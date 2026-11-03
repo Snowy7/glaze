@@ -6,6 +6,8 @@
 //! call [`evaluate`] for every process before touching it, and must not follow
 //! child processes.
 
+pub mod signature;
+
 use std::path::{Component, Path};
 
 /// Built-in Windows executables, relative to the Windows directory.

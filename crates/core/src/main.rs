@@ -16,6 +16,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod restart;
+mod styling;
 mod tray;
 
 use std::os::windows::io::AsRawHandle;
@@ -37,6 +38,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::w;
 
 use crate::restart::{Decision, Restarts};
+use crate::styling::{Styling, WM_STYLE_CONFIG, WM_STYLE_PALETTE};
 use crate::tray::{Tray, WM_RESTART_WALLPAPER};
 
 /// Pause before relaunching after "Restart wallpaper".
@@ -96,6 +98,17 @@ fn run() -> Result<()> {
         .inspect_err(|e| log::warn!("no tray icon: {e:#}"))
         .ok();
 
+    // Native Windows styling of the active theme. Created after the
+    // single-instance check: it undoes a crashed run's leftovers, which a
+    // second instance must never do to a live one. Dropping it (any exit
+    // path) restores everything.
+    let mut styling = Styling::new(&config.theme)
+        .inspect_err(|e| log::warn!("no window styling: {e:#}"))
+        .ok();
+    if let Some(styling) = &mut styling {
+        styling.set_theme(&theme.to_string_lossy());
+    }
+
     let spawn = || -> Result<Child> {
         let mut command = Command::new(&wallpaper_exe);
         if theme_override.is_some() {
@@ -144,7 +157,8 @@ fn run() -> Result<()> {
             restart_at = None;
             child = Some(spawn()?);
         }
-        match pump() {
+        let pumped = pump();
+        match pumped.signal {
             Some(Signal::Panic) => {
                 log::warn!("panic hotkey: stopping everything");
                 break;
@@ -164,11 +178,22 @@ fn run() -> Result<()> {
             }
             None => {}
         }
+        if let Some(styling) = &mut styling {
+            if pumped.config_changed {
+                styling.follow_config();
+            }
+            if pumped.palette_changed {
+                styling.palette_changed();
+            }
+        }
     }
 
     if let Some(mut child) = child {
         let _ = child.kill();
         let _ = child.wait();
+    }
+    if let Some(styling) = &mut styling {
+        styling.stop();
     }
     if let Ok(host) = DesktopHost::find() {
         host.restore();
@@ -187,11 +212,22 @@ enum Signal {
     Panic,
 }
 
-/// Drains the message queue (running the tray's window procedure) and
-/// returns the most urgent request in it.
-fn pump() -> Option<Signal> {
+/// What one drain of the message queue found.
+#[derive(Debug, Default)]
+struct Pumped {
+    /// The most urgent request in the queue.
+    signal: Option<Signal>,
+    /// `config.json` changed: the theme (and its styling) may have too.
+    config_changed: bool,
+    /// The wallpaper wrote a new `palette.json`.
+    palette_changed: bool,
+}
+
+/// Drains the message queue (running the tray's window procedure and any
+/// window-event callbacks of the styling).
+fn pump() -> Pumped {
     let mut msg = MSG::default();
-    let mut signal = None;
+    let mut pumped = Pumped::default();
     // SAFETY: standard message pump on the thread that owns the tray window.
     unsafe {
         while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
@@ -199,14 +235,22 @@ fn pump() -> Option<Signal> {
                 WM_HOTKEY if msg.wParam.0 == PANIC_HOTKEY as usize => Signal::Panic,
                 WM_QUIT => Signal::Quit,
                 WM_RESTART_WALLPAPER => Signal::Restart,
+                WM_STYLE_CONFIG => {
+                    pumped.config_changed = true;
+                    continue;
+                }
+                WM_STYLE_PALETTE => {
+                    pumped.palette_changed = true;
+                    continue;
+                }
                 _ => {
                     let _ = TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                     continue;
                 }
             };
-            signal = signal.max(Some(requested));
+            pumped.signal = pumped.signal.max(Some(requested));
         }
     }
-    signal
+    pumped
 }

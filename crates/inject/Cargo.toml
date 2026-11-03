@@ -7,3 +7,13 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies.windows]
+workspace = true
+features = [
+  "Win32_Foundation",
+  "Win32_Security_Cryptography",
+  "Win32_Security_Cryptography_Catalog",
+  "Win32_Security_Cryptography_Sip",
+  "Win32_Security_WinTrust",
+]

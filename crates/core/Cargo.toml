@@ -9,6 +9,7 @@ license.workspace = true
 mypaper-config.workspace = true
 mypaper-desktop.workspace = true
 mypaper-theme.workspace = true
+mypaper-tweaks.workspace = true
 
 anyhow.workspace = true
 log.workspace = true
