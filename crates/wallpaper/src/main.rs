@@ -18,6 +18,7 @@ mod control;
 mod engine;
 mod gpu;
 mod hold;
+mod palette;
 mod sources;
 mod window;
 

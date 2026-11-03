@@ -924,6 +924,7 @@ dependencies = [
  "mypaper-config",
  "mypaper-desktop",
  "mypaper-theme",
+ "mypaper-tweaks",
  "windows",
 ]
 
@@ -942,6 +943,9 @@ dependencies = [
 [[package]]
 name = "mypaper-inject"
 version = "0.1.0"
+dependencies = [
+ "windows",
+]
 
 [[package]]
 name = "mypaper-theme"
@@ -951,6 +955,20 @@ dependencies = [
  "mypaper-config",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "mypaper-tweaks"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "mypaper-inject",
+ "mypaper-theme",
+ "notify",
+ "serde",
+ "serde_json",
+ "windows",
 ]
 
 [[package]]
@@ -966,6 +984,7 @@ dependencies = [
  "mypaper-config",
  "mypaper-desktop",
  "mypaper-theme",
+ "mypaper-tweaks",
  "notify",
  "pollster",
  "raw-window-handle",

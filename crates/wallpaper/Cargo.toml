@@ -13,6 +13,7 @@ hotpatch = ["dep:subsecond", "dep:dioxus-devtools"]
 mypaper-config.workspace = true
 mypaper-desktop.workspace = true
 mypaper-theme.workspace = true
+mypaper-tweaks.workspace = true
 
 anyhow.workspace = true
 bytemuck.workspace = true

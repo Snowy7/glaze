@@ -20,6 +20,7 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use crate::gpu::{Gpu, Screen};
 use crate::hold::{Fact, HoldReasons, Holds};
+use crate::palette;
 use crate::sources::{self, Frame, Redraw, Source};
 use crate::window::Window;
 
@@ -61,6 +62,8 @@ pub struct Engine {
     holds: Holds,
     /// The reasons behind the current `held`, for logging changes.
     reasons: HoldReasons,
+    /// The loaded theme's palette has not been written yet (once per load).
+    palette_due: bool,
 }
 
 impl Engine {
@@ -92,6 +95,7 @@ impl Engine {
             held: false,
             holds: Holds::default(),
             reasons: HoldReasons::default(),
+            palette_due: true,
         })
     }
 
@@ -241,6 +245,7 @@ impl Engine {
         // SAFETY: `cursor` outlives the call.
         let _ = unsafe { GetCursorPos(&mut cursor) };
 
+        let mut drew = false;
         for (index, screen) in self.screens.iter_mut().enumerate() {
             if screen.paused || !(due || screen.dirty) {
                 continue;
@@ -269,6 +274,20 @@ impl Engine {
             );
             self.gpu.queue.submit([encoder.finish()]);
             self.gpu.queue.present(texture);
+            drew = true;
+        }
+
+        // First frame of a newly loaded theme: publish its palette, once.
+        if drew && std::mem::take(&mut self.palette_due) {
+            let size = self.screens.first().map_or((1, 1), Screen::size);
+            palette::publish(
+                &self.gpu,
+                self.source.as_mut(),
+                &self.theme.dir,
+                size,
+                self.clock,
+                self.frame,
+            );
         }
     }
 
@@ -289,6 +308,7 @@ impl Engine {
         log::info!("{} loaded in {:.1?}", theme.theme.name, started.elapsed());
         self.source = source;
         self.theme = theme;
+        self.palette_due = true;
         self.next_frame = Instant::now();
         self.mark_dirty();
         Ok(())
