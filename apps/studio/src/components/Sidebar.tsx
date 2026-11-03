@@ -77,12 +77,23 @@ function EngineChip({ onOpen }: { onOpen: () => void }) {
 }
 
 /** Two aurora ribbons, echoing the app icon, in grays. */
+/** The mypaper mark (assets/logo/mark-small.svg), drawn in the theme's inverse colors. */
 function Mark() {
+  const sheet = "M6.5 8H20.5L26 13.5V22.5Q26 24 24.5 24H6.5Q5 24 5 22.5V9.5Q5 8 6.5 8Z";
   return (
     <svg viewBox="0 0 32 32" className="size-8 shrink-0" aria-hidden>
-      <rect width="32" height="32" rx="9" className="fill-solid" />
-      <path d="M3 21c4-7 7-7 10-3s6 3 10-4 6-2 6-2" fill="none" className="stroke-solid-ink" strokeWidth="2.6" strokeLinecap="round" />
-      <path d="M3 15c4-6 7-6 10-2.5s6 2.5 9.5-3 6.5-1 6.5-1" fill="none" className="stroke-solid-ink" strokeWidth="2.2" strokeLinecap="round" opacity="0.5" />
+      <defs>
+        <clipPath id="mark-sheet">
+          <path d={sheet} />
+        </clipPath>
+      </defs>
+      <rect width="32" height="32" rx="7.5" className="fill-solid" />
+      <path d={sheet} className="fill-solid-ink" />
+      <g clipPath="url(#mark-sheet)" className="fill-solid">
+        <circle cx="13" cy="13" r="2.2" />
+        <path d="M5 20C9 16.5 13 16.5 16.5 18.5S22.5 20.5 26 17V24H5Z" />
+      </g>
+      <path d="M20.5 8V12.2Q20.5 13.5 21.8 13.5H26Z" className="fill-solid" opacity="0.55" />
     </svg>
   );
 }
