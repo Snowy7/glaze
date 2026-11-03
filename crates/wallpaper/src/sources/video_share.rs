@@ -1,5 +1,5 @@
 //! Zero-copy frames: the decoder's D3D11 device and wgpu's D3D12 device,
-//! on the same GPU, share a small ring of NV12 textures ("slots").
+//! on the same GPU, share a small ring of NV12 (or P010) textures ("slots").
 //!
 //! Per frame the decoder copies its output into a free slot and signals the
 //! `written` fence. The engine has wgpu's next submission wait for that
@@ -8,8 +8,8 @@
 //! queue waits for that before writing the slot again. Neither CPU thread
 //! ever waits for the other's GPU work.
 //!
-//! wgpu sees each slot as two single-plane textures (R8 luma, RG8 chroma).
-//! They are only ever sampled and are declared as already in that state,
+//! wgpu sees each slot as two single-plane textures (R8 luma and RG8 chroma
+//! for NV12, R16 and RG16 for P010). They are only ever sampled and are declared as already in that state,
 //! so wgpu emits no barriers: D3D12 promotes them from COMMON for each
 //! submission and decays them back after, the state the D3D11 writer needs.
 
@@ -24,12 +24,13 @@ use windows::Win32::Graphics::Direct3D11::{
 use windows::Win32::Graphics::Direct3D12::{
     D3D12_FENCE_FLAG_SHARED, ID3D12Device, ID3D12Fence, ID3D12Resource,
 };
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
+use windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC;
 use windows::Win32::Graphics::Dxgi::{
     DXGI_SHARED_RESOURCE_READ, DXGI_SHARED_RESOURCE_WRITE, IDXGIResource1,
 };
 use windows::core::{Interface, PCWSTR};
 
+use super::Layout;
 use crate::gpu::Gpu;
 
 /// Slots in the ring: one per frame that can be in flight (two queued, one
@@ -53,6 +54,7 @@ impl Drop for Handle {
 pub struct Slots {
     pub textures: Vec<Handle>,
     pub written: Handle,
+    pub layout: Layout,
     pub size: (u32, u32),
 }
 
@@ -77,17 +79,19 @@ pub struct Writer {
     written: ID3D11Fence,
     value: u64,
     released: ID3D11Fence,
+    layout: Layout,
     /// The part of the decoder's (padded) output that is shown.
     region: D3D11_BOX,
     pub size: (u32, u32),
 }
 
 impl Writer {
-    /// Creates slots for the `width × height` frame at `(x, y)` of the
-    /// decoder's output (NV12 needs even coordinates, so odd ones round).
+    /// Creates `layout` slots for the `width × height` frame at `(x, y)` of
+    /// the decoder's output (4:2:0 needs even coordinates, so odd ones round).
     pub fn new(
         device: &ID3D11Device,
         released: Handle,
+        layout: Layout,
         (x, y): (u32, u32),
         (width, height): (u32, u32),
     ) -> Result<(Self, Slots)> {
@@ -102,7 +106,7 @@ impl Writer {
             Height: height,
             MipLevels: 1,
             ArraySize: 1,
-            Format: DXGI_FORMAT_NV12,
+            Format: layout.dxgi(),
             SampleDesc: DXGI_SAMPLE_DESC {
                 Count: 1,
                 Quality: 0,
@@ -143,6 +147,7 @@ impl Writer {
                 written,
                 value: 0,
                 released,
+                layout,
                 region: D3D11_BOX {
                     left: x,
                     top: y,
@@ -156,15 +161,17 @@ impl Writer {
             let slots = Slots {
                 textures: handles,
                 written: Handle(written_handle),
+                layout,
                 size: (width, height),
             };
             Ok((writer, slots))
         }
     }
 
-    /// Whether frames of this area (as in [`Writer::new`]) fit these slots.
-    pub fn fits(&self, (x, y): (u32, u32), (width, height): (u32, u32)) -> bool {
-        (self.region.left, self.region.top) == (x & !1, y & !1)
+    /// Whether `layout` frames of this area (as in [`Writer::new`]) fit these slots.
+    pub fn fits(&self, layout: Layout, (x, y): (u32, u32), (width, height): (u32, u32)) -> bool {
+        self.layout == layout
+            && (self.region.left, self.region.top) == (x & !1, y & !1)
             && self.size == (width.next_multiple_of(2), height.next_multiple_of(2))
     }
 
@@ -234,23 +241,12 @@ impl Reader {
             (written, resources)
         };
         let (width, height) = slots.size;
+        let (luma_format, chroma_format) = slots.layout.plane_formats();
         let bind_groups = resources
             .iter()
             .map(|resource| {
-                let luma = plane(
-                    gpu,
-                    resource,
-                    0,
-                    wgpu::TextureFormat::R8Unorm,
-                    (width, height),
-                );
-                let chroma = plane(
-                    gpu,
-                    resource,
-                    1,
-                    wgpu::TextureFormat::Rg8Unorm,
-                    (width / 2, height / 2),
-                );
+                let luma = plane(gpu, resource, 0, luma_format, (width, height));
+                let chroma = plane(gpu, resource, 1, chroma_format, (width / 2, height / 2));
                 bind(&luma, &chroma)
             })
             .collect();
@@ -306,7 +302,7 @@ fn open<T: Interface>(device: &ID3D12Device, handle: &Handle) -> Result<T> {
     object.context("OpenSharedHandle returned nothing")
 }
 
-/// One plane of a shared NV12 slot, as a sample-only wgpu texture view.
+/// One plane of a shared NV12 or P010 slot, as a sample-only wgpu texture view.
 fn plane(
     gpu: &Gpu,
     resource: &ID3D12Resource,
@@ -329,7 +325,7 @@ fn plane(
         usage: wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     };
-    // SAFETY: `resource` is a live NV12 texture on wgpu's adapter, and
+    // SAFETY: `resource` is a live NV12 or P010 texture on wgpu's adapter, and
     // `plane`/`format`/`size` describe one of its planes. It is only ever
     // sampled, a state D3D12 enters implicitly from COMMON, hence the
     // `RESOURCE` initial state (no barriers; see the module docs).
