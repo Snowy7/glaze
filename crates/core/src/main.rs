@@ -1,5 +1,6 @@
-//! mypaper-core: the supervisor. Starts the wallpaper engine, restarts it
-//! when it crashes or the desktop changes, and owns the panic hotkey.
+//! mypaper-core: the supervisor. Starts the wallpaper engine and the widget
+//! host, restarts them when they crash or the desktop changes, and owns the
+//! panic hotkey.
 //!
 //! ```text
 //! mypaper-core [THEME]
@@ -15,12 +16,12 @@
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod child;
 mod restart;
 mod styling;
 mod tray;
 
-use std::os::windows::io::AsRawHandle;
-use std::process::{Child, Command, ExitCode};
+use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -37,7 +38,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::w;
 
-use crate::restart::{Decision, Restarts};
+use crate::child::{Outcome, Supervised};
 use crate::styling::{Styling, WM_STYLE_CONFIG, WM_STYLE_PALETTE};
 use crate::tray::{Tray, WM_RESTART_WALLPAPER};
 
@@ -109,53 +110,78 @@ fn run() -> Result<()> {
         styling.set_theme(&theme.to_string_lossy());
     }
 
-    let spawn = || -> Result<Child> {
-        let mut command = Command::new(&wallpaper_exe);
-        if theme_override.is_some() {
-            command.arg(&theme);
-        }
-        command.spawn().context("starting the wallpaper")
+    // The wallpaper is essential: when it stops for good, so does mypaper.
+    // The widget host is optional: if it is missing or gives up, mypaper
+    // keeps running without widgets.
+    let wallpaper_args = if theme_override.is_some() {
+        vec![theme.clone()]
+    } else {
+        Vec::new()
     };
-    let mut child = Some(spawn()?);
-    let mut restarts = Restarts::default();
-    let mut restart_at: Option<Instant> = None;
+    let mut wallpaper = Supervised::new("wallpaper", wallpaper_exe, wallpaper_args);
+    wallpaper.start()?;
+    let widgets_exe = std::env::current_exe()?.with_file_name("mypaper-widgets.exe");
+    let mut widgets = widgets_exe
+        .exists()
+        .then(|| Supervised::new("widget host", widgets_exe, Vec::new()));
+    if let Some(host) = &mut widgets
+        && let Err(e) = host.start()
+    {
+        log::warn!("{e:#}; continuing without widgets");
+        widgets = None;
+    }
 
     loop {
-        let handle = child.as_ref().map(|c| HANDLE(c.as_raw_handle()));
-        let timeout = restart_at.map_or(INFINITE, |t| {
+        let children = [Some(&wallpaper), widgets.as_ref()];
+        let handles: Vec<HANDLE> = children
+            .iter()
+            .flatten()
+            .filter_map(|c| c.handle())
+            .collect();
+        let owners: Vec<&'static str> = children
+            .iter()
+            .flatten()
+            .filter(|c| c.handle().is_some())
+            .map(|c| c.name)
+            .collect();
+        let next_restart = children
+            .iter()
+            .flatten()
+            .filter_map(|c| c.restart_at())
+            .min();
+        let timeout = next_restart.map_or(INFINITE, |t| {
             t.saturating_duration_since(Instant::now())
                 .as_millis()
                 .min(u128::from(INFINITE - 1)) as u32
         });
-        let handles = handle.as_ref().map(std::slice::from_ref);
-        // SAFETY: the child handle stays valid while `child` is alive.
-        let woke = unsafe { MsgWaitForMultipleObjects(handles, false, timeout, QS_ALLINPUT) };
+        let wait_on = (!handles.is_empty()).then_some(handles.as_slice());
+        // SAFETY: each handle stays valid while its child is alive (owned by `Supervised`).
+        let woke = unsafe { MsgWaitForMultipleObjects(wait_on, false, timeout, QS_ALLINPUT) };
 
-        if handle.is_some() && woke == WAIT_OBJECT_0 {
-            let mut exited = child.take().context("child vanished")?;
-            let code = exited.wait()?.code();
-            match restarts.on_exit(code, Instant::now()) {
-                Decision::Stop => {
-                    log::info!("wallpaper exited cleanly");
-                    break;
+        let exited = (woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize) < handles.len();
+        if exited {
+            let index = woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
+            match owners[index] {
+                name if name == wallpaper.name => {
+                    if wallpaper.on_exit()? == Outcome::Stopped {
+                        break;
+                    }
                 }
-                Decision::RestartAfter(delay) => {
-                    log::warn!("wallpaper exited ({code:?}); restarting in {delay:?}");
-                    restart_at = Some(Instant::now() + delay);
-                }
-                Decision::Broken => {
-                    log::error!("wallpaper cannot start with this configuration (see error above)");
-                    break;
-                }
-                Decision::GiveUp => {
-                    log::error!("wallpaper keeps crashing; giving up (desktop restored)");
-                    break;
+                _ => {
+                    if let Some(host) = &mut widgets
+                        && host.on_exit()? == Outcome::Stopped
+                    {
+                        widgets = None;
+                    }
                 }
             }
         }
-        if restart_at.is_some_and(|t| Instant::now() >= t) {
-            restart_at = None;
-            child = Some(spawn()?);
+        wallpaper.restart_if_due()?;
+        if let Some(host) = &mut widgets
+            && let Err(e) = host.restart_if_due()
+        {
+            log::warn!("{e:#}; continuing without widgets");
+            widgets = None;
         }
         let pumped = pump();
         match pumped.signal {
@@ -166,15 +192,11 @@ fn run() -> Result<()> {
             Some(Signal::Quit) => break,
             Some(Signal::Restart) => {
                 log::info!("restarting the wallpaper");
-                if let Some(mut old) = child.take() {
-                    let _ = old.kill();
-                    let _ = old.wait();
-                }
+                wallpaper.restart_after(MANUAL_RESTART_DELAY);
                 // A killed wallpaper cannot clean up after itself.
                 if let Ok(host) = DesktopHost::find() {
                     host.restore();
                 }
-                restart_at = Some(Instant::now() + MANUAL_RESTART_DELAY);
             }
             None => {}
         }
@@ -188,10 +210,10 @@ fn run() -> Result<()> {
         }
     }
 
-    if let Some(mut child) = child {
-        let _ = child.kill();
-        let _ = child.wait();
+    if let Some(host) = &mut widgets {
+        host.stop();
     }
+    wallpaper.stop();
     if let Some(styling) = &mut styling {
         styling.stop();
     }

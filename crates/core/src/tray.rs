@@ -1,5 +1,5 @@
-//! The tray icon and its right-click menu: pause, theme picker, studio,
-//! restart and quit. Everything goes through `config.json` (the wallpaper
+//! The tray icon and its right-click menu: pause, theme picker, widget edit
+//! mode, studio, restart and quit. Everything goes through `config.json` (the wallpaper
 //! applies it live) or a message to the supervisor loop, so the tray holds
 //! no state of its own.
 
@@ -21,11 +21,11 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreateIcon, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon,
-    DestroyMenu, DestroyWindow, HICON, HMENU, IDI_APPLICATION, LoadIconW, MENU_ITEM_FLAGS,
-    MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, PostMessageW, PostQuitMessage,
-    PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW, SetForegroundWindow,
-    TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, WM_APP, WM_CONTEXTMENU,
-    WM_NULL, WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_POPUP,
+    DestroyMenu, DestroyWindow, FindWindowExW, HICON, HMENU, HWND_MESSAGE, IDI_APPLICATION,
+    LoadIconW, MENU_ITEM_FLAGS, MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING,
+    PostMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW,
+    SetForegroundWindow, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, WM_APP,
+    WM_CONTEXTMENU, WM_NULL, WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -44,6 +44,7 @@ const ID_PAUSE: usize = 1;
 const ID_STUDIO: usize = 2;
 const ID_RESTART: usize = 3;
 const ID_QUIT: usize = 4;
+const ID_EDIT_WIDGETS: usize = 5;
 /// Theme `i` in the Themes submenu has id `ID_THEME + i`.
 const ID_THEME: usize = 100;
 
@@ -255,6 +256,7 @@ enum Command {
     SetTheme(String),
     OpenStudio,
     RestartWallpaper,
+    EditWidgets,
     Quit,
 }
 
@@ -265,6 +267,7 @@ fn decode(id: usize, themes: &[String]) -> Option<Command> {
         ID_STUDIO => Some(Command::OpenStudio),
         ID_RESTART => Some(Command::RestartWallpaper),
         ID_QUIT => Some(Command::Quit),
+        ID_EDIT_WIDGETS => Some(Command::EditWidgets),
         id if id >= ID_THEME => themes.get(id - ID_THEME).cloned().map(Command::SetTheme),
         _ => None,
     }
@@ -308,6 +311,7 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
         } else {
             MF_GRAYED
         };
+        append(menu, MF_STRING, ID_EDIT_WIDGETS, "Edit widgets");
         append(menu, MF_STRING | studio_flags, ID_STUDIO, "Open Studio");
         append(menu, MF_STRING, ID_RESTART, "Restart wallpaper");
         append(menu, MF_SEPARATOR, 0, "");
@@ -352,9 +356,31 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
                 )
             };
         }
+        Some(Command::EditWidgets) => toggle_widget_edit_mode(),
         // SAFETY: posts WM_QUIT to this thread's queue; the supervisor loop cleans up.
         Some(Command::Quit) => unsafe { PostQuitMessage(0) },
         None => {}
+    }
+}
+
+/// Toggles the widget host's edit mode by posting its registered
+/// `mypaper.widgets.edit` message (wParam 2 = toggle) to its message-only
+/// window (see docs/widgets.md).
+fn toggle_widget_edit_mode() {
+    // SAFETY: plain lookups and a post; a missing host is just logged.
+    unsafe {
+        let message = RegisterWindowMessageW(w!("mypaper.widgets.edit"));
+        match FindWindowExW(
+            Some(HWND_MESSAGE),
+            None,
+            w!("mypaper.widgets.host"),
+            PCWSTR::null(),
+        ) {
+            Ok(host) if message != 0 => {
+                let _ = PostMessageW(Some(host), message, WPARAM(2), LPARAM(0));
+            }
+            _ => log::warn!("widget host is not running; cannot toggle edit mode"),
+        }
     }
 }
 
@@ -468,6 +494,7 @@ mod tests {
         let themes = ["aurora".to_owned(), "zen".to_owned()];
         assert_eq!(decode(ID_PAUSE, &themes), Some(Command::TogglePause));
         assert_eq!(decode(ID_QUIT, &themes), Some(Command::Quit));
+        assert_eq!(decode(ID_EDIT_WIDGETS, &themes), Some(Command::EditWidgets));
         assert_eq!(
             decode(ID_THEME + 1, &themes),
             Some(Command::SetTheme("zen".into()))
