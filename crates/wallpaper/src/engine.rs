@@ -22,7 +22,10 @@ use crate::window::Window;
 const RELOAD_DEBOUNCE: Duration = Duration::from_millis(80);
 /// Coalesces window-move storms before re-checking what is covered.
 const COVER_DEBOUNCE: Duration = Duration::from_millis(100);
-/// Longest clock step between ticks, so resuming never jumps ahead.
+/// Slack on the longest clock step between ticks, so a stall (or system
+/// sleep) never jumps the clock ahead. The step may also cover the sleep the
+/// engine itself planned (see `Engine::step_limit`), or a source scheduled
+/// with `Redraw::At` would wake with the clock barely moved.
 const MAX_STEP: Duration = Duration::from_millis(100);
 
 pub enum Flow {
@@ -41,6 +44,8 @@ pub struct Engine {
     /// Animation clock: advances only while some screen is visible.
     clock: Duration,
     last_tick: Option<Instant>,
+    /// Longest clock step the next tick may take: the planned sleep plus `MAX_STEP`.
+    step_limit: Duration,
     next_frame: Instant,
     frame: u32,
     reload_at: Option<Instant>,
@@ -70,6 +75,7 @@ impl Engine {
             monitors,
             clock: Duration::ZERO,
             last_tick: None,
+            step_limit: MAX_STEP,
             next_frame: Instant::now(),
             frame: 0,
             reload_at: None,
@@ -137,7 +143,7 @@ impl Engine {
         }
         self.clock += self
             .last_tick
-            .map_or(Duration::ZERO, |t| (now - t).min(MAX_STEP));
+            .map_or(Duration::ZERO, |t| (now - t).min(self.step_limit));
         self.last_tick = Some(now);
 
         self.source.update(&self.gpu, self.clock);
@@ -161,6 +167,8 @@ impl Engine {
             Redraw::At(t) => Some(now + t.saturating_sub(self.clock)),
             Redraw::OnChange => None,
         };
+        self.step_limit =
+            MAX_STEP + frame_deadline.map_or(Duration::ZERO, |t| t.saturating_duration_since(now));
         Flow::Wait(self.deadline(frame_deadline))
     }
 
