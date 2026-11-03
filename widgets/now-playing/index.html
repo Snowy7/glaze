@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Now playing</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card" id="card" data-state="empty">
+      <div class="backdrop" id="backdrop"></div>
+
+      <div class="art" id="art">
+        <img id="img" alt="" hidden />
+        <svg class="note" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 18V6l10-2v12" />
+          <circle cx="6.5" cy="18" r="2.5" />
+          <circle cx="16.5" cy="16" r="2.5" />
+        </svg>
+      </div>
+
+      <div class="info">
+        <div class="title" id="title">Nothing playing</div>
+        <div class="artist" id="artist">Start music in any app</div>
+      </div>
+
+      <div class="progress" id="progress">
+        <span class="time num" id="pos">0:00</span>
+        <div class="bar"><i id="fill"></i></div>
+        <span class="time num" id="dur">0:00</span>
+      </div>
+
+      <div class="controls">
+        <button id="prev" aria-label="Previous track" title="Previous">
+          <svg viewBox="0 0 24 24"><path d="M6 5v14M19 5.5v13L9 12z" /></svg>
+        </button>
+        <button id="toggle" class="play" aria-label="Play or pause" title="Play / pause">
+          <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" /></svg>
+          <svg class="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" /></svg>
+        </button>
+        <button id="next" aria-label="Next track" title="Next">
+          <svg viewBox="0 0 24 24"><path d="M18 5v14M5 5.5v13L15 12z" /></svg>
+        </button>
+      </div>
+    </main>
+    <script src="mypaper.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

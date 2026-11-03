@@ -1,0 +1,16 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "system-monitor",
+  "name": "System monitor",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "CPU, memory, GPU and network as live sparklines.",
+  "entry": "index.html",
+  "size": { "default": [2, 2], "min": [2, 1], "max": [4, 3] },
+  "resizable": true,
+  "permissions": ["system.stats", "theme"],
+  "plugins": [],
+  "settings": [
+    { "key": "wallpaperAccent", "type": "boolean", "label": "Use wallpaper accent", "default": false }
+  ]
+}

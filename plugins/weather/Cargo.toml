@@ -1,0 +1,20 @@
+[package]
+name = "mypaper-plugin-weather"
+description = "Weather plugin for mypaper widgets: open-meteo, no API key (JSON-RPC over stdio)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# plugin.json says `"command": "weather.exe"`.
+[[bin]]
+name = "weather"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+# Blocking HTTP with rustls; no async runtime, no default features (no gzip, no native-tls).
+ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
+
+[lints]
+workspace = true

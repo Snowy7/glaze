@@ -1,0 +1,256 @@
+/* main.js sets data-layout from the pixel size:
+   tiny   (2x1)        current conditions only
+   side   (3x1, 4x1)   current on the left, forecast columns on the right
+   stack  (2x2)        current on top, forecast rows below
+   full   (3x2, 4x2)   current on top, forecast columns below */
+
+svg.icon,
+.day svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.card {
+  display: grid;
+  gap: 10px 14px;
+}
+
+.now {
+  display: grid;
+  align-items: center;
+  min-width: 0;
+}
+.icon {
+  color: var(--t0);
+}
+.temp {
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--t0);
+}
+.cond {
+  font-weight: 600;
+  color: var(--t0);
+}
+.place,
+.range {
+  color: var(--t2);
+}
+.range {
+  color: var(--t1);
+}
+
+.days {
+  display: none;
+  min-width: 0;
+}
+.day {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  min-width: 0;
+  color: var(--t1);
+}
+.day .name {
+  color: var(--t2);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.day.today .name {
+  color: var(--t0);
+}
+.day .hi {
+  color: var(--t0);
+  font-weight: 600;
+}
+.day .lo {
+  color: var(--t2);
+}
+.day svg {
+  width: 24px;
+  height: 24px;
+  color: var(--t0);
+}
+
+.status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--pad);
+  text-align: center;
+  color: var(--t1);
+  background: var(--surface);
+}
+.card[data-state="loading"] .temp,
+.card[data-state="loading"] .icon {
+  opacity: 0.35;
+}
+
+/* ---- tiny: 200x96 */
+.card[data-layout="tiny"] .now {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas: "icon temp ." "meta meta meta";
+  gap: 4px 8px;
+  height: 100%;
+  align-content: center;
+}
+[data-layout="tiny"] .icon {
+  grid-area: icon;
+  width: 38px;
+  height: 38px;
+}
+[data-layout="tiny"] .temp {
+  grid-area: temp;
+  font-size: 38px;
+}
+[data-layout="tiny"] .meta {
+  grid-area: meta;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 0 8px;
+  align-items: baseline;
+  font-size: 12px;
+}
+[data-layout="tiny"] .range {
+  display: none;
+}
+
+/* ---- side: 3x1, 4x1 */
+.card[data-layout="side"] {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+}
+[data-layout="side"] .now {
+  grid-template-columns: auto auto;
+  grid-template-areas: "icon temp" "meta meta";
+  gap: 4px 8px;
+  justify-content: start;
+}
+[data-layout="side"] .icon {
+  grid-area: icon;
+  width: 34px;
+  height: 34px;
+}
+[data-layout="side"] .temp {
+  grid-area: temp;
+  font-size: 34px;
+}
+[data-layout="side"] .meta {
+  grid-area: meta;
+  font-size: 12px;
+}
+[data-layout="side"] .range {
+  display: none;
+}
+[data-layout="side"] .days {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+[data-layout="side"] .day {
+  gap: 4px;
+  align-content: center;
+}
+[data-layout="side"] .day .lo {
+  display: none;
+}
+
+/* ---- stack: 2x2 */
+.card[data-layout="stack"] {
+  grid-template-rows: auto 1fr;
+  gap: 8px;
+}
+[data-layout="stack"] .now {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "icon temp" "meta meta";
+  gap: 6px 10px;
+  justify-content: start;
+}
+[data-layout="stack"] .icon {
+  grid-area: icon;
+  width: 44px;
+  height: 44px;
+}
+[data-layout="stack"] .temp {
+  grid-area: temp;
+  font-size: 44px;
+}
+[data-layout="stack"] .meta {
+  grid-area: meta;
+  font-size: 12px;
+}
+[data-layout="stack"] .days {
+  display: grid;
+  align-content: end;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+[data-layout="stack"] .day {
+  grid-template-columns: 44px 24px minmax(0, 1fr);
+  justify-items: start;
+  gap: 8px;
+  font-size: 12px;
+}
+[data-layout="stack"] .day svg {
+  width: 18px;
+  height: 18px;
+}
+[data-layout="stack"] .day .temps {
+  justify-self: end;
+}
+
+/* ---- full: 3x2, 4x2 */
+.card[data-layout="full"] {
+  grid-template-rows: 1fr auto;
+  gap: 12px;
+}
+[data-layout="full"] .now {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas: "icon temp meta";
+  gap: 6px 14px;
+  justify-content: start;
+}
+[data-layout="full"] .icon {
+  grid-area: icon;
+  width: 56px;
+  height: 56px;
+}
+[data-layout="full"] .temp {
+  grid-area: temp;
+  font-size: 56px;
+}
+[data-layout="full"] .meta {
+  grid-area: meta;
+  font-size: 13px;
+  align-self: center;
+}
+[data-layout="full"] .cond {
+  font-size: 15px;
+}
+[data-layout="full"] .days {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+[data-layout="full"] .day {
+  gap: 4px;
+  font-size: 12px;
+}
+[data-layout="full"] .day .temps {
+  display: flex;
+  gap: 6px;
+}

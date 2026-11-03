@@ -6,3 +6,7 @@ apps/studio/node_modules
 apps/studio/dist
 apps/studio/src-tauri/target
 apps/studio/src-tauri/gen
+packages/*/node_modules
+packages/*/dist
+# A built plugin binary dropped next to its plugin.json for local use.
+plugins/*/*.exe

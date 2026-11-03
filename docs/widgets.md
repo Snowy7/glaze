@@ -95,7 +95,22 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   - `clipboard.write`.
 - `plugins`: plugin ids whose methods this widget may call (see Plugins).
 - `settings`: rendered by the shell in edit mode, and by Studio. Values go to the widget at load
-  and on every change.
+  and on every change. Types: `boolean`, `string`, `color`, `select` (needs `options`), `number`
+  (optional `min`, `max`, `step`), and `list`:
+
+  ```json
+  { "key": "shortcuts", "type": "list", "label": "Shortcuts", "maxItems": 24,
+    "fields": [ { "key": "label", "type": "string", "label": "Label" },
+                { "key": "target", "type": "string", "label": "Path or URL" } ],
+    "default": [ { "label": "Files", "target": "explorer.exe" } ] }
+  ```
+
+  A `list` is an editable list of records: the shell renders one input per field for each item
+  (with add and remove), and the widget receives an array of `{ <field key>: value }` objects.
+  `fields` take the scalar types above, and their `default` is optional.
+- `$schema`: optional, ignored by the host. Point it at
+  `packages/widget-sdk/schema/widget.schema.json` for editor validation and completion
+  (`plugin.schema.json` for plugins).
 
 ## Layout: `widgets.json`
 
@@ -159,13 +174,17 @@ capability the manifest didn't declare rejects with `PermissionDenied`.
 
 ```ts
 interface Mypaper {
-  readonly instance: string;        // "clock-1"
-  readonly widget: WidgetManifest;  // the parsed manifest
+  readonly ready: Promise<void>;    // resolves once the shell answers the handshake; every call waits for it
+  readonly instance: string;        // "clock-1" (after ready)
+  readonly widget: WidgetManifest;  // the parsed manifest (after ready)
+  readonly visible: boolean;        // false while the host is held
+  readonly editing: boolean;        // edit mode is on
   settings: {
     get(): Promise<Record<string, unknown>>;
     onChange(cb: (s: Record<string, unknown>) => void): () => void;
   };
   size: {
+    // px is in CSS pixels (what innerWidth/innerHeight report); dpi is the monitor's (96 = 100%).
     get(): Promise<{ cells: [number, number]; px: [number, number]; dpi: number }>;
     onChange(cb: (s: { cells: [number, number]; px: [number, number]; dpi: number }) => void): () => void;
   };
@@ -203,6 +222,55 @@ interface Mypaper {
 - **Visibility**: when the host is held, widgets get `visibility:false` and then the WebView is
   suspended. Widgets should stop their animations. Subscriptions are paused automatically.
 
+### Wire protocol (iframe ⇄ shell)
+
+The SDK (`packages/widget-sdk`, also the `mypaper.js` drop-in) speaks this; the shell implements
+the other side. All messages carry `"mypaper": 1`.
+
+**Handshake.** On load the widget sends `hello` (`params: { sdk: 1 }`). The shell answers with
+everything a widget needs synchronously afterwards:
+`{ instance, widget /* the manifest */, settings, size, visible, editing }`. `mypaper.ready`
+resolves with that, and every other call waits for it. (A widget that gets no answer within
+10 s fails `ready`: it is not inside mypaper.)
+
+**Requests** (widget → shell, answered with `result` or `error`). The shell checks the permission
+from the manifest *before* forwarding to the host:
+
+| method | params | result | needs |
+|---|---|---|---|
+| `hello` | `{ sdk }` | the handshake state above | |
+| `storage.get` | `{ key }` | the value, or `null` when missing | |
+| `storage.set` | `{ key, value }` | `null` | |
+| `system.stats` | | `SystemStats` | `system.stats` |
+| `media.current` | | `MediaState` or `null` | `media` |
+| `media.control` | `{ action }` | `null` | `media` |
+| `launch` | `{ target }` | `null` | `launch` |
+| `theme.current` | | `ThemeInfo` | `theme` |
+| `plugin` | `{ plugin, method, params? }` | the plugin's result | `plugin` listed in `plugins` |
+| `subscribe` | see below | `null` | per topic |
+| `unsubscribe` | `{ sub }` | `null` | |
+
+**Subscriptions.** `subscribe` params are `{ sub, topic: "system", intervalMs }`,
+`{ sub, topic: "media" }`, `{ sub, topic: "theme" }` or
+`{ sub, topic: "plugin", plugin, event }`, where `sub` is an id the widget makes up. Values arrive
+as `{ mypaper: 1, event: "sub", data: { sub, value } }`:
+
+- `system`: one sample right away, then one per `intervalMs` (never faster than 1000).
+- `media`, `theme`: on change only (read the current value with `media.current` / `theme.current`).
+- `plugin`: each matching plugin event's `data`.
+
+While the host is held (`visibility: false`) nothing is delivered; `system` sends a sample as soon
+as the widget is visible again.
+
+**Pushed events** (shell → widget, always on, no subscription): `visibility` (`boolean`),
+`editmode` (`boolean`), `settings` (the full settings object) and `size`
+(`{ cells, px, dpi }`).
+
+**Plugin errors.** A JSON-RPC `error` from a plugin becomes a wire error as follows: if
+`error.data.code` is one of the five names above it is used; otherwise `-32601` is `NotFound`,
+`-32602` is `InvalidParams` and anything else is `Internal`. A plugin that isn't running, can't
+start or crashed mid-call is `PluginUnavailable`. The message is passed on.
+
 ## Plugins
 
 A plugin is a folder with `plugin.json` and an executable. It runs as a separate process, which
@@ -234,6 +302,13 @@ is held.
 - **Lifecycle**: the host sends `{"jsonrpc":"2.0","method":"suspend"}` and `{"jsonrpc":"2.0","method":"resume"}`
   notifications on hold and release, and `{"jsonrpc":"2.0","id":N,"method":"shutdown"}` before
   terminating it (with a 2 s grace period).
+- **Command**: `command` is an executable in the plugin folder, else a program on `PATH` (for
+  example `python`, with `"args": ["plugin.py"]`).
+- **Reserved names**: `initialize`, `shutdown`, `suspend`, `resume` and `event` can't be listed in
+  `methods`. The host only forwards calls to methods listed in `plugin.json`.
+- **Errors**: a standard JSON-RPC `error`; put one of mypaper's error names in `error.data.code`
+  (for example `{"code":-32000,"message":"no such city","data":{"code":"NotFound"}}`) to choose how
+  the widget sees it (see Wire protocol).
 - **Isolation**: plugins run in a Job object (killed with the host), have no console, and are
   started with the plugin folder as their working directory.
 - `permissions` is documentation for users and Studio. Plugins are native code, so only install
@@ -249,6 +324,9 @@ is held.
   - `notes`: a sticky note, using storage.
   - `launcher`: a grid of shortcuts, using launch.
 - **Plugins**: `weather` (Rust, open-meteo, no API key).
+- **Tooling**: `packages/widget-sdk` has the typed SDK, the `mypaper.js` drop-in, the JSON
+  Schemas and a mock host for developing widgets in a browser. Tutorials:
+  [writing-widgets.md](writing-widgets.md) and [writing-plugins.md](writing-plugins.md).
 
 ## Performance budget
 

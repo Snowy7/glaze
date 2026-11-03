@@ -1,0 +1,19 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "weather",
+  "name": "Weather",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "Current conditions and a short forecast (open-meteo, no API key).",
+  "entry": "index.html",
+  "size": { "default": [2, 1], "min": [2, 1], "max": [4, 2] },
+  "resizable": true,
+  "permissions": [],
+  "plugins": ["weather"],
+  "settings": [
+    { "key": "city", "type": "string", "label": "City", "default": "London" },
+    { "key": "lat", "type": "string", "label": "Latitude (overrides city)", "default": "" },
+    { "key": "lon", "type": "string", "label": "Longitude (overrides city)", "default": "" },
+    { "key": "units", "type": "select", "label": "Units", "options": ["metric", "imperial"], "default": "metric" }
+  ]
+}

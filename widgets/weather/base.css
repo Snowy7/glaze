@@ -1,0 +1,148 @@
+/* mypaper widget kit: monochrome tokens and the shared glass surface.
+   Source of truth is packages/widget-sdk/widget-kit/base.css; `pnpm build` copies it into every
+   bundled widget (a widget is served from its own origin, so it can't import from outside). */
+
+:root {
+  color-scheme: dark;
+
+  /* Text: white for emphasis, then three clear steps down. */
+  --t0: #fff;
+  --t1: rgb(255 255 255 / 0.74);
+  --t2: rgb(255 255 255 / 0.46);
+  --t3: rgb(255 255 255 / 0.24);
+
+  /* Fills and lines on top of the surface. */
+  --fill-1: rgb(255 255 255 / 0.06);
+  --fill-2: rgb(255 255 255 / 0.11);
+  --fill-3: rgb(255 255 255 / 0.2);
+  --line: rgb(255 255 255 / 0.1);
+
+  --surface: rgb(16 16 16 / 0.72);
+  /* White unless the widget opts into the wallpaper accent (see kit.js). */
+  --accent: #fff;
+
+  --radius: min(22px, 20cqmin);
+  --pad: clamp(10px, 8cqmin, 20px);
+  --font:
+    "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* The WebView is transparent; only .card paints. */
+  background: transparent;
+  color: var(--t0);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.25;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+/* The widget's own size is the container, so cq* units and @container rules track the cell size. */
+body {
+  container-type: size;
+}
+
+.card {
+  position: absolute;
+  inset: 0;
+  padding: var(--pad);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  -webkit-backdrop-filter: blur(28px) saturate(1.1);
+  backdrop-filter: blur(28px) saturate(1.1);
+  overflow: hidden;
+}
+
+/* `display` rules in a widget's CSS must not resurrect elements hidden with the attribute. */
+[hidden] {
+  display: none !important;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.caps {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--t2);
+}
+
+.dim {
+  color: var(--t2);
+}
+
+.ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+button {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--t1);
+  transition:
+    background-color 0.12s,
+    color 0.12s,
+    transform 0.12s;
+}
+button:hover {
+  background: var(--fill-2);
+  color: var(--t0);
+}
+button:active {
+  transform: scale(0.94);
+}
+button:focus-visible {
+  outline: 2px solid var(--t1);
+  outline-offset: 1px;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* The host is held: nothing may keep animating. (Timers are stopped in JS by kit.js.) */
+html[data-hidden] *,
+html[data-hidden] *::before,
+html[data-hidden] *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
+
+/* In edit mode the shell owns the pointer for moving and resizing. */
+html[data-editing] body {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
