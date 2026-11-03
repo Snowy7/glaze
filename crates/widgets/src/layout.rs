@@ -286,16 +286,23 @@ impl Grid {
         } else {
             icon_cell
         };
-        let fit = |length: f64, cell: f64| {
-            let room = length - 2.0 * spec.margin + spec.gap;
-            ((room / (cell + spec.gap)).floor() as u32).max(1)
+        // As many whole cells of the nominal size as fit, then every cell
+        // stretched so the grid spans the full area, edge to edge (no
+        // leftover strip on the right or bottom).
+        let span = |length: f64, nominal: f64| {
+            let usable = (length - 2.0 * spec.margin).max(nominal);
+            let count = (((usable + spec.gap) / (nominal + spec.gap)).floor() as u32).max(1);
+            let size = (usable - f64::from(count - 1) * spec.gap) / f64::from(count);
+            (count, size)
         };
+        let (cols, cell_w) = span(work.width, cell[0]);
+        let (rows, cell_h) = span(work.height, cell[1]);
         Self {
             origin: [work.x + spec.margin, work.y + spec.margin],
-            cell,
+            cell: [cell_w, cell_h],
             gap: spec.gap,
-            cols: fit(work.width, cell[0]),
-            rows: fit(work.height, cell[1]),
+            cols,
+            rows,
         }
     }
 
@@ -456,6 +463,10 @@ mod tests {
         assert_eq!(grid.origin, [16.0, 16.0]);
         // (1920 - 32 + 8) / 104 = 18.2 → 18; (1040 - 32 + 8) / 104 = 9.7 → 9
         assert_eq!((grid.cols, grid.rows), (18, 9));
+        // Stretched to span the full area: the last cell ends at the right/bottom margin.
+        let last = grid.rect([17, 8], [1, 1]);
+        assert!((last.x + last.width - (1920.0 - 16.0)).abs() < 1e-9);
+        assert!((last.y + last.height - (1040.0 - 16.0)).abs() < 1e-9);
         let fixed = Grid::new(
             &GridSpec {
                 cell: 120.0,
@@ -464,7 +475,10 @@ mod tests {
             [96.0, 96.0],
             WORK,
         );
-        assert_eq!(fixed.cell, [120.0, 120.0]);
+        // A fixed nominal cell decides the count ((1888 + 8) / 128 = 14.8 → 14,
+        // (1008 + 8) / 128 = 7.9 → 7); cells then stretch to fill.
+        assert_eq!((fixed.cols, fixed.rows), (14, 7));
+        assert!(fixed.cell[0] >= 120.0 && fixed.cell[1] >= 120.0);
     }
 
     #[test]
@@ -476,15 +490,13 @@ mod tests {
         }; // taskbar on top
         let grid = Grid::new(&GridSpec::default(), [75.0, 90.0], work);
         assert_eq!(grid.origin, [16.0, 64.0]);
-        assert_eq!(
-            grid.rect([1, 2], [2, 1]),
-            RectF {
-                x: 16.0 + 83.0,
-                y: 64.0 + 2.0 * 98.0,
-                width: 158.0,
-                height: 90.0
-            }
-        );
+        // (1888 + 8) / 83 = 22.8 → 22 columns; (1008 + 8) / 98 = 10.4 → 10 rows.
+        assert_eq!((grid.cols, grid.rows), (22, 10));
+        let rect = grid.rect([1, 2], [2, 1]);
+        assert!((rect.x - (16.0 + grid.cell[0] + 8.0)).abs() < 1e-9);
+        assert!((rect.y - (64.0 + 2.0 * (grid.cell[1] + 8.0))).abs() < 1e-9);
+        assert!((rect.width - (2.0 * grid.cell[0] + 8.0)).abs() < 1e-9);
+        assert!(grid.cell[0] >= 75.0 && grid.cell[1] >= 90.0);
     }
 
     #[test]

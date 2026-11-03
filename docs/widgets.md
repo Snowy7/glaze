@@ -156,6 +156,8 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
 ```
 
 - **The grid.**
+  - `cell` is the **nominal** cell size: as many whole cells as fit are laid out, then every
+    cell is stretched so the grid spans the full area edge to edge (no leftover strip).
   - `cell: 0` means "match the desktop icon grid": horizontal and vertical icon spacing from
     `HKCU\Control Panel\Desktop\WindowMetrics` `IconSpacing`/`IconVerticalSpacing`. Negative values
     are twips (`px = -value / 1440 × DPI`, so `-value / 15` DIPs); positive values are DIPs. Missing
