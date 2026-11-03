@@ -76,7 +76,7 @@ mod tests {
     const MANIFEST: &str = r#"{
   "name": "Aurora",
   "wallpaper": { "source": "aurora.wgsl", "kind": "shader", "fps": 30 },
-  "styles": "extra.css"
+  "widgets": { "css": "extra.css" }
 }"#;
 
     fn field(text: &str, key: &str) -> Value {
@@ -95,10 +95,10 @@ mod tests {
 
         // Untouched fields are identical, including the inner order of `wallpaper`.
         assert_eq!(field(&edited, "wallpaper"), field(MANIFEST, "wallpaper"));
-        assert_eq!(field(&edited, "styles"), "extra.css");
+        assert_eq!(field(&edited, "widgets"), field(MANIFEST, "widgets"));
         let wallpaper_at = edited.find("\"source\"").unwrap();
         assert!(wallpaper_at < edited.find("\"kind\"").unwrap(), "key order changed:\n{edited}");
-        assert!(edited.find("\"styles\"").unwrap() < edited.find("\"windows\"").unwrap());
+        assert!(edited.find("\"widgets\"").unwrap() < edited.find("\"windows\"").unwrap());
 
         // Only the set fields are written, and the theme crate accepts them.
         let windows = field(&edited, "windows");

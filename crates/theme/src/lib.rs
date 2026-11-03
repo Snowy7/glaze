@@ -11,7 +11,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub const MANIFEST: &str = "theme.json";
 
@@ -77,10 +77,105 @@ pub struct Theme {
     /// to allowlisted Windows windows while this theme is active.
     #[serde(default)]
     pub windows: Option<WindowsStyle>,
-    /// A style sheet restyling Windows' own UI (XAML / Win32) through the
-    /// injector; see `crates/inject`. Relative to the theme folder.
+    /// How desktop widgets look while this theme is active (docs/widgets.md).
     #[serde(default)]
-    pub styles: Option<PathBuf>,
+    pub widgets: Option<Skin>,
+    /// How the top bar and dock look while this theme is active (docs/bars.md).
+    #[serde(default)]
+    pub bars: Option<Skin>,
+}
+
+/// A theme's look for a family of mypaper UI (widgets, bars): appearance
+/// values plus an optional style sheet loaded after the built-in styles.
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Skin {
+    #[serde(default)]
+    pub appearance: Option<Appearance>,
+    /// CSS, relative to the theme folder. Use the documented CSS variables
+    /// and `data-*` attributes; it applies on top of `appearance`.
+    #[serde(default)]
+    pub css: Option<PathBuf>,
+}
+
+/// The look of a widget or bar. Every field is optional; layers are merged
+/// with [`Appearance::over`] (built-in defaults < theme < user < instance).
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Appearance {
+    /// `none`: no background at all, text sits on the wallpaper.
+    pub surface: Option<Surface>,
+    /// The surface color.
+    pub tint: Option<Color>,
+    /// Surface opacity, 0..=1.
+    pub opacity: Option<f32>,
+    /// Background blur in px, 0..=64 (glass only).
+    pub blur: Option<f32>,
+    /// Corner radius in px, 0..=48.
+    pub radius: Option<f32>,
+    /// A hairline border around the surface.
+    pub border: Option<bool>,
+    /// Light text for dark wallpapers, dark text for light ones.
+    pub text: Option<TextTone>,
+    /// Highlight color, or `auto` (from the wallpaper palette).
+    pub accent: Option<Paint>,
+    /// A CSS font-family list.
+    pub font: Option<String>,
+    /// Content scale, 0.5..=2.
+    pub scale: Option<f32>,
+    /// A soft text shadow, for legibility without a surface.
+    pub shadow: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Surface {
+    None,
+    Glass,
+    Solid,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TextTone {
+    Light,
+    Dark,
+}
+
+impl Appearance {
+    /// `self` layered over `base`: each field set here wins.
+    pub fn over(&self, base: &Appearance) -> Appearance {
+        Appearance {
+            surface: self.surface.or(base.surface),
+            tint: self.tint.or(base.tint),
+            opacity: self.opacity.or(base.opacity),
+            blur: self.blur.or(base.blur),
+            radius: self.radius.or(base.radius),
+            border: self.border.or(base.border),
+            text: self.text.or(base.text),
+            accent: self.accent.or(base.accent),
+            font: self.font.clone().or_else(|| base.font.clone()),
+            scale: self.scale.or(base.scale),
+            shadow: self.shadow.or(base.shadow),
+        }
+    }
+
+    /// Range checks, for theme and layout files.
+    pub fn validate(&self) -> Result<()> {
+        let check =
+            |name: &str, value: Option<f32>, range: std::ops::RangeInclusive<f32>| match value {
+                Some(v) if !range.contains(&v) => bail!(
+                    "appearance.{name} must be between {} and {}, got {v}",
+                    range.start(),
+                    range.end()
+                ),
+                _ => Ok(()),
+            };
+        check("opacity", self.opacity, 0.0..=1.0)?;
+        check("blur", self.blur, 0.0..=64.0)?;
+        check("radius", self.radius, 0.0..=48.0)?;
+        check("scale", self.scale, 0.5..=2.0)
+    }
 }
 
 /// An sRGB color, written `"#rrggbb"` in theme files.
@@ -100,6 +195,27 @@ impl Color {
         let hex = text.strip_prefix('#').filter(|h| h.len() == 6)?;
         let channel = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok();
         Some(Self([channel(0)?, channel(2)?, channel(4)?]))
+    }
+
+    /// `"#rrggbb"`.
+    pub fn hex(self) -> String {
+        let [r, g, b] = self.0;
+        format!("#{r:02x}{g:02x}{b:02x}")
+    }
+}
+
+impl Serialize for Color {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.hex())
+    }
+}
+
+impl Serialize for Paint {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Paint::Auto => serializer.serialize_str("auto"),
+            Paint::Color(color) => color.serialize(serializer),
+        }
     }
 }
 
@@ -365,8 +481,13 @@ impl LoadedTheme {
             }
             Wallpaper::App(a) => check_path(&a.command)?,
         }
-        if let Some(styles) = &theme.styles {
-            check_path(styles)?;
+        for skin in [&theme.widgets, &theme.bars].into_iter().flatten() {
+            if let Some(appearance) = &skin.appearance {
+                appearance.validate()?;
+            }
+            if let Some(css) = &skin.css {
+                check_path(css)?;
+            }
         }
         Ok(Self { dir, theme })
     }
@@ -477,6 +598,33 @@ mod tests {
         let t = parse(r#"{ "name": "A", "wallpaper": { "kind": "image", "source": "x.jpg" } }"#)
             .unwrap();
         assert_eq!(t.asset(Path::new("x.jpg")), PathBuf::from("themes/t/x.jpg"));
+    }
+
+    #[test]
+    fn skins_layer_and_validate_and_colors_round_trip() {
+        let json = r##"{ "name": "A", "wallpaper": { "kind": "image", "source": "x.jpg" },
+            "widgets": { "appearance": { "surface": "none", "text": "light", "opacity": 0.4 }, "css": "w.css" },
+            "bars": { "appearance": { "surface": "glass", "tint": "#101820", "accent": "auto" } } }"##;
+        let theme = parse(json).unwrap().theme;
+        let widgets = theme.widgets.unwrap().appearance.unwrap();
+        let user = Appearance {
+            surface: Some(Surface::Glass),
+            blur: Some(30.0),
+            ..Default::default()
+        };
+        let merged = user.over(&widgets);
+        assert_eq!(merged.surface, Some(Surface::Glass)); // the upper layer wins
+        assert_eq!(merged.opacity, Some(0.4)); // unset above: kept from below
+        assert_eq!(merged.blur, Some(30.0));
+
+        let bars = theme.bars.unwrap().appearance.unwrap();
+        let encoded = serde_json::to_value(&bars).unwrap();
+        assert_eq!(encoded["tint"], "#101820");
+        assert_eq!(encoded["accent"], "auto");
+        assert_eq!(serde_json::from_value::<Appearance>(encoded).unwrap(), bars);
+
+        assert!(parse(&json.replace("0.4", "1.5")).is_err()); // opacity out of range
+        assert!(parse(&json.replace("w.css", "../w.css")).is_err());
     }
 
     #[test]

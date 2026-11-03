@@ -177,6 +177,64 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   editor can edit it live. If the file doesn't parse, the host keeps showing the last good layout,
   refuses edits (so it never overwrites your file), and the shell shows the error in edit mode.
 
+## Appearance
+
+How a widget *looks* (its surface, text, accent, font and size) is a separate, layered setting,
+so users and themes can restyle every widget without editing widget code.
+
+**Fields** are defined by `mypaper_theme::Appearance` (`crates/theme`). Each one is optional:
+
+| Field | Values | Default |
+|---|---|---|
+| `surface` | `none` (no background: text sits on the wallpaper), `glass` (tinted and blurred), `solid` | **`none`** |
+| `tint` | `"#rrggbb"`: the surface color | `#101010` |
+| `opacity` | 0–1: surface opacity | 0.55 |
+| `blur` | 0–64 px: background blur (glass only) | 24 |
+| `radius` | 0–48 px: corner radius | 18 |
+| `border` | bool: hairline border | true |
+| `text` | `light` (for dark wallpapers) or `dark` | `light` |
+| `accent` | `"#rrggbb"` or `auto` (the wallpaper palette's accent) | `#ffffff` |
+| `font` | a CSS font-family list | Segoe UI Variable |
+| `scale` | 0.5–2: content scale | 1 |
+| `shadow` | bool: soft text shadow, for legibility with `surface: none` | true |
+
+**Layers**, lowest to highest (each set field wins over the layers below it):
+
+1. The built-in defaults above.
+2. The active theme: `theme.json` → `"widgets": { "appearance": { … }, "css": "widgets.css" }`.
+3. The user's global choice: `widgets.json` → `"appearance": { … }`.
+4. The instance: `widgets.json` → `instances[i].appearance`.
+
+**Resolution is done by the host.** It sends the merged result as plain JSON values: `accent: auto`
+is resolved to a color from `palette.json`, falling back to `#ffffff`. It also sends the theme CSS as
+text. Both arrive in the `hello` result as `appearance` (an object with every field set) and
+`themeCss` (string or null). Changes arrive as the pushed event `appearance` with
+`{ appearance, themeCss }`, whenever any layer, the theme or the palette changes.
+
+**What the SDK does with it.** `packages/widget-sdk`'s kit applies the appearance on `<html>`:
+
+| Attribute or variable | Set from |
+|---|---|
+| `data-surface="none\|glass\|solid"` | `surface` |
+| `data-text="light\|dark"` | `text` |
+| `data-shadow="on\|off"` | `shadow` |
+| `--surface` | `tint` at `opacity` |
+| `--blur`, `--radius` | `blur`, `radius` (px) |
+| `--line` | the border color, or transparent if `border` is false |
+| `--t0`…`--t3` | text steps from `text` |
+| `--fill-1`…`--fill-3` | fills from `text` |
+| `--accent`, `--font`, `--scale` | `accent`, `font`, `scale` |
+
+It also inserts `themeCss` as the last `<style>`. Widgets should use these variables and never
+hard-code a background, so a theme can restyle them. The widget's own CSS still works, and theme CSS
+can target `[data-widget="<id>"]` (set by the kit on `<html>`).
+
+**The CSP** allows `style-src 'self' 'unsafe-inline'`, so the kit can inject theme CSS.
+
+**Editing.** In edit mode, the toolbar's **Appearance** button edits the user layer (all widgets).
+Each widget's ⋯ menu has **Appearance** for the instance layer, with "Use default" to clear a field.
+Each change is written to `widgets.json` and applied live.
+
 ## Edit mode
 
 - **Toggle**:
