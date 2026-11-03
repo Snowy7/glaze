@@ -12,6 +12,7 @@ import {
   resolve,
   sizeLimits,
   sizeToPx,
+  toolbarEdge,
   type Grid,
   type Item,
   type SizeLimits,
@@ -266,5 +267,31 @@ describe("resolve", () => {
   it("refuses when one of several displaced widgets has no room", () => {
     const items = [item("a", [0, 0], [2, 1]), item("b", [2, 0], [1, 2]), item("c", [3, 0], [1, 2])];
     expect(resolve(small, items, item("a", [2, 0], [2, 1]), "move")).toEqual({ ok: false });
+  });
+});
+
+describe("toolbarEdge", () => {
+  const work = { x: 0, y: 48, width: 1000, height: 600 };
+  const bar = { width: 300, height: 46 }; // centred: x 350..650
+  const rect = (x: number, y: number, width = 100, height = 100) => ({ x, y, width, height });
+
+  it("stays on top when nothing is under it", () => {
+    expect(toolbarEdge(work, bar, [])).toBe("top");
+    expect(toolbarEdge(work, bar, [rect(0, 58), rect(900, 58)])).toBe("top"); // beside it, not under it
+  });
+
+  it("moves to the bottom when a widget is under the top spot and the bottom is clear", () => {
+    expect(toolbarEdge(work, bar, [rect(500, 58)])).toBe("bottom");
+    expect(toolbarEdge(work, bar, [rect(500, 58), rect(0, 500)])).toBe("bottom"); // the bottom widget is off to the side
+  });
+
+  it("stays on top when both edges are taken, rather than covering the other widget", () => {
+    expect(toolbarEdge(work, bar, [rect(500, 58), rect(500, 500)])).toBe("top");
+  });
+
+  it("uses the measured width: a wider toolbar reaches a widget a narrow one would miss", () => {
+    const beside = [rect(680, 58)];
+    expect(toolbarEdge(work, { width: 300, height: 46 }, beside)).toBe("top");
+    expect(toolbarEdge(work, { width: 400, height: 46 }, beside)).toBe("bottom"); // x 300..700
   });
 });

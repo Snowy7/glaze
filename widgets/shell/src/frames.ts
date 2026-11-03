@@ -6,6 +6,7 @@ import { h } from "./dom";
 import { rectToPx, sizeToPx, type PxRect, type Rect } from "./grid";
 import { denial } from "./permissions";
 import type {
+  AppearanceValues,
   HelloResult,
   HostToShell,
   InstanceState,
@@ -25,6 +26,7 @@ export interface Slot {
   origin: string; // https://<widget>.widget.mypaper
   sizeKey: string; // JSON of the last size the widget was told about
   settingsKey: string; // JSON of the last settings the widget was told about
+  appearanceKey: string; // JSON of the last appearance (and theme CSS) the widget was told about
 }
 
 export interface Frames {
@@ -33,9 +35,13 @@ export interface Frames {
   readonly overrides: Map<string, Rect>;
   /** Exact px rects to show instead of any cell (the widget being dragged). */
   readonly live: Map<string, PxRect>;
+  /** Looks to show instead of the host's (the Appearance panel's live preview). */
+  readonly looks: Map<string, AppearanceValues>;
   sync(state: ShellState): void;
   /** Applies positions from the host state, `overrides` and `live`. */
   render(): void;
+  /** Tells widgets whose look (from the host state or `looks`) changed. */
+  applyLooks(): void;
   onHost(message: Exclude<HostToShell, { type: "state" }>): void;
 }
 
@@ -70,8 +76,14 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
   const slots = new Map<string, Slot>();
   const overrides = new Map<string, Rect>();
   const live = new Map<string, PxRect>();
+  const looks = new Map<string, AppearanceValues>();
   let state: ShellState | undefined;
   let byInstance = new Map<string, InstanceState>();
+
+  /** What an instance's widget is told about its look: the previewed or the host's, and the theme CSS. */
+  function lookOf(inst: InstanceState): { appearance: AppearanceValues; themeCss: string | null } {
+    return { appearance: looks.get(inst.instance) ?? inst.appearance, themeCss: state?.themeCss ?? null };
+  }
 
   function sizeInfo(inst: InstanceState): SizeInfo {
     if (!state) throw new Error("no state yet");
@@ -107,6 +119,7 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
       origin: originOf(inst.widget),
       sizeKey: JSON.stringify(sizeInfo(inst)),
       settingsKey: JSON.stringify(inst.settings),
+      appearanceKey: JSON.stringify(lookOf(inst)),
     };
     slots.set(inst.instance, slot);
     layer.append(el);
@@ -119,6 +132,19 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
     slots.delete(slot.instance);
     overrides.delete(slot.instance);
     live.delete(slot.instance);
+    looks.delete(slot.instance);
+  }
+
+  function applyLooks() {
+    for (const slot of slots.values()) {
+      const inst = byInstance.get(slot.instance);
+      if (!inst) continue;
+      const look = lookOf(inst);
+      const key = JSON.stringify(look);
+      if (key === slot.appearanceKey) continue;
+      slot.appearanceKey = key;
+      postEvent(slot, "appearance", look);
+    }
   }
 
   function render() {
@@ -180,6 +206,7 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
         postEvent(slot, "settings", inst.settings);
       }
     }
+    applyLooks();
   }
 
   // iframe → shell → host
@@ -193,6 +220,7 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
     if (method === "hello") {
       const inst = byInstance.get(slot.instance);
       if (!inst) return;
+      const look = lookOf(inst);
       const result: HelloResult = {
         instance: slot.instance,
         widget: slot.manifest,
@@ -200,7 +228,9 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
         size: sizeInfo(inst),
         visible: state.visible,
         editing: state.editing,
+        ...look,
       };
+      slot.appearanceKey = JSON.stringify(look);
       postToFrame(slot, { id, result });
       send({ type: "hello", instance: slot.instance });
       return;
@@ -243,5 +273,5 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
     }
   }
 
-  return { slots, overrides, live, sync, render, onHost };
+  return { slots, overrides, live, looks, sync, render, applyLooks, onHost };
 }

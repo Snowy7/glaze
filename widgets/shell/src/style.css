@@ -773,6 +773,83 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
+/* ---- appearance panel ---- */
+
+.panel.wide {
+  width: 304px;
+}
+
+/* Every field fits without scrolling on a normal screen. */
+.panel.wide .form {
+  max-height: min(88vh, 800px);
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.field.inline .tools {
+  margin: 0 auto 0 10px;
+}
+
+/* A field this layer sets: its label turns bright, and "Use default" shows. */
+.field.set > .row > .t,
+.field.set.inline > .t {
+  color: var(--text);
+}
+
+.reset {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.reset:hover {
+  color: var(--white);
+}
+
+.reset[hidden] {
+  display: none;
+}
+
+.stack {
+  display: grid;
+  gap: 8px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--well);
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.chip:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+input.swatch:disabled,
+input.hex:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

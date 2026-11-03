@@ -59,6 +59,32 @@ export interface WidgetManifest {
   settings?: readonly SettingDef[];
 }
 
+// ---- appearance (docs/widgets.md, "Appearance"; mirrors `mypaper_theme::Appearance`) ----
+
+export type SurfaceKind = "none" | "glass" | "solid";
+export type TextTone = "light" | "dark";
+
+/** Every field of an appearance, set. `accent` is `#rrggbb`, or `auto` in an unresolved layer. */
+export interface AppearanceValues {
+  surface: SurfaceKind;
+  tint: string; // #rrggbb
+  opacity: number; // 0..1
+  blur: number; // px, 0..64
+  radius: number; // px, 0..48
+  border: boolean;
+  text: TextTone;
+  accent: string; // "auto" | #rrggbb
+  font: string; // a CSS font-family list
+  scale: number; // 0.5..2
+  shadow: boolean;
+}
+
+/** One layer: only the fields it sets. */
+export type Layer = Partial<AppearanceValues>;
+
+/** An edit to a layer: a value sets the field, `null` clears it ("Use default"). */
+export type LayerPatch = { [K in keyof AppearanceValues]?: AppearanceValues[K] | null };
+
 // ---- host ⇄ shell ----
 
 export interface InstanceState {
@@ -67,6 +93,10 @@ export interface InstanceState {
   cell: Vec2;
   size: Vec2;
   settings: Record<string, unknown>;
+  /** What the widget shows: every layer merged, `accent` a color. */
+  appearance: AppearanceValues;
+  /** Only what this instance sets itself (the top layer). */
+  own: Layer;
 }
 
 export interface ShellState {
@@ -76,6 +106,11 @@ export interface ShellState {
   grid: { origin: Vec2; cell: Vec2; gap: number; cols: number; rows: number };
   instances: InstanceState[];
   widgets: WidgetManifest[];
+  /** The layers under an instance's own: built-in defaults and the theme (`base`), the user's
+   *  choice (`user`), and the color `auto` stands for (`accent`). */
+  appearance: { base: AppearanceValues; user: Layer; accent: string };
+  /** The theme's widget style sheet, as text. */
+  themeCss: string | null;
   editing: boolean;
   visible: boolean;
   error?: string;
@@ -107,6 +142,8 @@ export type ShellToHost =
   | { type: "duplicate"; instance: string; cell: Vec2 }
   | { type: "remove"; instance: string }
   | { type: "settings"; instance: string; values: Record<string, unknown> }
+  /** Edits the user's appearance layer, or an instance's own when `instance` is set. */
+  | { type: "appearance"; instance?: string; values: LayerPatch }
   | { type: "edit"; on: boolean };
 
 // ---- iframe ⇄ shell (the SDK's wire) ----
@@ -129,6 +166,8 @@ export interface HelloResult {
   size: SizeInfo;
   visible: boolean;
   editing: boolean;
+  appearance: AppearanceValues;
+  themeCss: string | null;
 }
 
 export type SubscribeParams =
@@ -168,6 +207,7 @@ export interface WireEvents {
   editmode: boolean;
   settings: Settings;
   size: SizeInfo;
+  appearance: { appearance: AppearanceValues; themeCss: string | null };
   sub: { sub: string; value: unknown };
 }
 

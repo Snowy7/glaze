@@ -149,11 +149,19 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
       "monitor": "\\\\.\\DISPLAY1",
       "cell": [0, 0],
       "size": [2, 1],
-      "settings": { "format24": true }
+      "settings": { "format24": true },
+      "appearance": { "text": "dark" }
     }
-  ]
+  ],
+  "appearance": { "surface": "glass", "opacity": 0.5 }
 }
 ```
+
+- `appearance` (top level: the user's look for every widget; per instance: that widget's own) holds
+  only the fields it sets, with the names and values of [Appearance](#appearance). Both are
+  optional and validated when the file loads (ranges, `#rrggbb`, unknown fields are errors, so the
+  file never silently loses a setting). The host writes only the fields a layer sets, and drops an
+  empty layer.
 
 - **The grid.**
   - `cell` is the **nominal** cell size: as many whole cells as fit are laid out, then every
@@ -164,9 +172,16 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
     values fall back to 96 DIPs. Cells may therefore be rectangular.
   - A positive `cell` is a fixed size in DIPs.
   - `gap` and `margin` are in DIPs. The grid starts at the monitor's **work area** (excluding the
-    taskbar) plus `margin`. A cell `[c, r]` sits at `origin + [c, r] × (cell + gap)`, and a widget
-    `[w, h]` cells wide is `w × cell + (w − 1) × gap`. The grid has as many whole cells as fit in
-    the work area minus the margins.
+    taskbar and any app bar, such as mypaper's own top bar and dock) plus `margin`. A cell `[c, r]`
+    sits at `origin + [c, r] × (cell + gap)`, and a widget `[w, h]` cells wide is
+    `w × cell + (w − 1) × gap`. The grid has as many whole cells as fit in the work area minus the
+    margins.
+  - **The work area changes** (an app bar appears or goes, a display is added, resized or changes
+    scale, the icon spacing changes): the host hears it through `WM_SETTINGCHANGE`
+    (`SPI_SETWORKAREA`, icon metrics) and `WM_DISPLAYCHANGE`, a few hundred milliseconds after the
+    last one, and re-lays out: the grid is recomputed (the stretch included) and every widget is
+    placed on it again, clamped, so none sits under a bar. Saved cells are not rewritten; they
+    clamp again if the bar goes.
 - `instance` ids are `[a-z0-9-]`, unique; the host names new ones `<widget>-<n>`.
 - `monitor` is the device name (`MONITORINFOEXW.szDevice`). If that monitor is missing, the
   instance is shown on the primary monitor at its cell, clamped, and its saved monitor isn't
@@ -207,9 +222,12 @@ so users and themes can restyle every widget without editing widget code.
 
 **Resolution is done by the host.** It sends the merged result as plain JSON values: `accent: auto`
 is resolved to a color from `palette.json`, falling back to `#ffffff`. It also sends the theme CSS as
-text. Both arrive in the `hello` result as `appearance` (an object with every field set) and
-`themeCss` (string or null). Changes arrive as the pushed event `appearance` with
-`{ appearance, themeCss }`, whenever any layer, the theme or the palette changes.
+text (read from the theme's `widgets.css` path, 512 KB at most). Both arrive in the `hello` result
+as `appearance` (an object with every field set) and `themeCss` (string or null). Changes arrive as
+the pushed event `appearance` with `{ appearance, themeCss }`, whenever any layer, the theme or the
+palette changes: an edit of `widgets.json`, a theme switch in `config.json`, an edit of the active
+theme's `theme.json` or `.css` files, or a new `palette.json`. (On the wire between host and shell
+the same data travels in `state`, see [Host ⇄ shell](#host--shell); the shell relays it.)
 
 **What the SDK does with it.** `packages/widget-sdk`'s kit applies the appearance on `<html>`:
 
@@ -232,8 +250,14 @@ can target `[data-widget="<id>"]` (set by the kit on `<html>`).
 **The CSP** allows `style-src 'self' 'unsafe-inline'`, so the kit can inject theme CSS.
 
 **Editing.** In edit mode, the toolbar's **Appearance** button edits the user layer (all widgets).
-Each widget's ⋯ menu has **Appearance** for the instance layer, with "Use default" to clear a field.
-Each change is written to `widgets.json` and applied live.
+Each widget's ⋯ menu has **Appearance** for the instance layer. Controls: surface (segmented:
+none / glass / solid), tint (color), opacity, blur and radius (sliders), border and text shadow
+(toggles), text (light / dark), accent (Auto, or a color), font (text field with presets) and scale
+(slider). A field the edited layer sets shows **Use default**, which clears it so the layer below
+shows through (an unset field shows that inherited value). Sliders and color pickers preview live on
+the affected widgets while they move (nothing is written) and save once on release; the other
+controls save at once. A user-layer change reaches every widget that doesn't set the field itself;
+an instance change reaches only that widget.
 
 ## Edit mode
 
@@ -245,9 +269,12 @@ Each change is written to `widgets.json` and applied live.
     with `wParam` 1 (on), 0 (off) or 2 (toggle) to the host's message-only window, whose class is
     `mypaper.widgets.host`. `mypaper-widgets --edit on|off|toggle` does exactly that and exits.
 - **What it shows**: the grid (subtle dots or lines on the work area), each widget with a frame,
-  a drag area, resize handles (edges and corners) and a ⋯ menu (Settings, Duplicate, Remove), plus
-  a **+ Add widget** palette listing every installed widget. The window region covers the whole
-  monitor while editing, on every monitor.
+  a drag area, resize handles (edges and corners) and a ⋯ menu (Settings, Appearance, Duplicate,
+  Remove), plus a toolbar with **+ Add widget** (a palette listing every installed widget),
+  **Appearance** (the user layer, see [Appearance](#appearance)) and **Done**. The toolbar sits
+  centred at the top of the work area, or at the bottom when a widget is under the top spot and the
+  bottom is clear (it is always drawn above widgets). The window region covers the whole monitor
+  while editing, on every monitor.
 - **Moving and resizing**: live, with the pointer. Positions snap to cells. Sizes are clamped to the
   manifest's `min`/`max`. Widgets can't overlap: a move that would overlap swaps or shifts the
   other widgets (they move down, then right; never off-grid), or the move is refused with a shake
@@ -319,6 +346,12 @@ interface Mypaper {
   track changes, not every second, so advance it locally while `playing`. `artwork` is a
   `data:image/…;base64,` URL (omitted above 256 KB). `app` is a readable app name (`Spotify`, not
   `Spotify.exe`). Colors are `#rrggbb`.
+- **Battery, uptime, network**: `battery.percent` is 0–100; `battery` is absent on machines without
+  a battery (or when Windows can't tell). `uptime` is seconds since boot. `network.kind` is
+  `ethernet` when a wired adapter has a link (Windows routes over it first), else `wifi` with the
+  network's name (`name`, the SSID) and `signal` (0–100), else `none`. All of it is read only while
+  something subscribes or asks: one sample for every subscriber, the Wi-Fi service queried at most
+  every 5 s, nothing while the host is held.
 - **Errors**: `PermissionDenied`, `NotFound`, `InvalidParams`, `PluginUnavailable`, `Internal`.
 - **Visibility**: when the host is held, widgets get `visibility:false` and then the WebView is
   suspended. Widgets should stop their animations. Subscriptions are paused automatically. A
@@ -336,7 +369,8 @@ the manifest on disk, never from the message.
 
 **Handshake.** On load the widget sends `hello` (`params: { sdk: 1 }`). The shell answers with
 everything a widget needs synchronously afterwards:
-`{ instance, widget /* the manifest */, settings, size, visible, editing }`. `mypaper.ready`
+`{ instance, widget /* the manifest */, settings, size, visible, editing, appearance, themeCss }`
+(see [Appearance](#appearance)). `mypaper.ready`
 resolves with that, and every other call waits for it. (A widget that gets no answer within
 10 s fails `ready`: it is not inside mypaper.)
 
@@ -370,8 +404,8 @@ While the host is held (`visibility: false`) nothing is delivered; `system` send
 as the widget is visible again.
 
 **Pushed events** (shell → widget, always on, no subscription): `visibility` (`boolean`),
-`editmode` (`boolean`), `settings` (the full settings object) and `size`
-(`{ cells, px, dpi }`).
+`editmode` (`boolean`), `settings` (the full settings object), `size`
+(`{ cells, px, dpi }`) and `appearance` (`{ appearance, themeCss }`).
 
 **Plugin errors.** A JSON-RPC `error` from a plugin becomes a wire error as follows: if
 `error.data.code` is one of the five names above it is used; otherwise `-32601` is `NotFound`,
@@ -392,8 +426,14 @@ type HostToShell =
       work: { x: number; y: number; width: number; height: number };   // the work area
       grid: { origin: [number, number]; cell: [number, number]; gap: number; cols: number; rows: number };
       instances: { instance: string; widget: string; cell: [number, number]; size: [number, number];
-                   settings: Record<string, unknown> }[];  // resolved: defaults plus saved values
+                   settings: Record<string, unknown>;      // resolved: defaults plus saved values
+                   appearance: Appearance;                  // resolved: every layer merged, every field set
+                   own: Partial<Appearance> }[];            // only what the instance sets (the top layer)
       widgets: WidgetManifest[];                           // every installed widget (the palette)
+      appearance: { base: Appearance;                      // built-in defaults < theme skin (accent may be "auto")
+                    user: Partial<Appearance>;             // the user's layer (widgets.json "appearance")
+                    accent: string };                      // the color "auto" stands for (palette.json, else #ffffff)
+      themeCss: string | null;                             // the theme's widgets style sheet, as text
       editing: boolean; visible: boolean;
       error?: string }                                     // widgets.json doesn't parse
   | { type: "reply"; instance: string; id: number | string; result?: unknown;
@@ -410,6 +450,8 @@ type ShellToHost =
   | { type: "duplicate"; instance: string; cell: [number, number] }
   | { type: "remove"; instance: string }
   | { type: "settings"; instance: string; values: Record<string, unknown> }
+  | { type: "appearance"; instance?: string;                // the user's layer, or an instance's own
+      values: { [K in keyof Appearance]?: Appearance[K] | null } }  // null clears a field ("Use default")
   | { type: "edit"; on: boolean };                         // Done / Esc
 ```
 
@@ -419,9 +461,15 @@ type ShellToHost =
   to widgets when those change in the state.
 - `call` carries every other wire request unchanged; the host answers with `reply`, and delivers
   subscription values as `event` (`sub`). While a monitor is hidden its widgets get nothing.
-- Layout edits (`layout`, `add`, `duplicate`, `remove`, `settings`) are applied, clamped, saved, and
-  answered with a fresh `state`, which is authoritative: a refused edit just gets the old state back.
-  The shell resolves overlaps and finds free cells before sending.
+- Layout edits (`layout`, `add`, `duplicate`, `remove`, `settings`, `appearance`) are applied,
+  clamped, saved, and answered with a fresh `state`, which is authoritative: a refused edit just gets
+  the old state back. The shell resolves overlaps and finds free cells before sending. An
+  `appearance` edit is merged into its layer (a `null` value deletes the field), validated, and
+  refused whole if anything is out of range.
+- Appearance reaches widgets through the shell: its `hello` answer and its `appearance` event carry
+  `state`'s resolved `appearance` and `themeCss` for that instance. While the Appearance panel is
+  open the shell previews edits by sending the `appearance` event itself, merged locally from the
+  same layers (`base`, `user`, `own`, `accent`), and drops the preview at the next `state`.
 - The host also injects a small hardening script (`widgets/shell/dist/harden.js`) into every frame
   at document creation (`AddScriptToExecuteOnDocumentCreated`); see [Network](#network).
 
@@ -433,8 +481,12 @@ Two layers, so a widget reaches exactly the origins its manifest lists.
 
 ```text
 Content-Security-Policy: default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: <each network: origin>;
+                         style-src 'self' 'unsafe-inline' data: blob: <each network: origin>;
                          object-src 'none'; base-uri 'self'
 ```
+
+(`style-src` repeats the default on purpose: inline styles must stay allowed so the widget kit can
+insert the theme's style sheet.)
 
 Chromium enforces it on every connection the widget's documents and workers make (`fetch`, XHR,
 WebSockets, EventSource, beacons, images, fonts, media, frames), including about:blank and srcdoc
@@ -553,4 +605,6 @@ target\debug\mypaper-widgets.exe --edit toggle   # or Ctrl+Alt+Shift+W
 - `MYPAPER_WIDGETS_IGNORE_COVERED=1` keeps monitors awake while a maximized window covers them,
   for capturing the widget layer in tests (`PrintWindow(GetShellWindow(), PW_RENDERFULLCONTENT)`
   renders the desktop, widgets included, without touching the windows in front).
-- `pnpm -C widgets/shell test` runs the grid math tests (vitest).
+- `pnpm -C widgets/shell test` runs the grid math, permission and appearance-layer tests (vitest).
+- To drive the shell page from a script, set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`
+  before starting the host and attach over the DevTools protocol (`http://127.0.0.1:9333/json/list`).

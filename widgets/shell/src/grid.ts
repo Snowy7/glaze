@@ -107,6 +107,22 @@ export function deltaToCells(grid: Grid, delta: Vec2): Vec2 {
   return [delta[0] / p[0], delta[1] / p[1]];
 }
 
+// ---- the edit-mode toolbar ----
+
+/**
+ * Which edge of the work area the toolbar sits on, centred: the top, unless a widget is under it
+ * there and the bottom is clear. (When both are blocked it stays on top: it is drawn over widgets.)
+ * `bar` is the toolbar's measured size; the widget rects are in px.
+ */
+export function toolbarEdge(work: PxRect, bar: { width: number; height: number }, widgets: readonly PxRect[], inset = 10): "top" | "bottom" {
+  const x = work.x + work.width / 2 - bar.width / 2;
+  const blocked = (y: number) =>
+    widgets.some((r) => r.x < x + bar.width && x < r.x + r.width && r.y < y + bar.height && y < r.y + r.height);
+  const top = work.y + inset;
+  const bottom = work.y + work.height - inset - bar.height;
+  return blocked(top) && !blocked(bottom) ? "bottom" : "top";
+}
+
 // ---- size limits ----
 
 export function sizeLimits(manifest: Pick<WidgetManifest, "size" | "resizable">): SizeLimits {

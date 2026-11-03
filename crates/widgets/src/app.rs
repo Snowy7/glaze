@@ -575,6 +575,7 @@ impl App {
     /// Unlike window events these arrive even when no window moved, e.g. an app bar that
     /// reserves screen space.
     fn relayout_for_display(&mut self) {
+        log::debug!("display or work-area change announced");
         let icon_cell = icon_cell();
         if icon_cell != self.icon_cell {
             self.icon_cell = icon_cell; // icon spacing sets the grid's cell size
