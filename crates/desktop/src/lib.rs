@@ -15,6 +15,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// restarted, monitors changed); start me again". The supervisor relaunches.
 pub const EXIT_RESTART: u8 = 3;
 
+/// Process exit code meaning "my configuration is broken (bad arguments,
+/// missing or invalid theme)". Restarting cannot help, so the supervisor stops.
+pub const EXIT_CONFIG: u8 = 2;
+
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::System::Console::SetConsoleCtrlHandler;
 use windows::Win32::System::Threading::GetCurrentThreadId;

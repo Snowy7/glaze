@@ -1,11 +1,12 @@
 //! mypaper-wallpaper: renders a theme's wallpaper behind the desktop icons.
 //!
 //! ```text
-//! mypaper-wallpaper [--windowed] [THEME_DIR]
+//! mypaper-wallpaper [--windowed] [THEME]
 //! ```
 //!
 //! `--windowed` renders into a normal window instead of the desktop, for
-//! development. Theme files hot-reload on save in both modes.
+//! development. Theme files hot-reload on save in both modes. `THEME` is a theme
+//! folder or name (default `aurora`), see [`mypaper_theme::locate`].
 
 mod engine;
 mod gpu;
@@ -15,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Result, bail};
-use mypaper_desktop::{DesktopHost, WindowEvents, monitors};
+use mypaper_desktop::{DesktopHost, EXIT_CONFIG, WindowEvents, monitors};
 use mypaper_theme::LoadedTheme;
 use notify::Watcher;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
@@ -27,7 +28,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::engine::{Engine, Flow};
 use crate::window::{WM_RELOAD, Waiter, Window};
 
-const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [THEME_DIR]";
+const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [THEME]";
 
 struct Args {
     windowed: bool,
@@ -41,7 +42,17 @@ fn main() -> ExitCode {
     #[cfg(feature = "hotpatch")]
     dioxus_devtools::connect_subsecond();
 
-    match parse_args().and_then(run) {
+    // Bad arguments or a broken theme will not fix themselves: exit with
+    // EXIT_CONFIG so the supervisor reports it instead of restarting.
+    let (args, theme) =
+        match parse_args().and_then(|args| Ok((LoadedTheme::load(&args.theme)?, args))) {
+            Ok((theme, args)) => (args, theme),
+            Err(e) => {
+                log::error!("{e:#}");
+                return ExitCode::from(EXIT_CONFIG);
+            }
+        };
+    match run(args, theme) {
         Ok(code) => ExitCode::from(code),
         Err(e) => {
             log::error!("{e:#}");
@@ -51,26 +62,24 @@ fn main() -> ExitCode {
 }
 
 fn parse_args() -> Result<Args> {
-    let mut args = Args {
-        windowed: false,
-        theme: PathBuf::from("themes/aurora"),
-    };
+    let mut windowed = false;
+    let mut theme = None;
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
-            "--windowed" => args.windowed = true,
+            "--windowed" => windowed = true,
             "-h" | "--help" => {
                 println!("{USAGE}");
                 std::process::exit(0);
             }
             flag if flag.starts_with('-') => bail!("unknown flag {flag}\n{USAGE}"),
-            path => args.theme = path.into(),
+            name => theme = Some(name.to_owned()),
         }
     }
-    Ok(args)
+    let theme = mypaper_theme::locate(theme.as_deref())?;
+    Ok(Args { windowed, theme })
 }
 
-fn run(args: Args) -> Result<u8> {
-    let theme = LoadedTheme::load(&args.theme)?;
+fn run(args: Args, theme: LoadedTheme) -> Result<u8> {
     log::info!("theme: {} ({})", theme.theme.name, args.theme.display());
     window::register_class()?;
 

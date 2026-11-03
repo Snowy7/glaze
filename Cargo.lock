@@ -756,6 +756,7 @@ dependencies = [
  "env_logger",
  "log",
  "mypaper-desktop",
+ "mypaper-theme",
  "windows",
 ]
 

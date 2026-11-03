@@ -2,7 +2,7 @@
 //! when it crashes or the desktop changes, and owns the panic hotkey.
 //!
 //! ```text
-//! mypaper-core [THEME_DIR]
+//! mypaper-core [THEME]
 //! ```
 //!
 //! **Panic hotkey: Ctrl+Alt+Shift+Backspace** stops everything and restores
@@ -11,7 +11,6 @@
 mod restart;
 
 use std::os::windows::io::AsRawHandle;
-use std::path::PathBuf;
 use std::process::{Child, Command, ExitCode};
 use std::time::Instant;
 
@@ -44,9 +43,10 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<()> {
-    let theme = std::env::args()
-        .nth(1)
-        .map_or_else(|| PathBuf::from("themes/aurora"), PathBuf::from);
+    // Resolve once, up front: a missing theme fails here instead of crash-looping
+    // the child, and the child gets an absolute path whatever our working dir is.
+    let theme = mypaper_theme::locate(std::env::args().nth(1).as_deref())?;
+    log::info!("theme folder: {}", theme.display());
     let wallpaper_exe = std::env::current_exe()?.with_file_name("mypaper-wallpaper.exe");
     if !wallpaper_exe.exists() {
         bail!(
@@ -105,6 +105,10 @@ fn run() -> Result<()> {
                 Decision::RestartAfter(delay) => {
                     log::warn!("wallpaper exited ({code:?}); restarting in {delay:?}");
                     restart_at = Some(Instant::now() + delay);
+                }
+                Decision::Broken => {
+                    log::error!("wallpaper cannot start with this configuration (see error above)");
+                    break;
                 }
                 Decision::GiveUp => {
                     log::error!("wallpaper keeps crashing; giving up (desktop restored)");

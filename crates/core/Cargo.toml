@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 mypaper-desktop.workspace = true
+mypaper-theme.workspace = true
 
 anyhow.workspace = true
 env_logger.workspace = true

@@ -13,6 +13,37 @@ use serde::Deserialize;
 
 pub const MANIFEST: &str = "theme.json";
 
+/// Used when no theme is given on the command line.
+pub const DEFAULT_THEME: &str = "aurora";
+
+/// Finds a theme folder and returns its absolute path. `name` is a path
+/// (absolute or relative to the current directory) or a bare theme name.
+/// Failing that, it is looked up in a `themes/` folder beside the
+/// executable or any parent, so a double-clicked `target/debug/*.exe`
+/// finds the repo themes just like an installed copy finds its own.
+pub fn locate(name: Option<&str>) -> Result<PathBuf> {
+    locate_from(name.unwrap_or(DEFAULT_THEME), &std::env::current_exe()?)
+}
+
+fn locate_from(name: &str, exe: &Path) -> Result<PathBuf> {
+    let direct = PathBuf::from(name);
+    let beside_exe = exe
+        .ancestors()
+        .skip(1)
+        .flat_map(|dir| [dir.join("themes").join(name), dir.join(name)]);
+    let mut tried = Vec::new();
+    for candidate in std::iter::once(direct).chain(beside_exe) {
+        if candidate.join(MANIFEST).is_file() {
+            return Ok(std::path::absolute(&candidate)?);
+        }
+        tried.push(candidate.display().to_string());
+    }
+    bail!(
+        "theme {name:?} not found; looked in:\n  {}",
+        tried.join("\n  ")
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Theme {
@@ -130,6 +161,20 @@ mod tests {
             );
             assert!(parse(&json).is_err(), "{source} should be rejected");
         }
+    }
+
+    #[test]
+    fn locates_themes_from_a_nested_exe() {
+        let root = std::env::temp_dir().join(format!("mypaper-locate-{}", std::process::id()));
+        let theme = root.join("themes").join("aurora");
+        std::fs::create_dir_all(&theme).unwrap();
+        std::fs::write(theme.join(MANIFEST), "{}").unwrap();
+        let exe = root.join("target").join("debug").join("mypaper-core.exe");
+
+        let found = locate_from("aurora", &exe).unwrap();
+        assert_eq!(found, theme);
+        assert!(locate_from("nope", &exe).is_err());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

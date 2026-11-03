@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use mypaper_desktop::EXIT_RESTART;
+use mypaper_desktop::{EXIT_CONFIG, EXIT_RESTART};
 
 /// Crashes counted within this window decide the backoff.
 const CRASH_WINDOW: Duration = Duration::from_secs(60);
@@ -13,6 +13,8 @@ const MAX_CRASHES: usize = 5;
 #[derive(Debug, PartialEq, Eq)]
 pub enum Decision {
     Stop,
+    /// Bad configuration: restarting would fail the same way.
+    Broken,
     RestartAfter(Duration),
     GiveUp,
 }
@@ -27,6 +29,7 @@ impl Restarts {
     pub fn on_exit(&mut self, code: Option<i32>, now: Instant) -> Decision {
         match code {
             Some(0) => Decision::Stop,
+            Some(c) if c == i32::from(EXIT_CONFIG) => Decision::Broken,
             // The desktop changed (Explorer restart, monitors): give Explorer
             // a moment to rebuild its windows, then reattach.
             Some(c) if c == i32::from(EXIT_RESTART) => {
@@ -50,10 +53,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn clean_exit_stops_and_desktop_change_restarts_quickly() {
+    fn clean_exit_and_bad_config_stop_while_desktop_change_restarts() {
         let mut r = Restarts::default();
         let now = Instant::now();
         assert_eq!(r.on_exit(Some(0), now), Decision::Stop);
+        assert_eq!(r.on_exit(Some(2), now), Decision::Broken);
         assert_eq!(
             r.on_exit(Some(3), now),
             Decision::RestartAfter(Duration::from_millis(750))
