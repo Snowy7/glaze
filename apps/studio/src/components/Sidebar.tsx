@@ -1,12 +1,14 @@
-import { LayoutGrid, Pause, Plus, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { Blocks, LayoutGrid, PanelTop, Pause, Plus, SlidersHorizontal, type LucideIcon } from "lucide-react";
 
 import { useStudio } from "../lib/studio";
 import { StatusDot } from "./ui";
 
-export type View = "gallery" | "new" | "settings";
+export type View = "gallery" | "widgets" | "bars" | "new" | "settings";
 
 const ITEMS: { view: View; label: string; icon: LucideIcon }[] = [
   { view: "gallery", label: "Gallery", icon: LayoutGrid },
+  { view: "widgets", label: "Widgets", icon: Blocks },
+  { view: "bars", label: "Bars", icon: PanelTop },
   { view: "new", label: "New theme", icon: Plus },
   { view: "settings", label: "Settings", icon: SlidersHorizontal },
 ];

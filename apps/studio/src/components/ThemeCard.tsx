@@ -46,15 +46,15 @@ export function ThemeCard({ theme, index, onCustomize }: Props) {
           <h3 className="truncate font-display text-[15px] font-semibold tracking-tight text-ink">{theme.name}</h3>
           <p className="flex items-center gap-1.5 truncate text-xs text-ink-3" title={theme.dir}>
             {ORIGIN_LABEL[theme.origin]}
-            {theme.styled && (
-              <>
+            {looks(theme).map(({ label, hint }) => (
+              <span key={label} className="flex items-center gap-1.5">
                 <span aria-hidden>·</span>
-                <span title="Has Windows styling">Styled</span>
-              </>
-            )}
+                <span title={hint}>{label}</span>
+              </span>
+            ))}
           </p>
         </div>
-        <IconButton icon={Palette} label={`Windows styling for ${theme.name}`} disabled={broken} onClick={() => onCustomize(theme)} />
+        <IconButton icon={Palette} label={`Customize ${theme.name}`} disabled={broken} onClick={() => onCustomize(theme)} />
         {theme.active ? (
           <span className="px-2 text-[13px] font-medium text-ink-2">In use</span>
         ) : (
@@ -79,6 +79,15 @@ export function ThemeCard({ theme, index, onCustomize }: Props) {
   );
 }
 
+/** What the theme restyles besides the wallpaper. */
+function looks(theme: ThemeEntry): { label: string; hint: string }[] {
+  return [
+    theme.styled && { label: "Windows", hint: "Styles window colors, corners and backdrop" },
+    theme.widgetsSkin && { label: "Widgets", hint: "Sets how desktop widgets look" },
+    theme.barsSkin && { label: "Bars", hint: "Sets how the top bar and dock look" },
+  ].filter((look) => look !== false);
+}
+
 /** The reason without the leading "in <path>\theme.json:" context, which is long and not useful on a card. */
 function errorSummary(error: string): string {
   return error.replace(/^in .*?theme\.json:\s*/i, "") || error;
@@ -97,7 +106,7 @@ function Preview({ theme, loading }: { theme: ThemeEntry; loading: boolean }) {
         decoding="async"
         draggable={false}
         onError={() => setFailed(preview)}
-        className={`size-full object-cover ${zoom}`}
+        className={`size-full animate-fade-in object-cover ${zoom}`}
       />
     );
   }

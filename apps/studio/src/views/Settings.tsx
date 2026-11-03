@@ -1,11 +1,18 @@
 import { Play, Square } from "lucide-react";
-import type { ReactNode } from "react";
 
-import { Button, Keycap, PageHeader, SectionLabel, StatusDot, Switch } from "../components/ui";
+import { Button, Group, Keycap, PageHeader, Row, StatusDot, ToggleRow } from "../components/ui";
+import type { Component, ComponentId } from "../lib/api";
 import { useStudio } from "../lib/studio";
 
+const COMPONENT_INFO: Record<ComponentId, { name: string; detail: string }> = {
+  core: { name: "mypaper-core", detail: "The supervisor and tray icon. Starts the others." },
+  wallpaper: { name: "mypaper-wallpaper", detail: "Draws the wallpaper behind your desktop icons." },
+  widgets: { name: "mypaper-widgets", detail: "Desktop widgets: one transparent layer per monitor." },
+  bars: { name: "mypaper-bars", detail: "The top bar, the dock and the taskbar options." },
+};
+
 export function Settings() {
-  const { config, updateConfig, engine, startEngine, stopEngine, autostart, setAutostart, busy } = useStudio();
+  const { config, updateConfig, engine, components, startEngine, stopEngine, autostart, setAutostart, busy } = useStudio();
 
   return (
     <>
@@ -51,6 +58,14 @@ export function Settings() {
           </Row>
         </Group>
 
+        <Group title="Components">
+          {components === null ? (
+            <Row title="Checking" />
+          ) : (
+            components.map((component) => <ComponentRow key={component.id} component={component} />)
+          )}
+        </Group>
+
         <Group title="Playback">
           <ToggleRow
             title="Pause wallpaper"
@@ -90,47 +105,16 @@ export function Settings() {
   );
 }
 
-function Group({ title, children }: { title: string; children: ReactNode }) {
+/** One program: running, stopped (found but not running), or missing (not built or installed). */
+function ComponentRow({ component }: { component: Component }) {
+  const info = COMPONENT_INFO[component.id];
+  const state = component.running ? "Running" : component.path ? "Stopped" : "Not found";
   return (
-    <section aria-label={title}>
-      <SectionLabel>{title}</SectionLabel>
-      <div className="divide-y divide-line overflow-hidden rounded-2xl bg-surface shadow-card ring-1 ring-line">{children}</div>
-    </section>
-  );
-}
-
-function Row({ title, detail, mono, children }: { title: string; detail: string; mono?: boolean; children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-4 px-5 py-4">
-      <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-medium text-ink">{title}</div>
-        <div className={`mt-0.5 text-[12.5px] text-ink-3 ${mono ? "selectable truncate font-mono text-xs" : ""}`} title={mono ? detail : undefined}>
-          {detail}
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function ToggleRow({
-  title,
-  detail,
-  mono,
-  checked,
-  disabled,
-  onChange,
-}: {
-  title: string;
-  detail: string;
-  mono?: boolean;
-  checked: boolean;
-  disabled: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <Row title={title} detail={detail} mono={mono}>
-      <Switch label={title} checked={checked} disabled={disabled} onChange={onChange} />
+    <Row title={info.name} detail={info.detail}>
+      <span className="flex items-center gap-2.5 text-[13px] font-medium text-ink-2" title={component.path ?? `${component.exe} wasn't found beside Studio or in a target folder`}>
+        <StatusDot state={component.running ? "on" : "off"} />
+        {state}
+      </span>
     </Row>
   );
 }

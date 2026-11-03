@@ -1,10 +1,11 @@
 import { Copy, Lock, X } from "lucide-react";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { ThemeEntry } from "../lib/api";
 import { useStudio } from "../lib/studio";
+import { SkinEditor } from "./SkinEditor";
 import { StyleEditor } from "./StyleEditor";
-import { Button, IconButton } from "./ui";
+import { Button, IconButton, Segmented } from "./ui";
 
 type Props = {
   theme: ThemeEntry;
@@ -13,10 +14,19 @@ type Props = {
   onDuplicated: (copy: ThemeEntry) => void;
 };
 
+type Tab = "windows" | "widgets" | "bars";
+
+const TABS: readonly { value: Tab; label: string }[] = [
+  { value: "windows", label: "Windows" },
+  { value: "widgets", label: "Widgets look" },
+  { value: "bars", label: "Bars look" },
+];
+
 /** A right-hand sheet (a native modal dialog: focus is trapped and Esc closes it). */
-export function StyleSheet({ theme, onClose, onDuplicated }: Props) {
+export function CustomizeSheet({ theme, onClose, onDuplicated }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const [tab, setTab] = useState<Tab>("windows");
 
   useEffect(() => {
     const dialog = ref.current;
@@ -29,19 +39,28 @@ export function StyleSheet({ theme, onClose, onDuplicated }: Props) {
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(event) => event.target === event.currentTarget && ref.current?.close()}
-      className="m-0 ml-auto h-dvh max-h-none w-[min(30rem,100vw)] max-w-none animate-slide-in overflow-hidden border-l border-line-strong bg-sidebar p-0 text-ink-2 shadow-card open:flex open:flex-col"
+      className="m-0 ml-auto h-dvh max-h-none w-[min(36rem,100vw)] max-w-none animate-slide-in overflow-hidden border-l border-line-strong bg-sidebar p-0 text-ink-2 shadow-card open:flex open:flex-col"
     >
-      <header className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
-        <div className="min-w-0">
-          <h2 id={titleId} className="font-display text-xl font-semibold tracking-tight text-ink">
-            Windows styling
-          </h2>
-          <p className="mt-0.5 truncate text-[13px] text-ink-3">{theme.name}</p>
+      <header className="border-b border-line px-6 pt-5 pb-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 id={titleId} className="font-display text-xl font-semibold tracking-tight text-ink">
+              Customize
+            </h2>
+            <p className="mt-0.5 truncate text-[13px] text-ink-3">{theme.name}</p>
+          </div>
+          <IconButton icon={X} label="Close" onClick={() => ref.current?.close()} />
         </div>
-        <IconButton icon={X} label="Close" onClick={() => ref.current?.close()} />
+        <Segmented<Tab> label="Section" hideLabel className="mt-4" value={tab} options={TABS} onChange={setTab} />
       </header>
 
-      {theme.origin === "user" ? <StyleEditor key={theme.id} theme={theme} /> : <ReadOnly theme={theme} onDuplicated={onDuplicated} />}
+      {theme.origin !== "user" ? (
+        <ReadOnly theme={theme} onDuplicated={onDuplicated} />
+      ) : tab === "windows" ? (
+        <StyleEditor key={theme.id} theme={theme} />
+      ) : (
+        <SkinEditor key={`${theme.id}:${tab}`} theme={theme} kind={tab} />
+      )}
     </dialog>
   );
 }
@@ -56,7 +75,7 @@ function ReadOnly({ theme, onDuplicated }: Pick<Props, "theme" | "onDuplicated">
       </span>
       <p className="font-display text-base font-semibold text-ink">{theme.origin === "bundled" ? "Built-in themes are read-only" : "This theme lives outside your themes folder"}</p>
       <p className="mt-1 max-w-sm text-[13px] text-ink-3">
-        Copy it to your themes and you can change its accent, borders, title bars, corners and backdrop. Its images and other files come along, and the original stays as it is.
+        Copy it to your themes and you can change its Windows styling and how widgets and the bars look. Its images and other files come along, and the original stays as it is.
       </p>
       <Button
         variant="primary"

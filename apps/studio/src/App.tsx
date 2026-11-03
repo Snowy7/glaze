@@ -4,9 +4,11 @@ import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { Sidebar, type View } from "./components/Sidebar";
 import { Button } from "./components/ui";
 import { StudioProvider, useStudio } from "./lib/studio";
+import { Bars } from "./views/Bars";
 import { Gallery } from "./views/Gallery";
 import { NewTheme } from "./views/NewTheme";
 import { Settings } from "./views/Settings";
+import { Widgets } from "./views/Widgets";
 
 export function App() {
   return (
@@ -30,6 +32,8 @@ function Shell() {
       >
         <ErrorBoundary inline>
           {view === "gallery" && <Gallery onNavigate={setView} />}
+          {view === "widgets" && <Widgets />}
+          {view === "bars" && <Bars />}
           {view === "new" && <NewTheme onNavigate={setView} />}
           {view === "settings" && <Settings />}
         </ErrorBoundary>

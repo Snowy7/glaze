@@ -2,7 +2,7 @@ import { FolderPlus, Pause, Play, SearchX } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import type { View } from "../components/Sidebar";
-import { StyleSheet } from "../components/StyleSheet";
+import { CustomizeSheet } from "../components/CustomizeSheet";
 import { ThemeCard } from "../components/ThemeCard";
 import { Banner, Button, EmptyState, PageHeader, Segmented, Skeleton } from "../components/ui";
 import type { ThemeEntry } from "../lib/api";
@@ -98,7 +98,7 @@ export function Gallery({ onNavigate }: { onNavigate: (view: View) => void }) {
         </>
       )}
 
-      {sheetTheme && <StyleSheet theme={sheetTheme} onClose={() => setSheetId(null)} onDuplicated={(copy) => setSheetId(copy.id)} />}
+      {sheetTheme && <CustomizeSheet theme={sheetTheme} onClose={() => setSheetId(null)} onDuplicated={(copy) => setSheetId(copy.id)} />}
     </>
   );
 }

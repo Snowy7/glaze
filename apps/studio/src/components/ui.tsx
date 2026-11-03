@@ -1,5 +1,5 @@
-import { LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
-import { useId, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Check, LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
+import { useEffect, useId, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 // Shared primitives. Colors come only from the tokens in index.css; selected
 // and primary states are always the inverse fill (`solid`), never a hue.
@@ -218,5 +218,163 @@ export function StatusDot({ state }: { state: "on" | "off" | "unknown" }) {
         }`}
       />
     </span>
+  );
+}
+
+/** "Saving" while an edit is on its way to disk, otherwise a calm confirmation. */
+export function SaveStatus({ saving }: { saving: boolean }) {
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-ink-3" aria-live="polite">
+      {saving ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
+      {saving ? "Saving" : "Changes save as you make them"}
+    </span>
+  );
+}
+
+/** A titled card of rows (settings-style). */
+export function Group({ title, children, action }: { title?: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <section aria-label={title}>
+      {(title || action) && (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          {title ? <SectionLabel>{title}</SectionLabel> : <span />}
+          {action}
+        </div>
+      )}
+      <div className="divide-y divide-line overflow-hidden rounded-2xl bg-surface shadow-card ring-1 ring-line">{children}</div>
+    </section>
+  );
+}
+
+/** A title and detail on the left, its control on the right. */
+export function Row({ title, detail, mono, children }: { title: string; detail?: ReactNode; mono?: boolean; children?: ReactNode }) {
+  return (
+    <div className="flex items-center gap-4 px-5 py-4">
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] font-medium text-ink">{title}</div>
+        {detail && (
+          <div className={`mt-0.5 text-[12.5px] text-ink-3 ${mono ? "selectable truncate font-mono text-xs" : ""}`} title={mono && typeof detail === "string" ? detail : undefined}>
+            {detail}
+          </div>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Like `Row`, but the control gets the full width under the title. */
+export function Block({ title, detail, children }: { title: string; detail?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="px-5 py-4">
+      <div className="text-[14px] font-medium text-ink">{title}</div>
+      {detail && <div className="mt-0.5 text-[12.5px] text-ink-3">{detail}</div>}
+      <div className="mt-3">{children}</div>
+    </div>
+  );
+}
+
+export function ToggleRow({
+  title,
+  detail,
+  mono,
+  checked,
+  disabled = false,
+  onChange,
+}: {
+  title: string;
+  detail?: ReactNode;
+  mono?: boolean;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <Row title={title} detail={detail} mono={mono}>
+      <Switch label={title} checked={checked} disabled={disabled} onChange={onChange} />
+    </Row>
+  );
+}
+
+type SliderProps = {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  /** How the value reads next to the track, e.g. `(v) => `${v}px``. */
+  format?: (value: number) => string;
+  onChange: (value: number) => void;
+  className?: string;
+};
+
+/** A range input with its value beside it. */
+export function Slider({ label, value, min, max, step = 1, format = String, onChange, className = "" }: SliderProps) {
+  return (
+    <div className={`flex items-center gap-3 ${className}`}>
+      <input
+        type="range"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.valueAsNumber)}
+        className="h-6 min-w-0 flex-1 cursor-default accent-solid"
+      />
+      <output className="w-14 shrink-0 text-right font-mono text-xs text-ink-2 tabular-nums">{format(value)}</output>
+    </div>
+  );
+}
+
+/** A color swatch (the native picker) with its hex value. */
+export function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const id = useId();
+  return (
+    <label
+      htmlFor={id}
+      className="flex w-fit shrink-0 cursor-default items-center gap-2 rounded-lg bg-canvas py-1 pr-3 pl-1 ring-1 ring-line-strong hover:ring-line-hi has-focus-visible:outline-2 has-focus-visible:outline-ink"
+    >
+      <input id={id} type="color" aria-label={label} value={value.toLowerCase()} onChange={(e) => onChange(e.currentTarget.value)} className="size-7 cursor-default rounded-md border-0 bg-transparent p-0" />
+      <span className="font-mono text-xs text-ink-2 uppercase">{value}</span>
+    </label>
+  );
+}
+
+/** A destructive action that asks once: the first click arms it, the second does it. */
+export function ConfirmButton({
+  children,
+  onConfirm,
+  label,
+  icon,
+  disabled,
+}: {
+  children: ReactNode;
+  onConfirm: () => void;
+  label: string;
+  icon?: LucideIcon;
+  disabled?: boolean;
+}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const timer = window.setTimeout(() => setArmed(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [armed]);
+  return (
+    <Button
+      variant={armed ? "primary" : "secondary"}
+      icon={icon}
+      disabled={disabled}
+      aria-label={armed ? `Confirm: ${label}` : label}
+      onClick={() => {
+        if (armed) {
+          setArmed(false);
+          onConfirm();
+        } else setArmed(true);
+      }}
+    >
+      {armed ? "Sure?" : children}
+    </Button>
   );
 }

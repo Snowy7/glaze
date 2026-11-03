@@ -1,8 +1,8 @@
-import { Check, RotateCcw } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { api, errorText, type Backdrop, type Corners, type ThemeEntry, type WindowsStyle } from "../lib/api";
-import { Button, Segmented } from "./ui";
+import { SaveFooter } from "./SaveFooter";
+import { Segmented } from "./ui";
 
 const UNSET: WindowsStyle = {
   accent: null,
@@ -106,31 +106,16 @@ export function StyleEditor({ theme }: { theme: ThemeEntry }) {
         </div>
       </div>
 
-      <footer className="border-t border-line bg-sidebar px-6 py-4">
-        {error && (
-          <p role="alert" className="selectable mb-3 text-[13px] text-ink">
-            {error}
-          </p>
-        )}
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" icon={RotateCcw} disabled={same(draft, UNSET)} onClick={() => setDraft(UNSET)}>
-            Clear all
-          </Button>
-          <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-3" aria-live="polite">
-            {justSaved && !dirty && (
-              <>
-                <Check className="size-3.5" aria-hidden /> Saved
-              </>
-            )}
-          </span>
-          <Button disabled={!dirty} onClick={() => saved && setDraft(saved)}>
-            Revert
-          </Button>
-          <Button variant="primary" busy={saving} disabled={!dirty} onClick={() => void save()}>
-            Save
-          </Button>
-        </div>
-      </footer>
+      <SaveFooter
+        dirty={dirty}
+        saving={saving}
+        justSaved={justSaved}
+        error={error}
+        cleared={same(draft, UNSET)}
+        onClear={() => setDraft(UNSET)}
+        onRevert={() => saved && setDraft(saved)}
+        onSave={() => void save()}
+      />
     </>
   );
 }

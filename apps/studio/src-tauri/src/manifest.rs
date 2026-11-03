@@ -7,6 +7,8 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::look::Look;
+
 /// The `windows` section as the editor sees it. `None` means "don't change":
 /// the key is left out of `theme.json`. Colors are `"#rrggbb"`, plus `"auto"`
 /// for accent and border; the theme crate validates every value on load.
@@ -54,6 +56,66 @@ pub fn with_style(text: &str, style: &WindowsStyle) -> Result<String> {
         manifest.shift_remove("windows");
     } else {
         manifest.insert("windows".into(), Value::Object(section));
+    }
+    render(manifest)
+}
+
+/// Which family of mypaper UI a theme skin restyles: the manifest's `widgets` or `bars` section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SkinKind {
+    Widgets,
+    Bars,
+}
+
+impl SkinKind {
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Widgets => "widgets",
+            Self::Bars => "bars",
+        }
+    }
+}
+
+/// A `widgets` / `bars` section as the editor sees it. Empty means "no skin":
+/// the section is left out of `theme.json`.
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SkinEdit {
+    pub appearance: Look,
+    /// A style sheet, relative to the theme folder.
+    pub css: Option<String>,
+}
+
+impl SkinEdit {
+    fn is_empty(&self) -> bool {
+        self.appearance.is_empty() && self.css.is_none()
+    }
+}
+
+/// The manifest's `widgets` or `bars` section (empty if it has none).
+pub fn read_skin(text: &str, kind: SkinKind) -> Result<SkinEdit> {
+    match parse_object(text)?.remove(kind.key()) {
+        Some(section) => serde_json::from_value(section).with_context(|| format!("reading the {} section", kind.key())),
+        None => Ok(SkinEdit::default()),
+    }
+}
+
+/// The manifest with its `widgets` or `bars` section replaced by `skin`. An
+/// empty skin removes the section. Every other field is untouched.
+pub fn with_skin(text: &str, kind: SkinKind, skin: &SkinEdit) -> Result<String> {
+    let mut manifest = parse_object(text)?;
+    if skin.is_empty() {
+        manifest.shift_remove(kind.key());
+    } else {
+        let mut section = Map::new();
+        if !skin.appearance.is_empty() {
+            section.insert("appearance".into(), Value::Object(skin.appearance.to_map()?));
+        }
+        if let Some(css) = &skin.css {
+            section.insert("css".into(), Value::String(css.clone()));
+        }
+        manifest.insert(kind.key().into(), Value::Object(section));
     }
     render(manifest)
 }
@@ -136,6 +198,44 @@ mod tests {
     #[test]
     fn bad_values_are_left_for_the_theme_crate_to_reject() {
         let text = with_style(MANIFEST, &WindowsStyle { accent: Some("teal".into()), ..Default::default() }).unwrap();
+        assert!(LoadedTheme::parse(PathBuf::from("themes/a"), &text).is_err());
+    }
+
+    #[test]
+    fn skins_replace_their_own_section_and_keep_everything_else() {
+        let skin = SkinEdit {
+            appearance: serde_json::from_str(r##"{ "surface": "glass", "tint": "#101820", "accent": "auto", "opacity": 0.4 }"##).unwrap(),
+            css: Some("bars.css".into()),
+        };
+        let edited = with_skin(MANIFEST, SkinKind::Bars, &skin).unwrap();
+        for key in ["wallpaper", "widgets"] {
+            assert_eq!(field(&edited, key), field(MANIFEST, key));
+        }
+        assert!(edited.find("\"widgets\"").unwrap() < edited.find("\"bars\"").unwrap());
+        assert_eq!(read_skin(&edited, SkinKind::Bars).unwrap(), skin);
+        assert!(field(&edited, "bars")["appearance"].get("blur").is_none(), "unset fields stay out");
+
+        // The css-only `widgets` section in MANIFEST reads back as a skin with no appearance.
+        let widgets = read_skin(MANIFEST, SkinKind::Widgets).unwrap();
+        assert!(widgets.appearance.is_empty() && widgets.css.as_deref() == Some("extra.css"));
+
+        let theme = LoadedTheme::parse(PathBuf::from("themes/a"), &edited).unwrap().theme;
+        let bars = theme.bars.unwrap();
+        assert_eq!(bars.appearance.unwrap().accent, Some(Paint::Auto));
+        assert_eq!(bars.css, Some(PathBuf::from("bars.css")));
+
+        let cleared = with_skin(&edited, SkinKind::Bars, &SkinEdit::default()).unwrap();
+        assert!(field(&cleared, "bars").is_null());
+        assert_eq!(field(&cleared, "widgets"), field(MANIFEST, "widgets"));
+    }
+
+    #[test]
+    fn skin_values_are_left_for_the_theme_crate_to_refuse() {
+        let loud = SkinEdit { appearance: serde_json::from_str(r#"{ "opacity": 4 }"#).unwrap(), css: None };
+        let text = with_skin(MANIFEST, SkinKind::Widgets, &loud).unwrap();
+        assert!(LoadedTheme::parse(PathBuf::from("themes/a"), &text).is_err());
+        let escaping = SkinEdit { css: Some(r"..\evil.css".into()), ..Default::default() };
+        let text = with_skin(MANIFEST, SkinKind::Widgets, &escaping).unwrap();
         assert!(LoadedTheme::parse(PathBuf::from("themes/a"), &text).is_err());
     }
 
