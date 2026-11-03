@@ -2,3 +2,7 @@
 *.pdb
 .DS_Store
 /.claude/
+apps/studio/node_modules
+apps/studio/dist
+apps/studio/src-tauri/target
+apps/studio/src-tauri/gen

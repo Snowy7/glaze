@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. Dark is the default; light follows the system. Surfaces are a
+ * graphite scale with a faint blue cast, text is warm paper-white, and the one
+ * accent is amber. Theme previews supply all the other color.
+ */
+:root {
+  color-scheme: dark;
+  --sidebar: oklch(0.15 0.012 270);
+  --canvas: oklch(0.185 0.012 270);
+  --surface: oklch(0.225 0.013 270);
+  --surface-hi: oklch(0.275 0.014 270);
+  --line: oklch(1 0 0 / 0.08);
+  --line-strong: oklch(1 0 0 / 0.15);
+  --ink: oklch(0.96 0.006 90);
+  --ink-2: oklch(0.77 0.01 270);
+  --ink-3: oklch(0.62 0.012 270);
+  --accent: oklch(0.82 0.125 78);
+  --accent-ink: oklch(0.22 0.04 70);
+  --ok: oklch(0.78 0.15 155);
+  --warn: oklch(0.82 0.13 80);
+  --danger: oklch(0.73 0.16 25);
+  --shadow: 0 1px 2px oklch(0 0 0 / 0.35), 0 12px 32px -12px oklch(0 0 0 / 0.55);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --sidebar: oklch(0.935 0.008 85);
+    --canvas: oklch(0.972 0.005 85);
+    --surface: oklch(0.995 0.002 85);
+    --surface-hi: oklch(0.955 0.006 85);
+    --line: oklch(0 0 0 / 0.09);
+    --line-strong: oklch(0 0 0 / 0.17);
+    --ink: oklch(0.22 0.015 270);
+    --ink-2: oklch(0.4 0.015 270);
+    --ink-3: oklch(0.47 0.013 270);
+    --accent: oklch(0.6 0.14 62);
+    --accent-ink: oklch(0.99 0.01 85);
+    --ok: oklch(0.52 0.14 155);
+    --warn: oklch(0.55 0.13 70);
+    --danger: oklch(0.55 0.19 25);
+    --shadow: 0 1px 2px oklch(0 0 0 / 0.08), 0 12px 28px -14px oklch(0 0 0 / 0.25);
+  }
+}
+
+/* With Mica the sidebar is the backdrop itself and the content panel is a
+   translucent sheet over it. The Rust side sets data-mica only when it worked. */
+html[data-mica="true"] {
+  --sidebar: transparent;
+  --canvas: oklch(0.185 0.012 270 / 0.74);
+}
+@media (prefers-color-scheme: light) {
+  html[data-mica="true"] {
+    --canvas: oklch(0.972 0.005 85 / 0.72);
+  }
+}
+
+@theme inline {
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", ui-monospace, Consolas, monospace;
+
+  --color-sidebar: var(--sidebar);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-hi: var(--surface-hi);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --shadow-card: var(--shadow);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--sidebar);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* Paths and error text are worth copying. */
+.selectable {
+  user-select: text;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes pulse-ring {
+  70%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
