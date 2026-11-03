@@ -2,17 +2,20 @@
 //! with no polling threads, so an idle mypaper costs ~0% CPU.
 
 mod config_watch;
+mod control;
 mod cover;
 mod fullscreen;
+pub mod hold;
 mod host;
 mod monitors;
 mod power;
 
-pub use config_watch::{ConfigWatcher, watch_config};
+pub use config_watch::{ConfigWatcher, watch_config, watch_file};
+pub use control::{ControlWindow, WM_FACT};
 pub use cover::{WindowEvents, covered_monitors};
 pub use fullscreen::fullscreen_app_in_front;
 pub use host::DesktopHost;
-pub use monitors::{Rect, monitors};
+pub use monitors::{Monitor, Rect, monitor_infos, monitors};
 pub use power::on_battery;
 
 use std::sync::atomic::{AtomicU32, Ordering};

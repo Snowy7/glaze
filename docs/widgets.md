@@ -30,33 +30,44 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
 ```
 
 - **Window placement.** Each monitor gets a window that's a child of the desktop host
-  (`mypaper_desktop::DesktopHost`). In the layered (24H2+) layout it's z-ordered **above**
-  `SHELLDLL_DefView`, so widgets draw over the icons. In the legacy layout it's a child of the
-  DefView's parent, above DefView. It covers the monitor and is `WS_EX_NOACTIVATE` until a widget is
-  clicked.
+  (`mypaper_desktop::DesktopHost::icons_parent`). In the layered (24H2+) layout it's z-ordered
+  **above** `SHELLDLL_DefView`, so widgets draw over the icons. In the legacy layout it's a child of
+  the DefView's parent, above DefView. It covers the monitor and is `WS_EX_NOACTIVATE` until a widget
+  is clicked. The WebView's rasterization scale is set from the monitor's own DPI.
+- **Which monitors.** A monitor gets a window and a WebView only while it has widget instances, or
+  while edit mode is on (so widgets can be added to any monitor). With no instances and edit mode
+  off, the host creates no WebView at all.
 - **Click-through.** The window's region (`SetWindowRgn`) is the union of the widget rectangles,
   plus the whole monitor while edit mode is on. Clicks outside widgets go to the desktop (icons,
   right-click menu, rubber-band selection).
 - **Transparency.** WebView2 `DefaultBackgroundColor` is fully transparent, and the shell page's
-  background is transparent.
+  background is transparent. Chromium paints an opaque backdrop behind an iframe whose
+  `color-scheme` differs from its embedder's, so widgets should leave `color-scheme` at its default.
 - **Isolation.** Widgets are served from per-widget virtual hosts
   (`SetVirtualHostNameToFolderMapping("<id>.widget.mypaper", <widget folder>, DENY_CORS)`).
   Iframes use `sandbox="allow-scripts allow-same-origin"` (same-origin means *their own*
   origin). Widgets can't read each other or the shell. The shell is served from
-  `shell.mypaper` → `widgets/shell/dist`.
+  `shell.mypaper` → `widgets/shell/dist` (`DENY`). Popups, top-level navigation away from the shell,
+  script dialogs and every permission prompt (camera, location, notifications, clipboard read, …)
+  are refused.
 - **Pausing.** On hold, every WebView2 gets `put_IsVisible(false)` and `TrySuspend`. On release,
-  `Resume` and `put_IsVisible(true)`. Widgets see `visibility` events (below).
+  `Resume` and `put_IsVisible(true)`. Widgets see `visibility` events (below). A monitor that is
+  completely covered by a maximized or fullscreen window is paused the same way, on its own.
 
 ## Folders
 
 | What | Where |
 |---|---|
 | Bundled widgets | `widgets/<id>/` beside the exe or any parent (the same search as themes) |
-| User widgets | `%APPDATA%\mypaper\widgets\<id>\` |
+| User widgets | `%APPDATA%\mypaper\widgets\<id>\` (wins over a bundled widget with the same id) |
 | Bundled plugins | `plugins/<id>/` beside the exe or any parent |
-| User plugins | `%APPDATA%\mypaper\plugins\<id>\` |
+| User plugins | `%APPDATA%\mypaper\plugins\<id>\` (wins over a bundled plugin with the same id) |
+| Shell page | `widgets/shell/dist/` beside the exe or any parent |
 | Layout | `%APPDATA%\mypaper\widgets.json` |
 | Widget storage | `%APPDATA%\mypaper\widget-data\<instance-id>.json` |
+| Plugin data (`dataDir`) | `%APPDATA%\mypaper\plugin-data\<plugin-id>\` |
+| WebView2 profile | `%LOCALAPPDATA%\mypaper\webview2-widgets\` |
+| Wallpaper palette (optional) | `%LOCALAPPDATA%\mypaper\palette.json`: `{ "dominant": "#rrggbb", "accent": "#rrggbb" }` |
 
 ## Widget manifest: `widget.json`
 
@@ -83,6 +94,10 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
 ```
 
 - `id`: lowercase `[a-z0-9-]`, unique; it's the folder name too.
+- Required: `id`, `name`, `size.default`. Optional: `version`, `author`, `description`, `entry`
+  (default `index.html`, a relative path inside the folder), `size.min` (default `[1, 1]`),
+  `size.max` (default: unbounded), `resizable` (default `true`), `permissions`, `plugins`,
+  `settings`. Unknown fields and unknown permissions are errors, so typos fail loudly.
 - `size` is in **grid cells**, `[columns, rows]`. `min <= default <= max`. `"resizable": false`
   locks the size to `default`.
 - `permissions` (anything not listed is denied):
@@ -90,12 +105,16 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   - `media`: now-playing info and transport controls (Windows SMTC).
   - `launch`: open files, folders, URLs and apps (`mypaper.launch`).
   - `network:<origin>`: `fetch` to that origin (for example `network:https://api.open-meteo.com`),
-    enforced by the host's web resource filter. No other network access.
+    enforced by the host's web resource filter (see [Network](#network)). No other network access.
+    An origin is `scheme://host[:port]` with no path; schemes are `http`, `https`, `ws`, `wss`.
   - `theme`: read the current wallpaper palette and theme name.
-  - `clipboard.write`.
+  - `clipboard.write`: the shell adds `allow="clipboard-write"` to the widget's iframe, so
+    `navigator.clipboard.writeText` works. There's no bridge method for it.
 - `plugins`: plugin ids whose methods this widget may call (see Plugins).
 - `settings`: rendered by the shell in edit mode, and by Studio. Values go to the widget at load
-  and on every change.
+  and on every change. A saved value that doesn't fit its setting (wrong type, a number outside
+  `min`/`max`, a select value not in `options`, a color that isn't `#rrggbb`) is replaced by the
+  default.
 
 ## Layout: `widgets.json`
 
@@ -118,16 +137,23 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
 
 - **The grid.**
   - `cell: 0` means "match the desktop icon grid": horizontal and vertical icon spacing from
-    `HKCU\Control Panel\Desktop\WindowMetrics` `IconSpacing`/`IconVerticalSpacing` (twips, so
-    `-15 × value / 1440 × DPI` px), falling back to 96 px at 100% scale, then scaled per monitor DPI.
+    `HKCU\Control Panel\Desktop\WindowMetrics` `IconSpacing`/`IconVerticalSpacing`. Negative values
+    are twips (`px = -value / 1440 × DPI`, so `-value / 15` DIPs); positive values are DIPs. Missing
+    values fall back to 96 DIPs. Cells may therefore be rectangular.
   - A positive `cell` is a fixed size in DIPs.
   - `gap` and `margin` are in DIPs. The grid starts at the monitor's **work area** (excluding the
-    taskbar) plus `margin`.
+    taskbar) plus `margin`. A cell `[c, r]` sits at `origin + [c, r] × (cell + gap)`, and a widget
+    `[w, h]` cells wide is `w × cell + (w − 1) × gap`. The grid has as many whole cells as fit in
+    the work area minus the margins.
+- `instance` ids are `[a-z0-9-]`, unique; the host names new ones `<widget>-<n>`.
 - `monitor` is the device name (`MONITORINFOEXW.szDevice`). If that monitor is missing, the
   instance is shown on the primary monitor at its cell, clamped, and its saved monitor isn't
   changed.
+- On display, sizes are clamped to the manifest (`min`/`max`, or `default` when not resizable) and
+  cells to the grid. Instances of widgets that aren't installed are kept in the file but not shown.
 - The host writes the file atomically (temp file plus rename) and watches it, so Studio or a text
-  editor can edit it live.
+  editor can edit it live. If the file doesn't parse, the host keeps showing the last good layout,
+  refuses edits (so it never overwrites your file), and the shell shows the error in edit mode.
 
 ## Edit mode
 
@@ -137,23 +163,31 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   - with the hotkey **Ctrl+Alt+Shift+W**;
   - by posting the registered window message `mypaper.widgets.edit` (`RegisterWindowMessageW`)
     with `wParam` 1 (on), 0 (off) or 2 (toggle) to the host's message-only window, whose class is
-    `mypaper.widgets.host`.
+    `mypaper.widgets.host`. `mypaper-widgets --edit on|off|toggle` does exactly that and exits.
 - **What it shows**: the grid (subtle dots or lines on the work area), each widget with a frame,
   a drag area, resize handles (edges and corners) and a ⋯ menu (Settings, Duplicate, Remove), plus
   a **+ Add widget** palette listing every installed widget. The window region covers the whole
-  monitor while editing.
+  monitor while editing, on every monitor.
 - **Moving and resizing**: live, with the pointer. Positions snap to cells. Sizes are clamped to the
   manifest's `min`/`max`. Widgets can't overlap: a move that would overlap swaps or shifts the
   other widgets (they move down, then right; never off-grid), or the move is refused with a shake
-  animation. The rule is documented in the shell.
+  animation. The exact rule is documented in the shell (`widgets/shell/src/grid.ts`). Widgets stay
+  on their monitor; to move one to another monitor, remove it and add it there.
 - **Saving**: every committed change is written to `widgets.json` at once. **Esc** or **Done**
   leaves edit mode.
-- **Keyboard**: arrows move the selected widget one cell, and Shift+arrows resize it.
+- **Keyboard**: arrows move the selected widget one cell, and Shift+arrows resize it (right and
+  down grow, left and up shrink). Esc closes an open menu first. The shell needs keyboard focus for
+  this, which it gets when you click it (the host never takes focus by itself).
 - Edit mode never takes effect while a fullscreen app is in front (the host is held then anyway).
+  Requests to turn it on while held are ignored, and becoming held leaves edit mode.
 
 ## Widget JS API (`mypaper`)
 
-The shell injects a tiny bridge into each widget iframe. Widgets can import the typed SDK
+The host injects the shell's bridge script (`widgets/shell/dist/bridge.js`) into every frame at
+document creation (`AddScriptToExecuteOnDocumentCreated`). It activates only in a frame on a
+`*.widget.mypaper` origin whose parent is the shell, before any of the widget's own scripts run.
+It reads the instance id and manifest from the iframe's `name`, which the shell sets to
+`{"instance": "…", "widget": {…manifest}}`. Widgets can import the typed SDK
 (`packages/widget-sdk`) or use the global `mypaper` object. Every call is a promise. A call to a
 capability the manifest didn't declare rejects with `PermissionDenied`.
 
@@ -194,14 +228,110 @@ interface Mypaper {
 }
 ```
 
+- **Units**: `cpu` and `gpu` are percent (0–100) of the whole machine; `memory` and `disks` are
+  bytes; `net` is bytes per second, summed over physical interfaces; `disks` lists fixed drives
+  (`name` is `"C:"`); `gpu` is the busiest GPU engine and is omitted when unavailable. Media
+  `position` and `duration` are seconds. `position` is sampled: change events fire on seeks and
+  track changes, not every second, so advance it locally while `playing`. `artwork` is a
+  `data:image/…;base64,` URL (omitted above 256 KB). Colors are `#rrggbb`.
 - **Wire format (iframe ⇄ shell)**: `postMessage` with
   `{ mypaper: 1, id, method, params }` → `{ mypaper: 1, id, result } | { mypaper: 1, id, error: { code, message } }`,
-  and events as `{ mypaper: 1, event, data }`. The shell checks the sender's `event.source` against
-  the instance's iframe and forwards to the host with the **instance id attached by the shell**, never
-  by the widget. The host enforces permissions from the manifest on disk, never from the message.
-- **Errors**: `PermissionDenied`, `NotFound`, `InvalidParams`, `PluginUnavailable`, `Internal`.
+  and events as `{ mypaper: 1, event, data }`. The shell checks the sender's `event.source` (and
+  `event.origin`) against the instance's iframe and forwards to the host with the **instance id
+  attached by the shell**, never by the widget. The host enforces permissions from the manifest on
+  disk, never from the message.
+- **Methods** (`params` → `result`):
+
+  | Method | Params | Result | Needs |
+  |---|---|---|---|
+  | `hello` | — | `null` | — (sent by the bridge at document start; drops that instance's old subscriptions) |
+  | `settings.get` | — | settings object | — |
+  | `size.get` | — | `{ cells, px, dpi }` | — (answered by the shell) |
+  | `storage.get` | `{ key }` | the value, or `null` | — |
+  | `storage.set` | `{ key, value }` | `null` | — (omitting `value` deletes the key; 1 MB per instance) |
+  | `system.stats` | — | `SystemStats` | `system.stats` |
+  | `system.subscribe` | `{ intervalMs }` | `{ sub }` | `system.stats` |
+  | `system.unsubscribe` | `{ sub }` | `null` | `system.stats` |
+  | `media.current` | — | `MediaState` or `null` | `media` |
+  | `media.subscribe`, `media.unsubscribe` | — | `null` | `media` |
+  | `media.control` | `{ action }` | `null` | `media` |
+  | `launch` | `{ target }` | `null` | `launch` |
+  | `theme.current` | — | `ThemeInfo` | `theme` |
+  | `theme.subscribe`, `theme.unsubscribe` | — | `null` | `theme` |
+  | `plugin.call` | `{ plugin, method, params? }` | the plugin's result | plugin listed in `plugins` |
+  | `plugin.subscribe`, `plugin.unsubscribe` | `{ plugin, event }` | `null` | plugin listed in `plugins` |
+
+- **Events** (`event` → `data`): `settings` → settings object; `size` → `{ cells, px, dpi }`;
+  `visibility` → boolean; `editmode` → boolean; `system.stats` → `{ sub, stats }`; `media` →
+  `MediaState` or `null`; `theme` → `ThemeInfo`; `plugin` → `{ plugin, event, data }`. The bridge
+  subscribes on the first `onChange`/`onPlugin` listener and unsubscribes after the last. The shell
+  sends `editmode` and `visibility` right after relaying a frame's `hello`, and the bridge calls an
+  `on("editmode" | "visibility")` listener added later with the last value it received.
+- **Errors**: `PermissionDenied`, `NotFound`, `InvalidParams`, `PluginUnavailable`, `Internal`. The
+  bridge rejects with an `Error` whose `name` and `code` are the error code.
 - **Visibility**: when the host is held, widgets get `visibility:false` and then the WebView is
   suspended. Widgets should stop their animations. Subscriptions are paused automatically.
+
+## Host ⇄ shell
+
+The shell talks to the host with WebView2 web messages (`chrome.webview.postMessage` and
+`PostWebMessageAsJson`), one JSON object per message with a `type`. The host only accepts messages
+from the shell's top-level document. Lengths are CSS pixels (DIPs), relative to the monitor's
+top-left corner.
+
+```ts
+type HostToShell =
+  | { type: "state";
+      monitor: { device: string; dpi: number; width: number; height: number };
+      work: { x: number; y: number; width: number; height: number };   // the work area
+      grid: { origin: [number, number]; cell: [number, number]; gap: number; cols: number; rows: number };
+      instances: { instance: string; widget: string; cell: [number, number]; size: [number, number];
+                   settings: Record<string, unknown> }[];  // resolved: defaults plus saved values
+      widgets: WidgetManifest[];                           // every installed widget (the palette)
+      editing: boolean; visible: boolean;
+      error?: string }                                     // widgets.json doesn't parse
+  | { type: "reply"; instance: string; id: number | string; result?: unknown;
+      error?: { code: string; message: string } }
+  | { type: "event"; instance: string; event: string; data: unknown }
+  | { type: "reload"; widget: string };                   // the widget's files changed
+
+type ShellToHost =
+  | { type: "ready" }                                      // the host answers with "state"
+  | { type: "call"; instance: string; id: number | string; method: string; params?: unknown }
+  | { type: "layout"; changes: { instance: string; cell: [number, number]; size: [number, number] }[] }
+  | { type: "add"; widget: string; cell: [number, number]; size: [number, number] }
+  | { type: "duplicate"; instance: string; cell: [number, number] }
+  | { type: "remove"; instance: string }
+  | { type: "settings"; instance: string; values: Record<string, unknown> }
+  | { type: "edit"; on: boolean };                         // Done / Esc
+```
+
+- The host sends `state` after `ready` and whenever anything in it changes. The shell reconciles by
+  instance id and never reloads an iframe that is still there. It emits `editmode`, `visibility`
+  and `size` events to widgets when those change, and answers `size.get` itself.
+- Layout edits (`layout`, `add`, `duplicate`, `remove`, `settings`) are applied, clamped, saved, and
+  answered with a fresh `state`, which is authoritative: a refused edit just gets the old state back.
+  The shell resolves overlaps and finds free cells before sending. A `settings` change also reaches
+  the widget as a `settings` event.
+
+## Network
+
+Every WebView has a `WebResourceRequested` filter for `*` (every context and, where the runtime
+supports it, every request source, including workers). The host attributes each request to the
+frame that made it from the `Origin` header, or failing that the `Referer` header, which Chromium
+sets from the requesting document and which pages can't forge. Then:
+
+| Request to | Allowed when the initiator is |
+|---|---|
+| `https://shell.mypaper/…` | the shell, or nobody (the shell's own navigation) |
+| `https://<id>.widget.mypaper/…` | the shell (loading the iframe) or the same widget |
+| anything else (`http`, `https`, `ws`, `wss`) | a widget whose manifest lists `network:<that origin>` |
+
+Everything else is answered with a `403` without touching the network: requests with no
+attributable initiator, a `null` origin, a widget stripping its referrer (`no-referrer` breaks the
+widget, by design), service-worker scripts, and other schemes. `data:` and `blob:` URLs never reach
+the network and aren't filtered. The bridge also removes `RTCPeerConnection` from widget frames,
+since WebRTC traffic doesn't pass through the filter.
 
 ## Plugins
 
@@ -222,18 +352,24 @@ is held.
 }
 ```
 
+- `command` is relative to the plugin folder.
 - **Transport**: JSON-RPC 2.0, one JSON object per line (UTF-8, `\n`-delimited) over stdin and
   stdout. stderr goes to the mypaper log.
 - **Handshake**: the host sends
   `{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocol":1,"plugin":"weather","dataDir":"…"}}`.
-  The plugin replies `{"jsonrpc":"2.0","id":0,"result":{"protocol":1}}`.
+  The plugin replies `{"jsonrpc":"2.0","id":0,"result":{"protocol":1}}` within 10 s. Calls made
+  before that are queued.
 - **Calls**: the host sends `{"jsonrpc":"2.0","id":N,"method":"current","params":{…}}` and the plugin
-  replies with `result` or `error`.
+  replies with `result` or `error` within 30 s (or the widget gets `PluginUnavailable`). Only
+  methods listed in `methods` are forwarded (others are `NotFound`). Plugin errors reach the widget
+  as `NotFound` (-32601), `InvalidParams` (-32602) or `Internal`, with the plugin's message.
 - **Events**: the plugin sends notifications `{"jsonrpc":"2.0","method":"event","params":{"event":"updated","data":{…}}}`,
-  and widgets subscribed via `onPlugin(id, event)` receive them.
+  and widgets subscribed via `onPlugin(id, event)` receive them. Only events listed in `events`
+  can be subscribed to.
 - **Lifecycle**: the host sends `{"jsonrpc":"2.0","method":"suspend"}` and `{"jsonrpc":"2.0","method":"resume"}`
   notifications on hold and release, and `{"jsonrpc":"2.0","id":N,"method":"shutdown"}` before
-  terminating it (with a 2 s grace period).
+  terminating it (with a 2 s grace period). A plugin is in use while a widget has a call pending or
+  an `onPlugin` subscription to it.
 - **Isolation**: plugins run in a Job object (killed with the host), have no console, and are
   started with the plugin folder as their working directory.
 - `permissions` is documentation for users and Studio. Plugins are native code, so only install
@@ -257,3 +393,23 @@ is held.
   driven by one host timer for all subscribers.
 - **Held**: WebViews suspended, plugins suspended, and the host waiting on its message queue at 0%
   CPU.
+
+## How to run
+
+```sh
+pnpm -C widgets/shell install
+pnpm -C widgets/shell build          # → widgets/shell/dist (index.html + bridge.js)
+cargo build -p mypaper-widgets
+target\debug\mypaper-widgets.exe     # finds widgets/, plugins/ and widgets/shell/dist by walking up
+target\debug\mypaper-widgets.exe --edit toggle   # or Ctrl+Alt+Shift+W
+```
+
+- Debug builds log to their console (`RUST_LOG=debug` for more); release builds log to
+  `%LOCALAPPDATA%\mypaper\mypaper.log`.
+- `MYPAPER_WIDGETS_DEVTOOLS=1` enables the WebView2 devtools, the default context menu (right-click
+  → Inspect) and the browser shortcut keys (F12, F5).
+- Saving a file in a widget folder reloads that widget's frames, so a widget's dev loop is just
+  "save". The shell itself reloads on `pnpm -C widgets/shell build`.
+- To try it without touching your real setup, point `APPDATA` (and `LOCALAPPDATA`) at a temporary
+  folder holding `mypaper\widgets.json` and your test widgets in `mypaper\widgets\<id>\`.
+- `pnpm -C widgets/shell test` runs the grid math tests (vitest).

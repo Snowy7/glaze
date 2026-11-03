@@ -2,9 +2,10 @@ use anyhow::{Result, anyhow};
 use windows::Win32::Foundation::{HWND, LPARAM, MAX_PATH, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowExW, FindWindowW, GetShellWindow, SMTO_NORMAL, SPI_GETDESKWALLPAPER,
-    SPI_SETDESKWALLPAPER, SWP_NOACTIVATE, SWP_SHOWWINDOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
-    SendMessageTimeoutW, SetWindowPos, SystemParametersInfoW,
+    EnumWindows, FindWindowExW, FindWindowW, GW_HWNDPREV, GetShellWindow, GetWindow, HWND_TOP,
+    SMTO_NORMAL, SPI_GETDESKWALLPAPER, SPI_SETDESKWALLPAPER, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_SHOWWINDOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SendMessageTimeoutW,
+    SetWindowPos, SystemParametersInfoW,
 };
 use windows::core::{BOOL, PCWSTR, w};
 
@@ -20,8 +21,9 @@ pub enum DesktopHost {
     /// Windows 11 24H2+: icons (`SHELLDLL_DefView`) and the static wallpaper
     /// (`WorkerW`) are both children of Progman. We slot in between them.
     Layered { progman: HWND, defview: HWND },
-    /// Older builds: a dedicated top-level `WorkerW` sits behind the icons.
-    Legacy { workerw: HWND },
+    /// Older builds: a dedicated top-level `WorkerW` sits behind the icons,
+    /// which live in another top-level window (`icons`, DefView's parent).
+    Legacy { workerw: HWND, icons: HWND },
 }
 
 impl DesktopHost {
@@ -48,12 +50,13 @@ impl DesktopHost {
                 return Ok(Self::Layered { progman, defview });
             }
 
-            let mut workerw = HWND::default();
-            let _ = EnumWindows(Some(find_legacy_workerw), LPARAM(&raw mut workerw as isize));
+            let mut found = (HWND::default(), HWND::default());
+            let _ = EnumWindows(Some(find_legacy_workerw), LPARAM(&raw mut found as isize));
+            let (icons, workerw) = found;
             if workerw.is_invalid() {
                 return Err(anyhow!("could not find the desktop WorkerW window"));
             }
-            Ok(Self::Legacy { workerw })
+            Ok(Self::Legacy { workerw, icons })
         }
     }
 
@@ -61,7 +64,65 @@ impl DesktopHost {
     pub fn parent(&self) -> HWND {
         match *self {
             Self::Layered { progman, .. } => progman,
-            Self::Legacy { workerw } => workerw,
+            Self::Legacy { workerw, .. } => workerw,
+        }
+    }
+
+    /// The window that holds the icons (`SHELLDLL_DefView`): widget windows,
+    /// which draw over the icons, are created as its children.
+    pub fn icons_parent(&self) -> HWND {
+        match *self {
+            Self::Layered { progman, .. } => progman,
+            Self::Legacy { icons, .. } => icons,
+        }
+    }
+
+    /// Moves a child of [`icons_parent`](Self::icons_parent) over the screen
+    /// rect `rect`, z-ordered above the icons.
+    pub fn place_above_icons(&self, child: HWND, rect: Rect) -> Result<()> {
+        let mut origin = POINT {
+            x: rect.x,
+            y: rect.y,
+        };
+        // SAFETY: valid windows; `origin` outlives the call.
+        unsafe {
+            let _ = ScreenToClient(self.icons_parent(), &mut origin);
+            SetWindowPos(
+                child,
+                Some(HWND_TOP),
+                origin.x,
+                origin.y,
+                rect.width,
+                rect.height,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Puts `child` (placed with [`place_above_icons`](Self::place_above_icons))
+    /// back above the icons if Explorer raised them over it. Cheap; call it
+    /// when window events fire.
+    pub fn keep_above_icons(&self, child: HWND) {
+        // SAFETY: read-only z-order walk over sibling windows, then a z-order-only move.
+        unsafe {
+            let Ok(defview) = FindWindowExW(
+                Some(self.icons_parent()),
+                None,
+                w!("SHELLDLL_DefView"),
+                PCWSTR::null(),
+            ) else {
+                return;
+            };
+            let mut above = GetWindow(child, GW_HWNDPREV);
+            while let Ok(window) = above {
+                if window == defview {
+                    let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+                    let _ = SetWindowPos(child, Some(HWND_TOP), 0, 0, 0, 0, flags);
+                    return;
+                }
+                above = GetWindow(window, GW_HWNDPREV);
+            }
         }
     }
 
@@ -111,14 +172,14 @@ impl DesktopHost {
 }
 
 /// Legacy layout: the WorkerW we want is the top-level sibling right after
-/// the window that hosts `SHELLDLL_DefView`.
+/// the window that hosts `SHELLDLL_DefView`. Finds both, as `(icons, workerw)`.
 unsafe extern "system" fn find_legacy_workerw(hwnd: HWND, out: LPARAM) -> BOOL {
-    // SAFETY: `out` points at the HWND owned by `DesktopHost::find`.
+    // SAFETY: `out` points at the (HWND, HWND) owned by `DesktopHost::find`.
     unsafe {
         if FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), PCWSTR::null()).is_ok()
             && let Ok(workerw) = FindWindowExW(None, Some(hwnd), w!("WorkerW"), PCWSTR::null())
         {
-            *(out.0 as *mut HWND) = workerw;
+            *(out.0 as *mut (HWND, HWND)) = (hwnd, workerw);
             return false.into();
         }
     }
