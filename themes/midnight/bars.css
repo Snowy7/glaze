@@ -1,0 +1,27 @@
+/* Midnight bars: the same moonlit glass as the widgets.
+   Uses the documented hooks only (docs/bars.md, "Appearance"): the CSS variables and data-*
+   attributes set on <html>, plus data-bar="top|dock" and data-position. The page writes its
+   variables inline, so the overrides use !important, scoped to light text. */
+
+html[data-text="light"] {
+  --t0: #eef4ff !important;
+  --t1: rgb(222 233 255 / 0.76) !important;
+  --t2: rgb(186 205 245 / 0.5) !important;
+  --t3: rgb(160 182 230 / 0.26) !important;
+  --fill-1: rgb(150 180 255 / 0.07) !important;
+  --fill-2: rgb(150 180 255 / 0.13) !important;
+  --fill-3: rgb(150 180 255 / 0.22) !important;
+}
+
+/* An accent-tinted hairline, as on the widgets. */
+html[data-surface="glass"] {
+  --line: color-mix(in srgb, var(--accent) 34%, rgb(255 255 255 / 0.1)) !important;
+}
+
+/* The top bar is flat against the screen edge; the dock floats with softer, rounder corners. */
+html[data-bar="top"] {
+  --radius: 0px !important;
+}
+html[data-bar="dock"] {
+  --radius: 20px !important;
+}

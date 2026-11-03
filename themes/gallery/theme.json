@@ -2,10 +2,10 @@
   "name": "Gallery",
   "wallpaper": {
     "kind": "slideshow",
-    "folder": "C:\\Windows\\Web\\Wallpaper\\ThemeA",
-    "interval": 20,
+    "folder": "images",
+    "interval": 60,
     "transition": 2,
-    "shuffle": false,
+    "shuffle": true,
     "fit": "cover"
   }
 }

@@ -184,7 +184,7 @@ A theme is a folder with a `theme.json`:
 | `shader` | `source`, `fps` (60), `scale` (1) | `aurora`, `midnight` |
 | `image` | `source`, `fit` (cover). WIC decode, EXIF rotation, downscaled to the largest monitor | `photo` |
 | `slideshow` | `folder`, `interval` (300 s), `transition` (1.5 s), `shuffle`, `fit` | `gallery` |
-| `video` | `source`, `fit`, `fps` (30), `speed` (1). H.264/HEVC/VP9/AV1 via Media Foundation, 8- and 10-bit, HDR tone-mapped | `loop` |
+| `video` | `source`, `fit`, `fps` (30), `speed` (1). H.264/HEVC/VP9/AV1 via Media Foundation, 8- and 10-bit, HDR tone-mapped | `earth-orbit` |
 | `scene` | `source` (.glb/.gltf), `fps`, `scale`, `orbit` (4°/s), `parallax` (0.15), `background` | `islands` |
 | `web` | `url` (http(s), or a local .html). WebView2, suspended while hidden | `webdemo` |
 | `app` | `command`, `args` (`{hwnd}` = the window to render into; Unity: `-parentHWND {hwnd} delayed`) | see [`themes/app-example`](themes/app-example) |
