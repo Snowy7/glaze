@@ -1,33 +1,53 @@
-//! Window chrome: the Mica backdrop, when this Windows version has it.
+//! Window chrome: the title bar and frame take the sidebar's gray (a Windows
+//! 11 feature; older builds ignore the calls), so the frame and the app read
+//! as one surface. These grays mirror the `--sidebar`, `--line` and `--ink-2`
+//! tokens in `src/index.css`; the page itself is styled only from those tokens.
 
-use serde::Serialize;
-use tauri::WebviewWindow;
-use tauri::window::{Effect, EffectsBuilder};
-use winreg::RegKey;
-use winreg::enums::HKEY_LOCAL_MACHINE;
+use std::ffi::c_void;
 
-/// First Windows 11 build with the public Mica backdrop API.
-const MICA_MIN_BUILD: u32 = 22621;
+use tauri::{Theme, WebviewWindow, WindowEvent};
+use windows::Win32::Foundation::{COLORREF, HWND};
+use windows::Win32::Graphics::Dwm::{
+    DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DWMWINDOWATTRIBUTE, DwmSetWindowAttribute,
+};
 
-#[derive(Debug, Clone, Copy, Serialize)]
-pub struct ShellInfo {
-    /// Mica is active, so the page should let the backdrop show through.
-    pub mica: bool,
+struct Chrome {
+    caption: u32,
+    text: u32,
+    border: u32,
 }
 
-fn windows_build() -> Option<u32> {
-    RegKey::predef(HKEY_LOCAL_MACHINE)
-        .open_subkey(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
-        .and_then(|key| key.get_value::<String, _>("CurrentBuildNumber"))
-        .ok()?
-        .parse()
-        .ok()
+const DARK: Chrome = Chrome { caption: 0x14_14_14, text: 0xd4_d4_d4, border: 0x2e_2e_2e };
+const LIGHT: Chrome = Chrome { caption: 0xe8_e8_e8, text: 0x2c_2c_2c, border: 0xdc_dc_dc };
+
+/// `0xRRGGBB` as the `0x00BBGGRR` a `COLORREF` wants.
+fn colorref(rgb: u32) -> COLORREF {
+    COLORREF(((rgb & 0xff) << 16) | (rgb & 0xff00) | (rgb >> 16))
 }
 
-/// The window is created transparent but the page stays opaque unless this
-/// succeeds, so Windows 10 never shows a see-through window.
-pub fn apply_backdrop(window: &WebviewWindow) -> ShellInfo {
-    let supported = windows_build().is_some_and(|build| build >= MICA_MIN_BUILD);
-    let mica = supported && window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build()).is_ok();
-    ShellInfo { mica }
+fn set(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE, rgb: u32) {
+    let value = colorref(rgb);
+    // SAFETY: `value` is a COLORREF-sized value that lives through the call.
+    // Failure (Windows 10) just leaves the default chrome.
+    let _ = unsafe { DwmSetWindowAttribute(hwnd, attribute, std::ptr::from_ref(&value).cast::<c_void>(), size_of::<COLORREF>() as u32) };
+}
+
+fn apply(window: &WebviewWindow, theme: Theme) {
+    let Ok(handle) = window.hwnd() else { return };
+    let hwnd = HWND(handle.0);
+    let chrome = if theme == Theme::Light { LIGHT } else { DARK };
+    set(hwnd, DWMWA_CAPTION_COLOR, chrome.caption);
+    set(hwnd, DWMWA_TEXT_COLOR, chrome.text);
+    set(hwnd, DWMWA_BORDER_COLOR, chrome.border);
+}
+
+/// Colors the frame now and again whenever the system switches light/dark.
+pub fn match_chrome(window: &WebviewWindow) {
+    apply(window, window.theme().unwrap_or(Theme::Dark));
+    let window_for_events = window.clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::ThemeChanged(theme) = event {
+            apply(&window_for_events, *theme);
+        }
+    });
 }

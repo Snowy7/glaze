@@ -2,7 +2,7 @@
 //! runs it off the UI thread (process and registry calls can take a moment),
 //! and every error is the full `anyhow` chain as a string.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::autostart::{self, Autostart};
 use crate::engine::{self, EngineStatus};
-use crate::shell::ShellInfo;
+use crate::manifest::WindowsStyle;
 use crate::source::{self, Kind};
 use crate::themes::{self, NewTheme, Origin, ThemeEntry, ThemeList};
 
@@ -115,24 +115,65 @@ pub async fn list_themes(app: AppHandle) -> CmdResult<ThemeList> {
 }
 
 #[derive(Debug, Serialize)]
+pub struct PresetInfo {
+    id: &'static str,
+    label: &'static str,
+    /// The arguments as they'd be typed, e.g. `-parentHWND {hwnd} delayed`.
+    args: String,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceInfo {
-    path: String,
+    /// The absolute path, or the web address.
+    source: String,
     kind: Kind,
     uses_fit: bool,
     suggested_name: String,
+    /// Argument presets to offer (programs only).
+    presets: Vec<PresetInfo>,
+    /// Arguments to start with, e.g. the Unity preset when the exe looks like a Unity player.
+    default_args: String,
+}
+
+impl From<source::Resolved> for SourceInfo {
+    fn from(resolved: source::Resolved) -> Self {
+        let source::Resolved { kind, source } = resolved;
+        let path = Path::new(&source);
+        let is_app = kind == Kind::App;
+        SourceInfo {
+            suggested_name: if kind == Kind::Web && source.contains("://") {
+                source::url_name(&source)
+            } else {
+                source::suggested_name(path)
+            },
+            uses_fit: kind.uses_fit(),
+            presets: if is_app {
+                source::ARG_PRESETS
+                    .iter()
+                    .map(|p| PresetInfo { id: p.id, label: p.label, args: source::join_args(p.args) })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            default_args: source::suggested_preset(path).filter(|_| is_app).map_or_else(String::new, |p| source::join_args(p.args)),
+            kind,
+            source,
+        }
+    }
 }
 
 /// What a picked file or folder would become, or why it can't be a theme.
 #[tauri::command]
 pub async fn inspect_source(path: PathBuf) -> CmdResult<SourceInfo> {
-    let kind = source::check(&path).map_err(text)?;
-    Ok(SourceInfo {
-        path: path.display().to_string(),
-        kind,
-        uses_fit: kind.uses_fit(),
-        suggested_name: source::suggested_name(&path),
-    })
+    source::resolve(&path.to_string_lossy()).map(Into::into).map_err(text)
+}
+
+/// Checks a typed web address.
+#[tauri::command]
+pub async fn inspect_url(url: String) -> CmdResult<SourceInfo> {
+    let url = source::check_url(&url).map_err(text)?;
+    source::resolve(url).map(Into::into).map_err(text)
 }
 
 #[derive(Debug, Deserialize)]
@@ -162,6 +203,43 @@ pub async fn create_theme(app: AppHandle, request: CreateThemeRequest) -> CmdRes
     Ok(entry)
 }
 
+/// Makes the thumbnail for a video theme. The caller re-lists themes afterwards.
+#[tauri::command]
+pub async fn generate_preview(dir: PathBuf) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || themes::generate_preview(&dir))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(text)
+}
+
+/// Copies any theme into the user's themes folder so it can be customized.
+#[tauri::command]
+pub async fn duplicate_theme(app: AppHandle, dir: PathBuf) -> CmdResult<ThemeEntry> {
+    let duplicate = || -> Result<ThemeEntry> {
+        let root = mypaper_config::user_themes_dir()?;
+        let copy = themes::duplicate_into(&root, &dir)?;
+        Ok(themes::entry(&copy, Origin::User, None))
+    };
+    let entry = duplicate().map_err(text)?;
+    allow_previews(&app, std::slice::from_ref(&entry));
+    Ok(entry)
+}
+
+#[tauri::command]
+pub async fn get_style(dir: PathBuf) -> CmdResult<WindowsStyle> {
+    themes::read_style(&dir).map_err(text)
+}
+
+/// Saves the `windows` section of a user theme and returns what is now on disk.
+#[tauri::command]
+pub async fn set_style(dir: PathBuf, style: WindowsStyle) -> CmdResult<WindowsStyle> {
+    let save = || -> Result<WindowsStyle> {
+        themes::save_style(&dir, &mypaper_config::user_themes_dir()?, &style)?;
+        themes::read_style(&dir)
+    };
+    save().map_err(text)
+}
+
 #[tauri::command]
 pub async fn engine_status() -> EngineStatus {
     engine::status()
@@ -187,11 +265,6 @@ pub async fn get_autostart() -> Autostart {
 #[tauri::command]
 pub async fn set_autostart(enabled: bool) -> CmdResult<Autostart> {
     autostart::set(enabled).map_err(text)
-}
-
-#[tauri::command]
-pub async fn shell_info(app: AppHandle) -> ShellInfo {
-    *app.state::<ShellInfo>()
 }
 
 #[cfg(test)]
