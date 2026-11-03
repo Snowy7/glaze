@@ -921,6 +921,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "log",
+ "mypaper-config",
  "mypaper-desktop",
  "mypaper-theme",
  "windows",
@@ -933,6 +934,8 @@ dependencies = [
  "anyhow",
  "env_logger",
  "log",
+ "mypaper-config",
+ "notify",
  "windows",
 ]
 
@@ -960,6 +963,7 @@ dependencies = [
  "glam",
  "gltf",
  "log",
+ "mypaper-config",
  "mypaper-desktop",
  "mypaper-theme",
  "notify",

@@ -5,8 +5,9 @@ full 3D scenes), and eventually a full retheme of Windows itself: taskbar, Start
 Settings, File Explorer, title bars and icons. You could make Windows look like Linux, macOS or
 something new, without your desktop paying for it.
 
-> Status: **phase 1.** The engine, desktop attach, pausing, hot reload, supervisor and panic
-> hotkey all work. See [Roadmap](#roadmap).
+> Status: **phase 1.** The engine, desktop attach, pausing (covered, battery, lock, fullscreen
+> games), live config, tray, hot reload, supervisor and panic hotkey all work. See
+> [Roadmap](#roadmap).
 
 ## Principles
 
@@ -35,10 +36,13 @@ target/debug/mypaper-core         # the real thing: behind your icons, supervise
 **Panic hotkey: `Ctrl+Alt+Shift+Backspace`.** It stops everything and restores your desktop.
 `Ctrl+C` in the console does the same.
 
-Themes are found by name (`mypaper-core aurora`) in a `themes/` folder beside the exe or any
-parent folder, so you can double-click `target\debug\mypaper-core.exe`. Debug builds log to their
-console. Release builds (`cargo build --release`) open no console and log to
+Themes are found by name in `%APPDATA%\mypaper\themes` and then in a `themes/` folder beside the
+exe or any parent folder, so you can double-click `target\debug\mypaper-core.exe`. Debug builds
+log to their console. Release builds (`cargo build --release`) open no console and log to
 `%LOCALAPPDATA%\mypaper\mypaper.log`.
+
+`mypaper-core` takes the theme from the [config](#config-tray-and-pausing). `mypaper-core aurora`
+(or `mypaper-wallpaper aurora`) overrides it for that run, which is handy in development.
 
 ## The dev loop: three speeds
 
@@ -76,19 +80,22 @@ Dioxus CLI 0.7.10 (`cargo binstall dioxus-cli@0.7.10`).
 ## Architecture
 
 ```text
-mypaper-core        supervisor: spawn/restart, panic hotkey, single instance
+mypaper-core        supervisor: spawn/restart, tray icon, panic hotkey, single instance
   └─ mypaper-wallpaper   one process, one GPU device, one surface per monitor
         ├─ desktop attach    behind the icons (24H2+ layered layout, plus the legacy WorkerW)
         ├─ pause logic       WinEvent hooks → "is this monitor covered?" → sleep
+        ├─ hold reasons      user / battery / display off / locked / fullscreen app → sleep everywhere
+        ├─ live config       config.json watcher → theme switch, pause settings, no restart
         ├─ frame pacing      high-res waitable timer, per-theme fps cap
         └─ hot reload        file watcher → WM_RELOAD → recompile
 ```
 
 | Crate | What it owns |
 |---|---|
-| [`crates/core`](crates/core) | Supervisor process, restart policy (unit-tested), panic hotkey |
-| [`crates/wallpaper`](crates/wallpaper) | Engine: wgpu renderer, frame loop, shader prelude, dev window |
-| [`crates/desktop`](crates/desktop) | Win32 plumbing: attaching to the desktop, monitors, occlusion, Ctrl+C |
+| [`crates/core`](crates/core) | Supervisor process, restart policy (unit-tested), tray icon and menu, panic hotkey |
+| [`crates/wallpaper`](crates/wallpaper) | Engine: wgpu renderer, frame loop, hold reasons, live config, shader prelude, dev window |
+| [`crates/desktop`](crates/desktop) | Win32 plumbing: attaching to the desktop, monitors, occlusion, fullscreen detection, battery, config watcher, Ctrl+C |
+| [`crates/config`](crates/config) | The user's settings file (`config.json`), shared by core, the engine and the studio |
 | [`crates/theme`](crates/theme) | Theme format and validation |
 | [`crates/inject`](crates/inject) | Injection allowlist policy (unit-tested). The injector itself is coming. |
 
@@ -113,6 +120,48 @@ whether disabling the NVIDIA overlay (or a per-app GPU preference) removes the h
 - `Mailbox` present plus our own timer: no vsync blocking, and frame latency is 1.
 - Shader time stops while paused and resumes without a jump.
 - Release builds use thin LTO, `panic=abort` and stripped binaries.
+
+## Config, tray and pausing
+
+Settings live in `%APPDATA%\mypaper\config.json`. Every field is optional, and unknown fields are
+rejected so typos fail loudly:
+
+```json
+{ "theme": "aurora", "paused": false, "pause_on_battery": true, "pause_on_fullscreen": true }
+```
+
+The wallpaper watches the file and applies edits live, with no restart and no IPC (the studio, the
+tray and a text editor all just write the file):
+
+- **`theme`** (a name or a folder path) loads in-process and the theme file watcher follows the new
+  folder. If the new theme fails to load, the error is logged and the current one keeps running.
+- **`paused`, `pause_on_battery`, `pause_on_fullscreen`** update the pause state immediately.
+- A config that doesn't parse is logged and ignored, so the last good settings stay in effect.
+
+**Tray icon.** `mypaper-core` shows a tray icon (tooltip `mypaper: <theme name>`). Right-click for
+**Pause / Resume**, **Themes** (every theme in your themes folder and the bundled ones, the active one
+checked), **Open Studio** (greyed out if `mypaper-studio.exe` isn't beside core or in an
+`apps/studio` dev build), **Restart wallpaper** and **Quit** (same cleanup as the panic hotkey).
+The icon comes back by itself after an Explorer restart.
+
+**Pausing.** Any one of these puts every screen to sleep at 0% CPU and GPU (each change is logged
+with its reason):
+
+| Reason | When |
+|---|---|
+| paused by user | `paused` is set (tray or studio) |
+| on battery | `pause_on_battery`, and the PC runs on battery |
+| display off | the monitors are off (always) |
+| session locked | the session is locked (always) |
+| fullscreen app in front | `pause_on_fullscreen`, and a fullscreen game or app is in front |
+
+The fullscreen rule is there so games get the whole GPU: **while a game is fullscreen, every mypaper
+screen is paused, including your other monitors.** It triggers when Windows reports an
+exclusive-fullscreen Direct3D app or presentation mode (`SHQueryUserNotificationState`), or when the
+foreground window covers its entire monitor, which catches borderless-fullscreen games and F11 video.
+Maximized windows (which stop at the taskbar) and the desktop itself don't count. It's re-checked
+only when window events fire, never on a timer. Battery, display and lock changes arrive as Windows
+notifications to an invisible message-only window, so nothing polls.
 
 ## Themes
 
@@ -167,7 +216,8 @@ so it's checked rather than trusted.
 2. **Lighter and more wallpaper types**: cut driver memory (see the note above) and get Rust
    hot-patching working. Then images (with crossfades), hardware-decoded video (Media
    Foundation), render scale (render at 50% and upscale, for big savings on 4K).
-   Also pausing on battery and lock.
+   Pausing on battery, lock, display off and fullscreen games is done (see
+   [Config, tray and pausing](#config-tray-and-pausing)).
 3. **Native tweaks**: DWM accent, borders, corners and Mica on allowlisted windows. Palette
    extraction so the accent color follows the wallpaper. An undo journal for every change.
 4. **Style engine and injector**: CSS-like selectors over the XAML visual tree (XAML Diagnostics) and

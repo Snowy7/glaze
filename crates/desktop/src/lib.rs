@@ -1,13 +1,19 @@
 //! Win32 plumbing shared by mypaper processes. Everything is event-driven,
 //! with no polling threads, so an idle mypaper costs ~0% CPU.
 
+mod config_watch;
 mod cover;
+mod fullscreen;
 mod host;
 mod monitors;
+mod power;
 
+pub use config_watch::{ConfigWatcher, watch_config};
 pub use cover::{WindowEvents, covered_monitors};
+pub use fullscreen::fullscreen_app_in_front;
 pub use host::DesktopHost;
 pub use monitors::{Rect, monitors};
+pub use power::on_battery;
 
 use std::sync::atomic::{AtomicU32, Ordering};
 

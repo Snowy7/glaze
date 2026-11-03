@@ -5,6 +5,10 @@
 //! mypaper-core [THEME]
 //! ```
 //!
+//! The wallpaper follows `config.json` on its own (theme, pausing), so core
+//! passes it nothing; an explicit `THEME` is forwarded as a run-only override.
+//! Core owns the tray icon (pause, themes, studio, restart, quit).
+//!
 //! **Panic hotkey: Ctrl+Alt+Shift+Backspace** stops everything and restores
 //! the stock desktop, whatever state mypaper is in.
 
@@ -12,12 +16,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod restart;
+mod tray;
 
 use std::os::windows::io::AsRawHandle;
 use std::process::{Child, Command, ExitCode};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
+use mypaper_config::Config;
 use mypaper_desktop::DesktopHost;
 use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{CreateMutexW, INFINITE};
@@ -25,11 +31,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, RegisterHotKey, UnregisterHotKey, VK_BACK,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    MSG, MsgWaitForMultipleObjects, PM_REMOVE, PeekMessageW, QS_ALLINPUT, WM_HOTKEY, WM_QUIT,
+    DispatchMessageW, MSG, MsgWaitForMultipleObjects, PM_REMOVE, PeekMessageW, QS_ALLINPUT,
+    TranslateMessage, WM_HOTKEY, WM_QUIT,
 };
 use windows::core::w;
 
 use crate::restart::{Decision, Restarts};
+use crate::tray::{Tray, WM_RESTART_WALLPAPER};
+
+/// Pause before relaunching after "Restart wallpaper".
+const MANUAL_RESTART_DELAY: Duration = Duration::from_millis(250);
 
 const PANIC_HOTKEY: i32 = 1;
 
@@ -46,9 +57,13 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<()> {
-    // Resolve once, up front: a missing theme fails here instead of crash-looping
-    // the child, and the child gets an absolute path whatever our working dir is.
-    let theme = mypaper_theme::locate(std::env::args().nth(1).as_deref())?;
+    // Validate once, up front: a missing theme fails here with a clear error
+    // instead of crash-looping the child. The child reads the config itself;
+    // only an explicit override is forwarded, as an absolute path.
+    let config = Config::load().context("config.json")?;
+    let theme_override = std::env::args().nth(1);
+    let theme = mypaper_theme::locate(Some(theme_override.as_deref().unwrap_or(&config.theme)))
+        .context("theme to start with")?;
     log::info!("theme folder: {}", theme.display());
     let wallpaper_exe = std::env::current_exe()?.with_file_name("mypaper-wallpaper.exe");
     if !wallpaper_exe.exists() {
@@ -76,11 +91,17 @@ fn run() -> Result<()> {
     }
     log::info!("running; panic hotkey: Ctrl+Alt+Shift+Backspace");
 
+    // Failing to show a tray icon must not stop the wallpaper.
+    let _tray = Tray::new()
+        .inspect_err(|e| log::warn!("no tray icon: {e:#}"))
+        .ok();
+
     let spawn = || -> Result<Child> {
-        Command::new(&wallpaper_exe)
-            .arg(&theme)
-            .spawn()
-            .context("starting the wallpaper")
+        let mut command = Command::new(&wallpaper_exe);
+        if theme_override.is_some() {
+            command.arg(&theme);
+        }
+        command.spawn().context("starting the wallpaper")
     };
     let mut child = Some(spawn()?);
     let mut restarts = Restarts::default();
@@ -129,6 +150,18 @@ fn run() -> Result<()> {
                 break;
             }
             Some(Signal::Quit) => break,
+            Some(Signal::Restart) => {
+                log::info!("restarting the wallpaper");
+                if let Some(mut old) = child.take() {
+                    let _ = old.kill();
+                    let _ = old.wait();
+                }
+                // A killed wallpaper cannot clean up after itself.
+                if let Ok(host) = DesktopHost::find() {
+                    host.restore();
+                }
+                restart_at = Some(Instant::now() + MANUAL_RESTART_DELAY);
+            }
             None => {}
         }
     }
@@ -146,22 +179,34 @@ fn run() -> Result<()> {
     Ok(())
 }
 
+/// What the message queue asked of the supervisor, least urgent first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Signal {
-    Panic,
+    Restart,
     Quit,
+    Panic,
 }
 
+/// Drains the message queue (running the tray's window procedure) and
+/// returns the most urgent request in it.
 fn pump() -> Option<Signal> {
     let mut msg = MSG::default();
-    // SAFETY: standard message pump; this thread has no windows.
+    let mut signal = None;
+    // SAFETY: standard message pump on the thread that owns the tray window.
     unsafe {
         while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
-            match msg.message {
-                WM_HOTKEY if msg.wParam.0 == PANIC_HOTKEY as usize => return Some(Signal::Panic),
-                WM_QUIT => return Some(Signal::Quit),
-                _ => {}
-            }
+            let requested = match msg.message {
+                WM_HOTKEY if msg.wParam.0 == PANIC_HOTKEY as usize => Signal::Panic,
+                WM_QUIT => Signal::Quit,
+                WM_RESTART_WALLPAPER => Signal::Restart,
+                _ => {
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                    continue;
+                }
+            };
+            signal = signal.max(Some(requested));
         }
     }
-    None
+    signal
 }

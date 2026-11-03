@@ -1,0 +1,182 @@
+//! Live configuration: follows `config.json` and the theme folder while the
+//! wallpaper runs, so a theme switch or pause toggle needs no restart.
+
+use std::path::Path;
+use std::time::{Duration, Instant};
+
+use anyhow::Result;
+use mypaper_config::Config;
+use mypaper_desktop::{ConfigWatcher, watch_config};
+use notify::Watcher;
+use windows::Win32::Foundation::{LPARAM, WPARAM};
+use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
+
+use crate::engine::Engine;
+use crate::window::{WM_CONFIG, WM_RELOAD};
+
+/// Coalesces the burst of events one config save produces.
+const CONFIG_DEBOUNCE: Duration = Duration::from_millis(100);
+
+/// What a config change asks of the engine.
+#[derive(Debug, PartialEq, Eq)]
+enum Action {
+    SwitchTheme(String),
+    /// Paused / pause-on-battery / pause-on-fullscreen changed.
+    UpdateHold,
+}
+
+/// The actions that take the engine from `old` to `new`.
+fn actions(old: &Config, new: &Config) -> Vec<Action> {
+    let mut actions = Vec::new();
+    if old.theme != new.theme {
+        actions.push(Action::SwitchTheme(new.theme.clone()));
+    }
+    if (old.paused, old.pause_on_battery, old.pause_on_fullscreen)
+        != (new.paused, new.pause_on_battery, new.pause_on_fullscreen)
+    {
+        actions.push(Action::UpdateHold);
+    }
+    actions
+}
+
+/// Applies config changes to the engine and keeps the file watches.
+pub struct Live {
+    /// The last config applied. A `THEME` command-line override stays in
+    /// effect until the config's theme changes from what it was at startup.
+    config: Config,
+    apply_at: Option<Instant>,
+    theme_watch: Option<notify::RecommendedWatcher>,
+    _config_watch: ConfigWatcher,
+}
+
+impl Live {
+    /// Starts following `config.json` and the folder of the theme in use.
+    pub fn new(config: Config, theme_dir: &Path) -> Result<Self> {
+        // SAFETY: no preconditions.
+        let thread = unsafe { GetCurrentThreadId() };
+        let config_watch = watch_config(move || post(thread, WM_CONFIG))?;
+        Ok(Self {
+            config,
+            apply_at: None,
+            theme_watch: watch_theme(theme_dir),
+            _config_watch: config_watch,
+        })
+    }
+
+    /// The config file changed; apply it after the debounce.
+    pub fn schedule(&mut self) {
+        self.apply_at
+            .get_or_insert(Instant::now() + CONFIG_DEBOUNCE);
+    }
+
+    pub fn deadline(&self) -> Option<Instant> {
+        self.apply_at
+    }
+
+    /// Applies a pending config change once its debounce has passed.
+    pub fn apply_due(&mut self, engine: &mut Engine) {
+        if !self.apply_at.is_some_and(|t| Instant::now() >= t) {
+            return;
+        }
+        self.apply_at = None;
+        let new = match Config::load() {
+            Ok(config) => config,
+            Err(e) => return log::error!("{e:#}\n(keeping the current settings)"),
+        };
+        for action in actions(&self.config, &new) {
+            match action {
+                Action::SwitchTheme(name) => self.switch_theme(engine, &name),
+                Action::UpdateHold => engine.apply_config(&new),
+            }
+        }
+        self.config = new;
+    }
+
+    /// Reloads the engine onto another theme and follows its folder. On
+    /// failure the current theme keeps running.
+    fn switch_theme(&mut self, engine: &mut Engine, name: &str) {
+        let switched = mypaper_theme::locate(Some(name)).and_then(|dir| {
+            engine.switch_theme(&dir)?;
+            Ok(dir)
+        });
+        match switched {
+            Ok(dir) => self.theme_watch = watch_theme(&dir),
+            Err(e) => {
+                log::error!("cannot switch to theme {name:?}: {e:#}\n(keeping the current one)")
+            }
+        }
+    }
+}
+
+/// Wakes the main thread with `WM_RELOAD` whenever a theme file changes.
+fn watch_theme(dir: &Path) -> Option<notify::RecommendedWatcher> {
+    // SAFETY: no preconditions.
+    let thread = unsafe { GetCurrentThreadId() };
+    let watch = || -> notify::Result<_> {
+        let mut watcher =
+            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+                if event.is_ok_and(|e| !e.kind.is_access()) {
+                    post(thread, WM_RELOAD);
+                }
+            })?;
+        watcher.watch(dir, notify::RecursiveMode::Recursive)?;
+        Ok(watcher)
+    };
+    watch()
+        .inspect_err(|e| log::warn!("not watching {} for changes: {e}", dir.display()))
+        .ok()
+}
+
+fn post(thread: u32, message: u32) {
+    // SAFETY: posting to a thread id is always safe; failure means it is gone.
+    let _ = unsafe { PostThreadMessageW(thread, message, WPARAM(0), LPARAM(0)) };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config(f: impl FnOnce(&mut Config)) -> Config {
+        let mut config = Config::default();
+        f(&mut config);
+        config
+    }
+
+    #[test]
+    fn identical_configs_ask_for_nothing() {
+        assert!(actions(&Config::default(), &Config::default()).is_empty());
+    }
+
+    #[test]
+    fn theme_change_switches_theme_only() {
+        let new = config(|c| c.theme = "photo".into());
+        assert_eq!(
+            actions(&Config::default(), &new),
+            [Action::SwitchTheme("photo".into())]
+        );
+    }
+
+    #[test]
+    fn each_pause_setting_updates_hold() {
+        for new in [
+            config(|c| c.paused = true),
+            config(|c| c.pause_on_battery = false),
+            config(|c| c.pause_on_fullscreen = false),
+        ] {
+            assert_eq!(actions(&Config::default(), &new), [Action::UpdateHold]);
+        }
+    }
+
+    #[test]
+    fn simultaneous_changes_do_both() {
+        let new = config(|c| {
+            c.theme = "photo".into();
+            c.paused = true;
+        });
+        assert_eq!(
+            actions(&Config::default(), &new),
+            [Action::SwitchTheme("photo".into()), Action::UpdateHold]
+        );
+    }
+}
