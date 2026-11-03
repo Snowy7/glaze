@@ -124,6 +124,55 @@ body {
   mix-blend-mode: overlay;
 }
 
+/*
+ * Appearance preview. A stand-in wallpaper (stripes and glows, so blur and
+ * transparency show) with samples painted from the same variables and
+ * data attributes the real widget and bar pages use (docs/widgets.md,
+ * "Appearance"). The samples are content, so they ignore the UI tokens.
+ */
+.ap-stage[data-wallpaper="dark"] {
+  background:
+    radial-gradient(60% 95% at 14% 20%, oklch(0.66 0 0 / 0.95), transparent 62%),
+    radial-gradient(55% 85% at 88% 82%, oklch(0.52 0 0 / 0.95), transparent 66%),
+    repeating-linear-gradient(120deg, oklch(0.2 0 0) 0 18px, oklch(0.3 0 0) 18px 36px);
+}
+
+.ap-stage[data-wallpaper="light"] {
+  background:
+    radial-gradient(60% 95% at 14% 20%, oklch(0.99 0 0 / 0.95), transparent 62%),
+    radial-gradient(55% 85% at 88% 82%, oklch(0.74 0 0 / 0.95), transparent 66%),
+    repeating-linear-gradient(120deg, oklch(0.84 0 0) 0 18px, oklch(0.92 0 0) 18px 36px);
+}
+
+.ap-root {
+  font-family: var(--font);
+  color: var(--t0);
+}
+
+.ap-root[data-shadow="on"] {
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+
+.ap-root[data-shadow="on"][data-text="dark"] {
+  text-shadow: 0 1px 8px rgb(255 255 255 / 0.6);
+}
+
+.ap-surface {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  backdrop-filter: blur(var(--blur));
+}
+
+.ap-root[data-surface="none"] .ap-surface {
+  background: none;
+  backdrop-filter: none;
+}
+
+.ap-root[data-surface="solid"] .ap-surface {
+  backdrop-filter: none;
+}
+
 dialog {
   color: inherit;
 }

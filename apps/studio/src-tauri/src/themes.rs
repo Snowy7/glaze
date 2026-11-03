@@ -7,7 +7,8 @@ use anyhow::{Context, Result, bail};
 use mypaper_theme::{Fit, LoadedTheme, MANIFEST, Wallpaper};
 use serde::{Deserialize, Serialize};
 
-use crate::manifest::{self, WindowsStyle};
+use crate::fsio;
+use crate::manifest::{self, SkinEdit, SkinKind, WindowsStyle};
 use crate::source::{self, Kind};
 use crate::thumbs;
 
@@ -39,6 +40,9 @@ pub struct ThemeEntry {
     pub preview_pending: bool,
     /// The theme has a `windows` styling section.
     pub styled: bool,
+    /// The theme sets how widgets / the bars look.
+    pub widgets_skin: bool,
+    pub bars_skin: bool,
     pub active: bool,
     /// What to write to `config.theme` to select this theme.
     pub apply_as: String,
@@ -120,6 +124,8 @@ pub fn entry(dir: &Path, origin: Origin, active_dir: Option<&Path>) -> ThemeEntr
         preview_pending: preview.is_none() && video_source(loaded_ok).is_some_and(|p| p.is_file()),
         preview: preview.map(|p| p.display().to_string()),
         styled: loaded_ok.is_some_and(|t| t.theme.windows.is_some()),
+        widgets_skin: loaded_ok.is_some_and(|t| t.theme.widgets.is_some()),
+        bars_skin: loaded_ok.is_some_and(|t| t.theme.bars.is_some()),
         active: active_dir == Some(canonical_dir.as_path()),
         apply_as: if by_name { folder } else { dir.display().to_string() },
     }
@@ -281,6 +287,48 @@ pub fn save_style(dir: &Path, user_root: &Path, style: &WindowsStyle) -> Result<
     Ok(())
 }
 
+/// A `widgets` / `bars` section of a theme's `theme.json`, as the editor shows it.
+pub fn read_skin(dir: &Path, kind: SkinKind) -> Result<SkinEdit> {
+    LoadedTheme::load(dir)?;
+    let path = dir.join(MANIFEST);
+    manifest::read_skin(&std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?, kind)
+}
+
+/// Writes a skin into a user theme's `theme.json`, leaving every other field
+/// alone. Like `save_style`, the edited text is validated by the theme loader
+/// first (ranges, colors, a css path that stays inside the theme).
+pub fn save_skin(dir: &Path, user_root: &Path, kind: SkinKind, skin: &SkinEdit) -> Result<()> {
+    if !is_user_theme(dir, user_root) {
+        bail!("only themes in your themes folder can be edited; duplicate this one first");
+    }
+    let path = dir.join(MANIFEST);
+    let original = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    if manifest::read_skin(&original, kind)? == *skin {
+        return Ok(());
+    }
+    let updated = manifest::with_skin(&original, kind, skin)?;
+    LoadedTheme::parse(dir.to_path_buf(), &updated).with_context(|| format!("these {} values were refused", kind.key()))?;
+    fsio::write_atomic(&path, updated)
+}
+
+/// Brings a style sheet into a user theme and returns the path to put in the
+/// skin's `css`. A file already inside the theme folder is used where it is;
+/// any other is copied in as `<kind>.css` (replacing the last one picked).
+pub fn import_skin_css(dir: &Path, user_root: &Path, kind: SkinKind, source: &Path) -> Result<String> {
+    if !is_user_theme(dir, user_root) {
+        bail!("only themes in your themes folder can be edited; duplicate this one first");
+    }
+    if !source.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("css")) {
+        bail!("pick a .css file");
+    }
+    if let Ok(inside) = canonical(source).strip_prefix(canonical(dir)) {
+        return Ok(inside.display().to_string());
+    }
+    let name = format!("{}.css", kind.key());
+    std::fs::copy(source, dir.join(&name)).with_context(|| format!("copying {} into the theme", source.display()))?;
+    Ok(name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -425,6 +473,66 @@ mod tests {
         let style = WindowsStyle { corners: Some("square".into()), ..Default::default() };
         assert!(save_style(&bundled, &mine, &style).is_err());
         assert!(!std::fs::read_to_string(bundled.join(MANIFEST)).unwrap().contains("windows"));
+        std::fs::remove_dir_all(&work).unwrap();
+    }
+
+    #[test]
+    fn saving_a_skin_is_validated_by_the_theme_crate_and_edits_only_its_section() {
+        let work = temp_dir("skin");
+        let mine = work.join("mine");
+        let dir = shader_theme(&mine, "own");
+        let before = LoadedTheme::load(&dir).unwrap();
+
+        let skin = SkinEdit {
+            appearance: serde_json::from_str(r##"{ "surface": "solid", "tint": "#202020", "radius": 12, "shadow": false }"##).unwrap(),
+            css: Some("widgets.css".into()),
+        };
+        save_skin(&dir, &mine, SkinKind::Widgets, &skin).unwrap();
+        assert_eq!(read_skin(&dir, SkinKind::Widgets).unwrap(), skin);
+        assert_eq!(read_skin(&dir, SkinKind::Bars).unwrap(), SkinEdit::default());
+        let loaded = LoadedTheme::load(&dir).unwrap();
+        assert_eq!(loaded.theme.wallpaper, before.theme.wallpaper);
+        let widgets = loaded.theme.widgets.unwrap();
+        assert_eq!(widgets.appearance.unwrap().surface, Some(mypaper_theme::Surface::Solid));
+        assert!(entry(&dir, Origin::User, None).widgets_skin && !entry(&dir, Origin::User, None).bars_skin);
+
+        // Out-of-range and escaping values are refused, and the file stays as it was.
+        let good = std::fs::read_to_string(dir.join(MANIFEST)).unwrap();
+        let loud = SkinEdit { appearance: serde_json::from_str(r#"{ "blur": 500 }"#).unwrap(), css: None };
+        let error = format!("{:#}", save_skin(&dir, &mine, SkinKind::Bars, &loud).unwrap_err());
+        assert!(error.contains("refused") && error.contains("blur"), "{error}");
+        let escaping = SkinEdit { css: Some(r"..\..\x.css".into()), ..Default::default() };
+        assert!(save_skin(&dir, &mine, SkinKind::Bars, &escaping).is_err());
+        assert_eq!(std::fs::read_to_string(dir.join(MANIFEST)).unwrap(), good);
+        assert!(!dir.join("theme.json.studio.tmp").exists());
+
+        // Bundled themes can't be edited.
+        let bundled = shader_theme(&work.join("bundled"), "shady");
+        assert!(save_skin(&bundled, &mine, SkinKind::Bars, &skin).is_err());
+
+        save_skin(&dir, &mine, SkinKind::Widgets, &SkinEdit::default()).unwrap();
+        assert!(!entry(&dir, Origin::User, None).widgets_skin);
+        std::fs::remove_dir_all(&work).unwrap();
+    }
+
+    #[test]
+    fn style_sheets_are_copied_into_the_theme_unless_already_inside() {
+        let work = temp_dir("skin-css");
+        let mine = work.join("mine");
+        let dir = shader_theme(&mine, "own");
+        let outside = work.join("fancy.css");
+        std::fs::write(&outside, "body{}").unwrap();
+
+        assert_eq!(import_skin_css(&dir, &mine, SkinKind::Bars, &outside).unwrap(), "bars.css");
+        assert_eq!(std::fs::read_to_string(dir.join("bars.css")).unwrap(), "body{}");
+        std::fs::write(dir.join("mine.css"), "x").unwrap();
+        assert_eq!(import_skin_css(&dir, &mine, SkinKind::Bars, &dir.join("mine.css")).unwrap(), "mine.css");
+
+        std::fs::write(work.join("notes.txt"), "").unwrap();
+        assert!(import_skin_css(&dir, &mine, SkinKind::Bars, &work.join("notes.txt")).is_err());
+        let bundled = shader_theme(&work.join("bundled"), "shady");
+        assert!(import_skin_css(&bundled, &mine, SkinKind::Bars, &outside).is_err());
+        assert!(!bundled.join("bars.css").exists());
         std::fs::remove_dir_all(&work).unwrap();
     }
 

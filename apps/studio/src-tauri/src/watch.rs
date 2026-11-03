@@ -13,21 +13,27 @@ use tauri::{AppHandle, Emitter};
 
 pub const EVENT: &str = "studio:changed";
 
-/// What changed. Both flags can be set when a burst touches both.
+/// What changed. Several flags can be set when a burst touches several files.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Changes {
     pub config: bool,
     pub themes: bool,
+    /// `bars.json`.
+    pub bars: bool,
+    /// `widgets.json`, or a widget folder.
+    pub widgets: bool,
 }
 
 impl Changes {
     fn merge(&mut self, other: Self) {
         self.config |= other.config;
         self.themes |= other.themes;
+        self.bars |= other.bars;
+        self.widgets |= other.widgets;
     }
 }
 
-/// Classifies an event path: `config.json` itself (not its temp file), or anything under `themes\`.
+/// Classifies an event path: a file we follow (not its temp file), or anything under `themes\` or `widgets\`.
 fn classify(dir: &Path, path: &Path) -> Changes {
     let Ok(relative) = path.strip_prefix(dir) else {
         return Changes::default();
@@ -35,6 +41,8 @@ fn classify(dir: &Path, path: &Path) -> Changes {
     Changes {
         config: relative == Path::new("config.json"),
         themes: relative.starts_with("themes"),
+        bars: relative == Path::new("bars.json"),
+        widgets: relative == Path::new("widgets.json") || relative.starts_with("widgets"),
     }
 }
 
@@ -75,14 +83,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_config_json_and_the_themes_folder_count() {
+    fn only_the_files_studio_follows_count() {
         let dir = Path::new(r"C:\Users\me\AppData\Roaming\mypaper");
         let at = |rel: &str| classify(dir, &dir.join(rel));
-        assert_eq!(at("config.json"), Changes { config: true, themes: false });
+        assert_eq!(at("config.json"), Changes { config: true, ..Changes::default() });
         assert_eq!(at("config.json.tmp"), Changes::default());
-        assert_eq!(at(r"themes\neon\theme.json"), Changes { config: false, themes: true });
-        assert_eq!(at("themes"), Changes { config: false, themes: true });
+        assert_eq!(at(r"themes\neon\theme.json"), Changes { themes: true, ..Changes::default() });
+        assert_eq!(at("themes"), Changes { themes: true, ..Changes::default() });
         assert_eq!(at("themes-backup"), Changes::default());
+        assert_eq!(at("bars.json"), Changes { bars: true, ..Changes::default() });
+        assert_eq!(at("bars.json.studio.tmp"), Changes::default());
+        assert_eq!(at("widgets.json"), Changes { widgets: true, ..Changes::default() });
+        assert_eq!(at(r"widgets\mine\widget.json"), Changes { widgets: true, ..Changes::default() });
+        assert_eq!(at(r"widget-data\clock-1.json"), Changes::default());
         assert_eq!(classify(dir, Path::new(r"D:\elsewhere\config.json")), Changes::default());
     }
 }
