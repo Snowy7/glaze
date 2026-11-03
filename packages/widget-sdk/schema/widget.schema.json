@@ -1,0 +1,146 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mypaper.dev/schema/widget.schema.json",
+  "title": "mypaper widget manifest",
+  "description": "widget.json: the manifest of a mypaper widget. See docs/widgets.md.",
+  "type": "object",
+  "required": ["id", "name", "version", "entry", "size"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Lowercase [a-z0-9-], unique. Also the folder name."
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+([-+].+)?$" },
+    "author": { "type": "string" },
+    "description": { "type": "string" },
+    "entry": { "type": "string", "minLength": 1, "description": "The HTML file to load, relative to the widget folder." },
+    "size": {
+      "type": "object",
+      "description": "In grid cells, [columns, rows]. min <= default <= max.",
+      "required": ["default", "min", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "default": { "$ref": "#/definitions/cells" },
+        "min": { "$ref": "#/definitions/cells" },
+        "max": { "$ref": "#/definitions/cells" }
+      }
+    },
+    "resizable": { "type": "boolean", "default": true, "description": "false locks the size to size.default." },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Anything not listed is denied.",
+      "items": {
+        "type": "string",
+        "pattern": "^(system\\.stats|media|launch|theme|clipboard\\.write|network:https?://[^\\s/]+)$"
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Plugin ids whose methods this widget may call.",
+      "items": { "type": "string", "pattern": "^[a-z0-9-]+$" }
+    },
+    "settings": {
+      "type": "array",
+      "description": "Rendered by the shell in edit mode and by Studio.",
+      "items": { "$ref": "#/definitions/setting" }
+    }
+  },
+  "definitions": {
+    "cells": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "integer", "minimum": 1 }
+    },
+    "settingBase": {
+      "type": "object",
+      "required": ["key", "type", "label"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "label": { "type": "string", "minLength": 1 }
+      }
+    },
+    "scalarSetting": {
+      "allOf": [
+        { "$ref": "#/definitions/settingBase" },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "type": { "const": "boolean" },
+                "default": { "type": "boolean" }
+              }
+            },
+            {
+              "properties": {
+                "type": { "const": "string" },
+                "default": { "type": "string" }
+              }
+            },
+            {
+              "properties": {
+                "type": { "const": "color" },
+                "default": { "type": "string", "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$" }
+              }
+            },
+            {
+              "required": ["options"],
+              "properties": {
+                "type": { "const": "select" },
+                "options": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+                "default": { "type": "string" }
+              }
+            },
+            {
+              "properties": {
+                "type": { "const": "number" },
+                "min": { "type": "number" },
+                "max": { "type": "number" },
+                "step": { "type": "number", "exclusiveMinimum": 0 },
+                "default": { "type": "number" }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "setting": {
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/definitions/scalarSetting" },
+            { "required": ["default"] }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/definitions/settingBase" },
+            {
+              "required": ["fields", "default"],
+              "properties": {
+                "type": { "const": "list" },
+                "fields": {
+                  "type": "array",
+                  "minItems": 1,
+                  "description": "The columns of each item. Scalar settings only, defaults optional.",
+                  "items": { "$ref": "#/definitions/scalarSetting" }
+                },
+                "maxItems": { "type": "integer", "minimum": 1 },
+                "default": {
+                  "type": "array",
+                  "items": { "type": "object" }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

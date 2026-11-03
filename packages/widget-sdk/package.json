@@ -1,0 +1,35 @@
+{
+  "name": "@mypaper/widget-sdk",
+  "version": "1.0.0",
+  "description": "Typed SDK, drop-in script, JSON schemas and a mock host for mypaper widgets.",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./mypaper.js": "./dist/mypaper.js",
+    "./global": "./types/global.d.ts",
+    "./schema/widget.schema.json": "./schema/widget.schema.json",
+    "./schema/plugin.schema.json": "./schema/plugin.schema.json"
+  },
+  "files": ["dist", "schema", "types", "widget-kit"],
+  "scripts": {
+    "dev": "vite",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node scripts/build.mjs && node scripts/sync-widgets.mjs",
+    "sync-widgets": "node scripts/sync-widgets.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.1.0"
+  }
+}
