@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clock</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card" id="card">
+      <div class="time num" id="time" aria-live="off">
+        <span class="hm"><span id="h">--</span><span class="colon">:</span><span id="m">--</span></span>
+        <span class="sec" id="s" hidden></span>
+        <span class="ampm" id="ampm" hidden></span>
+      </div>
+      <div class="date" id="date">
+        <span class="weekday"><span class="l" id="wd-l"></span><span class="s" id="wd-s"></span></span>
+        <span class="day"><span class="l" id="d-l"></span><span class="s" id="d-s"></span></span>
+      </div>
+    </main>
+    <script src="mypaper.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

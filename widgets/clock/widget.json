@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "clock",
+  "name": "Clock",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "Big, calm clock with the date.",
+  "entry": "index.html",
+  "size": { "default": [2, 1], "min": [1, 1], "max": [4, 2] },
+  "resizable": true,
+  "permissions": [],
+  "plugins": [],
+  "settings": [
+    { "key": "format24", "type": "boolean", "label": "24-hour clock", "default": true },
+    { "key": "showSeconds", "type": "boolean", "label": "Show seconds", "default": false },
+    { "key": "showDate", "type": "boolean", "label": "Show date", "default": true }
+  ]
+}
