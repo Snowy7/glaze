@@ -144,8 +144,10 @@ impl ClockConfig {
 pub struct DockConfig {
     pub enabled: bool,
     pub monitors: Monitors,
+    /// Which dock layout the page draws; the host sizes the band for it.
+    pub style: DockStyle,
     pub position: DockPosition,
-    /// The icon size in DIPs; the dock's band is `size + 16`.
+    /// The icon size in DIPs; the band follows from the style ([`DockStyle::band`]).
     pub size: f64,
     pub autohide: bool,
     pub magnify: bool,
@@ -160,12 +162,33 @@ impl Default for DockConfig {
         Self {
             enabled: false,
             monitors: Monitors::Primary,
+            style: DockStyle::Floating,
             position: DockPosition::Bottom,
             size: 48.0,
             autohide: false,
             magnify: true,
             running: true,
             pinned: None,
+        }
+    }
+}
+
+/// A dock layout. Each style is a page layout (`bars/shell/src/dock/styles.ts`) plus a band size
+/// here ([`DockStyle::band`]); a new style adds one of each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DockStyle {
+    /// A pill of icons floating centered on its edge, macOS-style.
+    #[default]
+    Floating,
+}
+
+impl DockStyle {
+    /// The band (DIPs) the dock reserves for icons of `size`: for `floating`, a 6 DIP gap from
+    /// the screen edge plus a pill with 5 DIP of padding.
+    pub fn band(self, size: f64) -> f64 {
+        match self {
+            Self::Floating => size + 2.0 * 5.0 + 6.0,
         }
     }
 }
@@ -402,6 +425,7 @@ mod tests {
             r#"{ "top": { "left": ["clock"], "right": ["clock"] } }"#,
             r#"{ "top": { "height": 4 } }"#,
             r#"{ "dock": { "size": 500 } }"#,
+            r#"{ "dock": { "style": "ribbon" } }"#,
             r#"{ "dock": { "pinned": [ { "path": " " } ] } }"#,
             r#"{ "version": 2 }"#,
             r#"{ "appearance": { "opacity": 3 } }"#,
@@ -446,6 +470,12 @@ mod tests {
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["top"]["monitors"], "all");
         assert_eq!(json["dock"]["position"], "bottom");
+        assert_eq!(json["dock"]["style"], "floating");
+        assert_eq!(
+            DockStyle::Floating.band(48.0),
+            64.0,
+            "icons plus pill padding plus the edge gap"
+        );
         assert_eq!(json["top"]["right"][0], "media");
         assert!(json.get("appearance").is_none());
         assert!(json["taskbar"].get("alignment").is_none());

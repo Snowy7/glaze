@@ -15,8 +15,17 @@ export function createTop(root: HTMLElement, config: BarsConfig): Bar {
   strip.style.setProperty("--bar-h", `${config.top.height}px`);
 
   const layout = topLayout(config.top);
+  // Every module carries `data-module="<name>"` and every zone `data-zone`: the hooks theme CSS
+  // and presets style by (docs/bars.md, "Styling").
+  const build = (name: (typeof layout)["left"][number]) => {
+    const el = factories[name]({ config, scope });
+    el.dataset.module = name;
+    return el;
+  };
   for (const zone of ["left", "center", "right"] as const) {
-    strip.append(h("div", `zone ${zone}`, ...layout[zone].map((name) => factories[name]({ config, scope }))));
+    const el = h("div", `zone ${zone}`, ...layout[zone].map(build));
+    el.dataset.zone = zone;
+    strip.append(el);
   }
   root.append(strip);
 

@@ -109,6 +109,7 @@ export function createMockTransport(): Transport {
     dock: {
       enabled: true,
       monitors: "all",
+      style: "floating",
       position,
       size: Number(q.get("size")) || 48,
       autohide,

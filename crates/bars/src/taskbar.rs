@@ -19,7 +19,7 @@ use windows::Win32::UI::Shell::{
     ABM_GETSTATE, ABM_SETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowW, GetClassNameW, HWND_BROADCAST, SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA,
+    EnumWindows, FindWindowW, GetClassNameW, IsWindowVisible, SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA,
     SendMessageTimeoutW, ShowWindow, WM_SETTINGCHANGE,
 };
 use windows::core::{BOOL, PCWSTR, w};
@@ -297,21 +297,41 @@ impl Shell for NativeShell {
         if !(status.is_ok() || value.is_none() && status == ERROR_FILE_NOT_FOUND) {
             status.ok().context("writing TaskbarAl")?;
         }
-        // What Settings broadcasts after changing taskbar settings.
-        // SAFETY: a static string that outlives the call; the timeout bounds hung windows.
-        unsafe {
-            SendMessageTimeoutW(
-                HWND_BROADCAST,
-                WM_SETTINGCHANGE,
-                WPARAM(0),
-                LPARAM(w!("TraySettings").as_ptr() as isize),
-                SMTO_ABORTIFHUNG,
-                500,
-                None,
-            )
-        };
+        // What Settings announces after changing taskbar settings, sent to the taskbars only:
+        // a broadcast waits on every window in the session, which can take seconds.
+        for hwnd in taskbar_windows() {
+            // SAFETY: a static string that outlives the call; the timeout bounds a hung Explorer.
+            unsafe {
+                SendMessageTimeoutW(
+                    hwnd,
+                    WM_SETTINGCHANGE,
+                    WPARAM(0),
+                    LPARAM(w!("TraySettings").as_ptr() as isize),
+                    SMTO_ABORTIFHUNG,
+                    500,
+                    None,
+                )
+            };
+        }
         Ok(())
     }
+}
+
+/// `hide` mode's fast path, when Explorer showed a taskbar again (Start, a notification, a display
+/// change): hides every taskbar window that's visible and says how many were. No journal I/O; the
+/// journal already says hidden. Also reports whether auto-hide is still set, so the caller can
+/// re-apply the mode when Explorer reset it.
+pub fn hide_visible() -> (usize, bool) {
+    let shown = taskbar_windows()
+        .into_iter()
+        // SAFETY: read-only query, then a hide, on taskbar windows found just now.
+        .filter(|&hwnd| unsafe { IsWindowVisible(hwnd) }.as_bool())
+        .inspect(|&hwnd| {
+            // SAFETY: as above.
+            let _ = unsafe { ShowWindow(hwnd, SW_HIDE) };
+        })
+        .count();
+    (shown, NativeShell.appbar_state() & ABS_AUTOHIDE != 0)
 }
 
 /// `Shell_TrayWnd` and every `Shell_SecondaryTrayWnd`.

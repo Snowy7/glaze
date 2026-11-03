@@ -4,7 +4,7 @@
 //! Events arrive through the installing thread's message loop; the callback only sets bits that
 //! the main loop takes with [`Hooks::take`].
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
@@ -23,10 +23,18 @@ pub const WINDOWS: u32 = 1;
 pub const FOREGROUND: u32 = 2;
 /// A top-level window moved or resized.
 pub const MOVED: u32 = 4;
-/// A taskbar window was shown (Explorer re-showing a taskbar we hid).
+/// A taskbar window was shown or moved (Explorer re-showing, or sliding in, a taskbar we hid).
 pub const TASKBAR_SHOWN: u32 = 8;
 
 static PENDING: AtomicU32 = AtomicU32::new(0);
+/// Whether taskbar moves count as [`TASKBAR_SHOWN`]: only while the taskbar should be hidden, so
+/// other moves cost no class lookup.
+static WATCH_TASKBAR: AtomicBool = AtomicBool::new(false);
+
+/// Watch the taskbar windows' moves too (`taskbar.mode` is `hide`).
+pub fn watch_taskbar(on: bool) {
+    WATCH_TASKBAR.store(on, Ordering::Relaxed);
+}
 
 pub struct Hooks {
     hooks: Vec<HWINEVENTHOOK>,
@@ -74,12 +82,14 @@ fn top_level(hwnd: HWND) -> bool {
     unsafe { GetAncestor(hwnd, GA_PARENT) == GetDesktopWindow() }
 }
 
-/// Which bits an event sets, if any.
-fn classify(event: u32, top: bool, taskbar: impl FnOnce() -> bool) -> u32 {
+/// Which bits an event sets, if any. `taskbar` says whether the window is a taskbar; it's only
+/// asked when the answer matters.
+fn classify(event: u32, top: bool, watching: bool, taskbar: impl Fn() -> bool) -> u32 {
     match event {
         EVENT_SYSTEM_FOREGROUND => FOREGROUND,
         // A destroyed window can't be asked whether it was top-level any more.
         EVENT_OBJECT_DESTROY => WINDOWS,
+        EVENT_OBJECT_LOCATIONCHANGE if top && watching && taskbar() => MOVED | TASKBAR_SHOWN,
         EVENT_OBJECT_LOCATIONCHANGE if top => MOVED,
         EVENT_OBJECT_SHOW if top && taskbar() => WINDOWS | TASKBAR_SHOWN,
         EVENT_OBJECT_CREATE
@@ -113,7 +123,8 @@ unsafe extern "system" fn on_event(
     }
     let top = event != EVENT_OBJECT_DESTROY && event != EVENT_SYSTEM_FOREGROUND && top_level(hwnd);
     let taskbar = || mypaper_bars::taskbar::is_taskbar_class(&crate::apps::class_name(hwnd));
-    let bits = classify(event, top, taskbar);
+    let watching = WATCH_TASKBAR.load(Ordering::Relaxed);
+    let bits = classify(event, top, watching, taskbar);
     if bits != 0 {
         PENDING.fetch_or(bits, Ordering::Relaxed);
     }
@@ -125,21 +136,45 @@ mod tests {
 
     #[test]
     fn events_map_to_what_needs_redoing() {
-        let no = || false;
-        assert_eq!(classify(EVENT_SYSTEM_FOREGROUND, false, no), FOREGROUND);
-        assert_eq!(classify(EVENT_OBJECT_DESTROY, false, no), WINDOWS);
-        assert_eq!(classify(EVENT_OBJECT_NAMECHANGE, true, no), WINDOWS);
+        let (no, yes) = (|| false, || true);
         assert_eq!(
-            classify(EVENT_OBJECT_NAMECHANGE, false, no),
+            classify(EVENT_SYSTEM_FOREGROUND, false, false, no),
+            FOREGROUND
+        );
+        assert_eq!(classify(EVENT_OBJECT_DESTROY, false, false, no), WINDOWS);
+        assert_eq!(classify(EVENT_OBJECT_NAMECHANGE, true, false, no), WINDOWS);
+        assert_eq!(
+            classify(EVENT_OBJECT_NAMECHANGE, false, false, no),
             0,
             "a child control renamed"
         );
-        assert_eq!(classify(EVENT_OBJECT_LOCATIONCHANGE, true, no), MOVED);
-        assert_eq!(classify(EVENT_OBJECT_LOCATIONCHANGE, false, no), 0);
         assert_eq!(
-            classify(EVENT_OBJECT_SHOW, true, || true),
-            WINDOWS | TASKBAR_SHOWN
+            classify(EVENT_OBJECT_LOCATIONCHANGE, true, false, no),
+            MOVED
         );
-        assert_eq!(classify(EVENT_OBJECT_SHOW, true, no), WINDOWS);
+        assert_eq!(classify(EVENT_OBJECT_LOCATIONCHANGE, false, false, no), 0);
+        assert_eq!(
+            classify(EVENT_OBJECT_SHOW, true, false, yes),
+            WINDOWS | TASKBAR_SHOWN,
+            "a taskbar shown counts even when not watching its moves"
+        );
+        assert_eq!(classify(EVENT_OBJECT_SHOW, true, false, no), WINDOWS);
+    }
+
+    #[test]
+    fn taskbar_moves_count_only_while_watched() {
+        let (no, yes) = (|| false, || true);
+        assert_eq!(
+            classify(EVENT_OBJECT_LOCATIONCHANGE, true, true, yes),
+            MOVED | TASKBAR_SHOWN,
+            "an auto-hidden taskbar sliding in"
+        );
+        assert_eq!(classify(EVENT_OBJECT_LOCATIONCHANGE, true, true, no), MOVED);
+        let asked = std::cell::Cell::new(false);
+        classify(EVENT_OBJECT_LOCATIONCHANGE, true, false, || {
+            asked.set(true);
+            true
+        });
+        assert!(!asked.get(), "no class lookup per move while not watching");
     }
 }

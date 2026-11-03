@@ -28,8 +28,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowW, IsIconic, IsWindow, PostMessageW, SC_MINIMIZE, SC_TASKLIST, SW_RESTORE,
-    SW_SHOWNORMAL, SetForegroundWindow, ShowWindowAsync, WM_CLOSE, WM_SYSCOMMAND,
+    FindWindowW, IsIconic, IsWindow, PostMessageW, SC_MINIMIZE, SC_RESTORE, SC_TASKLIST,
+    SW_SHOWNORMAL, SetForegroundWindow, WM_CLOSE, WM_SYSCOMMAND,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -39,18 +39,25 @@ pub fn hwnd(raw: isize) -> HWND {
     HWND(raw as _)
 }
 
-/// Brings a window to the front, restoring it first if it's minimized.
+/// Brings a window to the front, restoring it if it's minimized.
 pub fn activate(window: HWND) -> bool {
     // SAFETY: plain calls on a window handle; a stale one just fails.
     unsafe {
         if !IsWindow(Some(window)).as_bool() {
             return false;
         }
-        if IsIconic(window).as_bool() {
-            // Async: a hung app can't block the bars.
-            let _ = ShowWindowAsync(window, SW_RESTORE);
-        }
         let done = SetForegroundWindow(window).as_bool();
+        if IsIconic(window).as_bool() {
+            // What the taskbar sends. Chromium-based windows ignore a ShowWindow(SW_RESTORE)
+            // from another process, but every app handles its own restore command (posted, so
+            // a hung app can't block the bars).
+            let _ = PostMessageW(
+                Some(window),
+                WM_SYSCOMMAND,
+                WPARAM(SC_RESTORE as usize),
+                LPARAM(0),
+            );
+        }
         if !done {
             log::info!("Windows refused to bring {window:?} to the front");
         }

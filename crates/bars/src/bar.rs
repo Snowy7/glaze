@@ -21,8 +21,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, HWND_TOPMOST, IDC_ARROW, LWA_ALPHA,
     LoadCursorW, MA_NOACTIVATE, PBT_APMPOWERSTATUSCHANGE, PostThreadMessageW, RegisterClassExW,
     RegisterWindowMessageW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetLayeredWindowAttributes,
-    SetWindowPos, ShowWindow, WM_ACTIVATE, WM_APP, WM_CLOSE, WM_DISPLAYCHANGE, WM_DPICHANGED,
-    WM_ERASEBKGND, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_POWERBROADCAST, WM_TIMECHANGE,
+    SetWindowPos, ShowWindow, WA_ACTIVE, WM_ACTIVATE, WM_APP, WM_CLOSE, WM_DISPLAYCHANGE,
+    WM_DPICHANGED, WM_ERASEBKGND, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_POWERBROADCAST, WM_TIMECHANGE,
     WM_WINDOWPOSCHANGED, WNDCLASSEXW, WS_CLIPCHILDREN, WS_EX_LAYERED, WS_EX_NOACTIVATE,
     WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
@@ -32,16 +32,9 @@ use crate::appbar::{AppBar, Edge, settle, window_rect};
 use crate::bridge::BarKind;
 use crate::web::Web;
 
-/// Extra room every bar window has beyond its band, for popovers, menus and magnify (DIPs).
+/// Extra room every bar window has beyond its band, for flyouts, menus and magnify (DIPs). It's
+/// the most a flyout can extend past its bar; raise it (or make it per bar) for bigger ones.
 pub const ROOM: f64 = 360.0;
-/// The dock pill's padding around its icons, and its gap from the screen edge (DIPs).
-pub const DOCK_PAD: f64 = 5.0;
-pub const DOCK_GAP: f64 = 6.0;
-
-/// The dock's band for an icon `size`: what it reserves when it doesn't auto-hide.
-pub fn dock_band(size: f64) -> f64 {
-    size + 2.0 * DOCK_PAD + DOCK_GAP
-}
 
 const BAR_CLASS: PCWSTR = w!("mypaper.bars.bar");
 const EDGE_CLASS: PCWSTR = w!("mypaper.bars.edge");
@@ -62,6 +55,8 @@ pub const WM_BARS_TASKBAR: u32 = WM_APP + 24;
 pub const WM_BARS_POWER: u32 = WM_APP + 25;
 /// Posted to the main thread: the system clock or time zone changed.
 pub const WM_BARS_TIME: u32 = WM_APP + 26;
+/// Posted to the main thread: a bar was activated without a click (`lParam`: its window).
+pub const WM_BARS_ACTIVATED: u32 = WM_APP + 27;
 
 static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
 
@@ -155,7 +150,13 @@ unsafe extern "system" fn bar_proc(
             return LRESULT(0);
         }
         // App bars must report these (SHAppBarMessage docs).
-        WM_ACTIVATE => appbar_notify(ABM_ACTIVATE),
+        WM_ACTIVATE => {
+            appbar_notify(ABM_ACTIVATE);
+            // Activated, but not by a click: the main loop gives the foreground back.
+            if (wparam.0 & 0xFFFF) as u32 == WA_ACTIVE {
+                post(WM_BARS_ACTIVATED, 0, hwnd.0 as isize);
+            }
+        }
         WM_WINDOWPOSCHANGED => appbar_notify(ABM_WINDOWPOSCHANGED),
         WM_DISPLAYCHANGE => post(WM_BARS_DISPLAY, 0, 0),
         // The host places and scales bars itself; don't take Windows' suggested rect.

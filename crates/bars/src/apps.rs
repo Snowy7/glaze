@@ -286,6 +286,21 @@ impl Apps {
     }
 }
 
+/// The app window highest in the z-order that isn't minimized (nor `except`): where the
+/// foreground goes when the bars hand it back.
+pub fn front_window(except: Option<isize>) -> Option<isize> {
+    let ours = std::process::id();
+    top_level_windows()
+        .into_iter()
+        .filter(|hwnd| Some(hwnd.0 as isize) != except)
+        .find(|&hwnd| {
+            // SAFETY: a read-only query on a handle from EnumWindows.
+            let minimized = unsafe { IsIconic(hwnd) }.as_bool();
+            !minimized && taskbar_eligible(&facts(hwnd, ours).0)
+        })
+        .map(|hwnd| hwnd.0 as isize)
+}
+
 /// The top-level window that owns `hwnd` (itself if unowned).
 pub fn root_owner(hwnd: isize) -> isize {
     // SAFETY: a read-only query; an invalid handle gives a null result.

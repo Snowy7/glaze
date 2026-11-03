@@ -81,7 +81,6 @@ export function createDock(root: HTMLElement, config: BarsConfig, ctx: BarContex
   let revealed = !autohide;
   let regionOn = !autohide;
   let hideTimer = 0;
-  let suppressClick = false;
   let drag: Drag | undefined;
   let pendingItems: DockItem[] | undefined;
 
@@ -99,6 +98,8 @@ export function createDock(root: HTMLElement, config: BarsConfig, ctx: BarContex
     slot.item = item;
     slot.el.setAttribute("aria-label", item.name);
     slot.el.dataset.state = indicator(item);
+    slot.el.dataset.name = item.name; // for theme CSS: per-app styling and icon swaps
+    slot.el.dataset.pinned = String(item.pinned);
     if (slot.iconSrc === item.icon && slot.icon.firstChild) return;
     slot.iconSrc = item.icon;
     if (item.icon) {
@@ -117,8 +118,11 @@ export function createDock(root: HTMLElement, config: BarsConfig, ctx: BarContex
     const el = h("button", "slot", icon, h("span", "dot"));
     el.type = "button";
     const slot: Slot = { item, el, icon, iconSrc: undefined };
-    el.addEventListener("click", () => {
-      if (!suppressClick) fire("activate", { app: slot.item.key });
+    // Pointer clicks activate on release (see onDragEnd): magnify slides icons while the pointer
+    // arrives, so press and release can land on different elements and no `click` fires. Here
+    // only the keyboard's click (Enter/Space, detail 0) remains.
+    el.addEventListener("click", (e) => {
+      if (e.detail === 0) fire("activate", { app: slot.item.key });
     });
     el.addEventListener("mousedown", (e) => {
       if (e.button === 1) e.preventDefault();
@@ -408,12 +412,11 @@ export function createDock(root: HTMLElement, config: BarsConfig, ctx: BarContex
     if (!d || e.pointerId !== d.pointerId) return;
     stopDragListeners();
     if (!d.active) {
+      // A click: the icon that was pressed, wherever magnify moved it meanwhile.
       drag = undefined;
+      fire("activate", { app: d.slot.item.key });
       return;
     }
-    // The click that follows this release must not activate the app.
-    suppressClick = true;
-    setTimeout(() => (suppressClick = false), 0);
     settle(d, resolveDrop(items, d.from, d.far ? null : d.to, d.far));
   }
 

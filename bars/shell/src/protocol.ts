@@ -21,6 +21,9 @@ export type Module = (typeof MODULES)[number];
 export type Monitors = "all" | "primary" | string[];
 export type TaskbarMode = "keep" | "autohide" | "hide";
 export type DockPosition = "bottom" | "left" | "right";
+/** Dock layouts; each has a page layout in dock/styles.ts and a band size in the host. */
+export const DOCK_STYLES = ["floating"] as const;
+export type DockStyle = (typeof DOCK_STYLES)[number];
 export type BarKind = "top" | "dock";
 
 export interface Pinned {
@@ -46,8 +49,9 @@ export interface BarsConfig {
   dock: {
     enabled: boolean;
     monitors: Monitors;
+    style: DockStyle;
     position: DockPosition;
-    /** Icon size in DIPs. The dock's band is `size + 16` (see DOCK_PAD and DOCK_GAP). */
+    /** Icon size in DIPs. For `floating` the dock's band is `size + 16` (see DOCK_PAD and DOCK_GAP). */
     size: number;
     autohide: boolean;
     magnify: boolean;
@@ -73,7 +77,10 @@ export interface Appearance {
 
 // --- Geometry shared with the host (DIPs) ------------------------------------------------------
 
-/** Extra room the host gives every bar window beyond its band, for popovers, menus and magnify. */
+/**
+ * Extra room the host gives every bar window beyond its band, for flyouts, menus and magnify: the
+ * most a flyout can extend past its bar. The page lays out within the window it gets.
+ */
 export const ROOM = 360;
 /** The dock pill's padding around its icons. */
 export const DOCK_PAD = 5;

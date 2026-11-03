@@ -1,7 +1,8 @@
-//! The tray icon and its right-click menu: pause, theme picker, widget edit
-//! mode, the shell bars (`bars.json`), studio, restart and quit. Everything goes through `config.json` (the wallpaper
-//! applies it live) or a message to the supervisor loop, so the tray holds
-//! no state of its own.
+//! The tray icon (the mypaper logo) and its right-click menu: pause, theme
+//! picker, widget edit mode, the shell bars (`bars.json`), studio, restart
+//! and quit. Everything goes through `config.json` / `bars.json` (the
+//! processes apply them live) or a message to the supervisor loop, so the
+//! tray holds no state of its own.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -16,17 +17,19 @@ use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetSystemMetricsForDpi};
 use windows::Win32::UI::Shell::{
     NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION,
     NOTIFYICON_VERSION_4, NOTIFYICONDATAW, Shell_NotifyIconW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreateIcon, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon,
-    DestroyMenu, DestroyWindow, FindWindowExW, HICON, HMENU, HWND_MESSAGE, IDI_APPLICATION,
-    LoadIconW, MENU_ITEM_FLAGS, MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING,
-    PostMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW,
-    SetForegroundWindow, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, WM_APP,
-    WM_CONTEXTMENU, WM_NULL, WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_POPUP,
+    AppendMenuW, CreateIconFromResourceEx, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
+    DestroyIcon, DestroyMenu, DestroyWindow, FindWindowExW, HICON, HMENU, HWND_MESSAGE,
+    IDI_APPLICATION, LR_DEFAULTCOLOR, LoadIconW, MENU_ITEM_FLAGS, MF_CHECKED, MF_GRAYED, MF_POPUP,
+    MF_SEPARATOR, MF_STRING, PostMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassExW,
+    RegisterWindowMessageW, SM_CXSMICON, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_RETURNCMD,
+    TPM_RIGHTBUTTON, TrackPopupMenu, WM_APP, WM_CONTEXTMENU, WM_NULL, WNDCLASSEXW,
+    WS_EX_TOOLWINDOW, WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -218,41 +221,47 @@ fn tooltip() -> String {
     format!("mypaper: {name}")
 }
 
-/// A round gradient badge, drawn in code so no icon asset has to ship.
+/// The mypaper logo, every size (16–256 px PNG entries; 16–32 px are a hand-tuned small mark).
+/// Rendered from `assets/logo/mark.svg` and `mark-small.svg` by `scripts/render-logo.ps1`.
+const LOGO: &[u8] = include_bytes!("../../../assets/logo/mypaper.ico");
+
+/// The logo at the tray's small-icon size for the system DPI.
 fn make_icon() -> HICON {
-    const N: usize = 32;
-    let mut colors = [0u8; N * N * 4]; // BGRA
-    let mut mask = [0xFFu8; N * N / 8]; // 1 bits are transparent
-    let radius = N as f32 / 2.0;
-    for y in 0..N {
-        for x in 0..N {
-            let (dx, dy) = (x as f32 + 0.5 - radius, y as f32 + 0.5 - radius);
-            if dx * dx + dy * dy > (radius - 1.0).powi(2) {
-                continue;
-            }
-            let t = y as f32 / (N - 1) as f32;
-            let mix = |from: f32, to: f32| (from + (to - from) * t) as u8;
-            // Teal to violet, top to bottom.
-            let pixel = [mix(191.0, 237.0), mix(212.0, 58.0), mix(45.0, 124.0), 255];
-            colors[(y * N + x) * 4..][..4].copy_from_slice(&pixel);
-            mask[y * (N / 8) + x / 8] &= !(0x80 >> (x % 8));
-        }
-    }
-    // SAFETY: both buffers match the stated 32x32 size and formats.
-    let icon = unsafe {
-        let hinstance = GetModuleHandleW(None).ok().map(Into::into);
-        CreateIcon(
-            hinstance,
-            N as i32,
-            N as i32,
-            1,
-            32,
-            mask.as_ptr(),
-            colors.as_ptr(),
-        )
-    };
+    // SAFETY: no preconditions.
+    let size = unsafe { GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForSystem()) }.max(16);
+    let icon = ico_image(LOGO, size as u32).and_then(|image| {
+        // SAFETY: `image` is one complete icon image (PNG or DIB) from the file; 0x30000 is
+        // the icon format version the API asks for.
+        unsafe { CreateIconFromResourceEx(image, true, 0x0003_0000, size, size, LR_DEFAULTCOLOR) }
+            .ok()
+    });
     // SAFETY: loads a shared system icon; no ownership is taken.
-    icon.unwrap_or_else(|_| unsafe { LoadIconW(None, IDI_APPLICATION) }.unwrap_or_default())
+    icon.unwrap_or_else(|| unsafe { LoadIconW(None, IDI_APPLICATION) }.unwrap_or_default())
+}
+
+/// The image in an `.ico` file that suits `size` px best: the smallest at least that big, else
+/// the biggest.
+fn ico_image(ico: &[u8], size: u32) -> Option<&[u8]> {
+    let count = u16::from_le_bytes(ico.get(4..6)?.try_into().ok()?);
+    let entries: Vec<(u32, &[u8])> = (0..usize::from(count))
+        .filter_map(|i| {
+            let entry = ico.get(6 + i * 16..6 + (i + 1) * 16)?;
+            let side = if entry[0] == 0 {
+                256
+            } else {
+                u32::from(entry[0])
+            };
+            let len = u32::from_le_bytes(entry[8..12].try_into().ok()?) as usize;
+            let offset = u32::from_le_bytes(entry[12..16].try_into().ok()?) as usize;
+            Some((side, ico.get(offset..offset.checked_add(len)?)?))
+        })
+        .collect();
+    let fits = entries
+        .iter()
+        .filter(|(side, _)| *side >= size)
+        .min_by_key(|(side, _)| *side);
+    fits.or_else(|| entries.iter().max_by_key(|(side, _)| *side))
+        .map(|(_, image)| *image)
 }
 
 /// What a menu item asks for.
@@ -538,6 +547,24 @@ mod tests {
         bundled.touch("not-a-theme/readme.txt");
         let roots = [user.0.clone(), bundled.0.clone(), user.0.join("missing")];
         assert_eq!(list_themes(&roots), ["aurora", "mine", "zen"]);
+    }
+
+    #[test]
+    fn the_logo_has_an_image_for_every_tray_size() {
+        // An entry is a PNG (its width: big-endian at byte 16, in IHDR) or a DIB (biWidth:
+        // little-endian at byte 4).
+        let side = |size| {
+            let image = ico_image(LOGO, size).expect("an image");
+            if image.starts_with(b"\x89PNG") {
+                u32::from_be_bytes(image[16..20].try_into().unwrap())
+            } else {
+                u32::from_le_bytes(image[4..8].try_into().unwrap())
+            }
+        };
+        assert_eq!(side(16), 16);
+        assert!(side(20) >= 20, "the next size up");
+        assert_eq!(side(1000), 256, "too big: the biggest there is");
+        assert_eq!(ico_image(b"\0\0\x01\0\x01\0", 16), None, "a truncated file");
     }
 
     #[test]

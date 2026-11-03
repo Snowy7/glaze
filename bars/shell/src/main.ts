@@ -1,6 +1,6 @@
 import { applyAppearance } from "./appearance";
 import type { Bar } from "./bar";
-import { createDock } from "./dock/dock";
+import { dockStyles } from "./dock/styles";
 import { connect, fire, on } from "./host";
 import { initOverlay } from "./overlay";
 import type { BarsConfig } from "./protocol";
@@ -27,9 +27,11 @@ async function main(): Promise<void> {
     bar?.destroy();
     if (hello.bar === "top") {
       html.removeAttribute("data-position");
+      html.removeAttribute("data-style");
       bar = createTop(app, config);
     } else {
-      bar = createDock(app, config, { invalidateRegion: region.invalidate });
+      html.setAttribute("data-style", config.dock.style);
+      bar = dockStyles[config.dock.style](app, config, { invalidateRegion: region.invalidate });
     }
     region.invalidate();
   };

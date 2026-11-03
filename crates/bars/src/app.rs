@@ -29,9 +29,9 @@ use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows::Win32::System::Threading::{GetCurrentThreadId, INFINITE};
 use windows::Win32::UI::Shell::{ABN_FULLSCREENAPP, ABN_POSCHANGED, ABN_STATECHANGE};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, GetForegroundWindow, GetWindowThreadProcessId, MSG, MWMO_INPUTAVAILABLE,
-    MsgWaitForMultipleObjectsEx, PM_REMOVE, PeekMessageW, QS_ALLINPUT, TranslateMessage, WM_CLOSE,
-    WM_QUIT,
+    DispatchMessageW, GetForegroundWindow, GetShellWindow, GetWindowThreadProcessId, IsIconic,
+    IsWindow, IsWindowVisible, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
+    PeekMessageW, QS_ALLINPUT, SetForegroundWindow, TranslateMessage, WM_CLOSE, WM_QUIT,
 };
 use windows::core::{PCWSTR, w};
 
@@ -39,8 +39,8 @@ use crate::appbar::Edge;
 use crate::apps::{self, Apps, Pin, Running};
 use crate::audio::Audio;
 use crate::bar::{
-    self, Bar, Geometry, WM_BARS_APPBAR, WM_BARS_DISPLAY, WM_BARS_EDGE, WM_BARS_POWER,
-    WM_BARS_TASKBAR, WM_BARS_TIME, dock_band,
+    self, Bar, Geometry, WM_BARS_ACTIVATED, WM_BARS_APPBAR, WM_BARS_DISPLAY, WM_BARS_EDGE,
+    WM_BARS_POWER, WM_BARS_TASKBAR, WM_BARS_TIME,
 };
 use crate::bridge::{Activate, BarError, BarKind, Envelope, Method, Topic, bar_topics};
 use crate::desktops::{Desktops, Workspaces};
@@ -68,10 +68,8 @@ const SETTLE_NETWORK: Duration = Duration::from_millis(500);
 const SETTLE_EXPLORER: Duration = Duration::from_secs(1);
 const STATS_EVERY: Duration = Duration::from_secs(2);
 const RETRY_WEBVIEW: Duration = Duration::from_secs(30);
-/// Re-hiding a taskbar that Explorer keeps showing: at most this often...
-const REHIDE_BURST: u32 = 10;
-/// ...within this window, then we stop fighting for a while.
-const REHIDE_WINDOW: Duration = Duration::from_secs(10);
+/// Re-hiding a taskbar that Explorer keeps showing happens at most this often.
+const REHIDE_SPACING: Duration = Duration::from_millis(50);
 
 enum Env {
     None,
@@ -142,6 +140,12 @@ fn page_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok();
     let from_exe = exe.as_deref().and_then(Path::parent).and_then(found);
     from_exe.or_else(|| found(&std::env::current_dir().ok()?))
+}
+
+fn built_at(page: &Path) -> Option<SystemTime> {
+    std::fs::metadata(page.join("index.html"))
+        .and_then(|m| m.modified())
+        .ok()
 }
 
 /// The native taskbar's pinned shortcuts, in name order: the dock's pins until the user picks
@@ -215,13 +219,15 @@ pub struct App {
     next_bar: u32,
     monitors: Vec<Monitor>,
     page: Option<PathBuf>,
+    /// When the page's `index.html` was built: a rebuild changes it, reading it doesn't.
+    page_built: Option<SystemTime>,
     devtools: bool,
 
     config_path: PathBuf,
     /// `bars.json`, resolved (the last good one if the file is broken).
     config: BarsConfig,
     taskbar: Taskbar<NativeShell>,
-    rehides: (Instant, u32),
+    last_rehide: Instant,
     skin: ThemeSkin,
     palette: Option<Color>,
 
@@ -300,12 +306,13 @@ impl App {
             bars: Vec::new(),
             next_bar: 0,
             monitors,
+            page_built: page.as_deref().and_then(built_at),
             page,
             devtools: std::env::var_os("MYPAPER_BARS_DEVTOOLS").is_some_and(|v| v == "1"),
             config_path,
             config,
             taskbar: Taskbar::native()?,
-            rehides: (Instant::now(), 0),
+            last_rehide: Instant::now(),
             skin: ThemeSkin::load(),
             palette: look::palette_accent(),
             holds,
@@ -432,6 +439,10 @@ impl App {
                         self.timers.clock = None;
                         self.sync_clock();
                     }
+                    WM_BARS_ACTIVATED => {
+                        log::debug!("a bar was activated without a click; handing it back");
+                        self.hand_back(None);
+                    }
                     _ => {
                         let _ = TranslateMessage(&msg);
                         DispatchMessageW(&msg);
@@ -485,9 +496,8 @@ impl App {
             if happened & (hooks::FOREGROUND | hooks::MOVED) != 0 {
                 soon(&mut self.timers.fullscreen, SETTLE_FULLSCREEN);
             }
-            if happened & hooks::TASKBAR_SHOWN != 0 && self.config.taskbar.mode == TaskbarMode::Hide
-            {
-                soon(&mut self.timers.rehide, Duration::from_millis(100));
+            if happened & hooks::TASKBAR_SHOWN != 0 {
+                self.rehide_taskbar(now); // at once: it must never be seen
             }
         }
         if due(&mut self.timers.windows, now) && self.apps.refresh() {
@@ -557,7 +567,7 @@ impl App {
                     DockPosition::Left => Edge::Left,
                     DockPosition::Right => Edge::Right,
                 },
-                thickness: dock_band(self.config.dock.size),
+                thickness: self.config.dock.style.band(self.config.dock.size),
                 reserve: !self.config.dock.autohide,
             },
         }
@@ -1119,12 +1129,41 @@ impl App {
             .iter()
             .find(|w| Some(w.hwnd) == self.foreground && !w.minimized);
         match front {
-            Some(window) => system::minimize(system::hwnd(window.hwnd)),
+            Some(window) => {
+                system::minimize(system::hwnd(window.hwnd));
+                // Like the taskbar: the next window comes to the front, not the bar.
+                self.hand_back(Some(window.hwnd));
+            }
             None => {
                 system::activate(system::hwnd(item.windows[0].hwnd));
             }
         }
         Ok(Value::Null)
+    }
+
+    /// Gives the foreground back to the app window that had it (or the top one, or the desktop).
+    /// The bars only hold it right after a click; WebView2 taking focus as it starts, or
+    /// Windows activating our topmost window when the active app minimized or closed, must not
+    /// leave it with us. `except` is a window that is going away.
+    fn hand_back(&mut self, except: Option<isize>) {
+        let usable = |hwnd: isize| {
+            let window = system::hwnd(hwnd);
+            // SAFETY: read-only queries; a stale handle just isn't usable.
+            unsafe {
+                IsWindow(Some(window)).as_bool()
+                    && IsWindowVisible(window).as_bool()
+                    && !IsIconic(window).as_bool()
+            }
+        };
+        let target = self
+            .foreground
+            .filter(|&hwnd| Some(hwnd) != except && usable(hwnd))
+            .or_else(|| apps::front_window(except));
+        // SAFETY: plain calls; we hold the foreground, so Windows lets us pass it on.
+        unsafe {
+            let window = target.map_or_else(|| GetShellWindow(), system::hwnd);
+            let _ = SetForegroundWindow(window);
+        }
     }
 
     /// Edits the pinned list and saves it to `bars.json`.
@@ -1152,6 +1191,12 @@ impl App {
             Err(e) => return log::warn!("bad message from a bar ({e}): {json}"),
         };
         let hello = envelope.method == "hello";
+        log::debug!(
+            "bar {}: {} {}",
+            self.bars[index].id,
+            envelope.method,
+            envelope.params
+        );
         let reply = Method::parse(&envelope.method, envelope.params)
             .and_then(|method| self.call(index, method));
         let message = match reply {
@@ -1305,29 +1350,34 @@ impl App {
     }
 
     fn apply_taskbar(&mut self) {
-        if let Err(e) = self.taskbar.apply(self.wanted_taskbar()) {
+        let wanted = self.wanted_taskbar();
+        hooks::watch_taskbar(wanted.mode == TaskbarMode::Hide);
+        if let Err(e) = self.taskbar.apply(wanted) {
             log::warn!("{e:#}");
         }
     }
 
-    /// Explorer showed the taskbar again while it should be hidden.
+    /// Explorer showed (or slid in) the taskbar while it should be hidden: hide it at once, and
+    /// set auto-hide again if Explorer reset it. Never gives up; [`REHIDE_SPACING`] only keeps a
+    /// fight with Explorer cheap.
     fn rehide_taskbar(&mut self, now: Instant) {
-        if self.config.taskbar.mode != TaskbarMode::Hide {
+        if self.wanted_taskbar().mode != TaskbarMode::Hide {
             return;
         }
-        let (since, count) = &mut self.rehides;
-        if now.duration_since(*since) > REHIDE_WINDOW {
-            *since = now;
-            *count = 0;
-        }
-        *count += 1;
-        if *count > REHIDE_BURST {
-            if *count == REHIDE_BURST + 1 {
-                log::warn!("Explorer keeps showing the taskbar; not hiding it for a while");
-            }
+        let next = self.last_rehide + REHIDE_SPACING;
+        if now < next {
+            self.timers.rehide.get_or_insert(next);
             return;
         }
-        self.apply_taskbar();
+        self.last_rehide = now;
+        let (shown, autohide) = mypaper_bars::taskbar::hide_visible();
+        if shown > 0 {
+            log::debug!("Explorer showed the taskbar; hid it again");
+        }
+        if !autohide {
+            log::info!("Explorer reset the taskbar's auto-hide; setting it again");
+            self.apply_taskbar();
+        }
     }
 
     // --- Live reload ------------------------------------------------------------------------------
@@ -1407,7 +1457,13 @@ impl App {
 
     fn reload_page(&mut self) {
         let first = self.page.is_none();
-        self.page = page_dir();
+        let page = page_dir();
+        let built = page.as_deref().and_then(built_at);
+        if !first && built == self.page_built {
+            return; // the WebView reading the files, not a rebuild
+        }
+        self.page = page;
+        self.page_built = built;
         if first && self.page.is_some() {
             log::info!("the page was built; starting the bars");
             self.apply_taskbar();
@@ -1505,6 +1561,7 @@ impl App {
 
 impl Drop for App {
     fn drop(&mut self) {
+        let started = Instant::now();
         self.media.set_active(false);
         self.tray.set_active(false);
         self.bars.clear(); // app bars removed: the work area comes back
@@ -1514,6 +1571,7 @@ impl Drop for App {
             Ok(false) => {}
             Err(e) => log::error!("restoring the taskbar: {e:#} (core replays the journal)"),
         }
+        log::info!("stopped in {:?}", started.elapsed());
     }
 }
 
