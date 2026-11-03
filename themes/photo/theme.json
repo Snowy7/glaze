@@ -1,0 +1,8 @@
+{
+  "name": "Photo",
+  "wallpaper": {
+    "kind": "image",
+    "source": "C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg",
+    "fit": "cover"
+  }
+}

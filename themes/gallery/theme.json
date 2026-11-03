@@ -1,0 +1,11 @@
+{
+  "name": "Gallery",
+  "wallpaper": {
+    "kind": "slideshow",
+    "folder": "C:\\Windows\\Web\\Wallpaper\\ThemeA",
+    "interval": 20,
+    "transition": 2,
+    "shuffle": false,
+    "fit": "cover"
+  }
+}
