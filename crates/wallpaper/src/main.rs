@@ -19,6 +19,7 @@ mod engine;
 mod gpu;
 mod hold;
 mod sources;
+mod trim;
 mod window;
 
 use std::process::ExitCode;
@@ -35,6 +36,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::control::Live;
 use crate::engine::{Engine, Flow};
 use crate::hold::Fact;
+use crate::trim::Trimmer;
 use crate::window::{ControlWindow, WM_CONFIG, WM_FACT, WM_RELOAD, Waiter, Window};
 
 const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [THEME]";
@@ -50,7 +52,7 @@ fn main() -> ExitCode {
     mypaper_desktop::enable_dpi_awareness();
     mypaper_desktop::quit_on_ctrl_c();
     #[cfg(feature = "hotpatch")]
-    dioxus_devtools::connect_subsecond();
+    connect_hotpatch();
 
     // Bad arguments, config or theme will not fix themselves: exit with
     // EXIT_CONFIG so the supervisor reports it instead of restarting.
@@ -133,13 +135,17 @@ fn run(args: Args, config: Config, theme: LoadedTheme) -> Result<u8> {
     let events = host.is_some().then(WindowEvents::install);
     let waiter = Waiter::new()?;
 
+    let mut trimmer = Trimmer::new(engine.theme_dir());
     let code = loop {
         if let Some(code) = pump(&mut engine, &mut live) {
             break code;
         }
         live.apply_due(&mut engine);
+        let trim_at = trimmer.poll(engine.theme_dir());
         match tick(&mut engine, events.as_ref()) {
-            Flow::Wait(deadline) => waiter.wait(earliest(deadline, live.deadline())),
+            Flow::Wait(deadline) => {
+                waiter.wait(earliest(earliest(deadline, trim_at), live.deadline()))
+            }
             Flow::Exit(code) => break code,
         }
     };
@@ -178,6 +184,29 @@ fn pump(engine: &mut Engine, live: &mut Live) -> Option<u8> {
         }
     }
     None
+}
+
+/// Connects to `dx serve --hotpatch` and logs each patch it applies: how
+/// many functions the jump table maps, and whether `Engine::tick` (the entry
+/// point [`tick`] calls through it) is one of them.
+#[cfg(feature = "hotpatch")]
+fn connect_hotpatch() {
+    dioxus_devtools::connect_subsecond();
+    subsecond::register_handler(std::sync::Arc::new(|| {
+        let entry = Engine::tick as fn(&mut Engine, Option<&WindowEvents>) -> Flow;
+        // SAFETY: only read for logging, right after the patch was applied.
+        let table = unsafe { subsecond::get_jump_table() };
+        log::info!(
+            "hot-patch applied: {} functions mapped, Engine::tick at {:#x} is {}",
+            table.map_or(0, |t| t.map.len()),
+            entry as usize,
+            if table.is_some_and(|t| t.map.contains_key(&(entry as usize as u64))) {
+                "mapped (patched)"
+            } else {
+                "NOT mapped (unchanged)"
+            }
+        );
+    }));
 }
 
 /// Runs one engine tick. When hot-patching, the call goes through
