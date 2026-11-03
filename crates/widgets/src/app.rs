@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use mypaper_config::Config;
-use mypaper_desktop::hold::{Fact, HoldReasons, Holds};
+use mypaper_desktop::hold::{Fact, HoldReasons, Holds, Reason};
 use mypaper_desktop::{
     ControlWindow, DesktopHost, Monitor, Rect, WM_FACT, WindowEvents, covered_monitors,
     fullscreen_app_in_front, monitor_infos,
@@ -165,7 +165,9 @@ pub struct App {
     theme: ThemeInfo,
     /// `(instance, sub)` of every `theme` subscription.
     theme_subs: BTreeSet<(String, String)>,
-    window_events: WindowEvents,
+    /// Window-change hooks: only while a widget layer exists (they wake us on
+    /// every window move anywhere).
+    window_events: Option<WindowEvents>,
     timers: Timers,
     changed_widgets: BTreeSet<String>,
     watchers: Vec<notify::RecommendedWatcher>,
@@ -266,7 +268,7 @@ impl App {
             plugins: Plugins::new(waker.clone()),
             theme: theme::current(),
             theme_subs: BTreeSet::new(),
-            window_events: WindowEvents::install(),
+            window_events: None,
             timers: Timers::default(),
             changed_widgets: BTreeSet::new(),
             watchers: Vec::new(),
@@ -389,7 +391,11 @@ impl App {
     }
 
     fn tick(&mut self, now: Instant) {
-        if self.window_events.take_changed() {
+        if self
+            .window_events
+            .as_ref()
+            .is_some_and(WindowEvents::take_changed)
+        {
             self.timers.recheck.get_or_insert(now + RECHECK);
         }
         if due(&mut self.timers.recheck, now) {
@@ -440,6 +446,9 @@ impl App {
     /// Combines every hold reason, logging changes, and puts everything to
     /// sleep (or wakes it).
     fn sync_hold(&mut self) {
+        if self.window_events.is_none() {
+            self.refresh_fullscreen(); // unwatched: look now
+        }
         let reasons = self.holds.reasons();
         if reasons == self.reasons {
             return;
@@ -459,6 +468,7 @@ impl App {
             self.editing = false;
             self.reconcile();
         } else {
+            self.sync_hooks();
             self.apply_visibility();
         }
     }
@@ -545,6 +555,9 @@ impl App {
     // --- Edit mode and surfaces ---------------------------------------------
 
     fn set_editing(&mut self, on: bool) {
+        if on {
+            self.sync_hold(); // without hooks, nothing watched for a fullscreen app
+        }
         if on && self.held() {
             log::info!("not entering edit mode while held ({})", self.reasons);
             return;
@@ -582,7 +595,12 @@ impl App {
         if self.shell.is_none() {
             self.surfaces.clear();
             self.env = Env::None;
+            self.sync_hooks();
             return;
+        }
+        if self.window_events.is_none() {
+            // Unwatched while no layer was up: the monitors may have changed.
+            self.monitors = monitor_infos();
         }
         let wanted: Vec<Monitor> = self
             .monitors
@@ -627,8 +645,27 @@ impl App {
         } else {
             self.ensure_webviews();
         }
+        self.sync_hooks();
         self.push_all();
         self.apply_visibility();
+    }
+
+    /// The window-change hooks wake us on every window move anywhere, so they
+    /// run only while they matter: a layer is up and we're not held, or held
+    /// by a fullscreen app (to see it leave). Pause, battery, lock and display
+    /// arrive as notifications without them.
+    fn sync_hooks(&mut self) {
+        let fullscreen = self.reasons.contains(Reason::Fullscreen);
+        let wanted = !self.surfaces.is_empty() && (self.reasons.is_empty() || fullscreen);
+        match (wanted, self.window_events.is_some()) {
+            (true, false) => {
+                self.window_events = Some(WindowEvents::install());
+                // What's covered or fullscreen right now, on the next turn.
+                self.timers.recheck = Some(Instant::now());
+            }
+            (false, true) => self.window_events = None,
+            _ => {}
+        }
     }
 
     /// Creates the environment if needed, and a WebView for every surface without one.
