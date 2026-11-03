@@ -292,7 +292,10 @@ interface Mypaper {
   };
   system: {                            // "system.stats"
     stats(): Promise<{ cpu: number; memory: { used: number; total: number };
-                       gpu?: number; net?: { up: number; down: number }; disks?: { name: string; used: number; total: number }[] }>;
+                       gpu?: number; net?: { up: number; down: number }; disks?: { name: string; used: number; total: number }[];
+                       battery?: { percent: number; charging: boolean };  // absent on desktops
+                       uptime: number;                                      // seconds since boot
+                       network?: { kind: "wifi" | "ethernet" | "none"; name?: string; signal?: number } }>;
     subscribe(intervalMs: number, cb: (s: SystemStats) => void): () => void; // min 1000 ms; paused while hidden
   };
   media: {                             // "media"
