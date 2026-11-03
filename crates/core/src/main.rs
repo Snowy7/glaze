@@ -8,6 +8,9 @@
 //! **Panic hotkey: Ctrl+Alt+Shift+Backspace** stops everything and restores
 //! the stock desktop, whatever state mypaper is in.
 
+// No console window in release builds; logs go to a file (see init_logging).
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod restart;
 
 use std::os::windows::io::AsRawHandle;
@@ -31,7 +34,7 @@ use crate::restart::{Decision, Restarts};
 const PANIC_HOTKEY: i32 = 1;
 
 fn main() -> ExitCode {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    mypaper_desktop::init_logging();
     mypaper_desktop::quit_on_ctrl_c();
     match run() {
         Ok(()) => ExitCode::SUCCESS,

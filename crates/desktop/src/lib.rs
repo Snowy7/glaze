@@ -28,6 +28,36 @@ use windows::Win32::UI::HiDpi::{
 use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_QUIT};
 use windows::core::BOOL;
 
+/// Debug builds log to the console. Release builds have no console (they
+/// use the Windows subsystem so double-clicking opens no terminal), so they
+/// append to `%LOCALAPPDATA%\mypaper\mypaper.log`. Filter with `RUST_LOG`.
+pub fn init_logging() {
+    let env = env_logger::Env::default().default_filter_or("info");
+    let mut builder = env_logger::Builder::from_env(env);
+    if !cfg!(debug_assertions)
+        && let Some(file) = log_file()
+    {
+        builder.target(env_logger::Target::Pipe(Box::new(file)));
+    }
+    builder.init();
+}
+
+fn log_file() -> Option<std::fs::File> {
+    const MAX_BYTES: u64 = 4 << 20;
+    let dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("mypaper");
+    std::fs::create_dir_all(&dir).ok()?;
+    let path = dir.join("mypaper.log");
+    let too_big = std::fs::metadata(&path).is_ok_and(|m| m.len() > MAX_BYTES);
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true);
+    if too_big {
+        options.write(true).truncate(true);
+    } else {
+        options.append(true);
+    }
+    options.open(path).ok()
+}
+
 /// Physical-pixel coordinates everywhere. Call first thing in `main`.
 pub fn enable_dpi_awareness() {
     let context = DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2;

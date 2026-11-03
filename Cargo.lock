@@ -753,7 +753,6 @@ name = "mypaper-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "env_logger",
  "log",
  "mypaper-desktop",
  "mypaper-theme",
@@ -765,6 +764,7 @@ name = "mypaper-desktop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "env_logger",
  "log",
  "windows",
 ]
@@ -789,7 +789,6 @@ dependencies = [
  "anyhow",
  "bytemuck",
  "dioxus-devtools",
- "env_logger",
  "log",
  "mypaper-desktop",
  "mypaper-theme",

@@ -8,6 +8,9 @@
 //! development. Theme files hot-reload on save in both modes. `THEME` is a theme
 //! folder or name (default `aurora`), see [`mypaper_theme::locate`].
 
+// No console window in release builds; logs go to a file (see init_logging).
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod engine;
 mod gpu;
 mod window;
@@ -36,7 +39,7 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    mypaper_desktop::init_logging();
     mypaper_desktop::enable_dpi_awareness();
     mypaper_desktop::quit_on_ctrl_c();
     #[cfg(feature = "hotpatch")]

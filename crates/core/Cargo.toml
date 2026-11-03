@@ -10,7 +10,6 @@ mypaper-desktop.workspace = true
 mypaper-theme.workspace = true
 
 anyhow.workspace = true
-env_logger.workspace = true
 log.workspace = true
 
 [dependencies.windows]

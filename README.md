@@ -35,6 +35,11 @@ target/debug/mypaper-core         # the real thing: behind your icons, supervise
 **Panic hotkey: `Ctrl+Alt+Shift+Backspace`.** It stops everything and restores your desktop.
 `Ctrl+C` in the console does the same.
 
+Themes are found by name (`mypaper-core aurora`) in a `themes/` folder beside the exe or any
+parent folder, so you can double-click `target\debug\mypaper-core.exe`. Debug builds log to their
+console. Release builds (`cargo build --release`) open no console and log to
+`%LOCALAPPDATA%\mypaper\mypaper.log`.
+
 ## The dev loop: three speeds
 
 | You change | What happens | Measured |
@@ -96,9 +101,12 @@ Measured with release builds (Ryzen laptop, AMD iGPU and NVIDIA dGPU, two 1440p 
 | Rendering Aurora at 60 fps (1280×720 window) | **0.23%** | engine 3.6 MB |
 | On the desktop, both monitors covered | **0.00%** | core 0.36 MB, 8 MB RAM |
 
-Memory is the open problem: the engine uses 170–290 MB, and roughly 190 MB of that is NVIDIA driver
-DLLs. wgpu probes *every* GPU at startup, even though we render on the iGPU. Fixing this
-(choosing the low-power adapter before wgpu opens the others) is the top item in phase 2.
+Memory is the open problem: the engine's working set is 150–290 MB (private ~210 MB). Almost all of
+it belongs to the GPU drivers: AMD's shader compiler, plus NVIDIA's overlay/capture hooks (`nvspcap64`
+and its D3D11 driver), which load into *every* Direct3D process on a machine with GeForce software,
+whether or not the process uses the NVIDIA GPU. Restricting wgpu to the low-power GPU was tried and
+measured at only about 20 MB saved, so it isn't worth it. Next to measure: a bare DX12 baseline, and
+whether disabling the NVIDIA overlay (or a per-app GPU preference) removes the hooks.
 
 - Event-driven throughout. No polling threads. Fully covered monitors are not rendered at all.
 - The low-power (integrated) GPU is preferred, so a wallpaper never wakes your dGPU.
@@ -156,8 +164,8 @@ so it's checked rather than trusted.
 
 1. ✅ **Engine**: shader wallpapers behind the icons, multi-monitor, pausing when covered, hot reload,
    supervisor, panic hotkey, fast dev loop.
-2. **Lighter and more wallpaper types**: choose the adapter without waking or loading the dGPU
-   (see the memory note above), and get Rust hot-patching working. Then images (with crossfades), hardware-decoded video (Media
+2. **Lighter and more wallpaper types**: cut driver memory (see the note above) and get Rust
+   hot-patching working. Then images (with crossfades), hardware-decoded video (Media
    Foundation), render scale (render at 50% and upscale, for big savings on 4K).
    Also pausing on battery and lock.
 3. **Native tweaks**: DWM accent, borders, corners and Mica on allowlisted windows. Palette
