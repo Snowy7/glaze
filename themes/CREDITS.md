@@ -42,5 +42,9 @@ kept.
 ## Original to this repo
 
 `aurora/aurora.wgsl`, `midnight/midnight.wgsl` and `webdemo/index.html` are shaders and a page written
-for mypaper, with no third-party media. `app-example/preview.jpg` and the other `preview.jpg` files
-for shader themes were rendered from them.
+for mypaper, with no third-party media.
+
+`preview.jpg` (640x360) in each theme folder is for Studio's gallery. Shader previews are renders of
+the shaders; `photo`, `gallery` (a 2x2 collage of its slides) and `earth-orbit` (one video frame) are
+made from the media above; `islands` and `webdemo` are crops of captures of the running wallpaper;
+`app-example` is a drawn placeholder.
