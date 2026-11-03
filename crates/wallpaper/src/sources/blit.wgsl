@@ -5,7 +5,11 @@ struct Blit {
     scale: vec2f,
     offset: vec2f,
     opacity: f32,
-    _pad: vec3f,
+    // Scalars, not a vec3f: a vec3f would align to 16 and make the struct 48
+    // bytes, but `Params` in blit.rs is 32.
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 }
 
 @group(0) @binding(0) var<uniform> blit: Blit;
