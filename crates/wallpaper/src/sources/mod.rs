@@ -12,6 +12,7 @@ mod scene;
 mod shader;
 mod slideshow;
 mod video;
+mod wic;
 
 use std::time::Duration;
 
