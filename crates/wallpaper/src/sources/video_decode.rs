@@ -1,9 +1,10 @@
 //! The video decode worker: Media Foundation's source reader on a D3D11
 //! device (DXVA hardware decode on wgpu's GPU), sending frames to the
-//! engine over a small bounded channel. Frames stay on the GPU when wgpu
-//! can share textures with this device ([`super::share`]); otherwise they
-//! are copied to system memory as tightly packed NV12. Every COM object
-//! lives and dies on the worker thread.
+//! engine over a small bounded channel. Frames are NV12, or P010 for
+//! 10-bit video ([`Layout`]). They stay on the GPU when wgpu can share
+//! textures with this device ([`super::share`]); otherwise they are copied
+//! to system memory, tightly packed. Every COM object lives and dies on the
+//! worker thread.
 
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
@@ -22,22 +23,24 @@ use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, DXGI_GPU_PREFERENCE_MINIMUM_POWER, IDXGIAdapter1, IDXGIFactory6,
 };
 use windows::Win32::Media::MediaFoundation::{
-    IMF2DBuffer2, IMFDXGIBuffer, IMFMediaBuffer, IMFSample, IMFSourceReader, MF_MT_DEFAULT_STRIDE,
-    MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_MAJOR_TYPE, MF_MT_MINIMUM_DISPLAY_APERTURE,
-    MF_MT_SUBTYPE, MF_MT_VIDEO_NOMINAL_RANGE, MF_MT_YUV_MATRIX,
+    IMF2DBuffer2, IMFDXGIBuffer, IMFMediaBuffer, IMFMediaType, IMFSample, IMFSourceReader,
+    MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_MAJOR_TYPE,
+    MF_MT_MINIMUM_DISPLAY_APERTURE, MF_MT_MPEG2_PROFILE, MF_MT_SUBTYPE, MF_MT_TRANSFER_FUNCTION,
+    MF_MT_VIDEO_NOMINAL_RANGE, MF_MT_VIDEO_PRIMARIES, MF_MT_YUV_MATRIX,
     MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SOURCE_READER_ALL_STREAMS,
     MF_SOURCE_READER_D3D_MANAGER, MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_FLAG,
     MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED, MF_SOURCE_READERF_ENDOFSTREAM,
     MF_SOURCE_READERF_ERROR, MF_VERSION, MF2DBuffer_LockFlags_Read, MFCreateAttributes,
     MFCreateDXGIDeviceManager, MFCreateMediaType, MFCreateSourceReaderFromURL, MFMediaType_Video,
-    MFSTARTUP_LITE, MFShutdown, MFStartup, MFVideoArea, MFVideoFormat_NV12,
+    MFSTARTUP_LITE, MFShutdown, MFStartup, MFVideoArea, MFVideoFormat_AV1, MFVideoFormat_H265,
+    MFVideoFormat_HEVC, MFVideoFormat_VP90, MFVideoTransFunc_2084, MFVideoTransFunc_HLG,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
 use windows::core::{GUID, HSTRING, Interface};
 
-use super::Color;
 use super::share::{Handle, SLOTS, Slots, Writer};
+use super::{Color, Layout, Tags};
 
 /// Media Foundation's time unit (100 ns) per second.
 pub const TICKS: i64 = 10_000_000;
@@ -48,8 +51,8 @@ const AHEAD: usize = 2;
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 const VIDEO: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
 
-/// One decoded NV12 frame.
-pub struct Nv12 {
+/// One decoded 4:2:0 frame (`color.layout` says NV12 or P010).
+pub struct Yuv {
     /// Presentation time on the looped timeline (it never jumps back), in [`TICKS`].
     pub time: i64,
     pub size: (u32, u32),
@@ -58,7 +61,7 @@ pub struct Nv12 {
 }
 
 pub enum Pixels {
-    /// Tightly packed in system memory: `width × height` luma bytes, then
+    /// Tightly packed in system memory: `width × height` luma samples, then
     /// rows of interleaved chroma at half resolution.
     Cpu(Vec<u8>),
     /// In shared slot `slot`, once its `written` fence reaches `ready`.
@@ -95,16 +98,19 @@ pub struct Target {
 /// The worker's startup report.
 struct Ready {
     fps: f64,
+    layout: Layout,
     slots: Option<Slots>,
 }
 
 /// The engine's end of a running decoder.
 pub struct Stream {
-    pub frames: Receiver<Nv12>,
+    pub frames: Receiver<Yuv>,
     /// Takes spent buffers and slots back, so steady playback allocates nothing.
     pub recycle: SyncSender<Spent>,
     /// The video's own frame rate.
     pub fps: f64,
+    /// How the frames are stored: 8-bit NV12 or 10-bit P010.
+    pub layout: Layout,
     /// Shared slots, when the frames stay on the GPU.
     pub slots: Option<Slots>,
     pub thread: Thread,
@@ -149,13 +155,14 @@ pub fn spawn(path: PathBuf, fps_cap: u32, speed: f32, target: Target) -> Result<
             }
         })?;
     // On failure `thread` is detached rather than joined: it may be stuck.
-    let Ready { fps, slots } = ready
+    let Ready { fps, layout, slots } = ready
         .recv_timeout(START_TIMEOUT)
         .context("the video decoder did not start")??;
     Ok(Stream {
         frames,
         recycle,
         fps,
+        layout,
         slots,
         thread: Thread(Some(thread)),
     })
@@ -168,7 +175,7 @@ fn decode(
     speed: f32,
     target: Target,
     ready: &mut Option<SyncSender<Result<Ready>>>,
-    frames: &SyncSender<Nv12>,
+    frames: &SyncSender<Yuv>,
     mut spares: Spares,
 ) -> Result<()> {
     let mut decoder = Decoder::open(path, target.adapter)?;
@@ -188,13 +195,21 @@ fn decode(
         );
         // Decide on the first frame: zero-copy if it is on the GPU and wgpu takes shared slots.
         if let (Some(released), Some(_)) = (released.take(), &decoded.texture) {
-            match Writer::new(&decoder.device, released, origin, size) {
+            match Writer::new(
+                &decoder.device,
+                released,
+                decoder.format.color.layout,
+                origin,
+                size,
+            ) {
                 Ok((created, shared)) => (writer, slots) = (Some(created), Some(shared)),
                 Err(e) => log::warn!("zero-copy video unavailable, copying frames: {e:#}"),
             }
         }
         let (pixels, size) = match (&mut writer, &decoded.texture) {
-            (Some(writer), Some((texture, index))) if writer.fits(origin, size) => {
+            (Some(writer), Some((texture, index)))
+                if writer.fits(decoder.format.color.layout, origin, size) =>
+            {
                 let Some((slot, after)) = spares.slot() else {
                     return Ok(());
                 };
@@ -213,7 +228,7 @@ fn decode(
         };
         // Back to the decoder's pool before we (maybe) block on a full channel.
         drop((decoded, sample));
-        let frame = Nv12 {
+        let frame = Yuv {
             time,
             size,
             color: decoder.format.color,
@@ -224,13 +239,18 @@ fn decode(
         }
         if let Some(ready) = ready.take() {
             let (fps, adapter) = (decoder.format.fps, &decoder.adapter);
+            let color = decoder.format.color;
             log::info!(
-                "video: {}x{} at {fps:.3} fps, {mode} on {adapter}",
+                "video: {}x{} at {fps:.3} fps, {:?} ({:?}, {:?}), {mode} on {adapter}",
                 size.0,
-                size.1
+                size.1,
+                color.layout,
+                color.transfer,
+                color.gamut,
             );
             let _ = ready.send(Ok(Ready {
                 fps,
+                layout: color.layout,
                 slots: slots.take(),
             }));
         }
@@ -278,7 +298,8 @@ impl Spares {
     }
 }
 
-/// A source reader that outputs NV12 for the first video stream.
+/// A source reader that outputs NV12 (or P010, for 10-bit video) for the
+/// first video stream.
 struct Decoder {
     reader: IMFSourceReader,
     device: ID3D11Device,
@@ -313,11 +334,25 @@ impl Decoder {
             reader
                 .SetStreamSelection(VIDEO, true)
                 .context("the file has no video stream")?;
-            let nv12 = MFCreateMediaType()?;
-            nv12.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
-            nv12.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
-            reader
-                .SetCurrentMediaType(VIDEO, None, &nv12)
+            // 8-bit video decodes to NV12, the common path. 10-bit video asks
+            // for P010 first: some decoders accept NV12 for it too and
+            // silently drop the extra bits.
+            let output = |layout: Layout| {
+                let output = MFCreateMediaType()?;
+                output.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+                output.SetGUID(&MF_MT_SUBTYPE, &layout.subtype())?;
+                reader.SetCurrentMediaType(VIDEO, None, &output)
+            };
+            let ten_bit = reader
+                .GetNativeMediaType(VIDEO, 0)
+                .is_ok_and(|native| is_ten_bit(&native));
+            let order = if ten_bit {
+                [Layout::P010, Layout::Nv12]
+            } else {
+                [Layout::Nv12, Layout::P010]
+            };
+            output(order[0])
+                .or_else(|_| output(order[1]))
                 .context("no decoder for this video format")?;
         }
         Ok(Self {
@@ -394,8 +429,39 @@ impl Decoder {
             None => format.rows,
         };
         let locked = Locked::new(&frame.buffer, format.stride)?;
-        pack_nv12(locked.bytes(), locked.pitch, rows, format.area, &mut data)?;
+        let bytes = format.color.layout.bytes_per_sample();
+        pack_yuv420(
+            locked.bytes(),
+            locked.pitch,
+            rows,
+            format.area,
+            bytes,
+            &mut data,
+        )?;
         Ok(data)
+    }
+}
+
+/// Whether a stream's native type is 10-bit video: a 4:2:0 10-bit HEVC, VP9
+/// or AV1 profile, or any stream tagged with an HDR transfer function.
+fn is_ten_bit(native: &IMFMediaType) -> bool {
+    // The profile numbering of all three codecs puts 4:2:0 10-bit at 2.
+    const MAIN_420_10: u32 = 2;
+    // SAFETY: COM calls on a live media type.
+    unsafe {
+        let subtype = native.GetGUID(&MF_MT_SUBTYPE).ok();
+        let tens = [
+            MFVideoFormat_HEVC,
+            MFVideoFormat_H265,
+            MFVideoFormat_VP90,
+            MFVideoFormat_AV1,
+        ];
+        let profile = native.GetUINT32(&MF_MT_MPEG2_PROFILE).ok();
+        let transfer = native.GetUINT32(&MF_MT_TRANSFER_FUNCTION).ok();
+        (subtype.is_some_and(|s| tens.contains(&s)) && profile == Some(MAIN_420_10))
+            || [MFVideoTransFunc_2084, MFVideoTransFunc_HLG]
+                .iter()
+                .any(|hdr| transfer == Some(hdr.0 as u32))
     }
 }
 
@@ -435,8 +501,9 @@ struct Format {
     area: Area,
     /// Luma rows of a system-memory frame (GPU frames report their own).
     rows: usize,
-    /// Row pitch of a system-memory buffer without 2D locking.
+    /// Row pitch, in bytes, of a system-memory buffer without 2D locking.
     stride: usize,
+    /// How its samples map to RGB, including the storage layout.
     color: Color,
     fps: f64,
 }
@@ -484,11 +551,16 @@ impl Format {
             } else {
                 full
             };
+            let layout = current
+                .GetGUID(&MF_MT_SUBTYPE)
+                .ok()
+                .and_then(|subtype| Layout::from_subtype(&subtype))
+                .context("the decoder output is neither NV12 nor P010")?;
             // MF_MT_DEFAULT_STRIDE is a signed value stored as a UINT32.
             let stride = (current.GetUINT32(&MF_MT_DEFAULT_STRIDE).ok())
                 .map(|s| s as i32)
                 .filter(|&s| s > 0)
-                .map_or(width, |s| s as usize);
+                .map_or(width * layout.bytes_per_sample(), |s| s as usize);
             let fps = match current.GetUINT64(&MF_MT_FRAME_RATE).map(split) {
                 Ok((num, den)) if num > 0 && den > 0 => f64::from(num) / f64::from(den),
                 _ => 30.0,
@@ -498,8 +570,13 @@ impl Format {
                 rows: height,
                 stride,
                 color: Color::from_tags(
-                    tag(&MF_MT_YUV_MATRIX),
-                    tag(&MF_MT_VIDEO_NOMINAL_RANGE),
+                    layout,
+                    Tags {
+                        matrix: tag(&MF_MT_YUV_MATRIX),
+                        range: tag(&MF_MT_VIDEO_NOMINAL_RANGE),
+                        transfer: tag(&MF_MT_TRANSFER_FUNCTION),
+                        primaries: tag(&MF_MT_VIDEO_PRIMARIES),
+                    },
                     area.height,
                 ),
                 fps,
@@ -615,7 +692,7 @@ impl Locked {
                 len: (start.addr() + len as usize).saturating_sub(scan0.addr()),
                 pitch: pitch.max(0) as usize,
             };
-            ensure!(pitch > 0, "bottom-up NV12 is not supported");
+            ensure!(pitch > 0, "bottom-up video frames are not supported");
             return Ok(locked);
         }
         let (mut data, mut len) = (null_mut(), 0);
@@ -657,22 +734,30 @@ struct Area {
     height: usize,
 }
 
-/// Packs the visible `area` of an NV12 image into `out` without padding:
-/// luma rows, then chroma rows. In `src` rows are `pitch` bytes apart and
-/// the chroma plane starts after `rows` luma rows.
-fn pack_nv12(src: &[u8], pitch: usize, rows: usize, area: Area, out: &mut Vec<u8>) -> Result<()> {
+/// Packs the visible `area` of an NV12 or P010 image into `out` without
+/// padding: luma rows, then chroma rows. In `src` rows are `pitch` bytes
+/// apart and the chroma plane starts after `rows` luma rows. `bytes` is the
+/// size of one sample (1 for NV12, 2 for P010).
+fn pack_yuv420(
+    src: &[u8],
+    pitch: usize,
+    rows: usize,
+    area: Area,
+    bytes: usize,
+    out: &mut Vec<u8>,
+) -> Result<()> {
     let row = |start: usize, len: usize| {
-        (src.get(start..start + len)).context("the NV12 buffer is smaller than its frame")
+        (src.get(start..start + len)).context("the video buffer is smaller than its frame")
     };
     let (chroma_width, chroma_rows) = (area.width.div_ceil(2) * 2, area.height.div_ceil(2));
     out.clear();
-    out.reserve(area.width * area.height + chroma_width * chroma_rows);
+    out.reserve((area.width * area.height + chroma_width * chroma_rows) * bytes);
     for y in area.y..area.y + area.height {
-        out.extend_from_slice(row(y * pitch + area.x, area.width)?);
+        out.extend_from_slice(row(y * pitch + area.x * bytes, area.width * bytes)?);
     }
-    let chroma = rows * pitch + (area.x & !1);
+    let chroma = rows * pitch + (area.x & !1) * bytes;
     for y in area.y / 2..area.y / 2 + chroma_rows {
-        out.extend_from_slice(row(chroma + y * pitch, chroma_width)?);
+        out.extend_from_slice(row(chroma + y * pitch, chroma_width * bytes)?);
     }
     Ok(())
 }
@@ -765,14 +850,44 @@ mod tests {
             height: 2,
         };
         let mut out = Vec::new();
-        pack_nv12(&src, pitch, rows, area, &mut out).unwrap();
+        pack_yuv420(&src, pitch, rows, area, 1, &mut out).unwrap();
         #[rustfmt::skip]
         assert_eq!(out, [
             22, 23, 24, 25,
             32, 33, 34, 35,
             112, 113, 114, 115, // chroma row 1: the luma rows 2-3
         ]);
-        assert!(pack_nv12(&src[..pitch * rows], pitch, rows, area, &mut out).is_err());
+        assert!(pack_yuv420(&src[..pitch * rows], pitch, rows, area, 1, &mut out).is_err());
+    }
+
+    #[test]
+    fn packs_two_byte_samples_for_p010() {
+        // A 2x2 area at (2, 0) of a 4x2 frame with a 12-byte pitch (6 samples
+        // per row): luma samples are 10*row + column, chroma 100 + column.
+        let (pitch, rows) = (12, 2);
+        let samples = |row: &dyn Fn(usize) -> u16, count: usize| {
+            (0..count)
+                .flat_map(|x| row(x).to_le_bytes())
+                .collect::<Vec<u8>>()
+        };
+        let mut src = Vec::new();
+        for y in 0..rows {
+            src.extend(samples(&|x| (10 * y + x) as u16, pitch / 2));
+        }
+        src.extend(samples(&|x| (100 + x) as u16, pitch / 2));
+        let area = Area {
+            x: 2,
+            y: 0,
+            width: 2,
+            height: 2,
+        };
+        let mut out = Vec::new();
+        pack_yuv420(&src, pitch, rows, area, 2, &mut out).unwrap();
+        let words: Vec<u16> = (out.as_chunks::<2>().0.iter())
+            .map(|&b| u16::from_le_bytes(b))
+            .collect();
+        // Luma rows 0 and 1 at columns 2-3, then the chroma pair (U, V) at samples 2-3.
+        assert_eq!(words, [2, 3, 12, 13, 102, 103]);
     }
 
     #[test]

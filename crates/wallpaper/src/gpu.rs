@@ -26,9 +26,7 @@ pub struct Gpu {
 impl Gpu {
     /// Creates the device and a surface for each window (in order).
     pub fn new(windows: &[Window]) -> Result<(Self, Vec<wgpu::Surface<'static>>)> {
-        let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
-        desc.backends = wgpu::Backends::DX12;
-        let instance = wgpu::Instance::new(desc);
+        let instance = instance();
 
         let surfaces = windows
             .iter()
@@ -44,14 +42,7 @@ impl Gpu {
         let info = adapter.get_info();
         log::info!("GPU: {} ({:?})", info.name, info.backend);
 
-        let (device, queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-                label: Some("mypaper"),
-                required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
-                ..Default::default()
-            }))?;
-        device.on_uncaptured_error(std::sync::Arc::new(|e| log::error!("GPU: {e}")));
+        let (device, queue) = open_device(&adapter)?;
 
         // Non-sRGB target: shader output is used as-is, matching Shadertoy-style code.
         let caps = surfaces
@@ -76,6 +67,31 @@ impl Gpu {
             blit,
         };
         Ok((gpu, surfaces))
+    }
+
+    /// A device with no windows, for tests that render to textures. `None`
+    /// on a machine without a DX12 GPU.
+    #[cfg(test)]
+    pub fn headless() -> Option<Self> {
+        let instance = instance();
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::LowPower,
+            compatible_surface: None,
+            force_fallback_adapter: false,
+            apply_limit_buckets: false,
+        }))
+        .ok()?;
+        let (device, queue) = open_device(&adapter).ok()?;
+        let format = wgpu::TextureFormat::Bgra8Unorm;
+        let blit = Blitter::new(&device, format);
+        Some(Self {
+            _instance: instance,
+            adapter,
+            device,
+            queue,
+            format,
+            blit,
+        })
     }
 
     /// Runs `build` with validation errors captured instead of panicking,
@@ -211,6 +227,39 @@ impl Screen {
             _ => None, // timeout / occluded: try next frame
         }
     }
+}
+
+/// The wgpu instance: DX12 only, compiling shaders with FXC.
+///
+/// wgpu's default (`Auto`) loads whatever `dxcompiler.dll` it finds on the
+/// search path, such as the Vulkan SDK's, and silently falls back to FXC
+/// without it, so the same build behaved differently per machine. FXC ships
+/// with Windows, compiles all our shaders, and leaves the 21 MB
+/// `dxcompiler.dll` out of the process: 5-8 MB less working set per theme
+/// (see docs/engine-notes.md).
+fn instance() -> wgpu::Instance {
+    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+    desc.backends = wgpu::Backends::DX12;
+    desc.backend_options.dx12.shader_compiler = wgpu::Dx12Compiler::Fxc;
+    wgpu::Instance::new(desc)
+}
+
+/// Opens the device and queue, routing GPU errors to the log.
+fn open_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue)> {
+    let (device, queue) = pollster::block_on(
+        adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("mypaper"),
+            // 16-bit normalized formats: the planes of 10-bit (P010) video.
+            required_features: adapter
+                .features()
+                .intersection(wgpu::Features::TEXTURE_FORMAT_16BIT_NORM),
+            required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
+            memory_hints: wgpu::MemoryHints::MemoryUsage,
+            ..Default::default()
+        }),
+    )?;
+    device.on_uncaptured_error(std::sync::Arc::new(|e| log::error!("GPU: {e}")));
+    Ok((device, queue))
 }
 
 fn create_surface(instance: &wgpu::Instance, window: &Window) -> Result<wgpu::Surface<'static>> {

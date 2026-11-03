@@ -4,6 +4,7 @@
 //! toward the mouse. A still camera makes it a static wallpaper that is
 //! drawn once.
 
+use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -102,6 +103,8 @@ pub struct SceneSource {
     mesh_pipeline: wgpu::RenderPipeline,
     globals_layout: wgpu::BindGroupLayout,
     screens: Vec<Option<ScreenState>>,
+    /// The live multisampled attachments, shared by same-sized screens.
+    attachments: Vec<Weak<Attachments>>,
 }
 
 /// One draw: an index range plus the texture bound for it.
@@ -122,10 +125,66 @@ struct ScreenState {
 /// Per-screen render targets, rebuilt only when the render size changes.
 struct Target {
     size: (u32, u32),
-    msaa: wgpu::TextureView,
-    depth: wgpu::TextureView,
+    attachments: Rc<Attachments>,
     /// Single-sample color and its upscaler, when `scale < 1`.
     upscale: Option<(wgpu::TextureView, BlitQuad)>,
+}
+
+/// The multisampled color and depth that a pass draws into. Both are cleared
+/// when a pass starts and discarded when it ends, so screens with the same
+/// render size can take turns with one set instead of each holding its own
+/// (about 120 MB of GPU memory per 1440p screen).
+struct Attachments {
+    size: (u32, u32),
+    msaa: wgpu::TextureView,
+    depth: wgpu::TextureView,
+}
+
+impl Attachments {
+    fn new(gpu: &Gpu, size: (u32, u32)) -> Self {
+        let attachment = |label, format| {
+            gpu.device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: wgpu::Extent3d {
+                        width: size.0,
+                        height: size.1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: SAMPLES,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                })
+                .create_view(&Default::default())
+        };
+        Self {
+            size,
+            msaa: attachment("scene msaa", gpu.format),
+            depth: attachment("scene depth", DEPTH_FORMAT),
+        }
+    }
+}
+
+/// The attachments for `size`: the ones another screen already uses, else new
+/// ones. `cache` only watches them, so a set is freed with its last screen.
+fn shared_attachments(
+    cache: &mut Vec<Weak<Attachments>>,
+    gpu: &Gpu,
+    size: (u32, u32),
+) -> Rc<Attachments> {
+    cache.retain(|weak| weak.strong_count() > 0);
+    let found = cache
+        .iter()
+        .filter_map(Weak::upgrade)
+        .find(|attachments| attachments.size == size);
+    found.unwrap_or_else(|| {
+        let attachments = Rc::new(Attachments::new(gpu, size));
+        cache.push(Rc::downgrade(&attachments));
+        attachments
+    })
 }
 
 impl SceneSource {
@@ -160,6 +219,7 @@ impl SceneSource {
             mesh_pipeline: gpu_resources.mesh_pipeline,
             globals_layout: gpu_resources.globals_layout,
             screens: Vec::new(),
+            attachments: Vec::new(),
         })
     }
 
@@ -173,7 +233,14 @@ impl Source for SceneSource {
         let size = render_size(frame.size, self.scale);
         let state = screen_state(&mut self.screens, gpu, &self.globals_layout, frame.screen);
         if state.target.as_ref().is_none_or(|t| t.size != size) {
-            state.target = Some(Target::new(gpu, size, frame.size, self.scale < 1.0));
+            let attachments = shared_attachments(&mut self.attachments, gpu, size);
+            state.target = Some(Target::new(
+                gpu,
+                attachments,
+                size,
+                frame.size,
+                self.scale < 1.0,
+            ));
         }
         let target = state.target.as_ref().expect("just created");
 
@@ -207,7 +274,7 @@ impl Source for SceneSource {
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("scene"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &target.msaa,
+                        view: &target.attachments.msaa,
                         depth_slice: None,
                         resolve_target: Some(resolve),
                         ops: wgpu::Operations {
@@ -216,7 +283,7 @@ impl Source for SceneSource {
                         },
                     })],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &target.depth,
+                        view: &target.attachments.depth,
                         depth_ops: Some(wgpu::Operations {
                             load: wgpu::LoadOp::Clear(1.0),
                             store: wgpu::StoreOp::Discard,
@@ -298,25 +365,13 @@ fn screen_state<'a>(
 
 impl Target {
     /// `size` is the render size; `screen` the swapchain size to upscale to.
-    fn new(gpu: &Gpu, size: (u32, u32), screen: (u32, u32), upscale: bool) -> Self {
-        let attachment = |label, format, samples| {
-            gpu.device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d {
-                        width: size.0,
-                        height: size.1,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: samples,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
-        };
+    fn new(
+        gpu: &Gpu,
+        attachments: Rc<Attachments>,
+        size: (u32, u32),
+        screen: (u32, u32),
+        upscale: bool,
+    ) -> Self {
         let upscale = upscale.then(|| {
             let texture = gpu.texture(
                 "scene resolve",
@@ -332,8 +387,7 @@ impl Target {
         });
         Self {
             size,
-            msaa: attachment("scene msaa", gpu.format, SAMPLES),
-            depth: attachment("scene depth", DEPTH_FORMAT, SAMPLES),
+            attachments,
             upscale,
         }
     }
