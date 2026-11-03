@@ -1,30 +1,59 @@
-/* mypaper widget kit: monochrome tokens and the shared glass surface.
+/* mypaper widget kit: tokens, the optional surface, and legibility on a bare wallpaper.
    Source of truth is packages/widget-sdk/widget-kit/base.css; `pnpm build` copies it into every
-   bundled widget (a widget is served from its own origin, so it can't import from outside). */
+   bundled widget (a widget is served from its own origin, so it can't import from outside).
+
+   The look is not decided here. The drop-in (mypaper.js) sets, from the user's and theme's
+   appearance, attributes on <html> (data-surface, data-text, data-shadow, data-widget) and the
+   variables below in a <style> that comes after this file. The values in this :root are the spec's
+   defaults, for the moment before the host answers.
+
+   Rules for widgets: never hard-code a background or a color. Use --t0..--t3 for text,
+   --fill-* for fills, --accent sparingly. */
 
 :root {
+  /* Always `dark`, whatever the text tone: Chromium paints an opaque backdrop behind an iframe whose
+     color-scheme differs from its embedder's, and the shell is `dark`. This only picks the UA's
+     defaults; nothing here paints a page background (html and body stay transparent, only .card paints). */
   color-scheme: dark;
 
-  /* Text: white for emphasis, then three clear steps down. */
-  --t0: #fff;
-  --t1: rgb(255 255 255 / 0.74);
-  --t2: rgb(255 255 255 / 0.46);
-  --t3: rgb(255 255 255 / 0.24);
+  /* Text steps and fills: the ink (white, or near-black with data-text="dark") at fixed alphas. */
+  --t0: rgb(255 255 255 / 1);
+  --t1: rgb(255 255 255 / 0.82);
+  --t2: rgb(255 255 255 / 0.6);
+  --t3: rgb(255 255 255 / 0.38);
+  --fill-1: rgb(255 255 255 / 0.08);
+  --fill-2: rgb(255 255 255 / 0.14);
+  --fill-3: rgb(255 255 255 / 0.24);
+  --line: rgb(255 255 255 / 0.14);
 
-  /* Fills and lines on top of the surface. */
-  --fill-1: rgb(255 255 255 / 0.06);
-  --fill-2: rgb(255 255 255 / 0.11);
-  --fill-3: rgb(255 255 255 / 0.2);
-  --line: rgb(255 255 255 / 0.1);
+  /* Channel triples for custom alphas: rgb(var(--ink) / 0.3). --halo is the opposite of the ink. */
+  --ink: 255 255 255;
+  --halo: 0 0 0;
 
-  --surface: rgb(16 16 16 / 0.72);
-  /* White unless the widget opts into the wallpaper accent (see kit.js). */
+  --surface: rgb(16 16 16 / 0.55);
+  --blur: 24px;
+  --radius: 18px;
   --accent: #fff;
-
-  --radius: min(22px, 20cqmin);
-  --pad: clamp(10px, 8cqmin, 20px);
+  --on-accent: #0a0a0c;
+  --scale: 1;
   --font:
     "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+
+  /* A small pill or field: a dark (or, in dark text, light) wash on a bare wallpaper, a plain fill on a surface. */
+  --chip: rgb(var(--halo) / 0.24);
+  --accent-soft: color-mix(in srgb, var(--accent) 30%, transparent);
+  --pad: clamp(10px, 8cqmin, 20px);
+}
+
+/* With a surface, chips are just fills. */
+html[data-surface="glass"],
+html[data-surface="solid"] {
+  --chip: var(--fill-1);
+}
+
+/* Tighter outer padding when there is no card edge to keep clear of. */
+html[data-surface="none"] {
+  --pad: clamp(4px, 4cqmin, 12px);
 }
 
 *,
@@ -39,7 +68,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  /* The WebView is transparent; only .card paints. */
+  /* The WebView is transparent; only .card paints, and only with a surface. */
   background: transparent;
   color: var(--t0);
   font-family: var(--font);
@@ -50,23 +79,74 @@ body {
   cursor: default;
 }
 
-/* The widget's own size is the container, so cq* units and @container rules track the cell size. */
+/* --scale: the content is laid out in a box 1/scale as big and scaled back up, so everything
+   (px sizes, cq units, container queries) sees the smaller box. kit.js's trackSize reports it. */
 body {
+  width: calc(100% / var(--scale));
+  height: calc(100% / var(--scale));
+  transform: scale(var(--scale));
+  transform-origin: 0 0;
+  /* The widget's own size is the container, so cq* units and @container rules track the cell size. */
   container-type: size;
 }
+
+/* ---------------------------------------------------------------- the card */
 
 .card {
   position: absolute;
   inset: 0;
   padding: var(--pad);
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
-  -webkit-backdrop-filter: blur(28px) saturate(1.1);
-  backdrop-filter: blur(28px) saturate(1.1);
+  border-radius: min(var(--radius), 20cqmin);
   overflow: hidden;
 }
+
+html[data-surface="glass"] .card,
+html[data-surface="solid"] .card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--ink) / 0.08),
+    inset 0 0 0 1px rgb(var(--halo) / 0.06);
+}
+html[data-surface="glass"] .card {
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.35);
+  backdrop-filter: blur(var(--blur)) saturate(1.35);
+}
+/* A soft sheen from the top-left corner, so a surface reads as material rather than a flat fill. */
+html[data-surface="glass"] .card::before,
+html[data-surface="solid"] .card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(140deg, rgb(var(--ink) / 0.07), transparent 45%);
+}
+.card {
+  isolation: isolate;
+}
+
+/* ---------------------------------------------------------------- legibility without a surface */
+
+/* A multi-layer soft shadow: a tight core for edge contrast, then wide falloffs that never form a
+   hard outline. Text inherits it; SVG gets the same as a drop-shadow. */
+html[data-shadow="on"][data-surface="none"] body {
+  text-shadow:
+    0 0 1px rgb(var(--halo) / 0.3),
+    0 1px 2px rgb(var(--halo) / 0.3),
+    0 2px 10px rgb(var(--halo) / 0.28),
+    0 4px 28px rgb(var(--halo) / 0.2);
+}
+html[data-shadow="on"][data-surface="none"] svg,
+html[data-shadow="on"][data-surface="none"] .gfx {
+  filter: drop-shadow(0 1px 1.5px rgb(var(--halo) / 0.35)) drop-shadow(0 2px 10px rgb(var(--halo) / 0.25));
+}
+/* Chips and fields carry their own wash; no extra shadow on their text. */
+html[data-surface="none"] :is(.chip, .field) {
+  text-shadow: none;
+}
+
+/* ---------------------------------------------------------------- shared pieces */
 
 /* `display` rules in a widget's CSS must not resurrect elements hidden with the attribute. */
 [hidden] {
@@ -94,6 +174,86 @@ body {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* A group inside the card: a quiet fill with a surface, nothing at all on a bare wallpaper
+   (spacing and hairlines group things there). */
+.panel {
+  border-radius: calc(var(--radius) * 0.6);
+}
+html[data-surface="glass"] .panel,
+html[data-surface="solid"] .panel {
+  background: var(--fill-1);
+  border: 1px solid var(--line);
+}
+
+/* A pill: a label, a value, a button. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.25em 0.7em;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--t1);
+}
+html[data-surface="none"] .chip {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* A text input. On a bare wallpaper it is a small frosted pill. */
+.field {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  min-width: 0;
+  padding: 0.55em 0.95em;
+  border-radius: 999px;
+  background: var(--chip);
+  box-shadow: inset 0 0 0 1px var(--fill-2);
+  color: var(--t0);
+  caret-color: var(--t0);
+  user-select: text;
+  cursor: text;
+}
+html[data-surface="none"] .field {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.field::placeholder {
+  color: var(--t2);
+}
+.field:focus {
+  box-shadow:
+    inset 0 0 0 1px var(--t3),
+    0 0 0 3px var(--fill-2);
+}
+
+/* A progress track and its fill. On a bare wallpaper the track gets a faint outline so it shows on
+   both light and dark photos. */
+.track {
+  background: var(--fill-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+html[data-surface="none"] .track {
+  background: rgb(var(--ink) / 0.22);
+  box-shadow:
+    0 0 0 0.5px rgb(var(--halo) / 0.22),
+    0 1px 8px rgb(var(--halo) / 0.22);
+}
+.track > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+/* A hairline divider. */
+.rule {
+  height: 1px;
+  background: var(--fill-2);
 }
 
 button {

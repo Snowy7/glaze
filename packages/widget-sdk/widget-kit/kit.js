@@ -2,11 +2,13 @@
 // mypaper widget kit: small helpers over the global `mypaper` (loaded by mypaper.js).
 // Source of truth is packages/widget-sdk/widget-kit/kit.js; `pnpm build` copies it into every
 // bundled widget.
+//
+// The look (surface, text tone, variables, theme CSS) is applied by mypaper.js itself; see
+// base.css. This file has no styling code.
 
 const root = document.documentElement;
 
 /** @typedef {Awaited<ReturnType<typeof mypaper.size.get>>} SizeInfo */
-/** @typedef {Awaited<ReturnType<typeof mypaper.theme.current>>} ThemeInfo */
 
 /**
  * `document.querySelector` that throws when missing and narrows the type.
@@ -46,18 +48,42 @@ export function trackSettings(defaults, cb) {
 
 /**
  * Size now and on every change; also mirrored into `data-cols`/`data-rows` on <html>.
+ * `px` is the size your layout really has: the widget's pixels divided by the appearance `scale`
+ * (a scale of 1.5 lays the content out in a box a third smaller and zooms it back up).
  * @param {(size: SizeInfo) => void} cb
  * @returns {() => void}
  */
 export function trackSize(cb) {
-  /** @param {SizeInfo} size */
-  const apply = (size) => {
+  /** @type {SizeInfo | undefined} */
+  let size;
+  let scale = 1;
+  const emit = () => {
+    if (!size) return;
     root.dataset.cols = String(size.cells[0]);
     root.dataset.rows = String(size.cells[1]);
-    cb(size);
+    cb({ ...size, px: [size.px[0] / scale, size.px[1] / scale] });
   };
-  void mypaper.size.get().then(apply);
-  return mypaper.size.onChange(apply);
+  /** @param {{ appearance: { scale: number } }} look */
+  const setScale = (look) => {
+    const next = Number.isFinite(look.appearance.scale) ? clamp(look.appearance.scale, 0.5, 2) : 1;
+    if (next === scale) return;
+    scale = next;
+    emit();
+  };
+  void mypaper.size.get().then((s) => {
+    size = s;
+    emit();
+  });
+  void mypaper.appearance.get().then(setScale, () => {});
+  const offSize = mypaper.size.onChange((s) => {
+    size = s;
+    emit();
+  });
+  const offLook = mypaper.appearance.onChange(setScale);
+  return () => {
+    offSize();
+    offLook();
+  };
 }
 
 /**
@@ -104,37 +130,62 @@ export function every(ms, fn) {
   }, stop);
 }
 
-let wallpaperAccent = false;
-/** @type {(() => void) | undefined} */
-let stopTheme;
-
-/**
- * Optional accent: `--accent` follows the wallpaper palette when enabled (needs the "theme"
- * permission), and is white otherwise.
- * @param {boolean} enabled
- */
-export function useWallpaperAccent(enabled) {
-  wallpaperAccent = enabled;
-  if (!enabled) {
-    root.style.removeProperty("--accent");
-    stopTheme?.();
-    stopTheme = undefined;
-    return;
-  }
-  /** @param {ThemeInfo} theme */
-  const apply = (theme) => {
-    if (wallpaperAccent && theme.palette) root.style.setProperty("--accent", theme.palette.accent);
-  };
-  mypaper.theme.current().then(apply, () => {});
-  stopTheme ??= mypaper.theme.onChange(apply);
-}
-
 /**
  * @param {number} n
  * @param {number} lo
  * @param {number} hi
  */
 export const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+/** @param {number} n */
+export const pad2 = (n) => String(n).padStart(2, "0");
+
+/**
+ * Sets `text` as the node's text, only when it changed (cheap to call every tick).
+ * @param {Element} node
+ * @param {string} text
+ */
+export function setText(node, text) {
+  if (node.textContent !== text) node.textContent = text;
+}
+
+/**
+ * A byte count as a short number and its unit: `{ n: "612", unit: "GB" }`.
+ * @param {number} bytes
+ */
+export function formatBytes(bytes) {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let n = Math.max(0, bytes);
+  let i = 0;
+  while (n >= 1000 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return { n: n < 10 && i > 0 ? n.toFixed(1) : String(Math.round(n)), unit: units[i] ?? "B" };
+}
+
+/**
+ * A rate in bytes per second, as a short number and its unit: `{ n: "1.4", unit: "MB/s" }`.
+ * @param {number} bytesPerSecond
+ */
+export function formatRate(bytesPerSecond) {
+  const { n, unit } = formatBytes(bytesPerSecond);
+  return { n, unit: `${unit}/s` };
+}
+
+/**
+ * Seconds as `3d 4h`, `4h 12m` or `12m`.
+ * @param {number} seconds
+ */
+export function formatDuration(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86_400);
+  const h = Math.floor((s % 86_400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
 
 // Lifecycle flags every widget wants as CSS hooks (see base.css).
 mypaper.on("visibility", (visible) => root.toggleAttribute("data-hidden", !visible));

@@ -3,12 +3,14 @@
 //   widget=<id> cols=<n> rows=<n> cell=<px> gap=<px> dpi=<96|120|144|192>
 //   bg=dark|light|photo|checker  ui=0 (hide the panel)  hidden=1  edit=1
 //   settings=<json>  storage=<json, seeds the instance storage>  media=playing|paused|none
-//   theme=<name>  plugin=mock|real
+//   theme=<name>  plugin=mock|real  battery=none|discharging|charging  net=wifi|ethernet|none
+//   surface=none|glass|solid  text=light|dark  scale=<0.5..2>  appearance=<json>  (see look.ts)
 
 import { MypaperError } from "../src";
-import type { PluginManifest, Settings, SizeInfo, WidgetManifest } from "../src/types";
+import type { AppearanceState, PluginManifest, Settings, SizeInfo, WidgetManifest } from "../src/types";
 import { FakeBackend, THEMES } from "./fake";
 import { BridgeHost, type HostOutput } from "./host";
+import { appearanceForm, lookFromParams } from "./look";
 import { mockPlugin, type FolderMocks } from "./mock-plugins";
 import { settingsForm, withDefaults } from "./settings-form";
 
@@ -28,7 +30,7 @@ const num = (key: string, fallback: number) => {
   return q.has(key) && Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
-const BACKGROUNDS = ["dark", "light", "photo", "checker"];
+const BACKGROUNDS = ["dark", "light", "photo", "photo-dark", "photo-light", "checker"];
 const DPIS = [96, 120, 144, 192];
 
 // ---------------------------------------------------------------- state
@@ -48,7 +50,15 @@ const state = {
   editing: q.get("edit") === "1",
   pluginMode: (q.get("plugin") === "real" ? "real" : "mock") as "mock" | "real",
   settings: {} as Settings,
+  look: lookFromParams(q) as AppearanceState,
 };
+{
+  const battery = q.get("battery");
+  backend.hasBattery = battery !== "none";
+  backend.charging = battery === "charging";
+  const net = q.get("net");
+  if (net === "wifi" || net === "ethernet" || net === "none") backend.netKind = net;
+}
 let host: BridgeHost | undefined;
 let iframe: HTMLIFrameElement | undefined;
 let folderMocks: FolderMocks = {};
@@ -223,7 +233,7 @@ async function loadWidget() {
     m,
     backend,
     (msg: HostOutput) => next.contentWindow?.postMessage(msg, "*"),
-    { settings: state.settings, size: sizeInfo() },
+    { settings: state.settings, size: sizeInfo(), look: state.look },
     logEntry,
   );
   host.visible = state.visible;
@@ -347,6 +357,10 @@ function renderPanel() {
     row("Background", select(BACKGROUNDS, state.bg, (v) => ((state.bg = v), applyStageLayout()))),
   );
 
+  // appearance
+  panel.append(el("h2", undefined, "Appearance"));
+  panel.append(appearanceForm(state.look, () => host?.setAppearance({ ...state.look })));
+
   // lifecycle
   panel.append(el("h2", undefined, "Host state"));
   panel.append(
@@ -389,6 +403,19 @@ function renderPanel() {
   panel.append(reset);
 
   // data sources
+  if (m.permissions?.includes("system.stats")) {
+    panel.append(el("h2", undefined, "System"));
+    const batteryMode = !backend.hasBattery ? "none" : backend.charging ? "charging" : "discharging";
+    panel.append(
+      row("Battery", select(["none", "discharging", "charging"], batteryMode, (v) => {
+        backend.hasBattery = v !== "none";
+        backend.charging = v === "charging";
+      })),
+      row("Network", select(["wifi", "ethernet", "none"], backend.netKind, (v) => {
+        backend.netKind = v === "ethernet" || v === "none" ? v : "wifi";
+      })),
+    );
+  }
   if (m.permissions?.includes("media")) {
     panel.append(el("h2", undefined, "Media"));
     panel.append(row("State", select(["playing", "paused", "none"], q.get("media") ?? (backend.present ? (backend.playing ? "playing" : "paused") : "none"), (v) => backend.setMedia(v === "none" ? "none" : v === "paused" ? "paused" : "playing"))));

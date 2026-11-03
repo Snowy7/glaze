@@ -105,6 +105,12 @@ export interface SystemStats {
   net?: { up: number; down: number };
   /** Bytes. */
   disks?: { name: string; used: number; total: number }[];
+  /** Absent on machines without a battery. */
+  battery?: { percent: number; charging: boolean };
+  /** Seconds since boot. */
+  uptime: number;
+  /** The active connection; absent when the host can't tell. */
+  network?: { kind: "wifi" | "ethernet" | "none"; name?: string; signal?: number };
 }
 
 export interface MediaState {
@@ -127,6 +133,40 @@ export type MediaAction = "play" | "pause" | "toggle" | "next" | "previous";
 export interface ThemeInfo {
   name: string;
   palette?: { dominant: string; accent: string };
+}
+
+/**
+ * How a widget should look, resolved by the host (docs/widgets.md, "Appearance"). Every field is
+ * set. The SDK applies it to <html> for you; read it only for what CSS can't do.
+ */
+export interface Appearance {
+  /** `none`: no background, the text sits on the wallpaper. */
+  surface: "none" | "glass" | "solid";
+  /** `#rrggbb`, the surface color. */
+  tint: string;
+  /** 0 to 1. */
+  opacity: number;
+  /** Pixels, 0 to 64 (glass only). */
+  blur: number;
+  /** Pixels, 0 to 48. */
+  radius: number;
+  border: boolean;
+  /** `light` text is for dark wallpapers, `dark` for light ones. */
+  text: "light" | "dark";
+  /** `#rrggbb`. */
+  accent: string;
+  /** A CSS font-family list. */
+  font: string;
+  /** 0.5 to 2. */
+  scale: number;
+  /** A soft shadow under the text, for legibility with `surface: none`. */
+  shadow: boolean;
+}
+
+/** The appearance plus the theme's widget CSS (null when the theme has none). */
+export interface AppearanceState {
+  appearance: Appearance;
+  themeCss: string | null;
 }
 
 // ---------------------------------------------------------------- api
@@ -152,6 +192,11 @@ export interface Mypaper {
   settings: {
     get(): Promise<Settings>;
     onChange(cb: (s: Settings) => void): () => void;
+  };
+  /** The resolved look. The drop-in already applies it to <html>; see `applyAppearance`. */
+  appearance: {
+    get(): Promise<AppearanceState>;
+    onChange(cb: (s: AppearanceState) => void): () => void;
   };
   size: {
     get(): Promise<SizeInfo>;
@@ -199,6 +244,9 @@ export interface HelloResult {
   size: SizeInfo;
   visible: boolean;
   editing: boolean;
+  /** Older hosts send neither; the SDK then keeps the default look. */
+  appearance?: Appearance;
+  themeCss?: string | null;
 }
 
 /** Subscription topics, with their `subscribe` params. */
@@ -229,6 +277,7 @@ export interface WireEvents {
   editmode: boolean;
   settings: Settings;
   size: SizeInfo;
+  appearance: AppearanceState;
   /** `value` is a SystemStats, MediaState | null, ThemeInfo or plugin event data, by subscription. */
   sub: { sub: string; value: unknown };
 }
