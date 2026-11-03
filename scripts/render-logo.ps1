@@ -42,7 +42,9 @@ foreach ($s in $sizes) {
 
 # .ico with PNG-compressed entries (supported since Vista), 16..256.
 $icoSizes = 16, 20, 24, 32, 48, 64, 128, 256
-$blobs = $icoSizes | ForEach-Object { [IO.File]::ReadAllBytes((Join-Path $out "mark-$_.png")) }
+# The leading comma keeps each byte[] whole; without it PowerShell unrolls
+# every array into one flat list of bytes (and every entry looks 1 byte long).
+$blobs = @($icoSizes | ForEach-Object { , [IO.File]::ReadAllBytes((Join-Path $out "mark-$_.png")) })
 $ico = New-Object IO.MemoryStream
 $w = New-Object IO.BinaryWriter $ico
 $w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]$icoSizes.Count)
@@ -54,7 +56,7 @@ for ($i = 0; $i -lt $icoSizes.Count; $i++) {
   $w.Write([uint32]$blobs[$i].Length); $w.Write([uint32]$offset)
   $offset += $blobs[$i].Length
 }
-foreach ($b in $blobs) { $w.Write($b) }
+foreach ($b in $blobs) { $w.Write([byte[]]$b) }
 $w.Flush()
 [IO.File]::WriteAllBytes((Join-Path $logo "mypaper.ico"), $ico.ToArray())
 Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
