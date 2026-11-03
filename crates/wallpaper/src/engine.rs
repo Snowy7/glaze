@@ -5,16 +5,21 @@
 //! once, animated ones are paced by their own fps cap, and the clock that
 //! drives animation stops while everything is hidden.
 
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use mypaper_desktop::{EXIT_RESTART, Rect, WindowEvents, covered_monitors, monitors};
+use mypaper_config::Config;
+use mypaper_desktop::{
+    EXIT_RESTART, Rect, WindowEvents, covered_monitors, fullscreen_app_in_front, monitors,
+};
 use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::POINT;
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use crate::gpu::{Gpu, Screen};
+use crate::hold::{Fact, HoldReasons, Holds};
 use crate::sources::{self, Frame, Redraw, Source};
 use crate::window::Window;
 
@@ -45,8 +50,12 @@ pub struct Engine {
     frame: u32,
     reload_at: Option<Instant>,
     recheck_at: Option<Instant>,
-    /// Externally requested pause (battery saver, session locked, user).
+    /// Pauses every screen regardless of coverage. Derived from `holds`.
     held: bool,
+    /// Settings and system conditions that can hold the wallpaper.
+    holds: Holds,
+    /// The reasons behind the current `held`, for logging changes.
+    reasons: HoldReasons,
 }
 
 impl Engine {
@@ -75,6 +84,8 @@ impl Engine {
             reload_at: None,
             recheck_at: None,
             held: false,
+            holds: Holds::default(),
+            reasons: HoldReasons::default(),
         })
     }
 
@@ -82,10 +93,50 @@ impl Engine {
         self.reload_at = Some(Instant::now() + RELOAD_DEBOUNCE);
     }
 
+    /// The folder of the theme being shown.
+    pub fn theme_dir(&self) -> &Path {
+        &self.theme.dir
+    }
+
+    /// Takes the pause settings from `config` and re-evaluates the hold.
+    pub fn apply_config(&mut self, config: &Config) {
+        self.holds.apply(config);
+        self.refresh_fullscreen();
+        self.sync_hold();
+    }
+
+    /// Records a system condition (battery, display, lock) and re-evaluates the hold.
+    pub fn set_fact(&mut self, fact: Fact, value: bool) {
+        self.holds.set(fact, value);
+        self.sync_hold();
+    }
+
+    /// Re-checks for a fullscreen app in front. Only the desktop wallpaper
+    /// yields to one; the dev window is a normal window.
+    fn refresh_fullscreen(&mut self) {
+        let fullscreen =
+            self.monitors.is_some() && self.holds.wants_fullscreen() && fullscreen_app_in_front();
+        self.holds.set_fullscreen(fullscreen);
+    }
+
+    /// Combines every hold reason into [`hold`](Self::hold), logging changes.
+    fn sync_hold(&mut self) {
+        let reasons = self.holds.reasons();
+        if reasons == self.reasons {
+            return;
+        }
+        if reasons.is_empty() {
+            log::info!("released (was held: {})", self.reasons);
+        } else {
+            log::info!("held: {reasons}");
+        }
+        self.reasons = reasons;
+        self.hold(!reasons.is_empty());
+    }
+
     /// Pauses or resumes every screen regardless of coverage.
-    pub fn hold(&mut self, held: bool) {
+    fn hold(&mut self, held: bool) {
         if self.held != held {
-            log::info!("{}", if held { "held (paused)" } else { "released" });
             self.held = held;
             self.mark_dirty();
         }
@@ -116,6 +167,9 @@ impl Engine {
                     screen.paused = covered;
                 }
             }
+            // Same trigger: a game going fullscreen shows up as a window event.
+            self.refresh_fullscreen();
+            self.sync_hold();
         }
         if self.reload_at.is_some_and(|t| now >= t) {
             self.reload_at = None;
@@ -210,22 +264,26 @@ impl Engine {
         }
     }
 
+    /// Reloads the current theme after its files changed.
     fn reload(&mut self) {
-        let theme = match LoadedTheme::load(&self.theme.dir) {
-            Ok(theme) => theme,
-            Err(e) => return log::error!("{e:#}\n(keeping the current wallpaper)"),
-        };
-        let started = Instant::now();
-        match sources::load(&self.gpu, &theme) {
-            Ok(source) => {
-                log::info!("{} reloaded in {:.1?}", theme.theme.name, started.elapsed());
-                self.source = source;
-                self.theme = theme;
-                self.next_frame = Instant::now();
-                self.mark_dirty();
-            }
-            Err(e) => log::error!("{e:#}\n(keeping the current wallpaper)"),
+        let dir = self.theme.dir.clone();
+        if let Err(e) = self.switch_theme(&dir) {
+            log::error!("{e:#}\n(keeping the current wallpaper)");
         }
+    }
+
+    /// Loads the theme in `dir` and swaps it in, in-process. On failure
+    /// nothing changes and the current theme keeps running.
+    pub fn switch_theme(&mut self, dir: &Path) -> Result<()> {
+        let theme = LoadedTheme::load(dir)?;
+        let started = Instant::now();
+        let source = sources::load(&self.gpu, &theme)?;
+        log::info!("{} loaded in {:.1?}", theme.theme.name, started.elapsed());
+        self.source = source;
+        self.theme = theme;
+        self.next_frame = Instant::now();
+        self.mark_dirty();
+        Ok(())
     }
 
     fn mark_dirty(&mut self) {

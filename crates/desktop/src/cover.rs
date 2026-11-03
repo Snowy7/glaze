@@ -125,7 +125,7 @@ unsafe extern "system" fn scan_window(hwnd: HWND, data: LPARAM) -> BOOL {
 
 /// The visible frame of a window, or `None` if it cannot hide the desktop
 /// (invisible, minimized, cloaked, overlay-style, shell, or ours).
-unsafe fn opaque_frame(hwnd: HWND, our_pid: u32) -> Option<Rect> {
+pub(crate) unsafe fn opaque_frame(hwnd: HWND, our_pid: u32) -> Option<Rect> {
     // SAFETY: read-only queries on a valid top-level window.
     unsafe {
         if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() {

@@ -4,39 +4,45 @@
 //! mypaper-wallpaper [--windowed] [THEME]
 //! ```
 //!
-//! `--windowed` renders into a normal window instead of the desktop, for
-//! development. Theme files hot-reload on save in both modes. `THEME` is a theme
-//! folder or name (default `aurora`), see [`mypaper_theme::locate`].
+//! The theme and pause settings come from `config.json` and follow it live:
+//! switching the theme or pausing needs no restart. `THEME` (a theme folder or
+//! name, see [`mypaper_theme::locate`]) overrides the config's theme for this
+//! run, for development; later theme changes in the config still apply.
+//! `--windowed` renders into a normal window instead of the desktop. Theme
+//! files hot-reload on save in both modes.
 
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod control;
 mod engine;
 mod gpu;
+mod hold;
 mod sources;
 mod window;
 
-use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Instant;
 
 use anyhow::{Result, bail};
+use mypaper_config::Config;
 use mypaper_desktop::{DesktopHost, EXIT_CONFIG, WindowEvents, monitors};
 use mypaper_theme::LoadedTheme;
-use notify::Watcher;
-use windows::Win32::Foundation::{LPARAM, WPARAM};
-use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, PostThreadMessageW, TranslateMessage, WM_QUIT,
+    DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage, WM_QUIT,
 };
 
+use crate::control::Live;
 use crate::engine::{Engine, Flow};
-use crate::window::{WM_RELOAD, Waiter, Window};
+use crate::hold::Fact;
+use crate::window::{ControlWindow, WM_CONFIG, WM_FACT, WM_RELOAD, Waiter, Window};
 
 const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [THEME]";
 
 struct Args {
     windowed: bool,
-    theme: PathBuf,
+    /// Overrides `Config::theme` for this run.
+    theme: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -46,23 +52,31 @@ fn main() -> ExitCode {
     #[cfg(feature = "hotpatch")]
     dioxus_devtools::connect_subsecond();
 
-    // Bad arguments or a broken theme will not fix themselves: exit with
+    // Bad arguments, config or theme will not fix themselves: exit with
     // EXIT_CONFIG so the supervisor reports it instead of restarting.
-    let (args, theme) =
-        match parse_args().and_then(|args| Ok((LoadedTheme::load(&args.theme)?, args))) {
-            Ok((theme, args)) => (args, theme),
-            Err(e) => {
-                log::error!("{e:#}");
-                return ExitCode::from(EXIT_CONFIG);
-            }
-        };
-    match run(args, theme) {
+    let (args, config, theme) = match startup() {
+        Ok(started) => started,
+        Err(e) => {
+            log::error!("{e:#}");
+            return ExitCode::from(EXIT_CONFIG);
+        }
+    };
+    match run(args, config, theme) {
         Ok(code) => ExitCode::from(code),
         Err(e) => {
             log::error!("{e:#}");
             ExitCode::FAILURE
         }
     }
+}
+
+/// Reads the arguments and config, and loads the theme they select.
+fn startup() -> Result<(Args, Config, LoadedTheme)> {
+    let args = parse_args()?;
+    let config = Config::load()?;
+    let name = args.theme.as_deref().unwrap_or(&config.theme);
+    let theme = LoadedTheme::load(mypaper_theme::locate(Some(name))?)?;
+    Ok((args, config, theme))
 }
 
 fn parse_args() -> Result<Args> {
@@ -79,12 +93,11 @@ fn parse_args() -> Result<Args> {
             name => theme = Some(name.to_owned()),
         }
     }
-    let theme = mypaper_theme::locate(theme.as_deref())?;
     Ok(Args { windowed, theme })
 }
 
-fn run(args: Args, theme: LoadedTheme) -> Result<u8> {
-    log::info!("theme: {} ({})", theme.theme.name, args.theme.display());
+fn run(args: Args, config: Config, theme: LoadedTheme) -> Result<u8> {
+    log::info!("theme: {} ({})", theme.theme.name, theme.dir.display());
     window::register_class()?;
 
     let host = if args.windowed {
@@ -111,17 +124,22 @@ fn run(args: Args, theme: LoadedTheme) -> Result<u8> {
         ),
     };
 
+    let _control = ControlWindow::new()?;
     let mut engine = Engine::new(theme, windows, monitors)?;
-    let _watcher = watch(&args.theme)?;
+    // Facts first, so the initial hold is logged once.
+    engine.set_fact(Fact::OnBattery, mypaper_desktop::on_battery());
+    engine.apply_config(&config);
+    let mut live = Live::new(config, engine.theme_dir())?;
     let events = host.is_some().then(WindowEvents::install);
     let waiter = Waiter::new()?;
 
     let code = loop {
-        if let Some(code) = pump(&mut engine) {
+        if let Some(code) = pump(&mut engine, &mut live) {
             break code;
         }
+        live.apply_due(&mut engine);
         match tick(&mut engine, events.as_ref()) {
-            Flow::Wait(deadline) => waiter.wait(deadline),
+            Flow::Wait(deadline) => waiter.wait(earliest(deadline, live.deadline())),
             Flow::Exit(code) => break code,
         }
     };
@@ -133,8 +151,12 @@ fn run(args: Args, theme: LoadedTheme) -> Result<u8> {
     Ok(code)
 }
 
+fn earliest(a: Option<Instant>, b: Option<Instant>) -> Option<Instant> {
+    [a, b].into_iter().flatten().min()
+}
+
 /// Drains the message queue. Returns the exit code once `WM_QUIT` arrives.
-fn pump(engine: &mut Engine) -> Option<u8> {
+fn pump(engine: &mut Engine, live: &mut Live) -> Option<u8> {
     let mut msg = MSG::default();
     // SAFETY: standard message pump on the thread that owns our windows.
     unsafe {
@@ -142,6 +164,12 @@ fn pump(engine: &mut Engine) -> Option<u8> {
             match msg.message {
                 WM_QUIT => return Some(msg.wParam.0 as u8),
                 WM_RELOAD => engine.schedule_reload(),
+                WM_CONFIG => live.schedule(),
+                WM_FACT => {
+                    if let Some(fact) = Fact::from_wparam(msg.wParam.0) {
+                        engine.set_fact(fact, msg.lParam.0 != 0);
+                    }
+                }
                 _ => {
                     let _ = TranslateMessage(&msg);
                     DispatchMessageW(&msg);
@@ -150,20 +178,6 @@ fn pump(engine: &mut Engine) -> Option<u8> {
         }
     }
     None
-}
-
-/// Wakes the main thread with `WM_RELOAD` whenever a theme file changes.
-fn watch(dir: &Path) -> Result<notify::RecommendedWatcher> {
-    // SAFETY: no preconditions.
-    let thread = unsafe { GetCurrentThreadId() };
-    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-        if event.is_ok_and(|e| !e.kind.is_access()) {
-            // SAFETY: posting to a thread id is always safe.
-            let _ = unsafe { PostThreadMessageW(thread, WM_RELOAD, WPARAM(0), LPARAM(0)) };
-        }
-    })?;
-    watcher.watch(dir, notify::RecursiveMode::Recursive)?;
-    Ok(watcher)
 }
 
 /// Runs one engine tick. When hot-patching, the call goes through
