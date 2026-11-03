@@ -1,7 +1,7 @@
 import { Play, Square } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Button, Keycap, PageHeader, Switch } from "../components/ui";
+import { Button, Keycap, PageHeader, SectionLabel, StatusDot, Switch } from "../components/ui";
 import { useStudio } from "../lib/studio";
 
 export function Settings() {
@@ -11,12 +11,12 @@ export function Settings() {
     <>
       <PageHeader title="Settings" subtitle="Changes apply to the running wallpaper immediately." />
 
-      <div className="flex max-w-2xl flex-col gap-8">
+      <div className="flex max-w-3xl flex-col gap-8">
         <Group title="Engine">
           <div className="flex items-center gap-4 px-5 py-4">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-[14px] font-medium">
-                <span className={`size-2 rounded-full ${engine?.running ? "bg-ok" : "bg-ink-3"}`} aria-hidden />
+              <div className="flex items-center gap-2.5 text-[14px] font-medium text-ink">
+                <StatusDot state={!engine ? "unknown" : engine.running ? "on" : "off"} />
                 {!engine ? "Checking" : engine.running ? "Running" : "Stopped"}
               </div>
               <div className="selectable mt-0.5 truncate font-mono text-xs text-ink-3" title={engine?.corePath ?? undefined}>
@@ -93,7 +93,7 @@ export function Settings() {
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section aria-label={title}>
-      <h2 className="mb-2.5 px-1 text-xs font-semibold tracking-[0.12em] text-ink-3 uppercase">{title}</h2>
+      <SectionLabel>{title}</SectionLabel>
       <div className="divide-y divide-line overflow-hidden rounded-2xl bg-surface shadow-card ring-1 ring-line">{children}</div>
     </section>
   );
@@ -103,7 +103,7 @@ function Row({ title, detail, mono, children }: { title: string; detail: string;
   return (
     <div className="flex items-center gap-4 px-5 py-4">
       <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-medium">{title}</div>
+        <div className="text-[14px] font-medium text-ink">{title}</div>
         <div className={`mt-0.5 text-[12.5px] text-ink-3 ${mono ? "selectable truncate font-mono text-xs" : ""}`} title={mono ? detail : undefined}>
           {detail}
         </div>
