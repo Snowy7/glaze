@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mypaper web demo</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #05060b; }
+  /* Drawn at 1/8 of the screen's resolution and upscaled (smoothly) by the browser:
+     soft gradients lose nothing, and the page paints 1/64 of the pixels. */
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #clock {
+    position: fixed; left: 6vw; bottom: 9vh;
+    color: rgba(255, 255, 255, .84);
+    font: 200 8vw/1 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    letter-spacing: .01em; text-shadow: 0 0 4vw rgba(120, 140, 255, .35);
+    user-select: none;
+  }
+  #date {
+    position: fixed; left: calc(6vw + .4vw); bottom: calc(9vh + 9vw);
+    color: rgba(255, 255, 255, .5);
+    font: 400 1.3vw/1 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    letter-spacing: .32em; text-transform: uppercase; user-select: none;
+  }
+</style>
+<canvas id="sky"></canvas>
+<div id="date"></div>
+<div id="clock"></div>
+<script>
+  "use strict";
+  // Self-contained: no network, no libraries. Capped at 30 fps by skipping
+  // requestAnimationFrame callbacks that arrive too soon.
+  const FPS = 30, STEP = 1000 / FPS;
+  const SCALE = 8; // one canvas pixel per 8x8 screen pixels
+
+  const canvas = document.getElementById("sky");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const clock = document.getElementById("clock");
+  const date = document.getElementById("date");
+
+  // [hue, size (of the short side), x speed, y speed, x phase, y phase]
+  const blobs = [
+    [226, 0.80, 0.050, 0.037, 0.0, 1.3],
+    [268, 0.70, 0.041, 0.057, 2.1, 0.4],
+    [196, 0.65, 0.063, 0.029, 4.2, 2.7],
+    [312, 0.55, 0.033, 0.049, 1.1, 5.1],
+    [172, 0.50, 0.057, 0.044, 3.3, 3.9],
+  ];
+
+  // Each blob is a soft disc rendered once into its own small canvas;
+  // a frame is then five cheap drawImage calls instead of five gradient fills.
+  let sprites = [];
+  function sprite(hue, radius) {
+    const s = document.createElement("canvas");
+    s.width = s.height = Math.ceil(radius * 2);
+    const c = s.getContext("2d");
+    const g = c.createRadialGradient(radius, radius, 0, radius, radius, radius);
+    g.addColorStop(0, `hsla(${hue}, 80%, 52%, .30)`);
+    g.addColorStop(1, `hsla(${hue}, 80%, 40%, 0)`);
+    c.fillStyle = g;
+    c.fillRect(0, 0, s.width, s.height);
+    return s;
+  }
+
+  function resize() {
+    canvas.width = Math.ceil(innerWidth / SCALE);
+    canvas.height = Math.ceil(innerHeight / SCALE);
+    const short = Math.min(canvas.width, canvas.height);
+    sprites = blobs.map(([hue, size]) => sprite(hue, short * size));
+  }
+  addEventListener("resize", resize);
+  resize();
+
+  function draw(seconds) {
+    const { width: w, height: h } = canvas;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "#05060b";
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = "lighter";
+    blobs.forEach(([, , sx, sy, px, py], i) => {
+      const r = sprites[i].width / 2;
+      const x = w * (0.5 + 0.42 * Math.sin(seconds * sx * Math.PI * 2 + px));
+      const y = h * (0.5 + 0.38 * Math.sin(seconds * sy * Math.PI * 2 + py));
+      ctx.drawImage(sprites[i], x - r, y - r);
+    });
+  }
+
+  function tickClock() {
+    const now = new Date();
+    clock.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    date.textContent = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+  }
+
+  let last = -Infinity, lastClock = -Infinity;
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (now - last < STEP - 1) return; // 1 ms of slack for vsync jitter
+    last = now;
+    draw(now / 1000);
+    if (now - lastClock > 5000) { lastClock = now; tickClock(); }
+  }
+  requestAnimationFrame(frame);
+</script>

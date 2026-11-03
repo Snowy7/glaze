@@ -5,6 +5,7 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use mypaper_desktop::{DesktopHost, EXIT_RESTART, Rect};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Power::{
     HPOWERNOTIFY, POWERBROADCAST_SETTING, RegisterPowerSettingNotification,
@@ -41,6 +42,18 @@ pub const WM_CONFIG: u32 = WM_APP + 3;
 const CLASS: PCWSTR = w!("mypaper.wallpaper");
 const CONTROL_CLASS: PCWSTR = w!("mypaper.wallpaper.control");
 const DEV_WINDOW: isize = 1;
+
+/// Makes the calling thread a COM single-threaded apartment for the rest of
+/// the process. WebView2 requires one on the thread that pumps messages (its
+/// completion handlers are delivered through that pump). Everything else that
+/// uses COM here (WIC) tolerates an apartment chosen earlier.
+pub fn init_com_apartment() -> Result<()> {
+    // SAFETY: plain per-thread COM init, intentionally never balanced: the
+    // apartment lives until the process exits.
+    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+        .ok()
+        .context("CoInitializeEx")
+}
 
 pub fn register_class() -> Result<()> {
     register(CLASS, wndproc)?;
