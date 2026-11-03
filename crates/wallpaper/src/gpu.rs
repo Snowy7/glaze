@@ -1,39 +1,26 @@
-//! GPU side: one device shared by every screen, one surface per window, and
-//! shader compilation that never takes the wallpaper down on a typo.
+//! GPU core: one device shared by every screen and one surface per window.
+//! What gets drawn lives in `sources`; this module only owns the device,
+//! the swapchains and the shared fit/blit pipeline.
 
 use std::num::NonZeroIsize;
 
 use anyhow::{Context, Result, anyhow, bail};
-use bytemuck::{Pod, Zeroable};
 use raw_window_handle::{Win32WindowHandle, WindowsDisplayHandle};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 
+use crate::sources::blit::Blitter;
 use crate::window::Window;
-
-/// Appended *after* the theme shader, so compiler line numbers match the
-/// theme file exactly (WGSL declarations are order-independent).
-const PRELUDE: &str = include_str!("prelude.wgsl");
-
-/// Mirrors `struct Paper` in prelude.wgsl.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
-pub struct Uniforms {
-    pub resolution: [f32; 2],
-    pub mouse: [f32; 2],
-    pub time: f32,
-    pub frame: u32,
-    pub _pad: [f32; 2],
-}
 
 pub struct Gpu {
     // Kept alive for as long as the surfaces made from it.
     _instance: wgpu::Instance,
     adapter: wgpu::Adapter,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    format: wgpu::TextureFormat,
-    bind_layout: wgpu::BindGroupLayout,
-    pipeline_layout: wgpu::PipelineLayout,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    /// Format of every screen's swapchain (non-sRGB: values are written as-is).
+    pub format: wgpu::TextureFormat,
+    /// Shared textured-quad pipeline with fit modes and opacity.
+    pub blit: Blitter,
 }
 
 impl Gpu {
@@ -79,74 +66,72 @@ impl Gpu {
             .or(caps.formats.first().copied())
             .context("surface has no formats")?;
 
-        let bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("paper"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("paper"),
-            bind_group_layouts: &[Some(&bind_layout)],
-            immediate_size: 0,
-        });
-
+        let blit = Blitter::new(&device, format);
         let gpu = Self {
             _instance: instance,
             adapter,
             device,
             queue,
             format,
-            bind_layout,
-            pipeline_layout,
+            blit,
         };
         Ok((gpu, surfaces))
     }
 
-    /// Compiles a theme shader. Errors come back as text (with line numbers)
-    /// instead of panicking, so a bad save keeps the last good frame running.
-    pub fn compile(&self, source: &str) -> Result<wgpu::RenderPipeline> {
+    /// Runs `build` with validation errors captured instead of panicking,
+    /// so a broken asset is reported and the previous frame keeps running.
+    pub fn checked<T>(&self, build: impl FnOnce() -> T) -> Result<T> {
         let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let module = self
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("wallpaper"),
-                source: wgpu::ShaderSource::Wgsl(format!("{source}\n{PRELUDE}").into()),
-            });
-        let pipeline = self
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("wallpaper"),
-                layout: Some(&self.pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &module,
-                    entry_point: Some("mypaper_vs"),
-                    compilation_options: Default::default(),
-                    buffers: &[],
-                },
-                primitive: Default::default(),
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &module,
-                    entry_point: Some("mypaper_fs"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(self.format.into())],
-                }),
-                multiview_mask: None,
-                cache: None,
-            });
+        let value = build();
         if let Some(err) = pollster::block_on(scope.pop()) {
             bail!("{err}");
         }
-        Ok(pipeline)
+        Ok(value)
+    }
+
+    /// A sampled texture in `format`, optionally filled with tightly packed pixels.
+    pub fn texture(
+        &self,
+        label: &str,
+        (width, height): (u32, u32),
+        format: wgpu::TextureFormat,
+        usage: wgpu::TextureUsages,
+        pixels: Option<&[u8]>,
+    ) -> wgpu::Texture {
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: usage | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        if let Some(pixels) = pixels {
+            self.write_texture(&texture, pixels);
+        }
+        texture
+    }
+
+    /// Replaces a whole texture's contents with tightly packed pixels.
+    pub fn write_texture(&self, texture: &wgpu::Texture, pixels: &[u8]) {
+        let size = texture.size();
+        let block = texture.format().block_copy_size(None).unwrap_or(4);
+        self.queue.write_texture(
+            texture.as_image_copy(),
+            pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(size.width * block),
+                rows_per_image: Some(size.height),
+            },
+            size,
+        );
     }
 }
 
@@ -155,10 +140,11 @@ pub struct Screen {
     // Field order matters: the surface must drop before its window.
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
-    uniforms: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
     pub window: Window,
+    /// Hidden behind a maximized/fullscreen window (or minimized in dev mode).
     pub paused: bool,
+    /// Needs a frame even if the source is static (new, resized, resumed, reloaded).
+    pub dirty: bool,
 }
 
 impl Screen {
@@ -179,28 +165,12 @@ impl Screen {
         }
         config.desired_maximum_frame_latency = 1;
         surface.configure(&gpu.device, &config);
-
-        let uniforms = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("paper"),
-            size: size_of::<Uniforms>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("paper"),
-            layout: &gpu.bind_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniforms.as_entire_binding(),
-            }],
-        });
         Ok(Self {
             surface,
             config,
-            uniforms,
-            bind_group,
             window,
             paused: false,
+            dirty: true,
         })
     }
 
@@ -215,63 +185,21 @@ impl Screen {
             self.config.width = w;
             self.config.height = h;
             self.surface.configure(&gpu.device, &self.config);
+            self.dirty = true;
         }
     }
 
-    /// Draws one frame. `pipeline: None` (shader never compiled) draws a
-    /// dim red screen so a broken theme is obvious, not silently black.
-    pub fn render(
-        &mut self,
-        gpu: &Gpu,
-        pipeline: Option<&wgpu::RenderPipeline>,
-        uniforms: &Uniforms,
-    ) {
-        let frame = match self.surface.get_current_texture() {
+    /// The next swapchain image, or `None` if this frame should be skipped.
+    pub fn acquire(&mut self, gpu: &Gpu) -> Option<wgpu::SurfaceTexture> {
+        match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => Some(t),
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.surface.configure(&gpu.device, &self.config);
-                return;
+                None
             }
-            _ => return, // timeout / occluded: try next frame
-        };
-        gpu.queue
-            .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(uniforms));
-
-        let view = frame.texture.create_view(&Default::default());
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        {
-            let clear = if pipeline.is_some() {
-                wgpu::Color::BLACK
-            } else {
-                wgpu::Color {
-                    r: 0.18,
-                    g: 0.0,
-                    b: 0.02,
-                    a: 1.0,
-                }
-            };
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("wallpaper"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(clear),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-            if let Some(pipeline) = pipeline {
-                pass.set_pipeline(pipeline);
-                pass.set_bind_group(0, &self.bind_group, &[]);
-                pass.draw(0..3, 0..1);
-            }
+            _ => None, // timeout / occluded: try next frame
         }
-        gpu.queue.submit([encoder.finish()]);
-        gpu.queue.present(frame);
     }
 }
 
@@ -288,13 +216,4 @@ fn create_surface(instance: &wgpu::Instance, window: &Window) -> Result<wgpu::Su
         })?
     };
     Ok(surface)
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn uniforms_match_the_wgsl_layout() {
-        // vec2f, vec2f, f32, u32, vec2f padding: 32 bytes, 16-byte multiple.
-        assert_eq!(size_of::<super::Uniforms>(), 32);
-    }
 }

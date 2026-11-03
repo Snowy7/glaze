@@ -1,23 +1,29 @@
-//! The frame loop policy: when to render, when to sleep, when to reload.
-//! Everything here is hot-patchable with `dx serve --hotpatch`; keep struct
-//! layouts stable while patching (change function bodies, not fields).
+//! The frame loop policy: when to draw, when to sleep, when to reload.
+//!
+//! The engine never draws a frame nobody can see or that would look the
+//! same as the last one: covered screens are skipped, static sources draw
+//! once, animated ones are paced by their own fps cap, and the clock that
+//! drives animation stops while everything is hidden.
 
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use mypaper_desktop::{EXIT_RESTART, Rect, WindowEvents, covered_monitors, monitors};
-use mypaper_theme::{LoadedTheme, Wallpaper};
+use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::POINT;
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
-use crate::gpu::{Gpu, Screen, Uniforms};
+use crate::gpu::{Gpu, Screen};
+use crate::sources::{self, Frame, Redraw, Source};
 use crate::window::Window;
 
 /// Coalesces the burst of file events an editor save produces.
-const RELOAD_DEBOUNCE: Duration = Duration::from_millis(40);
+const RELOAD_DEBOUNCE: Duration = Duration::from_millis(80);
 /// Coalesces window-move storms before re-checking what is covered.
 const COVER_DEBOUNCE: Duration = Duration::from_millis(100);
+/// Longest clock step between ticks, so resuming never jumps ahead.
+const MAX_STEP: Duration = Duration::from_millis(100);
 
 pub enum Flow {
     /// Sleep until this deadline (or the next message, if `None`).
@@ -28,19 +34,19 @@ pub enum Flow {
 pub struct Engine {
     theme: LoadedTheme,
     gpu: Gpu,
-    pipeline: Option<wgpu::RenderPipeline>,
-    /// The shader source last compiled (successfully or not).
-    source: String,
+    source: Box<dyn Source>,
     screens: Vec<Screen>,
     /// Monitor rects for desktop mode; `None` in dev (windowed) mode.
     monitors: Option<Vec<Rect>>,
-    interval: Duration,
+    /// Animation clock: advances only while some screen is visible.
+    clock: Duration,
+    last_tick: Option<Instant>,
     next_frame: Instant,
-    last_frame: Option<Instant>,
-    time: Duration,
     frame: u32,
     reload_at: Option<Instant>,
     recheck_at: Option<Instant>,
+    /// Externally requested pause (battery saver, session locked, user).
+    held: bool,
 }
 
 impl Engine {
@@ -55,31 +61,38 @@ impl Engine {
             .zip(windows)
             .map(|(surface, window)| Screen::new(&gpu, surface, window))
             .collect::<Result<_>>()?;
-        let mut engine = Self {
+        let source = load_or_broken(&gpu, &theme);
+        Ok(Self {
             theme,
             gpu,
-            pipeline: None,
-            source: String::new(),
+            source,
             screens,
             monitors,
-            interval: Duration::from_secs(1) / 60,
+            clock: Duration::ZERO,
+            last_tick: None,
             next_frame: Instant::now(),
-            last_frame: None,
-            time: Duration::ZERO,
             frame: 0,
             reload_at: None,
             recheck_at: None,
-        };
-        engine.apply_theme();
-        Ok(engine)
+            held: false,
+        })
     }
 
     pub fn schedule_reload(&mut self) {
         self.reload_at = Some(Instant::now() + RELOAD_DEBOUNCE);
     }
 
-    /// One turn of the loop: react to changes, render if a frame is due,
-    /// and say how long the thread may sleep.
+    /// Pauses or resumes every screen regardless of coverage.
+    pub fn hold(&mut self, held: bool) {
+        if self.held != held {
+            log::info!("{}", if held { "held (paused)" } else { "released" });
+            self.held = held;
+            self.mark_dirty();
+        }
+    }
+
+    /// One turn of the loop: react to changes, draw what is due, and say
+    /// how long the thread may sleep.
     pub fn tick(&mut self, events: Option<&WindowEvents>) -> Flow {
         let now = Instant::now();
 
@@ -95,11 +108,10 @@ impl Engine {
                 }
                 for (screen, covered) in self.screens.iter_mut().zip(covered_monitors(known)) {
                     if screen.paused != covered {
-                        log::info!(
-                            "{} {}",
-                            if covered { "pausing" } else { "resuming" },
-                            label(screen)
-                        );
+                        let (w, h) = screen.size();
+                        let verb = if covered { "pausing" } else { "resuming" };
+                        log::info!("{verb} {w}x{h} screen");
+                        screen.dirty |= !covered;
                     }
                     screen.paused = covered;
                 }
@@ -111,98 +123,130 @@ impl Engine {
         }
         if self.monitors.is_none() {
             for screen in &mut self.screens {
-                screen.paused = screen.window.minimized();
+                let minimized = screen.window.minimized();
+                screen.dirty |= screen.paused && !minimized;
+                screen.paused = minimized;
                 screen.sync_size(&self.gpu);
             }
         }
 
-        let active = self.screens.iter().any(|s| !s.paused);
+        let active = !self.held && self.screens.iter().any(|s| !s.paused);
         if !active {
-            self.last_frame = None; // so time resumes where it stopped
-        } else if now >= self.next_frame {
-            self.render(now);
-            self.next_frame = (self.next_frame + self.interval).max(now);
+            self.last_tick = None; // the clock stops while nothing is visible
+            return Flow::Wait(self.deadline(None));
+        }
+        self.clock += self
+            .last_tick
+            .map_or(Duration::ZERO, |t| (now - t).min(MAX_STEP));
+        self.last_tick = Some(now);
+
+        self.source.update(&self.gpu, self.clock);
+        let redraw = self.source.redraw(self.clock);
+        let due = match redraw {
+            Redraw::Every(_) => now >= self.next_frame,
+            Redraw::At(t) => self.clock >= t,
+            Redraw::OnChange => false,
+        };
+        if due || self.screens.iter().any(|s| s.dirty && !s.paused) {
+            self.render(due);
         }
 
-        let frame_deadline = active.then_some(self.next_frame);
-        Flow::Wait(
-            [frame_deadline, self.reload_at, self.recheck_at]
-                .into_iter()
-                .flatten()
-                .min(),
-        )
+        let frame_deadline = match redraw {
+            Redraw::Every(interval) => {
+                if due {
+                    self.next_frame = (self.next_frame + interval).max(now);
+                }
+                Some(self.next_frame)
+            }
+            Redraw::At(t) => Some(now + t.saturating_sub(self.clock)),
+            Redraw::OnChange => None,
+        };
+        Flow::Wait(self.deadline(frame_deadline))
     }
 
-    fn render(&mut self, now: Instant) {
-        // Cap the step so resuming after a pause continues smoothly.
-        let dt = self
-            .last_frame
-            .map_or(Duration::ZERO, |last| (now - last).min(self.interval * 4));
-        self.last_frame = Some(now);
-        self.time += dt;
-        self.frame = self.frame.wrapping_add(1);
+    fn deadline(&self, frame: Option<Instant>) -> Option<Instant> {
+        [frame, self.reload_at, self.recheck_at]
+            .into_iter()
+            .flatten()
+            .min()
+    }
 
+    /// Draws visible screens: all of them if a frame is `due`, otherwise
+    /// only the dirty ones.
+    fn render(&mut self, due: bool) {
+        self.frame = self.frame.wrapping_add(1);
         let mut cursor = POINT::default();
         // SAFETY: `cursor` outlives the call.
         let _ = unsafe { GetCursorPos(&mut cursor) };
 
-        for screen in self.screens.iter_mut().filter(|s| !s.paused) {
+        for (index, screen) in self.screens.iter_mut().enumerate() {
+            if screen.paused || !(due || screen.dirty) {
+                continue;
+            }
+            let Some(texture) = screen.acquire(&self.gpu) else {
+                continue;
+            };
+            screen.dirty = false;
             let mut mouse = cursor;
             // SAFETY: valid window; `mouse` outlives the call.
             let _ = unsafe { ScreenToClient(screen.window.0, &mut mouse) };
-            let (w, h) = screen.size();
-            let uniforms = Uniforms {
-                resolution: [w as f32, h as f32],
-                mouse: [mouse.x as f32, mouse.y as f32],
-                time: self.time.as_secs_f32(),
-                frame: self.frame,
-                _pad: [0.0; 2],
-            };
-            screen.render(&self.gpu, self.pipeline.as_ref(), &uniforms);
+
+            let view = texture.texture.create_view(&Default::default());
+            let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
+            self.source.render(
+                &self.gpu,
+                Frame {
+                    screen: index,
+                    size: screen.size(),
+                    mouse: [mouse.x as f32, mouse.y as f32],
+                    clock: self.clock,
+                    frame: self.frame,
+                    view: &view,
+                    encoder: &mut encoder,
+                },
+            );
+            self.gpu.queue.submit([encoder.finish()]);
+            self.gpu.queue.present(texture);
         }
     }
 
     fn reload(&mut self) {
-        match LoadedTheme::load(&self.theme.dir) {
-            Ok(theme) => self.theme = theme,
-            Err(e) => {
-                log::error!("{e:#}");
-                return;
+        let theme = match LoadedTheme::load(&self.theme.dir) {
+            Ok(theme) => theme,
+            Err(e) => return log::error!("{e:#}\n(keeping the current wallpaper)"),
+        };
+        let started = Instant::now();
+        match sources::load(&self.gpu, &theme) {
+            Ok(source) => {
+                log::info!("{} reloaded in {:.1?}", theme.theme.name, started.elapsed());
+                self.source = source;
+                self.theme = theme;
+                self.next_frame = Instant::now();
+                self.mark_dirty();
             }
+            Err(e) => log::error!("{e:#}\n(keeping the current wallpaper)"),
         }
-        self.apply_theme();
     }
 
-    fn apply_theme(&mut self) {
-        let Wallpaper::Shader(shader) = &self.theme.theme.wallpaper;
-        self.interval = Duration::from_secs(1) / shader.fps;
-        let path = self.theme.asset(&shader.source);
-        let source = match std::fs::read_to_string(&path) {
-            Ok(source) => source,
-            Err(e) => {
-                log::error!("{}: {e}", path.display());
-                return;
-            }
-        };
-        // Editors fire several events per save; compile each version once.
-        if source == self.source {
-            return;
+    fn mark_dirty(&mut self) {
+        for screen in &mut self.screens {
+            screen.dirty = true;
         }
-        let started = Instant::now();
-        let compiled = self.gpu.compile(&source);
-        self.source = source;
-        match compiled {
-            Ok(pipeline) => {
-                self.pipeline = Some(pipeline);
-                log::info!("{} ready in {:.1?}", path.display(), started.elapsed());
-            }
-            Err(e) => log::error!("{}: {e:#}\n(keeping the previous shader)", path.display()),
-        }
-        self.next_frame = Instant::now();
     }
 }
 
-fn label(screen: &Screen) -> String {
-    let (w, h) = screen.size();
-    format!("{w}x{h} screen")
+/// A theme that fails at startup shows the red "broken" screen and keeps
+/// watching for a fix, instead of exiting.
+fn load_or_broken(gpu: &Gpu, theme: &LoadedTheme) -> Box<dyn Source> {
+    let started = Instant::now();
+    match sources::load(gpu, theme) {
+        Ok(source) => {
+            log::info!("{} ready in {:.1?}", theme.theme.name, started.elapsed());
+            source
+        }
+        Err(e) => {
+            log::error!("{e:#}");
+            Box::new(sources::Broken)
+        }
+    }
 }

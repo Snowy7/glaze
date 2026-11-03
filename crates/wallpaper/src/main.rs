@@ -13,6 +13,7 @@
 
 mod engine;
 mod gpu;
+mod sources;
 mod window;
 
 use std::path::{Path, PathBuf};
