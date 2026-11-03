@@ -1,0 +1,27 @@
+# Fast dev loop. Everything here is dev-only; release builds use plain LLVM.
+
+[unstable]
+codegen-backend = true
+
+[build]
+rustflags = [
+  "-Zthreads=8",          # parallel rustc frontend
+  "-Zshare-generics=y",   # reuse monomorphized generics across crates
+]
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"   # much faster than link.exe
+
+# Cranelift compiles our crates; deps stay on LLVM (optimized, built once).
+[profile.dev]
+codegen-backend = "cranelift"
+
+[profile.dev.package."*"]
+codegen-backend = "llvm"
+
+[profile.release]
+codegen-backend = "llvm"
+
+[alias]
+paper = "run -p mypaper-wallpaper --"          # cargo paper --windowed themes/aurora
+core = "run -p mypaper-core --"                # cargo core themes/aurora

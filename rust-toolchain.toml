@@ -1,0 +1,6 @@
+# Nightly unlocks the fast-iteration stack: Cranelift codegen, the parallel
+# frontend and shared generics. See .cargo/config.toml.
+[toolchain]
+channel = "nightly"
+components = ["rustc-codegen-cranelift-preview", "rust-src", "clippy", "rustfmt", "rust-analyzer"]
+profile = "minimal"

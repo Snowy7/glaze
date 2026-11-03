@@ -1,0 +1,14 @@
+[package]
+name = "mypaper-theme"
+description = "Theme folder format: theme.json + the assets it references."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
