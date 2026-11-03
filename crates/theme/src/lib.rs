@@ -229,7 +229,7 @@ impl LoadedTheme {
             Wallpaper::Image(i) => check_path(&i.source)?,
             Wallpaper::Slideshow(s) => {
                 check_path(&s.folder)?;
-                if !(s.interval >= 1.0) {
+                if s.interval.is_nan() || s.interval < 1.0 {
                     bail!("wallpaper.interval must be at least 1 second");
                 }
                 if !(0.0..=s.interval).contains(&s.transition) {
