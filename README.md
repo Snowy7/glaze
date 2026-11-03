@@ -112,15 +112,20 @@ mypaper-core        supervisor: spawn/restart, tray icon, panic hotkey, single i
 
 Measured with release builds (Ryzen laptop, AMD iGPU and NVIDIA dGPU, two 1440p monitors):
 
-| | CPU (whole machine) | Notes |
-|---|---|---|
-| Shader (Aurora), 60 fps | **0.23%** | engine binary 3.6 MB |
-| Video, 1080p30 on a 1440p screen | **0.23%** | hardware decode, zero-copy D3D11→D3D12 |
-| Image | **0%** after the first frame | drawn once per screen, then idle |
-| Slideshow | **0%** between slides | next image decoded ahead on a worker thread |
-| Everything covered, or a game fullscreen | **0.00%** | core: 0.36 MB binary, 8 MB RAM |
+Release build, one 1440p screen rendering, measured over 8 s (16-thread CPU):
 
-Memory is the open problem: the engine's working set is 150–290 MB (private ~210 MB). Almost all of
+| Theme | CPU (machine) | CPU (one core) | Notes |
+|---|---|---|---|
+| `aurora`, shader at 60 fps | **0.17%** | 2.7% | |
+| `photo`, image | **0.02%** | 0.4% | drawn once, then idle |
+| `gallery`, slideshow | **0.01%** | 0.2% | idle between slides |
+| `loop`, 1080p30 video | **0.23%** | 3.7% | hardware decode, zero-copy D3D11→D3D12 |
+| `islands`, 3D scene at 30 fps | **0.12%** | 2.0% | 4x MSAA |
+| everything covered, or a game fullscreen | **0.00%** | 0% | the engine sleeps on the message queue |
+
+Binaries: engine 4.9 MB, core 0.65 MB (8 MB RAM), Studio 3.8 MB.
+
+Memory is the open problem: the engine's working set is 290–375 MB (video is the largest, because of its decoder). Almost all of
 it belongs to the GPU drivers: AMD's shader compiler, plus NVIDIA's overlay/capture hooks (`nvspcap64`
 and its D3D11 driver), which load into *every* Direct3D process on a machine with GeForce software,
 whether or not the process uses the NVIDIA GPU. Restricting wgpu to the low-power GPU was tried and
