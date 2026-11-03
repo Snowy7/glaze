@@ -140,6 +140,8 @@ pub struct Screen {
     // Field order matters: the surface must drop before its window.
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
+    /// Whether `config` has been applied to `surface` yet (see `acquire`).
+    configured: bool,
     pub window: Window,
     /// Hidden behind a maximized/fullscreen window (or minimized in dev mode).
     pub paused: bool,
@@ -164,10 +166,10 @@ impl Screen {
             config.present_mode = wgpu::PresentMode::Mailbox;
         }
         config.desired_maximum_frame_latency = 1;
-        surface.configure(&gpu.device, &config);
         Ok(Self {
             surface,
             config,
+            configured: false,
             window,
             paused: false,
             dirty: true,
@@ -184,13 +186,21 @@ impl Screen {
         if w > 0 && h > 0 && (w, h) != self.size() {
             self.config.width = w;
             self.config.height = h;
-            self.surface.configure(&gpu.device, &self.config);
+            if self.configured {
+                self.surface.configure(&gpu.device, &self.config);
+            }
             self.dirty = true;
         }
     }
 
     /// The next swapchain image, or `None` if this frame should be skipped.
+    /// The swapchain is created here on first use, so screens whose source
+    /// draws with windows of its own (web, app) never pay for one.
     pub fn acquire(&mut self, gpu: &Gpu) -> Option<wgpu::SurfaceTexture> {
+        if !self.configured {
+            self.surface.configure(&gpu.device, &self.config);
+            self.configured = true;
+        }
         match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => Some(t),
