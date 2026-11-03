@@ -7,7 +7,7 @@
 //! [`Msg::Plugin`], stderr lines go to the log, and a writer drains a channel
 //! into stdin so the main thread never blocks on a full pipe.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, BufReader, Write};
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
@@ -44,14 +44,30 @@ fn unavailable(message: impl Into<String>) -> WidgetError {
     WidgetError::new(ErrorCode::PluginUnavailable, message)
 }
 
-/// How a plugin's JSON-RPC error reaches the widget.
+/// How a plugin's JSON-RPC error reaches the widget: the name in
+/// `error.data.code` if it's one of ours, else by the JSON-RPC code.
 fn widget_error(error: RpcError) -> WidgetError {
-    let code = match error.code {
+    let named = error.name.as_deref().and_then(ErrorCode::from_name);
+    let code = named.unwrap_or(match error.code {
         -32601 => ErrorCode::NotFound,
         -32602 => ErrorCode::InvalidParams,
         _ => ErrorCode::Internal,
-    };
+    });
     WidgetError::new(code, error.message)
+}
+
+/// What to run for a plugin's `command`: the file in its folder (`.exe`
+/// optional), else the bare name for a `PATH` lookup.
+fn program(dir: &Path, command: &str) -> std::path::PathBuf {
+    let local = dir.join(command);
+    let exe = dir.join(format!("{command}.exe"));
+    if local.is_file() {
+        local
+    } else if exe.is_file() {
+        exe
+    } else {
+        command.into()
+    }
 }
 
 enum State {
@@ -141,8 +157,8 @@ impl Drop for Job {
 
 pub struct Plugins {
     procs: HashMap<String, Process>,
-    /// `(plugin, instance, event)`.
-    subs: BTreeSet<(String, String, String)>,
+    /// `(instance, sub)` → `(plugin, event)`.
+    subs: BTreeMap<(String, String), (String, String)>,
     /// Plugins that died with listeners: when to try again, and the next delay.
     restarts: HashMap<String, (Instant, Duration)>,
     /// Old processes still shutting down while a new one took their id.
@@ -157,7 +173,7 @@ impl Plugins {
     pub fn new(waker: Waker) -> Self {
         Self {
             procs: HashMap::new(),
-            subs: BTreeSet::new(),
+            subs: BTreeMap::new(),
             restarts: HashMap::new(),
             dying: Vec::new(),
             job: None,
@@ -195,9 +211,11 @@ impl Plugins {
         None
     }
 
+    /// Subscription `sub` gets each `event` of `plugin`, starting the plugin if needed.
     pub fn subscribe(
         &mut self,
         instance: &str,
+        sub: &str,
         plugin: &str,
         event: &str,
         now: Instant,
@@ -209,18 +227,21 @@ impl Plugins {
         }
         process.idle_since = None;
         self.subs
-            .insert((plugin.into(), instance.into(), event.into()));
+            .insert((instance.into(), sub.into()), (plugin.into(), event.into()));
         Ok(())
     }
 
-    pub fn unsubscribe(&mut self, instance: &str, plugin: &str, event: &str) {
-        self.subs
-            .remove(&(plugin.into(), instance.into(), event.into()));
+    pub fn unsubscribe(&mut self, instance: &str, sub: &str) {
+        self.subs.remove(&(instance.into(), sub.into()));
     }
 
     /// Drops an instance's subscriptions (it reloaded or went away).
     pub fn forget(&mut self, instance: &str) {
-        self.subs.retain(|(_, i, _)| i != instance);
+        self.subs.retain(|(i, _), _| i != instance);
+    }
+
+    fn listened(&self, plugin: &str) -> bool {
+        self.subs.values().any(|(p, _)| p == plugin)
     }
 
     /// The process for `id`, started if it isn't running.
@@ -245,7 +266,7 @@ impl Plugins {
         let id = manifest.id.clone();
         let data_dir = crate::files::user("plugin-data")?.join(&id);
         std::fs::create_dir_all(&data_dir)?;
-        let mut child = Command::new(dir.join(&manifest.command))
+        let mut child = Command::new(program(dir, &manifest.command))
             .args(&manifest.args)
             .current_dir(dir)
             .stdin(Stdio::piped())
@@ -351,7 +372,7 @@ impl Plugins {
             let stopping = matches!(process.state, State::Stopping { .. });
             if !stopping {
                 log::warn!("plugin {id} exited unexpectedly");
-                if self.subs.iter().any(|(p, ..)| p == id) {
+                if self.listened(id) {
                     let delay = self.restarts.get(id).map_or(RESTART_DELAY, |(_, d)| *d);
                     self.restarts.insert(
                         id.to_owned(),
@@ -393,14 +414,13 @@ impl Plugins {
                 if self.held || !process.manifest.events.contains(&event) {
                     return Vec::new();
                 }
-                let data = json!({ "plugin": id, "event": event, "data": data });
                 self.subs
                     .iter()
-                    .filter(|(p, _, e)| p == id && *e == event)
-                    .map(|(_, instance, _)| Out::Event {
+                    .filter(|(_, (p, e))| p == id && *e == event)
+                    .map(|((instance, sub), _)| Out::Event {
                         instance: instance.clone(),
-                        event: "plugin",
-                        data: data.clone(),
+                        event: "sub",
+                        data: json!({ "sub": sub, "value": data }),
                     })
                     .collect()
             }
@@ -418,7 +438,7 @@ impl Plugins {
     fn users(&self, id: &str, process: &Process) -> usize {
         process.pending.len()
             + process.queued.len()
-            + self.subs.iter().filter(|(p, ..)| p == id).count()
+            + self.subs.values().filter(|(p, _)| p == id).count()
     }
 
     /// Timeouts, idle stops, kills after the grace period, and restarts.
@@ -474,7 +494,7 @@ impl Plugins {
             .map(|(id, _)| id.clone())
             .collect();
         for id in due {
-            if self.subs.iter().any(|(p, ..)| *p == id)
+            if self.listened(&id)
                 && !self.held
                 && let Err(e) = self.running(&id, now)
             {
@@ -500,7 +520,7 @@ impl Plugins {
         let restarts = self
             .restarts
             .iter()
-            .filter(|(id, _)| !self.held && self.subs.iter().any(|(p, ..)| p == *id))
+            .filter(|(id, _)| !self.held && self.listened(id))
             .map(|(_, (at, _))| Some(*at));
         let dying = self.dying.iter().map(|(_, deadline)| Some(*deadline));
         per_process.chain(restarts).chain(dying).flatten().min()
@@ -559,15 +579,29 @@ mod tests {
 
     #[test]
     fn plugin_errors_map_to_widget_codes() {
-        let error = |code| {
+        let error = |code, name: Option<&str>| {
             widget_error(RpcError {
                 code,
                 message: "m".into(),
+                name: name.map(str::to_owned),
             })
             .code
         };
-        assert_eq!(error(-32601), ErrorCode::NotFound);
-        assert_eq!(error(-32602), ErrorCode::InvalidParams);
-        assert_eq!(error(-32000), ErrorCode::Internal);
+        assert_eq!(error(-32601, None), ErrorCode::NotFound);
+        assert_eq!(error(-32602, None), ErrorCode::InvalidParams);
+        assert_eq!(error(-32000, None), ErrorCode::Internal);
+        // error.data.code wins when it's one of ours.
+        assert_eq!(error(-32000, Some("NotFound")), ErrorCode::NotFound);
+        assert_eq!(error(-32601, Some("Bogus")), ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn commands_resolve_in_the_folder_then_on_path() {
+        let dir = crate::files::temp_dir("plugin-command");
+        std::fs::write(dir.join("weather.exe"), b"").unwrap();
+        assert_eq!(program(&dir, "weather.exe"), dir.join("weather.exe"));
+        assert_eq!(program(&dir, "weather"), dir.join("weather.exe"));
+        assert_eq!(program(&dir, "python"), std::path::PathBuf::from("python"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

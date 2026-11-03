@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit && vite build && vite build -c vite.bridge.config.ts",
+    "build": "tsc --noEmit && vite build && vite build -c vite.harden.config.ts",
     "test": "vitest run"
   },
   "devDependencies": {

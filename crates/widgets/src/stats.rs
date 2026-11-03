@@ -324,7 +324,8 @@ impl Sampler {
 
 struct Sub {
     instance: String,
-    sub: u64,
+    /// The widget's own id for the subscription.
+    sub: String,
     interval: Duration,
     due: Instant,
 }
@@ -333,15 +334,15 @@ struct Sub {
 pub enum Delivery {
     /// The answer to a `system.stats` call.
     Reply(Target, SystemStats),
-    /// A `system.stats` event for subscription `sub`.
+    /// A sample for subscription `sub`.
     Event {
         instance: String,
-        sub: u64,
+        sub: String,
         stats: SystemStats,
     },
 }
 
-/// Every `system.stats` request and subscription, driven by one timer.
+/// Every `system.stats` request and `system` subscription, driven by one timer.
 #[derive(Default)]
 pub struct Stats {
     sampler: Option<Sampler>,
@@ -349,7 +350,6 @@ pub struct Stats {
     ready_at: Option<Instant>,
     subs: Vec<Sub>,
     once: Vec<Target>,
-    next_sub: u64,
     held: bool,
 }
 
@@ -374,23 +374,30 @@ impl Stats {
         self.wake(now);
     }
 
-    /// Starts a subscription and returns its id.
-    pub fn subscribe(&mut self, instance: &str, interval: Duration, now: Instant) -> u64 {
-        self.next_sub += 1;
+    /// Starts (or replaces) subscription `sub`: a sample right away, then
+    /// one per `interval`.
+    pub fn subscribe(&mut self, instance: &str, sub: &str, interval: Duration, now: Instant) {
+        self.unsubscribe(instance, sub);
         self.subs.push(Sub {
             instance: instance.to_owned(),
-            sub: self.next_sub,
+            sub: sub.to_owned(),
             interval,
             due: now,
         });
         self.wake(now);
-        self.next_sub
     }
 
-    pub fn unsubscribe(&mut self, instance: &str, sub: u64) {
+    pub fn unsubscribe(&mut self, instance: &str, sub: &str) {
         self.subs
             .retain(|s| !(s.instance == instance && s.sub == sub));
         self.sleep_if_idle();
+    }
+
+    /// Makes an instance's subscriptions due now (it just became visible).
+    pub fn refresh(&mut self, instance: &str, now: Instant) {
+        for sub in self.subs.iter_mut().filter(|s| s.instance == instance) {
+            sub.due = now;
+        }
     }
 
     /// Forgets everything an instance asked for (it reloaded or went away).
@@ -435,7 +442,7 @@ impl Stats {
             sub.due = now + sub.interval;
             out.push(Delivery::Event {
                 instance: sub.instance.clone(),
-                sub: sub.sub,
+                sub: sub.sub.clone(),
                 stats: stats.clone(),
             });
         }
@@ -508,8 +515,8 @@ mod tests {
         let now = Instant::now();
         let mut stats = Stats::default();
         assert_eq!(stats.deadline(), None, "nothing to do: no timer");
-        let a = stats.subscribe("a-1", Duration::from_secs(1), now);
-        stats.subscribe("b-1", Duration::from_secs(5), now);
+        stats.subscribe("a-1", "s1", Duration::from_secs(1), now);
+        stats.subscribe("b-1", "s1", Duration::from_secs(5), now);
         stats.request(target("c-1"), now);
         assert_eq!(stats.deadline(), Some(now + WARMUP));
         assert!(stats.tick(now).is_empty(), "not warm yet");
@@ -525,7 +532,7 @@ mod tests {
             Some(now + WARMUP + Duration::from_secs(1))
         );
 
-        stats.unsubscribe("a-1", a);
+        stats.unsubscribe("a-1", "s1");
         stats.forget("b-1");
         assert_eq!(stats.deadline(), None);
         assert!(
@@ -535,10 +542,27 @@ mod tests {
     }
 
     #[test]
+    fn subscriptions_are_per_instance_and_refresh_on_demand() {
+        let now = Instant::now();
+        let mut stats = Stats::default();
+        stats.subscribe("a-1", "s1", Duration::from_secs(5), now);
+        stats.subscribe("a-1", "s1", Duration::from_secs(5), now); // replaces, not doubles
+        stats.subscribe("b-1", "s1", Duration::from_secs(5), now);
+        assert_eq!(stats.tick(now + WARMUP).len(), 2);
+        let later = now + WARMUP + Duration::from_secs(1);
+        assert!(stats.tick(later).is_empty());
+        stats.refresh("a-1", later);
+        let refreshed = stats.tick(later);
+        assert!(
+            matches!(refreshed.as_slice(), [Delivery::Event { instance, .. }] if instance == "a-1")
+        );
+    }
+
+    #[test]
     fn holding_pauses_everything() {
         let now = Instant::now();
         let mut stats = Stats::default();
-        stats.subscribe("a-1", Duration::from_secs(1), now);
+        stats.subscribe("a-1", "s1", Duration::from_secs(1), now);
         stats.set_held(true, now);
         assert_eq!(stats.deadline(), None);
         stats.set_held(false, now);

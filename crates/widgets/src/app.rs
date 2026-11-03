@@ -41,10 +41,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
-use crate::bridge::{ErrorCode, FromShell, Method, Out, Reply, Target, WidgetError};
+use crate::bridge::{ErrorCode, FromShell, Method, Out, Reply, Target, Topic, WidgetError};
 use crate::layout::{self, Grid, Layout, Placed, RectF};
 use crate::manifest::WidgetManifest;
 use crate::media::Media;
+use crate::net::WidgetNet;
 use crate::plugins::Plugins;
 use crate::registry::{self, Registry};
 use crate::stats::{Delivery, Stats};
@@ -69,10 +70,10 @@ const SETTLE_WIDGETS: Duration = Duration::from_millis(250);
 const SETTLE_SHELL: Duration = Duration::from_millis(500);
 const RETRY_WEBVIEW: Duration = Duration::from_secs(30);
 
-/// The built shell: its folder and the bridge script injected into widget frames.
+/// The built shell: its folder and the hardening script injected into every frame.
 struct Shell {
     dir: PathBuf,
-    bridge: String,
+    harden: String,
 }
 
 fn load_shell() -> Option<Shell> {
@@ -80,10 +81,10 @@ fn load_shell() -> Option<Shell> {
         log::error!("widgets/shell/dist not found; build it with `pnpm -C widgets/shell build`");
         return None;
     };
-    match std::fs::read_to_string(dir.join("bridge.js")) {
-        Ok(bridge) => Some(Shell { dir, bridge }),
+    match std::fs::read_to_string(dir.join("harden.js")) {
+        Ok(harden) => Some(Shell { dir, harden }),
         Err(e) => {
-            log::error!("{}: {e}", dir.join("bridge.js").display());
+            log::error!("{}: {e}", dir.join("harden.js").display());
             None
         }
     }
@@ -154,12 +155,16 @@ pub struct App {
     covered: HashMap<String, bool>,
     editing: bool,
     devtools: bool,
+    /// `MYPAPER_WIDGETS_IGNORE_COVERED=1`: keep covered monitors awake (for
+    /// capturing them in tests).
+    ignore_covered: bool,
     storage: Storage,
     stats: Stats,
     media: Media,
     plugins: Plugins,
     theme: ThemeInfo,
-    theme_subs: BTreeSet<String>,
+    /// `(instance, sub)` of every `theme` subscription.
+    theme_subs: BTreeSet<(String, String)>,
     window_events: WindowEvents,
     timers: Timers,
     changed_widgets: BTreeSet<String>,
@@ -253,6 +258,8 @@ impl App {
             covered: HashMap::new(),
             editing: false,
             devtools,
+            ignore_covered: std::env::var_os("MYPAPER_WIDGETS_IGNORE_COVERED")
+                .is_some_and(|v| v == "1"),
             storage: Storage::new(crate::files::user("widget-data")?),
             stats: Stats::default(),
             media: Media::new(waker.clone()),
@@ -411,11 +418,7 @@ impl App {
                     sub,
                     stats,
                 } => {
-                    self.emit(
-                        &instance,
-                        "system.stats",
-                        json!({ "sub": sub, "stats": stats }),
-                    );
+                    self.emit_sub(&instance, &sub, json!(stats));
                 }
             }
         }
@@ -472,9 +475,8 @@ impl App {
         let theme = theme::current();
         if theme != self.theme {
             self.theme = theme;
-            let data = json!(self.theme);
-            for instance in self.theme_subs.clone() {
-                self.emit(&instance, "theme", data.clone());
+            for (instance, sub) in &self.theme_subs {
+                self.emit_sub(instance, sub, json!(self.theme));
             }
         }
     }
@@ -488,13 +490,15 @@ impl App {
             self.icon_cell = icon_cell();
             self.reconcile();
         }
-        let rects: Vec<Rect> = self.monitors.iter().map(|m| m.rect).collect();
-        self.covered = self
-            .monitors
-            .iter()
-            .zip(covered_monitors(&rects))
-            .map(|(monitor, covered)| (monitor.device.clone(), covered))
-            .collect();
+        if !self.ignore_covered {
+            let rects: Vec<Rect> = self.monitors.iter().map(|m| m.rect).collect();
+            self.covered = self
+                .monitors
+                .iter()
+                .zip(covered_monitors(&rects))
+                .map(|(monitor, covered)| (monitor.device.clone(), covered))
+                .collect();
+        }
         for surface in &self.surfaces {
             self.host.keep_above_icons(surface.hwnd());
         }
@@ -526,6 +530,14 @@ impl App {
             } else {
                 self.surfaces[index].set_hidden(false);
                 self.push_state(index);
+                // `system` subscribers get a sample as soon as they're visible again.
+                let now = Instant::now();
+                let device = self.surfaces[index].monitor.device.clone();
+                for instance in &self.layout.instances {
+                    if self.shown_on(instance).as_deref() == Some(device.as_str()) {
+                        self.stats.refresh(&instance.instance, now);
+                    }
+                }
             }
         }
     }
@@ -732,16 +744,10 @@ impl App {
                 return log::error!("creating a WebView: {e}");
             }
         };
-        let widgets = self.mappings();
-        let mapped: Vec<(String, &Path)> = widgets
-            .iter()
-            .map(|(id, dir)| (id.clone(), dir.as_path()))
-            .collect();
         let setup = Setup {
             env,
             shell_dir: &shell.dir,
-            bridge: &shell.bridge,
-            widgets: &mapped,
+            harden: &shell.harden,
             devtools: self.devtools,
             policy: &self.policy,
             events: &self.events,
@@ -749,14 +755,6 @@ impl App {
         if let Err(e) = self.surfaces[index].attach(controller, &setup) {
             log::error!("setting up a WebView: {e:#}");
         }
-    }
-
-    fn mappings(&self) -> Vec<(String, PathBuf)> {
-        self.registry
-            .widgets
-            .iter()
-            .map(|(id, installed)| (id.clone(), installed.dir.clone()))
-            .collect()
     }
 
     // --- State for the shell --------------------------------------------------
@@ -856,6 +854,7 @@ impl App {
                 self.surfaces[index].ready = true;
                 self.push_state(index);
             }
+            FromShell::Hello { instance } => self.forget(&instance),
             FromShell::Call {
                 instance,
                 id,
@@ -912,13 +911,6 @@ impl App {
         let internal = |e: anyhow::Error| WidgetError::new(ErrorCode::Internal, format!("{e:#}"));
         let done = Some(Ok(Value::Null));
         match method {
-            Method::Hello => {
-                self.forget(instance);
-                done
-            }
-            Method::SettingsGet => Some(Ok(Value::Object(
-                manifest.resolve_settings(&saved.settings),
-            ))),
             Method::StorageGet { key } => Some(self.storage.get(instance, &key).map_err(internal)),
             Method::StorageSet { key, value } => Some(
                 self.storage
@@ -930,27 +922,9 @@ impl App {
                 self.stats.request(target.clone(), now);
                 None
             }
-            Method::SystemSubscribe { interval_ms } => {
-                let sub = self
-                    .stats
-                    .subscribe(instance, Duration::from_millis(interval_ms), now);
-                Some(Ok(json!({ "sub": sub })))
-            }
-            Method::SystemUnsubscribe { sub } => {
-                self.stats.unsubscribe(instance, sub);
-                done
-            }
             Method::MediaCurrent => {
                 self.media.current(target.clone());
                 None
-            }
-            Method::MediaSubscribe => {
-                self.media.subscribe(instance);
-                done
-            }
-            Method::MediaUnsubscribe => {
-                self.media.unsubscribe(instance);
-                done
             }
             Method::MediaControl { action } => {
                 self.media.control(target.clone(), action);
@@ -961,15 +935,7 @@ impl App {
                 None
             }
             Method::ThemeCurrent => Some(Ok(json!(self.theme))),
-            Method::ThemeSubscribe => {
-                self.theme_subs.insert(instance.to_owned());
-                done
-            }
-            Method::ThemeUnsubscribe => {
-                self.theme_subs.remove(instance);
-                done
-            }
-            Method::PluginCall {
+            Method::Plugin {
                 plugin,
                 method,
                 params,
@@ -980,16 +946,39 @@ impl App {
                 self.deliver(out.into_iter().collect());
                 None
             }
-            Method::PluginSubscribe { plugin, event } => Some(
-                self.plugins
-                    .subscribe(instance, &plugin, &event, now)
-                    .map(|()| Value::Null),
-            ),
-            Method::PluginUnsubscribe { plugin, event } => {
-                self.plugins.unsubscribe(instance, &plugin, &event);
+            Method::Subscribe { sub, topic } => {
+                self.unsubscribe(instance, &sub);
+                match topic {
+                    Topic::System { interval_ms } => {
+                        let interval = Duration::from_millis(interval_ms);
+                        self.stats.subscribe(instance, &sub, interval, now);
+                    }
+                    Topic::Media => self.media.subscribe(instance, &sub),
+                    Topic::Theme => {
+                        self.theme_subs.insert((instance.to_owned(), sub));
+                    }
+                    Topic::Plugin { plugin, event } => {
+                        let subscribed =
+                            self.plugins.subscribe(instance, &sub, &plugin, &event, now);
+                        return Some(subscribed.map(|()| Value::Null));
+                    }
+                }
+                done
+            }
+            Method::Unsubscribe { sub } => {
+                self.unsubscribe(instance, &sub);
                 done
             }
         }
+    }
+
+    /// Ends subscription `sub`, whatever its topic.
+    fn unsubscribe(&mut self, instance: &str, sub: &str) {
+        self.stats.unsubscribe(instance, sub);
+        self.media.unsubscribe(instance, sub);
+        self.plugins.unsubscribe(instance, sub);
+        self.theme_subs
+            .remove(&(instance.to_owned(), sub.to_owned()));
     }
 
     /// Drops every subscription an instance holds.
@@ -997,7 +986,7 @@ impl App {
         self.stats.forget(instance);
         self.media.forget(instance);
         self.plugins.forget(instance);
-        self.theme_subs.remove(instance);
+        self.theme_subs.retain(|(i, _)| i != instance);
     }
 
     fn deliver(&mut self, out: Vec<Out>) {
@@ -1028,13 +1017,23 @@ impl App {
         self.surfaces[index].post(&message.to_string());
     }
 
+    /// Sends an event to an instance's frame. Hidden monitors get nothing:
+    /// their WebView is suspended, and their widgets are told so.
     fn emit(&self, instance: &str, event: &str, data: Value) {
         let Some(index) = self.surface_of(instance) else {
             return;
         };
+        if self.surfaces[index].hidden {
+            return;
+        }
         let message =
             json!({ "type": "event", "instance": instance, "event": event, "data": data });
         self.surfaces[index].post(&message.to_string());
+    }
+
+    /// A subscription value: `{ sub, value }` as a `sub` event.
+    fn emit_sub(&self, instance: &str, sub: &str, value: Value) {
+        self.emit(instance, "sub", json!({ "sub": sub, "value": value }));
     }
 
     // --- Layout edits -----------------------------------------------------------
@@ -1049,7 +1048,6 @@ impl App {
         let monitor = self.surfaces[index].monitor.clone();
         let grid = self.grid_for(&monitor);
         let mut next = self.layout.clone();
-        let mut settings_changed = None;
         let mut removed = None;
         let applied = (|| -> Result<()> {
             let manifest_of = |widget: &str| -> Result<WidgetManifest> {
@@ -1105,12 +1103,13 @@ impl App {
                         .registry
                         .manifest_on_disk(&saved.widget)
                         .context("can't read the widget's manifest")?;
-                    manifest.check_settings(&values)?;
-                    next.set_settings(&instance, values)?;
-                    settings_changed = Some((instance, manifest));
-                    Ok(())
+                    let values = manifest.check_settings(values)?;
+                    next.set_settings(&instance, values)
                 }
-                FromShell::Ready | FromShell::Call { .. } | FromShell::Edit { .. } => Ok(()),
+                FromShell::Ready
+                | FromShell::Hello { .. }
+                | FromShell::Call { .. }
+                | FromShell::Edit { .. } => Ok(()),
             }
         })();
         if let Err(e) = applied.and_then(|()| next.save(&self.layout_path)) {
@@ -1121,12 +1120,7 @@ impl App {
         if let Some(instance) = removed {
             self.forget(&instance);
         }
-        if let Some((instance, manifest)) = settings_changed
-            && let Some(saved) = self.layout.get(&instance)
-        {
-            let resolved = manifest.resolve_settings(&saved.settings);
-            self.emit(&instance, "settings", Value::Object(resolved));
-        }
+        // The new state carries the settings; the shell pushes them to the widget.
         self.reconcile();
     }
 
@@ -1139,33 +1133,13 @@ impl App {
                     return; // our own save coming back
                 }
                 log::info!("widgets.json changed");
-                let old = std::mem::replace(&mut self.layout, layout);
-                self.emit_settings_changes(&old);
+                self.layout = layout;
                 self.reconcile();
             }
             Err(e) => {
                 log::error!("{e:#}\n(keeping the last good layout)");
                 self.layout_error = Some(format!("{e:#}"));
                 self.push_all();
-            }
-        }
-    }
-
-    /// Tells instances whose resolved settings differ from `old`.
-    fn emit_settings_changes(&self, old: &Layout) {
-        for instance in &self.layout.instances {
-            let Some(before) = old
-                .get(&instance.instance)
-                .filter(|b| b.widget == instance.widget)
-            else {
-                continue;
-            };
-            let Some(installed) = self.registry.get(&instance.widget) else {
-                continue;
-            };
-            let now = installed.manifest.resolve_settings(&instance.settings);
-            if now != installed.manifest.resolve_settings(&before.settings) {
-                self.emit(&instance.instance, "settings", Value::Object(now));
             }
         }
     }
@@ -1178,10 +1152,11 @@ impl App {
             .widgets
             .iter()
             .map(|(id, installed)| {
-                (
-                    id.clone(),
-                    installed.manifest.network_origins().cloned().collect(),
-                )
+                let net = WidgetNet {
+                    dir: installed.dir.clone(),
+                    origins: installed.manifest.network_origins().cloned().collect(),
+                };
+                (id.clone(), net)
             })
             .collect();
         *self.policy.borrow_mut() = policy;
@@ -1190,17 +1165,7 @@ impl App {
     fn rescan_widgets(&mut self) {
         self.roots = registry::widget_roots();
         self.registry = Registry::scan(&self.roots);
-        self.update_policy();
-        let widgets = self.mappings();
-        let mapped: Vec<(String, &Path)> = widgets
-            .iter()
-            .map(|(id, dir)| (id.clone(), dir.as_path()))
-            .collect();
-        for surface in &mut self.surfaces {
-            if let Err(e) = surface.sync_mappings(&mapped) {
-                log::warn!("updating widget folders: {e:#}");
-            }
-        }
+        self.update_policy(); // the network filter serves widget files from this
         // Fresh manifests first, so reloaded frames get them.
         self.reconcile();
         for widget in std::mem::take(&mut self.changed_widgets) {
@@ -1218,7 +1183,7 @@ impl App {
         let Some(shell) = load_shell() else { return };
         log::info!("the shell was rebuilt; reloading it");
         for surface in &mut self.surfaces {
-            if let Err(e) = surface.replace_bridge(&shell.bridge, &self.events) {
+            if let Err(e) = surface.replace_script(&shell.harden, &self.events) {
                 log::warn!("reloading the shell: {e:#}");
             }
         }

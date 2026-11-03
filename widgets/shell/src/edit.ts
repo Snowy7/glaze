@@ -213,8 +213,7 @@ export function createEditor({ root, frames, send }: Options): Editor {
 
   function openSettings(slot: Slot) {
     const inst = state?.instances.find((i) => i.instance === slot.instance);
-    const specs = slot.manifest.settings ?? [];
-    if (!inst || specs.length === 0) return;
+    const specs = slot.manifest.settings ?? [];    if (!inst || specs.length === 0) return;
     const form: SettingsForm = buildSettingsForm(specs, inst.settings, (key, value) =>
       send({ type: "settings", instance: slot.instance, values: { [key]: value } }),
     );
@@ -476,6 +475,14 @@ export function createEditor({ root, frames, send }: Options): Editor {
     root.style.setProperty("--ww", `${work.width}px`);
     root.style.setProperty("--wh", `${work.height}px`);
     renderGridMap(next.grid);
+
+    // The toolbar sits at the top of the work area, or at the bottom when a widget is up there.
+    const bar = { x: work.x + work.width / 2 - 130, y: work.y, width: 260, height: 60 };
+    const under = next.instances.some((inst) => {
+      const r = rectToPx(next.grid, inst);
+      return r.x < bar.x + bar.width && bar.x < r.x + r.width && r.y < bar.y + bar.height && bar.y < r.y + r.height;
+    });
+    toolbar.classList.toggle("bottom", under);
 
     banner.textContent = next.error ?? "";
     banner.classList.toggle("on", Boolean(next.error));

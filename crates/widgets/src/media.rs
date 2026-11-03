@@ -10,7 +10,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use windows::Foundation::TypedEventHandler;
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession as Session,
@@ -59,7 +59,8 @@ enum Cmd {
 /// The host side: who listens, who waits, and the worker if one runs.
 pub struct Media {
     worker: Option<Sender<Cmd>>,
-    subs: BTreeSet<String>,
+    /// `(instance, sub)`.
+    subs: BTreeSet<(String, String)>,
     pending: HashMap<u64, Target>,
     next_token: u64,
     held: bool,
@@ -109,18 +110,20 @@ impl Media {
         self.ask(target, |token| Cmd::Control(token, action));
     }
 
-    pub fn subscribe(&mut self, instance: &str) {
-        self.subs.insert(instance.to_owned());
+    /// Subscription `sub` gets every change from now on.
+    pub fn subscribe(&mut self, instance: &str, sub: &str) {
+        self.subs.insert((instance.to_owned(), sub.to_owned()));
         self.worker();
     }
 
-    pub fn unsubscribe(&mut self, instance: &str) {
-        self.subs.remove(instance);
+    pub fn unsubscribe(&mut self, instance: &str, sub: &str) {
+        self.subs.remove(&(instance.to_owned(), sub.to_owned()));
         self.stop_if_idle();
     }
 
     pub fn forget(&mut self, instance: &str) {
-        self.unsubscribe(instance);
+        self.subs.retain(|(i, _)| i != instance);
+        self.stop_if_idle();
     }
 
     /// The worker answered (`token`) or saw a change (`None`).
@@ -139,10 +142,10 @@ impl Media {
                 Ok(state) if !self.held => self
                     .subs
                     .iter()
-                    .map(|instance| Out::Event {
+                    .map(|(instance, sub)| Out::Event {
                         instance: instance.clone(),
-                        event: "media",
-                        data: state.clone(),
+                        event: "sub",
+                        data: json!({ "sub": sub, "value": state }),
                     })
                     .collect(),
                 Ok(_) => Vec::new(),
@@ -279,7 +282,9 @@ impl Worker {
 
     fn serve(mut self, rx: &Receiver<Cmd>, waker: &Waker) {
         let report = |token, result| waker.send(Msg::Media { token, result });
-        let mut dirty = true; // subscribers get the state right away
+        // Subscribers hear about changes only: what's playing now is the baseline.
+        self.sent = Some((self.state(), Instant::now()));
+        let mut dirty = false;
         loop {
             let command = if dirty {
                 match rx.recv_timeout(SETTLE) {

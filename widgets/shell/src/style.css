@@ -367,6 +367,11 @@ button {
   border-radius: 14px;
 }
 
+/* A widget sits where the toolbar would: move to the bottom of the work area. */
+.toolbar.bottom {
+  top: calc(var(--wy, 0px) + var(--wh, 0px) - 54px);
+}
+
 .btn {
   height: 32px;
   padding: 0 14px;
@@ -568,6 +573,37 @@ button {
   display: grid;
   gap: 12px;
   padding: 4px 8px 8px;
+  max-height: min(64vh, 520px);
+  overflow-y: auto;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+}
+
+.list-row {
+  display: grid;
+  gap: 8px;
+  padding: 6px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.list-row .icon-btn {
+  width: 20px;
+  height: 20px;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn:disabled:hover {
+  background: var(--raised);
+  border-color: var(--line);
 }
 
 .field {

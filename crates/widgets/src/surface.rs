@@ -6,7 +6,7 @@
 //! network filter, which must answer synchronously (see `net.rs`).
 
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -25,6 +25,7 @@ use windows::Win32::Graphics::Gdi::{
     CombineRgn, CreateRectRgn, DeleteObject, RGN_OR, SetWindowRgn,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Shell::SHCreateMemStream;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GWLP_USERDATA, GetWindowLongPtrW, IDC_ARROW,
     LoadCursorW, PostQuitMessage, RegisterClassExW, SW_HIDE, SW_SHOWNA, SetWindowLongPtrW,
@@ -33,7 +34,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{BOOL, HSTRING, Interface, PCWSTR, PWSTR, w};
 
-use crate::net::{self, Origin, Verdict};
+use crate::net::{self, Origin, Party, Verdict, WidgetNet};
 
 pub const SHELL_URL: &str = "https://shell.mypaper/index.html";
 const SHELL_PREFIX: &str = "https://shell.mypaper/";
@@ -70,14 +71,13 @@ pub enum WebEvent {
 pub type Events = Rc<RefCell<VecDeque<WebEvent>>>;
 
 /// Which origins each widget may fetch from: read by every network filter.
-pub type NetPolicy = Rc<RefCell<HashMap<String, Vec<Origin>>>>;
+pub type NetPolicy = Rc<RefCell<HashMap<String, WidgetNet>>>;
 
 /// Everything a new WebView needs from the host.
 pub struct Setup<'a> {
     pub env: &'a ICoreWebView2Environment,
     pub shell_dir: &'a Path,
-    pub bridge: &'a str,
-    pub widgets: &'a [(String, &'a Path)],
+    pub harden: &'a str,
     pub devtools: bool,
     pub policy: &'a NetPolicy,
     pub events: &'a Events,
@@ -182,7 +182,7 @@ fn filter_request(
             policy
                 .borrow()
                 .get(widget)
-                .is_some_and(|origins| origins.contains(target))
+                .is_some_and(|net| net.origins.contains(target))
         });
         if verdict == Verdict::Block {
             let by = from
@@ -195,10 +195,53 @@ fn filter_request(
                 w!("Forbidden"),
                 w!("Content-Type: text/plain"),
             )?;
+            return args.SetResponse(&response);
+        }
+        log::debug!("allowed {url} (from {from:?})");
+        // Widget hosts aren't on the network: we serve them, CSP included.
+        if let Some(Party::Widget(widget)) = Origin::of_url(&url).as_ref().map(Origin::party) {
+            let (status, reason, headers, body) = widget_file(policy, widget, &url);
+            let stream = SHCreateMemStream(Some(&body));
+            let response = env.CreateWebResourceResponse(
+                stream.as_ref(),
+                status,
+                &HSTRING::from(reason),
+                &HSTRING::from(headers),
+            )?;
             args.SetResponse(&response)?;
         }
     }
     Ok(())
+}
+
+/// A file from a widget's folder as `(status, reason, headers, body)`. Every
+/// response carries the widget's Content-Security-Policy, so documents and
+/// the workers they start can only connect where the manifest says.
+fn widget_file(
+    policy: &NetPolicy,
+    widget: &str,
+    url: &str,
+) -> (i32, &'static str, String, Vec<u8>) {
+    let policy = policy.borrow();
+    let found = policy.get(widget).and_then(|net| {
+        let path = net::widget_path(url)?;
+        let body = std::fs::read(net.dir.join(&path)).ok()?;
+        Some((net, path, body))
+    });
+    let Some((net, path, body)) = found else {
+        return (
+            404,
+            "Not Found",
+            "Content-Type: text/plain".into(),
+            Vec::new(),
+        );
+    };
+    let headers = format!(
+        "Content-Type: {}\r\nContent-Security-Policy: {}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-cache",
+        net::content_type(&path),
+        net::csp(&net.origins)
+    );
+    (200, "OK", headers, body)
 }
 
 struct Web {
@@ -219,7 +262,6 @@ pub struct Surface {
     pub hidden: bool,
     script: Option<String>,
     navigated: bool,
-    mapped: BTreeSet<String>,
 }
 
 impl Surface {
@@ -252,7 +294,6 @@ impl Surface {
             hidden: false,
             script: None,
             navigated: false,
-            mapped: BTreeSet::new(),
         };
         surface.set_region(&[]);
         host.place_above_icons(hwnd, surface.monitor.rect)?;
@@ -290,8 +331,9 @@ impl Surface {
     }
 
     /// Configures a new WebView: transparent, locked down, filtered, with
-    /// the shell and widget folders mapped and the bridge injected. The shell
-    /// is navigated once the bridge script is registered.
+    /// the shell folder mapped (widget hosts are served by the network
+    /// filter) and the hardening script injected.
+    /// The shell is navigated once that script is registered.
     pub fn attach(&mut self, controller: ICoreWebView2Controller, setup: &Setup) -> Result<()> {
         self.creating = false;
         // SAFETY: COM calls on the live controller and WebView we were just given.
@@ -435,8 +477,7 @@ impl Surface {
                 webview,
             });
         }
-        self.sync_mappings(setup.widgets)?;
-        self.add_bridge(setup.bridge, setup.events)?;
+        self.add_script(setup.harden, setup.events)?;
         if self.hidden {
             self.hidden = false;
             self.set_hidden(true);
@@ -453,37 +494,9 @@ impl Surface {
         }
     }
 
-    /// Maps `<id>.widget.mypaper` for every installed widget, and unmaps the gone ones.
-    pub fn sync_mappings(&mut self, widgets: &[(String, &Path)]) -> Result<()> {
-        let Some(web) = &self.web else { return Ok(()) };
-        let webview3: ICoreWebView2_3 = web.webview.cast()?;
-        let wanted: BTreeSet<String> = widgets.iter().map(|(id, _)| id.clone()).collect();
-        for gone in self.mapped.difference(&wanted) {
-            // SAFETY: COM call on a live WebView.
-            unsafe {
-                webview3.ClearVirtualHostNameToFolderMapping(&HSTRING::from(format!(
-                    "{gone}{}",
-                    net::WIDGET_SUFFIX
-                )))
-            }?;
-        }
-        for (id, dir) in widgets {
-            // SAFETY: COM call on a live WebView; re-mapping replaces the folder.
-            unsafe {
-                webview3.SetVirtualHostNameToFolderMapping(
-                    &HSTRING::from(format!("{id}{}", net::WIDGET_SUFFIX)),
-                    &HSTRING::from(crate::files::plain(dir)),
-                    COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS,
-                )
-            }?;
-        }
-        self.mapped = wanted;
-        Ok(())
-    }
-
-    /// Registers the bridge script for every future document; the shell
+    /// Registers the hardening script for every future document; the shell
     /// (re)loads once that's done (see [`on_script_added`](Self::on_script_added)).
-    fn add_bridge(&mut self, bridge: &str, events: &Events) -> Result<()> {
+    fn add_script(&mut self, script: &str, events: &Events) -> Result<()> {
         let Some(web) = &self.web else { return Ok(()) };
         let (surface, events) = (self.id, events.clone());
         let handler = AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(
@@ -498,13 +511,13 @@ impl Surface {
         // SAFETY: COM call on a live WebView with a handler that outlives it.
         unsafe {
             web.webview
-                .AddScriptToExecuteOnDocumentCreated(&HSTRING::from(bridge), &handler)
+                .AddScriptToExecuteOnDocumentCreated(&HSTRING::from(script), &handler)
         }?;
         Ok(())
     }
 
-    /// Swaps in a rebuilt bridge script and reloads the shell.
-    pub fn replace_bridge(&mut self, bridge: &str, events: &Events) -> Result<()> {
+    /// Swaps in a rebuilt hardening script and reloads the shell.
+    pub fn replace_script(&mut self, script: &str, events: &Events) -> Result<()> {
         if let (Some(web), Some(id)) = (&self.web, self.script.take()) {
             // SAFETY: COM call on a live WebView; `id` came from AddScriptToExecuteOnDocumentCreated.
             unsafe {
@@ -512,13 +525,13 @@ impl Surface {
                     .RemoveScriptToExecuteOnDocumentCreated(&HSTRING::from(id))
             }?;
         }
-        self.add_bridge(bridge, events)
+        self.add_script(script, events)
     }
 
     pub fn on_script_added(&mut self, id: Option<String>) {
         let Some(web) = &self.web else { return };
         let Some(id) = id else {
-            return log::error!("couldn't register the widget bridge script");
+            return log::error!("couldn't register the hardening script");
         };
         self.script = Some(id);
         self.ready = false;
@@ -555,7 +568,6 @@ impl Surface {
         self.ready = false;
         self.navigated = false;
         self.script = None;
-        self.mapped.clear();
     }
 
     /// Sends a JSON message to the shell page.

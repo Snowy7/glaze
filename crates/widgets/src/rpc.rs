@@ -35,6 +35,8 @@ pub fn method_not_found(id: &Value) -> String {
 pub struct RpcError {
     pub code: i64,
     pub message: String,
+    /// `error.data.code`: the mypaper error name the plugin chose, if any.
+    pub name: Option<String>,
 }
 
 /// One line from a plugin.
@@ -92,6 +94,10 @@ pub fn parse(line: &str) -> Incoming {
                         .and_then(Value::as_str)
                         .unwrap_or("plugin error")
                         .to_owned(),
+                    name: error
+                        .pointer("/data/code")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
                 }),
                 (Some(result), None) => Ok(result.clone()),
                 (None, None) => Ok(Value::Null),
@@ -205,10 +211,16 @@ mod tests {
                 id: 3,
                 outcome: Err(RpcError {
                     code: -32601,
-                    message: "nope".into()
+                    message: "nope".into(),
+                    name: None,
                 })
             }
         );
+        let named = r#"{"jsonrpc":"2.0","id":4,"error":{"code":-32000,"message":"no such city","data":{"code":"NotFound"}}}"#;
+        assert!(matches!(
+            parse(named),
+            Incoming::Response { outcome: Err(RpcError { name: Some(name), .. }), .. } if name == "NotFound"
+        ));
         assert_eq!(
             parse(
                 r#"{"jsonrpc":"2.0","method":"event","params":{"event":"updated","data":{"t":1}}}"#

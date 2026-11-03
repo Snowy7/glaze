@@ -4,14 +4,16 @@
 
 import { h } from "./dom";
 import { rectToPx, sizeToPx, type PxRect, type Rect } from "./grid";
+import { denial } from "./permissions";
 import type {
+  HelloResult,
   HostToShell,
   InstanceState,
   ShellState,
   ShellToHost,
   SizeInfo,
   WidgetManifest,
-  WidgetRequest,
+  WireRequest,
 } from "./protocol";
 
 export interface Slot {
@@ -22,6 +24,7 @@ export interface Slot {
   iframe: HTMLIFrameElement;
   origin: string; // https://<widget>.widget.mypaper
   sizeKey: string; // JSON of the last size the widget was told about
+  settingsKey: string; // JSON of the last settings the widget was told about
 }
 
 export interface Frames {
@@ -50,7 +53,7 @@ const urlOf = (manifest: WidgetManifest) =>
 
 const iframeName = (instance: string, manifest: WidgetManifest) => JSON.stringify({ instance, widget: manifest });
 
-function isRequest(data: unknown): data is WidgetRequest {
+function isRequest(data: unknown): data is WireRequest {
   return (
     typeof data === "object" &&
     data !== null &&
@@ -103,6 +106,7 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
       iframe,
       origin: originOf(inst.widget),
       sizeKey: JSON.stringify(sizeInfo(inst)),
+      settingsKey: JSON.stringify(inst.settings),
     };
     slots.set(inst.instance, slot);
     layer.append(el);
@@ -165,10 +169,16 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
       const inst = byInstance.get(slot.instance);
       if (!inst) continue;
       const info = sizeInfo(inst);
-      const key = JSON.stringify(info);
-      if (key === slot.sizeKey) continue;
-      slot.sizeKey = key;
-      postEvent(slot, "size", info);
+      const sizeKey = JSON.stringify(info);
+      if (sizeKey !== slot.sizeKey) {
+        slot.sizeKey = sizeKey;
+        postEvent(slot, "size", info);
+      }
+      const settingsKey = JSON.stringify(inst.settings);
+      if (settingsKey !== slot.settingsKey) {
+        slot.settingsKey = settingsKey;
+        postEvent(slot, "settings", inst.settings);
+      }
     }
   }
 
@@ -179,18 +189,31 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
     if (!slot || !isRequest(e.data)) return;
     const { id, method, params } = e.data;
 
-    if (method === "size.get") {
+    // The handshake is answered from the state; the host only learns that the frame (re)loaded.
+    if (method === "hello") {
       const inst = byInstance.get(slot.instance);
-      if (inst) postToFrame(slot, { id, result: sizeInfo(inst) });
+      if (!inst) return;
+      const result: HelloResult = {
+        instance: slot.instance,
+        widget: slot.manifest,
+        settings: inst.settings,
+        size: sizeInfo(inst),
+        visible: state.visible,
+        editing: state.editing,
+      };
+      postToFrame(slot, { id, result });
+      send({ type: "hello", instance: slot.instance });
+      return;
+    }
+
+    const message = denial(slot.manifest, method, params);
+    if (message !== undefined) {
+      postToFrame(slot, { id, error: { code: "PermissionDenied", message } });
       return;
     }
 
     // The instance id comes from the slot, never from the widget.
     send({ type: "call", instance: slot.instance, id, method, ...(params !== undefined && { params }) });
-    if (method === "hello") {
-      postEvent(slot, "editmode", state.editing);
-      postEvent(slot, "visibility", state.visible);
-    }
   });
 
   function onHost(message: Exclude<HostToShell, { type: "state" }>) {

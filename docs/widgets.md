@@ -43,10 +43,12 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
 - **Transparency.** WebView2 `DefaultBackgroundColor` is fully transparent, and the shell page's
   background is transparent. Chromium paints an opaque backdrop behind an iframe whose
   `color-scheme` differs from its embedder's, so widgets should leave `color-scheme` at its default.
-- **Isolation.** Widgets are served from per-widget virtual hosts
-  (`SetVirtualHostNameToFolderMapping("<id>.widget.mypaper", <widget folder>, DENY_CORS)`).
-  Iframes use `sandbox="allow-scripts allow-same-origin"` (same-origin means *their own*
-  origin). Widgets can't read each other or the shell. The shell is served from
+- **Isolation.** Each widget has its own origin, `https://<id>.widget.mypaper/`, served from its
+  folder by the host's network filter (see [Network](#network)), with a Content-Security-Policy on
+  every response. (Not with `SetVirtualHostNameToFolderMapping`: mapped hosts bypass
+  `WebResourceRequested`, so the host could neither filter them nor attach a policy.) Iframes use
+  `sandbox="allow-scripts allow-same-origin"` (same-origin means *their own* origin). Widgets
+  can't read each other or the shell. The shell, which is trusted, is mapped from
   `shell.mypaper` → `widgets/shell/dist` (`DENY`). Popups, top-level navigation away from the shell,
   script dialogs and every permission prompt (camera, location, notifications, clipboard read, …)
   are refused.
@@ -362,23 +364,38 @@ type ShellToHost =
 
 ## Network
 
-Every WebView has a `WebResourceRequested` filter for `*` (every context and, where the runtime
-supports it, every request source, including workers). The host attributes each request to the
-frame that made it from the `Origin` header, or failing that the `Referer` header, which Chromium
-sets from the requesting document and which pages can't forge. Then:
+Two layers, so a widget reaches exactly the origins its manifest lists.
+
+**The browser's own policy.** Everything served from `https://<id>.widget.mypaper/` carries
+
+```text
+Content-Security-Policy: default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: <each network: origin>;
+                         object-src 'none'; base-uri 'self'
+```
+
+Chromium enforces it on every connection the widget's documents and workers make (`fetch`, XHR,
+WebSockets, EventSource, beacons, images, fonts, media, frames), including about:blank and srcdoc
+frames the widget creates, which inherit it. As in CSP, an `https://host` origin also admits
+`wss://host`.
+
+**The host's filter.** Every WebView has a `WebResourceRequested` filter for `*` (every context
+and, where the runtime supports it, every request source, including workers); it also serves the
+widget hosts. The host attributes each request to the frame that made it from the `Origin` header,
+or failing that the `Referer` header, which Chromium sets from the requesting document and which
+pages can't forge. Then:
 
 | Request to | Allowed when the initiator is |
 |---|---|
-| `https://shell.mypaper/…` | the shell, or nobody (the shell's own navigation) |
 | `https://<id>.widget.mypaper/…` | the shell (loading the iframe) or the same widget |
-| anything else (`http`, `https`, `ws`, `wss`) | a widget whose manifest lists `network:<that origin>` |
+| anything else (`http`, `https`) | a widget whose manifest lists `network:<that origin>` |
 
 Everything else is answered with a `403` without touching the network: requests with no
-attributable initiator, a `null` origin, a widget stripping its referrer (`no-referrer` breaks the
-widget, by design), service-worker scripts, and other schemes. `data:` and `blob:` URLs never reach
-the network and aren't filtered. WebRTC traffic doesn't pass through the filter, so the hardening
-script removes `RTCPeerConnection` (and its relatives) from every frame before the page's own
-scripts run.
+attributable initiator, a `null` origin, `no-cors` requests (images, scripts) from a page that
+strips its referrer (`no-referrer` breaks the widget, by design), service-worker scripts, and other
+schemes. `data:` and `blob:` URLs never reach the network and aren't filtered. The shell's mapped
+host (`shell.mypaper`) and WebSocket handshakes never reach `WebResourceRequested`, which is why the
+policy above exists. WebRTC isn't covered by either, so the hardening script removes
+`RTCPeerConnection` (and its relatives) from every frame before the page's own scripts run.
 
 ## Plugins
 
@@ -455,6 +472,8 @@ is held.
 ```sh
 pnpm -C widgets/shell install
 pnpm -C widgets/shell build          # → widgets/shell/dist (index.html + harden.js)
+cargo build --release -p mypaper-plugin-weather
+copy target\release\weather.exe plugins\weather\   # the weather widget's plugin
 cargo build -p mypaper-widgets
 target\debug\mypaper-widgets.exe     # finds widgets/, plugins/ and widgets/shell/dist by walking up
 target\debug\mypaper-widgets.exe --edit toggle   # or Ctrl+Alt+Shift+W
@@ -468,4 +487,7 @@ target\debug\mypaper-widgets.exe --edit toggle   # or Ctrl+Alt+Shift+W
   "save". The shell itself reloads on `pnpm -C widgets/shell build`.
 - To try it without touching your real setup, point `APPDATA` (and `LOCALAPPDATA`) at a temporary
   folder holding `mypaper\widgets.json` and your test widgets in `mypaper\widgets\<id>\`.
+- `MYPAPER_WIDGETS_IGNORE_COVERED=1` keeps monitors awake while a maximized window covers them,
+  for capturing the widget layer in tests (`PrintWindow(GetShellWindow(), PW_RENDERFULLCONTENT)`
+  renders the desktop, widgets included, without touching the windows in front).
 - `pnpm -C widgets/shell test` runs the grid math tests (vitest).

@@ -1,9 +1,9 @@
 //! The messages between the shell and the host, and the widget methods they
-//! carry (docs/widgets.md, "Widget JS API" and "Host ⇄ shell").
+//! carry (docs/widgets.md, "Wire protocol" and "Host ⇄ shell").
 //!
 //! Pure: parsing and the permission rule. Every widget call is checked
 //! against the manifest the host read from disk, never against anything in
-//! the message.
+//! the message (the shell checks first too, but the host doesn't rely on it).
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -15,6 +15,10 @@ use crate::manifest::{Permission, WidgetManifest};
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum FromShell {
     Ready,
+    /// A frame (re)loaded and shook hands with the shell: its old subscriptions are gone.
+    Hello {
+        instance: String,
+    },
     Call {
         /// Attached by the shell from the sender's iframe, never by the widget.
         instance: String,
@@ -102,12 +106,24 @@ pub enum Out {
     },
 }
 
-/// A widget call that the host answers (everything but `size.get`, which the
-/// shell answers itself).
+impl ErrorCode {
+    /// The code a plugin picked by name in `error.data.code`.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "PermissionDenied" => Self::PermissionDenied,
+            "NotFound" => Self::NotFound,
+            "InvalidParams" => Self::InvalidParams,
+            "PluginUnavailable" => Self::PluginUnavailable,
+            "Internal" => Self::Internal,
+            _ => return None,
+        })
+    }
+}
+
+/// A widget request the host answers: every wire method but `hello`, which
+/// the shell answers itself.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Method {
-    Hello,
-    SettingsGet,
     StorageGet {
         key: String,
     },
@@ -116,15 +132,7 @@ pub enum Method {
         value: Option<Value>,
     },
     SystemStats,
-    SystemSubscribe {
-        interval_ms: u64,
-    },
-    SystemUnsubscribe {
-        sub: u64,
-    },
     MediaCurrent,
-    MediaSubscribe,
-    MediaUnsubscribe,
     MediaControl {
         action: MediaAction,
     },
@@ -132,21 +140,36 @@ pub enum Method {
         target: String,
     },
     ThemeCurrent,
-    ThemeSubscribe,
-    ThemeUnsubscribe,
-    PluginCall {
+    Plugin {
         plugin: String,
         method: String,
         params: Option<Value>,
     },
-    PluginSubscribe {
-        plugin: String,
-        event: String,
+    /// `sub` is the widget's own id for the subscription.
+    Subscribe {
+        sub: String,
+        topic: Topic,
     },
-    PluginUnsubscribe {
-        plugin: String,
-        event: String,
+    Unsubscribe {
+        sub: String,
     },
+}
+
+/// What a subscription delivers.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "topic", rename_all = "lowercase")]
+pub enum Topic {
+    /// A [`SystemStats`](crate::stats::SystemStats) sample right away, then every interval.
+    System {
+        #[serde(rename = "intervalMs")]
+        interval_ms: u64,
+    },
+    /// The media state, on change.
+    Media,
+    /// The theme, on change.
+    Theme,
+    /// Each matching plugin event's data.
+    Plugin { plugin: String, event: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -160,7 +183,6 @@ pub enum MediaAction {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct KeyParams {
     key: String,
     #[serde(default, deserialize_with = "present")]
@@ -173,14 +195,15 @@ fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Value>, D::E
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct SubscribeParams {
-    interval_ms: u64,
+    sub: String,
+    #[serde(flatten)]
+    topic: Topic,
 }
 
 #[derive(Deserialize)]
 struct SubParams {
-    sub: u64,
+    sub: String,
 }
 
 #[derive(Deserialize)]
@@ -194,20 +217,14 @@ struct LaunchParams {
 }
 
 #[derive(Deserialize)]
-struct PluginCallParams {
+struct PluginParams {
     plugin: String,
     method: String,
     #[serde(default)]
     params: Option<Value>,
 }
 
-#[derive(Deserialize)]
-struct PluginEventParams {
-    plugin: String,
-    event: String,
-}
-
-/// The shortest `system.subscribe` interval.
+/// The shortest `system` subscription interval.
 pub const MIN_INTERVAL_MS: u64 = 1000;
 const MAX_KEY: usize = 256;
 
@@ -219,8 +236,6 @@ impl Method {
         }
         let invalid = |why: &str| Err(WidgetError::new(ErrorCode::InvalidParams, why));
         Ok(match method {
-            "hello" => Self::Hello,
-            "settings.get" => Self::SettingsGet,
             "storage.get" | "storage.set" => {
                 let KeyParams { key, value } = take(params)?;
                 if key.is_empty() || key.len() > MAX_KEY {
@@ -232,18 +247,7 @@ impl Method {
                 }
             }
             "system.stats" => Self::SystemStats,
-            "system.subscribe" => {
-                let SubscribeParams { interval_ms } = take(params)?;
-                Self::SystemSubscribe {
-                    interval_ms: interval_ms.max(MIN_INTERVAL_MS),
-                }
-            }
-            "system.unsubscribe" => Self::SystemUnsubscribe {
-                sub: take::<SubParams>(params)?.sub,
-            },
             "media.current" => Self::MediaCurrent,
-            "media.subscribe" => Self::MediaSubscribe,
-            "media.unsubscribe" => Self::MediaUnsubscribe,
             "media.control" => Self::MediaControl {
                 action: take::<ActionParams>(params)?.action,
             },
@@ -255,27 +259,31 @@ impl Method {
                 Self::Launch { target }
             }
             "theme.current" => Self::ThemeCurrent,
-            "theme.subscribe" => Self::ThemeSubscribe,
-            "theme.unsubscribe" => Self::ThemeUnsubscribe,
-            "plugin.call" => {
-                let PluginCallParams {
+            "plugin" => {
+                let PluginParams {
                     plugin,
                     method,
                     params,
                 } = take(params)?;
-                Self::PluginCall {
+                Self::Plugin {
                     plugin,
                     method,
                     params,
                 }
             }
-            "plugin.subscribe" | "plugin.unsubscribe" => {
-                let PluginEventParams { plugin, event } = take(params)?;
-                match method {
-                    "plugin.subscribe" => Self::PluginSubscribe { plugin, event },
-                    _ => Self::PluginUnsubscribe { plugin, event },
+            "subscribe" => {
+                let SubscribeParams { sub, mut topic } = take(params)?;
+                if sub.is_empty() || sub.len() > MAX_KEY {
+                    return invalid("subscription ids are 1 to 256 characters");
                 }
+                if let Topic::System { interval_ms } = &mut topic {
+                    *interval_ms = (*interval_ms).max(MIN_INTERVAL_MS);
+                }
+                Self::Subscribe { sub, topic }
             }
+            "unsubscribe" => Self::Unsubscribe {
+                sub: take::<SubParams>(params)?.sub,
+            },
             other => {
                 return Err(WidgetError::new(
                     ErrorCode::NotFound,
@@ -288,18 +296,28 @@ impl Method {
     /// Whether `manifest` allows this call.
     pub fn check(&self, manifest: &WidgetManifest) -> Result<(), WidgetError> {
         let needs = match self {
-            Self::SystemStats | Self::SystemSubscribe { .. } | Self::SystemUnsubscribe { .. } => {
-                Permission::SystemStats
-            }
+            Self::SystemStats
+            | Self::Subscribe {
+                topic: Topic::System { .. },
+                ..
+            } => Permission::SystemStats,
             Self::MediaCurrent
-            | Self::MediaSubscribe
-            | Self::MediaUnsubscribe
-            | Self::MediaControl { .. } => Permission::Media,
+            | Self::MediaControl { .. }
+            | Self::Subscribe {
+                topic: Topic::Media,
+                ..
+            } => Permission::Media,
             Self::Launch { .. } => Permission::Launch,
-            Self::ThemeCurrent | Self::ThemeSubscribe | Self::ThemeUnsubscribe => Permission::Theme,
-            Self::PluginCall { plugin, .. }
-            | Self::PluginSubscribe { plugin, .. }
-            | Self::PluginUnsubscribe { plugin, .. } => {
+            Self::ThemeCurrent
+            | Self::Subscribe {
+                topic: Topic::Theme,
+                ..
+            } => Permission::Theme,
+            Self::Plugin { plugin, .. }
+            | Self::Subscribe {
+                topic: Topic::Plugin { plugin, .. },
+                ..
+            } => {
                 return if manifest.plugins.contains(plugin) {
                     Ok(())
                 } else {
@@ -309,7 +327,7 @@ impl Method {
                     ))
                 };
             }
-            Self::Hello | Self::SettingsGet | Self::StorageGet { .. } | Self::StorageSet { .. } => {
+            Self::StorageGet { .. } | Self::StorageSet { .. } | Self::Unsubscribe { .. } => {
                 return Ok(());
             }
         };
@@ -362,6 +380,14 @@ mod tests {
         }))
         .unwrap();
         assert!(matches!(layout, FromShell::Layout { ref changes } if changes[0].cell == [1, 2]));
+        let hello: FromShell =
+            serde_json::from_value(json!({ "type": "hello", "instance": "a-1" })).unwrap();
+        assert_eq!(
+            hello,
+            FromShell::Hello {
+                instance: "a-1".into()
+            }
+        );
         assert!(serde_json::from_value::<FromShell>(json!({ "type": "hack" })).is_err());
     }
 
@@ -382,9 +408,43 @@ mod tests {
             }
         );
         assert_eq!(
-            parse("system.subscribe", json!({ "intervalMs": 10 })),
-            Method::SystemSubscribe {
-                interval_ms: MIN_INTERVAL_MS
+            parse(
+                "subscribe",
+                json!({ "sub": "s1", "topic": "system", "intervalMs": 10 })
+            ),
+            Method::Subscribe {
+                sub: "s1".into(),
+                topic: Topic::System {
+                    interval_ms: MIN_INTERVAL_MS
+                }
+            }
+        );
+        assert_eq!(
+            parse(
+                "subscribe",
+                json!({ "sub": "s2", "topic": "plugin", "plugin": "weather", "event": "updated" })
+            ),
+            Method::Subscribe {
+                sub: "s2".into(),
+                topic: Topic::Plugin {
+                    plugin: "weather".into(),
+                    event: "updated".into()
+                }
+            }
+        );
+        assert_eq!(
+            parse("unsubscribe", json!({ "sub": "s1" })),
+            Method::Unsubscribe { sub: "s1".into() }
+        );
+        assert_eq!(
+            parse(
+                "plugin",
+                json!({ "plugin": "weather", "method": "current" })
+            ),
+            Method::Plugin {
+                plugin: "weather".into(),
+                method: "current".into(),
+                params: None
             }
         );
         assert_eq!(
@@ -393,9 +453,15 @@ mod tests {
                 action: MediaAction::Next
             }
         );
-        assert_eq!(parse("settings.get", Value::Null), Method::SettingsGet);
         assert_eq!(
             code(Method::parse("storage.get", json!({ "key": "" }))),
+            ErrorCode::InvalidParams
+        );
+        assert_eq!(
+            code(Method::parse(
+                "subscribe",
+                json!({ "sub": "s", "topic": "disk" })
+            )),
             ErrorCode::InvalidParams
         );
         assert_eq!(
@@ -410,6 +476,11 @@ mod tests {
             code(Method::parse("fs.read", Value::Null)),
             ErrorCode::NotFound
         );
+        // The shell answers the handshake; it never reaches the host.
+        assert_eq!(
+            code(Method::parse("hello", json!({ "sdk": 1 }))),
+            ErrorCode::NotFound
+        );
     }
 
     #[test]
@@ -417,12 +488,22 @@ mod tests {
         let bare = manifest("[]", "[]");
         for method in [
             parse("system.stats", Value::Null),
+            parse(
+                "subscribe",
+                json!({ "sub": "s", "topic": "system", "intervalMs": 1000 }),
+            ),
             parse("media.current", Value::Null),
+            parse("subscribe", json!({ "sub": "s", "topic": "media" })),
             parse("launch", json!({ "target": "https://example.com" })),
             parse("theme.current", Value::Null),
+            parse("subscribe", json!({ "sub": "s", "topic": "theme" })),
             parse(
-                "plugin.call",
+                "plugin",
                 json!({ "plugin": "weather", "method": "current" }),
+            ),
+            parse(
+                "subscribe",
+                json!({ "sub": "s", "topic": "plugin", "plugin": "weather", "event": "updated" }),
             ),
         ] {
             assert_eq!(
@@ -431,11 +512,11 @@ mod tests {
                 "{method:?}"
             );
         }
-        // Always allowed: the widget's own state.
+        // Always allowed: the widget's own state, and letting go.
         for method in [
-            parse("hello", Value::Null),
-            parse("settings.get", Value::Null),
             parse("storage.get", json!({ "key": "k" })),
+            parse("storage.set", json!({ "key": "k", "value": 1 })),
+            parse("unsubscribe", json!({ "sub": "s" })),
         ] {
             assert!(method.check(&bare).is_ok());
         }
@@ -447,28 +528,26 @@ mod tests {
             r#"["system.stats", "media", "launch", "theme"]"#,
             r#"["weather"]"#,
         );
-        assert!(
-            parse("system.subscribe", json!({ "intervalMs": 2000 }))
-                .check(&full)
-                .is_ok()
-        );
-        assert!(
-            parse("media.control", json!({ "action": "toggle" }))
-                .check(&full)
-                .is_ok()
-        );
-        assert!(
+        for method in [
             parse(
-                "plugin.subscribe",
-                json!({ "plugin": "weather", "event": "updated" })
-            )
-            .check(&full)
-            .is_ok()
-        );
-        let other_plugin = parse(
-            "plugin.call",
-            json!({ "plugin": "stocks", "method": "quote" }),
-        );
+                "subscribe",
+                json!({ "sub": "s", "topic": "system", "intervalMs": 2000 }),
+            ),
+            parse("media.control", json!({ "action": "toggle" })),
+            parse(
+                "subscribe",
+                json!({ "sub": "s", "topic": "plugin", "plugin": "weather", "event": "updated" }),
+            ),
+        ] {
+            assert!(method.check(&full).is_ok(), "{method:?}");
+        }
+        let other_plugin = parse("plugin", json!({ "plugin": "stocks", "method": "quote" }));
         assert_eq!(code(other_plugin.check(&full)), ErrorCode::PermissionDenied);
+    }
+
+    #[test]
+    fn error_codes_by_name() {
+        assert_eq!(ErrorCode::from_name("NotFound"), Some(ErrorCode::NotFound));
+        assert_eq!(ErrorCode::from_name("notfound"), None);
     }
 }

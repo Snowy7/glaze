@@ -5,8 +5,94 @@
 //! A request is attributed to the frame that made it by those headers, which
 //! Chromium sets from the requesting document and pages can't forge. Anything
 //! that can't be attributed is blocked.
+//!
+//! WebSockets never reach `WebResourceRequested`, so widget documents are
+//! also served with a Content-Security-Policy ([`csp`]) that the browser
+//! enforces on every connection, including frames the widget creates.
 
 use std::fmt;
+use std::path::PathBuf;
+
+/// What the network rule needs to know about one installed widget.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WidgetNet {
+    pub dir: PathBuf,
+    /// Its `network:<origin>` permissions.
+    pub origins: Vec<Origin>,
+}
+
+/// The Content-Security-Policy on everything a widget host serves: its own
+/// origin plus its declared ones, for everything (`'unsafe-inline'` and
+/// `'unsafe-eval'` are fine: this is about where a widget may connect, not
+/// about XSS). An `https` origin also admits `wss` to the same host, as CSP does.
+pub fn csp(origins: &[Origin]) -> String {
+    let declared: String = origins.iter().map(|o| format!(" {o}")).collect();
+    format!(
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:{declared}; object-src 'none'; base-uri 'self'"
+    )
+}
+
+/// The file a widget-host URL names, relative to the widget folder: no
+/// query or fragment, percent-decoded, `index.html` for a folder, and
+/// never outside the folder (`None`).
+pub fn widget_path(url: &str) -> Option<String> {
+    let (_, rest) = url.split_once("://")?;
+    let path = rest.find('/').map_or("/", |at| &rest[at..]);
+    let path = path.split(['?', '#']).next().unwrap_or_default();
+    let mut bytes = Vec::with_capacity(path.len());
+    let mut raw = path.bytes();
+    while let Some(b) = raw.next() {
+        if b == b'%' {
+            let hex = [raw.next()?, raw.next()?];
+            bytes.push(u8::from_str_radix(std::str::from_utf8(&hex).ok()?, 16).ok()?);
+        } else {
+            bytes.push(b);
+        }
+    }
+    let mut path = String::from_utf8(bytes).ok()?.replace('\\', "/");
+    if path.ends_with('/') {
+        path.push_str("index.html");
+    }
+    let parts: Vec<&str> = path
+        .split('/')
+        .filter(|p| !p.is_empty() && *p != ".")
+        .collect();
+    if parts.is_empty() || parts.iter().any(|p| *p == ".." || p.contains(':')) {
+        return None;
+    }
+    Some(parts.join("/"))
+}
+
+/// The Content-Type of a widget file by its extension (scripts must be
+/// right: module scripts are refused under any other type).
+pub fn content_type(path: &str) -> &'static str {
+    let extension = path.rsplit('.').next().map(str::to_ascii_lowercase);
+    match extension.as_deref() {
+        Some("html" | "htm") => "text/html; charset=utf-8",
+        Some("js" | "mjs") => "text/javascript; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("json" | "map") => "application/json; charset=utf-8",
+        Some("txt" | "md") => "text/plain; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("avif") => "image/avif",
+        Some("ico") => "image/x-icon",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("otf") => "font/otf",
+        Some("mp3") => "audio/mpeg",
+        Some("ogg") => "audio/ogg",
+        Some("wav") => "audio/wav",
+        Some("mp4") => "video/mp4",
+        Some("webm") => "video/webm",
+        Some("wasm") => "application/wasm",
+        _ => "application/octet-stream",
+    }
+}
 
 /// The shell's virtual host.
 pub const SHELL_HOST: &str = "shell.mypaper";
@@ -157,6 +243,54 @@ pub fn decide(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn widget_files_get_a_policy_of_their_declared_origins() {
+        assert_eq!(
+            csp(&[
+                origin("https://api.open-meteo.com"),
+                origin("wss://feed.example.com:8443")
+            ]),
+            "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://api.open-meteo.com \
+             wss://feed.example.com:8443; object-src 'none'; base-uri 'self'"
+        );
+        assert!(
+            csp(&[]).starts_with("default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:;")
+        );
+    }
+
+    #[test]
+    fn widget_paths_stay_inside_the_widget() {
+        let path = |url| widget_path(url);
+        assert_eq!(
+            path("https://clock.widget.mypaper/index.html?x=1#y").as_deref(),
+            Some("index.html")
+        );
+        assert_eq!(
+            path("https://clock.widget.mypaper/").as_deref(),
+            Some("index.html")
+        );
+        assert_eq!(
+            path("https://clock.widget.mypaper").as_deref(),
+            Some("index.html")
+        );
+        assert_eq!(
+            path("https://clock.widget.mypaper/pages/My%20Page.html").as_deref(),
+            Some("pages/My Page.html")
+        );
+        for bad in [
+            "https://clock.widget.mypaper/../x.html",
+            "https://clock.widget.mypaper/a/%2e%2e/%2e%2e/x.html",
+            "https://clock.widget.mypaper/%5c..%5cx.html",
+            "https://clock.widget.mypaper/C:/x.html",
+            "https://clock.widget.mypaper/%zz",
+        ] {
+            assert_eq!(path(bad), None, "{bad}");
+        }
+        assert_eq!(content_type("index.HTML"), "text/html; charset=utf-8");
+        assert_eq!(content_type("main.js"), "text/javascript; charset=utf-8");
+        assert_eq!(content_type("data.bin"), "application/octet-stream");
+    }
 
     fn origin(text: &str) -> Origin {
         Origin::parse(text).unwrap()

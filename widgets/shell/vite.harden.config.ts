@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 
-// dist/bridge.js: a self-contained classic script (IIFE), injected by the host into every frame.
+// dist/harden.js: a self-contained classic script (IIFE), injected by the host into every frame.
 export default defineConfig({
   build: {
     outDir: "dist",
@@ -8,10 +8,10 @@ export default defineConfig({
     target: "es2022",
     copyPublicDir: false,
     lib: {
-      entry: "src/bridge.ts",
+      entry: "src/harden.ts",
       formats: ["iife"],
-      name: "mypaperBridge",
-      fileName: () => "bridge.js",
+      name: "mypaperHarden",
+      fileName: () => "harden.js",
     },
   },
 });
