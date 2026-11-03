@@ -14,13 +14,13 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "mypaper Studio",
         "width": 1100,
         "height": 720,
         "minWidth": 880,
         "minHeight": 600,
-        "center": true,
-        "transparent": true
+        "center": true
       }
     ],
     "security": {

@@ -1,18 +1,217 @@
-//! `web` wallpapers. (Stub: being implemented.)
+//! `web` wallpapers: a WebView2 per screen, as a child of the screen's window.
+//!
+//! WebView2 is asynchronous: the environment and every controller arrive
+//! through completion handlers, which the engine's message loop dispatches on
+//! the main thread (a single-threaded COM apartment, see
+//! [`init_com_apartment`](crate::window::init_com_apartment)). Handlers hold
+//! only a `Weak` reference to the shared state, so a source dropped (theme
+//! switch) before they fire is simply ignored.
+//!
+//! Lightness: a hidden screen's WebView is hidden and then suspended
+//! (`TrySuspend`), which stops its scripts, timers and rendering, and lets
+//! the browser trim its memory. The page resumes where it left off.
 
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
+use std::rc::{Rc, Weak};
 use std::time::Duration;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use mypaper_theme::{LoadedTheme, WebWallpaper};
+use webview2_com::Microsoft::Web::WebView2::Win32::{
+    COREWEBVIEW2_COLOR, COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS,
+    CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2, ICoreWebView2_3,
+    ICoreWebView2Controller, ICoreWebView2Controller2, ICoreWebView2Environment,
+    ICoreWebView2EnvironmentOptions, ICoreWebView2Settings3, ICoreWebView2Settings5,
+    ICoreWebView2Settings6,
+};
+use webview2_com::{
+    CoreWebView2EnvironmentOptions, CreateCoreWebView2ControllerCompletedHandler,
+    CreateCoreWebView2EnvironmentCompletedHandler, NavigationCompletedEventHandler,
+    TrySuspendCompletedHandler,
+};
+use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
+use windows::core::{HSTRING, Interface, PCWSTR};
 
 use super::{Frame, Redraw, Source};
 use crate::gpu::Gpu;
 
-pub struct WebSource;
+/// Name under which a local page's folder is served (`https://mypaper.theme/...`).
+/// Unlike `file://`, a virtual host gives the page a real origin, so `fetch`,
+/// ES modules and workers work with relative paths.
+const HOST: &str = "mypaper.theme";
+
+/// Browser flags: no SmartScreen lookups (a wallpaper loads its own content),
+/// and autoplay without a user gesture (nobody clicks a wallpaper). Background
+/// throttling stays on, so hidden frames and timers are throttled by the browser.
+const BROWSER_ARGS: &str =
+    "--disable-features=msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
+
+/// Shown before the first paint, so a loading page is black rather than white.
+const BACKGROUND: COREWEBVIEW2_COLOR = COREWEBVIEW2_COLOR {
+    A: 255,
+    R: 0,
+    G: 0,
+    B: 0,
+};
+
+/// What a theme's `url` points at.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Page {
+    /// An `http(s)` URL, navigated to as written.
+    Remote(String),
+    /// A local file, served from `folder` under [`HOST`] at `url`.
+    Local { folder: PathBuf, url: String },
+}
+
+impl Page {
+    /// Resolves a theme's `url`. `file` is the local path it would be
+    /// (`LoadedTheme::asset`), used when `url` is not remote. A file inside the
+    /// theme folder serves the whole theme folder (so `../`-free sibling assets
+    /// and subfolders work); one outside it serves just its own folder.
+    fn resolve(url: &str, file: &Path, theme_dir: &Path) -> Self {
+        if is_remote(url) {
+            return Self::Remote(url.to_owned());
+        }
+        let (folder, relative) = match file.strip_prefix(theme_dir) {
+            Ok(relative) => (theme_dir, relative),
+            Err(_) => (
+                file.parent().unwrap_or(file),
+                Path::new(file.file_name().unwrap_or_default()),
+            ),
+        };
+        let path = relative
+            .components()
+            .filter_map(|c| match c {
+                std::path::Component::Normal(name) => Some(percent_encode(&name.to_string_lossy())),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("/");
+        Self::Local {
+            folder: folder.to_owned(),
+            url: format!("https://{HOST}/{path}"),
+        }
+    }
+}
+
+fn is_remote(url: &str) -> bool {
+    let scheme = |s: &str| {
+        url.get(..s.len())
+            .is_some_and(|p| p.eq_ignore_ascii_case(s))
+    };
+    scheme("https://") || scheme("http://")
+}
+
+/// Percent-encodes everything but unreserved characters, for one URL path segment.
+fn percent_encode(segment: &str) -> String {
+    let mut out = String::with_capacity(segment.len());
+    for byte in segment.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(byte as char);
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
+/// `%LOCALAPPDATA%\mypaper\webview2`: one profile shared by every web theme.
+fn user_data_folder() -> Result<PathBuf> {
+    let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
+    let dir = PathBuf::from(local).join("mypaper").join("webview2");
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    Ok(dir)
+}
+
+/// A page on every screen. Dropping it closes the WebViews and releases the
+/// environment, which lets the browser processes exit.
+pub struct WebSource {
+    state: Rc<RefCell<State>>,
+}
+
+struct State {
+    page: Page,
+    /// Set once the environment exists; kept so it outlives the controllers.
+    environment: Option<ICoreWebView2Environment>,
+    /// The source was dropped: late completions must clean up and do nothing.
+    closed: bool,
+    screens: Vec<ScreenView>,
+}
+
+struct ScreenView {
+    hwnd: HWND,
+    /// What the engine last said. Applied as soon as the view exists.
+    visible: bool,
+    view: Option<View>,
+}
+
+/// Cheap to clone (COM reference counts): callers copy a view out of the
+/// shared state before calling into WebView2, so no `RefCell` borrow is held
+/// while WebView2 might call back.
+#[derive(Clone)]
+struct View {
+    controller: ICoreWebView2Controller,
+    webview: ICoreWebView2_3,
+    /// The first navigation finished, so the page can be suspended.
+    loaded: bool,
+}
 
 impl WebSource {
-    pub fn new(_gpu: &Gpu, _theme: &LoadedTheme, _config: &WebWallpaper) -> Result<Self> {
-        bail!("web wallpapers are not implemented yet")
+    /// Starts creating the environment and a WebView per screen. Fails
+    /// at once if WebView2 is missing or the page is a local file that does
+    /// not exist; later failures are logged, since they arrive asynchronously.
+    pub fn new(theme: &LoadedTheme, config: &WebWallpaper, screens: &[HWND]) -> Result<Self> {
+        let page = {
+            let file = theme.asset(Path::new(&config.url));
+            let page = Page::resolve(&config.url, &file, &theme.dir);
+            if matches!(page, Page::Local { .. }) && !file.is_file() {
+                bail!("web page {} does not exist", file.display());
+            }
+            page
+        };
+        let state = Rc::new(RefCell::new(State {
+            page,
+            environment: None,
+            closed: false,
+            screens: screens
+                .iter()
+                .map(|&hwnd| ScreenView {
+                    hwnd,
+                    visible: true,
+                    view: None,
+                })
+                .collect(),
+        }));
+
+        let options = CoreWebView2EnvironmentOptions::default();
+        // SAFETY: `options` is not shared with WebView2 yet.
+        unsafe { options.set_additional_browser_arguments(BROWSER_ARGS.into()) };
+        let options: ICoreWebView2EnvironmentOptions = options.into();
+        let user_data = HSTRING::from(user_data_folder()?.to_string_lossy().as_ref());
+
+        let weak = Rc::downgrade(&state);
+        let handler = CreateCoreWebView2EnvironmentCompletedHandler::create(Box::new(
+            move |result, environment| {
+                match (result, environment) {
+                    (Ok(()), Some(environment)) => environment_ready(&weak, environment),
+                    (Err(e), _) => log::error!("WebView2 environment failed: {e}"),
+                    (Ok(()), None) => log::error!("WebView2 environment failed: none returned"),
+                }
+                Ok(())
+            },
+        ));
+        // SAFETY: valid arguments; the handler runs later on this thread's message loop.
+        unsafe {
+            CreateCoreWebView2EnvironmentWithOptions(PCWSTR::null(), &user_data, &options, &handler)
+        }
+        .context(
+            "creating the WebView2 environment (is the WebView2 Runtime installed? \
+             https://developer.microsoft.com/microsoft-edge/webview2/)",
+        )?;
+        Ok(Self { state })
     }
 }
 
@@ -21,5 +220,310 @@ impl Source for WebSource {
 
     fn redraw(&self, _clock: Duration) -> Redraw {
         Redraw::OnChange
+    }
+
+    fn native(&self) -> bool {
+        true
+    }
+
+    fn layout(&mut self, screen: usize, hwnd: HWND, _size: (u32, u32)) {
+        let view = (self.state.borrow().screens.get(screen)).and_then(|s| s.view.clone());
+        if let Some(view) = view {
+            fill(&view.controller, hwnd);
+        }
+    }
+
+    fn set_visible(&mut self, screen: usize, _hwnd: HWND, visible: bool) {
+        let view = {
+            let mut state = self.state.borrow_mut();
+            let Some(slot) = state.screens.get_mut(screen) else {
+                return;
+            };
+            slot.visible = visible;
+            slot.view.clone()
+        };
+        if let Some(view) = view {
+            view.set_visible(visible);
+        }
+    }
+}
+
+impl Drop for WebSource {
+    fn drop(&mut self) {
+        let (views, environment) = {
+            let mut state = self.state.borrow_mut();
+            state.closed = true;
+            let views: Vec<View> = state
+                .screens
+                .iter_mut()
+                .filter_map(|s| s.view.take())
+                .collect();
+            (views, state.environment.take())
+        };
+        for view in views {
+            // SAFETY: closing a controller we own; its parent window still exists.
+            let _ = unsafe { view.controller.Close() };
+        }
+        drop(environment);
+    }
+}
+
+impl View {
+    /// Hides and suspends the page, or resumes and shows it. Suspending is
+    /// deferred until the first navigation finishes (see [`navigation_done`]).
+    fn set_visible(&self, visible: bool) {
+        // SAFETY: calls on COM objects we own, from their creating thread.
+        unsafe {
+            if visible {
+                // Resume before showing; both fail harmlessly if nothing was suspended.
+                let _ = self.webview.Resume();
+                let _ = self.controller.SetIsVisible(true);
+            } else {
+                let _ = self.controller.SetIsVisible(false);
+                if self.loaded {
+                    self.suspend();
+                }
+            }
+        }
+    }
+
+    /// Asks the browser to suspend the (already hidden) page.
+    ///
+    /// # Safety
+    /// Must be called on the thread that created the WebView.
+    unsafe fn suspend(&self) {
+        let done = TrySuspendCompletedHandler::create(Box::new(|result, suspended| {
+            log::debug!("web: suspend {result:?}, suspended={suspended}");
+            Ok(())
+        }));
+        // SAFETY: per this function's contract.
+        if let Err(e) = unsafe { self.webview.TrySuspend(&done) } {
+            log::debug!("web: TrySuspend: {e}");
+        }
+    }
+}
+
+/// The environment exists: create a controller for every screen.
+fn environment_ready(weak: &Weak<RefCell<State>>, environment: ICoreWebView2Environment) {
+    let Some(state) = weak.upgrade() else { return };
+    let hwnds: Vec<HWND> = {
+        let mut state = state.borrow_mut();
+        if state.closed {
+            return;
+        }
+        state.environment = Some(environment.clone());
+        state.screens.iter().map(|s| s.hwnd).collect()
+    };
+    for (screen, hwnd) in hwnds.into_iter().enumerate() {
+        let weak = weak.clone();
+        let handler = CreateCoreWebView2ControllerCompletedHandler::create(Box::new(
+            move |result, controller| {
+                match (result, controller) {
+                    (Ok(()), Some(controller)) => controller_ready(&weak, screen, controller),
+                    (Err(e), _) => log::error!("WebView2 controller {screen} failed: {e}"),
+                    (Ok(()), None) => log::error!("WebView2 controller {screen}: none returned"),
+                }
+                Ok(())
+            },
+        ));
+        // SAFETY: `hwnd` is a live screen window of this thread.
+        if let Err(e) = unsafe { environment.CreateCoreWebView2Controller(hwnd, &handler) } {
+            log::error!("WebView2 controller {screen} failed: {e}");
+        }
+    }
+}
+
+/// A controller exists: configure it, load the page and apply the screen's visibility.
+fn controller_ready(
+    weak: &Weak<RefCell<State>>,
+    screen: usize,
+    controller: ICoreWebView2Controller,
+) {
+    let Some(state) = weak.upgrade() else {
+        // SAFETY: closing the controller we were just handed.
+        let _ = unsafe { controller.Close() };
+        return;
+    };
+    let (hwnd, visible, page) = {
+        let state = state.borrow();
+        if state.closed {
+            // SAFETY: as above.
+            let _ = unsafe { controller.Close() };
+            return;
+        }
+        let slot = &state.screens[screen];
+        (slot.hwnd, slot.visible, state.page.clone())
+    };
+    match setup(weak, screen, controller.clone(), hwnd, &page) {
+        Ok(view) => {
+            view.set_visible(visible);
+            state.borrow_mut().screens[screen].view = Some(view);
+        }
+        Err(e) => {
+            log::error!("web: setting up screen {screen}: {e:#}");
+            // SAFETY: closing the controller we own.
+            let _ = unsafe { controller.Close() };
+        }
+    }
+}
+
+/// Fills the screen, applies the wallpaper-appropriate settings and navigates.
+fn setup(
+    weak: &Weak<RefCell<State>>,
+    screen: usize,
+    controller: ICoreWebView2Controller,
+    hwnd: HWND,
+    page: &Page,
+) -> Result<View> {
+    // SAFETY: COM calls on objects owned by this thread.
+    unsafe {
+        fill(&controller, hwnd);
+        if let Ok(controller2) = controller.cast::<ICoreWebView2Controller2>() {
+            controller2.SetDefaultBackgroundColor(BACKGROUND)?;
+        }
+        let webview: ICoreWebView2 = controller.CoreWebView2()?;
+
+        // A wallpaper is not a browser: no menus, tools, zoom, dialogs or shortcuts.
+        let settings = webview.Settings()?;
+        settings.SetAreDefaultContextMenusEnabled(false)?;
+        settings.SetAreDevToolsEnabled(false)?;
+        settings.SetIsStatusBarEnabled(false)?;
+        settings.SetIsZoomControlEnabled(false)?;
+        settings.SetAreDefaultScriptDialogsEnabled(false)?;
+        // Newer settings are best-effort: older runtimes lack the interfaces.
+        if let Ok(s) = settings.cast::<ICoreWebView2Settings3>() {
+            let _ = s.SetAreBrowserAcceleratorKeysEnabled(false);
+        }
+        if let Ok(s) = settings.cast::<ICoreWebView2Settings5>() {
+            let _ = s.SetIsPinchZoomEnabled(false);
+        }
+        if let Ok(s) = settings.cast::<ICoreWebView2Settings6>() {
+            let _ = s.SetIsSwipeNavigationEnabled(false);
+        }
+
+        let webview3 = webview
+            .cast::<ICoreWebView2_3>()
+            .context("the installed WebView2 Runtime is too old (needs ICoreWebView2_3)")?;
+        let url = match page {
+            Page::Remote(url) => url,
+            Page::Local { folder, url } => {
+                webview3.SetVirtualHostNameToFolderMapping(
+                    &HSTRING::from(HOST),
+                    &HSTRING::from(folder.to_string_lossy().as_ref()),
+                    COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS,
+                )?;
+                url
+            }
+        };
+
+        let weak = weak.clone();
+        let handler = NavigationCompletedEventHandler::create(Box::new(move |_, _| {
+            navigation_done(&weak, screen);
+            Ok(())
+        }));
+        let mut token = 0;
+        webview.add_NavigationCompleted(&handler, &mut token)?;
+        webview
+            .Navigate(&HSTRING::from(url.as_str()))
+            .with_context(|| format!("navigating to {url}"))?;
+
+        Ok(View {
+            controller,
+            webview: webview3,
+            loaded: false,
+        })
+    }
+}
+
+/// The page finished loading. A screen that was hidden in the meantime can
+/// only be suspended now.
+fn navigation_done(weak: &Weak<RefCell<State>>, screen: usize) {
+    let Some(state) = weak.upgrade() else { return };
+    let suspend = {
+        let mut state = state.borrow_mut();
+        let slot = &mut state.screens[screen];
+        let visible = slot.visible;
+        slot.view.as_mut().and_then(|view| {
+            let first = !std::mem::replace(&mut view.loaded, true);
+            (first && !visible).then(|| view.clone())
+        })
+    };
+    if let Some(view) = suspend {
+        // SAFETY: handlers run on the thread that created the WebView.
+        unsafe { view.suspend() };
+    }
+}
+
+/// Sizes a controller to its window's client area.
+fn fill(controller: &ICoreWebView2Controller, hwnd: HWND) {
+    let mut rect = RECT::default();
+    // SAFETY: valid window; `rect` outlives the call.
+    unsafe {
+        let _ = GetClientRect(hwnd, &mut rect);
+        let _ = controller.SetBounds(rect);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn resolve(url: &str, theme: &str) -> Page {
+        let theme_dir = PathBuf::from(theme);
+        Page::resolve(url, &theme_dir.join(url), &theme_dir)
+    }
+
+    #[test]
+    fn http_and_https_are_remote_in_any_case() {
+        for url in [
+            "https://example.com/a?b=c",
+            "http://localhost:3000",
+            "HTTPS://X.IO",
+        ] {
+            assert_eq!(resolve(url, r"C:\themes\t"), Page::Remote(url.to_owned()));
+        }
+        assert!(!is_remote("index.html"));
+        assert!(!is_remote(r"C:\pages\index.html"));
+        assert!(!is_remote("httpx://nope"));
+    }
+
+    #[test]
+    fn page_inside_the_theme_serves_the_theme_folder() {
+        assert_eq!(
+            resolve("index.html", r"C:\themes\t"),
+            Page::Local {
+                folder: PathBuf::from(r"C:\themes\t"),
+                url: "https://mypaper.theme/index.html".into(),
+            }
+        );
+        assert_eq!(
+            resolve("site/my page.html", r"C:\themes\t"),
+            Page::Local {
+                folder: PathBuf::from(r"C:\themes\t"),
+                url: "https://mypaper.theme/site/my%20page.html".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn page_outside_the_theme_serves_its_own_folder() {
+        let page = Page::resolve(
+            r"D:\sites\fun\home.html",
+            Path::new(r"D:\sites\fun\home.html"),
+            Path::new(r"C:\themes\t"),
+        );
+        assert_eq!(
+            page,
+            Page::Local {
+                folder: PathBuf::from(r"D:\sites\fun"),
+                url: "https://mypaper.theme/home.html".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn percent_encoding_keeps_unreserved_and_escapes_the_rest() {
+        assert_eq!(percent_encode("a-B_c.9~"), "a-B_c.9~");
+        assert_eq!(percent_encode("a b#?é"), "a%20b%23%3F%C3%A9");
     }
 }

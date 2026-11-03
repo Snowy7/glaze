@@ -1,0 +1,148 @@
+.card {
+  --scale: 1;
+  /* Grows gently with the widget; the font-size setting multiplies it. */
+  --fs: calc(clamp(11.5px, 3.4cqmin, 15px) * var(--scale));
+  padding: clamp(10px, 6cqmin, 16px);
+  font-size: var(--fs);
+  line-height: 1.45;
+}
+
+/* Paper style: a light note. Same monochrome tokens, inverted. */
+.card[data-paper="on"] {
+  --surface: rgb(244 244 244 / 0.94);
+  --t0: #0a0a0a;
+  --t1: rgb(0 0 0 / 0.72);
+  --t2: rgb(0 0 0 / 0.46);
+  --t3: rgb(0 0 0 / 0.26);
+  --fill-1: rgb(0 0 0 / 0.05);
+  --fill-2: rgb(0 0 0 / 0.1);
+  --line: rgb(0 0 0 / 0.1);
+  color: var(--t0);
+}
+
+.view,
+#editor {
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+  overflow-y: auto;
+  color: var(--t1);
+}
+
+.view {
+  outline: none;
+  cursor: text;
+  overflow-wrap: anywhere;
+}
+.view:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--t3);
+  border-radius: var(--radius);
+}
+.empty {
+  color: var(--t3);
+}
+
+#editor {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  color: var(--t0);
+  caret-color: var(--t0);
+  user-select: text;
+}
+#editor::selection {
+  background: var(--fill-3);
+}
+
+/* ---- rendered blocks (one per source line) */
+.view > * {
+  margin: 0;
+}
+.view h1,
+.view h2,
+.view h3 {
+  color: var(--t0);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.view h1 { font-size: 1.35em; }
+.view h2 { font-size: 1.15em; }
+.view h3 { font-size: 1em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--t2); }
+.view b { color: var(--t0); font-weight: 650; }
+.view code {
+  padding: 0.05em 0.35em;
+  border-radius: 5px;
+  background: var(--fill-2);
+  font: 0.9em ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.view s { color: var(--t2); }
+.gap { height: 0.6em; }
+hr {
+  height: 1px;
+  margin: 0.5em 0;
+  border: 0;
+  background: var(--line);
+}
+blockquote {
+  padding-left: 0.7em;
+  border-left: 2px solid var(--t3);
+  color: var(--t2);
+}
+
+.li,
+.task {
+  display: flex;
+  gap: 0.6em;
+}
+.li::before {
+  content: "";
+  flex: none;
+  width: 0.32em;
+  height: 0.32em;
+  margin-top: 0.62em;
+  border-radius: 50%;
+  background: var(--t2);
+}
+.task {
+  cursor: pointer;
+}
+.box {
+  flex: none;
+  width: 1.05em;
+  height: 1.05em;
+  margin-top: 0.22em;
+  border-radius: 0.3em;
+  border: 1.5px solid var(--t2);
+  display: grid;
+  place-items: center;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+.task:hover .box {
+  border-color: var(--t0);
+}
+.task[data-checked] .box {
+  background: var(--t0);
+  border-color: var(--t0);
+}
+.task[data-checked] .box::after {
+  content: "";
+  width: 0.28em;
+  height: 0.52em;
+  margin-top: -0.1em;
+  border: solid var(--surface);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.card[data-paper="on"] .task[data-checked] .box::after {
+  border-color: #f4f4f4;
+}
+.task[data-checked] .text {
+  color: var(--t2);
+  text-decoration: line-through;
+}

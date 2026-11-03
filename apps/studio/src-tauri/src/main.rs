@@ -6,22 +6,22 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod autostart;
+mod capture;
 mod commands;
 mod engine;
+mod manifest;
 mod shell;
 mod source;
 mod themes;
+mod thumbs;
 mod watch;
-
-use tauri::Manager;
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            if let Some(window) = app.get_webview_window("main") {
-                app.manage(shell::apply_backdrop(&window));
-            }
+            let window = capture::build_main_window(app.handle())?;
+            shell::match_chrome(&window);
             // Live updates are a nicety: Studio still works if watching fails.
             if let Err(e) = watch::start(app.handle().clone()) {
                 eprintln!("not watching the config folder: {e:#}");
@@ -34,13 +34,17 @@ fn main() {
             commands::reset_config,
             commands::list_themes,
             commands::inspect_source,
+            commands::inspect_url,
             commands::create_theme,
+            commands::generate_preview,
+            commands::duplicate_theme,
+            commands::get_style,
+            commands::set_style,
             commands::engine_status,
             commands::start_engine,
             commands::stop_engine,
             commands::get_autostart,
             commands::set_autostart,
-            commands::shell_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running mypaper Studio");

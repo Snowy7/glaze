@@ -13,7 +13,7 @@ export type Config = {
   pause_on_fullscreen: boolean;
 };
 
-export type Kind = "shader" | "image" | "slideshow" | "video" | "scene";
+export type Kind = "shader" | "image" | "slideshow" | "video" | "scene" | "web" | "app";
 export type Fit = "cover" | "contain" | "stretch" | "center";
 export type Origin = "user" | "bundled" | "external";
 
@@ -27,6 +27,10 @@ export type ThemeEntry = {
   error: string | null;
   /** Absolute path of an image to show on the card. */
   preview: string | null;
+  /** A video theme whose thumbnail is still being made. */
+  previewPending: boolean;
+  /** The theme has a `windows` styling section. */
+  styled: boolean;
   active: boolean;
   /** What to write to `config.theme` to select this theme. */
   applyAs: string;
@@ -34,18 +38,41 @@ export type ThemeEntry = {
 
 export type ThemeList = { themes: ThemeEntry[]; roots: string[] };
 
+export type PresetInfo = { id: string; label: string; args: string };
+
 export type SourceInfo = {
-  path: string;
+  /** The absolute path, or the web address. */
+  source: string;
   kind: Kind;
   usesFit: boolean;
   suggestedName: string;
+  /** Launch-argument presets to offer (programs only). */
+  presets: PresetInfo[];
+  /** Arguments to start with, e.g. the Unity preset for a Unity player. */
+  defaultArgs: string;
 };
 
 export type CreateThemeRequest = {
   source: string;
   name: string;
   fit: Fit | null;
+  /** Launch arguments for programs, as one command-line style string. */
+  args: string | null;
   apply: boolean;
+};
+
+export type Corners = "default" | "round" | "small" | "square";
+export type Backdrop = "auto" | "none" | "mica" | "acrylic" | "tabbed";
+
+/** A theme's `windows` section. Null means "don't change". Colors are `#rrggbb`; accent and border also take `"auto"`. */
+export type WindowsStyle = {
+  accent: string | null;
+  border: string | null;
+  caption: string | null;
+  caption_text: string | null;
+  corners: Corners | null;
+  backdrop: Backdrop | null;
+  dark_mode: boolean | null;
 };
 
 export type EngineStatus = {
@@ -55,7 +82,6 @@ export type EngineStatus = {
 };
 
 export type Autostart = { enabled: boolean; command: string | null };
-export type ShellInfo = { mica: boolean };
 export type Changes = { config: boolean; themes: boolean };
 
 export const api = {
@@ -64,13 +90,17 @@ export const api = {
   resetConfig: () => invoke<Config>("reset_config"),
   listThemes: () => invoke<ThemeList>("list_themes"),
   inspectSource: (path: string) => invoke<SourceInfo>("inspect_source", { path }),
+  inspectUrl: (url: string) => invoke<SourceInfo>("inspect_url", { url }),
   createTheme: (request: CreateThemeRequest) => invoke<ThemeEntry>("create_theme", { request }),
+  generatePreview: (dir: string) => invoke<void>("generate_preview", { dir }),
+  duplicateTheme: (dir: string) => invoke<ThemeEntry>("duplicate_theme", { dir }),
+  getStyle: (dir: string) => invoke<WindowsStyle>("get_style", { dir }),
+  setStyle: (dir: string, style: WindowsStyle) => invoke<WindowsStyle>("set_style", { dir, style }),
   engineStatus: () => invoke<EngineStatus>("engine_status"),
   startEngine: () => invoke<EngineStatus>("start_engine"),
   stopEngine: () => invoke<EngineStatus>("stop_engine"),
   getAutostart: () => invoke<Autostart>("get_autostart"),
   setAutostart: (enabled: boolean) => invoke<Autostart>("set_autostart", { enabled }),
-  shellInfo: () => invoke<ShellInfo>("shell_info"),
 };
 
 /** Runs `handler` when config.json or the user themes folder changes on disk. */
@@ -81,8 +111,8 @@ export function onChanged(handler: (changes: Changes) => void): Promise<Unlisten
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "gif", "tif", "tiff", "webp", "heic", "heif"];
 const VIDEO_EXTENSIONS = ["mp4", "mkv", "webm", "mov", "m4v"];
 
-/** Native file picker for anything that can become a theme (a folder has its own picker). */
-export async function pickFile(): Promise<string | null> {
+/** Native file picker for pictures, videos, shaders and 3D scenes. */
+export function pickMedia(): Promise<string | null> {
   return open({
     multiple: false,
     directory: false,
@@ -101,6 +131,14 @@ export async function pickFile(): Promise<string | null> {
 
 export function pickFolder(): Promise<string | null> {
   return open({ multiple: false, directory: true });
+}
+
+export function pickHtml(): Promise<string | null> {
+  return open({ multiple: false, directory: false, filters: [{ name: "Web pages", extensions: ["html", "htm"] }] });
+}
+
+export function pickProgram(): Promise<string | null> {
+  return open({ multiple: false, directory: false, filters: [{ name: "Programs", extensions: ["exe"] }] });
 }
 
 /** A URL the webview can load for a local file the backend listed. */

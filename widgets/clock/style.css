@@ -1,0 +1,83 @@
+/* Layout adapts to the widget's size with container units, so any size between min and max works. */
+
+.card {
+  /* Inner box, and how many em wide the time string is (see the modifier classes). */
+  --w: calc(100cqw - 2 * var(--pad));
+  --h: calc(100cqh - 2 * var(--pad));
+  --k: 2.6;
+  --hf: 0.68;
+  --fs: min(calc(var(--w) / var(--k)), calc(var(--h) * var(--hf)));
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--fs) * 0.06);
+}
+.card.has-sec { --k: 3.45; }
+.card.has-ampm { --k: 3.15; }
+.card.has-sec.has-ampm { --k: 3.95; }
+.card.no-date { --hf: 0.8; }
+
+.time {
+  display: flex;
+  align-items: baseline;
+  gap: 0.12em;
+  font-size: var(--fs);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+.colon {
+  color: var(--t3);
+  margin: 0 0.02em;
+}
+.sec,
+.ampm {
+  font-size: 0.38em;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--t2);
+}
+.sec { font-size: 0.42em; }
+.ampm { text-transform: uppercase; letter-spacing: 0.06em; }
+
+.date {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5em;
+  font-size: clamp(11px, calc(var(--fs) * 0.21), 24px);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--t1);
+}
+.weekday { color: var(--t0); font-weight: 600; }
+.day { color: var(--t2); }
+.card.no-date .date { display: none; }
+
+.s { display: none; }
+@container (max-width: 230px) {
+  .date .l { display: none; }
+  .date .s { display: inline; }
+}
+
+/* Wide and short (3x1, 4x1): time on the left, the date stacked on the right. */
+@container (min-aspect-ratio: 3/1) {
+  .card {
+    --hf: 0.8;
+    --k: 4.2;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1em;
+  }
+  .card.has-sec { --k: 5.1; }
+  .card.has-ampm { --k: 4.8; }
+  .card.has-sec.has-ampm { --k: 5.6; }
+  .date {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.15em;
+    font-size: clamp(12px, calc(var(--fs) * 0.28), 26px);
+  }
+}

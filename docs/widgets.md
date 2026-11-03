@@ -109,12 +109,30 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
     An origin is `scheme://host[:port]` with no path; schemes are `http`, `https`, `ws`, `wss`.
   - `theme`: read the current wallpaper palette and theme name.
   - `clipboard.write`: the shell adds `allow="clipboard-write"` to the widget's iframe, so
-    `navigator.clipboard.writeText` works. There's no bridge method for it.
+    `navigator.clipboard.writeText` works. There's no wire method for it.
 - `plugins`: plugin ids whose methods this widget may call (see Plugins).
 - `settings`: rendered by the shell in edit mode, and by Studio. Values go to the widget at load
-  and on every change. A saved value that doesn't fit its setting (wrong type, a number outside
-  `min`/`max`, a select value not in `options`, a color that isn't `#rrggbb`) is replaced by the
-  default.
+  and on every change. Types: `boolean`, `string`, `color`, `select` (needs `options`), `number`
+  (optional `min`, `max`, `step`), and `list`:
+
+  ```json
+  { "key": "shortcuts", "type": "list", "label": "Shortcuts", "maxItems": 24,
+    "fields": [ { "key": "label", "type": "string", "label": "Label" },
+                { "key": "target", "type": "string", "label": "Path or URL" } ],
+    "default": [ { "label": "Files", "target": "explorer.exe" } ] }
+  ```
+
+  A `list` is an editable list of records: the shell renders one input per field for each item
+  (with add and remove), and the widget receives an array of `{ <field key>: value }` objects.
+  `fields` take the scalar types above, and their `default` is optional.
+
+  A saved value that doesn't fit its setting (wrong type, a number outside `min`/`max`, a select
+  value not in `options`, a color that isn't `#rrggbb`, a list longer than `maxItems` or with an
+  invalid field) is replaced by the default. List items get missing fields filled from the
+  field's default (or `false`, `0`, `""`, the first option, `#ffffff`) and unknown fields dropped.
+- `$schema`: optional, ignored by the host. Point it at
+  `packages/widget-sdk/schema/widget.schema.json` for editor validation and completion
+  (`plugin.schema.json` for plugins).
 
 ## Layout: `widgets.json`
 
@@ -183,23 +201,24 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
 
 ## Widget JS API (`mypaper`)
 
-The host injects the shell's bridge script (`widgets/shell/dist/bridge.js`) into every frame at
-document creation (`AddScriptToExecuteOnDocumentCreated`). It activates only in a frame on a
-`*.widget.mypaper` origin whose parent is the shell, before any of the widget's own scripts run.
-It reads the instance id and manifest from the iframe's `name`, which the shell sets to
-`{"instance": "…", "widget": {…manifest}}`. Widgets can import the typed SDK
-(`packages/widget-sdk`) or use the global `mypaper` object. Every call is a promise. A call to a
-capability the manifest didn't declare rejects with `PermissionDenied`.
+Widgets bring the SDK themselves: the `mypaper.js` drop-in (`<script src="mypaper.js">`, which
+defines the global `mypaper`) or the typed package (`packages/widget-sdk`). It speaks the wire
+protocol below with the shell. Every call is a promise. A call to a capability the manifest didn't
+declare rejects with `PermissionDenied`.
 
 ```ts
 interface Mypaper {
-  readonly instance: string;        // "clock-1"
-  readonly widget: WidgetManifest;  // the parsed manifest
+  readonly ready: Promise<void>;    // resolves once the shell answers the handshake; every call waits for it
+  readonly instance: string;        // "clock-1" (after ready)
+  readonly widget: WidgetManifest;  // the parsed manifest (after ready)
+  readonly visible: boolean;        // false while the host is held
+  readonly editing: boolean;        // edit mode is on
   settings: {
     get(): Promise<Record<string, unknown>>;
     onChange(cb: (s: Record<string, unknown>) => void): () => void;
   };
   size: {
+    // px is in CSS pixels (what innerWidth/innerHeight report); dpi is the monitor's (96 = 100%).
     get(): Promise<{ cells: [number, number]; px: [number, number]; dpi: number }>;
     onChange(cb: (s: { cells: [number, number]; px: [number, number]; dpi: number }) => void): () => void;
   };
@@ -233,44 +252,66 @@ interface Mypaper {
   (`name` is `"C:"`); `gpu` is the busiest GPU engine and is omitted when unavailable. Media
   `position` and `duration` are seconds. `position` is sampled: change events fire on seeks and
   track changes, not every second, so advance it locally while `playing`. `artwork` is a
-  `data:image/…;base64,` URL (omitted above 256 KB). Colors are `#rrggbb`.
-- **Wire format (iframe ⇄ shell)**: `postMessage` with
-  `{ mypaper: 1, id, method, params }` → `{ mypaper: 1, id, result } | { mypaper: 1, id, error: { code, message } }`,
-  and events as `{ mypaper: 1, event, data }`. The shell checks the sender's `event.source` (and
-  `event.origin`) against the instance's iframe and forwards to the host with the **instance id
-  attached by the shell**, never by the widget. The host enforces permissions from the manifest on
-  disk, never from the message.
-- **Methods** (`params` → `result`):
-
-  | Method | Params | Result | Needs |
-  |---|---|---|---|
-  | `hello` | — | `null` | — (sent by the bridge at document start; drops that instance's old subscriptions) |
-  | `settings.get` | — | settings object | — |
-  | `size.get` | — | `{ cells, px, dpi }` | — (answered by the shell) |
-  | `storage.get` | `{ key }` | the value, or `null` | — |
-  | `storage.set` | `{ key, value }` | `null` | — (omitting `value` deletes the key; 1 MB per instance) |
-  | `system.stats` | — | `SystemStats` | `system.stats` |
-  | `system.subscribe` | `{ intervalMs }` | `{ sub }` | `system.stats` |
-  | `system.unsubscribe` | `{ sub }` | `null` | `system.stats` |
-  | `media.current` | — | `MediaState` or `null` | `media` |
-  | `media.subscribe`, `media.unsubscribe` | — | `null` | `media` |
-  | `media.control` | `{ action }` | `null` | `media` |
-  | `launch` | `{ target }` | `null` | `launch` |
-  | `theme.current` | — | `ThemeInfo` | `theme` |
-  | `theme.subscribe`, `theme.unsubscribe` | — | `null` | `theme` |
-  | `plugin.call` | `{ plugin, method, params? }` | the plugin's result | plugin listed in `plugins` |
-  | `plugin.subscribe`, `plugin.unsubscribe` | `{ plugin, event }` | `null` | plugin listed in `plugins` |
-
-- **Events** (`event` → `data`): `settings` → settings object; `size` → `{ cells, px, dpi }`;
-  `visibility` → boolean; `editmode` → boolean; `system.stats` → `{ sub, stats }`; `media` →
-  `MediaState` or `null`; `theme` → `ThemeInfo`; `plugin` → `{ plugin, event, data }`. The bridge
-  subscribes on the first `onChange`/`onPlugin` listener and unsubscribes after the last. The shell
-  sends `editmode` and `visibility` right after relaying a frame's `hello`, and the bridge calls an
-  `on("editmode" | "visibility")` listener added later with the last value it received.
-- **Errors**: `PermissionDenied`, `NotFound`, `InvalidParams`, `PluginUnavailable`, `Internal`. The
-  bridge rejects with an `Error` whose `name` and `code` are the error code.
+  `data:image/…;base64,` URL (omitted above 256 KB). `app` is a readable app name (`Spotify`, not
+  `Spotify.exe`). Colors are `#rrggbb`.
+- **Errors**: `PermissionDenied`, `NotFound`, `InvalidParams`, `PluginUnavailable`, `Internal`.
 - **Visibility**: when the host is held, widgets get `visibility:false` and then the WebView is
-  suspended. Widgets should stop their animations. Subscriptions are paused automatically.
+  suspended. Widgets should stop their animations. Subscriptions are paused automatically. A
+  monitor covered by a maximized or fullscreen window is paused the same way, on its own.
+
+### Wire protocol (iframe ⇄ shell)
+
+The SDK (`packages/widget-sdk`, also the `mypaper.js` drop-in) speaks this; the shell implements
+the other side. All messages carry `"mypaper": 1`: requests are `{ mypaper: 1, id, method, params }`,
+answers `{ mypaper: 1, id, result }` or `{ mypaper: 1, id, error: { code, message } }`, and events
+`{ mypaper: 1, event, data }`. The shell only accepts a message whose `event.source` is the
+instance's iframe and whose `event.origin` is that widget's origin, and forwards it to the host with
+the **instance id attached by the shell**, never by the widget. The host enforces permissions from
+the manifest on disk, never from the message.
+
+**Handshake.** On load the widget sends `hello` (`params: { sdk: 1 }`). The shell answers with
+everything a widget needs synchronously afterwards:
+`{ instance, widget /* the manifest */, settings, size, visible, editing }`. `mypaper.ready`
+resolves with that, and every other call waits for it. (A widget that gets no answer within
+10 s fails `ready`: it is not inside mypaper.)
+
+**Requests** (widget → shell, answered with `result` or `error`). The shell checks the permission
+from the manifest *before* forwarding to the host (the host checks again, from disk):
+
+| method | params | result | needs |
+|---|---|---|---|
+| `hello` | `{ sdk }` | the handshake state above | |
+| `storage.get` | `{ key }` | the value, or `null` when missing | |
+| `storage.set` | `{ key, value }` | `null` (a missing `value`, which is what `undefined` becomes, deletes the key; 1 MB per instance) | |
+| `system.stats` | | `SystemStats` | `system.stats` |
+| `media.current` | | `MediaState` or `null` | `media` |
+| `media.control` | `{ action }` | `null` | `media` |
+| `launch` | `{ target }` | `null` | `launch` |
+| `theme.current` | | `ThemeInfo` | `theme` |
+| `plugin` | `{ plugin, method, params? }` | the plugin's result | `plugin` listed in `plugins` |
+| `subscribe` | see below | `null` | per topic |
+| `unsubscribe` | `{ sub }` | `null` | |
+
+**Subscriptions.** `subscribe` params are `{ sub, topic: "system", intervalMs }`,
+`{ sub, topic: "media" }`, `{ sub, topic: "theme" }` or
+`{ sub, topic: "plugin", plugin, event }`, where `sub` is an id the widget makes up. Values arrive
+as `{ mypaper: 1, event: "sub", data: { sub, value } }`:
+
+- `system`: one sample right away, then one per `intervalMs` (never faster than 1000).
+- `media`, `theme`: on change only (read the current value with `media.current` / `theme.current`).
+- `plugin`: each matching plugin event's `data`.
+
+While the host is held (`visibility: false`) nothing is delivered; `system` sends a sample as soon
+as the widget is visible again.
+
+**Pushed events** (shell → widget, always on, no subscription): `visibility` (`boolean`),
+`editmode` (`boolean`), `settings` (the full settings object) and `size`
+(`{ cells, px, dpi }`).
+
+**Plugin errors.** A JSON-RPC `error` from a plugin becomes a wire error as follows: if
+`error.data.code` is one of the five names above it is used; otherwise `-32601` is `NotFound`,
+`-32602` is `InvalidParams` and anything else is `Internal`. A plugin that isn't running, can't
+start or crashed mid-call is `PluginUnavailable`. The message is passed on.
 
 ## Host ⇄ shell
 
@@ -292,11 +333,12 @@ type HostToShell =
       error?: string }                                     // widgets.json doesn't parse
   | { type: "reply"; instance: string; id: number | string; result?: unknown;
       error?: { code: string; message: string } }
-  | { type: "event"; instance: string; event: string; data: unknown }
+  | { type: "event"; instance: string; event: "sub"; data: { sub: string; value: unknown } }
   | { type: "reload"; widget: string };                   // the widget's files changed
 
 type ShellToHost =
   | { type: "ready" }                                      // the host answers with "state"
+  | { type: "hello"; instance: string }                    // a frame (re)loaded: drop its subscriptions
   | { type: "call"; instance: string; id: number | string; method: string; params?: unknown }
   | { type: "layout"; changes: { instance: string; cell: [number, number]; size: [number, number] }[] }
   | { type: "add"; widget: string; cell: [number, number]; size: [number, number] }
@@ -307,12 +349,16 @@ type ShellToHost =
 ```
 
 - The host sends `state` after `ready` and whenever anything in it changes. The shell reconciles by
-  instance id and never reloads an iframe that is still there. It emits `editmode`, `visibility`
-  and `size` events to widgets when those change, and answers `size.get` itself.
+  instance id and never reloads an iframe that is still there. It answers each frame's `hello`
+  from the state (and tells the host), and pushes `editmode`, `visibility`, `settings` and `size`
+  to widgets when those change in the state.
+- `call` carries every other wire request unchanged; the host answers with `reply`, and delivers
+  subscription values as `event` (`sub`). While a monitor is hidden its widgets get nothing.
 - Layout edits (`layout`, `add`, `duplicate`, `remove`, `settings`) are applied, clamped, saved, and
   answered with a fresh `state`, which is authoritative: a refused edit just gets the old state back.
-  The shell resolves overlaps and finds free cells before sending. A `settings` change also reaches
-  the widget as a `settings` event.
+  The shell resolves overlaps and finds free cells before sending.
+- The host also injects a small hardening script (`widgets/shell/dist/harden.js`) into every frame
+  at document creation (`AddScriptToExecuteOnDocumentCreated`); see [Network](#network).
 
 ## Network
 
@@ -330,8 +376,9 @@ sets from the requesting document and which pages can't forge. Then:
 Everything else is answered with a `403` without touching the network: requests with no
 attributable initiator, a `null` origin, a widget stripping its referrer (`no-referrer` breaks the
 widget, by design), service-worker scripts, and other schemes. `data:` and `blob:` URLs never reach
-the network and aren't filtered. The bridge also removes `RTCPeerConnection` from widget frames,
-since WebRTC traffic doesn't pass through the filter.
+the network and aren't filtered. WebRTC traffic doesn't pass through the filter, so the hardening
+script removes `RTCPeerConnection` (and its relatives) from every frame before the page's own
+scripts run.
 
 ## Plugins
 
@@ -352,7 +399,6 @@ is held.
 }
 ```
 
-- `command` is relative to the plugin folder.
 - **Transport**: JSON-RPC 2.0, one JSON object per line (UTF-8, `\n`-delimited) over stdin and
   stdout. stderr goes to the mypaper log.
 - **Handshake**: the host sends
@@ -361,15 +407,22 @@ is held.
   before that are queued.
 - **Calls**: the host sends `{"jsonrpc":"2.0","id":N,"method":"current","params":{…}}` and the plugin
   replies with `result` or `error` within 30 s (or the widget gets `PluginUnavailable`). Only
-  methods listed in `methods` are forwarded (others are `NotFound`). Plugin errors reach the widget
-  as `NotFound` (-32601), `InvalidParams` (-32602) or `Internal`, with the plugin's message.
+  methods listed in `methods` are forwarded (others are `NotFound`).
 - **Events**: the plugin sends notifications `{"jsonrpc":"2.0","method":"event","params":{"event":"updated","data":{…}}}`,
   and widgets subscribed via `onPlugin(id, event)` receive them. Only events listed in `events`
   can be subscribed to.
 - **Lifecycle**: the host sends `{"jsonrpc":"2.0","method":"suspend"}` and `{"jsonrpc":"2.0","method":"resume"}`
   notifications on hold and release, and `{"jsonrpc":"2.0","id":N,"method":"shutdown"}` before
   terminating it (with a 2 s grace period). A plugin is in use while a widget has a call pending or
-  an `onPlugin` subscription to it.
+  an `onPlugin` subscription to it. A plugin that exits while widgets listen to it is restarted,
+  backing off from 2 s to a minute.
+- **Command**: `command` is an executable in the plugin folder, else a program on `PATH` (for
+  example `python`, with `"args": ["plugin.py"]`).
+- **Reserved names**: `initialize`, `shutdown`, `suspend`, `resume` and `event` can't be listed in
+  `methods`. The host only forwards calls to methods listed in `plugin.json`.
+- **Errors**: a standard JSON-RPC `error`; put one of mypaper's error names in `error.data.code`
+  (for example `{"code":-32000,"message":"no such city","data":{"code":"NotFound"}}`) to choose how
+  the widget sees it (see Wire protocol).
 - **Isolation**: plugins run in a Job object (killed with the host), have no console, and are
   started with the plugin folder as their working directory.
 - `permissions` is documentation for users and Studio. Plugins are native code, so only install
@@ -385,6 +438,9 @@ is held.
   - `notes`: a sticky note, using storage.
   - `launcher`: a grid of shortcuts, using launch.
 - **Plugins**: `weather` (Rust, open-meteo, no API key).
+- **Tooling**: `packages/widget-sdk` has the typed SDK, the `mypaper.js` drop-in, the JSON
+  Schemas and a mock host for developing widgets in a browser. Tutorials:
+  [writing-widgets.md](writing-widgets.md) and [writing-plugins.md](writing-plugins.md).
 
 ## Performance budget
 
@@ -398,7 +454,7 @@ is held.
 
 ```sh
 pnpm -C widgets/shell install
-pnpm -C widgets/shell build          # → widgets/shell/dist (index.html + bridge.js)
+pnpm -C widgets/shell build          # → widgets/shell/dist (index.html + harden.js)
 cargo build -p mypaper-widgets
 target\debug\mypaper-widgets.exe     # finds widgets/, plugins/ and widgets/shell/dist by walking up
 target\debug\mypaper-widgets.exe --edit toggle   # or Ctrl+Alt+Shift+W

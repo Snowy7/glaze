@@ -1,0 +1,15 @@
+{
+  "name": "Midnight",
+  "wallpaper": {
+    "kind": "shader",
+    "source": "midnight.wgsl",
+    "fps": 60
+  },
+  "windows": {
+    "accent": "auto",
+    "border": "auto",
+    "corners": "round",
+    "backdrop": "mica",
+    "dark_mode": true
+  }
+}

@@ -1,0 +1,277 @@
+/* Layouts, by widget size (the container is the page itself):
+   A  one row (1 cell high): A1 narrow (2 wide): text + controls; A2 (3 wide): art, text, controls under;
+      A3 (4 wide): art, text, controls on the right. Progress is a thin bar on the card's bottom edge.
+   B  taller, narrow (2x2, 3x2): art and text on top, then progress, then controls.
+   C  taller, wide (4x2): big art on the left; text, progress and controls stacked on the right. */
+
+.card {
+  display: grid;
+  align-items: center;
+  gap: 6px 12px;
+  --art: calc(100cqh - 2 * var(--pad));
+  --play: 34px;
+}
+
+.backdrop {
+  position: absolute;
+  inset: -40px;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  /* Grayscale on purpose: the UI stays monochrome, only the cover itself carries color. */
+  filter: blur(28px) grayscale(1) brightness(0.95);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.card[data-state="has-art"][data-backdrop="on"] .backdrop {
+  opacity: 0.38;
+}
+
+/* ---- art */
+.art {
+  grid-area: art;
+  width: var(--art);
+  height: var(--art);
+  display: none;
+  place-items: center;
+  border-radius: min(14px, 18cqmin);
+  background: var(--fill-2);
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+}
+.art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.note {
+  width: 42%;
+  fill: none;
+  stroke: var(--t2);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.card[data-state="has-art"] .note {
+  display: none;
+}
+
+/* ---- text */
+.info {
+  grid-area: info;
+  min-width: 0;
+}
+.title,
+.artist {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--t0);
+}
+.artist {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--t1);
+}
+.card[data-state="empty"] .title {
+  color: var(--t1);
+}
+.card[data-state="empty"] .artist {
+  color: var(--t2);
+}
+
+/* ---- progress */
+.progress {
+  grid-area: progress;
+}
+.bar {
+  height: 3px;
+  background: var(--fill-2);
+  overflow: hidden;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+}
+.time {
+  display: none;
+  font-size: 10px;
+  color: var(--t2);
+}
+.card[data-state="empty"] .progress {
+  visibility: hidden;
+}
+
+/* ---- controls */
+.controls {
+  grid-area: controls;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.controls button {
+  width: 30px;
+  height: 30px;
+}
+.controls svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.controls .play {
+  width: var(--play);
+  height: var(--play);
+  margin: 0 2px;
+  background: var(--accent);
+  color: #000;
+}
+.controls .play:hover {
+  background: var(--accent);
+  color: #000;
+  filter: brightness(0.9);
+}
+.play svg {
+  width: 16px;
+  height: 16px;
+}
+.play .i-pause {
+  stroke-width: 3.2;
+}
+.card:not([data-playing]) .i-pause,
+.card[data-playing] .i-play {
+  display: none;
+}
+.card[data-state="empty"] .controls {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* ---- A1: one row, narrow (2x1) */
+.card {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  grid-template-areas: "info" "controls";
+}
+.progress {
+  position: absolute;
+  inset: auto 0 0 0;
+}
+
+/* ---- A2: one row, 3 wide: art | text over controls */
+@container (min-width: 250px) and (max-height: 129px) {
+  .card {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    grid-template-areas: "art info" "art controls";
+  }
+  .art {
+    display: grid;
+  }
+  .controls {
+    margin-left: -6px;
+  }
+}
+
+/* ---- A3: one row, 4 wide: art | text | controls */
+@container (min-width: 380px) and (max-height: 129px) {
+  .card {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: 1fr;
+    grid-template-areas: "art info controls";
+  }
+  .controls {
+    margin-left: 0;
+  }
+}
+
+/* ---- B and C: two rows high */
+@container (min-height: 130px) {
+  .art {
+    display: grid;
+  }
+  .progress {
+    position: static;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+  .bar {
+    border-radius: 99px;
+  }
+  .time {
+    display: block;
+  }
+  .title {
+    font-size: 15px;
+  }
+  .artist {
+    font-size: 12.5px;
+  }
+}
+
+/* B */
+@container (min-height: 130px) and (max-width: 329px) {
+  .card {
+    --art: clamp(56px, calc(100cqh - 2 * var(--pad) - 82px), 120px);
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "art info" "progress progress" "controls controls";
+    align-content: center;
+    gap: 10px 12px;
+  }
+  .info {
+    align-self: center;
+  }
+  .controls {
+    justify-content: center;
+    gap: 10px;
+  }
+  .title,
+  .artist {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .artist {
+    -webkit-line-clamp: 1;
+  }
+}
+
+/* C */
+@container (min-height: 130px) and (min-width: 330px) {
+  .card {
+    --art: min(calc(100cqh - 2 * var(--pad)), 44cqw);
+    --play: 40px;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: 1fr auto auto 1fr;
+    grid-template-areas: "art ." "art info" "art progress" "art controls";
+    gap: 10px clamp(14px, 4cqw, 22px);
+  }
+  .info {
+    align-self: end;
+  }
+  .title {
+    font-size: 17px;
+  }
+  .artist {
+    font-size: 13px;
+  }
+  .controls {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+}

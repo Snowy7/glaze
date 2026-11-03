@@ -14,12 +14,13 @@ use mypaper_desktop::{
     EXIT_RESTART, Rect, WindowEvents, covered_monitors, fullscreen_app_in_front, monitors,
 };
 use mypaper_theme::LoadedTheme;
-use windows::Win32::Foundation::POINT;
+use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use crate::gpu::{Gpu, Screen};
 use crate::hold::{Fact, HoldReasons, Holds};
+use crate::palette;
 use crate::sources::{self, Frame, Redraw, Source};
 use crate::window::Window;
 
@@ -43,6 +44,8 @@ pub struct Engine {
     theme: LoadedTheme,
     gpu: Gpu,
     source: Box<dyn Source>,
+    /// Per screen: what `source` was last told via `Source::set_visible`.
+    shown: Vec<bool>,
     screens: Vec<Screen>,
     /// Monitor rects for desktop mode; `None` in dev (windowed) mode.
     monitors: Option<Vec<Rect>>,
@@ -61,6 +64,8 @@ pub struct Engine {
     holds: Holds,
     /// The reasons behind the current `held`, for logging changes.
     reasons: HoldReasons,
+    /// The loaded theme's palette has not been written yet (once per load).
+    palette_due: bool,
 }
 
 impl Engine {
@@ -70,16 +75,18 @@ impl Engine {
         monitors: Option<Vec<Rect>>,
     ) -> Result<Self> {
         let (gpu, surfaces) = Gpu::new(&windows)?;
-        let screens = surfaces
+        let screens: Vec<Screen> = surfaces
             .into_iter()
             .zip(windows)
             .map(|(surface, window)| Screen::new(&gpu, surface, window))
             .collect::<Result<_>>()?;
-        let source = load_or_broken(&gpu, &theme);
+        let hwnds: Vec<HWND> = screens.iter().map(|s| s.window.0).collect();
+        let source = load_or_broken(&gpu, &theme, &hwnds);
         Ok(Self {
             theme,
             gpu,
             source,
+            shown: vec![true; screens.len()],
             screens,
             monitors,
             clock: Duration::ZERO,
@@ -92,6 +99,7 @@ impl Engine {
             held: false,
             holds: Holds::default(),
             reasons: HoldReasons::default(),
+            palette_due: true,
         })
     }
 
@@ -190,6 +198,7 @@ impl Engine {
             }
         }
 
+        self.sync_visibility();
         let active = !self.held && self.screens.iter().any(|s| !s.paused);
         if !active {
             self.last_tick = None; // the clock stops while nothing is visible
@@ -226,6 +235,18 @@ impl Engine {
         Flow::Wait(self.deadline(frame_deadline))
     }
 
+    /// Tells the source about screens that became visible or hidden since
+    /// the last call, so it can suspend what it runs for them.
+    fn sync_visibility(&mut self) {
+        for (index, screen) in self.screens.iter().enumerate() {
+            let visible = !self.held && !screen.paused;
+            if self.shown[index] != visible {
+                self.shown[index] = visible;
+                self.source.set_visible(index, screen.window.0, visible);
+            }
+        }
+    }
+
     fn deadline(&self, frame: Option<Instant>) -> Option<Instant> {
         [frame, self.reload_at, self.recheck_at]
             .into_iter()
@@ -240,9 +261,17 @@ impl Engine {
         let mut cursor = POINT::default();
         // SAFETY: `cursor` outlives the call.
         let _ = unsafe { GetCursorPos(&mut cursor) };
+        let native = self.source.native();
 
+        let mut drew = false;
         for (index, screen) in self.screens.iter_mut().enumerate() {
             if screen.paused || !(due || screen.dirty) {
+                continue;
+            }
+            if native {
+                // The source owns what is on screen: nothing to acquire or present.
+                screen.dirty = false;
+                self.source.layout(index, screen.window.0, screen.size());
                 continue;
             }
             let Some(texture) = screen.acquire(&self.gpu) else {
@@ -269,6 +298,20 @@ impl Engine {
             );
             self.gpu.queue.submit([encoder.finish()]);
             self.gpu.queue.present(texture);
+            drew = true;
+        }
+
+        // First frame of a newly loaded theme: publish its palette, once.
+        if drew && std::mem::take(&mut self.palette_due) {
+            let size = self.screens.first().map_or((1, 1), Screen::size);
+            palette::publish(
+                &self.gpu,
+                self.source.as_mut(),
+                &self.theme.dir,
+                size,
+                self.clock,
+                self.frame,
+            );
         }
     }
 
@@ -285,11 +328,16 @@ impl Engine {
     pub fn switch_theme(&mut self, dir: &Path) -> Result<()> {
         let theme = LoadedTheme::load(dir)?;
         let started = Instant::now();
-        let source = sources::load(&self.gpu, &theme)?;
+        let hwnds: Vec<HWND> = self.screens.iter().map(|s| s.window.0).collect();
+        let source = sources::load(&self.gpu, &theme, &hwnds)?;
         log::info!("{} loaded in {:.1?}", theme.theme.name, started.elapsed());
         self.source = source;
         self.theme = theme;
+        self.palette_due = true;
         self.next_frame = Instant::now();
+        // A new source starts with every screen visible.
+        self.shown.fill(true);
+        self.sync_visibility();
         self.mark_dirty();
         Ok(())
     }
@@ -303,9 +351,9 @@ impl Engine {
 
 /// A theme that fails at startup shows the red "broken" screen and keeps
 /// watching for a fix, instead of exiting.
-fn load_or_broken(gpu: &Gpu, theme: &LoadedTheme) -> Box<dyn Source> {
+fn load_or_broken(gpu: &Gpu, theme: &LoadedTheme, screens: &[HWND]) -> Box<dyn Source> {
     let started = Instant::now();
-    match sources::load(gpu, theme) {
+    match sources::load(gpu, theme, screens) {
         Ok(source) => {
             log::info!("{} ready in {:.1?}", theme.theme.name, started.elapsed());
             source

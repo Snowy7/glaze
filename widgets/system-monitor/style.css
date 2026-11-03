@@ -1,0 +1,112 @@
+.card {
+  padding: clamp(6px, 4cqmin, 10px);
+}
+
+/* main.js picks the column/row count that gives the most natural tile shape for the size. */
+.grid {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(var(--gc, 2), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--gr, 2), minmax(0, 1fr));
+  gap: clamp(4px, 2.4cqmin, 8px);
+}
+
+.tile {
+  position: relative;
+  container-type: size;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: calc(var(--radius) * 0.62);
+  background: var(--fill-1);
+  border: 1px solid var(--line);
+}
+.tile[hidden] {
+  display: none;
+}
+
+.spark {
+  position: absolute;
+  inset: auto 0 0 0;
+  width: 100%;
+  height: 52%;
+  overflow: visible;
+}
+.area {
+  fill: url(#fade);
+  stroke: none;
+}
+.line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.line.second {
+  stroke: var(--t2);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+
+.head {
+  position: absolute;
+  inset: 0 0 auto 0;
+  padding: clamp(6px, 9cqmin, 12px) clamp(8px, 11cqmin, 14px) 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.name {
+  font-size: clamp(9px, 11cqmin, 11px);
+}
+.value {
+  font-size: clamp(16px, 27cqmin, 36px);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+.value small {
+  font-size: 0.5em;
+  font-weight: 500;
+  color: var(--t2);
+  margin-left: 0.15em;
+  letter-spacing: 0;
+}
+.sub {
+  font-size: clamp(9px, 10cqmin, 11px);
+  color: var(--t2);
+  white-space: nowrap;
+}
+
+/* Short tiles: no secondary line. */
+@container (max-height: 88px) {
+  .sub {
+    display: none;
+  }
+}
+
+/* Wide strips (a 4x3 monitor stacked into rows): label and value left, sparkline right. */
+@container (min-aspect-ratio: 2.4/1) {
+  .head {
+    inset: 0 auto 0 0;
+    width: 42%;
+    justify-content: center;
+    padding-top: 0;
+  }
+  .spark {
+    inset: 0 0 0 auto;
+    width: 56%;
+    height: 78%;
+    margin: auto 8px;
+    top: 0;
+    bottom: 0;
+  }
+  .value {
+    font-size: clamp(16px, 38cqh, 34px);
+  }
+  .sub {
+    display: block;
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "launcher",
+  "name": "Launcher",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "A grid of your favourite apps, folders and links.",
+  "entry": "index.html",
+  "size": { "default": [2, 1], "min": [1, 1], "max": [4, 3] },
+  "resizable": true,
+  "permissions": ["launch"],
+  "plugins": [],
+  "settings": [
+    {
+      "key": "shortcuts",
+      "type": "list",
+      "label": "Shortcuts",
+      "fields": [
+        { "key": "label", "type": "string", "label": "Label" },
+        { "key": "target", "type": "string", "label": "Path or URL" }
+      ],
+      "maxItems": 24,
+      "default": [
+        { "label": "Files", "target": "explorer.exe" },
+        { "label": "Terminal", "target": "wt.exe" },
+        { "label": "Notepad", "target": "notepad.exe" },
+        { "label": "Calculator", "target": "calc.exe" },
+        { "label": "GitHub", "target": "https://github.com" }
+      ]
+    },
+    { "key": "labels", "type": "select", "label": "Labels", "options": ["auto", "always", "never"], "default": "auto" }
+  ]
+}

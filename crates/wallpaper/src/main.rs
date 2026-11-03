@@ -17,6 +17,7 @@
 mod control;
 mod engine;
 mod gpu;
+mod palette;
 mod sources;
 mod window;
 
@@ -97,6 +98,7 @@ fn parse_args() -> Result<Args> {
 
 fn run(args: Args, config: Config, theme: LoadedTheme) -> Result<u8> {
     log::info!("theme: {} ({})", theme.theme.name, theme.dir.display());
+    window::init_com_apartment()?;
     window::register_class()?;
 
     let host = if args.windowed {

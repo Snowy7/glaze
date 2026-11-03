@@ -39,7 +39,11 @@ type Studio = {
   /** Keys of in-flight actions, e.g. `apply:<theme id>` or `engine`. */
   busy: ReadonlySet<string>;
   toast: Toast | null;
+  /** Ids of video themes whose thumbnail is being made right now. */
+  pendingPreviews: ReadonlySet<string>;
   applyTheme: (theme: ThemeEntry) => Promise<void>;
+  /** Copies a theme into the user's themes folder; resolves to the copy. */
+  duplicateTheme: (theme: ThemeEntry) => Promise<ThemeEntry | undefined>;
   updateConfig: (patch: Partial<Config>) => Promise<void>;
   resetConfig: () => Promise<void>;
   startEngine: () => Promise<void>;
@@ -70,6 +74,10 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<number>(0);
+  // Video thumbnails come from Windows' shell and can take a moment, so they
+  // are made one at a time after the list shows. A failure keeps the placeholder.
+  const [pendingPreviews, setPendingPreviews] = useState<ReadonlySet<string>>(new Set());
+  const triedPreviews = useRef(new Set<string>());
 
   const notify = useCallback((message: string, tone: Toast["tone"] = "info") => {
     window.clearTimeout(toastTimer.current);
@@ -150,6 +158,15 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, [refreshConfig, refreshThemes, refreshEngine, refreshAutostart]);
 
   useEffect(() => {
+    const waiting = themes.filter((t) => t.previewPending && !triedPreviews.current.has(t.id));
+    setPendingPreviews(new Set(waiting.map((t) => t.id)));
+    const next = waiting[0];
+    if (!next) return;
+    triedPreviews.current.add(next.id);
+    api.generatePreview(next.dir).then(refreshThemes, refreshThemes);
+  }, [themes, refreshThemes]);
+
+  useEffect(() => {
     const poll = window.setInterval(() => {
       if (!document.hidden) void refreshEngine();
     }, ENGINE_POLL_MS);
@@ -179,6 +196,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       setConfig(saved);
       await refreshThemes();
       notify(`Applied ${theme.name}`);
+    },
+    [run, refreshThemes, notify],
+  );
+
+  const duplicateTheme = useCallback(
+    async (theme: ThemeEntry) => {
+      const copy = await run(`duplicate:${theme.id}`, () => api.duplicateTheme(theme.dir));
+      if (!copy) return undefined;
+      await refreshThemes();
+      notify(`Copied ${theme.name} to your themes`);
+      return copy;
     },
     [run, refreshThemes, notify],
   );
@@ -231,7 +259,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       autostart,
       busy,
       toast,
+      pendingPreviews,
       applyTheme,
+      duplicateTheme,
       updateConfig,
       resetConfig,
       startEngine,
@@ -250,7 +280,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       autostart,
       busy,
       toast,
+      pendingPreviews,
       applyTheme,
+      duplicateTheme,
       updateConfig,
       resetConfig,
       startEngine,
