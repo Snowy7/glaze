@@ -2,13 +2,20 @@
    tiny   (2x1)        current conditions only
    side   (3x1, 4x1)   current on the left, forecast columns on the right
    stack  (2x2)        current on top, forecast rows below
-   full   (3x2, 4x2)   current on top, forecast columns below */
+   full   (3x2, 4x2)   current on top, forecast columns below
+   Groups are separated by spacing and hairlines, never boxes: there may be no surface at all. */
 
+/* Icons are line art on a 24-unit grid. Each one sets --isz (its size in px, unitless) and the
+   stroke follows, so the line stays a thin ~1.7px at every size. */
 svg.icon,
-.day svg {
+.day svg,
+.status svg {
+  --isz: 24;
+  width: calc(var(--isz) * 1px);
+  height: calc(var(--isz) * 1px);
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: calc(41 / var(--isz));
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -36,8 +43,7 @@ svg.icon,
   font-weight: 600;
   color: var(--t0);
 }
-.place,
-.range {
+.place {
   color: var(--t2);
 }
 .range {
@@ -58,53 +64,61 @@ svg.icon,
 .day .name {
   color: var(--t2);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.day.today .name {
-  color: var(--t0);
+  letter-spacing: 0.09em;
 }
 .day .hi {
   color: var(--t0);
-  font-weight: 600;
+  font-weight: 500;
 }
 .day .lo {
   color: var(--t2);
 }
 .day svg {
-  width: 24px;
-  height: 24px;
   color: var(--t0);
 }
 
+/* Loading and errors live in the layout, in place of the content, so they read on any surface. */
 .status {
-  position: absolute;
-  inset: 0;
-  display: grid;
+  display: none;
   place-items: center;
-  padding: var(--pad);
+  align-content: center;
+  gap: 8px;
+  min-width: 0;
   text-align: center;
   color: var(--t1);
-  background: var(--surface);
+  text-wrap: balance;
+}
+.status svg {
+  --isz: 28;
+  color: var(--t2);
+}
+.card[data-state="error"] {
+  place-items: center;
+}
+.card[data-state="error"] > :is(.now, .days) {
+  display: none;
+}
+.card[data-state="error"] > .status {
+  display: grid;
 }
 .card[data-state="loading"] .temp,
 .card[data-state="loading"] .icon {
   opacity: 0.35;
 }
 
-/* ---- tiny: 200x96 */
+/* ---- tiny: 2x1 */
 .card[data-layout="tiny"] .now {
   grid-template-columns: auto auto minmax(0, 1fr);
   grid-template-areas: "icon temp ." "meta meta meta";
-  gap: 4px 8px;
+  gap: 4px 10px;
   height: 100%;
   align-content: center;
 }
 [data-layout="tiny"] .icon {
+  --isz: 38;
   grid-area: icon;
-  width: 38px;
-  height: 38px;
 }
 [data-layout="tiny"] .temp {
   grid-area: temp;
@@ -126,17 +140,17 @@ svg.icon,
 .card[data-layout="side"] {
   grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   align-items: center;
+  gap: 10px 16px;
 }
 [data-layout="side"] .now {
   grid-template-columns: auto auto;
   grid-template-areas: "icon temp" "meta meta";
-  gap: 4px 8px;
+  gap: 4px 10px;
   justify-content: start;
 }
 [data-layout="side"] .icon {
+  --isz: 34;
   grid-area: icon;
-  width: 34px;
-  height: 34px;
 }
 [data-layout="side"] .temp {
   grid-area: temp;
@@ -154,15 +168,45 @@ svg.icon,
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 4px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
+  padding-left: 14px;
+  border-left: 1px solid var(--fill-2);
 }
 [data-layout="side"] .day {
-  gap: 4px;
+  gap: 5px;
   align-content: center;
 }
 [data-layout="side"] .day .lo {
   display: none;
+}
+
+/* ---- very short (a 1-cell widget at a large scale): drop the icon, temperature beside the text */
+@container (max-height: 72px) {
+  .card[data-layout="tiny"] .now,
+  .card[data-layout="side"] .now {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "temp meta";
+    gap: 0 10px;
+    height: 100%;
+    align-content: center;
+    align-items: center;
+  }
+  .card .icon {
+    display: none;
+  }
+  .card .temp {
+    font-size: 32px;
+  }
+  .card .meta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1px;
+    font-size: 11px;
+  }
+}
+@container (max-height: 90px) {
+  .status svg {
+    display: none;
+  }
 }
 
 /* ---- stack: 2x2 */
@@ -177,9 +221,8 @@ svg.icon,
   justify-content: start;
 }
 [data-layout="stack"] .icon {
+  --isz: 44;
   grid-area: icon;
-  width: 44px;
-  height: 44px;
 }
 [data-layout="stack"] .temp {
   grid-area: temp;
@@ -194,20 +237,21 @@ svg.icon,
   align-content: end;
   gap: 2px;
   padding-top: 8px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--fill-2);
 }
 [data-layout="stack"] .day {
-  grid-template-columns: 44px 24px minmax(0, 1fr);
+  grid-template-columns: 44px 22px minmax(0, 1fr);
   justify-items: start;
   gap: 8px;
   font-size: 12px;
 }
 [data-layout="stack"] .day svg {
-  width: 18px;
-  height: 18px;
+  --isz: 18;
 }
 [data-layout="stack"] .day .temps {
   justify-self: end;
+  display: flex;
+  gap: 8px;
 }
 
 /* ---- full: 3x2, 4x2 */
@@ -222,9 +266,8 @@ svg.icon,
   justify-content: start;
 }
 [data-layout="full"] .icon {
+  --isz: 56;
   grid-area: icon;
-  width: 56px;
-  height: 56px;
 }
 [data-layout="full"] .temp {
   grid-area: temp;
@@ -244,10 +287,10 @@ svg.icon,
   grid-auto-columns: minmax(0, 1fr);
   gap: 4px;
   padding-top: 10px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--fill-2);
 }
 [data-layout="full"] .day {
-  gap: 4px;
+  gap: 5px;
   font-size: 12px;
 }
 [data-layout="full"] .day .temps {

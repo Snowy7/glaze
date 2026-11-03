@@ -163,9 +163,9 @@ editor.addEventListener("keydown", (e) => {
 
 // ---- settings and first load
 
-trackSettings({ paper: false, fontScale: 1 }, (s) => {
-  card.dataset.paper = s.paper ? "on" : "off";
-  card.style.setProperty("--scale", String(s.fontScale));
+// Text size only: the page scale is the user's global appearance setting.
+trackSettings({ fontScale: 1 }, (s) => {
+  card.style.setProperty("--fs-mult", String(s.fontScale));
 });
 
 // Edit mode (moving the widget) ends any typing so a half-typed note is saved.

@@ -48,20 +48,51 @@ pub fn status() -> EngineStatus {
     }
 }
 
+/// One of mypaper's programs and whether it is running.
+#[derive(Debug, Serialize)]
+pub struct Component {
+    pub id: &'static str,
+    pub exe: &'static str,
+    pub running: bool,
+    /// Where it was found beside Studio or in a build folder; `None` if it isn't built or installed.
+    pub path: Option<String>,
+}
+
+const COMPONENTS: [(&str, &str); 4] = [
+    ("core", CORE_EXE),
+    ("wallpaper", WALLPAPER_EXE),
+    ("widgets", "mypaper-widgets.exe"),
+    ("bars", "mypaper-bars.exe"),
+];
+
+pub fn components() -> Vec<Component> {
+    let processes = processes();
+    let studio = std::env::current_exe().ok();
+    COMPONENTS
+        .iter()
+        .map(|&(id, exe)| Component {
+            id,
+            exe,
+            running: processes.iter().any(|p| p.name.eq_ignore_ascii_case(exe)),
+            path: studio.as_deref().and_then(|studio| find_exe_from(studio, exe)).map(|p| p.display().to_string()),
+        })
+        .collect()
+}
+
 /// `mypaper-core.exe` beside Studio (installed layout), else the newest build
 /// in a `target\release` or `target\debug` of any parent folder (dev layout).
 pub fn find_core() -> Option<PathBuf> {
-    find_core_from(&std::env::current_exe().ok()?)
+    find_exe_from(&std::env::current_exe().ok()?, CORE_EXE)
 }
 
-fn find_core_from(exe: &Path) -> Option<PathBuf> {
-    let beside = exe.with_file_name(CORE_EXE);
+fn find_exe_from(exe: &Path, name: &str) -> Option<PathBuf> {
+    let beside = exe.with_file_name(name);
     if beside.is_file() {
         return Some(beside);
     }
     exe.ancestors()
         .skip(1)
-        .flat_map(|dir| ["release", "debug"].map(|profile| dir.join("target").join(profile).join(CORE_EXE)))
+        .flat_map(|dir| ["release", "debug"].map(|profile| dir.join("target").join(profile).join(name)))
         .filter(|path| path.is_file())
         .max_by_key(|path| std::fs::metadata(path).and_then(|m| m.modified()).ok())
 }
@@ -199,16 +230,17 @@ mod tests {
         let root = temp_dir("core");
         let studio = root.join("apps").join("studio").join("src-tauri").join("target").join("debug").join("mypaper-studio.exe");
         std::fs::create_dir_all(studio.parent().unwrap()).unwrap();
-        assert_eq!(find_core_from(&studio), None);
+        assert_eq!(find_exe_from(&studio, CORE_EXE), None);
 
         let built = root.join("target").join("debug").join(CORE_EXE);
         std::fs::create_dir_all(built.parent().unwrap()).unwrap();
         std::fs::write(&built, "").unwrap();
-        assert_eq!(find_core_from(&studio), Some(built));
+        assert_eq!(find_exe_from(&studio, CORE_EXE), Some(built));
+        assert_eq!(find_exe_from(&studio, "mypaper-bars.exe"), None, "each program is looked up by its own name");
 
         let beside = studio.with_file_name(CORE_EXE);
         std::fs::write(&beside, "").unwrap();
-        assert_eq!(find_core_from(&studio), Some(beside));
+        assert_eq!(find_exe_from(&studio, CORE_EXE), Some(beside));
         std::fs::remove_dir_all(&root).unwrap();
     }
 

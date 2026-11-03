@@ -1,0 +1,91 @@
+/* main.js sets --cols (1 or 2) and data-compact (short boxes drop the "of" line) from the box size. */
+
+/* Centered while everything fits; main.js caps the height at a whole row when it has to scroll. */
+.card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.list {
+  --fade-t: 0px;
+  --fade-b: 0px;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr));
+  column-gap: clamp(14px, 6cqw, 24px);
+  row-gap: 12px;
+  /* The fade is an alpha mask; the color is irrelevant, only its alpha counts. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgb(var(--ink) / 0) 0,
+    rgb(var(--ink)) var(--fade-t),
+    rgb(var(--ink)) calc(100% - var(--fade-b)),
+    rgb(var(--ink) / 0) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgb(var(--ink) / 0) 0,
+    rgb(var(--ink)) var(--fade-t),
+    rgb(var(--ink)) calc(100% - var(--fade-b)),
+    rgb(var(--ink) / 0) 100%
+  );
+}
+.list[data-compact="true"] {
+  row-gap: 10px;
+}
+
+.drive {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.pct {
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+}
+.pct b {
+  font-weight: inherit;
+}
+.pct small {
+  margin-left: 0.12em;
+  font-size: 0.66em;
+  font-weight: 500;
+  color: var(--t2);
+}
+.track {
+  height: 5px;
+}
+.track > i {
+  transition: width 0.5s ease;
+}
+.sub {
+  font-size: 11px;
+  color: var(--t2);
+}
+.list[data-compact="true"] .sub {
+  display: none;
+}
+
+.empty {
+  margin: 0;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--t2);
+}

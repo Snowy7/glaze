@@ -116,7 +116,7 @@ Release builds on a Ryzen laptop (AMD iGPU and NVIDIA dGPU, two 1440p monitors, 
 | `aurora`, shader at 60 fps | **0.17%** | |
 | `photo`, image | **0.02%** | drawn once, then idle |
 | `gallery`, slideshow | **0.01%** | idle between slides |
-| `loop`, 1080p30 video | **0.23%** | hardware decode, zero-copy D3D11→D3D12, 10-bit/HDR tone-mapped |
+| 1080p30 video (measured on the earlier synthetic clip) | **0.23%** | hardware decode, zero-copy D3D11→D3D12, 10-bit/HDR tone-mapped |
 | `islands`, 3D scene at 30 fps | **0.12%** | 4x MSAA, targets shared across same-size screens |
 | `webdemo`, web page at 30 fps | ~1% | Chromium's own frame pipeline |
 | 7 widgets visible | **0.07%** | one WebView2 per monitor, one shared stats timer |
@@ -184,7 +184,7 @@ A theme is a folder with a `theme.json`:
 | `shader` | `source`, `fps` (60), `scale` (1) | `aurora`, `midnight` |
 | `image` | `source`, `fit` (cover). WIC decode, EXIF rotation, downscaled to the largest monitor | `photo` |
 | `slideshow` | `folder`, `interval` (300 s), `transition` (1.5 s), `shuffle`, `fit` | `gallery` |
-| `video` | `source`, `fit`, `fps` (30), `speed` (1). H.264/HEVC/VP9/AV1 via Media Foundation, 8- and 10-bit, HDR tone-mapped | `loop` |
+| `video` | `source`, `fit`, `fps` (30), `speed` (1). H.264/HEVC/VP9/AV1 via Media Foundation, 8- and 10-bit, HDR tone-mapped | `earth-orbit` |
 | `scene` | `source` (.glb/.gltf), `fps`, `scale`, `orbit` (4°/s), `parallax` (0.15), `background` | `islands` |
 | `web` | `url` (http(s), or a local .html). WebView2, suspended while hidden | `webdemo` |
 | `app` | `command`, `args` (`{hwnd}` = the window to render into; Unity: `-parentHWND {hwnd} delayed`) | see [`themes/app-example`](themes/app-example) |

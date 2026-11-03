@@ -1,0 +1,23 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "calendar",
+  "name": "Calendar",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "A quiet month view with today highlighted; a week strip when wide and short, a date tile when small.",
+  "entry": "index.html",
+  "size": { "default": [2, 2], "min": [1, 1], "max": [4, 4] },
+  "resizable": true,
+  "permissions": [],
+  "plugins": [],
+  "settings": [
+    {
+      "key": "weekStart",
+      "type": "select",
+      "label": "Week starts on",
+      "options": ["auto", "monday", "sunday", "saturday"],
+      "default": "auto"
+    },
+    { "key": "weekNumbers", "type": "boolean", "label": "Week numbers", "default": false }
+  ]
+}

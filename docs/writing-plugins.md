@@ -4,7 +4,7 @@ A plugin is a separate process that widgets can call: for network access with ca
 anything a web page can't do, or for code in a language you prefer. It is a folder with a
 `plugin.json` and an executable, written in any language that can read and write lines on
 stdin/stdout. The contract is [widgets.md](widgets.md#plugins); this is the practical guide. The
-bundled `plugins/weather` (Rust) is a complete example.
+bundled `plugins/weather` and `plugins/rss` (both Rust) are complete examples.
 
 Plugins are native code with the user's rights. They are **not sandboxed**: the `permissions` in
 `plugin.json` are documentation for users, and Studio tells them to install only plugins they
@@ -244,3 +244,34 @@ not suspended, stale entries are refreshed in the background and announced with 
 `updated`, whose data is `{ location, units }`: call `current` / `forecast` again (they're served
 from the fresh cache). `suspend` stops the background refresh, `resume` catches up, and
 `shutdown` exits cleanly.
+
+## 7. The bundled rss plugin
+
+`plugins/rss`: Rust, `ureq` with rustls for HTTP and `quick-xml` as a light pull parser. It reads
+RSS 2.0, RSS 1.0 (RDF) and Atom; the `rss` widget is its client.
+
+```text
+cargo build --release -p mypaper-plugin-rss
+copy target\release\rss.exe plugins\rss\       (next to plugin.json)
+cargo nextest run -p mypaper-plugin-rss
+```
+
+One method, `feeds`, taking `{ urls, limit? }`: 1 to 12 `http(s)` URLs, and a limit of 1 to 100
+(default 30). It returns the feeds merged, newest first:
+
+```json
+{
+  "items": [{ "title": "...", "link": "https://...", "source": "Feed title or host", "published": 1793707200, "summary": "plain text, up to 280 chars" }],
+  "errors": [{ "url": "https://...", "message": "..." }]
+}
+```
+
+`published` (unix seconds) and `summary` are left out when the feed has none; items without a date
+come last, in feed order. `link` is `""` when the entry has no `http(s)` link, so `javascript:` and
+the like never reach a widget. A feed that fails (network, a body over 2 MiB, not a feed) is listed
+in `errors` and doesn't fail the call, even when every feed fails. Bad params are `InvalidParams`.
+
+Parsed feeds are cached for **15 minutes** per URL, in memory; a failed refresh serves the stale
+copy if there is one. The feeds of one call are fetched in parallel (10 s timeout each). The plugin
+starts no background work, so `suspend` and `resume` need no handling. The tests run the service
+against a fake fetcher and a fake clock, with feed fixtures (no network).

@@ -3,7 +3,7 @@
 //! stored as PNGs in `%LOCALAPPDATA%\mypaper\thumbs`. A thumbnail is keyed on
 //! the video's path, size and modified time, so editing the file makes a new one.
 
-use std::ffi::c_void;
+use std::ffi::{OsStr, c_void};
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -14,19 +14,26 @@ use windows::Win32::Graphics::Gdi::{
     BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, GetDC, GetDIBits, GetObjectW, HGDIOBJ, ReleaseDC,
 };
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
-use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF_THUMBNAILONLY};
+use windows::Win32::UI::Shell::{
+    IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF, SIIGBF_THUMBNAILONLY,
+};
 use windows::core::{Owned, PCWSTR};
 
 /// Large enough for a 2x card on a high-DPI screen.
 const SIZE_PX: SIZE = SIZE { cx: 640, cy: 400 };
 
-fn cache_dir() -> Result<PathBuf> {
+/// `%LOCALAPPDATA%\mypaper`, where Studio keeps its caches.
+pub fn local_dir() -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
-    Ok(PathBuf::from(local).join("mypaper").join("thumbs"))
+    Ok(PathBuf::from(local).join("mypaper"))
+}
+
+fn cache_dir() -> Result<PathBuf> {
+    Ok(local_dir()?.join("thumbs"))
 }
 
 /// 64-bit FNV-1a: stable across Rust versions, unlike `DefaultHasher`.
-fn fnv1a(bytes: &[u8]) -> u64 {
+pub fn fnv1a(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
 }
 
@@ -64,7 +71,7 @@ pub fn generate(source: &Path) -> Result<PathBuf> {
     Ok(target)
 }
 
-struct Rgba {
+pub struct Rgba {
     width: u32,
     height: u32,
     pixels: Vec<u8>,
@@ -92,14 +99,20 @@ impl Drop for ComScope {
 
 /// Asks the shell for the file's thumbnail (never a generic icon).
 fn shell_thumbnail(source: &Path) -> Result<Rgba> {
+    shell_image(source.as_os_str(), SIZE_PX, SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK)
+        .context("Windows has no thumbnail provider for this video")
+}
+
+/// The shell's image for a parsing name (a path, or `shell:AppsFolder\<AUMID>`),
+/// from `IShellItemImageFactory`: the same source Explorer draws from.
+pub fn shell_image(parsing_name: &OsStr, size: SIZE, flags: SIIGBF) -> Result<Rgba> {
     let _com = ComScope::enter();
-    let wide: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
-    // SAFETY: `wide` is a NUL-terminated UTF-16 path that outlives the call.
+    let wide: Vec<u16> = parsing_name.encode_wide().chain(Some(0)).collect();
+    // SAFETY: `wide` is a NUL-terminated UTF-16 name that outlives the call.
     let factory: IShellItemImageFactory = unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) }
-        .with_context(|| format!("opening {} in the shell", source.display()))?;
+        .with_context(|| format!("opening {} in the shell", parsing_name.to_string_lossy()))?;
     // SAFETY: plain COM call; the bitmap it returns is ours to delete.
-    let bitmap = unsafe { factory.GetImage(SIZE_PX, SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK) }
-        .context("Windows has no thumbnail provider for this video")?;
+    let bitmap = unsafe { factory.GetImage(size, flags) }.context("the shell has no image for this item")?;
     // SAFETY: `bitmap` is a fresh GDI handle that nothing else deletes.
     let bitmap = unsafe { Owned::new(bitmap) };
 
@@ -153,7 +166,7 @@ fn bgra_to_rgba(pixels: &mut [u8]) {
     }
 }
 
-fn encode_png(image: &Rgba) -> Result<Vec<u8>> {
+pub fn encode_png(image: &Rgba) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, image.width, image.height);
     encoder.set_color(png::ColorType::Rgba);

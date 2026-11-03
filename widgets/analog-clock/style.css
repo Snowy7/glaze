@@ -1,0 +1,107 @@
+/* The face is an SVG in a 100x100 box that fills the card and stays square and centered. Stroke
+   widths are in screen px (non-scaling) built from --u, which grows slowly with the widget. */
+
+.card {
+  display: grid;
+  place-items: center;
+  padding: clamp(8px, 5cqmin, 14px);
+}
+html[data-surface="none"] .card {
+  padding: clamp(2px, 2cqmin, 6px);
+}
+
+.clock {
+  --u: clamp(0.8px, 0.55cqmin, 2.4px);
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke-linecap: round;
+}
+.clock :is(line, circle) {
+  vector-effect: non-scaling-stroke;
+}
+
+.ring {
+  stroke: var(--t3);
+  stroke-width: calc(var(--u) * 0.9);
+}
+/* A surface gets a faint dial; a bare wallpaper keeps just the ring. */
+html:not([data-surface="none"]) .ring {
+  fill: var(--fill-1);
+}
+
+.tick.minor {
+  stroke: var(--t3);
+  stroke-width: calc(var(--u) * 0.7);
+}
+.tick.major {
+  stroke: var(--t1);
+  stroke-width: calc(var(--u) * 1.3);
+}
+
+/* SVG text takes the page's text shadow too; the svg's drop-shadow already covers legibility. */
+.clock text {
+  font-family: var(--font);
+  fill: var(--t1);
+  stroke: none;
+  text-shadow: none;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+#numerals text {
+  font-size: 8.5px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+}
+.date {
+  font-size: 5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  fill: var(--t2);
+}
+
+.hand {
+  transform-origin: 50px 50px;
+}
+.hour {
+  stroke: var(--t0);
+  stroke-width: calc(var(--u) * 2.8);
+}
+.minute {
+  stroke: var(--t0);
+  stroke-width: calc(var(--u) * 2);
+}
+.sec {
+  stroke: var(--accent);
+  stroke-width: calc(var(--u) * 0.9);
+  /* A ticking hand settles with a tiny overshoot; `.snap` and the smooth sweep have none. */
+  transition: transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.sec.snap,
+.smooth .sec {
+  transition: none;
+}
+.hub {
+  fill: var(--t0);
+  stroke: none;
+}
+.hub-sec {
+  fill: var(--accent);
+  stroke: none;
+}
+
+/* Small faces: only the hour ticks, no numerals or date. */
+@container (max-width: 135px), (max-height: 135px) {
+  .tick.minor,
+  #numerals,
+  .date {
+    display: none;
+  }
+}
+@container (max-width: 175px), (max-height: 175px) {
+  .date {
+    display: none;
+  }
+}

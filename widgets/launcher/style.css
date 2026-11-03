@@ -1,3 +1,4 @@
+/* The card's padding is mirrored in main.js (`capacity`): keep them in sync. */
 .card {
   padding: clamp(8px, 6cqmin, 14px);
 }
@@ -19,7 +20,7 @@
   justify-items: center;
   gap: 5px;
   padding: 6px 2px;
-  border-radius: 14px;
+  border-radius: calc(var(--radius) * 0.7);
   color: var(--t1);
 }
 .tile:hover {
@@ -27,6 +28,8 @@
   color: var(--t0);
 }
 
+/* The monogram: a soft squircle. On a bare wallpaper a small frosted chip (so it reads over any
+   photo), on a surface a plain fill. */
 .mono {
   display: grid;
   place-items: center;
@@ -37,13 +40,25 @@
   border: 1px solid var(--line);
   color: var(--t0);
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   transition: background-color 0.12s, border-color 0.12s;
+}
+html[data-surface="none"] .mono {
+  background: var(--chip);
+  border-color: var(--fill-2);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  /* The chip is its own backdrop; the shared shadow would only smudge the letter. */
+  text-shadow: none;
 }
 .tile:hover .mono {
   background: var(--fill-3);
   border-color: var(--t3);
+}
+html[data-surface="none"] .tile:hover .mono {
+  background: var(--chip);
+  border-color: var(--t2);
 }
 
 .label {
@@ -61,7 +76,7 @@
 }
 .grid[data-mode="compact"] .tile {
   padding: 0;
-  border-radius: 12px;
+  border-radius: calc(var(--radius) * 0.6);
 }
 .grid[data-mode="compact"] .mono {
   width: var(--s);
@@ -75,8 +90,10 @@
 /* Launch failed (missing file, blocked URL): a short flash, not a dialog. */
 .tile[data-failed] .mono {
   border-color: var(--t0);
-  background: transparent;
   font-size: 0;
+}
+html:not([data-surface="none"]) .tile[data-failed] .mono {
+  background: transparent;
 }
 .tile[data-failed] .mono::after {
   content: "!";
@@ -90,5 +107,5 @@
   place-items: center;
   padding: var(--pad);
   text-align: center;
-  color: var(--t2);
+  color: var(--t1);
 }

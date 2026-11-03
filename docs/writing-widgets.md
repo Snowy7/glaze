@@ -4,7 +4,8 @@ A widget is a folder with a `widget.json` and a web page. No build step is requi
 doesn't need rebuilding or restarting to pick up a new folder. The contract is
 [widgets.md](widgets.md); this is the practical guide. The six bundled widgets in `widgets/` are
 complete, small examples: `clock` is the simplest, `system-monitor` and `weather` show responsive
-layouts and subscriptions.
+layouts and subscriptions. The rest of the bundled set (calendar, timer, todo, battery, network,
+disk, search, rss and more) are good references for storage, lists, plugins and permissions.
 
 ## 1. A widget in two files
 
@@ -30,13 +31,8 @@ Create `%APPDATA%\mypaper\widgets\hello\` (or `widgets/hello/` in the repo for a
 ```html
 <!doctype html>
 <meta charset="utf-8" />
-<style>
-  html, body { margin: 0; height: 100%; background: transparent; font: 16px "Segoe UI", sans-serif; color: #fff; }
-  body { display: grid; place-items: center; }
-  main { position: absolute; inset: 0; display: grid; place-items: center;
-         background: rgb(16 16 16 / 0.72); border-radius: 20px; backdrop-filter: blur(24px); }
-</style>
-<main id="out">...</main>
+<link rel="stylesheet" href="base.css" />
+<main class="card" id="out" style="display: grid; place-items: center; font-size: 1.6em">...</main>
 <script src="mypaper.js"></script>
 <script>
   mypaper.settings.get().then((s) => (out.textContent = `Hello, ${s.name}`));
@@ -44,23 +40,30 @@ Create `%APPDATA%\mypaper\widgets\hello\` (or `widgets/hello/` in the repo for a
 </script>
 ```
 
+`base.css` (see [Getting the kit](#getting-mypaperjs-and-the-kit)) brings the tokens and the optional
+background, so this widget already looks right with no background, glass or solid, light or dark
+text. There is nothing to paint yourself.
+
 Rules for the folder:
 
 - `id` is lowercase `[a-z0-9-]` and equals the folder name.
 - A widget is served from its **own origin** (`https://<id>.widget.mypaper/`) and can't load files
   from outside its folder, so keep everything it needs inside it (including `mypaper.js`).
-- The page background must be **transparent**: the WebView is. Only paint what you want to see.
+- The page background must be **transparent**: the WebView is. Only `.card` paints, and only when
+  the user chose a surface (see [Appearance](#5-appearance-and-style)).
 - Add `"$schema"` to get validation and completion in your editor. The host ignores it.
 
-### Getting `mypaper.js`
+### Getting `mypaper.js` and the kit
 
-`mypaper.js` is the drop-in build of the SDK: a single 3 KB script that defines the global
-`mypaper`. Build it once and copy it next to your `index.html`:
+`mypaper.js` is the drop-in build of the SDK: a single small script that defines the global
+`mypaper` and applies the user's appearance to the page (see below). Build it once and copy it next
+to your `index.html`, together with the kit (`base.css`: tokens and the optional surface; `kit.js`:
+helpers like `trackSettings`, `trackSize`, `every`):
 
 ```text
 cd packages/widget-sdk
 pnpm install
-pnpm build          # dist/mypaper.js, and refreshes the copies in widgets/*/
+pnpm build          # dist/mypaper.js, and refreshes the copies of mypaper.js, base.css and kit.js in widgets/*/
 ```
 
 Or, with your own bundler and TypeScript, import the SDK instead:
@@ -95,18 +98,32 @@ What it emulates, and how to poke at it (the panel on the left):
 | | |
 |---|---|
 | **Size** | Set the cell size within your manifest's `min` and `max`; also the cell px, gap and DPI. Your `size.onChange` fires like in the shell. |
+| **Appearance** | Every field of the user's appearance (surface, text tone, tint, opacity, blur, radius, accent, scale, border, text shadow) and a box for theme CSS. Changes are pushed live as the `appearance` event. |
 | **Host state** | **Visible** off is "the host is held" (`visibility: false`, subscriptions stop). **Edit mode** sends `editmode`. |
 | **Settings** | A form generated from your manifest, including `list`. Changes are pushed live and remembered per widget in this browser. |
 | **Permissions** | Enforced from your manifest: calling something you didn't declare rejects with `PermissionDenied`, as in the real host. |
-| **Data** | Fake `system.stats` (a random walk), a fake media player with artwork and working transport, themes with and without a palette. `launch` shows a toast. |
+| **Data** | Fake `system.stats` (a random walk, plus battery, uptime, network and three drives; the panel switches the battery between none, discharging and charging, and the network between wifi, ethernet and none), a fake media player with artwork and working transport, themes with and without a palette. `launch` shows a toast. |
 | **Storage** | In memory, per instance; viewable and clearable in the panel. |
 | **Plugins** | **Mock** (default) or **real**. See below. |
 | **Wire log** | The last messages in both directions. |
 
 Handy URL parameters: `widget`, `cols`, `rows`, `cell`, `gap`, `dpi`, `bg` (`dark`, `light`,
-`photo`, `checker`: check your widget over a busy wallpaper), `hidden=1`, `edit=1`,
-`settings=<json>`, `storage=<json>` (seed the instance storage), `media=playing|paused|none`,
-`theme=<name>`, `plugin=mock|real`, and `ui=0` (hide the panel, for screenshots).
+`photo`, `photo-dark`, `photo-light`, `checker`: check your widget over a busy wallpaper),
+`hidden=1`, `edit=1`, `settings=<json>`, `storage=<json>` (seed the instance storage),
+`media=playing|paused|none`, `battery=none|discharging|charging`, `net=wifi|ethernet|none`,
+`theme=<name>`, `plugin=mock|real`, the appearance (`surface=none|glass|solid`, `text=light|dark`,
+`scale=<0.5..2>`, `shadow=0|1`, `opacity`, `blur`, `radius`, `accent=<rrggbb>`, `tint=<rrggbb>`, or
+`appearance=<json>` with any field), `themecss=<css>`, and `ui=0` (hide the panel, for screenshots).
+
+**The gallery** shows everything at once: `http://localhost:5173/gallery.html?widget=hello` is a
+contact sheet with one live copy of the widget per surface (`none`, `glass`, `solid`, as rows) and
+size (`min`, `default`, `max`, as columns), over a dark and a light photo-like background (dark text
+is picked for the light one). Options: `sizes=min,default,max` or `2x1,4x2`, `surfaces=none,glass`,
+`bgs=photo-dark,photo-light`, `text=light|dark`, `scale`, `speed=40` (makes `system.subscribe` tick
+40 times faster, so sparklines fill up within a screenshot), plus the data and appearance parameters
+above. `node scripts/shot.mjs <name> "/gallery.html?widget=hello" 1400x900` (in `packages/widget-sdk`,
+with `MYPAPER_HARNESS=http://localhost:5173`) takes a headless Edge screenshot of any harness URL and
+prints the png's path.
 
 **Plugins.** In *mock* mode the weather plugin is built in, and any widget can ship canned
 answers in `mypaper.mock.json` next to its `widget.json`:
@@ -137,6 +154,11 @@ const off = mypaper.settings.onChange((s) => apply(s));   // every subscription 
 // Size, in cells and CSS pixels
 const { cells, px, dpi } = await mypaper.size.get();
 mypaper.size.onChange(({ cells, px }) => layout(px));
+
+// Appearance: mypaper.js already applies it to <html> (see "Appearance and style"); read it only
+// for what CSS can't do. Needs no permission.
+const { appearance, themeCss } = await mypaper.appearance.get();   // appearance.surface === "none" ...
+mypaper.appearance.onChange(({ appearance }) => redrawCanvas());
 
 // Lifecycle
 mypaper.visible;                          // current value
@@ -189,29 +211,118 @@ bundled widgets keep only values whose type matches the default's (`kit.js`: `tr
 Use `string` when "empty" must be a valid value (the weather widget's optional latitude and
 longitude): a `number` setting always has a number.
 
-## 5. Layout and style
+## 5. Appearance and style
+
+### The user decides how a widget looks
+
+Users and themes restyle **every** widget without touching its code: the surface behind it, the
+text tone, the accent, the font and the scale. (The fields and layers are in
+[widgets.md, Appearance](widgets.md#appearance).) Your job is to use the variables, never to pick
+colors. `mypaper.js` applies the appearance to your page by itself; `base.css` turns it into
+a card and into legible text. You get:
+
+| On `<html>` | Values | Use |
+|---|---|---|
+| `data-surface` | `none` (the default), `glass`, `solid` | Rules like `html[data-surface="none"] .foo { ... }`. |
+| `data-text` | `light` (for dark wallpapers), `dark` | Rarely needed: the tokens already flip. |
+| `data-shadow` | `on`, `off` | `base.css` adds the text shadow; you don't. |
+| `data-widget` | your id | Theme CSS targets `[data-widget="clock"]`. |
+
+| Variable | Is |
+|---|---|
+| `--t0` .. `--t3` | Text, from emphasis to quietest. Always use these for text. |
+| `--fill-1` .. `--fill-3` | Fills and hairlines on top of what's behind (bars, tracks, dividers, hover). |
+| `--line` | The card's border (transparent when the user turned borders off). |
+| `--accent`, `--on-accent` | The accent, and the ink that reads on it. Use sparingly: a progress fill, a ring, one highlight. |
+| `--surface`, `--blur` | The card's background and blur. `.card` already uses them. |
+| `--radius` | Corner radius. `.card` uses it; use `calc(var(--radius) * 0.6)` for things inside. |
+| `--ink`, `--halo` | `R G B` triples of the ink and its opposite, for custom alphas: `rgb(var(--ink) / 0.3)`. |
+| `--chip` | A small pill's background: a soft dark wash on a bare wallpaper, a plain fill on a surface. |
+| `--font`, `--scale` | The font family list, and the scale. Both are applied for you. |
+
+The **surface is `none` by default**: no card, the text sits straight on the wallpaper. That is the
+case to design for first. Then `glass` and `solid` have to look just as good.
+
+The classes in `base.css` that do the work:
+
+| Class | Is |
+|---|---|
+| `.card` | The widget's root box, absolutely filling the page. Paints the surface, border and blur only for `glass` and `solid`. |
+| `.panel` | A group inside the card: a quiet fill with a surface, **nothing at all** on a bare wallpaper (spacing and hairlines group things there instead). |
+| `.chip` | A pill (label, value, small button). |
+| `.field` | A text input; a small frosted pill on a bare wallpaper. |
+| `.track` and `.track > i` | A progress track and its fill (`width` or `transform` on the `i`). The track gets a faint outline on a bare wallpaper so it shows on any photo. |
+| `.rule` | A hairline divider. |
+| `.num`, `.caps`, `.dim`, `.ellipsis` | Tabular numbers, small caps labels, quiet text, truncation. |
+| `.gfx` | Gets the same soft drop-shadow as `<svg>` does on a bare wallpaper; put it on canvases and other graphics. |
+
+**Do:**
+
+- Style only with the variables above: `color: var(--t1)`, `background: var(--fill-1)`,
+  `stroke: var(--accent)`.
+- Keep graphics thin and soft: strokes of 1.5 to 2 px, round caps, no hard edges. On a bare wallpaper
+  `<svg>` and `.gfx` get a soft shadow for free; don't add outlines.
+- Group with spacing and hairlines (`.rule`, `--fill-2`), not boxes. Use `.panel` for the boxes you
+  do want with a surface.
+- Use `--radius` for corners, so the user's radius choice reaches your inner elements.
+- Make contrast with the *steps* (`--t0` for the one thing that matters, `--t1`, `--t2` for labels),
+  not with colors. Use `--accent` once or twice per widget.
+- Check every widget at all three surfaces, light and dark text, and over a dark and a light photo
+  (the gallery does this in one screenshot), at its smallest and largest size and at `scale` 0.7 and 1.5.
+
+**Don't:**
+
+- Never hard-code a background, a color or a gradient: no `#fff`, `rgb(...)`, `black`, `background:
+  rgba(...)` on your own elements. The only colors a widget owns are artwork and user data (a cover
+  image, a coin's red or green if you choose).
+- Never paint the page: `html` and `body` stay transparent, and `.card` is the only thing that
+  paints, and only with a surface. Don't give `.card` a background or border of your own.
+- Don't change `color-scheme`: `base.css` pins it to `dark` for every tone, because the shell's
+  iframes are `dark` and Chromium paints an opaque backdrop behind a frame whose scheme differs
+  (square dark corners behind a rounded glass widget). Don't flip it for `data-text="dark"`.
+- Don't add your own text shadows (stacked on the shared one they turn muddy), and don't rely on a
+  surface for legibility: with `none` the wallpaper is behind your text.
+- Don't scale things yourself for the user's `scale`: lay out at the size you're given
+  (`trackSize` from `kit.js` already reports the box divided by the scale) and the page is
+  scaled for you.
+- Don't read the appearance to pick your own colors. `mypaper.appearance.get()` exists for
+  what CSS can't do (say, a canvas), and even then read the CSS variables with `getComputedStyle`.
+
+The theme's widget CSS arrives last in the page, so a theme can override any of the above, or
+restyle one widget through `[data-widget="<id>"]`.
+
+### Layout
 
 Your widget is exactly the size of its cells, and it changes while the user drags the handles in
 edit mode. The most robust approach is CSS container units; the page itself is the container:
 
 ```css
-body { container-type: size; }
+body { container-type: size; }     /* base.css already does this */
 .time { font-size: min(34cqh, 17cqw); }
 @container (min-aspect-ratio: 3/1) { .card { flex-direction: row; } }
 ```
 
-Use `size.onChange` for what CSS can't do: choosing how many items to show, resizing a canvas.
-Make sure the widget works at **every** size between its manifest's `min` and `max`: check the
-corners in the harness.
+Use `size.onChange` (or `trackSize` in the kit) for what CSS can't do: choosing how many items to
+show, resizing a canvas. Make sure the widget works at **every** size between its manifest's `min`
+and `max`: check the corners in the harness or the gallery.
 
-The house style of the bundled widgets (copy `packages/widget-sdk/widget-kit/base.css` and `kit.js`
-into your folder to use it):
+`trackSize` reports the *page* box (the widget's pixels divided by `scale`), and may report once
+with a scale of 1 before the appearance arrives, then again. It knows nothing about your padding or
+your inner elements. When you need the real size of an inner element (a list that should show as
+many rows as fit), observe it with a `ResizeObserver` instead, as `world-clock` and the stats
+widgets do.
 
-- Monochrome: neutral grays with clear steps (`--t0` white for emphasis, `--t1`, `--t2`, `--t3`),
-  no accent hues. Offer the wallpaper's accent as an opt-in setting (`useWallpaperAccent`, needs
-  `theme`).
-- A soft translucent dark surface with `backdrop-filter`, a hairline border and generous radius.
-- Segoe UI Variable, tabular numbers for anything that changes, light weights for big numbers.
+### The house style
+
+The bundled widgets share one look, and copying `packages/widget-sdk/widget-kit/base.css` and
+`kit.js` into your folder gives you the parts:
+
+- Monochrome: neutral steps (`--t0` for emphasis, then `--t1`, `--t2`, `--t3`) and no hues.
+  `--accent` is white unless the user picks another color (or `auto`, the wallpaper's accent), so
+  it is how a widget gets color, without a setting of its own.
+- Segoe UI Variable (`--font`), tabular numbers (`.num`) for anything that changes, light weights
+  for big numbers, small caps labels (`.caps`).
+- Generous padding, soft shapes, one idea per widget.
 
 ## 6. Permissions
 
@@ -260,5 +371,7 @@ cost nothing.
 - Types: `// @ts-check` in your JS with `global.d.ts`.
 - Layout: the harness at your min, default and max size, over the `photo` and `checker` backgrounds,
   hidden on and off.
+- Appearance: the gallery (`/gallery.html?widget=<id>`): every surface at several sizes over a dark
+  and a light photo, and again with `text=dark`/`scale=1.5` and `appearance={"border":false}`.
 - Headless screenshots, without opening a window, for a quick look:
   `msedge --headless=new --screenshot=out.png --window-size=248,144 "http://localhost:5173/?ui=0&widget=hello&cols=2&rows=1"`.

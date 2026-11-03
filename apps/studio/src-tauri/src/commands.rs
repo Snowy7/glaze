@@ -12,10 +12,14 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use crate::autostart::{self, Autostart};
-use crate::engine::{self, EngineStatus};
-use crate::manifest::WindowsStyle;
+use crate::bars::{self, BarsConfig, BarsState};
+use crate::engine::{self, Component, EngineStatus};
+use crate::icons;
+use crate::look::Look;
+use crate::manifest::{SkinEdit, SkinKind, WindowsStyle};
 use crate::source::{self, Kind};
 use crate::themes::{self, NewTheme, Origin, ThemeEntry, ThemeList};
+use crate::widgets::{self, Layout, WidgetInfo};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -238,6 +242,132 @@ pub async fn set_style(dir: PathBuf, style: WindowsStyle) -> CmdResult<WindowsSt
         themes::read_style(&dir)
     };
     save().map_err(text)
+}
+
+/// Reads a theme's `widgets` or `bars` section.
+#[tauri::command]
+pub async fn get_skin(dir: PathBuf, kind: SkinKind) -> CmdResult<SkinEdit> {
+    themes::read_skin(&dir, kind).map_err(text)
+}
+
+/// Saves a user theme's `widgets` or `bars` section and returns what is now on disk.
+#[tauri::command]
+pub async fn set_skin(dir: PathBuf, kind: SkinKind, skin: SkinEdit) -> CmdResult<SkinEdit> {
+    let save = || -> Result<SkinEdit> {
+        themes::save_skin(&dir, &mypaper_config::user_themes_dir()?, kind, &skin)?;
+        themes::read_skin(&dir, kind)
+    };
+    save().map_err(text)
+}
+
+/// Copies a style sheet into a user theme; resolves to the path for the skin's `css`.
+#[tauri::command]
+pub async fn import_skin_css(dir: PathBuf, kind: SkinKind, source: PathBuf) -> CmdResult<String> {
+    let import = || themes::import_skin_css(&dir, &mypaper_config::user_themes_dir()?, kind, &source);
+    import().map_err(text)
+}
+
+/// The active theme's looks for widgets and bars: the layer under the user's own choices.
+#[derive(Debug, Default, Serialize)]
+pub struct ActiveSkins {
+    widgets: Look,
+    bars: Look,
+}
+
+#[tauri::command]
+pub async fn active_skins() -> ActiveSkins {
+    let skins = || -> Result<ActiveSkins> {
+        let theme = LoadedTheme::load(mypaper_theme::locate(Some(&load_config()?.theme))?)?.theme;
+        let look = |skin: Option<mypaper_theme::Skin>| Look(skin.and_then(|s| s.appearance).unwrap_or_default());
+        Ok(ActiveSkins { widgets: look(theme.widgets), bars: look(theme.bars) })
+    };
+    skins().unwrap_or_default()
+}
+
+#[tauri::command]
+pub async fn get_bars() -> CmdResult<BarsState> {
+    bars::path().and_then(|path| bars::load_from(&path)).map_err(text)
+}
+
+#[tauri::command]
+pub async fn set_bars(config: BarsConfig) -> CmdResult<BarsState> {
+    bars::path().and_then(|path| bars::save_to(&path, &config)).map_err(text)
+}
+
+/// Writes the default `bars.json`, for when the file on disk can't be parsed.
+#[tauri::command]
+pub async fn reset_bars() -> CmdResult<BarsState> {
+    bars::path().and_then(|path| bars::reset_at(&path)).map_err(text)
+}
+
+#[derive(Debug, Serialize)]
+pub struct MonitorInfo {
+    /// The device name `bars.json` uses, e.g. `\\.\DISPLAY2`.
+    device: String,
+    primary: bool,
+    width: u32,
+    height: u32,
+}
+
+#[tauri::command]
+pub async fn list_monitors(app: AppHandle) -> CmdResult<Vec<MonitorInfo>> {
+    let primary = app.primary_monitor().map_err(|e| e.to_string())?.and_then(|m| m.name().cloned());
+    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+    Ok(monitors
+        .iter()
+        .filter_map(|m| {
+            let device = m.name()?.clone();
+            Some(MonitorInfo { primary: primary.as_ref() == Some(&device), device, width: m.size().width, height: m.size().height })
+        })
+        .collect())
+}
+
+/// The icon file for a dock item. The webview may then read it through the asset protocol.
+#[tauri::command]
+pub async fn dock_icon(app: AppHandle, path: String) -> CmdResult<String> {
+    let file = tauri::async_runtime::spawn_blocking(move || icons::icon(&path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(text)?;
+    app.asset_protocol_scope().allow_file(&file).map_err(|e| e.to_string())?;
+    Ok(file.display().to_string())
+}
+
+#[tauri::command]
+pub async fn list_widgets() -> Vec<WidgetInfo> {
+    widgets::list()
+}
+
+#[tauri::command]
+pub async fn get_layout() -> CmdResult<Layout> {
+    widgets::load().map_err(text)
+}
+
+#[tauri::command]
+pub async fn set_widgets_appearance(appearance: Look) -> CmdResult<Layout> {
+    widgets::set_appearance(&appearance).map_err(text)
+}
+
+#[tauri::command]
+pub async fn remove_instance(instance: String) -> CmdResult<Layout> {
+    widgets::remove_instance(&instance).map_err(text)
+}
+
+/// Drops one placed widget's own look so it follows the global one again.
+#[tauri::command]
+pub async fn reset_instance_look(instance: String) -> CmdResult<Layout> {
+    widgets::clear_instance_look(&instance).map_err(text)
+}
+
+/// Toggles the widget host's edit mode on the desktop.
+#[tauri::command]
+pub async fn toggle_widget_edit() -> CmdResult<()> {
+    widgets::toggle_edit_mode().map_err(text)
+}
+
+#[tauri::command]
+pub async fn components() -> Vec<Component> {
+    engine::components()
 }
 
 #[tauri::command]

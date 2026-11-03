@@ -1,0 +1,21 @@
+[package]
+name = "mypaper-plugin-rss"
+description = "RSS/Atom feed plugin for mypaper widgets: merged, cached headlines (JSON-RPC over stdio)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# plugin.json says `"command": "rss.exe"`.
+[[bin]]
+name = "rss"
+path = "src/main.rs"
+
+[dependencies]
+quick-xml = { version = "0.42.0", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+# Blocking HTTP with rustls; no async runtime, no default features (no gzip, no native-tls).
+ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
+
+[lints]
+workspace = true

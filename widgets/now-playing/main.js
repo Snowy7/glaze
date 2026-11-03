@@ -1,5 +1,5 @@
 // @ts-check
-import { $, clamp, onVisible, trackSettings, useWallpaperAccent } from "./kit.js";
+import { $, clamp, onVisible, trackSettings } from "./kit.js";
 
 /** @typedef {NonNullable<Awaited<ReturnType<typeof mypaper.media.current>>>} Media */
 
@@ -79,8 +79,7 @@ $("#toggle").addEventListener("click", () => void mypaper.media.control("toggle"
 $("#prev").addEventListener("click", () => void mypaper.media.control("previous"));
 $("#next").addEventListener("click", () => void mypaper.media.control("next"));
 
-trackSettings({ wallpaperAccent: false, blurArtwork: true }, (s) => {
-  useWallpaperAccent(s.wallpaperAccent);
+trackSettings({ blurArtwork: true }, (s) => {
   card.dataset.backdrop = s.blurArtwork ? "on" : "off";
 });
 

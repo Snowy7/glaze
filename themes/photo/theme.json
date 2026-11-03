@@ -2,7 +2,7 @@
   "name": "Photo",
   "wallpaper": {
     "kind": "image",
-    "source": "C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg",
+    "source": "iss-aurora.jpg",
     "fit": "cover"
   }
 }

@@ -1,0 +1,297 @@
+/* main.js sets data-layout on the card (tile | row | stack), data-modes (on | off: the mode switch
+   shows or not) and data-state (idle | running | paused | done). The ring and readout size from
+   the ring box (.dial-box is the container); buttons and the switch from the widget's own size. */
+
+.card {
+  --bs: clamp(26px, 15cqmin, 40px); /* round button */
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 4cqmin, 12px);
+  padding: clamp(8px, 5cqmin, 14px);
+}
+html[data-surface="none"] .card {
+  padding: clamp(2px, 2cqmin, 6px);
+}
+
+/* ------------------------------------------------------------------ the ring */
+
+.dial-box {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+  display: grid;
+  place-items: center;
+}
+.dial {
+  position: relative;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+}
+/* Stroke widths are in viewBox units (they scale with the ring), because dash lengths must stay in
+   pathLength units: `non-scaling-stroke` would measure them in px and break the progress arc. */
+.ring-track {
+  stroke: var(--fill-3);
+  stroke-width: 1;
+}
+.prog {
+  stroke: var(--accent);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  transform-origin: 50px 50px;
+  transform: rotate(-90deg);
+}
+.glow {
+  stroke: var(--accent);
+  stroke-width: 5;
+  opacity: 0;
+  filter: blur(3px);
+}
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(min(100cqw, 100cqh) * 0.03);
+}
+.time {
+  font-size: calc(min(100cqw, 100cqh) * 0.27);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+.time[data-long] {
+  font-size: calc(min(100cqw, 100cqh) * 0.2);
+}
+.card[data-state="paused"] .time {
+  color: var(--t1);
+}
+
+.label {
+  display: none;
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(8px, calc(min(100cqw, 100cqh) * 0.085), 11px);
+}
+.card[data-modes="off"] .label,
+.card[data-state="done"] .label {
+  display: block;
+}
+.card[data-state="done"] .label {
+  color: var(--accent);
+}
+
+/* Completed focus sessions in the cycle; the one in progress is an outline. */
+.dots {
+  display: flex;
+  gap: calc(min(100cqw, 100cqh) * 0.035);
+}
+.dots i {
+  --s: max(4px, calc(min(100cqw, 100cqh) * 0.04));
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: var(--fill-3);
+}
+.dots i.on {
+  background: var(--t0);
+}
+.dots i.cur {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--t1);
+}
+.card[data-modes="off"] .dots,
+.card[data-state="done"] .dots {
+  display: none;
+}
+@container (max-height: 100px) {
+  .dots {
+    display: none;
+  }
+}
+
+/* Done: a soft glow breathes around the full ring for ~10 s (main.js drops data-pulse sooner if the
+   widget is touched). Reduced motion gets the static full ring and the "Done" label. */
+.dial[data-pulse] .glow {
+  animation: glow 2s ease-in-out 5;
+}
+.dial[data-pulse] .time {
+  animation: breathe 2s ease-in-out 5;
+}
+@keyframes glow {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ------------------------------------------------------------------ controls and modes */
+
+.side {
+  display: contents; /* stack: the switch, the ring and the buttons are the card's own rows */
+}
+.modes {
+  order: -1;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--chip);
+  box-shadow: inset 0 0 0 1px var(--fill-2);
+}
+html[data-surface="none"] .modes {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+/* Like .chip: these sit on their own wash, so the wallpaper's text shadow would only muddy them. */
+html[data-surface="none"] :is(.modes, .btn) {
+  text-shadow: none;
+}
+.card[data-modes="off"] .modes {
+  display: none;
+}
+.seg {
+  flex: 1 1 auto; /* longer names get more room */
+  min-width: 0;
+  padding: 0.5em 0.4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(8.5px, 4.6cqmin, 10px);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--t2);
+}
+.seg[aria-selected="true"] {
+  background: var(--fill-3);
+  color: var(--t0);
+}
+
+.controls {
+  order: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 3cqmin, 12px);
+}
+.btn {
+  width: var(--bs);
+  height: var(--bs);
+  background: var(--chip);
+  box-shadow: inset 0 0 0 1px var(--fill-2);
+}
+html[data-surface="none"] .btn {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.btn svg {
+  width: 46%;
+  height: 46%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.btn.play {
+  width: calc(var(--bs) * 1.25);
+  height: calc(var(--bs) * 1.25);
+  color: var(--t0);
+  background: var(--fill-2);
+}
+.btn.play:hover {
+  background: var(--fill-3);
+}
+.btn.play svg {
+  width: 44%;
+  height: 44%;
+}
+.i-play {
+  fill: currentColor;
+}
+
+/* ------------------------------------------------------------------ layouts */
+
+/* Wide: the ring on the left, the switch and buttons beside it. */
+.card[data-layout="row"] {
+  flex-direction: row;
+  align-items: stretch;
+  gap: clamp(10px, 6cqmin, 18px);
+}
+.card[data-layout="row"] .dial-box {
+  flex: none;
+  height: 100%;
+  aspect-ratio: 1;
+}
+.card[data-layout="row"] .side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  gap: clamp(8px, 5cqmin, 14px);
+}
+.card[data-layout="row"] .modes {
+  order: 0;
+  flex-direction: column;
+  border-radius: 16px;
+}
+.card[data-layout="row"][data-modes="off"] .modes {
+  display: none;
+}
+.card[data-layout="row"] .seg {
+  flex: none;
+  border-radius: 14px;
+}
+.card[data-layout="row"] .controls {
+  order: 0;
+}
+.card[data-layout="row"][data-modes="off"] {
+  --bs: 26px;
+}
+
+/* Small: just the ring, the readout and a play button inside the ring. */
+.card[data-layout="tile"] .side {
+  display: none;
+}
+.card[data-layout="tile"] .center {
+  padding-bottom: 42%;
+}
+.card[data-layout="tile"] .time {
+  font-size: calc(min(100cqw, 100cqh) * 0.25);
+}
+.card[data-layout="tile"] .controls {
+  --bs: 18px;
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  transform: translateX(-50%);
+}
+.card[data-layout="tile"] :is(.reset, .skip) {
+  display: none;
+}

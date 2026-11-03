@@ -19,6 +19,7 @@ import {
   errorText,
   onChanged,
   type Autostart,
+  type Component,
   type Config,
   type CreateThemeRequest,
   type EngineStatus,
@@ -35,7 +36,11 @@ type Studio = {
   roots: string[];
   themesLoaded: boolean;
   engine: EngineStatus | null;
+  /** Every mypaper program and whether it's running; null until the first check. */
+  components: Component[] | null;
   autostart: Autostart | null;
+  /** Shows a message at the bottom of the window. */
+  notify: (message: string, tone?: Toast["tone"]) => void;
   /** Keys of in-flight actions, e.g. `apply:<theme id>` or `engine`. */
   busy: ReadonlySet<string>;
   toast: Toast | null;
@@ -70,6 +75,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [roots, setRoots] = useState<string[]>([]);
   const [themesLoaded, setThemesLoaded] = useState(false);
   const [engine, setEngine] = useState<EngineStatus | null>(null);
+  const [components, setComponents] = useState<Component[] | null>(null);
   const [autostart, setAutostartState] = useState<Autostart | null>(null);
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [toast, setToast] = useState<Toast | null>(null);
@@ -133,7 +139,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   const refreshEngine = useCallback(async () => {
     try {
-      setEngine(await api.engineStatus());
+      const [status, programs] = await Promise.all([api.engineStatus(), api.components()]);
+      setEngine(status);
+      setComponents(programs);
     } catch {
       // A missed poll just keeps the last known status.
     }
@@ -222,12 +230,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const startEngine = useCallback(async () => {
     const status = await run("engine", () => api.startEngine());
     if (status) setEngine(status);
-  }, [run]);
+    await refreshEngine();
+  }, [run, refreshEngine]);
 
   const stopEngine = useCallback(async () => {
     const status = await run("engine", () => api.stopEngine());
     if (status) setEngine(status);
-  }, [run]);
+    await refreshEngine();
+  }, [run, refreshEngine]);
 
   const setAutostart = useCallback(
     async (enabled: boolean) => {
@@ -256,7 +266,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       roots,
       themesLoaded,
       engine,
+      components,
       autostart,
+      notify,
       busy,
       toast,
       pendingPreviews,
@@ -277,7 +289,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       roots,
       themesLoaded,
       engine,
+      components,
       autostart,
+      notify,
       busy,
       toast,
       pendingPreviews,

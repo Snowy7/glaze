@@ -1,0 +1,96 @@
+/* A header and rows of label and value. main.js decides how many rows fit and how many columns
+   there are (--cols, and --n rows per column); .row's height and the gap must match its ROW_H and GAP. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.head {
+  height: 22px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.logo {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--t0);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.logo .dot {
+  fill: var(--t0);
+  stroke: none;
+}
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.rows {
+  display: grid;
+  grid-auto-flow: column; /* columns fill top to bottom */
+  grid-template-rows: repeat(var(--n, 1), 24px);
+  grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr));
+  gap: 9px clamp(18px, 7cqw, 32px);
+}
+
+.row {
+  height: 24px;
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  grid-template-rows: 16px 3px;
+  row-gap: 5px;
+  align-items: center;
+}
+.key {
+  font-size: 10px;
+  white-space: nowrap;
+}
+.val {
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+}
+.val b {
+  font-weight: 500;
+  color: var(--t0);
+}
+.val small {
+  margin-left: 0.4em;
+  font-size: 1em;
+  font-weight: 400;
+  color: var(--t2);
+}
+.val small:empty {
+  display: none;
+}
+/* A narrow box has room for the main figure only, not the dim detail beside it. */
+@container (max-width: 175px) {
+  .val small {
+    display: none;
+  }
+}
+
+/* Under every row: a bar for CPU and RAM, a hairline for the rest. */
+.bar,
+.rule {
+  grid-column: 1 / -1;
+  height: 3px;
+}
+.bar > i {
+  transition: width 0.5s ease;
+}
+html[data-surface="none"] .rule {
+  background: rgb(var(--ink) / 0.2);
+  box-shadow: 0 0 0 0.5px rgb(var(--halo) / 0.18);
+}

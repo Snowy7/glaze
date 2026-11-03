@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BridgeHost, type Backend, type HostOutput } from "../dev/host";
-import type { WidgetManifest } from "../src";
+import { DEFAULT_APPEARANCE, type WidgetManifest } from "../src";
 
 const manifest = (overrides: Partial<WidgetManifest> = {}): WidgetManifest => ({
   id: "t",
@@ -12,7 +12,7 @@ const manifest = (overrides: Partial<WidgetManifest> = {}): WidgetManifest => ({
 });
 
 const backend: Backend = {
-  stats: () => ({ cpu: 1, memory: { used: 1, total: 2 } }),
+  stats: () => ({ cpu: 1, memory: { used: 1, total: 2 }, uptime: 60 }),
   media: () => null,
   control: vi.fn(),
   theme: () => ({ name: "mono" }),
@@ -25,6 +25,7 @@ function setup(m: WidgetManifest) {
   const host = new BridgeHost("t-1", m, backend, (msg) => out.push(msg), {
     settings: {},
     size: { cells: [2, 1], px: [200, 96], dpi: 96 },
+    look: { appearance: DEFAULT_APPEARANCE, themeCss: null },
   });
   const call = async (method: string, params?: unknown) => {
     const id = out.length + 1000;
@@ -100,5 +101,16 @@ describe("system subscriptions", () => {
     await call("unsubscribe", { sub: "s1" });
     vi.advanceTimersByTime(5000);
     expect(subs(out)).toHaveLength(5);
+  });
+});
+
+describe("appearance", () => {
+  it("hands the look over in the handshake and pushes changes", async () => {
+    const { host, out, call } = setup(manifest());
+    expect(await call("hello")).toMatchObject({ result: { appearance: DEFAULT_APPEARANCE, themeCss: null } });
+    const next = { appearance: { ...DEFAULT_APPEARANCE, surface: "glass" as const }, themeCss: "a{}" };
+    host.setAppearance(next);
+    expect(out.at(-1)).toEqual({ mypaper: 1, event: "appearance", data: next });
+    expect(await call("hello")).toMatchObject({ result: { appearance: next.appearance, themeCss: "a{}" } });
   });
 });

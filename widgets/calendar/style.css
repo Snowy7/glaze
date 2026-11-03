@@ -1,0 +1,216 @@
+/* Three layouts, chosen in main.js by size (data-mode): month, strip (a week) and tile (today). */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(2px, 2cqmin, 8px);
+  padding: clamp(8px, 5cqmin, 14px);
+}
+html[data-surface="none"] .card {
+  padding: clamp(2px, 2cqmin, 6px);
+}
+
+/* ------------------------------------------------------------------ header */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  min-height: 1.9em;
+  font-size: clamp(12px, 7.2cqmin, 17px);
+}
+.card[data-mode="tile"] .head {
+  display: none;
+}
+/* Narrow (a small box or a big scale): the year goes first; a very short strip drops the header. */
+@container (max-width: 170px) {
+  .yr {
+    display: none;
+  }
+}
+@container (max-height: 84px) {
+  .card[data-mode="strip"] .head {
+    display: none;
+  }
+}
+
+.title {
+  display: block;
+  min-width: 0;
+  padding: 0.15em 0.5em;
+  margin-left: -0.5em; /* the text, not the hover pill, aligns with the grid */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--t0);
+}
+.yr {
+  margin-left: 0.3em;
+  font-weight: 400;
+  color: var(--t2);
+}
+.badge {
+  color: var(--t3);
+}
+
+/* Navigation only shows while the pointer or focus is in the widget. */
+.navs {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.card:hover .navs,
+.card:focus-within .navs {
+  opacity: 1;
+}
+.card[data-mode="tile"] .navs {
+  display: none;
+}
+.nav {
+  width: 1.7em;
+  height: 1.7em;
+  color: var(--t1);
+}
+.nav svg {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ------------------------------------------------------------------ shared day pieces */
+
+.view {
+  flex: 1;
+  min-height: 0;
+  container-type: size;
+}
+
+.wd {
+  display: grid;
+  place-items: center;
+  font-size: clamp(8px, calc(var(--cell) * 0.34), 11px);
+  letter-spacing: 0.06em;
+  color: var(--t2);
+}
+.wd .n {
+  display: none;
+}
+@container (max-width: 175px) {
+  .wd .l {
+    display: none;
+  }
+  .wd .n {
+    display: inline;
+  }
+}
+
+.d {
+  display: grid;
+  place-items: center;
+}
+.d i {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: min(calc(var(--cell) * 0.9), 44px);
+  height: min(calc(var(--cell) * 0.9), 44px);
+  border-radius: 50%;
+  font-size: clamp(10px, calc(var(--cell) * 0.5), 21px);
+  font-style: normal;
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+  color: var(--t1);
+}
+.d.out i {
+  color: var(--t3);
+}
+.d.today i {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 650;
+  text-shadow: none;
+}
+.d.wk {
+  font-size: clamp(8px, calc(var(--cell) * 0.34), 11px);
+  color: var(--t3);
+}
+
+/* ------------------------------------------------------------------ month */
+
+.cal {
+  --cols: 7;
+  --cw: calc(100cqw / var(--cols));
+  --ch: calc(100cqh / 6.6);
+  --cell: min(var(--cw), var(--ch));
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: calc(var(--ch) * 0.6) repeat(6, minmax(0, 1fr));
+}
+
+/* ------------------------------------------------------------------ week strip */
+
+.week {
+  --cw: calc(100cqw / 7);
+  --cell: min(var(--cw), calc(100cqh * 0.5));
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-content: center;
+}
+.sd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--cell) * 0.08);
+}
+
+/* ------------------------------------------------------------------ today tile */
+
+.tile {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.1em;
+  padding-left: clamp(2px, 4cqmin, 8px);
+}
+html:not([data-surface="none"]) .tile {
+  padding-left: clamp(2px, 2cqmin, 4px);
+}
+.t-wd {
+  font-size: clamp(9px, 11cqmin, 12px);
+  color: var(--accent);
+}
+.t-wd .s {
+  display: none;
+}
+@container (max-width: 76px) {
+  .t-wd .l {
+    display: none;
+  }
+  .t-wd .s {
+    display: inline;
+  }
+}
+.t-num {
+  font-size: min(52cqh, 46cqw);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--t0);
+}
+.t-mo {
+  font-size: clamp(11px, 12cqmin, 16px);
+  font-weight: 500;
+  color: var(--t1);
+}

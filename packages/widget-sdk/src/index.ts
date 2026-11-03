@@ -2,6 +2,14 @@ import { createMypaper, type Transport } from "./runtime";
 import type { Mypaper } from "./types";
 
 export * from "./types";
+export {
+  DEFAULT_APPEARANCE,
+  appearanceAttributes,
+  appearanceRule,
+  appearanceVars,
+  applyAppearance,
+  normalizeAppearance,
+} from "./appearance";
 export { MypaperError, isMypaperError } from "./errors";
 export { createMypaper, type RuntimeOptions, type Transport } from "./runtime";
 

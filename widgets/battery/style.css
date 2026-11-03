@@ -1,0 +1,288 @@
+/* Three styles (data-style on .card: ring, bar, number) and four states (data-state: charging,
+   full, discharging, low, none). Layout follows the widget's box with container queries; the
+   page is the container, the dial is a named one (`dial`) for what lives inside it. */
+
+.card {
+  --w: calc(100cqw - 2 * var(--pad));
+  --h: calc(100cqh - 2 * var(--pad));
+  --d: min(var(--w), var(--h)); /* the ring's diameter */
+  --sub: flex; /* the status line inside the ring; roomier layouts turn it off */
+  display: grid;
+  place-items: center;
+}
+
+.live {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------- the dial (ring style) */
+
+.dial {
+  container: dial / size;
+  position: relative;
+  flex: none;
+  width: var(--d);
+  height: var(--d);
+  display: grid;
+  place-items: center;
+}
+.ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(-90deg); /* the arc starts at 12 o'clock */
+}
+.ring circle {
+  --sw: clamp(2px, 2.8cqmin, 5px);
+  cx: 50%;
+  cy: 50%;
+  r: calc(50% - var(--sw));
+  fill: none;
+  stroke-width: var(--sw);
+  stroke-linecap: round;
+}
+.back {
+  stroke: var(--fill-2);
+}
+html[data-surface="none"] .back {
+  stroke: rgb(var(--ink) / 0.24);
+}
+.arc {
+  stroke: var(--accent);
+  transition: stroke-dasharray 0.6s ease;
+}
+
+.read {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3cqmin;
+}
+.pct {
+  font-size: 30cqmin;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.pct b {
+  font-weight: inherit;
+}
+.pct small {
+  margin-left: 0.08em;
+  font-size: 0.42em;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--t2);
+}
+.sub {
+  display: var(--sub);
+  align-items: center;
+  gap: 0.4em;
+  font-size: clamp(8px, 7.5cqmin, 12px);
+  white-space: nowrap;
+}
+/* Small dials: only the bolt (charging) or "Low" fits under the number. */
+@container dial (max-width: 90px) {
+  .card:not([data-state="low"]) .sub span {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- status line */
+
+.bolt {
+  display: none;
+  flex: none;
+  width: 1.05em;
+  height: 1.05em;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+:is([data-state="charging"], [data-state="full"]) .bolt {
+  display: block;
+}
+
+.meta {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  color: var(--t1);
+  font-size: clamp(11px, 0.085 * var(--h), 14px);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.low-chip {
+  display: none;
+  padding: 0.15em 0.6em;
+  color: var(--t0);
+}
+[data-state="low"] .low-chip {
+  display: inline-flex;
+}
+
+/* Low (<= 20%, not charging): stronger ink and a dashed arc, no color and no motion. */
+[data-state="low"] .arc {
+  stroke: var(--t0);
+}
+[data-state="low"] .pct {
+  font-weight: 500;
+}
+[data-state="low"] .meta {
+  color: var(--t0);
+}
+
+/* A 1x1 has no room for "On battery" next to the chip. */
+@container (max-width: 130px) {
+  [data-state="low"] .meta .status {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- ring layouts */
+
+/* Tall enough (2x2 and up): the status moves under the ring. */
+@container (min-height: 140px) {
+  .card[data-style="ring"] {
+    --d: min(var(--w), calc(var(--h) - 44px));
+    --sub: none;
+  }
+  .card[data-style="ring"] .live {
+    gap: clamp(8px, 4cqmin, 16px);
+  }
+  .card[data-style="ring"] .meta {
+    display: flex;
+  }
+}
+/* Wide (2x1, 3x1, 3x2): the ring on the left, the status beside it. */
+@container (min-aspect-ratio: 3/2) {
+  .card[data-style="ring"] {
+    --d: min(var(--h), calc(var(--w) * 0.62));
+    --sub: none;
+  }
+  .card[data-style="ring"] .live {
+    flex-direction: row;
+    gap: clamp(10px, 8cqh, 22px);
+  }
+  .card[data-style="ring"] .meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4em;
+    font-size: clamp(12px, 0.1 * var(--h), 18px);
+  }
+  .card[data-style="ring"] .low-chip {
+    margin-top: 0.1em;
+  }
+}
+
+/* ---------------------------------------------------------------- bar and number */
+
+.card:is([data-style="bar"], [data-style="number"]) {
+  --f: clamp(20px, min(30cqh, 28cqw), 80px); /* the number's size */
+  --sub: none;
+}
+.card[data-style="number"] {
+  --f: clamp(24px, min(48cqh, 36cqw), 120px);
+}
+.card:is([data-style="bar"], [data-style="number"]) .ring {
+  display: none;
+}
+.card:is([data-style="bar"], [data-style="number"]) .dial {
+  container-type: normal;
+  width: auto;
+  height: auto;
+}
+.card:is([data-style="bar"], [data-style="number"]) .pct {
+  font-size: var(--f);
+}
+.card:is([data-style="bar"], [data-style="number"]) .meta {
+  display: flex;
+}
+.card[data-style="number"] .live {
+  gap: clamp(2px, 2cqh, 8px);
+}
+
+.bar {
+  display: none;
+  width: 100%;
+  height: clamp(4px, 3cqmin, 7px);
+}
+.card[data-style="bar"] .bar {
+  display: block;
+}
+.bar > i {
+  transition: width 0.6s ease;
+}
+[data-state="low"] .bar > i {
+  background: var(--t0);
+}
+
+.card[data-style="bar"] .live {
+  display: grid;
+  grid-template-areas: "pct" "bar" "meta";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  justify-items: stretch;
+  gap: clamp(4px, 4cqh, 10px);
+}
+.card[data-style="bar"] .dial {
+  grid-area: pct;
+  justify-self: start;
+}
+.card[data-style="bar"] .bar {
+  grid-area: bar;
+}
+.card[data-style="bar"] .meta {
+  grid-area: meta;
+  justify-content: flex-start;
+}
+@container (min-aspect-ratio: 2/1) {
+  .card[data-style="bar"] .live {
+    grid-template-areas: "pct bar" "pct meta";
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: clamp(10px, 8cqh, 20px);
+  }
+  .card[data-style="bar"] .dial {
+    align-self: center;
+  }
+}
+
+/* ---------------------------------------------------------------- no battery */
+
+.none {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7em;
+  color: var(--t3);
+}
+.none .caps {
+  color: var(--t2);
+  font-size: clamp(8px, 9cqmin, 10px);
+  letter-spacing: 0.06em;
+  text-align: center;
+  white-space: nowrap;
+}
+.plug {
+  width: clamp(20px, 30cqmin, 44px);
+  height: clamp(20px, 30cqmin, 44px);
+  fill: none;
+  stroke: var(--t3);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "disk",
+  "name": "Disks",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "How full each drive is, as quiet progress bars.",
+  "entry": "index.html",
+  "size": { "default": [2, 2], "min": [2, 1], "max": [4, 3] },
+  "resizable": true,
+  "permissions": ["system.stats"],
+  "plugins": [],
+  "settings": [
+    { "key": "drives", "type": "string", "label": "Drives to show (letters, e.g. C, D; empty for all)", "default": "" },
+    { "key": "showFree", "type": "boolean", "label": "Show free space instead of used", "default": false }
+  ]
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calendar</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card" id="card" data-mode="month">
+      <header class="head" id="head">
+        <button class="title" id="title" type="button" title="Back to today"></button>
+        <span class="badge caps num" id="badge" hidden></span>
+        <div class="navs">
+          <button class="nav" id="prev" type="button" aria-label="Previous">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
+          </button>
+          <button class="nav" id="next" type="button" aria-label="Next">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" /></svg>
+          </button>
+        </div>
+      </header>
+      <div class="view" id="view"></div>
+    </main>
+    <script src="mypaper.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
