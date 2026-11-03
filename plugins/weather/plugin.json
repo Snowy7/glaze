@@ -1,0 +1,11 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/plugin.schema.json",
+  "id": "weather",
+  "name": "Weather",
+  "version": "1.0.0",
+  "command": "weather.exe",
+  "args": [],
+  "methods": ["current", "forecast"],
+  "events": ["updated"],
+  "permissions": ["network:https://api.open-meteo.com", "network:https://geocoding-api.open-meteo.com"]
+}
