@@ -79,7 +79,7 @@ impl fmt::Display for HoldReasons {
 }
 
 /// A system condition the OS notifies us about. Travels from the window
-/// procedure to the main loop as a thread message (see `window::WM_FACT`).
+/// procedure to the main loop as a thread message (see [`WM_FACT`](crate::WM_FACT)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Fact {
     OnBattery,

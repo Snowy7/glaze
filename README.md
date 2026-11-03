@@ -101,8 +101,9 @@ mypaper-core        supervisor: spawn/restart, tray icon, panic hotkey, single i
 | Crate | What it owns |
 |---|---|
 | [`crates/core`](crates/core) | Supervisor process, restart policy (unit-tested), tray icon and menu, panic hotkey |
-| [`crates/wallpaper`](crates/wallpaper) | Engine: wgpu renderer, frame loop, hold reasons, live config, shader prelude, dev window |
-| [`crates/desktop`](crates/desktop) | Win32 plumbing: attaching to the desktop, monitors, occlusion, fullscreen detection, battery, config watcher, Ctrl+C |
+| [`crates/wallpaper`](crates/wallpaper) | Engine: wgpu renderer, frame loop, live config, shader prelude, dev window |
+| [`crates/widgets`](crates/widgets) | Widget host: desktop-layer WebView2 widgets, edit mode, permissions, network policy, plugins ([docs/widgets.md](docs/widgets.md)); shell page in [`widgets/shell`](widgets/shell) |
+| [`crates/desktop`](crates/desktop) | Win32 plumbing: attaching to the desktop (behind or above the icons), monitors, occlusion, fullscreen detection, battery, hold reasons and the power/session window, file watchers, Ctrl+C |
 | [`crates/config`](crates/config) | The user's settings file (`config.json`), shared by core, the engine and the studio |
 | [`crates/theme`](crates/theme) | Theme format and validation |
 | [`crates/inject`](crates/inject) | Injection allowlist policy (unit-tested). The injector itself is coming. |

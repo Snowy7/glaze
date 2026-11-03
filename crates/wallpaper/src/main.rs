@@ -17,7 +17,6 @@
 mod control;
 mod engine;
 mod gpu;
-mod hold;
 mod palette;
 mod sources;
 mod trim;
@@ -28,7 +27,7 @@ use std::time::Instant;
 
 use anyhow::{Result, bail};
 use mypaper_config::Config;
-use mypaper_desktop::{DesktopHost, EXIT_CONFIG, WindowEvents, monitors};
+use mypaper_desktop::{ControlWindow, DesktopHost, EXIT_CONFIG, WindowEvents, hold, monitors};
 use mypaper_theme::LoadedTheme;
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage, WM_QUIT,
@@ -38,7 +37,7 @@ use crate::control::Live;
 use crate::engine::{Engine, Flow};
 use crate::hold::Fact;
 use crate::trim::Trimmer;
-use crate::window::{ControlWindow, WM_CONFIG, WM_FACT, WM_RELOAD, Waiter, Window};
+use crate::window::{CONTROL_CLASS, WM_CONFIG, WM_FACT, WM_RELOAD, Waiter, Window};
 
 const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [THEME]";
 
@@ -128,7 +127,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme) -> Result<u8> {
         ),
     };
 
-    let _control = ControlWindow::new()?;
+    let _control = ControlWindow::new(CONTROL_CLASS)?;
     let mut engine = Engine::new(theme, windows, monitors)?;
     // Facts first, so the initial hold is logged once.
     engine.set_fact(Fact::OnBattery, mypaper_desktop::on_battery());

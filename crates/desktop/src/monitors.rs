@@ -1,5 +1,9 @@
 use windows::Win32::Foundation::{LPARAM, RECT};
-use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR};
+use windows::Win32::Graphics::Gdi::{
+    EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
+};
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+use windows::Win32::UI::WindowsAndMessaging::MONITORINFOF_PRIMARY;
 use windows::core::BOOL;
 
 /// A screen-space rectangle in physical pixels.
@@ -57,6 +61,60 @@ pub fn monitors() -> Vec<Rect> {
 unsafe extern "system" fn push_monitor(_: HMONITOR, _: HDC, rect: *mut RECT, out: LPARAM) -> BOOL {
     // SAFETY: `out` is the Vec passed by `monitors`; `rect` is valid for the call.
     unsafe { (*(out.0 as *mut Vec<Rect>)).push(Rect::from(*rect)) };
+    true.into()
+}
+
+/// A monitor as the widget host sees it: where it is, where the taskbar
+/// isn't, and how it scales. Rects are physical pixels in virtual-screen
+/// coordinates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Monitor {
+    /// The device name, e.g. `\\.\DISPLAY1` (`MONITORINFOEXW.szDevice`).
+    pub device: String,
+    pub rect: Rect,
+    /// The work area: `rect` minus the taskbar and docked app bars.
+    pub work: Rect,
+    /// Effective DPI (96 at 100% scale).
+    pub dpi: u32,
+    pub primary: bool,
+}
+
+/// Every monitor with its device name, work area and DPI.
+pub fn monitor_infos() -> Vec<Monitor> {
+    let mut out: Vec<Monitor> = Vec::new();
+    // SAFETY: the callback only runs during this call, while `out` is alive.
+    unsafe {
+        let _ = EnumDisplayMonitors(None, None, Some(push_info), LPARAM(&raw mut out as isize));
+    }
+    out
+}
+
+unsafe extern "system" fn push_info(monitor: HMONITOR, _: HDC, _: *mut RECT, out: LPARAM) -> BOOL {
+    let mut info = MONITORINFOEXW {
+        monitorInfo: MONITORINFO {
+            cbSize: size_of::<MONITORINFOEXW>() as u32,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let (mut dpi, mut dpi_y) = (96, 96);
+    // SAFETY: `info` is a MONITORINFOEXW with cbSize set, as GetMonitorInfoW
+    // requires for the extended struct; `out` is the Vec passed by `monitor_infos`.
+    unsafe {
+        if !GetMonitorInfoW(monitor, (&raw mut info).cast()).as_bool() {
+            return true.into();
+        }
+        let _ = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi, &mut dpi_y);
+        let device = &info.szDevice;
+        let len = device.iter().position(|&c| c == 0).unwrap_or(device.len());
+        (*(out.0 as *mut Vec<Monitor>)).push(Monitor {
+            device: String::from_utf16_lossy(&device[..len]),
+            rect: info.monitorInfo.rcMonitor.into(),
+            work: info.monitorInfo.rcWork.into(),
+            dpi: dpi.max(1),
+            primary: info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
+        });
+    }
     true.into()
 }
 
