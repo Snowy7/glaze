@@ -8,9 +8,11 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
-use serde::{Deserialize, Serialize};
+use mypaper_theme::Appearance;
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 
+use crate::look;
 use crate::manifest::{WidgetManifest, valid_id};
 
 pub const VERSION: u32 = 1;
@@ -27,10 +29,23 @@ pub struct Layout {
     pub grid: GridSpec,
     #[serde(default)]
     pub instances: Vec<Instance>,
+    /// The user's look for every widget (the "user" layer of docs/widgets.md, "Appearance").
+    #[serde(default, skip_serializing_if = "is_blank", serialize_with = "layer")]
+    pub appearance: Appearance,
 }
 
 fn version() -> u32 {
     VERSION
+}
+
+/// An appearance layer that sets nothing isn't written.
+fn is_blank(appearance: &Appearance) -> bool {
+    *appearance == Appearance::default()
+}
+
+/// Writes only the fields a layer sets (the derived impl would write `null` for the rest).
+fn layer<S: Serializer>(appearance: &Appearance, serializer: S) -> Result<S::Ok, S::Error> {
+    look::json_of(appearance).serialize(serializer)
 }
 
 impl Default for Layout {
@@ -39,6 +54,7 @@ impl Default for Layout {
             version: VERSION,
             grid: GridSpec::default(),
             instances: Vec::new(),
+            appearance: Appearance::default(),
         }
     }
 }
@@ -73,6 +89,9 @@ pub struct Instance {
     pub size: [u32; 2],
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub settings: Map<String, Value>,
+    /// This instance's own look (the top layer of docs/widgets.md, "Appearance").
+    #[serde(default, skip_serializing_if = "is_blank", serialize_with = "layer")]
+    pub appearance: Appearance,
 }
 
 impl Layout {
@@ -107,6 +126,9 @@ impl Layout {
             (0.0..=1024.0).contains(&margin),
             "grid.margin must be 0..1024"
         );
+        self.appearance
+            .validate()
+            .context("in the top-level appearance")?;
         let mut ids = HashSet::new();
         for instance in &self.instances {
             let id = &instance.instance;
@@ -124,6 +146,10 @@ impl Layout {
                 instance.size.iter().all(|&s| s >= 1),
                 "{id}: size must be at least [1, 1]"
             );
+            instance
+                .appearance
+                .validate()
+                .with_context(|| format!("in {id}"))?;
         }
         Ok(())
     }
@@ -175,6 +201,7 @@ impl Layout {
             cell,
             size,
             settings: Map::new(),
+            appearance: Appearance::default(),
         });
         id
     }
@@ -220,6 +247,21 @@ impl Layout {
     /// Merges setting values into an instance's saved settings.
     pub fn set_settings(&mut self, instance: &str, values: Map<String, Value>) -> Result<()> {
         self.get_mut(instance)?.settings.extend(values);
+        Ok(())
+    }
+
+    /// Edits an appearance layer: `instance`'s own, or the user's for every widget when `None`.
+    /// Fields with a value are set; `null` fields are cleared (see [`look::patch`]).
+    pub fn set_appearance(
+        &mut self,
+        instance: Option<&str>,
+        values: &Map<String, Value>,
+    ) -> Result<()> {
+        let target = match instance {
+            Some(instance) => &mut self.get_mut(instance)?.appearance,
+            None => &mut self.appearance,
+        };
+        *target = look::patch(target, values)?;
         Ok(())
     }
 }
@@ -338,11 +380,21 @@ pub struct Placed {
     pub cell: [u32; 2],
     pub size: [u32; 2],
     pub settings: Map<String, Value>,
+    /// What the widget shows: every layer merged, every field set (see [`look::resolve`]).
+    pub appearance: Map<String, Value>,
+    /// Only the fields the instance sets itself (for the edit-mode panel).
+    pub own: Map<String, Value>,
 }
 
 /// Places an instance on `grid`: the size clamped to the manifest and the
-/// grid, the cell to the grid, and its settings resolved.
-pub fn place(instance: &Instance, manifest: &WidgetManifest, grid: &Grid) -> Placed {
+/// grid, the cell to the grid, its settings resolved, and its look taken from
+/// `resolved` (already layered by [`look::resolve`]).
+pub fn place(
+    instance: &Instance,
+    manifest: &WidgetManifest,
+    grid: &Grid,
+    resolved: &Appearance,
+) -> Placed {
     let (cell, size) = grid.clamp(instance.cell, manifest.clamp_size(instance.size));
     Placed {
         instance: instance.instance.clone(),
@@ -350,6 +402,8 @@ pub fn place(instance: &Instance, manifest: &WidgetManifest, grid: &Grid) -> Pla
         cell,
         size,
         settings: manifest.resolve_settings(&instance.settings),
+        appearance: look::json_of(resolved),
+        own: look::json_of(&instance.appearance),
     }
 }
 
@@ -525,8 +579,10 @@ mod tests {
         let mut instance = Layout::parse(LAYOUT).unwrap().instances.remove(0);
         instance.cell = [50, 50];
         instance.size = [9, 9];
-        let placed = place(&instance, &manifest(), &grid);
+        let placed = place(&instance, &manifest(), &grid, &look::defaults());
         assert_eq!((placed.cell, placed.size), ([14, 7], [4, 2]));
+        assert_eq!(placed.appearance["surface"], "none");
+        assert!(placed.own.is_empty());
         assert_eq!(placed.settings["format24"], Value::Bool(true));
     }
 
@@ -536,6 +592,85 @@ mod tests {
         assert_eq!(show_on(r"\\.\DISPLAY2", &devices, 0), Some(r"\\.\DISPLAY2"));
         assert_eq!(show_on(r"\\.\DISPLAY9", &devices, 0), Some(r"\\.\DISPLAY1"));
         assert_eq!(show_on("x", &[], 0), None);
+    }
+
+    const LOOK_LAYOUT: &str = r##"{
+        "version": 1,
+        "appearance": { "surface": "glass", "tint": "#202020", "accent": "auto", "opacity": 0.7 },
+        "instances": [
+            { "instance": "clock-1", "widget": "clock", "monitor": "m", "cell": [0, 0], "size": [2, 1],
+              "appearance": { "text": "dark", "scale": 1.25 } },
+            { "instance": "clock-2", "widget": "clock", "monitor": "m", "cell": [2, 0], "size": [2, 1] }
+        ]
+    }"##;
+
+    fn object(value: Value) -> Map<String, Value> {
+        value.as_object().unwrap().clone()
+    }
+
+    #[test]
+    fn appearance_layers_parse_validate_and_save_only_what_is_set() {
+        let layout = Layout::parse(LOOK_LAYOUT).unwrap();
+        assert_eq!(layout.appearance.opacity, Some(0.7));
+        assert_eq!(layout.instances[0].appearance.scale, Some(1.25));
+        assert!(layout.instances[1].appearance == Appearance::default());
+
+        // Written back: no nulls, no empty layers, and it reads back the same.
+        let json: Value = serde_json::from_str(&serde_json::to_string(&layout).unwrap()).unwrap();
+        assert_eq!(json["appearance"]["opacity"], 0.7);
+        assert!(json["appearance"].get("blur").is_none());
+        assert!(json["instances"][1].get("appearance").is_none());
+        assert_eq!(Layout::parse(&json.to_string()).unwrap(), layout);
+        let empty = serde_json::to_string(&Layout::default()).unwrap();
+        assert!(!empty.contains("appearance"));
+
+        for (bad, why) in [
+            (LOOK_LAYOUT.replace("0.7", "1.7"), "opacity range"),
+            (LOOK_LAYOUT.replace("1.25", "3"), "instance scale range"),
+            (LOOK_LAYOUT.replace("#202020", "gray"), "color"),
+            (
+                LOOK_LAYOUT.replace("\"surface\"", "\"surfce\""),
+                "unknown field",
+            ),
+        ] {
+            assert!(Layout::parse(&bad).is_err(), "{why}");
+        }
+    }
+
+    #[test]
+    fn appearance_edits_set_clear_and_stay_valid() {
+        let mut layout = Layout::parse(LOOK_LAYOUT).unwrap();
+
+        layout
+            .set_appearance(
+                None,
+                &object(serde_json::json!({ "blur": 40, "opacity": null })),
+            )
+            .unwrap();
+        assert_eq!(layout.appearance.blur, Some(40.0));
+        assert_eq!(
+            layout.appearance.opacity, None,
+            "cleared: the theme shows through"
+        );
+        let tint = layout.appearance.tint.map(|c| c.hex());
+        assert_eq!(tint.as_deref(), Some("#202020"));
+
+        layout
+            .set_appearance(Some("clock-2"), &object(serde_json::json!({ "radius": 4 })))
+            .unwrap();
+        assert_eq!(layout.get("clock-2").unwrap().appearance.radius, Some(4.0));
+        assert_eq!(layout.get("clock-1").unwrap().appearance.radius, None);
+
+        // A refused edit changes nothing.
+        let before = layout.clone();
+        let too_big = object(serde_json::json!({ "scale": 9 }));
+        assert!(layout.set_appearance(Some("clock-2"), &too_big).is_err());
+        assert!(layout.set_appearance(Some("nope"), &Map::new()).is_err());
+        assert_eq!(layout, before);
+
+        // Duplicates keep their look.
+        let copy = layout.duplicate("clock-2", [6, 0]).unwrap();
+        assert_eq!(layout.get(&copy).unwrap().appearance.radius, Some(4.0));
     }
 
     #[test]

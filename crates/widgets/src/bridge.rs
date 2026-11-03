@@ -46,6 +46,13 @@ pub enum FromShell {
         instance: String,
         values: Map<String, Value>,
     },
+    /// Edits an appearance layer: an instance's own, or the user's when `instance` is absent.
+    /// A `null` value clears that field ("Use default").
+    Appearance {
+        #[serde(default)]
+        instance: Option<String>,
+        values: Map<String, Value>,
+    },
     Edit {
         on: bool,
     },
@@ -389,6 +396,20 @@ mod tests {
             }
         );
         assert!(serde_json::from_value::<FromShell>(json!({ "type": "hack" })).is_err());
+
+        // Appearance edits: the user's layer has no instance; null clears a field.
+        let user: FromShell = serde_json::from_value(
+            json!({ "type": "appearance", "values": { "blur": 8, "radius": null } }),
+        )
+        .unwrap();
+        assert!(
+            matches!(user, FromShell::Appearance { instance: None, ref values } if values.len() == 2)
+        );
+        let own: FromShell = serde_json::from_value(
+            json!({ "type": "appearance", "instance": "a-1", "values": { "text": "dark" } }),
+        )
+        .unwrap();
+        assert!(matches!(own, FromShell::Appearance { instance: Some(ref i), .. } if i == "a-1"));
     }
 
     #[test]

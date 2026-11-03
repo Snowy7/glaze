@@ -20,6 +20,8 @@ pub enum Msg {
     Layout,
     /// `palette.json` changed.
     Palette,
+    /// `theme.json` or a style sheet in the active theme's folder changed.
+    Theme,
     /// Files changed in these widget folders.
     Widgets(Vec<String>),
     /// The shell was rebuilt (`widgets/shell/dist`).

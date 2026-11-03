@@ -18,6 +18,7 @@ use mypaper_desktop::{
     ControlWindow, DesktopHost, Monitor, Rect, WM_FACT, WindowEvents, covered_monitors,
     fullscreen_app_in_front, monitor_infos,
 };
+use mypaper_theme::Color;
 use notify::Watcher;
 use serde_json::{Value, json};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -42,7 +43,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{HSTRING, PCWSTR, w};
 
 use crate::bridge::{ErrorCode, FromShell, Method, Out, Reply, Target, Topic, WidgetError};
+use crate::display::{DisplayWatcher, WM_DISPLAY};
 use crate::layout::{self, Grid, Layout, Placed, RectF};
+use crate::look;
 use crate::manifest::WidgetManifest;
 use crate::media::Media;
 use crate::net::WidgetNet;
@@ -68,6 +71,8 @@ const SETTLE_CONFIG: Duration = Duration::from_millis(100);
 const SETTLE_LAYOUT: Duration = Duration::from_millis(150);
 const SETTLE_WIDGETS: Duration = Duration::from_millis(250);
 const SETTLE_SHELL: Duration = Duration::from_millis(500);
+/// App bars announce a work-area change in bursts (one per bar, per edge).
+const SETTLE_DISPLAY: Duration = Duration::from_millis(200);
 const RETRY_WEBVIEW: Duration = Duration::from_secs(30);
 /// After this long held (a game session, a locked PC), the widget layers and
 /// WebView2 are released entirely: a suspended WebView still holds hundreds
@@ -110,6 +115,7 @@ struct Timers {
     shell: Option<Instant>,
     webview: Option<Instant>,
     park: Option<Instant>,
+    display: Option<Instant>,
 }
 
 impl Timers {
@@ -122,6 +128,7 @@ impl Timers {
             self.shell,
             self.webview,
             self.park,
+            self.display,
         ]
         .into_iter()
         .flatten()
@@ -171,6 +178,9 @@ pub struct App {
     media: Media,
     plugins: Plugins,
     theme: ThemeInfo,
+    /// The active theme's folder, and the widget skin read from it.
+    theme_dir: Option<PathBuf>,
+    skin: look::Skin,
     /// `(instance, sub)` of every `theme` subscription.
     theme_subs: BTreeSet<(String, String)>,
     /// Window-change hooks: only while a widget layer exists (they wake us on
@@ -179,7 +189,11 @@ pub struct App {
     timers: Timers,
     changed_widgets: BTreeSet<String>,
     watchers: Vec<notify::RecommendedWatcher>,
+    /// Watches the active theme's `theme.json` and style sheets; replaced when the theme changes.
+    theme_watch: Option<notify::RecommendedWatcher>,
     palette_watch: Option<mypaper_desktop::ConfigWatcher>,
+    /// Hears about work-area and display changes (see `display.rs`); held for its window.
+    _display_watch: Option<DisplayWatcher>,
 }
 
 impl App {
@@ -244,6 +258,11 @@ impl App {
             layout.instances.len()
         );
         let devtools = std::env::var_os("MYPAPER_WIDGETS_DEVTOOLS").is_some_and(|v| v == "1");
+        let theme_dir = theme::dir();
+        let skin = look::load_skin(theme_dir.as_deref());
+        let display_watch = DisplayWatcher::new()
+            .inspect_err(|e| log::warn!("work-area changes won't be noticed: {e:#}"))
+            .ok();
         let mut app = Self {
             host,
             control,
@@ -277,12 +296,16 @@ impl App {
             media: Media::new(waker.clone()),
             plugins: Plugins::new(waker.clone()),
             theme: theme::current(),
+            theme_dir,
+            skin,
             theme_subs: BTreeSet::new(),
             window_events: None,
             timers: Timers::default(),
             changed_widgets: BTreeSet::new(),
             watchers: Vec::new(),
+            theme_watch: None,
             palette_watch: None,
+            _display_watch: display_watch,
             waker,
         };
         if layout_missing {
@@ -350,6 +373,11 @@ impl App {
                         }
                     }
                     WM_WAKE => {}
+                    WM_DISPLAY => {
+                        self.timers
+                            .display
+                            .get_or_insert(Instant::now() + SETTLE_DISPLAY);
+                    }
                     m if m == self.edit_message && msg.hwnd == self.control.hwnd() => {
                         match msg.wParam.0 {
                             0 => self.set_editing(false),
@@ -371,7 +399,7 @@ impl App {
     fn handle(&mut self, msg: Msg) {
         let now = Instant::now();
         match msg {
-            Msg::Config | Msg::Palette => {
+            Msg::Config | Msg::Palette | Msg::Theme => {
                 self.timers.config.get_or_insert(now + SETTLE_CONFIG);
             }
             Msg::Layout => {
@@ -413,6 +441,9 @@ impl App {
         }
         if due(&mut self.timers.recheck, now) {
             self.recheck();
+        }
+        if due(&mut self.timers.display, now) {
+            self.relayout_for_display();
         }
         if due(&mut self.timers.config, now) {
             self.reload_config();
@@ -506,16 +537,31 @@ impl App {
             Err(e) => log::error!("{e:#}\n(keeping the current settings)"),
         }
         let theme = theme::current();
-        if theme != self.theme {
+        let theme_changed = theme != self.theme;
+        if theme_changed {
             self.theme = theme;
             for (instance, sub) in &self.theme_subs {
                 self.emit_sub(instance, sub, json!(self.theme));
             }
         }
+        // The theme's widget skin (appearance and style sheet), and so what `accent: auto`
+        // means, may have changed with the theme, its files or the palette: the state carries it.
+        let dir = theme::dir();
+        let skin = look::load_skin(dir.as_deref());
+        if dir != self.theme_dir {
+            self.theme_dir = dir;
+            self.watch_theme();
+        }
+        if skin != self.skin || theme_changed {
+            self.skin = skin;
+            self.push_all();
+        }
     }
 
-    /// After window events: monitors, coverage, a fullscreen app, z-order.
-    fn recheck(&mut self) {
+    /// Re-reads the monitors (position, size, DPI and work area) and re-lays out if any changed:
+    /// the surfaces follow, the grid is recomputed (it stretches to the work area) and every
+    /// widget is placed again, clamped so none sits under an app bar.
+    fn refresh_monitors(&mut self) {
         let monitors = monitor_infos();
         if monitors != self.monitors {
             log::info!("monitors changed");
@@ -523,6 +569,23 @@ impl App {
             self.icon_cell = icon_cell();
             self.reconcile();
         }
+    }
+
+    /// After `WM_DISPLAYCHANGE` or `WM_SETTINGCHANGE` for the work area (see `display.rs`).
+    /// Unlike window events these arrive even when no window moved, e.g. an app bar that
+    /// reserves screen space.
+    fn relayout_for_display(&mut self) {
+        let icon_cell = icon_cell();
+        if icon_cell != self.icon_cell {
+            self.icon_cell = icon_cell; // icon spacing sets the grid's cell size
+            self.reconcile();
+        }
+        self.refresh_monitors();
+    }
+
+    /// After window events: monitors, coverage, a fullscreen app, z-order.
+    fn recheck(&mut self) {
+        self.refresh_monitors();
         if !self.ignore_covered {
             let rects: Vec<Rect> = self.monitors.iter().map(|m| m.rect).collect();
             self.covered = self
@@ -868,15 +931,25 @@ impl App {
         Grid::new(&self.layout.grid, self.icon_cell, work)
     }
 
-    /// The instances shown on `monitor`, placed on its grid.
+    /// What `accent: auto` means right now: the wallpaper palette's accent, else white.
+    fn auto_accent(&self) -> Color {
+        look::accent(self.theme.palette.as_ref().map(|p| p.accent.as_str()))
+    }
+
+    /// The instances shown on `monitor`, placed on its grid, each with its look merged from
+    /// the layers (defaults < theme < user < instance).
     fn placed_on(&self, monitor: &Monitor, grid: &Grid) -> Vec<Placed> {
+        let base = look::base(&self.skin);
+        let accent = self.auto_accent();
         self.layout
             .instances
             .iter()
             .filter(|instance| self.shown_on(instance).as_deref() == Some(monitor.device.as_str()))
             .filter_map(|instance| {
                 let installed = self.registry.get(&instance.widget)?;
-                Some(layout::place(instance, &installed.manifest, grid))
+                let look =
+                    look::resolve(&instance.appearance, &self.layout.appearance, &base, accent);
+                Some(layout::place(instance, &installed.manifest, grid, &look))
             })
             .collect()
     }
@@ -924,6 +997,14 @@ impl App {
             "grid": grid,
             "instances": placed,
             "widgets": widgets,
+            // The look: the layers below an instance's own (for the Appearance panel), the
+            // color `auto` stands for, and the theme's style sheet.
+            "appearance": {
+                "base": look::json_of(&look::base(&self.skin)),
+                "user": look::json_of(&self.layout.appearance),
+                "accent": self.auto_accent().hex(),
+            },
+            "themeCss": self.skin.css,
             "editing": self.editing,
             "visible": !surface.hidden,
             "error": self.layout_error,
@@ -1204,6 +1285,9 @@ impl App {
                     let values = manifest.check_settings(values)?;
                     next.set_settings(&instance, values)
                 }
+                FromShell::Appearance { instance, values } => {
+                    next.set_appearance(instance.as_deref(), &values)
+                }
                 FromShell::Ready
                 | FromShell::Hello { .. }
                 | FromShell::Call { .. }
@@ -1332,6 +1416,22 @@ impl App {
                     .inspect_err(|e| log::warn!("not watching the palette: {e:#}"))
                     .ok();
         }
+        self.watch_theme();
+    }
+
+    /// (Re)watches the active theme's folder for edits to `theme.json` and style sheets, which
+    /// restyle the widgets live.
+    fn watch_theme(&mut self) {
+        self.theme_watch = None;
+        let Some(dir) = self.theme_dir.clone() else {
+            return;
+        };
+        let root = dir.clone();
+        let classify = move |path: &Path| -> Option<Msg> {
+            let name = path.strip_prefix(&root).ok()?.file_name()?.to_str()?;
+            (name == mypaper_theme::MANIFEST || name.ends_with(".css")).then_some(Msg::Theme)
+        };
+        self.theme_watch = start_watch(&dir, classify, self.waker.clone());
     }
 
     fn watch_dir(
@@ -1340,20 +1440,32 @@ impl App {
         classify: impl Fn(&Path) -> Option<Msg> + Send + 'static,
         waker: Waker,
     ) {
-        let path = dir.to_owned();
-        let watcher =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
-                Ok(event) if !event.kind.is_access() => {
-                    for msg in event.paths.iter().filter_map(|p| classify(p)) {
-                        waker.send(msg);
-                    }
+        self.watchers.extend(start_watch(dir, classify, waker));
+    }
+}
+
+/// Watches `dir` recursively; every changed path `classify` recognizes becomes a [`Msg`].
+fn start_watch(
+    dir: &Path,
+    classify: impl Fn(&Path) -> Option<Msg> + Send + 'static,
+    waker: Waker,
+) -> Option<notify::RecommendedWatcher> {
+    let path = dir.to_owned();
+    let watcher =
+        notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
+            Ok(event) if !event.kind.is_access() => {
+                for msg in event.paths.iter().filter_map(|p| classify(p)) {
+                    waker.send(msg);
                 }
-                Ok(_) => {}
-                Err(e) => waker.send(Msg::WatchError(path.clone(), e.to_string())),
-            });
-        match watcher.and_then(|mut w| w.watch(dir, notify::RecursiveMode::Recursive).map(|()| w)) {
-            Ok(watcher) => self.watchers.push(watcher),
-            Err(e) => log::warn!("not watching {}: {e}", dir.display()),
+            }
+            Ok(_) => {}
+            Err(e) => waker.send(Msg::WatchError(path.clone(), e.to_string())),
+        });
+    match watcher.and_then(|mut w| w.watch(dir, notify::RecursiveMode::Recursive).map(|()| w)) {
+        Ok(watcher) => Some(watcher),
+        Err(e) => {
+            log::warn!("not watching {}: {e}", dir.display());
+            None
         }
     }
 }
