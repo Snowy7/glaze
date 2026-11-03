@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+mypaper-bars.workspace = true
 mypaper-config.workspace = true
 mypaper-desktop.workspace = true
 mypaper-theme.workspace = true
@@ -13,6 +14,7 @@ mypaper-tweaks.workspace = true
 
 anyhow.workspace = true
 log.workspace = true
+serde.workspace = true
 
 [dependencies.windows]
 workspace = true

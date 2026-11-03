@@ -1105,6 +1105,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-bars"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "mypaper-config",
+ "mypaper-desktop",
+ "mypaper-theme",
+ "notify",
+ "serde",
+ "serde_json",
+ "webview2-com",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
 name = "mypaper-config"
 version = "0.1.0"
 dependencies = [
@@ -1119,10 +1136,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "log",
+ "mypaper-bars",
  "mypaper-config",
  "mypaper-desktop",
  "mypaper-theme",
  "mypaper-tweaks",
+ "serde",
  "windows",
 ]
 

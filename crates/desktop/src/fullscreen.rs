@@ -1,5 +1,8 @@
 //! "Is a fullscreen app or game in front?", used to give games the whole GPU.
 
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromWindow,
+};
 use windows::Win32::UI::Shell::{
     QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState,
 };
@@ -32,6 +35,37 @@ fn foreground_covers_monitor() -> bool {
         opaque_frame(hwnd, std::process::id())
     };
     frame.is_some_and(|frame| covers_whole_monitor(frame, &monitors()))
+}
+
+/// Where [`fullscreen_app_in_front`] sees a fullscreen app: the rect of the monitor it covers.
+/// Exclusive fullscreen and presentation mode count on the foreground window's monitor.
+pub fn fullscreen_app_monitor() -> Option<Rect> {
+    // SAFETY: read-only queries on the foreground window and its monitor.
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_invalid() {
+            return None;
+        }
+        match SHQueryUserNotificationState() {
+            Ok(QUNS_RUNNING_D3D_FULL_SCREEN | QUNS_PRESENTATION_MODE) => {
+                let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+                let mut info = MONITORINFO {
+                    cbSize: size_of::<MONITORINFO>() as u32,
+                    ..Default::default()
+                };
+                GetMonitorInfoW(monitor, &mut info)
+                    .as_bool()
+                    .then(|| info.rcMonitor.into())
+            }
+            _ => {
+                let frame = opaque_frame(hwnd, std::process::id())?;
+                let (cx, cy) = frame.center();
+                monitors()
+                    .into_iter()
+                    .find(|m| m.contains_point(cx, cy) && frame.contains(m))
+            }
+        }
+    }
 }
 
 /// Does `frame` cover, completely, the monitor it is mostly on?
