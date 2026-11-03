@@ -9,6 +9,7 @@ license = "MIT"
 
 [workspace.dependencies]
 mypaper-theme = { path = "crates/theme" }
+mypaper-config = { path = "crates/config" }
 mypaper-desktop = { path = "crates/desktop" }
 
 anyhow = "1"

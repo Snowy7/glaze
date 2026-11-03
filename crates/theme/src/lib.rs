@@ -19,31 +19,44 @@ pub const MANIFEST: &str = "theme.json";
 pub const DEFAULT_THEME: &str = "aurora";
 
 /// Finds a theme folder and returns its absolute path. `name` is a path
-/// (absolute or relative to the current directory) or a bare theme name.
-/// Failing that, it is looked up in a `themes/` folder beside the
-/// executable or any parent, so a double-clicked `target/debug/*.exe`
-/// finds the repo themes just like an installed copy finds its own.
+/// (absolute or relative to the current directory) or a bare theme name,
+/// looked up in the user themes folder (`%APPDATA%\mypaper\themes`) and
+/// then in a `themes/` folder beside the executable or any parent, so a
+/// double-clicked `target/debug/*.exe` finds the repo themes just like an
+/// installed copy finds its own.
 pub fn locate(name: Option<&str>) -> Result<PathBuf> {
-    locate_from(name.unwrap_or(DEFAULT_THEME), &std::env::current_exe()?)
+    let user = mypaper_config::user_themes_dir().ok();
+    locate_from(
+        name.unwrap_or(DEFAULT_THEME),
+        user.as_deref(),
+        &std::env::current_exe()?,
+    )
 }
 
-/// The `themes/` folder that [`locate`] would search first, if any.
-pub fn themes_dir() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    exe.ancestors()
-        .skip(1)
-        .map(|dir| dir.join("themes"))
-        .find(|dir| dir.is_dir())
+/// Every folder that holds themes: the user folder (if it exists), then
+/// the bundled `themes/` folder beside the executable or a parent.
+pub fn theme_roots() -> Vec<PathBuf> {
+    let user = mypaper_config::user_themes_dir()
+        .ok()
+        .filter(|dir| dir.is_dir());
+    let bundled = std::env::current_exe().ok().and_then(|exe| {
+        exe.ancestors()
+            .skip(1)
+            .map(|dir| dir.join("themes"))
+            .find(|dir| dir.is_dir())
+    });
+    user.into_iter().chain(bundled).collect()
 }
 
-fn locate_from(name: &str, exe: &Path) -> Result<PathBuf> {
+fn locate_from(name: &str, user: Option<&Path>, exe: &Path) -> Result<PathBuf> {
     let direct = PathBuf::from(name);
+    let in_user = user.map(|dir| dir.join(name));
     let beside_exe = exe
         .ancestors()
         .skip(1)
         .flat_map(|dir| [dir.join("themes").join(name), dir.join(name)]);
     let mut tried = Vec::new();
-    for candidate in std::iter::once(direct).chain(beside_exe) {
+    for candidate in std::iter::once(direct).chain(in_user).chain(beside_exe) {
         if candidate.join(MANIFEST).is_file() {
             return Ok(std::path::absolute(&candidate)?);
         }
@@ -355,9 +368,9 @@ mod tests {
         std::fs::write(theme.join(MANIFEST), "{}").unwrap();
         let exe = root.join("target").join("debug").join("mypaper-core.exe");
 
-        let found = locate_from("aurora", &exe).unwrap();
+        let found = locate_from("aurora", None, &exe).unwrap();
         assert_eq!(found, theme);
-        assert!(locate_from("nope", &exe).is_err());
+        assert!(locate_from("nope", None, &exe).is_err());
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

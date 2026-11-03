@@ -907,6 +907,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "mypaper-core"
 version = "0.1.0"
 dependencies = [
@@ -936,6 +945,7 @@ name = "mypaper-theme"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "mypaper-config",
  "serde",
  "serde_json",
 ]
