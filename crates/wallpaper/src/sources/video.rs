@@ -1,6 +1,7 @@
 //! `video` wallpapers: hardware-decoded by Media Foundation on a worker
-//! thread ([`decode`]), uploaded as NV12 planes and converted to RGB in
-//! `video.wgsl`.
+//! thread ([`decode`]) and converted from NV12 to RGB in `video.wgsl`.
+//! Frames stay on the GPU when wgpu can share textures with the decoder
+//! ([`share`]); otherwise they are copied through system memory.
 //!
 //! The playback position is the engine clock times `speed`, so a hidden
 //! wallpaper pauses its video for free: the engine stops calling `update`,
@@ -8,7 +9,10 @@
 
 #[path = "video_decode.rs"]
 mod decode;
+#[path = "video_share.rs"]
+mod share;
 
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
 use std::time::Duration;
 
@@ -20,7 +24,7 @@ use windows::Win32::Media::MediaFoundation::{
     MFVideoTransferMatrix_BT2020_10, MFVideoTransferMatrix_BT2020_12,
 };
 
-use self::decode::{Nv12, TICKS};
+use self::decode::{Nv12, Pixels, Spent, Stream, TICKS, Target};
 use super::blit::fit_transform;
 use super::{Frame, Redraw, Source, begin, clear};
 use crate::gpu::Gpu;
@@ -44,35 +48,118 @@ pub struct VideoSource {
     fit: Fit,
     speed: f64,
     interval: Duration,
+    draw: Draw,
+    /// Textures for frames copied through memory, reused while the size holds.
+    planes: Option<Planes>,
+    /// The decoder's shared slots, when frames stay on the GPU.
+    shared: Option<share::Reader>,
+    /// What `render` draws; `None` until the first frame arrives.
+    shown: Option<Shown>,
+    // Field order matters: `queue` drops first, closing the channel a
+    // blocked worker waits on, and `shared` releases every slot; this then
+    // joins the worker.
+    _decoder: decode::Thread,
+}
+
+/// The YUV pipeline and what all its bind groups share.
+struct Draw {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     params: wgpu::Buffer,
-    /// The frame on screen; `None` until the first one is uploaded.
-    planes: Option<Planes>,
-    // Field order matters: `queue` drops first, closing the channel that a
-    // blocked worker waits on; this then joins it.
-    _decoder: decode::Thread,
 }
 
-/// The current frame on the GPU.
+/// Our own textures for frames copied through memory.
 struct Planes {
     size: (u32, u32),
-    color: Color,
     luma: wgpu::Texture,
     chroma: wgpu::Texture,
     bind_group: wgpu::BindGroup,
+}
+
+struct Shown {
+    size: (u32, u32),
+    color: Color,
+    bind_group: wgpu::BindGroup,
+    /// The shared slot on screen, if it is one.
+    slot: Option<usize>,
 }
 
 impl VideoSource {
     pub fn new(gpu: &Gpu, theme: &LoadedTheme, config: &VideoWallpaper) -> Result<Self> {
         let path = theme.asset(&config.source);
         ensure!(path.is_file(), "video {} not found", path.display());
-        let stream = decode::spawn(path, config.fps, config.speed)?;
+        let draw = Draw::new(gpu);
+        let (stream, shared) = start(gpu, &draw, path, config)?;
         let speed = f64::from(config.speed);
         // New frames arrive at the video's rate times speed; drawing faster only repeats them.
         let rate = f64::from(config.fps).min(stream.fps * speed);
+        Ok(Self {
+            queue: Queue::new(stream.frames, stream.recycle),
+            fit: config.fit,
+            speed,
+            interval: Duration::from_secs_f64(1.0 / rate),
+            draw,
+            planes: None,
+            shared,
+            shown: None,
+            _decoder: stream.thread,
+        })
+    }
 
+    /// Uploads a frame copied through memory; returns its bind group.
+    fn upload(&mut self, gpu: &Gpu, size: (u32, u32), data: &[u8]) -> wgpu::BindGroup {
+        if self.planes.as_ref().is_none_or(|p| p.size != size) {
+            self.planes = Some(Planes::new(gpu, &self.draw, size));
+        }
+        let planes = self.planes.as_ref().expect("just created");
+        let (luma, chroma) = data.split_at((size.0 * size.1) as usize);
+        gpu.write_texture(&planes.luma, luma);
+        gpu.write_texture(&planes.chroma, chroma);
+        planes.bind_group.clone()
+    }
+}
+
+/// Starts the decoder: zero-copy if wgpu can import its slots, otherwise
+/// (or if the import fails) copying frames through memory.
+fn start(
+    gpu: &Gpu,
+    draw: &Draw,
+    path: PathBuf,
+    config: &VideoWallpaper,
+) -> Result<(Stream, Option<share::Reader>)> {
+    let spawn = |target| decode::spawn(path.clone(), config.fps, config.speed, target);
+    let (adapter, released, handle) = match share::target(gpu) {
+        Ok((luid, fence, handle)) => (Some(luid), Some(fence), Some(handle)),
+        Err(e) => {
+            log::warn!("zero-copy video unavailable: {e:#}");
+            (None, None, None)
+        }
+    };
+    let mut stream = spawn(Target {
+        adapter,
+        released: handle,
+    })?;
+    let (Some(slots), Some(released)) = (stream.slots.take(), released) else {
+        return Ok((stream, None));
+    };
+    let bind = |luma: &_, chroma: &_| draw.bind_group(gpu, luma, chroma);
+    match share::Reader::import(gpu, released, &slots, bind) {
+        Ok(reader) => Ok((stream, Some(reader))),
+        Err(e) => {
+            log::warn!("zero-copy video unavailable, copying frames: {e:#}");
+            drop(stream);
+            let target = Target {
+                adapter,
+                released: None,
+            };
+            Ok((spawn(target)?, None))
+        }
+    }
+}
+
+impl Draw {
+    fn new(gpu: &Gpu) -> Self {
         let device = &gpu.device;
         let module = device.create_shader_module(wgpu::include_wgsl!("video.wgsl"));
         let plane = |binding| wgpu::BindGroupLayoutEntry {
@@ -146,49 +233,21 @@ impl VideoSource {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        Ok(Self {
-            queue: Queue::new(stream.frames, stream.recycle),
-            fit: config.fit,
-            speed,
-            interval: Duration::from_secs_f64(1.0 / rate),
+        Self {
             pipeline,
             layout,
             sampler,
             params,
-            planes: None,
-            _decoder: stream.thread,
-        })
-    }
-
-    fn upload(&mut self, gpu: &Gpu, frame: &Nv12) {
-        if self.planes.as_ref().is_none_or(|p| p.size != frame.size) {
-            self.planes = Some(self.planes(gpu, frame.size, frame.color));
         }
-        let planes = self.planes.as_mut().expect("just created");
-        planes.color = frame.color;
-        let (luma, chroma) = frame.data.split_at((frame.size.0 * frame.size.1) as usize);
-        gpu.write_texture(&planes.luma, luma);
-        gpu.write_texture(&planes.chroma, chroma);
     }
 
-    /// Textures (and their bind group) for frames of `size`.
-    fn planes(&self, gpu: &Gpu, (width, height): (u32, u32), color: Color) -> Planes {
-        let none = wgpu::TextureUsages::empty();
-        let luma = gpu.texture(
-            "video luma",
-            (width, height),
-            wgpu::TextureFormat::R8Unorm,
-            none,
-            None,
-        );
-        let chroma = gpu.texture(
-            "video chroma",
-            (width.div_ceil(2), height.div_ceil(2)),
-            wgpu::TextureFormat::Rg8Unorm,
-            none,
-            None,
-        );
-        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+    fn bind_group(
+        &self,
+        gpu: &Gpu,
+        luma: &wgpu::TextureView,
+        chroma: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("video"),
             layout: &self.layout,
             entries: &[
@@ -198,25 +257,35 @@ impl VideoSource {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(
-                        &luma.create_view(&Default::default()),
-                    ),
+                    resource: wgpu::BindingResource::TextureView(luma),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(
-                        &chroma.create_view(&Default::default()),
-                    ),
+                    resource: wgpu::BindingResource::TextureView(chroma),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
                 },
             ],
-        });
-        Planes {
+        })
+    }
+}
+
+impl Planes {
+    fn new(gpu: &Gpu, draw: &Draw, (width, height): (u32, u32)) -> Self {
+        let none = wgpu::TextureUsages::empty();
+        let (r8, rg8) = (wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::Rg8Unorm);
+        let chroma_size = (width.div_ceil(2), height.div_ceil(2));
+        let luma = gpu.texture("video luma", (width, height), r8, none, None);
+        let chroma = gpu.texture("video chroma", chroma_size, rg8, none, None);
+        let bind_group = draw.bind_group(
+            gpu,
+            &luma.create_view(&Default::default()),
+            &chroma.create_view(&Default::default()),
+        );
+        Self {
             size: (width, height),
-            color,
             luma,
             chroma,
             bind_group,
@@ -227,32 +296,56 @@ impl VideoSource {
 impl Source for VideoSource {
     fn update(&mut self, gpu: &Gpu, clock: Duration) {
         let now = (clock.as_secs_f64() * self.speed * TICKS as f64) as i64;
-        if let Some(frame) = self.queue.take_due(now) {
-            self.upload(gpu, &frame);
-            self.queue.recycle(frame);
+        let Some(frame) = self.queue.take_due(now) else {
+            return;
+        };
+        let (bind_group, slot) = match frame.pixels {
+            Pixels::Cpu(data) => {
+                let bind_group = self.upload(gpu, frame.size, &data);
+                self.queue.recycle(Spent::Buffer(data));
+                (bind_group, None)
+            }
+            Pixels::Gpu { slot, ready } => {
+                let Some(shared) = &self.shared else {
+                    // Never sent without slots; hand it back regardless.
+                    return self.queue.recycle(Spent::Slot { slot, after: 0 });
+                };
+                shared.show(ready);
+                (shared.bind_groups[slot].clone(), Some(slot))
+            }
+        };
+        let previous = self.shown.replace(Shown {
+            size: frame.size,
+            color: frame.color,
+            bind_group,
+            slot,
+        });
+        if let (Some(slot), Some(shared)) = (previous.and_then(|s| s.slot), &mut self.shared) {
+            let after = shared.release();
+            self.queue.recycle(Spent::Slot { slot, after });
         }
     }
 
     fn render(&mut self, gpu: &Gpu, frame: Frame<'_>) {
-        let Some(planes) = &self.planes else {
+        let Some(shown) = &self.shown else {
             return clear(frame.encoder, frame.view, wgpu::Color::BLACK);
         };
-        let (scale, offset) = fit_transform(planes.size, frame.size, self.fit);
+        let (scale, offset) = fit_transform(shown.size, frame.size, self.fit);
         let params = Params {
             scale,
             offset,
-            rgb: planes.color.rgb_rows(),
+            rgb: shown.color.rgb_rows(),
         };
         // One buffer serves every screen: each screen's frame is its own submission.
         gpu.queue
-            .write_buffer(&self.params, 0, bytemuck::bytes_of(&params));
+            .write_buffer(&self.draw.params, 0, bytemuck::bytes_of(&params));
         let mut pass = begin(
             frame.encoder,
             frame.view,
             wgpu::LoadOp::Clear(wgpu::Color::BLACK),
         );
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &planes.bind_group, &[]);
+        pass.set_pipeline(&self.draw.pipeline);
+        pass.set_bind_group(0, &shown.bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
 
@@ -268,7 +361,7 @@ impl Source for VideoSource {
 /// The engine's end of the frame channel: picks which decoded frame to show.
 struct Queue {
     frames: Receiver<Nv12>,
-    recycle: SyncSender<Vec<u8>>,
+    recycle: SyncSender<Spent>,
     /// Received but not due yet.
     ahead: Option<Nv12>,
     /// Video time minus scaled engine time; set by the first frame, so
@@ -279,7 +372,7 @@ struct Queue {
 }
 
 impl Queue {
-    fn new(frames: Receiver<Nv12>, recycle: SyncSender<Vec<u8>>) -> Self {
+    fn new(frames: Receiver<Nv12>, recycle: SyncSender<Spent>) -> Self {
         Self {
             frames,
             recycle,
@@ -311,7 +404,7 @@ impl Queue {
                 break;
             }
             if let Some(skipped) = newest.replace(frame) {
-                self.recycle(skipped);
+                self.recycle(skipped.pixels.spent());
             }
         }
         if let (Some(frame), Some(origin)) = (&newest, &mut self.origin)
@@ -322,9 +415,10 @@ impl Queue {
         newest
     }
 
-    /// Hands a shown or skipped frame's buffer back to the worker for reuse.
-    fn recycle(&self, frame: Nv12) {
-        let _ = self.recycle.try_send(frame.data);
+    /// Hands a buffer or slot back to the worker for reuse. The channel has
+    /// room for everything in flight, so this only fails once the worker is gone.
+    fn recycle(&self, spent: Spent) {
+        let _ = self.recycle.try_send(spent);
     }
 
     fn ended(&self) -> bool {
@@ -410,13 +504,13 @@ mod tests {
             time,
             size: (2, 2),
             color: Color::from_tags(None, None, 2),
-            data: Vec::new(),
+            pixels: Pixels::Cpu(Vec::new()),
         }
     }
 
     /// A queue fed with frames at `times`, plus its sender (room for 8
     /// frames, so tests never block) and the recycled buffers.
-    fn queue(times: &[i64]) -> (Queue, SyncSender<Nv12>, Receiver<Vec<u8>>) {
+    fn queue(times: &[i64]) -> (Queue, SyncSender<Nv12>, Receiver<Spent>) {
         let (tx, rx) = mpsc::sync_channel(8);
         let (recycle, spent) = mpsc::sync_channel(8);
         for &time in times {

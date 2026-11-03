@@ -1,8 +1,9 @@
 //! The video decode worker: Media Foundation's source reader on a D3D11
-//! device (DXVA hardware decode on the minimum-power GPU, the same one
-//! wgpu's `LowPower` picks), sending tightly packed NV12 frames to the
-//! engine over a small bounded channel. Every COM object lives and dies on
-//! the worker thread.
+//! device (DXVA hardware decode on wgpu's GPU), sending frames to the
+//! engine over a small bounded channel. Frames stay on the GPU when wgpu
+//! can share textures with this device ([`super::share`]); otherwise they
+//! are copied to system memory as tightly packed NV12. Every COM object
+//! lives and dies on the worker thread.
 
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
@@ -11,7 +12,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail, ensure};
-use windows::Win32::Foundation::HMODULE;
+use windows::Win32::Foundation::{HMODULE, LUID};
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_CREATE_DEVICE_VIDEO_SUPPORT, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11CreateDevice,
@@ -36,6 +37,7 @@ use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninit
 use windows::core::{GUID, HSTRING, Interface};
 
 use super::Color;
+use super::share::{Handle, SLOTS, Slots, Writer};
 
 /// Media Foundation's time unit (100 ns) per second.
 pub const TICKS: i64 = 10_000_000;
@@ -46,23 +48,65 @@ const AHEAD: usize = 2;
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 const VIDEO: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
 
-/// One decoded frame, tightly packed NV12: `width × height` luma bytes,
-/// then rows of interleaved chroma at half resolution.
+/// One decoded NV12 frame.
 pub struct Nv12 {
     /// Presentation time on the looped timeline (it never jumps back), in [`TICKS`].
     pub time: i64,
     pub size: (u32, u32),
     pub color: Color,
-    pub data: Vec<u8>,
+    pub pixels: Pixels,
+}
+
+pub enum Pixels {
+    /// Tightly packed in system memory: `width × height` luma bytes, then
+    /// rows of interleaved chroma at half resolution.
+    Cpu(Vec<u8>),
+    /// In shared slot `slot`, once its `written` fence reaches `ready`.
+    Gpu { slot: usize, ready: u64 },
+}
+
+impl Pixels {
+    /// Hands the pixels back unshown (a slot that wgpu never sampled).
+    pub fn spent(self) -> Spent {
+        match self {
+            Self::Cpu(data) => Spent::Buffer(data),
+            Self::Gpu { slot, .. } => Spent::Slot { slot, after: 0 },
+        }
+    }
+}
+
+/// Storage the engine is done with, going back to the worker for reuse.
+pub enum Spent {
+    Buffer(Vec<u8>),
+    /// Free once wgpu's `released` fence reaches `after` (0: already free).
+    Slot {
+        slot: usize,
+        after: u64,
+    },
+}
+
+/// Where to decode: on wgpu's adapter (`None`: the minimum-power one) and,
+/// for zero-copy, with the fence wgpu signals when it releases a slot.
+pub struct Target {
+    pub adapter: Option<LUID>,
+    pub released: Option<Handle>,
+}
+
+/// The worker's startup report.
+struct Ready {
+    fps: f64,
+    slots: Option<Slots>,
 }
 
 /// The engine's end of a running decoder.
 pub struct Stream {
     pub frames: Receiver<Nv12>,
-    /// Takes spent frame buffers back, so steady playback allocates nothing.
-    pub recycle: SyncSender<Vec<u8>>,
+    /// Takes spent buffers and slots back, so steady playback allocates nothing.
+    pub recycle: SyncSender<Spent>,
     /// The video's own frame rate.
     pub fps: f64,
+    /// Shared slots, when the frames stay on the GPU.
+    pub slots: Option<Slots>,
     pub thread: Thread,
 }
 
@@ -80,15 +124,24 @@ impl Drop for Thread {
 
 /// Starts decoding `path` on a worker thread. Returns once the first frame
 /// is decoded, so a missing or undecodable file fails here, not later.
-pub fn spawn(path: PathBuf, fps_cap: u32, speed: f32) -> Result<Stream> {
+pub fn spawn(path: PathBuf, fps_cap: u32, speed: f32, target: Target) -> Result<Stream> {
     let (frames_tx, frames) = mpsc::sync_channel(AHEAD);
-    let (recycle, spent) = mpsc::sync_channel(AHEAD + 2);
+    // Room for every slot and buffer in flight, so handing one back never fails.
+    let (recycle, returned) = mpsc::sync_channel(SLOTS + AHEAD);
     let (ready_tx, ready) = mpsc::sync_channel(1);
     let thread = std::thread::Builder::new()
         .name("video decode".into())
         .spawn(move || {
             let mut ready = Some(ready_tx);
-            if let Err(e) = decode(&path, fps_cap, speed, &mut ready, &frames_tx, &spent) {
+            let spares = Spares {
+                returned,
+                buffers: Vec::new(),
+                slots: (0..SLOTS).map(|slot| (slot, 0)).collect(),
+            };
+            let result = decode(
+                &path, fps_cap, speed, target, &mut ready, &frames_tx, spares,
+            );
+            if let Err(e) = result {
                 match ready.take() {
                     Some(ready) => _ = ready.send(Err(e)),
                     None => log::warn!("video decoding stopped, keeping the last frame: {e:#}"),
@@ -96,13 +149,14 @@ pub fn spawn(path: PathBuf, fps_cap: u32, speed: f32) -> Result<Stream> {
             }
         })?;
     // On failure `thread` is detached rather than joined: it may be stuck.
-    let fps = ready
+    let Ready { fps, slots } = ready
         .recv_timeout(START_TIMEOUT)
         .context("the video decoder did not start")??;
     Ok(Stream {
         frames,
         recycle,
         fps,
+        slots,
         thread: Thread(Some(thread)),
     })
 }
@@ -112,34 +166,114 @@ fn decode(
     path: &Path,
     fps_cap: u32,
     speed: f32,
-    ready: &mut Option<SyncSender<Result<f64>>>,
+    target: Target,
+    ready: &mut Option<SyncSender<Result<Ready>>>,
     frames: &SyncSender<Nv12>,
-    spent: &Receiver<Vec<u8>>,
+    mut spares: Spares,
 ) -> Result<()> {
-    let mut decoder = Decoder::open(path)?;
+    let mut decoder = Decoder::open(path, target.adapter)?;
     let mut pacing = Pacing::new(fps_cap, speed, decoder.format.frame_ticks());
+    let mut released = target.released;
+    let (mut writer, mut slots) = (None, None);
     loop {
         let (time, sample) = decoder.next()?;
         if !pacing.keep(time) {
             continue; // above the fps cap: never copied off the GPU
         }
-        let frame = decoder.copy(time, sample, spent.try_recv().unwrap_or_default())?;
-        let (width, height) = frame.size;
+        let decoded = Decoded::new(&sample)?;
+        let area = decoder.format.area;
+        let (origin, size) = (
+            (area.x as u32, area.y as u32),
+            (area.width as u32, area.height as u32),
+        );
+        // Decide on the first frame: zero-copy if it is on the GPU and wgpu takes shared slots.
+        if let (Some(released), Some(_)) = (released.take(), &decoded.texture) {
+            match Writer::new(&decoder.device, released, origin, size) {
+                Ok((created, shared)) => (writer, slots) = (Some(created), Some(shared)),
+                Err(e) => log::warn!("zero-copy video unavailable, copying frames: {e:#}"),
+            }
+        }
+        let (pixels, size) = match (&mut writer, &decoded.texture) {
+            (Some(writer), Some((texture, index))) if writer.fits(origin, size) => {
+                let Some((slot, after)) = spares.slot() else {
+                    return Ok(());
+                };
+                let ready = writer.write(texture, *index, slot, after)?;
+                (Pixels::Gpu { slot, ready }, writer.size)
+            }
+            _ => {
+                let data = decoder.copy(&decoded, spares.buffer())?;
+                (Pixels::Cpu(data), size)
+            }
+        };
+        let mode = match (&pixels, &decoded.texture) {
+            (Pixels::Gpu { .. }, _) => "hardware decode, zero-copy",
+            (Pixels::Cpu(_), Some(_)) => "hardware decode, copied through memory",
+            (Pixels::Cpu(_), None) => "software decode",
+        };
+        // Back to the decoder's pool before we (maybe) block on a full channel.
+        drop((decoded, sample));
+        let frame = Nv12 {
+            time,
+            size,
+            color: decoder.format.color,
+            pixels,
+        };
         if frames.send(frame).is_err() {
             return Ok(());
         }
         if let Some(ready) = ready.take() {
+            let (fps, adapter) = (decoder.format.fps, &decoder.adapter);
             log::info!(
-                "video: {width}x{height} at {:.3} fps, {} decode on {}",
-                decoder.format.fps,
-                if decoder.hardware {
-                    "hardware"
-                } else {
-                    "software"
-                },
-                decoder.adapter,
+                "video: {}x{} at {fps:.3} fps, {mode} on {adapter}",
+                size.0,
+                size.1
             );
-            let _ = ready.send(Ok(decoder.format.fps));
+            let _ = ready.send(Ok(Ready {
+                fps,
+                slots: slots.take(),
+            }));
+        }
+    }
+}
+
+/// Buffers and slots the engine handed back, ready for reuse.
+struct Spares {
+    returned: Receiver<Spent>,
+    buffers: Vec<Vec<u8>>,
+    /// Free slots, with the `released` value to wait for before writing.
+    slots: Vec<(usize, u64)>,
+}
+
+impl Spares {
+    fn keep(&mut self, spent: Spent) {
+        match spent {
+            Spent::Buffer(buffer) => self.buffers.push(buffer),
+            Spent::Slot { slot, after } => self.slots.push((slot, after)),
+        }
+    }
+
+    fn collect(&mut self) {
+        while let Ok(spent) = self.returned.try_recv() {
+            self.keep(spent);
+        }
+    }
+
+    fn buffer(&mut self) -> Vec<u8> {
+        self.collect();
+        self.buffers.pop().unwrap_or_default()
+    }
+
+    /// A free slot, waiting for one to come back if need be. `None` once
+    /// the engine has hung up.
+    fn slot(&mut self) -> Option<(usize, u64)> {
+        loop {
+            self.collect();
+            if let Some(slot) = self.slots.pop() {
+                return Some(slot);
+            }
+            let spent = self.returned.recv().ok()?;
+            self.keep(spent);
         }
     }
 }
@@ -147,19 +281,18 @@ fn decode(
 /// A source reader that outputs NV12 for the first video stream.
 struct Decoder {
     reader: IMFSourceReader,
+    device: ID3D11Device,
     format: Format,
     timeline: Timeline,
     adapter: String,
-    /// The last frame came from GPU memory (DXVA).
-    hardware: bool,
     // Last, so Media Foundation shuts down after the reader is released.
     _mf: MediaFoundation,
 }
 
 impl Decoder {
-    fn open(path: &Path) -> Result<Self> {
+    fn open(path: &Path, adapter: Option<LUID>) -> Result<Self> {
         let mf = MediaFoundation::start()?;
-        let (device, adapter) = decode_device()?;
+        let (device, adapter) = decode_device(adapter)?;
         let (mut token, mut manager, mut attributes) = (0, None, None);
         // SAFETY: COM calls on live interfaces; the out-pointers are valid locals.
         let reader = unsafe {
@@ -190,9 +323,9 @@ impl Decoder {
         Ok(Self {
             format: Format::read(&reader)?,
             reader,
+            device,
             timeline: Timeline::default(),
             adapter,
-            hardware: false,
             _mf: mf,
         })
     }
@@ -245,25 +378,54 @@ impl Decoder {
         }
     }
 
-    /// Copies a frame off the GPU (or out of system memory) into `data`.
-    fn copy(&mut self, time: i64, sample: IMFSample, mut data: Vec<u8>) -> Result<Nv12> {
+    /// Copies a frame off the GPU (or out of system memory) into `data`,
+    /// tightly packed.
+    fn copy(&self, frame: &Decoded, mut data: Vec<u8>) -> Result<Vec<u8>> {
+        let format = &self.format;
+        // The chroma plane starts after the texture's allocated rows, which
+        // may be more than the frame has.
+        let rows = match &frame.texture {
+            Some((texture, _)) => {
+                let mut desc = D3D11_TEXTURE2D_DESC::default();
+                // SAFETY: a D3D11 call on a live texture; `desc` is a valid out-pointer.
+                unsafe { texture.GetDesc(&mut desc) };
+                desc.Height as usize
+            }
+            None => format.rows,
+        };
+        let locked = Locked::new(&frame.buffer, format.stride)?;
+        pack_nv12(locked.bytes(), locked.pitch, rows, format.area, &mut data)?;
+        Ok(data)
+    }
+}
+
+/// A decoded sample's buffer and, for a hardware frame, the D3D11 texture
+/// (and array slice) it lives in.
+struct Decoded {
+    buffer: IMFMediaBuffer,
+    texture: Option<(ID3D11Texture2D, u32)>,
+}
+
+impl Decoded {
+    fn new(sample: &IMFSample) -> Result<Self> {
         // SAFETY: a COM call on a live sample.
         let buffer = unsafe { sample.GetBufferByIndex(0) }?;
-        let gpu_rows = match buffer.cast::<IMFDXGIBuffer>() {
-            Ok(gpu) => Some(texture_rows(&gpu)?),
+        let texture = match buffer.cast::<IMFDXGIBuffer>() {
+            Ok(gpu) => {
+                let mut texture = null_mut();
+                // SAFETY: on success GetResource hands over one reference to
+                // an ID3D11Texture2D, which `from_raw` adopts.
+                unsafe {
+                    gpu.GetResource(&ID3D11Texture2D::IID, &mut texture)?;
+                    Some((
+                        ID3D11Texture2D::from_raw(texture),
+                        gpu.GetSubresourceIndex()?,
+                    ))
+                }
+            }
             Err(_) => None,
         };
-        self.hardware = gpu_rows.is_some();
-        let format = &self.format;
-        let locked = Locked::new(&buffer, format.stride)?;
-        let rows = gpu_rows.unwrap_or(format.rows);
-        pack_nv12(locked.bytes(), locked.pitch, rows, format.area, &mut data)?;
-        Ok(Nv12 {
-            time,
-            size: (format.area.width as u32, format.area.height as u32),
-            color: format.color,
-            data,
-        })
+        Ok(Self { buffer, texture })
     }
 }
 
@@ -356,15 +518,18 @@ fn split(packed: u64) -> (u32, u32) {
     ((packed >> 32) as u32, packed as u32)
 }
 
-/// A video-capable D3D11 device on the minimum-power GPU, safe for Media
+/// A video-capable D3D11 device on `adapter` (wgpu's GPU) or else the
+/// minimum-power GPU (the one wgpu's `LowPower` picks), safe for Media
 /// Foundation's own threads to use. Returns it with the adapter's name.
-fn decode_device() -> Result<(ID3D11Device, String)> {
+fn decode_device(adapter: Option<LUID>) -> Result<(ID3D11Device, String)> {
     let mut device = None;
     // SAFETY: DXGI/D3D11 calls with valid arguments; `device` is a valid out-pointer.
     unsafe {
         let factory: IDXGIFactory6 = CreateDXGIFactory1()?;
-        let adapter: IDXGIAdapter1 =
-            factory.EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_MINIMUM_POWER)?;
+        let adapter: IDXGIAdapter1 = match adapter {
+            Some(luid) => factory.EnumAdapterByLuid(luid)?,
+            None => factory.EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_MINIMUM_POWER)?,
+        };
         D3D11CreateDevice(
             &adapter,
             D3D_DRIVER_TYPE_UNKNOWN,
@@ -385,20 +550,6 @@ fn decode_device() -> Result<(ID3D11Device, String)> {
         let len = name.iter().position(|&c| c == 0).unwrap_or(name.len());
         Ok((device, String::from_utf16_lossy(&name[..len])))
     }
-}
-
-/// The allocated height of the texture behind a GPU buffer: the chroma
-/// plane starts after this many rows, which may be more than the frame has.
-fn texture_rows(buffer: &IMFDXGIBuffer) -> Result<usize> {
-    let mut texture = null_mut();
-    let mut desc = D3D11_TEXTURE2D_DESC::default();
-    // SAFETY: on success GetResource hands over one reference to an
-    // ID3D11Texture2D, which `from_raw` adopts (and releases on drop).
-    unsafe {
-        buffer.GetResource(&ID3D11Texture2D::IID, &mut texture)?;
-        ID3D11Texture2D::from_raw(texture).GetDesc(&mut desc);
-    }
-    Ok(desc.Height as usize)
 }
 
 /// COM (multithreaded) and Media Foundation on this thread; shut down on drop.
