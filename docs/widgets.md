@@ -26,7 +26,8 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
                                  │              origin https://<widget-id>.widget.mypaper/
                                  ├─ bridge: shell ⇄ host (WebView2 postMessage), permission checks in Rust
                                  ├─ plugin manager: spawns plugins, JSON-RPC 2.0 over stdio
-                                 └─ hold logic: the same reasons as the wallpaper (config + fullscreen + lock …)
+                                 └─ hold logic: pause, battery, lock, display off (global) and a window
+                                    covering a monitor (that monitor only), see Pausing
 ```
 
 - **Window placement.** Each monitor gets a window that's a child of the desktop host
@@ -52,9 +53,22 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   `shell.mypaper` → `widgets/shell/dist` (`DENY`). Popups, top-level navigation away from the shell,
   script dialogs and every permission prompt (camera, location, notifications, clipboard read, …)
   are refused.
-- **Pausing.** On hold, every WebView2 gets `put_IsVisible(false)` and `TrySuspend`. On release,
-  `Resume` and `put_IsVisible(true)`. Widgets see `visibility` events (below). A monitor that is
-  completely covered by a maximized or fullscreen window is paused the same way, on its own.
+- **Pausing is per monitor.** What pauses a layer:
+  - **A window covering that monitor** (a maximized or fullscreen app or game): that monitor's
+    layer is hidden (`put_IsVisible(false)`, `TrySuspend`) and nothing else changes: widgets on
+    every other monitor keep showing and animating. (A fullscreen app on monitor 1 no longer touches
+    monitor 2. `pause_on_fullscreen` in `config.json` governs the wallpaper, not widgets.) Edit mode
+    shows a covered monitor anyway.
+  - **A global hold with the desktop still on screen**: the user pauses from the tray or Studio, or
+    the machine is on battery with `pause_on_battery`. Layers *freeze*: they stay up showing their
+    last frame, widgets get `visibility: false` (so they stop animating), `system` and `media`
+    subscriptions, plugins and the stats timer stop. Layers are not hidden or released.
+  - **Nothing on screen** (session locked, display off): every layer is hidden and suspended.
+
+  A hidden layer is *parked* after 30 s: its window and WebView are released (a suspended WebView
+  still holds hundreds of MB) and rebuilt, about a second, when its monitor shows again. Only that
+  monitor's layer is released; when every monitor with widgets is parked, WebView2 itself is
+  released. On release, `Resume` and `put_IsVisible(true)`. Widgets see `visibility` events (below).
 
 ## Folders
 
@@ -285,8 +299,9 @@ an instance change reaches only that widget.
 - **Keyboard**: arrows move the selected widget one cell, and Shift+arrows resize it (right and
   down grow, left and up shrink). Esc closes an open menu first. The shell needs keyboard focus for
   this, which it gets when you click it (the host never takes focus by itself).
-- Edit mode never takes effect while a fullscreen app is in front (the host is held then anyway).
-  Requests to turn it on while held are ignored, and becoming held leaves edit mode.
+- Edit mode never takes effect while the host is held (paused by the user, on battery with
+  `pause_on_battery`, locked, display off): requests to turn it on are ignored, and becoming held
+  leaves edit mode. A fullscreen app on one monitor doesn't block editing the others.
 
 ## Widget JS API (`mypaper`)
 
@@ -300,7 +315,7 @@ interface Mypaper {
   readonly ready: Promise<void>;    // resolves once the shell answers the handshake; every call waits for it
   readonly instance: string;        // "clock-1" (after ready)
   readonly widget: WidgetManifest;  // the parsed manifest (after ready)
-  readonly visible: boolean;        // false while the host is held
+  readonly visible: boolean;        // false while paused, or while a window covers this monitor
   readonly editing: boolean;        // edit mode is on
   settings: {
     get(): Promise<Record<string, unknown>>;
@@ -353,9 +368,11 @@ interface Mypaper {
   something subscribes or asks: one sample for every subscriber, the Wi-Fi service queried at most
   every 5 s, nothing while the host is held.
 - **Errors**: `PermissionDenied`, `NotFound`, `InvalidParams`, `PluginUnavailable`, `Internal`.
-- **Visibility**: when the host is held, widgets get `visibility:false` and then the WebView is
-  suspended. Widgets should stop their animations. Subscriptions are paused automatically. A
-  monitor covered by a maximized or fullscreen window is paused the same way, on its own.
+- **Visibility**: when the host is paused (by the user, on battery) or a maximized or fullscreen
+  window covers the widget's monitor, the widget gets `visibility:false`. Widgets should stop their
+  animations. Subscriptions are paused automatically. A covered monitor's WebView is then
+  suspended; a paused one stays on screen showing the last frame. A game on another monitor changes
+  nothing (see [Pausing](#architecture)).
 
 ### Wire protocol (iframe ⇄ shell)
 
@@ -400,8 +417,8 @@ as `{ mypaper: 1, event: "sub", data: { sub, value } }`:
 - `media`, `theme`: on change only (read the current value with `media.current` / `theme.current`).
 - `plugin`: each matching plugin event's `data`.
 
-While the host is held (`visibility: false`) nothing is delivered; `system` sends a sample as soon
-as the widget is visible again.
+While a widget is not visible (`visibility: false`) nothing is delivered to it; `system` sends a
+sample as soon as it is visible again.
 
 **Pushed events** (shell → widget, always on, no subscription): `visibility` (`boolean`),
 `editmode` (`boolean`), `settings` (the full settings object), `size`
@@ -579,7 +596,11 @@ is held.
 - **Host idle (no widgets)**: no WebView created and 0% CPU.
 - **With widgets, visible**: one WebView2 per monitor that has widgets. `system.subscribe` is
   driven by one host timer for all subscribers.
-- **Held**: WebViews suspended, plugins suspended, and the host waiting on its message queue at 0%
+- **A monitor covered by a window**: its WebView suspended, then released after 30 s; the other
+  monitors' layers are unaffected.
+- **Paused by the user or on battery**: layers frozen (no widget animation, no sampling, plugins
+  suspended); the host waits on its message queue.
+- **Locked or display off**: WebViews suspended, then released, plugins suspended, the host at 0%
   CPU.
 
 ## How to run
@@ -602,6 +623,8 @@ target\debug\mypaper-widgets.exe --edit toggle   # or Ctrl+Alt+Shift+W
   "save". The shell itself reloads on `pnpm -C widgets/shell build`.
 - To try it without touching your real setup, point `APPDATA` (and `LOCALAPPDATA`) at a temporary
   folder holding `mypaper\widgets.json` and your test widgets in `mypaper\widgets\<id>\`.
+- `MYPAPER_WIDGETS_PARK_SECS=<n>` changes how long a hidden layer waits before it is released
+  (default 30), for testing.
 - `MYPAPER_WIDGETS_IGNORE_COVERED=1` keeps monitors awake while a maximized window covers them,
   for capturing the widget layer in tests (`PrintWindow(GetShellWindow(), PW_RENDERFULLCONTENT)`
   renders the desktop, widgets included, without touching the windows in front).

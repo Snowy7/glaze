@@ -16,7 +16,7 @@ use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, HoldReasons, Holds, Reason};
 use mypaper_desktop::{
     ControlWindow, DesktopHost, Monitor, Rect, WM_FACT, WindowEvents, covered_monitors,
-    fullscreen_app_in_front, monitor_infos,
+    monitor_infos,
 };
 use mypaper_theme::Color;
 use notify::Watcher;
@@ -74,10 +74,41 @@ const SETTLE_SHELL: Duration = Duration::from_millis(500);
 /// App bars announce a work-area change in bursts (one per bar, per edge).
 const SETTLE_DISPLAY: Duration = Duration::from_millis(200);
 const RETRY_WEBVIEW: Duration = Duration::from_secs(30);
-/// After this long held (a game session, a locked PC), the widget layers and
-/// WebView2 are released entirely: a suspended WebView still holds hundreds
-/// of MB. They are rebuilt (about a second) when the hold ends.
+/// After a monitor's layer has been hidden this long (a game or maximized window
+/// over it, a locked PC), that layer and its WebView are released entirely: a
+/// suspended WebView still holds hundreds of MB. It is rebuilt (about a second)
+/// when the monitor shows again. Layers on other monitors stay live.
 const PARK_AFTER: Duration = Duration::from_secs(30);
+
+/// Nothing is on screen: layers hide and sleep. Any other hold (paused, on battery) leaves the
+/// desktop visible, so layers stay up showing their last frame.
+fn nothing_visible(reasons: HoldReasons) -> bool {
+    reasons.contains(Reason::DisplayOff) || reasons.contains(Reason::Locked)
+}
+
+/// What one monitor's widget layer does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LayerState {
+    /// Shown and running.
+    Live,
+    /// Shown, but widgets are told to stop (a global hold with the desktop on screen).
+    Frozen,
+    /// Hidden and suspended (and released later): nothing to see.
+    Hidden,
+}
+
+/// The rule for a monitor's layer. Only a window covering *that* monitor (a maximized or
+/// fullscreen app) hides it, so a game on another monitor changes nothing here. Edit mode
+/// shows a covered monitor regardless.
+fn layer_state(reasons: HoldReasons, covered: bool, editing: bool) -> LayerState {
+    if nothing_visible(reasons) || (covered && !editing) {
+        LayerState::Hidden
+    } else if !reasons.is_empty() {
+        LayerState::Frozen
+    } else {
+        LayerState::Live
+    }
+}
 
 /// The built shell: its folder and the hardening script injected into every frame.
 struct Shell {
@@ -167,8 +198,13 @@ pub struct App {
     reasons: HoldReasons,
     covered: HashMap<String, bool>,
     editing: bool,
-    /// Held long enough that the layers and WebView2 were released.
-    parked: bool,
+    /// Monitors (by device) whose layer was hidden long enough to be released.
+    parked: BTreeSet<String>,
+    /// Since when each monitor's layer has been hidden.
+    hidden_since: HashMap<String, Instant>,
+    /// How long a layer stays hidden before it is parked ([`PARK_AFTER`], or
+    /// `MYPAPER_WIDGETS_PARK_SECS` for tests).
+    park_after: Duration,
     devtools: bool,
     /// `MYPAPER_WIDGETS_IGNORE_COVERED=1`: keep covered monitors awake (for
     /// capturing them in tests).
@@ -287,10 +323,15 @@ impl App {
             reasons: HoldReasons::default(),
             covered: HashMap::new(),
             editing: false,
-            parked: false,
+            parked: BTreeSet::new(),
+            hidden_since: HashMap::new(),
             devtools,
             ignore_covered: std::env::var_os("MYPAPER_WIDGETS_IGNORE_COVERED")
                 .is_some_and(|v| v == "1"),
+            park_after: std::env::var("MYPAPER_WIDGETS_PARK_SECS")
+                .ok()
+                .and_then(|secs| secs.parse().ok())
+                .map_or(PARK_AFTER, Duration::from_secs),
             storage: Storage::new(crate::files::user("widget-data")?),
             stats: Stats::default(),
             media: Media::new(waker.clone()),
@@ -313,7 +354,6 @@ impl App {
         }
         app.watch();
         app.update_policy();
-        app.refresh_fullscreen();
         app.sync_hold();
         app.reconcile();
         Ok(app)
@@ -460,10 +500,8 @@ impl App {
         if due(&mut self.timers.webview, now) {
             self.reconcile();
         }
-        if due(&mut self.timers.park, now) && self.held() && !self.parked {
-            log::info!("held for {PARK_AFTER:?}: releasing the widget layers and WebView2");
-            self.parked = true;
-            self.reconcile();
+        if due(&mut self.timers.park, now) {
+            self.park_hidden(now);
         }
         for delivery in self.stats.tick(now) {
             match delivery {
@@ -481,23 +519,35 @@ impl App {
         self.deliver(out);
     }
 
+    /// A global hold: the user paused, or we're on battery with that setting, or the display
+    /// is off or the session locked. (A fullscreen app is not one: it only pauses the monitor
+    /// it covers, see [`hides`](Self::hides).)
     fn held(&self) -> bool {
         !self.reasons.is_empty()
     }
 
-    // --- Hold -------------------------------------------------------------
-
-    fn refresh_fullscreen(&mut self) {
-        let fullscreen = self.holds.wants_fullscreen() && fullscreen_app_in_front();
-        self.holds.set_fullscreen(fullscreen);
+    /// Nothing is on screen (display off, locked).
+    fn nothing_visible(&self) -> bool {
+        nothing_visible(self.reasons)
     }
 
-    /// Combines every hold reason, logging changes, and puts everything to
+    /// Held, but the desktop is visible: widgets are told they're not visible (so they stop
+    /// animating) while their layers keep showing what they last drew.
+    fn frozen(&self) -> bool {
+        self.held() && !self.nothing_visible()
+    }
+
+    /// Whether the layer on `device` is hidden (see [`layer_state`]).
+    fn hides(&self, device: &str) -> bool {
+        let covered = self.covered.get(device).copied().unwrap_or(false);
+        layer_state(self.reasons, covered, self.editing) == LayerState::Hidden
+    }
+
+    // --- Hold -------------------------------------------------------------
+
+    /// Combines every global hold reason, logging changes, and puts what needs it to
     /// sleep (or wakes it).
     fn sync_hold(&mut self) {
-        if self.window_events.is_none() {
-            self.refresh_fullscreen(); // unwatched: look now
-        }
         let reasons = self.holds.reasons();
         if reasons == self.reasons {
             return;
@@ -509,29 +559,21 @@ impl App {
         }
         self.reasons = reasons;
         let held = !reasons.is_empty();
-        self.timers.park = held.then(|| Instant::now() + PARK_AFTER);
-        if !held && self.parked {
-            self.parked = false;
-            self.reconcile(); // rebuild the layers
-        }
         self.plugins.set_held(held);
         self.stats.set_held(held, Instant::now());
         self.media.set_held(held);
         if held && self.editing {
             log::info!("leaving edit mode");
             self.editing = false;
-            self.reconcile();
-        } else {
-            self.sync_hooks();
-            self.apply_visibility();
         }
+        // Un-parks what may show again, hides or freezes the rest, and tells every shell.
+        self.reconcile();
     }
 
     fn reload_config(&mut self) {
         match Config::load() {
             Ok(config) => {
                 self.holds.apply(&config);
-                self.refresh_fullscreen();
                 self.sync_hold();
             }
             Err(e) => log::error!("{e:#}\n(keeping the current settings)"),
@@ -584,7 +626,8 @@ impl App {
         self.refresh_monitors();
     }
 
-    /// After window events: monitors, coverage, a fullscreen app, z-order.
+    /// After window events: monitors, which are covered by a maximized or fullscreen window,
+    /// z-order.
     fn recheck(&mut self) {
         self.refresh_monitors();
         if !self.ignore_covered {
@@ -599,23 +642,63 @@ impl App {
         for surface in &self.surfaces {
             self.host.keep_above_icons(surface.hwnd());
         }
-        self.refresh_fullscreen();
         self.sync_hold();
-        self.apply_visibility();
+        if self.parked.iter().any(|device| !self.hides(device)) {
+            self.reconcile(); // a covered monitor was uncovered: rebuild its layer
+        } else {
+            self.apply_visibility();
+        }
     }
 
-    /// Hides (and suspends) surfaces while held or covered, shows the rest.
-    /// Widgets hear `visibility:false` before the suspend and `true` after the resume.
+    /// Releases the layers (and so their WebViews) of monitors that have been hidden for
+    /// [`PARK_AFTER`]. When that was every monitor with widgets, WebView2 itself goes.
+    fn park_hidden(&mut self, now: Instant) {
+        let due: Vec<String> = self
+            .hidden_since
+            .iter()
+            .filter(|(device, since)| {
+                now >= **since + self.park_after
+                    && !self.parked.contains(*device)
+                    && self.hides(device)
+            })
+            .map(|(device, _)| device.clone())
+            .collect();
+        if due.is_empty() {
+            return self.arm_park();
+        }
+        log::info!(
+            "hidden for {:?}: releasing the widget layer and WebView on {}",
+            self.park_after,
+            due.join(", ")
+        );
+        self.parked.extend(due);
+        self.reconcile();
+    }
+
+    /// Wakes us when the next hidden layer is due to be parked.
+    fn arm_park(&mut self) {
+        self.timers.park = self
+            .hidden_since
+            .iter()
+            .filter(|(device, _)| !self.parked.contains(*device))
+            .map(|(_, since)| *since + self.park_after)
+            .min();
+    }
+
+    /// Hides (and suspends) layers of monitors that are covered, or everywhere while nothing
+    /// is on screen; shows the rest. Widgets hear `visibility:false` before the suspend and
+    /// `true` after the resume. Notes since when each layer is hidden, for parking.
     fn apply_visibility(&mut self) {
-        let held = self.held();
+        let now = Instant::now();
         for index in 0..self.surfaces.len() {
+            let device = self.surfaces[index].monitor.device.clone();
+            let hidden = self.hides(&device);
+            if hidden {
+                self.hidden_since.entry(device).or_insert(now);
+            } else {
+                self.hidden_since.remove(&device);
+            }
             let surface = &self.surfaces[index];
-            let covered = self
-                .covered
-                .get(&surface.monitor.device)
-                .copied()
-                .unwrap_or(false);
-            let hidden = held || (covered && !self.editing);
             if hidden == surface.hidden {
                 continue;
             }
@@ -637,14 +720,20 @@ impl App {
                 }
             }
         }
+        // Layers that no longer exist (parked, or gone) aren't timed.
+        let live: BTreeSet<&str> = self
+            .surfaces
+            .iter()
+            .map(|s| s.monitor.device.as_str())
+            .collect();
+        self.hidden_since
+            .retain(|device, _| live.contains(device.as_str()));
+        self.arm_park();
     }
 
     // --- Edit mode and surfaces ---------------------------------------------
 
     fn set_editing(&mut self, on: bool) {
-        if on {
-            self.sync_hold(); // without hooks, nothing watched for a fullscreen app
-        }
         if on && self.held() {
             log::info!("not entering edit mode while held ({})", self.reasons);
             return;
@@ -689,11 +778,20 @@ impl App {
             // Unwatched while no layer was up: the monitors may have changed.
             self.monitors = monitor_infos();
         }
+        // A parked monitor stays parked while it is still hidden, and not otherwise. Monitors
+        // that went away are forgotten.
+        let hidden: BTreeSet<String> = self
+            .monitors
+            .iter()
+            .filter(|m| self.hides(&m.device))
+            .map(|m| m.device.clone())
+            .collect();
+        self.parked.retain(|device| hidden.contains(device));
         let wanted: Vec<Monitor> = self
             .monitors
             .iter()
             .filter(|monitor| {
-                !self.parked
+                !self.parked.contains(&monitor.device)
                     && (self.editing
                         || self.layout.instances.iter().any(|instance| {
                             self.registry.get(&instance.widget).is_some()
@@ -740,14 +838,12 @@ impl App {
     }
 
     /// The window-change hooks wake us on every window move anywhere, so they
-    /// run only while they matter: a layer is up and we're not held, or held
-    /// by a fullscreen app (to see it leave). Pause, battery, lock and display
-    /// arrive as notifications without them.
+    /// run only while they matter: a layer is up (or parked, and must see the
+    /// window over its monitor leave) and the desktop is on screen. Pause,
+    /// battery, lock and display arrive as notifications without them.
     fn sync_hooks(&mut self) {
-        let fullscreen = self.reasons.contains(Reason::Fullscreen);
-        // Parked layers are gone, but a fullscreen hold must still see the app leave.
-        let layer = !self.surfaces.is_empty() || self.parked;
-        let wanted = layer && (self.reasons.is_empty() || fullscreen);
+        let layer = !self.surfaces.is_empty() || !self.parked.is_empty();
+        let wanted = layer && !self.nothing_visible();
         match (wanted, self.window_events.is_some()) {
             (true, false) => {
                 self.window_events = Some(WindowEvents::install());
@@ -1007,7 +1103,8 @@ impl App {
             },
             "themeCss": self.skin.css,
             "editing": self.editing,
-            "visible": !surface.hidden,
+            // Frozen (paused, on battery) layers stay on screen but tell widgets to stop.
+            "visible": !surface.hidden && !self.frozen(),
             "error": self.layout_error,
         });
         surface.post(&state.to_string());
@@ -1542,4 +1639,57 @@ fn icon_cell() -> [f64; 2] {
         layout::icon_spacing_dip(read(w!("IconSpacing"))),
         layout::icon_spacing_dip(read(w!("IconVerticalSpacing"))),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reasons(paused: bool, on_battery: bool, display_off: bool, locked: bool) -> HoldReasons {
+        let mut holds = Holds::default();
+        holds.apply(&Config {
+            paused,
+            pause_on_battery: true,
+            pause_on_fullscreen: true,
+            ..Config::default()
+        });
+        holds.set(Fact::OnBattery, on_battery);
+        holds.set(Fact::DisplayOff, display_off);
+        holds.set(Fact::SessionLocked, locked);
+        holds.reasons()
+    }
+
+    #[test]
+    fn only_the_covered_monitor_pauses() {
+        let none = reasons(false, false, false, false);
+        // A game on another monitor: this monitor is not covered, so it keeps running.
+        assert_eq!(layer_state(none, false, false), LayerState::Live);
+        assert_eq!(layer_state(none, true, false), LayerState::Hidden);
+        // Edit mode shows a covered monitor anyway.
+        assert_eq!(layer_state(none, true, true), LayerState::Live);
+    }
+
+    #[test]
+    fn a_global_pause_freezes_visible_layers_and_hides_the_rest() {
+        let paused = reasons(true, false, false, false);
+        assert_eq!(
+            layer_state(paused, false, false),
+            LayerState::Frozen,
+            "still on screen"
+        );
+        assert_eq!(
+            layer_state(paused, true, false),
+            LayerState::Hidden,
+            "covered: nothing to see"
+        );
+        let battery = reasons(false, true, false, false);
+        assert_eq!(layer_state(battery, false, false), LayerState::Frozen);
+        // Nothing is on screen at all: everything hides, covered or not.
+        for off in [
+            reasons(false, false, true, false),
+            reasons(false, false, false, true),
+        ] {
+            assert_eq!(layer_state(off, false, false), LayerState::Hidden);
+        }
+    }
 }
