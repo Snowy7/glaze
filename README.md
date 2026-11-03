@@ -116,7 +116,7 @@ Release builds on a Ryzen laptop (AMD iGPU and NVIDIA dGPU, two 1440p monitors, 
 | `aurora`, shader at 60 fps | **0.17%** | |
 | `photo`, image | **0.02%** | drawn once, then idle |
 | `gallery`, slideshow | **0.01%** | idle between slides |
-| `loop`, 1080p30 video | **0.23%** | hardware decode, zero-copy D3D11→D3D12, 10-bit/HDR tone-mapped |
+| 1080p30 video (measured on the earlier synthetic clip) | **0.23%** | hardware decode, zero-copy D3D11→D3D12, 10-bit/HDR tone-mapped |
 | `islands`, 3D scene at 30 fps | **0.12%** | 4x MSAA, targets shared across same-size screens |
 | `webdemo`, web page at 30 fps | ~1% | Chromium's own frame pipeline |
 | 7 widgets visible | **0.07%** | one WebView2 per monitor, one shared stats timer |

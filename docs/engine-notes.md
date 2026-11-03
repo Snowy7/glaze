@@ -17,7 +17,7 @@ the engine was loaded and paused, which is also its most common state.
 | `aurora` (shader) | 290 / 297 MB | **5 / 295 MB** | FXC (-7 MB), trim |
 | `photo` (image) | 231 / 299 MB | **6 / 293 MB** | FXC (-5 MB), trim |
 | `gallery` (slideshow) | 246 / 313 MB | **6 / 311 MB** | FXC (-8 MB), trim (±20 MB run to run: it picks different pictures) |
-| `loop` (1080p video) | 373 / 420 MB | **7 / 418 MB** | FXC (-5 MB), trim |
+| 1080p video (earlier synthetic clip) | 373 / 420 MB | **7 / 418 MB** | FXC (-5 MB), trim |
 | `islands` (3D scene) | 344 / 548 MB | **4 / 426 MB** | shared MSAA (-60 MB working set, -125 MB private), FXC (-7 MB), trim |
 
 "Before" is the commit before these changes; "after" is the final build. Working set is what
