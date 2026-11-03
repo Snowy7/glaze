@@ -5,9 +5,10 @@ full 3D scenes), and eventually a full retheme of Windows itself: taskbar, Start
 Settings, File Explorer, title bars and icons. You could make Windows look like Linux, macOS or
 something new, without your desktop paying for it.
 
-> Status: **phase 1.** The engine, desktop attach, pausing (covered, battery, lock, fullscreen
-> games), live config, tray, hot reload, supervisor and panic hotkey all work. See
-> [Roadmap](#roadmap).
+> Status: **phases 1–2 done.** All five wallpaper types (shader, image, slideshow, hardware video,
+> 3D glTF scenes) render behind the desktop icons, with smart pausing (covered, fullscreen games,
+> battery, lock), live config, a tray icon, the Studio app, hot reload, a supervisor and a panic
+> hotkey. Next up is native retheming; see the [Roadmap](#roadmap).
 
 ## Principles
 
@@ -28,9 +29,14 @@ Requirements: Windows 10/11, [rustup](https://rustup.rs). The pinned nightly too
 installs itself on first build.
 
 ```sh
-cargo build
-cargo paper --windowed            # wallpaper in a normal window (safe dev mode)
-target/debug/mypaper-core         # the real thing: behind your icons, supervised
+cargo build --release
+target/release/mypaper-core       # behind your icons, supervised, with a tray icon
+
+# Studio (gallery, new-theme wizard, settings): Tauri + React, needs pnpm
+cd apps/studio && pnpm install && pnpm build && cd src-tauri && cargo build --release
+# then: tray icon → Open Studio, or run apps/studio/src-tauri/target/release/mypaper-studio.exe
+
+cargo paper --windowed            # dev: render a theme in a normal window
 ```
 
 **Panic hotkey: `Ctrl+Alt+Shift+Backspace`.** It stops everything and restores your desktop.
@@ -80,8 +86,10 @@ Dioxus CLI 0.7.10 (`cargo binstall dioxus-cli@0.7.10`).
 ## Architecture
 
 ```text
+mypaper-studio      Tauri app: gallery, new-theme wizard, settings → writes config.json
 mypaper-core        supervisor: spawn/restart, tray icon, panic hotkey, single instance
   └─ mypaper-wallpaper   one process, one GPU device, one surface per monitor
+        ├─ sources           shader · image · slideshow · video · scene (one trait, shared blit/fit)
         ├─ desktop attach    behind the icons (24H2+ layered layout, plus the legacy WorkerW)
         ├─ pause logic       WinEvent hooks → "is this monitor covered?" → sleep
         ├─ hold reasons      user / battery / display off / locked / fullscreen app → sleep everywhere
@@ -98,15 +106,19 @@ mypaper-core        supervisor: spawn/restart, tray icon, panic hotkey, single i
 | [`crates/config`](crates/config) | The user's settings file (`config.json`), shared by core, the engine and the studio |
 | [`crates/theme`](crates/theme) | Theme format and validation |
 | [`crates/inject`](crates/inject) | Injection allowlist policy (unit-tested). The injector itself is coming. |
+| [`apps/studio`](apps/studio) | mypaper Studio: Tauri v2 + React + Tailwind control app |
 
 ### What keeps it light
 
 Measured with release builds (Ryzen laptop, AMD iGPU and NVIDIA dGPU, two 1440p monitors):
 
-| | CPU (whole machine) | Binary |
+| | CPU (whole machine) | Notes |
 |---|---|---|
-| Rendering Aurora at 60 fps (1280×720 window) | **0.23%** | engine 3.6 MB |
-| On the desktop, both monitors covered | **0.00%** | core 0.36 MB, 8 MB RAM |
+| Shader (Aurora), 60 fps | **0.23%** | engine binary 3.6 MB |
+| Video, 1080p30 on a 1440p screen | **0.23%** | hardware decode, zero-copy D3D11→D3D12 |
+| Image | **0%** after the first frame | drawn once per screen, then idle |
+| Slideshow | **0%** between slides | next image decoded ahead on a worker thread |
+| Everything covered, or a game fullscreen | **0.00%** | core: 0.36 MB binary, 8 MB RAM |
 
 Memory is the open problem: the engine's working set is 150–290 MB (private ~210 MB). Almost all of
 it belongs to the GPU drivers: AMD's shader compiler, plus NVIDIA's overlay/capture hooks (`nvspcap64`
@@ -177,7 +189,21 @@ themes/aurora/
 { "name": "Aurora", "wallpaper": { "kind": "shader", "source": "aurora.wgsl", "fps": 60 } }
 ```
 
-Unknown fields are rejected, so typos fail loudly. Asset paths can't escape the theme folder.
+Unknown fields are rejected, so typos fail loudly. Relative asset paths can't escape the theme
+folder; absolute paths (your own pictures and videos) are fine. Your own themes go in
+`%APPDATA%\mypaper\themes`; the Studio's **New theme** flow creates them for you.
+
+| `kind` | Fields (defaults) | Bundled example | How it stays light |
+|---|---|---|---|
+| `shader` | `source`, `fps` (60), `scale` (1) | `aurora` | fps cap; `scale: 0.5` renders a quarter of the pixels and upscales |
+| `image` | `source`, `fit` (cover) | `photo` | WIC decode, downscaled to the largest monitor; drawn once |
+| `slideshow` | `folder`, `interval` (300 s), `transition` (1.5 s), `shuffle`, `fit` | `gallery` | idle between slides; worker-thread prefetch; at most 2 textures |
+| `video` | `source`, `fit`, `fps` (30), `speed` (1) | `loop` | Media Foundation hardware decode, zero-copy into wgpu, pauses with the clock |
+| `scene` | `source` (.glb/.gltf), `fps` (60), `scale` (1), `orbit` (4°/s), `parallax` (0.15), `background` | `islands` | merged buffers, few draw calls; static if orbit and parallax are both 0 |
+
+`fit` is `cover`, `contain`, `stretch` or `center`. Image formats are whatever WIC decodes (jpg,
+png, webp, heic, …); video is anything Media Foundation plays with 8-bit output (H.264, HEVC
+8-bit, VP9 with the codec extension, …).
 
 ### Writing a shader wallpaper
 
@@ -213,17 +239,16 @@ so it's checked rather than trusted.
 
 1. ✅ **Engine**: shader wallpapers behind the icons, multi-monitor, pausing when covered, hot reload,
    supervisor, panic hotkey, fast dev loop.
-2. **Lighter and more wallpaper types**: cut driver memory (see the note above) and get Rust
-   hot-patching working. Then images (with crossfades), hardware-decoded video (Media
-   Foundation), render scale (render at 50% and upscale, for big savings on 4K).
-   Pausing on battery, lock, display off and fullscreen games is done (see
-   [Config, tray and pausing](#config-tray-and-pausing)).
+2. ✅ **All wallpaper types and the desktop app**: image, slideshow, hardware video and glTF scenes,
+   render scale, pausing for battery, lock, display off and fullscreen games, live config, the tray, and
+   the Studio. Still open: cutting driver memory (see the note above), Rust hot-patching, web
+   (WebView2) wallpapers, 10-bit/HDR video, and EXIF rotation.
 3. **Native tweaks**: DWM accent, borders, corners and Mica on allowlisted windows. Palette
    extraction so the accent color follows the wallpaper. An undo journal for every change.
 4. **Style engine and injector**: CSS-like selectors over the XAML visual tree (XAML Diagnostics) and
    uxtheme hooks for Win32, one theme language for every UI framework, pushed live into
    allowlisted processes. First target: restyling the Settings app live.
-5. **3D scenes**: a glTF scene runtime, plus embedding Unity players (`-parentHWND`) for game-like
-   interactive desktops.
+5. **Interactive 3D desktops**: embed Unity players (`-parentHWND`) for game-like desktops on top of the
+   glTF runtime.
 6. **Shell additions**: a dock, a top bar and widgets, for layouts Windows doesn't have.
-7. **Studio**: a theme editor with an element inspector (click any UI element to get its selector).
+7. **Studio, part 2**: a theme editor with an element inspector (click any UI element to get its selector).
