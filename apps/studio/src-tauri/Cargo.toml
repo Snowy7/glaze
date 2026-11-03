@@ -39,6 +39,8 @@ features = [
 # Tauri CLI enables it for `tauri build`; plain `cargo build` does not, which
 # yields a window pointing at localhost:1420.
 [features]
+# Unfocused capture mode + page-script hook for screenshots during development.
+dev-capture = []
 custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]

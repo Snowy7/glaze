@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
-    "release": "tauri build --no-bundle"
+    "release": "tauri build --no-bundle",
+    "release:capture": "tauri build --no-bundle --features dev-capture"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",

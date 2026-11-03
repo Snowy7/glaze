@@ -3,19 +3,31 @@
 //! unfocused and always-on-top at that position (e.g. on a second monitor
 //! while a game runs in front); without the variable it opens centered and
 //! focused, as configured in `tauri.conf.json`.
+//!
+//! Capture mode (and its page-script hook) only exists in builds with the
+//! `dev-capture` feature (`pnpm release:capture`); shipped builds ignore
+//! both variables.
 
 use tauri::{AppHandle, PhysicalPosition, WebviewWindow, WebviewWindowBuilder};
 
+#[cfg(feature = "dev-capture")]
 const ENV: &str = "MYPAPER_STUDIO_CAPTURE";
 /// With capture mode: a JavaScript file to run in the page at startup.
 const SCRIPT_ENV: &str = "MYPAPER_STUDIO_SCRIPT";
 
 /// `"-2460, 109"` -> `(-2460, 109)`.
+#[cfg(any(feature = "dev-capture", test))]
 fn parse_position(text: &str) -> Option<(i32, i32)> {
     let (x, y) = text.split_once(',')?;
     Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
 }
 
+#[cfg(not(feature = "dev-capture"))]
+fn capture_position() -> Option<(i32, i32)> {
+    None
+}
+
+#[cfg(feature = "dev-capture")]
 fn capture_position() -> Option<(i32, i32)> {
     let value = std::env::var(ENV).ok()?;
     let position = parse_position(&value);
