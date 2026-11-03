@@ -17,6 +17,8 @@ pub enum Kind {
     Slideshow,
     Video,
     Scene,
+    Web,
+    App,
 }
 
 impl Kind {
@@ -27,6 +29,8 @@ impl Kind {
             Wallpaper::Slideshow(_) => Self::Slideshow,
             Wallpaper::Video(_) => Self::Video,
             Wallpaper::Scene(_) => Self::Scene,
+            Wallpaper::Web(_) => Self::Web,
+            Wallpaper::App(_) => Self::App,
         }
     }
 
@@ -142,6 +146,8 @@ pub fn manifest(name: &str, kind: Kind, source: &Path, fit: Fit) -> String {
         Kind::Image => json!({ "kind": "image", "source": source, "fit": fit }),
         Kind::Video => json!({ "kind": "video", "source": source, "fit": fit }),
         Kind::Slideshow => json!({ "kind": "slideshow", "folder": source, "fit": fit }),
+        Kind::Web => json!({ "kind": "web", "url": source }),
+        Kind::App => json!({ "kind": "app", "command": source }),
     };
     let manifest = json!({ "name": name, "wallpaper": wallpaper });
     // Serializing a `Value` cannot fail.

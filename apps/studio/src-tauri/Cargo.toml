@@ -30,6 +30,12 @@ features = [
   "Win32_UI_WindowsAndMessaging",
 ]
 
+# Embeds the built frontend instead of loading the dev server (devUrl). The
+# Tauri CLI enables it for `tauri build`; plain `cargo build` does not, which
+# yields a window pointing at localhost:1420.
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

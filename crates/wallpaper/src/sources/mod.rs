@@ -6,12 +6,14 @@
 //! need. Static content returns [`Redraw::OnChange`] and is drawn exactly
 //! once per screen (plus after resizes / resumes / reloads).
 
+mod app;
 pub mod blit;
 mod image;
 mod scene;
 mod shader;
 mod slideshow;
 mod video;
+mod web;
 mod wic;
 
 use std::time::Duration;
@@ -64,6 +66,8 @@ pub fn load(gpu: &Gpu, theme: &LoadedTheme) -> Result<Box<dyn Source>> {
         Wallpaper::Slideshow(w) => Box::new(slideshow::SlideshowSource::new(gpu, theme, w)?),
         Wallpaper::Video(w) => Box::new(video::VideoSource::new(gpu, theme, w)?),
         Wallpaper::Scene(w) => Box::new(scene::SceneSource::new(gpu, theme, w)?),
+        Wallpaper::Web(w) => Box::new(web::WebSource::new(gpu, theme, w)?),
+        Wallpaper::App(w) => Box::new(app::AppSource::new(gpu, theme, w)?),
     })
 }
 

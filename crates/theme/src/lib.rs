@@ -73,6 +73,92 @@ fn locate_from(name: &str, user: Option<&Path>, exe: &Path) -> Result<PathBuf> {
 pub struct Theme {
     pub name: String,
     pub wallpaper: Wallpaper,
+    /// Native window styling (accent, borders, corners, backdrop) applied
+    /// to allowlisted Windows windows while this theme is active.
+    #[serde(default)]
+    pub windows: Option<WindowsStyle>,
+    /// A style sheet restyling Windows' own UI (XAML / Win32) through the
+    /// injector; see `crates/inject`. Relative to the theme folder.
+    #[serde(default)]
+    pub styles: Option<PathBuf>,
+}
+
+/// An sRGB color, written `"#rrggbb"` in theme files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Color(pub [u8; 3]);
+
+impl<'de> Deserialize<'de> for Color {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        Color::parse(&text)
+            .ok_or_else(|| serde::de::Error::custom(format!("expected \"#rrggbb\", got {text:?}")))
+    }
+}
+
+impl Color {
+    pub fn parse(text: &str) -> Option<Self> {
+        let hex = text.strip_prefix('#').filter(|h| h.len() == 6)?;
+        let channel = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok();
+        Some(Self([channel(0)?, channel(2)?, channel(4)?]))
+    }
+}
+
+/// A color, or one derived from the wallpaper (`"auto"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Paint {
+    /// Picked from the wallpaper's palette.
+    Auto,
+    Color(Color),
+}
+
+impl<'de> Deserialize<'de> for Paint {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        if text == "auto" {
+            return Ok(Paint::Auto);
+        }
+        Color::parse(&text).map(Paint::Color).ok_or_else(|| {
+            serde::de::Error::custom(format!("expected \"auto\" or \"#rrggbb\", got {text:?}"))
+        })
+    }
+}
+
+/// Native styling for windows (DWM) and the system accent. Every field is
+/// optional: unset means "leave Windows' own setting alone".
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WindowsStyle {
+    /// System accent color (taskbar, Start, highlights).
+    pub accent: Option<Paint>,
+    /// Window border color.
+    pub border: Option<Paint>,
+    /// Title bar background color.
+    pub caption: Option<Color>,
+    /// Title bar text color.
+    pub caption_text: Option<Color>,
+    pub corners: Option<Corners>,
+    pub backdrop: Option<Backdrop>,
+    /// Force dark (`true`) or light (`false`) mode for apps and the system.
+    pub dark_mode: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Corners {
+    Default,
+    Round,
+    Small,
+    Square,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Backdrop {
+    Auto,
+    None,
+    Mica,
+    Acrylic,
+    Tabbed,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -88,6 +174,29 @@ pub enum Wallpaper {
     Video(VideoWallpaper),
     /// A 3D scene (glTF / GLB).
     Scene(SceneWallpaper),
+    /// A web page (WebView2), suspended while hidden.
+    Web(WebWallpaper),
+    /// An external program rendering into our desktop window, e.g. a
+    /// Unity player (`-parentHWND`).
+    App(AppWallpaper),
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WebWallpaper {
+    /// An `http(s)://` URL, or a path to a local `.html` file.
+    pub url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AppWallpaper {
+    /// The executable (relative to the theme folder, or absolute).
+    pub command: PathBuf,
+    /// Arguments; `{hwnd}` is replaced with the decimal handle of the window
+    /// the app should render into. Unity: `["-parentHWND", "{hwnd}", "delayed"]`.
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 /// How a source that has its own size fills a screen.
@@ -248,6 +357,16 @@ impl LoadedTheme {
                 check_fps(s.fps)?;
                 check_scale(s.scale)?;
             }
+            Wallpaper::Web(w) => {
+                let remote = w.url.starts_with("https://") || w.url.starts_with("http://");
+                if !remote {
+                    check_path(Path::new(&w.url))?;
+                }
+            }
+            Wallpaper::App(a) => check_path(&a.command)?,
+        }
+        if let Some(styles) = &theme.styles {
+            check_path(styles)?;
         }
         Ok(Self { dir, theme })
     }
@@ -358,6 +477,25 @@ mod tests {
         let t = parse(r#"{ "name": "A", "wallpaper": { "kind": "image", "source": "x.jpg" } }"#)
             .unwrap();
         assert_eq!(t.asset(Path::new("x.jpg")), PathBuf::from("themes/t/x.jpg"));
+    }
+
+    #[test]
+    fn parses_web_app_and_windows_styling() {
+        assert!(wallpaper(r#"{ "kind": "web", "url": "https://example.com" }"#).is_ok());
+        assert!(wallpaper(r#"{ "kind": "web", "url": "../page.html" }"#).is_err());
+        assert!(matches!(
+            wallpaper(r#"{ "kind": "app", "command": "game.exe", "args": ["-parentHWND", "{hwnd}"] }"#).unwrap(),
+            Wallpaper::App(AppWallpaper { args, .. }) if args.len() == 2
+        ));
+
+        let json = r##"{ "name": "A", "wallpaper": { "kind": "image", "source": "x.jpg" },
+            "windows": { "accent": "auto", "border": "#ff8800", "corners": "small", "backdrop": "mica" } }"##;
+        let style = parse(json).unwrap().theme.windows.unwrap();
+        assert_eq!(style.accent, Some(Paint::Auto));
+        assert_eq!(style.border, Some(Paint::Color(Color([0xff, 0x88, 0x00]))));
+        assert_eq!(style.corners, Some(Corners::Small));
+        assert_eq!(style.dark_mode, None);
+        assert!(parse(&json.replace("#ff8800", "orange")).is_err());
     }
 
     #[test]
