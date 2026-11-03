@@ -1,0 +1,174 @@
+/* A column of headlines separated by hairlines. main.js shows only what fits, plus a peek of the
+   next one under the fade (`data-clipped`). Sizes come from container queries on the page. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Fade the clipped edge. Only the alpha of the mask matters. */
+.list[data-clipped] {
+  -webkit-mask-image: linear-gradient(to bottom, rgb(var(--ink)) calc(100% - 34px), transparent);
+  mask-image: linear-gradient(to bottom, rgb(var(--ink)) calc(100% - 34px), transparent);
+}
+
+.item {
+  position: relative;
+  /* A grid, not a block: a button centers its content unless its children are stretched. */
+  display: grid;
+  justify-items: stretch;
+  align-content: start;
+  width: 100%;
+  padding: 0.62em 0.5em;
+  border-radius: calc(var(--radius) * 0.45);
+  text-align: left;
+  color: var(--t0);
+}
+.item:first-child {
+  padding-top: 0.3em;
+}
+/* The hairline between two headlines (a pseudo-element, so rounded hover fills don't curve it). */
+.item + .item::before {
+  content: "";
+  position: absolute;
+  inset: 0 0.5em auto;
+  height: 1px;
+  background: var(--fill-2);
+}
+button.item:hover {
+  background: var(--fill-1);
+  color: var(--t0);
+}
+html[data-surface="none"] button.item:hover {
+  background: rgb(var(--halo) / 0.18);
+}
+.item:hover + .item::before,
+.item:hover::before {
+  opacity: 0;
+}
+
+.title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.32;
+  letter-spacing: -0.005em;
+  color: var(--t0);
+  text-wrap: pretty;
+}
+
+.summary {
+  display: none;
+  margin-top: 0.4em;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.38;
+  color: var(--t1);
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  margin-top: 0.4em;
+  min-width: 0;
+  font-size: 10px;
+  line-height: 1.2;
+}
+.source {
+  letter-spacing: 0.09em;
+}
+.time {
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--t2);
+}
+/* A middle dot between source and time. */
+.source + .time::before {
+  content: "\00b7";
+  margin-right: 0.6em;
+  color: var(--t3);
+}
+
+/* The first headline leads once there is room. */
+@container (min-width: 300px) and (min-height: 190px) {
+  .item:first-child .title {
+    font-size: clamp(16px, 5.2cqw, 22px);
+    font-weight: 400;
+    line-height: 1.22;
+    letter-spacing: -0.015em;
+  }
+  .item:first-child {
+    padding-bottom: 0.8em;
+  }
+}
+/* Room for a third line of the lead only when tall. */
+@container (min-width: 300px) and (min-height: 300px) {
+  .item:first-child .title {
+    -webkit-line-clamp: 3;
+  }
+}
+@container (min-width: 300px) and (min-height: 260px) {
+  .item:first-child .summary {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
+@container (min-width: 380px) {
+  .title {
+    font-size: 14px;
+  }
+}
+
+/* One headline gets the whole line in a narrow, short widget. */
+@container (max-height: 120px) {
+  .title {
+    -webkit-line-clamp: 2;
+  }
+  .item {
+    padding-block: 0.3em;
+  }
+  .foot {
+    display: none;
+  }
+}
+
+.msg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  padding: var(--pad);
+  text-align: center;
+  pointer-events: none;
+}
+.msg-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--t1);
+}
+.msg-hint {
+  color: var(--t3);
+}
+
+.foot {
+  flex: none;
+  padding: 0 0.5em;
+  color: var(--t3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

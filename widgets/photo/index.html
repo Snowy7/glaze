@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Photo</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card" id="card">
+      <div class="frame" id="frame" data-fit="cover">
+        <img class="layer" id="a" alt="" draggable="false" />
+        <img class="layer" id="b" alt="" draggable="false" />
+        <div class="caption caps ellipsis" id="caption" hidden></div>
+        <div class="hint" id="hint" hidden>
+          <div class="hint-title" id="hint-title"></div>
+          <div class="hint-sub caps" id="hint-sub"></div>
+        </div>
+      </div>
+    </main>
+    <script src="mypaper.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

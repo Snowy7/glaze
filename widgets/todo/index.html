@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>To do</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card" id="card" data-add="bottom">
+      <header class="head">
+        <span class="caps title" id="title">To do</span>
+        <span class="count num" id="count"></span>
+      </header>
+      <div class="track bar" id="bar" hidden><i id="bar-fill"></i></div>
+      <div class="scroller" id="scroller">
+        <ul class="list" id="list"></ul>
+        <p class="empty" id="empty" hidden></p>
+      </div>
+      <input class="field add" id="add" type="text" placeholder="Add a task" aria-label="Add a task" maxlength="240" autocomplete="off" spellcheck="false" disabled />
+    </main>
+    <script src="mypaper.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

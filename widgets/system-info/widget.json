@@ -1,0 +1,19 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "system-info",
+  "name": "System info",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "A compact neofetch-style summary: uptime, CPU, memory, GPU, disk, network and battery.",
+  "entry": "index.html",
+  "size": { "default": [2, 2], "min": [2, 1], "max": [4, 3] },
+  "resizable": true,
+  "permissions": ["system.stats"],
+  "plugins": [],
+  "settings": [
+    { "key": "showGpu", "type": "boolean", "label": "Show GPU", "default": true },
+    { "key": "showDisk", "type": "boolean", "label": "Show disk", "default": true },
+    { "key": "showNetwork", "type": "boolean", "label": "Show network", "default": true },
+    { "key": "showBattery", "type": "boolean", "label": "Show battery", "default": true }
+  ]
+}

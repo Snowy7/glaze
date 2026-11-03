@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Countdown</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card" id="card" role="group" data-layout="digits">
+      <div class="ring-wrap" aria-hidden="true">
+        <svg class="ring" viewBox="0 0 100 100">
+          <circle class="trk" cx="50" cy="50" r="46" />
+          <circle class="arc" id="arc" cx="50" cy="50" r="46" pathLength="100" transform="rotate(-90 50 50)" />
+        </svg>
+        <div class="center">
+          <span class="v num" id="rv"></span>
+          <span class="l caps" id="rl"></span>
+        </div>
+      </div>
+      <div class="info">
+        <p class="title caps ellipsis" id="title"></p>
+        <div class="units num" id="units"></div>
+        <p class="msg" id="msg" hidden></p>
+        <p class="foot ellipsis" id="foot"></p>
+      </div>
+    </main>
+    <script src="mypaper.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

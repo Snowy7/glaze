@@ -1,0 +1,22 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "countdown",
+  "name": "Countdown",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "Days, hours and minutes until a date that matters.",
+  "entry": "index.html",
+  "size": { "default": [2, 1], "min": [1, 1], "max": [4, 2] },
+  "resizable": true,
+  "permissions": [],
+  "plugins": [],
+  "settings": [
+    { "key": "title", "type": "string", "label": "Title", "default": "New Year" },
+    { "key": "date", "type": "string", "label": "Date (YYYY-MM-DD, empty for the next January 1st)", "default": "" },
+    { "key": "time", "type": "string", "label": "Time (HH:MM)", "default": "00:00" },
+    { "key": "style", "type": "select", "label": "Style", "options": ["digits", "ring"], "default": "digits" },
+    { "key": "showSeconds", "type": "boolean", "label": "Show seconds", "default": false },
+    { "key": "afterwards", "type": "select", "label": "After the date", "options": ["countUp", "stop"], "default": "countUp" },
+    { "key": "startDate", "type": "string", "label": "Ring starts on (YYYY-MM-DD, optional)", "default": "" }
+  ]
+}
