@@ -1,7 +1,8 @@
 //! Shared image decoding through the Windows Imaging Component (WIC), so
 //! jpg, png, bmp, gif, tiff, webp and heic all work without extra crates.
-//! Images are decoded to straight-alpha BGRA and downscaled on the way out,
-//! so we never keep more pixels than the biggest screen can show.
+//! Images are decoded to straight-alpha BGRA, downscaled and turned upright
+//! (EXIF orientation) on the way out, so we never keep more pixels than the
+//! biggest screen can show.
 
 use std::path::Path;
 
@@ -9,14 +10,18 @@ use anyhow::{Context, Result, bail};
 use mypaper_theme::Fit;
 use windows::Win32::Foundation::{GENERIC_READ, RPC_E_CHANGED_MODE};
 use windows::Win32::Graphics::Imaging::{
-    CLSID_WICImagingFactory, GUID_WICPixelFormat32bppBGRA, IWICImagingFactory, IWICPalette,
-    WICBitmapDitherTypeNone, WICBitmapInterpolationModeHighQualityCubic,
-    WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnDemand,
+    CLSID_WICImagingFactory, GUID_WICPixelFormat32bppBGRA, IWICBitmapFrameDecode, IWICBitmapSource,
+    IWICImagingFactory, IWICPalette, WICBitmapDitherTypeNone,
+    WICBitmapInterpolationModeHighQualityCubic, WICBitmapPaletteTypeCustom,
+    WICBitmapTransformFlipHorizontal, WICBitmapTransformFlipVertical, WICBitmapTransformOptions,
+    WICBitmapTransformRotate0, WICBitmapTransformRotate90, WICBitmapTransformRotate180,
+    WICBitmapTransformRotate270, WICDecodeMetadataCacheOnDemand,
 };
+use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
 };
-use windows::core::HSTRING;
+use windows::core::{HSTRING, Interface, PCWSTR, w};
 
 use super::blit::BlitQuad;
 use crate::gpu::Gpu;
@@ -120,6 +125,110 @@ fn largest_screen() -> (u32, u32) {
     }
 }
 
+/// The EXIF orientation tag (274): how the stored pixels must be turned to
+/// show the picture upright, as phones record it instead of rotating pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Orientation {
+    /// 1, or no tag.
+    #[default]
+    Upright,
+    /// 2
+    MirrorHorizontal,
+    /// 3
+    Rotate180,
+    /// 4
+    MirrorVertical,
+    /// 5: reflected across the main diagonal.
+    Transpose,
+    /// 6: stored rotated counter-clockwise, so turn it 90° clockwise.
+    Rotate90,
+    /// 7: reflected across the anti-diagonal.
+    Transverse,
+    /// 8: turn it 90° counter-clockwise.
+    Rotate270,
+}
+
+impl Orientation {
+    /// From the tag's value; `None` outside 1..=8.
+    pub fn from_exif(value: u16) -> Option<Self> {
+        Some(match value {
+            1 => Self::Upright,
+            2 => Self::MirrorHorizontal,
+            3 => Self::Rotate180,
+            4 => Self::MirrorVertical,
+            5 => Self::Transpose,
+            6 => Self::Rotate90,
+            7 => Self::Transverse,
+            8 => Self::Rotate270,
+            _ => return None,
+        })
+    }
+
+    /// The WIC transform that makes the picture upright. WIC flips first,
+    /// then rotates clockwise.
+    fn transform(self) -> WICBitmapTransformOptions {
+        match self {
+            Self::Upright => WICBitmapTransformRotate0,
+            Self::MirrorHorizontal => WICBitmapTransformFlipHorizontal,
+            Self::Rotate180 => WICBitmapTransformRotate180,
+            Self::MirrorVertical => WICBitmapTransformFlipVertical,
+            Self::Transpose => then_flip(WICBitmapTransformRotate270),
+            Self::Rotate90 => WICBitmapTransformRotate90,
+            Self::Transverse => then_flip(WICBitmapTransformRotate90),
+            Self::Rotate270 => WICBitmapTransformRotate270,
+        }
+    }
+
+    /// Whether the upright picture has the stored width and height swapped.
+    pub fn swaps_axes(self) -> bool {
+        matches!(
+            self,
+            Self::Transpose | Self::Rotate90 | Self::Transverse | Self::Rotate270
+        )
+    }
+
+    /// `size` with width and height swapped if turning upright swaps them.
+    /// An involution: it converts between stored and upright sizes.
+    fn turn(self, (w, h): (u32, u32)) -> (u32, u32) {
+        if self.swaps_axes() { (h, w) } else { (w, h) }
+    }
+}
+
+/// `rotation` combined with a horizontal flip (WIC's options are plain bit
+/// flags, but the generated type has no `|`).
+const fn then_flip(rotation: WICBitmapTransformOptions) -> WICBitmapTransformOptions {
+    WICBitmapTransformOptions(rotation.0 | WICBitmapTransformFlipHorizontal.0)
+}
+
+/// Metadata queries for the orientation tag: the Exif IFD of JPEG, then of
+/// TIFF and HEIC, then Windows' format-independent property (PNG, WebP, ...).
+const ORIENTATION_QUERIES: [PCWSTR; 3] = [
+    w!("/app1/ifd/{ushort=274}"),
+    w!("/ifd/{ushort=274}"),
+    w!("System.Photo.Orientation"),
+];
+
+/// The frame's EXIF orientation. Missing, unreadable or out-of-range
+/// values count as upright.
+fn read_orientation(frame: &IWICBitmapFrameDecode) -> Orientation {
+    // SAFETY: COM calls on live objects; `value` is a valid out-pointer.
+    // Formats without metadata (BMP, ...) fail the first call.
+    unsafe {
+        let Ok(reader) = frame.GetMetadataQueryReader() else {
+            return Orientation::Upright;
+        };
+        ORIENTATION_QUERIES
+            .into_iter()
+            .find_map(|query| {
+                let mut value = PROPVARIANT::default();
+                reader.GetMetadataByName(query, &mut value).ok()?;
+                u16::try_from(&value).ok()
+            })
+            .and_then(Orientation::from_exif)
+            .unwrap_or_default()
+    }
+}
+
 /// Keeps COM initialized on the creating thread. Tolerates a thread that
 /// already chose another apartment model (`RPC_E_CHANGED_MODE`) or is
 /// already initialized (`S_FALSE`).
@@ -169,9 +278,11 @@ impl Decoder {
         Ok(Self { factory, _com: com })
     }
 
-    /// Decodes the first frame of `path` to BGRA, downscaled to `budget`.
-    /// Format conversion and scaling stream through WIC's pipeline, so only
-    /// the final (small) buffer is ever allocated.
+    /// Decodes the first frame of `path` to BGRA, downscaled to `budget` and
+    /// turned upright by its EXIF orientation (`budget` sees the upright
+    /// size). Format conversion and scaling stream through WIC's pipeline.
+    /// The turn comes last, on the already small image: turning first would
+    /// make WIC hold the whole full-size picture in memory.
     pub fn decode(&self, path: &Path, budget: Budget) -> Result<Decoded> {
         let name = HSTRING::from(path.as_os_str());
         let (mut width, mut height) = (0u32, 0u32);
@@ -200,21 +311,29 @@ impl Decoder {
                 WICBitmapPaletteTypeCustom,
             )?;
 
-            let size = budget.size_for((width, height));
-            let stride = size.0 * 4;
-            let mut bgra = vec![0u8; stride as usize * size.1 as usize];
-            if size == (width, height) {
-                converter.CopyPixels(std::ptr::null(), stride, &mut bgra)?;
-            } else {
+            let orientation = read_orientation(&frame);
+            // The final (upright) size, and the same size before turning.
+            let size = budget.size_for(orientation.turn((width, height)));
+            let scaled = orientation.turn(size);
+            let mut source: IWICBitmapSource = converter.cast()?;
+            if scaled != (width, height) {
                 let scaler = self.factory.CreateBitmapScaler()?;
                 scaler.Initialize(
-                    &converter,
-                    size.0,
-                    size.1,
+                    &source,
+                    scaled.0,
+                    scaled.1,
                     WICBitmapInterpolationModeHighQualityCubic,
                 )?;
-                scaler.CopyPixels(std::ptr::null(), stride, &mut bgra)?;
+                source = scaler.cast()?;
             }
+            if orientation != Orientation::Upright {
+                let rotator = self.factory.CreateBitmapFlipRotator()?;
+                rotator.Initialize(&source, orientation.transform())?;
+                source = rotator.cast()?;
+            }
+            let stride = size.0 * 4;
+            let mut bgra = vec![0u8; stride as usize * size.1 as usize];
+            source.CopyPixels(std::ptr::null(), stride, &mut bgra)?;
             (size, bgra)
         };
         Ok(Decoded { size, bgra })
@@ -267,6 +386,12 @@ impl Picture {
 
 #[cfg(test)]
 mod tests {
+    use windows::Win32::Graphics::Imaging::{
+        GUID_ContainerFormatJpeg, GUID_ContainerFormatTiff, GUID_WICPixelFormat24bppBGR,
+        WICBitmapEncoderNoCache,
+    };
+    use windows::core::GUID;
+
     use super::*;
 
     fn budget(fit: Fit) -> Budget {
@@ -312,5 +437,208 @@ mod tests {
         };
         assert_eq!(tight.size_for((8192, 4096)), (2048, 1024));
         assert_eq!(tight.size_for((1000, 6000)), (342, 2048));
+    }
+
+    #[test]
+    fn exif_values_map_to_wic_transforms() {
+        let transform = |value| Orientation::from_exif(value).unwrap().transform();
+        assert_eq!(transform(1), WICBitmapTransformRotate0);
+        assert_eq!(transform(2), WICBitmapTransformFlipHorizontal);
+        assert_eq!(transform(3), WICBitmapTransformRotate180);
+        assert_eq!(transform(4), WICBitmapTransformFlipVertical);
+        assert_eq!(
+            transform(5).0,
+            WICBitmapTransformRotate270.0 | WICBitmapTransformFlipHorizontal.0
+        );
+        assert_eq!(transform(6), WICBitmapTransformRotate90);
+        assert_eq!(
+            transform(7).0,
+            WICBitmapTransformRotate90.0 | WICBitmapTransformFlipHorizontal.0
+        );
+        assert_eq!(transform(8), WICBitmapTransformRotate270);
+        assert_eq!(Orientation::from_exif(0), None);
+        assert_eq!(Orientation::from_exif(9), None);
+    }
+
+    #[test]
+    fn only_the_quarter_turns_swap_width_and_height() {
+        let swaps = |value| Orientation::from_exif(value).unwrap().swaps_axes();
+        assert!((1..=4).all(|v| !swaps(v)));
+        assert!((5..=8).all(swaps));
+        assert_eq!(Orientation::Rotate90.turn((6, 4)), (4, 6));
+        assert_eq!(Orientation::Rotate180.turn((6, 4)), (6, 4));
+    }
+
+    /// Where the upright pixel `(x, y)` of a `w × h` stored picture with EXIF
+    /// `orientation` comes from, straight from the EXIF spec's table. This is
+    /// the oracle the real WIC pipeline is checked against.
+    fn stored_position(orientation: u16, (x, y): (u32, u32), (w, h): (u32, u32)) -> (u32, u32) {
+        match orientation {
+            1 => (x, y),
+            2 => (w - 1 - x, y),
+            3 => (w - 1 - x, h - 1 - y),
+            4 => (x, h - 1 - y),
+            5 => (y, x),
+            6 => (y, h - 1 - x),
+            7 => (w - 1 - y, h - 1 - x),
+            8 => (w - 1 - y, x),
+            _ => unreachable!(),
+        }
+    }
+
+    /// The colour of `cell` in the test pattern: all different.
+    fn cell_color((cx, cy): (u32, u32)) -> [u8; 3] {
+        [(cx * 50 + 20) as u8, (cy * 50 + 20) as u8, 128]
+    }
+
+    /// Writes a `cells` grid of `cell`-pixel squares (see [`cell_color`])
+    /// with EXIF `orientation`, set through the metadata `query`.
+    fn write_pattern(
+        decoder: &Decoder,
+        path: &Path,
+        container: &GUID,
+        query: PCWSTR,
+        orientation: u16,
+        cells: (u32, u32),
+        cell: u32,
+    ) {
+        let (width, height) = (cells.0 * cell, cells.1 * cell);
+        let mut bgr = Vec::new();
+        for y in 0..height {
+            for x in 0..width {
+                let [r, g, b] = cell_color((x / cell, y / cell));
+                bgr.extend([b, g, r]);
+            }
+        }
+        // SAFETY: COM calls on live objects owned by this test's thread.
+        unsafe {
+            let stream = decoder.factory.CreateStream().unwrap();
+            stream
+                .InitializeFromFilename(&HSTRING::from(path.as_os_str()), 0x4000_0000)
+                .unwrap();
+            let encoder = decoder
+                .factory
+                .CreateEncoder(container, std::ptr::null())
+                .unwrap();
+            encoder
+                .Initialize(&stream, WICBitmapEncoderNoCache)
+                .unwrap();
+            let (mut frame, mut options) = (None, None);
+            encoder.CreateNewFrame(&mut frame, &mut options).unwrap();
+            let frame = frame.unwrap();
+            frame.Initialize(options.as_ref()).unwrap();
+            frame.SetSize(width, height).unwrap();
+            let mut format = GUID_WICPixelFormat24bppBGR;
+            frame.SetPixelFormat(&mut format).unwrap();
+            assert_eq!(format, GUID_WICPixelFormat24bppBGR);
+            let writer = frame.GetMetadataQueryWriter().unwrap();
+            writer
+                .SetMetadataByName(query, &PROPVARIANT::from(orientation))
+                .unwrap();
+            frame.WritePixels(height, width * 3, &bgr).unwrap();
+            frame.Commit().unwrap();
+            encoder.Commit().unwrap();
+        }
+    }
+
+    /// A fresh path in the temp folder (removed when dropped).
+    struct TempFile(std::path::PathBuf);
+
+    impl TempFile {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("mypaper-wic-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir.join(name))
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    /// Decodes every orientation of a pattern written to `container` and
+    /// checks each cell's centre against the spec. `tolerance` allows for lossy formats.
+    fn check_upright(container: &GUID, ext: &str, query: PCWSTR, cell: u32, tolerance: u8) {
+        let decoder = Decoder::new().unwrap();
+        let cells = (3, 2);
+        for orientation in 1..=8u16 {
+            let file = TempFile::new(&format!("o{orientation}.{ext}"));
+            write_pattern(
+                &decoder,
+                &file.0,
+                container,
+                query,
+                orientation,
+                cells,
+                cell,
+            );
+            let image = decoder.decode(&file.0, budget(Fit::Center)).unwrap();
+            let upright = Orientation::from_exif(orientation).unwrap().turn(cells);
+            assert_eq!(image.size, (upright.0 * cell, upright.1 * cell));
+            for cy in 0..upright.1 {
+                for cx in 0..upright.0 {
+                    let (px, py) = (cx * cell + cell / 2, cy * cell + cell / 2);
+                    let at = ((py * image.size.0 + px) * 4) as usize;
+                    let [b, g, r, _] = image.bgra[at..at + 4].try_into().unwrap();
+                    let want = cell_color(stored_position(orientation, (cx, cy), cells));
+                    assert!(
+                        [r, g, b]
+                            .iter()
+                            .zip(want)
+                            .all(|(&a, b)| a.abs_diff(b) <= tolerance),
+                        "orientation {orientation}, cell ({cx}, {cy}): got {:?}, want {want:?}",
+                        [r, g, b]
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn tiff_photos_come_out_upright() {
+        check_upright(
+            &GUID_ContainerFormatTiff,
+            "tif",
+            w!("/ifd/{ushort=274}"),
+            1,
+            0,
+        );
+    }
+
+    #[test]
+    fn jpeg_photos_come_out_upright() {
+        // Blocks of 16 px, sampled at their centres, survive JPEG's loss.
+        check_upright(
+            &GUID_ContainerFormatJpeg,
+            "jpg",
+            w!("/app1/ifd/{ushort=274}"),
+            16,
+            24,
+        );
+    }
+
+    #[test]
+    fn scaling_applies_to_the_upright_size() {
+        let decoder = Decoder::new().unwrap();
+        let file = TempFile::new("scaled.tif");
+        write_pattern(
+            &decoder,
+            &file.0,
+            &GUID_ContainerFormatTiff,
+            w!("/ifd/{ushort=274}"),
+            6,
+            (8, 4),
+            1,
+        );
+        // Stored 8x4, upright 4x8; Cover on a 2x2 screen shrinks it to 2x4.
+        let screen = Budget {
+            screen: (2, 2),
+            ..budget(Fit::Cover)
+        };
+        let image = decoder.decode(&file.0, screen).unwrap();
+        assert_eq!(image.size, (2, 4));
+        assert_eq!(image.bgra.len(), 2 * 4 * 4);
     }
 }
