@@ -224,8 +224,9 @@ impl Screen {
 /// wgpu's default (`Auto`) loads whatever `dxcompiler.dll` it finds on the
 /// search path, such as the Vulkan SDK's, and silently falls back to FXC
 /// without it, so the same build behaved differently per machine. FXC ships
-/// with Windows, compiles all our shaders and keeps ~20 MB of DXC out of the
-/// process (see docs/engine-notes.md).
+/// with Windows, compiles all our shaders, and leaves the 21 MB
+/// `dxcompiler.dll` out of the process: 5-8 MB less working set per theme
+/// (see docs/engine-notes.md).
 fn instance() -> wgpu::Instance {
     let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
     desc.backends = wgpu::Backends::DX12;
