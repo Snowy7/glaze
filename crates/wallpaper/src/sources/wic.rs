@@ -10,16 +10,17 @@ use anyhow::{Context, Result, bail};
 use mypaper_theme::Fit;
 use windows::Win32::Foundation::{GENERIC_READ, RPC_E_CHANGED_MODE};
 use windows::Win32::Graphics::Imaging::{
-    CLSID_WICImagingFactory, GUID_WICPixelFormat32bppBGRA, IWICBitmapFrameDecode, IWICBitmapSource,
-    IWICImagingFactory, IWICPalette, WICBitmapDitherTypeNone,
-    WICBitmapInterpolationModeHighQualityCubic, WICBitmapPaletteTypeCustom,
-    WICBitmapTransformFlipHorizontal, WICBitmapTransformFlipVertical, WICBitmapTransformOptions,
-    WICBitmapTransformRotate0, WICBitmapTransformRotate90, WICBitmapTransformRotate180,
-    WICBitmapTransformRotate270, WICDecodeMetadataCacheOnDemand,
+    CLSID_WICImagingFactory, GUID_WICPixelFormat32bppBGRA, IWICBitmapDecoder,
+    IWICBitmapFrameDecode, IWICBitmapSource, IWICImagingFactory, IWICPalette,
+    WICBitmapDitherTypeNone, WICBitmapInterpolationModeHighQualityCubic,
+    WICBitmapPaletteTypeCustom, WICBitmapTransformFlipHorizontal, WICBitmapTransformFlipVertical,
+    WICBitmapTransformOptions, WICBitmapTransformRotate0, WICBitmapTransformRotate90,
+    WICBitmapTransformRotate180, WICBitmapTransformRotate270, WICDecodeMetadataCacheOnDemand,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
+    IStream, STREAM_SEEK_SET,
 };
 use windows::core::{HSTRING, Interface, PCWSTR, w};
 
@@ -285,16 +286,38 @@ impl Decoder {
     /// make WIC hold the whole full-size picture in memory.
     pub fn decode(&self, path: &Path, budget: Budget) -> Result<Decoded> {
         let name = HSTRING::from(path.as_os_str());
-        let (mut width, mut height) = (0u32, 0u32);
-        // SAFETY: every call is on COM objects owned by this thread's factory;
-        // `CopyPixels` writes at most `stride * height` bytes into `bgra`, which has exactly that length.
-        let (size, bgra) = unsafe {
-            let decoder = self.factory.CreateDecoderFromFilename(
+        // SAFETY: a COM call on this thread's factory.
+        let decoder = unsafe {
+            self.factory.CreateDecoderFromFilename(
                 &name,
                 None,
                 GENERIC_READ,
                 WICDecodeMetadataCacheOnDemand,
-            )?;
+            )?
+        };
+        self.decode_with(&decoder, budget)
+    }
+
+    /// Like [`decode`](Self::decode), for an encoded image in a COM stream
+    /// (read from its start).
+    pub fn decode_stream(&self, stream: &IStream, budget: Budget) -> Result<Decoded> {
+        // SAFETY: COM calls on this thread's factory and a stream we were handed.
+        let decoder = unsafe {
+            stream.Seek(0, STREAM_SEEK_SET, None)?;
+            self.factory.CreateDecoderFromStream(
+                stream,
+                std::ptr::null(),
+                WICDecodeMetadataCacheOnDemand,
+            )?
+        };
+        self.decode_with(&decoder, budget)
+    }
+
+    fn decode_with(&self, decoder: &IWICBitmapDecoder, budget: Budget) -> Result<Decoded> {
+        let (mut width, mut height) = (0u32, 0u32);
+        // SAFETY: every call is on COM objects owned by this thread's factory;
+        // `CopyPixels` writes at most `stride * height` bytes into `bgra`, which has exactly that length.
+        let (size, bgra) = unsafe {
             let frame = decoder.GetFrame(0)?;
             frame.GetSize(&mut width, &mut height)?;
             if width == 0 || height == 0 {

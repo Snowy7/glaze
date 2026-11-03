@@ -10,6 +10,12 @@
 //! Lightness: a hidden screen's WebView is hidden and then suspended
 //! (`TrySuspend`), which stops its scripts, timers and rendering, and lets
 //! the browser trim its memory. The page resumes where it left off.
+//!
+//! A paused screen can still be *seen* (the second monitor while a game is
+//! fullscreen), and hiding the WebView would reveal whatever the screen's
+//! swapchain last showed, often a previous theme. So pausing first captures
+//! a still of the page (`CapturePreview`), hands the screen to the swapchain
+//! to present it, and only then hides and suspends the WebView.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -17,24 +23,27 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use mypaper_theme::{LoadedTheme, WebWallpaper};
+use mypaper_theme::{Fit, LoadedTheme, WebWallpaper};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
-    COREWEBVIEW2_COLOR, COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS,
-    CreateCoreWebView2EnvironmentWithOptions, ICoreWebView2, ICoreWebView2_3,
-    ICoreWebView2Controller, ICoreWebView2Controller2, ICoreWebView2Environment,
-    ICoreWebView2EnvironmentOptions, ICoreWebView2Settings3, ICoreWebView2Settings5,
-    ICoreWebView2Settings6,
+    COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, COREWEBVIEW2_COLOR,
+    COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS, CreateCoreWebView2EnvironmentWithOptions,
+    ICoreWebView2, ICoreWebView2_3, ICoreWebView2Controller, ICoreWebView2Controller2,
+    ICoreWebView2Environment, ICoreWebView2EnvironmentOptions, ICoreWebView2Settings3,
+    ICoreWebView2Settings5, ICoreWebView2Settings6,
 };
 use webview2_com::{
-    CoreWebView2EnvironmentOptions, CreateCoreWebView2ControllerCompletedHandler,
-    CreateCoreWebView2EnvironmentCompletedHandler, NavigationCompletedEventHandler,
-    TrySuspendCompletedHandler,
+    CapturePreviewCompletedHandler, CoreWebView2EnvironmentOptions,
+    CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
+    NavigationCompletedEventHandler, TrySuspendCompletedHandler,
 };
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::{HGLOBAL, HWND, RECT};
+use windows::Win32::System::Com::IStream;
+use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
 use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
 use windows::core::{HSTRING, Interface, PCWSTR};
 
-use super::{Frame, Redraw, Source};
+use super::wic::{Budget, Decoded, Decoder, Picture};
+use super::{Frame, Redraw, Source, Visibility, begin};
 use crate::gpu::Gpu;
 
 /// Name under which a local page's folder is served (`https://mypaper.theme/...`).
@@ -144,8 +153,36 @@ struct State {
 struct ScreenView {
     hwnd: HWND,
     /// What the engine last said. Applied as soon as the view exists.
-    visible: bool,
+    visibility: Visibility,
     view: Option<View>,
+    still: Still,
+}
+
+/// What a paused screen shows instead of the live page.
+enum Still {
+    /// Live: the WebView is on screen.
+    None,
+    /// Capturing a still; the WebView stays visible until it arrives.
+    Capturing,
+    /// The swapchain shows `image` (black if `None`). `fresh` until the engine
+    /// has been told to present it; `hide` until that present happened.
+    Ready {
+        image: Option<Decoded>,
+        picture: Option<Picture>,
+        fresh: bool,
+        hide: bool,
+    },
+}
+
+impl Still {
+    fn ready(image: Option<Decoded>) -> Self {
+        Self::Ready {
+            image,
+            picture: None,
+            fresh: true,
+            hide: true,
+        }
+    }
 }
 
 /// Cheap to clone (COM reference counts): callers copy a view out of the
@@ -180,8 +217,9 @@ impl WebSource {
                 .iter()
                 .map(|&hwnd| ScreenView {
                     hwnd,
-                    visible: true,
+                    visibility: Visibility::Live,
                     view: None,
+                    still: Still::None,
                 })
                 .collect(),
         }));
@@ -216,14 +254,68 @@ impl WebSource {
 }
 
 impl Source for WebSource {
-    fn render(&mut self, _gpu: &Gpu, _frame: Frame<'_>) {}
+    /// Only reached for a paused screen showing its still (see [`Still`]).
+    fn render(&mut self, gpu: &Gpu, frame: Frame<'_>) {
+        let mut state = self.state.borrow_mut();
+        let Some(Still::Ready { image, picture, .. }) =
+            state.screens.get_mut(frame.screen).map(|s| &mut s.still)
+        else {
+            return;
+        };
+        if picture.is_none()
+            && let Some(image) = image.take()
+        {
+            match Picture::upload(gpu, "web still", &image) {
+                Ok(uploaded) => *picture = Some(uploaded),
+                Err(e) => log::warn!("web: still frame: {e:#}"),
+            }
+        }
+        let mut pass = begin(
+            frame.encoder,
+            frame.view,
+            wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+        );
+        if let Some(picture) = picture {
+            picture.draw(gpu, &mut pass, frame.size, Fit::Cover, 1.0);
+        }
+    }
 
     fn redraw(&self, _clock: Duration) -> Redraw {
         Redraw::OnChange
     }
 
-    fn native(&self) -> bool {
-        true
+    fn native(&self, screen: usize) -> bool {
+        let state = self.state.borrow();
+        !matches!(
+            state.screens.get(screen).map(|s| &s.still),
+            Some(Still::Ready { .. })
+        )
+    }
+
+    fn take_dirty(&mut self, screen: usize) -> bool {
+        let mut state = self.state.borrow_mut();
+        match state.screens.get_mut(screen).map(|s| &mut s.still) {
+            Some(Still::Ready { fresh, .. }) => std::mem::take(fresh),
+            _ => false,
+        }
+    }
+
+    fn presented(&mut self, screen: usize) {
+        let view = {
+            let mut state = self.state.borrow_mut();
+            let Some(slot) = state.screens.get_mut(screen) else {
+                return;
+            };
+            let hide = match &mut slot.still {
+                Still::Ready { hide, .. } => std::mem::take(hide),
+                _ => false,
+            };
+            hide.then(|| slot.view.clone()).flatten()
+        };
+        // The still is on screen now, so the page can go without a flash.
+        if let Some(view) = view {
+            view.set_visible(false);
+        }
     }
 
     fn layout(&mut self, screen: usize, hwnd: HWND, _size: (u32, u32)) {
@@ -233,17 +325,43 @@ impl Source for WebSource {
         }
     }
 
-    fn set_visible(&mut self, screen: usize, _hwnd: HWND, visible: bool) {
-        let view = {
+    fn set_visibility(&mut self, screen: usize, _hwnd: HWND, visibility: Visibility) {
+        let (view, previous, has_still) = {
             let mut state = self.state.borrow_mut();
             let Some(slot) = state.screens.get_mut(screen) else {
                 return;
             };
-            slot.visible = visible;
-            slot.view.clone()
+            let previous = std::mem::replace(&mut slot.visibility, visibility);
+            match visibility {
+                Visibility::Live => slot.still = Still::None,
+                // Nobody would see a still that is still being captured.
+                Visibility::Hidden if matches!(slot.still, Still::Capturing) => {
+                    slot.still = Still::None;
+                }
+                _ => {}
+            }
+            let has_still = matches!(slot.still, Still::Ready { .. });
+            (slot.view.clone(), previous, has_still)
         };
-        if let Some(view) = view {
-            view.set_visible(visible);
+        match (visibility, view) {
+            (Visibility::Live, Some(view)) => view.set_visible(true),
+            (Visibility::Hidden, Some(view)) => view.set_visible(false),
+            // A still from an earlier pause: the engine presents it again.
+            (Visibility::Still, _) if has_still => {}
+            (Visibility::Still, Some(view)) => {
+                if previous == Visibility::Hidden {
+                    view.set_visible(true); // a hidden page renders nothing to capture
+                }
+                // Loaded: capture now. Still loading: `navigation_done` does it.
+                if view.loaded {
+                    freeze(&Rc::downgrade(&self.state), screen, &view);
+                }
+            }
+            // No WebView yet: nothing to capture; show black, not a stale frame.
+            (Visibility::Still, None) => {
+                self.state.borrow_mut().screens[screen].still = Still::ready(None);
+            }
+            (Visibility::Live | Visibility::Hidden, None) => {}
         }
     }
 }
@@ -344,7 +462,7 @@ fn controller_ready(
         let _ = unsafe { controller.Close() };
         return;
     };
-    let (hwnd, visible, page) = {
+    let (hwnd, visibility, page) = {
         let state = state.borrow();
         if state.closed {
             // SAFETY: as above.
@@ -352,11 +470,13 @@ fn controller_ready(
             return;
         }
         let slot = &state.screens[screen];
-        (slot.hwnd, slot.visible, state.page.clone())
+        (slot.hwnd, slot.visibility, state.page.clone())
     };
     match setup(weak, screen, controller.clone(), hwnd, &page) {
         Ok(view) => {
-            view.set_visible(visible);
+            // A paused but seen screen keeps its page visible while it loads:
+            // `navigation_done` captures a still, then hides it.
+            view.set_visible(visibility != Visibility::Hidden);
             state.borrow_mut().screens[screen].view = Some(view);
         }
         Err(e) => {
@@ -435,22 +555,79 @@ fn setup(
     }
 }
 
-/// The page finished loading. A screen that was hidden in the meantime can
-/// only be suspended now.
+/// The page finished loading. A screen paused in the meantime can only be
+/// captured (if seen) or suspended (if hidden) now.
 fn navigation_done(weak: &Weak<RefCell<State>>, screen: usize) {
     let Some(state) = weak.upgrade() else { return };
-    let suspend = {
+    let first_load = {
         let mut state = state.borrow_mut();
         let slot = &mut state.screens[screen];
-        let visible = slot.visible;
+        let visibility = slot.visibility;
         slot.view.as_mut().and_then(|view| {
             let first = !std::mem::replace(&mut view.loaded, true);
-            (first && !visible).then(|| view.clone())
+            first.then(|| (view.clone(), visibility))
         })
     };
-    if let Some(view) = suspend {
+    match first_load {
+        Some((view, Visibility::Still)) => freeze(weak, screen, &view),
         // SAFETY: handlers run on the thread that created the WebView.
-        unsafe { view.suspend() };
+        Some((view, Visibility::Hidden)) => unsafe { view.suspend() },
+        Some((_, Visibility::Live)) | None => {}
+    }
+}
+
+/// Starts capturing a still of a paused screen's page. The WebView stays on
+/// screen until the still is presented in its place (see [`Still`]).
+fn freeze(weak: &Weak<RefCell<State>>, screen: usize, view: &View) {
+    let Some(state) = weak.upgrade() else { return };
+    state.borrow_mut().screens[screen].still = Still::Capturing;
+    // SAFETY: creates a growable in-memory stream that owns its memory.
+    let stream = match unsafe { CreateStreamOnHGlobal(HGLOBAL::default(), true) } {
+        Ok(stream) => stream,
+        Err(e) => return captured(weak, screen, Err(e.into())),
+    };
+    let done = {
+        let (weak, stream) = (weak.clone(), stream.clone());
+        CapturePreviewCompletedHandler::create(Box::new(move |result| {
+            captured(&weak, screen, result.map(|()| stream).map_err(Into::into));
+            Ok(())
+        }))
+    };
+    // SAFETY: COM call on the thread that created the WebView; the handler
+    // runs later on this thread's message loop.
+    let started = unsafe {
+        view.webview.CapturePreview(
+            COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
+            &stream,
+            &done,
+        )
+    };
+    if let Err(e) = started {
+        captured(weak, screen, Err(e.into()));
+    }
+}
+
+/// A still capture finished: decode it and hand the screen to the swapchain.
+/// A failed capture shows black, never a stale frame.
+fn captured(weak: &Weak<RefCell<State>>, screen: usize, png: Result<IStream>) {
+    let Some(state) = weak.upgrade() else { return };
+    let image = png.and_then(|stream| {
+        // Capture size: no scaling (the screen size), within texture limits.
+        let budget = Budget {
+            fit: Fit::Stretch,
+            screen: (u32::MAX, u32::MAX),
+            max_dim: 16_384,
+        };
+        Decoder::new()?.decode_stream(&stream, budget)
+    });
+    let image = image
+        .inspect_err(|e| log::warn!("web: capturing a still of screen {screen}: {e:#}"))
+        .ok();
+    let mut state = state.borrow_mut();
+    let slot = &mut state.screens[screen];
+    // Shown again (or reloaded) while capturing: the live page wins.
+    if slot.visibility == Visibility::Still && matches!(slot.still, Still::Capturing) {
+        slot.still = Still::ready(image);
     }
 }
 

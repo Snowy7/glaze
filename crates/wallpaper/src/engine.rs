@@ -21,7 +21,7 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use crate::gpu::{Gpu, Screen};
 use crate::hold::{Fact, HoldReasons, Holds};
 use crate::palette;
-use crate::sources::{self, Frame, Redraw, Source};
+use crate::sources::{self, Frame, Redraw, Source, Visibility};
 use crate::window::Window;
 
 /// Coalesces the burst of file events an editor save produces.
@@ -45,7 +45,7 @@ pub struct Engine {
     gpu: Gpu,
     source: Box<dyn Source>,
     /// Per screen: what `source` was last told via `Source::set_visible`.
-    shown: Vec<bool>,
+    shown: Vec<Visibility>,
     screens: Vec<Screen>,
     /// Monitor rects for desktop mode; `None` in dev (windowed) mode.
     monitors: Option<Vec<Rect>>,
@@ -86,7 +86,7 @@ impl Engine {
             theme,
             gpu,
             source,
-            shown: vec![true; screens.len()],
+            shown: vec![Visibility::Live; screens.len()],
             screens,
             monitors,
             clock: Duration::ZERO,
@@ -199,9 +199,18 @@ impl Engine {
         }
 
         self.sync_visibility();
+        for (index, screen) in self.screens.iter_mut().enumerate() {
+            screen.dirty |= self.source.take_dirty(index);
+        }
         let active = !self.held && self.screens.iter().any(|s| !s.paused);
         if !active {
             self.last_tick = None; // the clock stops while nothing is visible
+            // Held, but an uncovered screen is still seen (e.g. the second
+            // monitor while a game is fullscreen): give it one still frame of
+            // the current wallpaper rather than whatever was there before.
+            if self.screens.iter().any(|s| s.dirty && !s.paused) {
+                self.render(false);
+            }
             return Flow::Wait(self.deadline(None));
         }
         self.clock += self
@@ -235,14 +244,15 @@ impl Engine {
         Flow::Wait(self.deadline(frame_deadline))
     }
 
-    /// Tells the source about screens that became visible or hidden since
-    /// the last call, so it can suspend what it runs for them.
+    /// Tells the source about screens whose visibility changed since the last
+    /// call, so it can suspend what it runs for them.
     fn sync_visibility(&mut self) {
         for (index, screen) in self.screens.iter().enumerate() {
-            let visible = !self.held && !screen.paused;
-            if self.shown[index] != visible {
-                self.shown[index] = visible;
-                self.source.set_visible(index, screen.window.0, visible);
+            let visibility = Visibility::of(self.held, screen.paused);
+            if self.shown[index] != visibility {
+                self.shown[index] = visibility;
+                self.source
+                    .set_visibility(index, screen.window.0, visibility);
             }
         }
     }
@@ -261,14 +271,12 @@ impl Engine {
         let mut cursor = POINT::default();
         // SAFETY: `cursor` outlives the call.
         let _ = unsafe { GetCursorPos(&mut cursor) };
-        let native = self.source.native();
-
         let mut drew = false;
         for (index, screen) in self.screens.iter_mut().enumerate() {
             if screen.paused || !(due || screen.dirty) {
                 continue;
             }
-            if native {
+            if self.source.native(index) {
                 // The source owns what is on screen: nothing to acquire or present.
                 screen.dirty = false;
                 self.source.layout(index, screen.window.0, screen.size());
@@ -298,6 +306,7 @@ impl Engine {
             );
             self.gpu.queue.submit([encoder.finish()]);
             self.gpu.queue.present(texture);
+            self.source.presented(index);
             drew = true;
         }
 
@@ -336,7 +345,7 @@ impl Engine {
         self.palette_due = true;
         self.next_frame = Instant::now();
         // A new source starts with every screen visible.
-        self.shown.fill(true);
+        self.shown.fill(Visibility::Live);
         self.sync_visibility();
         self.mark_dirty();
         Ok(())

@@ -51,7 +51,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, PWSTR};
 
-use super::{Frame, Redraw, Source};
+use super::{Frame, Redraw, Source, Visibility};
 use crate::gpu::Gpu;
 
 /// How long to wait for the app to show a window before assuming it draws
@@ -117,7 +117,7 @@ impl Source for AppSource {
         Redraw::OnChange
     }
 
-    fn native(&self) -> bool {
+    fn native(&self, _screen: usize) -> bool {
         true
     }
 
@@ -130,9 +130,11 @@ impl Source for AppSource {
         }
     }
 
-    fn set_visible(&mut self, screen: usize, _hwnd: HWND, visible: bool) {
+    /// A suspended app keeps its window and last frame, so `Still` and
+    /// `Hidden` both just suspend it.
+    fn set_visibility(&mut self, screen: usize, _hwnd: HWND, visibility: Visibility) {
         if screen == 0 {
-            self.shared.visible.set(visible);
+            self.shared.visible.set(visibility == Visibility::Live);
             self.shared.sync();
         }
     }
