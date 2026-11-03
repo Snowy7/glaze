@@ -1,6 +1,9 @@
 .card {
   padding: clamp(6px, 4cqmin, 10px);
 }
+html[data-surface="none"] .card {
+  padding: clamp(2px, 2cqmin, 6px);
+}
 
 /* main.js picks the column/row count that gives the most natural tile shape for the size. */
 .grid {
@@ -11,14 +14,12 @@
   gap: clamp(4px, 2.4cqmin, 8px);
 }
 
+/* A tile is a `.panel` (a quiet fill with a surface, nothing on a bare wallpaper). */
 .tile {
   position: relative;
   container-type: size;
   min-width: 0;
   overflow: hidden;
-  border-radius: calc(var(--radius) * 0.62);
-  background: var(--fill-1);
-  border: 1px solid var(--line);
 }
 .tile[hidden] {
   display: none;
@@ -44,9 +45,17 @@
   vector-effect: non-scaling-stroke;
 }
 .line.second {
-  stroke: var(--t2);
+  stroke: var(--t1);
   stroke-width: 1.2;
   stroke-dasharray: 3 3;
+}
+/* Without a surface a baseline anchors each sparkline (and the tile's own edge is invisible). */
+html[data-surface="none"] .tile::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: var(--fill-2);
 }
 
 .head {
@@ -56,6 +65,9 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+html[data-surface="none"] .head {
+  padding-left: clamp(2px, 3cqmin, 6px);
 }
 .name {
   font-size: clamp(9px, 11cqmin, 11px);
@@ -76,7 +88,7 @@
 }
 .sub {
   font-size: clamp(9px, 10cqmin, 11px);
-  color: var(--t2);
+  color: var(--t1);
   white-space: nowrap;
 }
 

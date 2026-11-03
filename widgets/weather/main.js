@@ -22,6 +22,7 @@ const els = {
   range: $("#range"),
   days: $("#days"),
   status: $("#status"),
+  statusText: $("#status-text"),
 };
 
 const defaults = { city: "London", lat: "", lon: "", units: "metric" };
@@ -55,7 +56,7 @@ function placeParams() {
 /** @param {string} message */
 function showStatus(message) {
   els.status.hidden = false;
-  els.status.textContent = message;
+  els.statusText.textContent = message;
 }
 
 function render() {

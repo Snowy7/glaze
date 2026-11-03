@@ -1,23 +1,10 @@
 .card {
-  --scale: 1;
-  /* Grows gently with the widget; the font-size setting multiplies it. */
-  --fs: calc(clamp(11.5px, 3.4cqmin, 15px) * var(--scale));
+  /* Grows gently with the widget; the text size setting (--fs-mult) multiplies it. The global
+     appearance --scale is applied to the whole page and is not touched here. */
+  --fs: calc(clamp(11.5px, 3.4cqmin, 15px) * var(--fs-mult, 1));
   padding: clamp(10px, 6cqmin, 16px);
   font-size: var(--fs);
   line-height: 1.45;
-}
-
-/* Paper style: a light note. Same monochrome tokens, inverted. */
-.card[data-paper="on"] {
-  --surface: rgb(244 244 244 / 0.94);
-  --t0: #0a0a0a;
-  --t1: rgb(0 0 0 / 0.72);
-  --t2: rgb(0 0 0 / 0.46);
-  --t3: rgb(0 0 0 / 0.26);
-  --fill-1: rgb(0 0 0 / 0.05);
-  --fill-2: rgb(0 0 0 / 0.1);
-  --line: rgb(0 0 0 / 0.1);
-  color: var(--t0);
 }
 
 .view,
@@ -27,6 +14,7 @@
   padding: inherit;
   overflow-y: auto;
   color: var(--t1);
+  border-radius: calc(var(--radius) * 0.6);
 }
 
 .view {
@@ -35,25 +23,32 @@
   overflow-wrap: anywhere;
 }
 .view:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--t3);
-  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1.5px var(--t3);
 }
 .empty {
-  color: var(--t3);
+  color: var(--t2);
 }
 
+/* Editing: a quiet panel behind the text, so the state is visible with no card (a frosted wash on a
+   bare wallpaper, a fill on a surface). */
 #editor {
   width: 100%;
   height: 100%;
   resize: none;
   border: 0;
   outline: none;
-  background: transparent;
+  background: var(--chip);
+  box-shadow: inset 0 0 0 1px var(--fill-2);
   font: inherit;
   line-height: inherit;
   color: var(--t0);
   caret-color: var(--t0);
   user-select: text;
+  text-shadow: none;
+}
+html[data-surface="none"] #editor {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
 }
 #editor::selection {
   background: var(--fill-3);
@@ -78,7 +73,8 @@
 .view code {
   padding: 0.05em 0.35em;
   border-radius: 5px;
-  background: var(--fill-2);
+  background: var(--chip);
+  color: var(--t0);
   font: 0.9em ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 .view s { color: var(--t2); }
@@ -87,7 +83,7 @@ hr {
   height: 1px;
   margin: 0.5em 0;
   border: 0;
-  background: var(--line);
+  background: var(--fill-3);
 }
 blockquote {
   padding-left: 0.7em;
@@ -123,9 +119,16 @@ blockquote {
   place-items: center;
   transition: background-color 0.12s, border-color 0.12s;
 }
+/* A bare wallpaper gets the same faint outline and lift as a progress track. */
+html[data-surface="none"] .box {
+  box-shadow:
+    0 0 0 0.5px rgb(var(--halo) / 0.22),
+    0 1px 6px rgb(var(--halo) / 0.2);
+}
 .task:hover .box {
   border-color: var(--t0);
 }
+/* Checked: filled with the ink, the tick in its opposite (--halo), so it reads on both inks. */
 .task[data-checked] .box {
   background: var(--t0);
   border-color: var(--t0);
@@ -135,12 +138,10 @@ blockquote {
   width: 0.28em;
   height: 0.52em;
   margin-top: -0.1em;
-  border: solid var(--surface);
+  border: solid rgb(var(--halo));
   border-width: 0 2px 2px 0;
+  border-radius: 1px;
   transform: rotate(45deg);
-}
-.card[data-paper="on"] .task[data-checked] .box::after {
-  border-color: #f4f4f4;
 }
 .task[data-checked] .text {
   color: var(--t2);

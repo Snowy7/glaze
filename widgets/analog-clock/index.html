@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Analog Clock</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card" id="card">
+      <svg class="clock" id="clock" viewBox="0 0 100 100" role="img" aria-label="Clock">
+        <circle class="ring" cx="50" cy="50" r="48.5" />
+        <g id="ticks"></g>
+        <g id="numerals"></g>
+        <text class="date" id="date" x="50" y="69"></text>
+        <line class="hand hour" id="hour" x1="50" y1="57" x2="50" y2="27" />
+        <line class="hand minute" id="minute" x1="50" y1="58" x2="50" y2="11" />
+        <line class="hand sec" id="sec" x1="50" y1="61" x2="50" y2="9" />
+        <circle class="hub" cx="50" cy="50" r="2.4" />
+        <circle class="hub-sec" id="hub-sec" cx="50" cy="50" r="1.2" />
+      </svg>
+    </main>
+    <script src="mypaper.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

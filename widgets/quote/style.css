@@ -1,0 +1,87 @@
+/* A glyph, the quote and its author. main.js sizes .text to fill .body (font-size by fitting), and
+   sets data-compact on the card for short boxes. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 3cqmin, 10px);
+  padding: calc(var(--pad) + 2px) calc(var(--pad) + 4px);
+  cursor: pointer;
+}
+.card:focus-visible {
+  outline: 2px solid var(--t2);
+  outline-offset: -3px;
+}
+
+.mark {
+  flex: none;
+  width: clamp(18px, 10cqmin, 30px);
+  height: auto;
+  fill: none;
+  stroke: var(--t3);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.quote {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 2.6cqmin, 10px);
+}
+
+/* The space the quote may fill; it is centered inside. */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+}
+.text {
+  margin: 0;
+  width: 100%;
+  font-size: 16px; /* replaced by main.js */
+  font-weight: 300;
+  line-height: 1.22;
+  letter-spacing: -0.012em;
+  color: var(--t0);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+/* Last resort when even the smallest size does not fit: main.js sets --lines. */
+.text[data-clamped] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--lines);
+  line-clamp: var(--lines);
+  overflow: hidden;
+}
+
+.by {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  margin: 0;
+  color: var(--t2);
+  font-size: clamp(9.5px, 3cqmin, 11.5px);
+}
+.dash {
+  flex: none;
+  width: 1.8em;
+  height: 1px;
+  background: var(--t3);
+}
+.by[hidden] {
+  display: none;
+}
+
+/* Short boxes: no glyph, the quote and its author take the whole height. */
+.card[data-compact] .mark {
+  display: none;
+}
+.card[data-compact] {
+  padding-block: var(--pad);
+}

@@ -1,23 +1,11 @@
 // @ts-check
-import { $, clamp, onVisible, trackSettings, trackSize, useWallpaperAccent } from "./kit.js";
+import { $, clamp, formatRate, onVisible, trackSize } from "./kit.js";
 
 /** @typedef {Awaited<ReturnType<typeof mypaper.system.stats>>} Stats */
 
 const POINTS = 60; // 2 minutes at the 2 s sample rate
 const SVG = "http://www.w3.org/2000/svg";
 const GB = 1024 ** 3;
-
-/** @param {number} bytes per second */
-function rate(bytes) {
-  const units = ["B/s", "KB/s", "MB/s", "GB/s"];
-  let n = bytes;
-  let i = 0;
-  while (n >= 1000 && i < units.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  return { n: n < 10 && i > 0 ? n.toFixed(1) : String(Math.round(n)), unit: units[i] ?? "B/s" };
-}
 
 /**
  * Points to an SVG polyline in a 100x40 box, newest on the right.
@@ -50,7 +38,7 @@ class Tile {
    */
   constructor(label, options = {}) {
     this.el = document.createElement("section");
-    this.el.className = "tile";
+    this.el.className = "tile panel";
     this.el.innerHTML = `
       <div class="head"><span class="name caps"></span><span class="value num"></span><span class="sub num"></span></div>
       <svg class="spark" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
@@ -125,8 +113,8 @@ function render(s) {
 
   const down = s.net?.down ?? 0;
   const up = s.net?.up ?? 0;
-  const d = rate(down);
-  const u = rate(up);
+  const d = formatRate(down);
+  const u = formatRate(up);
   tiles.net.update({
     value: d.n,
     unit: d.unit,
@@ -159,7 +147,6 @@ function layout(w, h) {
 }
 
 trackSize((size) => layout(size.px[0], size.px[1]));
-trackSettings({ wallpaperAccent: false }, (s) => useWallpaperAccent(s.wallpaperAccent));
 
 // ---- data: one subscription while visible
 

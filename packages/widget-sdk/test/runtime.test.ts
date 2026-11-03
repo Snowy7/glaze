@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_APPEARANCE,
   MypaperError,
   createMypaper,
   isMypaperError,
+  type AppearanceState,
   type HelloResult,
   type Transport,
   type WireRequest,
@@ -260,5 +262,42 @@ describe("subscriptions", () => {
   it("rejects a non-numeric interval synchronously", async () => {
     const { mypaper } = setup();
     expect(() => mypaper.system.subscribe(Number.NaN, () => {})).toThrow(MypaperError);
+  });
+});
+
+describe("appearance", () => {
+  const look = { ...DEFAULT_APPEARANCE, surface: "glass" as const, text: "dark" as const };
+
+  it("starts with the defaults and no theme CSS when the host sends none", async () => {
+    const { mypaper } = setup();
+    expect(await mypaper.appearance.get()).toEqual({ appearance: DEFAULT_APPEARANCE, themeCss: null });
+  });
+
+  it("reads appearance and themeCss from the handshake", async () => {
+    const { mypaper, shell } = setup({ answerHello: false });
+    shell.result(1, { ...hello, appearance: look, themeCss: "html { --x: 1 }" });
+    expect(await mypaper.appearance.get()).toEqual({ appearance: look, themeCss: "html { --x: 1 }" });
+  });
+
+  it("pushes the appearance event to listeners and keeps get() current", async () => {
+    const { mypaper, shell } = setup();
+    await mypaper.ready;
+    const seen: AppearanceState[] = [];
+    const off = mypaper.appearance.onChange((s) => seen.push(s));
+    const next = { appearance: look, themeCss: null };
+    shell.event("appearance", next);
+    expect(seen).toEqual([next]);
+    expect(await mypaper.appearance.get()).toEqual(next);
+    off();
+    shell.event("appearance", { appearance: DEFAULT_APPEARANCE, themeCss: "x" });
+    expect(seen).toHaveLength(1);
+  });
+
+  it("prefers an appearance event that raced ahead of the handshake answer", async () => {
+    const { mypaper, shell } = setup({ answerHello: false });
+    const newer = { appearance: look, themeCss: "newer" };
+    shell.event("appearance", newer);
+    shell.result(1, { ...hello, appearance: DEFAULT_APPEARANCE, themeCss: "older" });
+    expect(await mypaper.appearance.get()).toEqual(newer);
   });
 });

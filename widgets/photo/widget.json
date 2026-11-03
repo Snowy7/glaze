@@ -1,0 +1,34 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "photo",
+  "name": "Photo",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "A photo frame that cycles through the images in its folder.",
+  "entry": "index.html",
+  "size": { "default": [2, 2], "min": [1, 1], "max": [4, 4] },
+  "resizable": true,
+  "permissions": [],
+  "plugins": [],
+  "settings": [
+    {
+      "key": "images",
+      "type": "list",
+      "label": "Images (files in the widget's images folder)",
+      "fields": [{ "key": "file", "type": "string", "label": "File name, e.g. sunrise.svg" }],
+      "maxItems": 24,
+      "default": [
+        { "file": "sunrise.svg" },
+        { "file": "dunes.svg" },
+        { "file": "mist.svg" },
+        { "file": "dusk.svg" },
+        { "file": "tide.svg" }
+      ]
+    },
+    { "key": "intervalSeconds", "type": "number", "label": "Change every (seconds)", "min": 5, "max": 600, "step": 5, "default": 30 },
+    { "key": "fit", "type": "select", "label": "Fit", "options": ["cover", "contain"], "default": "cover" },
+    { "key": "shuffle", "type": "boolean", "label": "Shuffle", "default": false },
+    { "key": "rounded", "type": "boolean", "label": "Rounded corners", "default": true },
+    { "key": "showCaption", "type": "boolean", "label": "Show file name", "default": false }
+  ]
+}

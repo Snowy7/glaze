@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quote</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card" id="card" tabindex="0" role="button" aria-label="Show another quote" title="Another quote">
+      <svg class="mark" id="mark" viewBox="0 0 28 19" aria-hidden="true">
+        <path d="M11 2C6.2 3 3 6.6 3 11.5V17h6.5v-6.5H6.2c.1-2.6 1.8-4.6 4.8-5.6z" />
+        <path transform="translate(13 0)" d="M11 2C6.2 3 3 6.6 3 11.5V17h6.5v-6.5H6.2c.1-2.6 1.8-4.6 4.8-5.6z" />
+      </svg>
+      <div class="quote" id="quote">
+        <div class="body" id="body"><blockquote class="text" id="text"></blockquote></div>
+        <p class="by caps" id="by"><span class="dash"></span><span class="author ellipsis" id="author"></span></p>
+      </div>
+    </main>
+    <script src="mypaper.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

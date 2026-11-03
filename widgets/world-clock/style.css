@@ -1,0 +1,107 @@
+/* main.js decides how many columns and rows fit (--cols, --rows) and how tall a row is (--rh); the
+   text sizes follow --rh. Rows are grouped by hairlines, not boxes, so a bare wallpaper stays clean. */
+
+.card {
+  display: flex;
+  padding: clamp(8px, 5cqmin, 14px);
+}
+html[data-surface="none"] .card {
+  padding: clamp(2px, 2cqmin, 6px);
+}
+
+.list {
+  --cols: 1;
+  --rows: 4;
+  --rh: 48px;
+  flex: 1; /* the list's box (not its content) is what main.js measures */
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), var(--rh));
+  align-content: center;
+  column-gap: clamp(14px, 6cqw, 28px);
+  min-height: 0;
+  min-width: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7em;
+  padding: 0 0.15em;
+  container-type: inline-size; /* so the time can shrink with a narrow column */
+  /* Hairline above every row but a column's first. */
+  box-shadow: inset 0 1px 0 var(--fill-2);
+}
+.row.first {
+  box-shadow: none;
+}
+/* Sizes below are fractions of the row's height (--rh), within sane limits. */
+.glyph {
+  width: calc(var(--rh) * 0.34);
+  height: calc(var(--rh) * 0.34);
+  min-width: 14px;
+  min-height: 14px;
+  fill: none;
+  stroke: var(--t1);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.row:not(.day) .glyph {
+  stroke: var(--t2);
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: 0.04em;
+  min-width: 0;
+}
+.name {
+  font-size: clamp(11px, calc(var(--rh) * 0.27), 18px);
+  font-weight: 600;
+  color: var(--t0);
+}
+.sub {
+  font-size: clamp(9px, calc(var(--rh) * 0.17), 12px);
+  color: var(--t2);
+}
+.row.no-sub .sub {
+  display: none;
+}
+
+.time {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25em;
+  font-size: clamp(16px, min(calc(var(--rh) * 0.5), 13cqw), 38px);
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--t0);
+}
+.ap {
+  font-size: 0.42em;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--t2);
+}
+
+.row.unknown :is(.name, .time, .glyph) {
+  color: var(--t3);
+  stroke: var(--t3);
+}
+.row.unknown .sub {
+  color: var(--t3);
+}
+
+/* A narrow widget (2 cells) has less room for the offset text: let the name win. */
+@container (max-width: 230px) {
+  .row {
+    gap: 0.5em;
+  }
+}

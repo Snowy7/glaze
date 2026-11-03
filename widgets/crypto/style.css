@@ -1,0 +1,168 @@
+/* main.js sets --cols and --per-col (rows fill column by column) and data-mode:
+   single  one big coin (a 1x1 widget)
+   rows    a quiet table: ticker and name on the left, price and 24h change on the right
+   Everything sizes from the row's own box, so it stays proportioned at any size. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rows {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--per-col, 1), minmax(0, 72px));
+  column-gap: clamp(18px, 6cqw, 32px);
+  align-content: center;
+}
+
+.row {
+  position: relative;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9em;
+  padding-inline: 0.4em;
+}
+/* A hairline between rows of a column. */
+.row:not([data-first])::before {
+  content: "";
+  position: absolute;
+  inset: 0 0.4em auto;
+  height: 1px;
+  background: var(--fill-2);
+}
+
+.label {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.sym {
+  font-size: clamp(12px, 28cqh, 16px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  color: var(--t0);
+}
+.name {
+  font-size: clamp(8.5px, 17cqh, 10px);
+}
+
+/* The price never truncates; the label gives way first. */
+.value {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  flex: none;
+}
+.price {
+  /* Grows with the row's height, but never so wide that the label has no room. */
+  font-size: min(clamp(14px, 36cqh, 23px), 15cqw);
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  color: var(--t0);
+}
+
+/* Gains: full ink and an up triangle. Losses: a step quieter and a down triangle. No hues. */
+.chg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32em;
+  font-size: clamp(10px, 23cqh, 12px);
+  line-height: 1.2;
+}
+.chg[data-dir="up"] {
+  color: var(--t0);
+  font-weight: 600;
+}
+.chg[data-dir="down"] {
+  color: var(--t2);
+  font-weight: 500;
+}
+.tri {
+  width: 0.72em;
+  height: 0.72em;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+/* ---- narrow (a 1-cell wide column): each coin stacks as ticker, price, change */
+.rows[data-narrow] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rows[data-narrow] .row {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  padding-inline: 0.3em;
+}
+.rows[data-narrow] .label {
+  display: block;
+  max-width: 100%;
+}
+.rows[data-narrow] .name {
+  display: none;
+}
+.rows[data-narrow] .sym {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: var(--t2);
+}
+.rows[data-narrow] .value {
+  justify-items: start;
+  gap: 2px;
+}
+.rows[data-narrow] .price {
+  /* Seven characters must fit the width (main.js shortens longer prices) and the height. */
+  font-size: min(23cqw, 30cqh, 26px);
+}
+.rows[data-narrow] .chg {
+  font-size: 11px;
+}
+
+/* ---- single: one coin, big, filling a small widget */
+.rows[data-mode="single"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+.rows[data-mode="single"] .value {
+  gap: 3px;
+}
+.rows[data-mode="single"] .price {
+  font-size: min(23cqw, 32cqh, 40px);
+}
+.rows[data-mode="single"] .chg {
+  font-size: 12px;
+}
+
+.msg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: var(--pad);
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--t2);
+  pointer-events: none;
+}
+
+.foot {
+  flex: none;
+  padding: 0 0.4em;
+  color: var(--t3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

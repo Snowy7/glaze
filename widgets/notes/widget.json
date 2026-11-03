@@ -11,7 +11,6 @@
   "permissions": [],
   "plugins": [],
   "settings": [
-    { "key": "paper", "type": "boolean", "label": "Paper style (light)", "default": false },
     { "key": "fontScale", "type": "number", "label": "Text size", "min": 0.8, "max": 1.6, "step": 0.1, "default": 1 }
   ]
 }

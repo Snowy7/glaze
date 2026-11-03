@@ -1,0 +1,11 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/plugin.schema.json",
+  "id": "rss",
+  "name": "RSS",
+  "version": "1.0.0",
+  "command": "rss.exe",
+  "args": [],
+  "methods": ["feeds"],
+  "events": [],
+  "permissions": []
+}

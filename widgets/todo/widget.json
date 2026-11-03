@@ -1,0 +1,18 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "todo",
+  "name": "To do",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "A calm checklist: add, edit, check off and clear tasks.",
+  "entry": "index.html",
+  "size": { "default": [2, 2], "min": [1, 1], "max": [4, 4] },
+  "resizable": true,
+  "permissions": [],
+  "plugins": [],
+  "settings": [
+    { "key": "title", "type": "string", "label": "Title (empty to hide)", "default": "To do" },
+    { "key": "addPosition", "type": "select", "label": "Add field", "options": ["bottom", "top"], "default": "bottom" },
+    { "key": "hideDone", "type": "boolean", "label": "Hide completed tasks", "default": false }
+  ]
+}

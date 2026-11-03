@@ -84,14 +84,40 @@ export class FakeBackend implements Backend {
     this.mem = clamp(this.mem + (Math.random() - 0.5) * 0.012, 0.3, 0.9);
     this.down = Math.random() < 0.3 ? Math.random() ** 2 * 18_000_000 : this.down * 0.5;
     this.up = Math.random() < 0.2 ? Math.random() ** 2 * 1_500_000 : this.up * 0.5;
+    // Drains slowly while unplugged and charges while plugged in, so the ring moves in a long session.
+    if (this.hasBattery) {
+      this.batteryPercent = clamp(this.batteryPercent + (this.charging ? 0.15 : -0.1), 3, 100);
+    }
+    const network: SystemStats["network"] =
+      this.netKind === "wifi"
+        ? { kind: "wifi", name: "Home-5G", signal: 78 }
+        : this.netKind === "ethernet"
+          ? { kind: "ethernet", name: "Ethernet" }
+          : { kind: "none" };
     return {
       cpu: this.cpu,
       memory: { used: this.mem * 32 * GB, total: 32 * GB },
       gpu: this.gpu,
       net: { up: this.up, down: this.down },
-      disks: [{ name: "C:", used: 612 * GB, total: 1000 * GB }],
+      disks: [
+        { name: "C:", used: 612 * GB, total: 1000 * GB },
+        { name: "D:", used: 1710 * GB, total: 1863 * GB },
+        { name: "E:", used: 41 * GB, total: 238 * GB },
+      ],
+      ...(this.hasBattery ? { battery: { percent: this.batteryPercent, charging: this.charging } } : {}),
+      uptime: this.bootSeconds + (performance.now() - this.stamp0) / 1000,
+      network,
     };
   }
+
+  // battery / network / uptime, set from the harness panel and URL
+  hasBattery = true;
+  charging = false;
+  batteryPercent = 64;
+  netKind: "wifi" | "ethernet" | "none" = "wifi";
+  /** Seconds the fake machine had been up when the page loaded: 2 days, 5 hours. */
+  bootSeconds = 2 * 86_400 + 5 * 3600 + 14 * 60;
+  private stamp0 = performance.now();
 
   private livePosition(): number {
     const t = TRACKS[this.track];

@@ -1,3 +1,5 @@
+/* `color-scheme: dark`, like the real shell's iframes: base.css is dark too. A mismatch would make
+   Chromium paint an opaque backdrop behind the iframe and hide the widget's transparency. */
 :root {
   color-scheme: dark;
   --bg: #0d0d0d;
@@ -45,6 +47,26 @@ pre { margin: 4px 0; padding: 8px; max-height: 180px; overflow: auto; background
 #stage[data-bg="photo"] { background: radial-gradient(700px 500px at 20% 20%, #ff6a3d 0%, transparent 60%), radial-gradient(800px 600px at 80% 30%, #2d6bff 0%, transparent 60%), radial-gradient(900px 700px at 40% 100%, #19c37d 0%, transparent 55%), #1a1030; }
 #stage[data-bg="checker"] { background: conic-gradient(#222 25%, #2e2e2e 0 50%, #222 0 75%, #2e2e2e 0) 0 0 / 32px 32px; }
 body.no-ui #stage { min-height: 0; overflow: hidden; }
+
+/* Photo-like backgrounds: procedural and busy on purpose (clouds, ridges, grain), to judge legibility
+   of text with no surface. photo-dark is a dusk mountain scene, photo-light a bright sky over pale sand. */
+.bg-photo-dark, #stage[data-bg="photo-dark"] {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000' preserveAspectRatio='none'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.012 .02' numOctaves='5' seed='4'/><feColorMatrix values='0 0 0 0 .55  0 0 0 0 .5  0 0 0 0 .75  0 0 0 1.1 -.35'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>") center / cover,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000' preserveAspectRatio='none'><path d='M0 700 L160 560 L300 640 L470 470 L640 620 L800 520 L980 660 L1150 500 L1320 640 L1600 540 V1000 H0Z' fill='%230b0e18' fill-opacity='.9'/><path d='M0 820 L220 700 L420 790 L640 690 L900 800 L1180 700 L1400 790 L1600 720 V1000 H0Z' fill='%23070910'/></svg>") center / cover,
+    linear-gradient(180deg, #1b2a52 0%, #5b4a7a 42%, #e48a5c 68%, #2a2540 100%);
+}
+.bg-photo-light, #stage[data-bg="photo-light"] {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000' preserveAspectRatio='none'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.008 .016' numOctaves='6' seed='11'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.6 -.55'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>") center / cover,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000' preserveAspectRatio='none'><path d='M0 760 Q400 700 800 760 T1600 740 V1000 H0Z' fill='%23e8dcc2'/><path d='M0 700 H1600 V760 Q1200 720 800 760 T0 750Z' fill='%236fb4c9'/></svg>") center / cover,
+    linear-gradient(180deg, #5aa7e6 0%, #a9d4f2 55%, #eef3f6 75%);
+}
+
+#panel .range { display: flex; align-items: center; gap: 8px; }
+#panel .range input { flex: 1; min-width: 0; }
+#panel .range .val { flex: 0 0 34px; text-align: right; color: var(--t2); font-variant-numeric: tabular-nums; }
+#panel textarea { width: 100%; margin: 6px 0; font: 11px/1.4 ui-monospace, Consolas, monospace; resize: vertical; }
 
 #grid { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.15s; }
 #stage.editing #grid { opacity: 1; }

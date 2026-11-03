@@ -1,0 +1,180 @@
+/* Sizes come from container units. main.js sets on the card:
+   data-layout   digits | digits-tiny | ring-row | ring-col | ring-tiny
+   --k           how many em wide the numerals row is (to fit it to the width)
+   --kc          the same for the number inside the ring */
+
+.card {
+  --w: calc(100cqw - 2 * var(--pad));
+  --h: calc(100cqh - 2 * var(--pad));
+  --foot: 0px; /* height reserved for the date line when there is room */
+  --k: 3;
+  --kc: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+@container (min-height: 130px) {
+  .card { --foot: 22px; }
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  gap: clamp(3px, calc(var(--fs) * 0.1), 8px);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(10px, calc(var(--fs) * 0.26), 12px);
+}
+.foot {
+  margin: 0;
+  color: var(--t2);
+  font-size: clamp(11px, calc(var(--fs) * 0.26), 13px);
+  white-space: nowrap;
+}
+
+/* ---- the numerals */
+
+.units {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--fs) * 0.4);
+  font-size: var(--fs);
+}
+.unit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28em;
+}
+.unit .v {
+  font-size: 1em;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+.unit .l {
+  font-size: clamp(9px, 0.21em, 12px);
+}
+
+/* "Today!", "Done": the same size and weight as the numerals. */
+.msg {
+  margin: 0;
+  font-size: var(--fs);
+  font-weight: 300;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+/* ---- digits */
+
+.card[data-layout^="digits"] {
+  --fs: max(16px, min(calc(var(--w) / var(--k)), calc((var(--h) - 30px - var(--foot)) / 1.35), 88px));
+}
+.card[data-layout="digits-tiny"] .foot,
+.card[data-layout="digits"] .foot {
+  display: none;
+}
+@container (min-height: 130px) {
+  .card[data-layout="digits"] .foot { display: block; }
+}
+
+/* ---- ring: a thin accent arc of the progress; the biggest unit sits inside it */
+
+.ring-wrap {
+  display: none;
+  position: relative;
+  flex: none;
+  width: var(--ring);
+  height: var(--ring);
+}
+.card[data-layout^="ring"] .ring-wrap {
+  display: block;
+}
+.ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke-width: 2.6px;
+}
+.ring circle {
+  vector-effect: non-scaling-stroke;
+}
+.trk {
+  stroke: var(--fill-3);
+}
+html[data-surface="none"] .trk {
+  stroke: rgb(var(--ink) / 0.3);
+}
+.arc {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.8s ease;
+}
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.3em;
+  text-align: center;
+}
+.center .v {
+  font-size: min(calc(var(--ring) * 0.34), calc(var(--ring) * 0.7 / var(--kc)));
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+.center .l {
+  font-size: clamp(9px, calc(var(--ring) * 0.09), 12px);
+}
+.center .l:empty {
+  display: none;
+}
+
+.card[data-layout="ring-row"] {
+  --ring: min(var(--h), calc(var(--w) * 0.5));
+  --fs: max(13px, min(calc(var(--ring) * 0.24), calc((var(--w) - var(--ring) - 16px) / var(--k)), 40px));
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+.card[data-layout="ring-row"] .foot {
+  display: none;
+}
+@container (min-height: 110px) {
+  .card[data-layout="ring-row"] .foot { display: block; }
+}
+
+.card[data-layout="ring-col"] {
+  --ring: min(var(--w), calc(var(--h) - 78px));
+  --fs: max(13px, min(calc(var(--w) / var(--k)), 24px));
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.card[data-layout="ring-col"] .info {
+  align-items: center;
+}
+.card[data-layout="ring-col"] .foot {
+  display: none;
+}
+
+.card[data-layout="ring-tiny"] {
+  --ring: min(var(--w), var(--h));
+  align-items: center;
+}
+.card[data-layout="ring-tiny"] .info {
+  display: none;
+}

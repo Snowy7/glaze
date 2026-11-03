@@ -1,9 +1,11 @@
 // The `mypaper` object, implemented over the postMessage wire format (docs/widgets.md).
 // Pure logic over a `Transport`, so it runs (and is tested) without a DOM.
 
+import { DEFAULT_APPEARANCE } from "./appearance";
 import { MypaperError } from "./errors";
 import {
   WIRE_VERSION,
+  type AppearanceState,
   type HelloResult,
   type MediaAction,
   type MediaState,
@@ -92,9 +94,13 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
     editmode: emitter<boolean>(),
     settings: emitter<Settings>(),
     size: emitter<SizeInfo>(),
+    appearance: emitter<AppearanceState>(),
   };
 
   let state: HelloResult | undefined;
+  /** Replaced by the handshake's copy, then by every `appearance` event. */
+  let look: AppearanceState = { appearance: DEFAULT_APPEARANCE, themeCss: null };
+  let lookPushed = false;
 
   function requireState(what: string): HelloResult {
     if (!state) {
@@ -130,6 +136,10 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
       case "size":
         if (state) state.size = msg.data;
         return events.size.emit(msg.data);
+      case "appearance":
+        look = msg.data;
+        lookPushed = true;
+        return events.appearance.emit(look);
       case "sub":
         return subs.get(msg.data.sub)?.(msg.data.value);
     }
@@ -163,6 +173,8 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
 
   const ready: Promise<void> = rawCall("hello", { sdk: WIRE_VERSION }, helloTimeoutMs).then((hello) => {
     state = hello;
+    // An `appearance` event that raced ahead of the answer is newer than the handshake's copy.
+    if (hello.appearance && !lookPushed) look = { appearance: hello.appearance, themeCss: hello.themeCss ?? null };
   });
 
   async function call<M extends keyof WireMethods>(
@@ -215,6 +227,13 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
         return { ...requireState("settings").settings };
       },
       onChange: (cb) => events.settings.on(cb),
+    },
+    appearance: {
+      async get() {
+        await ready;
+        return look;
+      },
+      onChange: (cb) => events.appearance.on(cb),
     },
     size: {
       async get() {

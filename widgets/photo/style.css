@@ -1,0 +1,121 @@
+/* The picture is the card. With no surface it fills the widget (rounded, with a hairline ring);
+   with glass or solid it sits inset in the surface, so it reads as a print on the material.
+   main.js sets data-fit, data-rounded, data-multi (more than one image) and data-empty. */
+
+.card {
+  --inset: clamp(4px, 3.2cqmin, 8px);
+  padding: var(--inset);
+}
+html[data-surface="none"] .card {
+  --inset: 0px;
+}
+
+.frame {
+  --card-radius: min(var(--radius), 20cqmin);
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  /* Concentric with the card's own corner. */
+  border-radius: max(0px, calc(var(--card-radius) - var(--inset)));
+}
+.frame[data-rounded="false"] {
+  border-radius: 0;
+}
+/* Without a surface the picture is the whole widget, so square corners are the card's too. */
+html[data-surface="none"] .card:has(.frame[data-rounded="false"]) {
+  border-radius: 0;
+}
+.frame[data-multi] {
+  cursor: pointer;
+}
+/* Letterbox bars read as a mat, not as a hole. */
+.frame[data-fit="contain"] {
+  background: var(--chip);
+}
+
+/* Two stacked images: the incoming one (`top`) fades in over the outgoing one (`under`), which
+   only disappears once it is fully covered. Resting layers are invisible. */
+.layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  z-index: 0;
+  -webkit-user-drag: none;
+}
+.frame[data-fit="contain"] .layer {
+  object-fit: contain;
+}
+.layer.under {
+  opacity: 1;
+  z-index: 1;
+}
+.layer.top {
+  --fade: 600ms; /* main.js FADE_MS */
+  z-index: 2;
+  transition: opacity var(--fade) ease;
+}
+.layer.top.show {
+  opacity: 1;
+}
+
+/* The hairline ring, above the picture. */
+.frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    inset 0 0 0 1px rgb(var(--halo) / 0.1);
+}
+
+.caption {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 3;
+  padding: 26px 12px 9px;
+  background: linear-gradient(to top, rgb(var(--halo) / 0.5), transparent);
+  color: var(--t0);
+  pointer-events: none;
+}
+
+/* No images, or none that load. */
+.frame[data-empty] {
+  background: var(--chip);
+}
+.hint {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  padding: 10px;
+  text-align: center;
+}
+.hint-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t1);
+}
+.hint-sub {
+  color: var(--t2);
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+@container (max-width: 120px) {
+  .hint-sub {
+    font-size: 9.5px;
+  }
+}

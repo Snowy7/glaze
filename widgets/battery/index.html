@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Battery</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Hidden until the first stats arrive, so a missing battery never flashes. -->
+    <main class="card" id="card" data-style="ring" data-state="discharging" hidden>
+      <section class="live" id="live">
+        <div class="dial">
+          <svg class="ring" aria-hidden="true">
+            <circle class="back" pathLength="100"></circle>
+            <circle class="arc" id="arc" pathLength="100"></circle>
+          </svg>
+          <div class="read">
+            <div class="pct num"><b id="pct">0</b><small>%</small></div>
+            <div class="sub caps">
+              <svg class="bolt" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5H11L10.5 22 19.5 10H13z" /></svg>
+              <span id="sub"></span>
+            </div>
+          </div>
+        </div>
+        <div class="track bar" aria-hidden="true"><i id="fill"></i></div>
+        <div class="meta">
+          <svg class="bolt" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5H11L10.5 22 19.5 10H13z" /></svg>
+          <span class="status" id="status"></span>
+          <span class="chip caps low-chip">Low</span>
+        </div>
+      </section>
+      <section class="none" id="none" hidden>
+        <svg class="plug" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4" />
+        </svg>
+        <span class="caps">No battery</span>
+      </section>
+    </main>
+    <script src="mypaper.js"></script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

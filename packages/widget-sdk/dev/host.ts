@@ -4,6 +4,7 @@
 
 import { MypaperError, WIRE_VERSION } from "../src";
 import type {
+  AppearanceState,
   MediaAction,
   MediaState,
   Permission,
@@ -47,13 +48,15 @@ export class BridgeHost {
 
   visible = true;
   editing = false;
+  /** Divides every `system` interval: a screenshot can then show a full sparkline history in seconds. */
+  speed = 1;
 
   constructor(
     readonly instance: string,
     readonly manifest: WidgetManifest,
     private backend: Backend,
     private out: (msg: HostOutput) => void,
-    private state: { settings: Settings; size: SizeInfo },
+    private state: { settings: Settings; size: SizeInfo; look: AppearanceState },
     /** Called with each handled call, for the wire log. */
     private log: (entry: { dir: "in" | "out"; msg: unknown }) => void = () => {},
   ) {}
@@ -86,6 +89,8 @@ export class BridgeHost {
       size: this.state.size,
       visible: this.visible,
       editing: this.editing,
+      appearance: this.state.look.appearance,
+      themeCss: this.state.look.themeCss,
     }),
     "storage.get": ({ key }) => this.storage.get(key) ?? null,
     "storage.set": ({ key, value }) => {
@@ -161,7 +166,7 @@ export class BridgeHost {
     if (p.topic !== "system") return;
     const push = () => this.pushSub(p.sub, this.backend.stats());
     push();
-    sub.timer = setInterval(push, Math.max(MIN_INTERVAL_MS, p.intervalMs));
+    sub.timer = setInterval(push, Math.max(MIN_INTERVAL_MS, p.intervalMs) / this.speed);
   }
 
   private pushSub(sub: string, value: unknown): void {
@@ -211,6 +216,11 @@ export class BridgeHost {
   setSettings(settings: Settings): void {
     this.state.settings = settings;
     this.send({ mypaper: WIRE_VERSION, event: "settings", data: settings });
+  }
+
+  setAppearance(look: AppearanceState): void {
+    this.state.look = look;
+    this.send({ mypaper: WIRE_VERSION, event: "appearance", data: look });
   }
 
   setSize(size: SizeInfo): void {
