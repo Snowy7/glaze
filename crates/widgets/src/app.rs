@@ -69,6 +69,10 @@ const SETTLE_LAYOUT: Duration = Duration::from_millis(150);
 const SETTLE_WIDGETS: Duration = Duration::from_millis(250);
 const SETTLE_SHELL: Duration = Duration::from_millis(500);
 const RETRY_WEBVIEW: Duration = Duration::from_secs(30);
+/// After this long held (a game session, a locked PC), the widget layers and
+/// WebView2 are released entirely: a suspended WebView still holds hundreds
+/// of MB. They are rebuilt (about a second) when the hold ends.
+const PARK_AFTER: Duration = Duration::from_secs(30);
 
 /// The built shell: its folder and the hardening script injected into every frame.
 struct Shell {
@@ -105,6 +109,7 @@ struct Timers {
     widgets: Option<Instant>,
     shell: Option<Instant>,
     webview: Option<Instant>,
+    park: Option<Instant>,
 }
 
 impl Timers {
@@ -116,6 +121,7 @@ impl Timers {
             self.widgets,
             self.shell,
             self.webview,
+            self.park,
         ]
         .into_iter()
         .flatten()
@@ -154,6 +160,8 @@ pub struct App {
     reasons: HoldReasons,
     covered: HashMap<String, bool>,
     editing: bool,
+    /// Held long enough that the layers and WebView2 were released.
+    parked: bool,
     devtools: bool,
     /// `MYPAPER_WIDGETS_IGNORE_COVERED=1`: keep covered monitors awake (for
     /// capturing them in tests).
@@ -210,6 +218,7 @@ impl App {
         holds.set(Fact::OnBattery, mypaper_desktop::on_battery());
 
         let layout_path = crate::files::layout()?;
+        let layout_missing = !layout_path.exists();
         let (layout, layout_error) = match Layout::load(&layout_path) {
             Ok(layout) => (layout, None),
             Err(e) => {
@@ -259,6 +268,7 @@ impl App {
             reasons: HoldReasons::default(),
             covered: HashMap::new(),
             editing: false,
+            parked: false,
             devtools,
             ignore_covered: std::env::var_os("MYPAPER_WIDGETS_IGNORE_COVERED")
                 .is_some_and(|v| v == "1"),
@@ -275,6 +285,9 @@ impl App {
             palette_watch: None,
             waker,
         };
+        if layout_missing {
+            app.seed_starter_layout();
+        }
         app.watch();
         app.update_policy();
         app.refresh_fullscreen();
@@ -416,6 +429,11 @@ impl App {
         if due(&mut self.timers.webview, now) {
             self.reconcile();
         }
+        if due(&mut self.timers.park, now) && self.held() && !self.parked {
+            log::info!("held for {PARK_AFTER:?}: releasing the widget layers and WebView2");
+            self.parked = true;
+            self.reconcile();
+        }
         for delivery in self.stats.tick(now) {
             match delivery {
                 Delivery::Reply(target, stats) => self.reply(target, Ok(json!(stats))),
@@ -460,6 +478,11 @@ impl App {
         }
         self.reasons = reasons;
         let held = !reasons.is_empty();
+        self.timers.park = held.then(|| Instant::now() + PARK_AFTER);
+        if !held && self.parked {
+            self.parked = false;
+            self.reconcile(); // rebuild the layers
+        }
         self.plugins.set_held(held);
         self.stats.set_held(held, Instant::now());
         self.media.set_held(held);
@@ -606,11 +629,13 @@ impl App {
             .monitors
             .iter()
             .filter(|monitor| {
-                self.editing
-                    || self.layout.instances.iter().any(|instance| {
-                        self.registry.get(&instance.widget).is_some()
-                            && self.shown_on(instance).as_deref() == Some(monitor.device.as_str())
-                    })
+                !self.parked
+                    && (self.editing
+                        || self.layout.instances.iter().any(|instance| {
+                            self.registry.get(&instance.widget).is_some()
+                                && self.shown_on(instance).as_deref()
+                                    == Some(monitor.device.as_str())
+                        }))
             })
             .cloned()
             .collect();
@@ -656,7 +681,9 @@ impl App {
     /// arrive as notifications without them.
     fn sync_hooks(&mut self) {
         let fullscreen = self.reasons.contains(Reason::Fullscreen);
-        let wanted = !self.surfaces.is_empty() && (self.reasons.is_empty() || fullscreen);
+        // Parked layers are gone, but a fullscreen hold must still see the app leave.
+        let layer = !self.surfaces.is_empty() || self.parked;
+        let wanted = layer && (self.reasons.is_empty() || fullscreen);
         match (wanted, self.window_events.is_some()) {
             (true, false) => {
                 self.window_events = Some(WindowEvents::install());
@@ -791,6 +818,40 @@ impl App {
         };
         if let Err(e) = self.surfaces[index].attach(controller, &setup) {
             log::error!("setting up a WebView: {e:#}");
+        }
+    }
+
+    /// First run only (no `widgets.json` yet): place a few bundled widgets on
+    /// the primary monitor and save, so the desktop is not empty. Once the
+    /// file exists (even with every widget removed) this never runs again.
+    fn seed_starter_layout(&mut self) {
+        const STARTER: [&str; 3] = ["clock", "system-monitor", "now-playing"];
+        let Some(monitor) = self
+            .monitors
+            .iter()
+            .find(|m| m.primary)
+            .or(self.monitors.first())
+        else {
+            return;
+        };
+        let grid = self.grid_for(monitor);
+        let widgets: Vec<(&str, [u32; 2])> = STARTER
+            .iter()
+            .filter_map(|id| Some((*id, self.registry.get(id)?.manifest.size.default)))
+            .collect();
+        let starter = Layout::starter(&monitor.device, grid.cols, grid.rows, &widgets);
+        if starter.instances.is_empty() {
+            return;
+        }
+        match starter.save(&self.layout_path) {
+            Ok(()) => {
+                log::info!(
+                    "first run: placed {} starter widgets",
+                    starter.instances.len()
+                );
+                self.layout = starter;
+            }
+            Err(e) => log::warn!("could not save the starter layout: {e:#}"),
         }
     }
 

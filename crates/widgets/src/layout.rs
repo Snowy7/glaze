@@ -179,6 +179,22 @@ impl Layout {
         id
     }
 
+    /// The first-run layout: a column of widgets down the right edge of
+    /// `monitor` (desktop icons fill from the left), stacked top to bottom
+    /// while they fit in `cols` x `rows`. `widgets` is `(id, default size)`.
+    pub fn starter(monitor: &str, cols: u32, rows: u32, widgets: &[(&str, [u32; 2])]) -> Self {
+        let mut layout = Self::default();
+        let mut row = 0;
+        for &(widget, [w, h]) in widgets {
+            if w > cols || row + h > rows {
+                continue;
+            }
+            layout.add(widget, monitor, [cols - w, row], [w, h]);
+            row += h;
+        }
+        layout
+    }
+
     /// Copies an instance (settings included, storage not) to `cell`.
     pub fn duplicate(&mut self, instance: &str, cell: [u32; 2]) -> Result<String> {
         let mut copy = self
@@ -369,6 +385,31 @@ mod tests {
         let json = serde_json::to_string(&layout).unwrap();
         assert_eq!(Layout::parse(&json).unwrap(), layout);
         assert_eq!(Layout::parse("{}").unwrap(), Layout::default());
+    }
+
+    #[test]
+    fn starter_stacks_on_the_right_edge_and_skips_what_does_not_fit() {
+        let widgets = [
+            ("clock", [2, 1]),
+            ("system-monitor", [2, 2]),
+            ("now-playing", [3, 1]),
+            ("notes", [2, 2]),
+        ];
+        let layout = Layout::starter("D1", 12, 4, &widgets);
+        let placed: Vec<_> = layout
+            .instances
+            .iter()
+            .map(|i| (i.widget.as_str(), i.cell, i.size))
+            .collect();
+        assert_eq!(
+            placed,
+            [
+                ("clock", [10, 0], [2, 1]),
+                ("system-monitor", [10, 1], [2, 2]),
+                ("now-playing", [9, 3], [3, 1]),
+            ]
+        );
+        assert!(Layout::starter("D1", 1, 1, &widgets).instances.is_empty());
     }
 
     #[test]
