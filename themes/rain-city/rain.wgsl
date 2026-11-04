@@ -7,6 +7,8 @@ fn Sin(x: f32) -> f32 { return sin(x-floor(x/6.28318530718+0.5)*6.28318530718); 
 @group(0) @binding(1) var photo: texture_2d<f32>;
 @group(0) @binding(2) var photo_sampler: sampler;
 @group(0) @binding(3) var profile: texture_2d<f32>;
+// The frame without drop refraction, baked once per render size (theme.json `bake`).
+@group(0) @binding(5) var still: texture_2d<f32>;
 // Smooth row functions are cached at 8192 samples across [-40,40]. Linear interpolation
 // error is below a few hundredths of a final-screen pixel, with the same full-size rain field.
 fn row_profile(y: f32) -> vec2f {
@@ -89,26 +91,20 @@ fn Drops(uv: vec2f,t: f32,l0: f32,l1: f32,l2: f32) -> vec3f {
     return vec3f(S(0.3,1.0,field.x),Sd(0.3,1.0,field.x)*field.yz);
 }
 fn sample_photo(uv: vec2f) -> vec3f { return textureSample(photo,photo_sampler,vec2f(uv.x,1.0-uv.y)).rgb; }
-fn wallpaper(frag: vec2f) -> vec4f {
-    let res = paper.resolution;
-    // The web page always applied its 1.06 CSS scale, including before any pointer event.
-    let coord = (vec2f(frag.x,res.y-frag.y)-res*0.5)/1.06+res*0.5;
-    var uv = (coord-res*0.5)/res.y;
-    var UV = coord/res;
+// The web page always applied its 1.06 CSS scale, including before any pointer event.
+fn css(frag: vec2f,res: vec2f) -> vec2f { return (vec2f(frag.x,res.y-frag.y)-res*0.5)/1.06+res*0.5; }
+fn cover_uv(coord: vec2f,res: vec2f) -> vec2f {
+    let UV = coord/res;
     let image = vec2f(textureDimensions(photo));
     let sa = res.x/res.y;
     let ta = image.x/image.y;
     let cover = select(vec2f(1.0,ta/sa),vec2f(sa/ta,1.0),ta>sa);
-    UV = cover*(UV-0.5)+0.5;
-    let t = paper.time*0.2*SPEED;
-    uv *= 0.7*2.61;
-    let l0 = S(-0.5,1.0,RAIN)*2.0;
-    let l1 = S(0.25,0.75,RAIN);
-    let l2 = S(0.0,0.5,RAIN);
-    let c = Drops(uv,t,l0,l1,l2);
-    let n = c.yz*0.0005;
+    return cover*(UV-0.5)+0.5;
+}
+// The photo seen through drop refraction n: all 18 original samples, including the centre,
+// with the original /16 gain, then grading and vignette.
+fn shade(coord: vec2f,UV: vec2f,n: vec2f) -> vec4f {
     var col = sample_photo(UV+n);
-    // All original 18 photo samples, including the centre; preserve the original /16 gain.
     let angle=N21(coord)*6.2831;
     var direction=vec2f(sin(angle),cos(angle));
     let disk=array<f32,17>(0.589455020,0.871941647,0.726960368,0.560964232,0.815803890,0.607816604,0.979664331,0.894431495,0.919477940,0.362277957,0.727700682,0.702685390,0.781555124,0.691411660,0.385012138,0.776420187,0.879505129);
@@ -120,4 +116,29 @@ fn wallpaper(frag: vec2f) -> vec4f {
 
     col *= 1.0-dot(UV-0.5,UV-0.5);
     return vec4f(col*BRIGHTNESS,1.0);
+}
+// Baked: most of the screen has no refraction at any moment, and there it never changes.
+@fragment fn still_frame(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let coord = css(pos.xy,paper.resolution);
+    return shade(coord,cover_uv(coord,paper.resolution),vec2f(0.0));
+}
+fn wallpaper(frag: vec2f) -> vec4f {
+    let res = paper.resolution;
+    let coord = css(frag,res);
+    var uv = (coord-res*0.5)/res.y;
+    let t = paper.time*0.2*SPEED;
+    uv *= 0.7*2.61;
+    let l0 = S(-0.5,1.0,RAIN)*2.0;
+    let l1 = S(0.25,0.75,RAIN);
+    let l2 = S(0.0,0.5,RAIN);
+    let c = Drops(uv,t,l0,l1,l2);
+    let n = c.yz*0.0005;
+    // A 2x2 quad without refraction is the baked pixel exactly: the blur's implicit
+    // derivatives see the same quad in both passes. Refracting quads draw the blur here.
+    let refracts = select(0.0,1.0,any(n!=vec2f(0.0)));
+    let row = refracts+abs(dpdxFine(refracts));
+    if row+abs(dpdyFine(row)) == 0.0 {
+        return textureLoad(still,vec2i(frag),0);
+    }
+    return shade(coord,cover_uv(coord,res),n);
 }
