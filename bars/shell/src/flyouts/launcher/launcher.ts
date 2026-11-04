@@ -59,6 +59,8 @@ const launcher = defineFlyout<Props>("launcher", ({ layout, size }, ctx) => {
   let pinned: Pin[] | undefined;
   let files: RecentFile[] = [];
   let clipboard: ClipboardHistory | undefined;
+  // Built once per open: it holds subscriptions and a timer.
+  let widgetRow: HTMLElement | undefined;
   let view: "home" | "all" = "home";
   let items: Item[] = [];
   let columns = 1;
@@ -220,7 +222,7 @@ const launcher = defineFlyout<Props>("launcher", ({ layout, size }, ctx) => {
               "div",
               "launcher-dash-main",
               section("Pinned", pinnedEntries.length ? grid(pinnedEntries, columns) : h("div", "fly-notice", "Right-click an app to pin it"), textButton("All apps", () => setView("all"), glyphs.chevronRight)),
-              widgets(ctx),
+              (widgetRow ??= widgets(ctx)),
             ),
             section("Clipboard", clipboardList()),
           ),
