@@ -8,11 +8,13 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="card" id="card" data-mode="month">
+    <!-- main.js sets data-variant (month | agenda | strip, the user's choice) and data-mode (month |
+         agenda | strip | tile: what fits the size) and fills #view. -->
+    <main class="card" id="card" data-variant="month" data-mode="month">
       <header class="head" id="head">
         <button class="title" id="title" type="button" title="Back to today"></button>
         <span class="badge caps num" id="badge" hidden></span>
-        <div class="navs">
+        <div class="navs" id="navs">
           <button class="nav" id="prev" type="button" aria-label="Previous">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
           </button>
@@ -20,6 +22,9 @@
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" /></svg>
           </button>
         </div>
+        <button class="btn primary add" id="add" type="button" aria-label="Add event" title="Add event">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
+        </button>
       </header>
       <div class="view" id="view"></div>
     </main>

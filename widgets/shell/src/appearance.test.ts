@@ -15,9 +15,23 @@ const base: AppearanceValues = {
   font: "Segoe UI Variable",
   scale: 1,
   shadow: true,
+  style: "minimal",
 };
 
 describe("layers", () => {
+  it("stacks the style like any other field", () => {
+    expect(resolve(base, {}, {}, "#fff").style).toBe("minimal");
+    expect(resolve(base, { style: "depth" }, {}, "#fff").style).toBe("depth");
+    expect(resolve(base, { style: "depth" }, { style: "neon" }, "#fff").style).toBe("neon");
+    expect(applyPatch({ style: "neon" }, { style: null })).toEqual({});
+  });
+
+  it("shows minimal when a host older than v2 sends no style", () => {
+    const old = { ...base };
+    Reflect.deleteProperty(old, "style"); // what a pre-v2 `base` looks like on the wire
+    expect(resolve(old, {}, {}, "#fff").style).toBe("minimal");
+  });
+
   it("stack as defaults+theme < user < instance, and auto takes the palette accent", () => {
     const got = resolve(base, { opacity: 0.9, radius: 30 }, { radius: 2 }, "#14d17f");
     expect(got.radius).toBe(2); // the instance beats the user

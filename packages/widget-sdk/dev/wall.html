@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mypaper widget wall</title>
+    <link rel="stylesheet" href="./harness.css" />
+    <style>
+      html, body { height: auto; overflow: visible; }
+      body { display: block; background: #000; }
+      .stage { position: relative; padding: 26px 22px 22px; min-height: 100vh; }
+      .stage > .head { position: absolute; left: 22px; top: 8px; font: 10px/1 ui-monospace, Consolas, monospace; color: rgb(255 255 255 / 0.7); mix-blend-mode: difference; }
+      .wall { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 22px 18px; }
+      .cell { position: relative; flex: 0 0 auto; }
+      .cell iframe { display: block; border: 0; background: transparent; }
+      .cell .tag { position: absolute; left: 0; top: -11px; font: 9px/1 ui-monospace, Consolas, monospace; color: rgb(255 255 255 / 0.65); mix-blend-mode: difference; white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <div id="sheet"></div>
+    <script type="module" src="./wall.ts"></script>
+  </body>
+</html>

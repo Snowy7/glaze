@@ -1,63 +1,226 @@
-.card {
-  padding: clamp(6px, 4cqmin, 10px);
+/* System monitor. main.js builds the cells for the look in `data-variant` (rings | bars | spark),
+   picks how many fit and how they are arranged (--gc/--gr), and paints values into them. Everything
+   else is here, sized from the cells' own boxes (container units), so each layout adapts rather
+   than scales. Colors: the kit's variables; each metric gets a pair --m1/--m2 out of --hi/--hi-2. */
+
+.sm {
+  --m1: var(--hi);
+  --m2: var(--hi-2);
+  padding: clamp(6px, 4cqmin, 12px);
 }
-html[data-surface="none"] .card {
-  padding: clamp(2px, 2cqmin, 6px);
+html[data-surface="none"] .sm {
+  padding: clamp(2px, 3cqmin, 8px);
+}
+/* One color pair per metric, rotated through the style's pair. */
+.sm[data-vary="on"] .m-ram {
+  --m1: var(--hi-2);
+  --m2: var(--hi);
+}
+.sm[data-vary="on"] .m-gpu {
+  --m1: color-mix(in oklab, var(--hi) 50%, var(--hi-2));
+  --m2: var(--hi-2);
+}
+.sm[data-vary="on"] .m-net {
+  --m1: var(--hi-2);
+  --m2: color-mix(in oklab, var(--hi) 50%, var(--hi-2));
 }
 
-/* main.js picks the column/row count that gives the most natural tile shape for the size. */
-.grid {
+.stage {
   height: 100%;
-  display: grid;
-  grid-template-columns: repeat(var(--gc, 2), minmax(0, 1fr));
-  grid-template-rows: repeat(var(--gr, 2), minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: clamp(4px, 2.4cqmin, 8px);
-}
-
-/* A tile is a `.panel` (a quiet fill with a surface, nothing on a bare wallpaper). */
-.tile {
-  position: relative;
   container-type: size;
-  min-width: 0;
-  overflow: hidden;
 }
-.tile[hidden] {
+.grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--gc, 1), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--gr, 1), minmax(0, 1fr));
+  gap: clamp(4px, 2.4cqmin, 10px);
+}
+.cell[hidden] {
   display: none;
 }
 
-.spark {
-  position: absolute;
-  inset: auto 0 0 0;
-  width: 100%;
-  height: 52%;
-  overflow: visible;
+.sub {
+  font-size: 10.5px;
+  color: var(--t2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.area {
-  fill: url(#fade);
-  stroke: none;
-}
-.line {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.6;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-.line.second {
-  stroke: var(--t1);
-  stroke-width: 1.2;
-  stroke-dasharray: 3 3;
-}
-/* Without a surface a baseline anchors each sparkline (and the tile's own edge is invisible). */
-html[data-surface="none"] .tile::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 1px;
-  background: var(--fill-2);
+.hero small {
+  font-size: 0.42em;
+  font-weight: 500;
+  margin-left: 0.12em;
+  letter-spacing: 0;
 }
 
+/* The network readout under rings and bars. */
+.netbar {
+  flex: none;
+  display: flex;
+  justify-content: space-around;
+  gap: 10px;
+  align-self: stretch;
+  padding: 0.28em 0.9em;
+  font-size: 11px;
+  color: var(--t1);
+}
+.netbar b {
+  font-weight: 600;
+  color: var(--t0);
+}
+@container (max-height: 149px) {
+  .netbar {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- rings */
+
+html[data-variant="rings"] .cell {
+  container-type: size;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  align-items: center;
+}
+/* Every ring leaves the same room for a sub line, so the rings are all one size (main.js sets
+   data-sub when a ring has something to say there: memory used, "not available"). */
+html[data-variant="rings"] .grid[data-sub] .cell {
+  --subh: 22px;
+}
+@container (max-height: 99px) {
+  html[data-variant="rings"] .grid[data-sub] .cell {
+    --subh: 0px;
+  }
+  html[data-variant="rings"] .sub {
+    display: none;
+  }
+}
+.ring {
+  position: relative;
+  width: min(100cqw, calc(100cqh - var(--subh, 0px)));
+  aspect-ratio: 1;
+  container-type: size;
+}
+.ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.trk,
+.arc {
+  fill: none;
+  stroke-width: 9;
+}
+.trk {
+  stroke: var(--fill-2);
+}
+html[data-surface="none"] .trk {
+  stroke: rgb(var(--ink) / 0.2);
+}
+.arc {
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.9s ease;
+}
+@container (min-width: 150px) {
+  .trk,
+  .arc {
+    stroke-width: 7;
+  }
+}
+.val {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+.val b {
+  font-size: 31cqmin;
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.nm {
+  margin-top: 0.4em;
+  font-size: clamp(8px, 7.5cqmin, 11px);
+}
+@container (max-width: 66px) {
+  .nm {
+    display: none;
+  }
+  .val b {
+    font-size: 36cqmin;
+  }
+}
+html[data-variant="rings"] .sub {
+  padding-top: 3px;
+}
+
+/* ---------------------------------------------------------------- bars */
+
+html[data-variant="bars"] .grid {
+  align-content: space-evenly;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: none;
+  grid-auto-rows: auto;
+  gap: clamp(8px, 4.5cqh, 18px);
+}
+.row {
+  display: grid;
+  gap: 6px;
+}
+.row .top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.row .caps {
+  flex: none;
+}
+.row .sub {
+  flex: 1;
+  min-width: 0;
+  color: var(--t3);
+}
+.row .hero {
+  margin-left: auto;
+  font-size: clamp(18px, 7cqh, 30px);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.row .track {
+  height: clamp(4px, 1.6cqh, 7px);
+}
+/* (The selector outweighs the kit's styled `.track > i` flow gradient: bars use the metric's pair.) */
+html:root .sm .row .track > i {
+  width: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+  background: linear-gradient(90deg, var(--m1), var(--m2));
+  background-size: 100% 100%;
+  animation: none;
+}
+
+/* ---------------------------------------------------------------- spark */
+
+.tile {
+  position: relative;
+  container-type: size;
+  overflow: hidden;
+  min-width: 0;
+}
 .head {
   position: absolute;
   inset: 0 0 auto 0;
@@ -69,37 +232,74 @@ html[data-surface="none"] .tile::after {
 html[data-surface="none"] .head {
   padding-left: clamp(2px, 3cqmin, 6px);
 }
-.name {
+.head .caps {
   font-size: clamp(9px, 11cqmin, 11px);
 }
-.value {
-  font-size: clamp(16px, 27cqmin, 36px);
+.head .hero {
+  font-size: clamp(18px, 27cqmin, 38px);
   font-weight: 300;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.035em;
   line-height: 1.05;
   white-space: nowrap;
 }
-.value small {
-  font-size: 0.5em;
-  font-weight: 500;
-  color: var(--t2);
-  margin-left: 0.15em;
-  letter-spacing: 0;
-}
-.sub {
-  font-size: clamp(9px, 10cqmin, 11px);
+.head .sub {
   color: var(--t1);
-  white-space: nowrap;
 }
-
-/* Short tiles: no secondary line. */
-@container (max-height: 88px) {
-  .sub {
+.spark {
+  position: absolute;
+  left: 0;
+  right: 9px;
+  bottom: 0;
+  height: 50%;
+}
+.spark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.area {
+  stroke: none;
+}
+.line {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.line.second {
+  stroke: var(--t1);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+/* The newest sample: a dot riding the end of the line. */
+.dot {
+  position: absolute;
+  right: -4px;
+  top: 100%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--m2);
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--m2) 30%, transparent);
+  transition: top 0.9s ease;
+}
+/* Minimal and bare: a baseline anchors each sparkline (the tile paints nothing there). */
+html[data-surface="none"][data-style="minimal"] .tile::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: var(--fill-2);
+}
+@container (max-height: 108px) {
+  .head .sub {
     display: none;
   }
 }
-
-/* Wide strips (a 4x3 monitor stacked into rows): label and value left, sparkline right. */
+/* Wide strips: label and value left, sparkline right. */
 @container (min-aspect-ratio: 2.4/1) {
   .head {
     inset: 0 auto 0 0;
@@ -108,17 +308,17 @@ html[data-surface="none"] .head {
     padding-top: 0;
   }
   .spark {
-    inset: 0 0 0 auto;
-    width: 56%;
+    left: auto;
+    width: 54%;
     height: 78%;
-    margin: auto 8px;
     top: 0;
     bottom: 0;
+    margin: auto 0;
   }
-  .value {
-    font-size: clamp(16px, 38cqh, 34px);
+  .head .hero {
+    font-size: clamp(18px, 38cqh, 34px);
   }
-  .sub {
+  .head .sub {
     display: block;
   }
 }

@@ -8,7 +8,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::manifest::{Permission, WidgetManifest};
+use crate::manifest::{Permission, WidgetManifest, valid_id};
+use crate::pick;
 
 /// A message from the shell page.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -55,6 +56,17 @@ pub enum FromShell {
     },
     Edit {
         on: bool,
+    },
+    /// A `file`/`image` setting asks for the file dialog; the host sets the setting to the
+    /// picked file's URL. The dialog's filter comes from the manifest, never from the message,
+    /// so `extensions` is only parsed.
+    #[serde(rename = "pickFile")]
+    PickFile {
+        instance: String,
+        key: String,
+        #[serde(default)]
+        #[allow(dead_code)]
+        extensions: Option<Vec<String>>,
     },
 }
 
@@ -131,12 +143,16 @@ impl ErrorCode {
 /// the shell answers itself.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Method {
+    /// `shared` names a shared namespace (permission `storage.shared:<ns>`) instead of the
+    /// instance's own storage.
     StorageGet {
         key: String,
+        shared: Option<String>,
     },
     StorageSet {
         key: String,
         value: Option<Value>,
+        shared: Option<String>,
     },
     SystemStats,
     MediaCurrent,
@@ -147,6 +163,18 @@ pub enum Method {
         target: String,
     },
     ThemeCurrent,
+    /// The signed-in user's display name and account name.
+    UserInfo,
+    /// The file dialog; the pick is copied into the instance's data folder.
+    PickFile {
+        extensions: Vec<String>,
+        title: Option<String>,
+    },
+    /// The icon of an exe, file, folder or `shell:AppsFolder\<AUMID>`, as a PNG data URL.
+    AppIcon {
+        target: String,
+        size: u32,
+    },
     Plugin {
         plugin: String,
         method: String,
@@ -177,6 +205,25 @@ pub enum Topic {
     Theme,
     /// Each matching plugin event's data.
     Plugin { plugin: String, event: String },
+    /// The audio spectrum, `bins` floats per frame (clamped to [`AUDIO_BINS`]).
+    Audio {
+        #[serde(default = "default_bins", deserialize_with = "clamped_bins")]
+        bins: usize,
+    },
+}
+
+/// The fewest, most and default number of bins a spectrum subscriber can ask for.
+pub const AUDIO_BINS: std::ops::RangeInclusive<usize> = 64..=128;
+const DEFAULT_BINS: usize = 64;
+
+fn default_bins() -> usize {
+    DEFAULT_BINS
+}
+
+/// Any number is accepted and clamped, as the spec says.
+fn clamped_bins<'de, D: serde::Deserializer<'de>>(d: D) -> Result<usize, D::Error> {
+    let wanted = f64::deserialize(d)?;
+    Ok((wanted.round() as usize).clamp(*AUDIO_BINS.start(), *AUDIO_BINS.end()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -194,7 +241,30 @@ struct KeyParams {
     key: String,
     #[serde(default, deserialize_with = "present")]
     value: Option<Value>,
+    #[serde(default)]
+    shared: Option<String>,
 }
+
+#[derive(Deserialize, Default)]
+struct PickParams {
+    #[serde(default)]
+    extensions: Vec<String>,
+    #[serde(default)]
+    title: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct IconParams {
+    target: String,
+    #[serde(default)]
+    size: Option<f64>,
+}
+
+/// The sizes `appIcon` can make.
+const ICON_SIZES: std::ops::RangeInclusive<u32> = 16..=256;
+const DEFAULT_ICON_SIZE: u32 = 64;
+const MAX_TITLE: usize = 200;
+const MAX_EXTENSIONS: usize = 32;
 
 /// Distinguishes `"value": null` (store null) from no `value` (delete).
 fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Value>, D::Error> {
@@ -244,14 +314,47 @@ impl Method {
         let invalid = |why: &str| Err(WidgetError::new(ErrorCode::InvalidParams, why));
         Ok(match method {
             "storage.get" | "storage.set" => {
-                let KeyParams { key, value } = take(params)?;
+                let KeyParams { key, value, shared } = take(params)?;
                 if key.is_empty() || key.len() > MAX_KEY {
                     return invalid("storage keys are 1 to 256 characters");
                 }
-                match method {
-                    "storage.get" => Self::StorageGet { key },
-                    _ => Self::StorageSet { key, value },
+                if shared.as_deref().is_some_and(|ns| !valid_id(ns)) {
+                    return invalid("shared namespaces are lowercase [a-z0-9-]");
                 }
+                match method {
+                    "storage.get" => Self::StorageGet { key, shared },
+                    _ => Self::StorageSet { key, value, shared },
+                }
+            }
+            "user.info" => Self::UserInfo,
+            "pickFile" => {
+                let PickParams { extensions, title } = if params.is_null() {
+                    PickParams::default()
+                } else {
+                    take(params)?
+                };
+                if extensions.len() > MAX_EXTENSIONS
+                    || !extensions.iter().all(|e| pick::valid_extension(e))
+                {
+                    return invalid("extensions are letters and digits without a dot");
+                }
+                if title
+                    .as_ref()
+                    .is_some_and(|t| t.chars().count() > MAX_TITLE)
+                {
+                    return invalid("the title is too long");
+                }
+                Self::PickFile { extensions, title }
+            }
+            "appIcon" => {
+                let IconParams { target, size } = take(params)?;
+                if target.trim().is_empty() || target.len() > 2048 || target.contains('\0') {
+                    return invalid("appIcon needs a path or an AppsFolder target");
+                }
+                let size = size.map_or(DEFAULT_ICON_SIZE, |s| {
+                    (s.round() as u32).clamp(*ICON_SIZES.start(), *ICON_SIZES.end())
+                });
+                Self::AppIcon { target, size }
             }
             "system.stats" => Self::SystemStats,
             "media.current" => Self::MediaCurrent,
@@ -314,12 +417,25 @@ impl Method {
                 topic: Topic::Media,
                 ..
             } => Permission::Media,
-            Self::Launch { .. } => Permission::Launch,
+            Self::Launch { .. } | Self::AppIcon { .. } => Permission::Launch,
             Self::ThemeCurrent
             | Self::Subscribe {
                 topic: Topic::Theme,
                 ..
             } => Permission::Theme,
+            Self::UserInfo => Permission::User,
+            Self::Subscribe {
+                topic: Topic::Audio { .. },
+                ..
+            } => Permission::Audio,
+            Self::StorageGet {
+                shared: Some(namespace),
+                ..
+            }
+            | Self::StorageSet {
+                shared: Some(namespace),
+                ..
+            } => Permission::StorageShared(namespace.clone()),
             Self::Plugin { plugin, .. }
             | Self::Subscribe {
                 topic: Topic::Plugin { plugin, .. },
@@ -334,9 +450,11 @@ impl Method {
                     ))
                 };
             }
-            Self::StorageGet { .. } | Self::StorageSet { .. } | Self::Unsubscribe { .. } => {
-                return Ok(());
-            }
+            // The widget's own state, letting go, and the dialog (which is the consent).
+            Self::StorageGet { .. }
+            | Self::StorageSet { .. }
+            | Self::Unsubscribe { .. }
+            | Self::PickFile { .. } => return Ok(()),
         };
         if manifest.has(&needs) {
             Ok(())
@@ -418,14 +536,16 @@ mod tests {
             parse("storage.set", json!({ "key": "k", "value": null })),
             Method::StorageSet {
                 key: "k".into(),
-                value: Some(Value::Null)
+                value: Some(Value::Null),
+                shared: None
             }
         );
         assert_eq!(
             parse("storage.set", json!({ "key": "k" })),
             Method::StorageSet {
                 key: "k".into(),
-                value: None
+                value: None,
+                shared: None
             }
         );
         assert_eq!(
@@ -564,6 +684,175 @@ mod tests {
         }
         let other_plugin = parse("plugin", json!({ "plugin": "stocks", "method": "quote" }));
         assert_eq!(code(other_plugin.check(&full)), ErrorCode::PermissionDenied);
+    }
+
+    #[test]
+    fn new_methods_parse_their_params() {
+        assert_eq!(parse("user.info", Value::Null), Method::UserInfo);
+        // pickFile: no params at all, or any subset.
+        let default = Method::PickFile {
+            extensions: vec![],
+            title: None,
+        };
+        assert_eq!(parse("pickFile", Value::Null), default);
+        assert_eq!(parse("pickFile", json!({})), default);
+        assert_eq!(
+            parse(
+                "pickFile",
+                json!({ "extensions": ["jpg", "png"], "title": "Pick" })
+            ),
+            Method::PickFile {
+                extensions: vec!["jpg".into(), "png".into()],
+                title: Some("Pick".into())
+            }
+        );
+        for bad in [
+            json!({ "extensions": [".png"] }),
+            json!({ "extensions": ["*"] }),
+            json!({ "extensions": "png" }),
+            json!({ "title": "x".repeat(201) }),
+        ] {
+            assert_eq!(
+                code(Method::parse("pickFile", bad.clone())),
+                ErrorCode::InvalidParams,
+                "{bad}"
+            );
+        }
+        // appIcon: default 64, clamped to 16..=256.
+        let icon = |params: Value| match parse("appIcon", params) {
+            Method::AppIcon { target, size } => (target, size),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(icon(json!({ "target": "a.exe" })), ("a.exe".into(), 64));
+        assert_eq!(icon(json!({ "target": "a.exe", "size": 8 })).1, 16);
+        assert_eq!(icon(json!({ "target": "a.exe", "size": 1000 })).1, 256);
+        assert_eq!(icon(json!({ "target": "a.exe", "size": 48 })).1, 48);
+        for bad in [
+            json!({ "target": " " }),
+            json!({}),
+            json!({ "target": "a\0b" }),
+        ] {
+            assert_eq!(
+                code(Method::parse("appIcon", bad)),
+                ErrorCode::InvalidParams
+            );
+        }
+        // Shared storage needs a valid namespace.
+        assert_eq!(
+            parse("storage.get", json!({ "key": "k", "shared": "pins" })),
+            Method::StorageGet {
+                key: "k".into(),
+                shared: Some("pins".into())
+            }
+        );
+        assert_eq!(
+            code(Method::parse(
+                "storage.get",
+                json!({ "key": "k", "shared": "../x" })
+            )),
+            ErrorCode::InvalidParams
+        );
+    }
+
+    #[test]
+    fn audio_subscriptions_clamp_their_bins() {
+        let bins = |params: Value| match parse("subscribe", params) {
+            Method::Subscribe {
+                topic: Topic::Audio { bins },
+                ..
+            } => bins,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(bins(json!({ "sub": "a", "topic": "audio" })), 64);
+        assert_eq!(
+            bins(json!({ "sub": "a", "topic": "audio", "bins": 100 })),
+            100
+        );
+        assert_eq!(
+            bins(json!({ "sub": "a", "topic": "audio", "bins": 10 })),
+            64
+        );
+        assert_eq!(
+            bins(json!({ "sub": "a", "topic": "audio", "bins": 5000 })),
+            128
+        );
+        assert_eq!(
+            bins(json!({ "sub": "a", "topic": "audio", "bins": -3 })),
+            64
+        );
+        assert_eq!(
+            code(Method::parse(
+                "subscribe",
+                json!({ "sub": "a", "topic": "audio", "bins": "x" })
+            )),
+            ErrorCode::InvalidParams
+        );
+    }
+
+    #[test]
+    fn new_capabilities_need_their_permissions() {
+        let bare = manifest("[]", "[]");
+        let methods = [
+            parse("user.info", Value::Null),
+            parse("appIcon", json!({ "target": "a.exe" })),
+            parse("subscribe", json!({ "sub": "s", "topic": "audio" })),
+            parse("storage.get", json!({ "key": "k", "shared": "pins" })),
+            parse(
+                "storage.set",
+                json!({ "key": "k", "value": 1, "shared": "pins" }),
+            ),
+        ];
+        for method in &methods {
+            assert_eq!(
+                code(method.check(&bare)),
+                ErrorCode::PermissionDenied,
+                "{method:?}"
+            );
+        }
+        // pickFile needs none: the dialog is the consent.
+        assert!(parse("pickFile", Value::Null).check(&bare).is_ok());
+
+        let full = manifest(
+            r#"["user", "launch", "audio", "storage.shared:pins"]"#,
+            "[]",
+        );
+        for method in &methods {
+            assert!(method.check(&full).is_ok(), "{method:?}");
+        }
+        // Only the namespace it declared.
+        let other = manifest(r#"["storage.shared:other"]"#, "[]");
+        assert_eq!(code(methods[3].check(&other)), ErrorCode::PermissionDenied);
+        // Each permission opens only its own door.
+        let audio_only = manifest(r#"["audio"]"#, "[]");
+        assert_eq!(
+            code(methods[0].check(&audio_only)),
+            ErrorCode::PermissionDenied
+        );
+        assert_eq!(
+            code(methods[1].check(&audio_only)),
+            ErrorCode::PermissionDenied
+        );
+    }
+
+    #[test]
+    fn pick_file_messages_parse() {
+        let message: FromShell = serde_json::from_value(
+            json!({ "type": "pickFile", "instance": "viz-1", "key": "photo", "extensions": ["png"] }),
+        )
+        .unwrap();
+        assert!(
+            matches!(message, FromShell::PickFile { ref instance, ref key, .. } if instance == "viz-1" && key == "photo")
+        );
+        let bare: FromShell =
+            serde_json::from_value(json!({ "type": "pickFile", "instance": "a", "key": "k" }))
+                .unwrap();
+        assert!(matches!(
+            bare,
+            FromShell::PickFile {
+                extensions: None,
+                ..
+            }
+        ));
     }
 
     #[test]

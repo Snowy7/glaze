@@ -1,6 +1,8 @@
 /* main.js sets data-layout on the card (tile | row | stack), data-modes (on | off: the mode switch
    shows or not) and data-state (idle | running | paused | done). The ring and readout size from
-   the ring box (.dial-box is the container); buttons and the switch from the widget's own size. */
+   the ring box (.dial-box is the container); buttons and the switch from the widget's own size.
+   The dial is a kit `.tile` turned into a disc, so every style gives it its own body, and the arc is
+   a gradient of the highlight pair (--hi to --hi-2). */
 
 .card {
   --bs: clamp(26px, 15cqmin, 40px); /* round button */
@@ -29,6 +31,13 @@ html[data-surface="none"] .card {
   height: min(100cqw, 100cqh);
 }
 
+/* The body inside the ring. */
+.disc {
+  position: absolute;
+  inset: 7%;
+  border-radius: 50%;
+}
+
 .ring {
   position: absolute;
   inset: 0;
@@ -37,23 +46,30 @@ html[data-surface="none"] .card {
   overflow: visible;
   fill: none;
 }
+.g0 {
+  stop-color: var(--hi);
+}
+.g1 {
+  stop-color: var(--hi-2);
+}
 /* Stroke widths are in viewBox units (they scale with the ring), because dash lengths must stay in
    pathLength units: `non-scaling-stroke` would measure them in px and break the progress arc. */
 .ring-track {
   stroke: var(--fill-3);
-  stroke-width: 1;
+  stroke-width: 1.2;
+}
+html[data-surface="none"] .ring-track {
+  stroke: rgb(var(--ink) / 0.26);
 }
 .prog {
-  stroke: var(--accent);
-  stroke-width: 1.7;
+  stroke: url(#arc-grad);
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-dasharray: 100;
-  transform-origin: 50px 50px;
-  transform: rotate(-90deg);
 }
-.glow {
-  stroke: var(--accent);
-  stroke-width: 5;
+.halo {
+  stroke: url(#arc-grad);
+  stroke-width: 6;
   opacity: 0;
   filter: blur(3px);
 }
@@ -78,7 +94,7 @@ html[data-surface="none"] .card {
   font-size: calc(min(100cqw, 100cqh) * 0.2);
 }
 .card[data-state="paused"] .time {
-  color: var(--t1);
+  opacity: 0.7;
 }
 
 .label {
@@ -94,7 +110,7 @@ html[data-surface="none"] .card {
   display: block;
 }
 .card[data-state="done"] .label {
-  color: var(--accent);
+  color: var(--hi);
 }
 
 /* Completed focus sessions in the cycle; the one in progress is an outline. */
@@ -110,7 +126,9 @@ html[data-surface="none"] .card {
   background: var(--fill-3);
 }
 .dots i.on {
-  background: var(--t0);
+  background: var(--hi);
+  background-image: linear-gradient(135deg, var(--hi), var(--hi-2));
+  box-shadow: 0 0 6px -1px var(--glow);
 }
 .dots i.cur {
   background: none;
@@ -128,19 +146,19 @@ html[data-surface="none"] .card {
 
 /* Done: a soft glow breathes around the full ring for ~10 s (main.js drops data-pulse sooner if the
    widget is touched). Reduced motion gets the static full ring and the "Done" label. */
-.dial[data-pulse] .glow {
-  animation: glow 2s ease-in-out 5;
+.dial[data-pulse] .halo {
+  animation: glow-pulse 2s ease-in-out 5;
 }
 .dial[data-pulse] .time {
   animation: breathe 2s ease-in-out 5;
 }
-@keyframes glow {
+@keyframes glow-pulse {
   0%,
   100% {
     opacity: 0;
   }
   50% {
-    opacity: 0.6;
+    opacity: 0.7;
   }
 }
 @keyframes breathe {
@@ -167,6 +185,18 @@ html[data-surface="none"] .modes {
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
+html[data-style="depth"] .modes {
+  background: rgb(var(--shade) / 0.22);
+  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.45), 0 1px 0 rgb(var(--lit) / 0.1);
+}
+html[data-style="neon"] .modes {
+  background: rgb(var(--shade) / 0.3);
+  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.35);
+}
+html[data-style="paper"] .modes {
+  background: rgb(var(--shade) / 0.22);
+  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.35), 0 1px 0 rgb(var(--lit) / 0.08);
+}
 /* Like .chip: these sit on their own wash, so the wallpaper's text shadow would only muddy them. */
 html[data-surface="none"] :is(.modes, .btn) {
   text-shadow: none;
@@ -191,6 +221,13 @@ html[data-surface="none"] :is(.modes, .btn) {
   background: var(--fill-3);
   color: var(--t0);
 }
+/* The active mode is the one place a styled look shows its highlight. */
+html[data-style]:not([data-style="minimal"]) .seg[aria-selected="true"] {
+  background: linear-gradient(135deg, var(--hi), var(--hi-2));
+  color: var(--on-spark);
+  box-shadow: var(--bevel), 0 0 var(--glow-size) -4px var(--glow);
+  text-shadow: none;
+}
 
 .controls {
   order: 1;
@@ -199,13 +236,13 @@ html[data-surface="none"] :is(.modes, .btn) {
   justify-content: center;
   gap: clamp(6px, 3cqmin, 12px);
 }
-.btn {
+/* The kit's .btn, round. */
+.btn.round {
   width: var(--bs);
   height: var(--bs);
-  background: var(--chip);
-  box-shadow: inset 0 0 0 1px var(--fill-2);
+  padding: 0;
 }
-html[data-surface="none"] .btn {
+html[data-surface="none"] .btn:not(.primary) {
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
@@ -219,20 +256,17 @@ html[data-surface="none"] .btn {
   stroke-linejoin: round;
 }
 .btn.play {
-  width: calc(var(--bs) * 1.25);
-  height: calc(var(--bs) * 1.25);
-  color: var(--t0);
-  background: var(--fill-2);
-}
-.btn.play:hover {
-  background: var(--fill-3);
+  width: calc(var(--bs) * 1.3);
+  height: calc(var(--bs) * 1.3);
 }
 .btn.play svg {
-  width: 44%;
-  height: 44%;
+  width: 46%;
+  height: 46%;
 }
 .i-play {
   fill: currentColor;
+  /* A play triangle's weight sits left of its box. */
+  transform: translateX(6%);
 }
 
 /* ------------------------------------------------------------------ layouts */
@@ -271,8 +305,14 @@ html[data-surface="none"] .btn {
 .card[data-layout="row"] .controls {
   order: 0;
 }
+/* A wide, short box: the ring and its buttons sit together in the middle instead of far apart. */
 .card[data-layout="row"][data-modes="off"] {
   --bs: 26px;
+  justify-content: center;
+  gap: clamp(14px, 8cqw, 28px);
+}
+.card[data-layout="row"][data-modes="off"] .side {
+  flex: none;
 }
 
 /* Small: just the ring, the readout and a play button inside the ring. */
@@ -286,7 +326,7 @@ html[data-surface="none"] .btn {
   font-size: calc(min(100cqw, 100cqh) * 0.25);
 }
 .card[data-layout="tile"] .controls {
-  --bs: 18px;
+  --bs: 20px;
   position: absolute;
   left: 50%;
   bottom: 8%;

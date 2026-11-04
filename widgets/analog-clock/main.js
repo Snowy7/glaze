@@ -15,6 +15,7 @@ const els = {
   minute: $("#minute", SVGLineElement),
   sec: $("#sec", SVGLineElement),
   hubSec: $("#hub-sec", SVGElement),
+  dateBg: $("#date-bg", SVGElement),
 };
 const dateFormat = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric" });
 
@@ -33,7 +34,7 @@ for (let i = 0; i < 60; i++) {
   const major = i % 5 === 0;
   els.ticks.append(
     svgEl("line", {
-      class: major ? "tick major" : "tick minor",
+      class: i === 0 ? "tick major twelve" : major ? "tick major" : "tick minor",
       x1: 50,
       x2: 50,
       y1: 2.8,
@@ -151,6 +152,7 @@ trackSettings(defaults, (next) => {
   els.sec.toggleAttribute("hidden", !settings.showSeconds);
   els.hubSec.toggleAttribute("hidden", !settings.showSeconds);
   els.date.toggleAttribute("hidden", !settings.showDate);
+  els.dateBg.toggleAttribute("hidden", !settings.showDate);
   els.clock.classList.toggle("smooth", settings.smooth);
   card.dataset.numerals = settings.numerals;
   draw(new Date()); // paint right away, even before the visibility is known

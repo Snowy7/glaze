@@ -1,0 +1,46 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "visualizer",
+  "name": "Audio visualizer",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "Whatever your speakers play, as capsule bars, a flowing wave or a pulsing ring.",
+  "entry": "index.html",
+  "size": { "default": [3, 1], "min": [2, 1], "max": [6, 3] },
+  "resizable": true,
+  "permissions": ["audio"],
+  "plugins": [],
+  "settings": [
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Look",
+      "group": "Layout",
+      "default": "bars",
+      "options": [
+        { "value": "bars", "label": "Bars", "icon": "▮" },
+        { "value": "wave", "label": "Wave", "icon": "∿" },
+        { "value": "circle", "label": "Ring", "icon": "◎" }
+      ]
+    },
+    { "key": "mirror", "type": "boolean", "label": "Mirror", "group": "Layout", "default": true },
+    { "key": "peaks", "type": "boolean", "label": "Peak caps", "group": "Layout", "default": true },
+    { "key": "barWidth", "type": "slider", "label": "Bar width", "group": "Bars", "min": 2, "max": 16, "step": 1, "unit": "px", "default": 6 },
+    { "key": "gap", "type": "slider", "label": "Gap", "group": "Bars", "min": 1, "max": 12, "step": 1, "unit": "px", "default": 3 },
+    { "key": "bins", "type": "slider", "label": "Density", "group": "Response", "min": 64, "max": 128, "step": 8, "default": 64 },
+    { "key": "smoothing", "type": "slider", "label": "Smoothing", "group": "Response", "min": 0, "max": 1, "step": 0.05, "default": 0.5 },
+    { "key": "sensitivity", "type": "slider", "label": "Sensitivity", "group": "Response", "min": 0.5, "max": 2.5, "step": 0.1, "default": 1.2 },
+    {
+      "key": "colorMode",
+      "type": "select",
+      "label": "Color",
+      "group": "Color",
+      "default": "gradient",
+      "options": [
+        { "value": "accent", "label": "Accent", "icon": "●" },
+        { "value": "gradient", "label": "Gradient", "icon": "◐" },
+        { "value": "rainbow", "label": "Rainbow", "icon": "🌈" }
+      ]
+    }
+  ]
+}

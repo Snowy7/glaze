@@ -1,48 +1,52 @@
 // @ts-check
-import { $, every, onVisible, trackSettings, trackSize } from "./kit.js";
+import { $, every, onVisible, setText, trackSettings, trackSize } from "./kit.js";
+import { dayLabel, degrees, errorInfo, hourLabel, pickLayout, placeNow, rangeBar, sceneFor, slotCount, upcomingHours } from "./weather-logic.js";
 
-/**
- * Response shapes of the weather plugin (plugins/weather).
- * @typedef {{ temperature: string, speed: string, precipitation: string }} Units
- * @typedef {{ name: string, country?: string, lat: number, lon: number }} Place
- * @typedef {{ location: Place, units: Units, temperature: number, apparent: number, humidity: number, condition: string, icon: string, is_day: boolean }} Current
- * @typedef {{ date: string, condition: string, icon: string, min: number, max: number }} Day
- * @typedef {{ location: Place, units: Units, days: Day[] }} Forecast
- */
+/** @typedef {import("./weather-logic.js").Current} Current */
+/** @typedef {import("./weather-logic.js").Forecast} Forecast */
+/** @typedef {import("./weather-logic.js").Day} Day */
+/** @typedef {import("./weather-logic.js").Hour} Hour */
+/** @typedef {import("./weather-logic.js").Variant} Variant */
 
 const REFRESH_MS = 10 * 60_000; // the plugin caches for the same time
 const RETRY_MS = 60_000;
+const VARIANTS = ["card", "compact", "forecast"];
+// Smallest slots, in px, of the hourly strip (and its gap), a day row and a day column.
+const SLOT_MIN = 46;
+const SLOT_GAP = 6;
+const ROW_MIN = 32;
+const COL_MIN = 52;
+const MAX_HOURS = 24;
+const MAX_ROWS = 6;
 
 const card = $("#card");
 const els = {
-  use: $("#icon-use", SVGUseElement),
+  art: $("#art", SVGSVGElement),
+  miniUse: $("#mini-use", SVGUseElement),
   temp: $("#temp"),
   cond: $("#cond"),
   place: $("#place"),
-  range: $("#range"),
+  hilo: $("#hilo"),
+  hours: $("#hours"),
   days: $("#days"),
-  status: $("#status"),
-  statusText: $("#status-text"),
+  statusTitle: $("#status-title"),
+  statusHint: $("#status-hint"),
 };
+const layers = [...els.art.querySelectorAll("[data-layer]")].filter((g) => g instanceof SVGElement);
 
-const defaults = { city: "London", lat: "", lon: "", units: "metric" };
+const defaults = { variant: "card", city: "London", lat: "", lon: "", units: "metric", animate: true };
 let settings = defaults;
+/** @type {Variant} */
+let variant = "card";
 /** Newest request wins: settings can change while a call is in flight. */
 let generation = 0;
 let lastOk = 0;
 let lastTry = 0;
 let failed = false;
-let layout = { name: "tiny", days: 0 };
-/** @type {{ current: Current, forecast: Forecast } | undefined} */
+let settingsKnown = false;
+/** @type {{ current: Current, forecast: Forecast, fetchedAt: number } | undefined} */
 let data;
-
-const weekday = new Intl.DateTimeFormat(undefined, { weekday: "short" });
-
-/** @param {number} t */
-const deg = (t) => `${Math.round(t)}°`;
-
-/** @param {string} icon */
-const href = (icon) => `#${/^[a-z-]+$/.test(icon) ? icon : "cloudy"}`;
+let hourKey = "";
 
 /** `lat`/`lon` win when both parse; otherwise the city. */
 function placeParams() {
@@ -53,67 +57,139 @@ function placeParams() {
   return city ? { city } : undefined;
 }
 
-/** @param {string} message */
-function showStatus(message) {
-  els.status.hidden = false;
-  els.statusText.textContent = message;
-}
-
-function render() {
-  if (!data) return;
-  const { current, forecast } = data;
-  const today = forecast.days[0];
-  card.dataset.state = "ready";
-  els.status.hidden = true;
-  els.use.setAttribute("href", href(current.icon));
-  els.temp.textContent = deg(current.temperature);
-  els.cond.textContent = current.condition;
-  els.place.textContent = current.location.name;
-  els.range.textContent = today ? `H ${deg(today.max)}   L ${deg(today.min)}` : "";
-
-  // Today is already the big number, so the strip starts tomorrow.
-  els.days.replaceChildren(...forecast.days.slice(1, 1 + layout.days).map(dayElement));
-}
-
-const SVG = "http://www.w3.org/2000/svg";
+/** @param {string} icon */
+const iconHref = (icon) => `#i-${/^[a-z-]+$/.test(icon) ? icon : "cloudy"}`;
 
 /**
  * @param {string} className
- * @param {string} text
+ * @param {string} [text]
  */
 function span(className, text) {
   const el = document.createElement("span");
   el.className = className;
-  el.textContent = text;
+  if (text !== undefined) el.textContent = text;
   return el;
 }
 
-/** @param {Day} d */
-function dayElement(d) {
-  const [y = 0, m = 1, day = 1] = d.date.split("-").map(Number);
+const SVG = "http://www.w3.org/2000/svg";
+/** @param {string} icon */
+function iconElement(icon) {
   const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("class", "ico");
   svg.setAttribute("aria-hidden", "true");
   const use = document.createElementNS(SVG, "use");
-  use.setAttribute("href", href(d.icon));
+  use.setAttribute("href", iconHref(icon));
   svg.append(use);
+  return svg;
+}
 
-  const temps = document.createElement("span");
-  temps.className = "temps";
-  temps.append(span("hi", deg(d.max)), span("lo", deg(d.min)));
+/** The big temperature and the facts around it, and the illustration's scene. */
+function renderNow() {
+  if (!data) return;
+  const { current, forecast } = data;
+  const today = forecast.days[0];
+  setText(els.temp, degrees(current.temperature));
+  setText(els.cond, current.condition);
+  setText(els.place, current.location.name);
+  setText(els.hilo, today ? `H ${degrees(today.max)}  L ${degrees(today.min)}` : "");
+  els.miniUse.setAttribute("href", iconHref(current.icon));
 
+  const scene = sceneFor(current.icon, current.code);
+  els.art.dataset.scene = scene.scene;
+  els.art.dataset.tone = scene.tone;
+  els.art.dataset.intensity = scene.intensity;
+  /** @type {Set<string>} */
+  const shown = new Set(scene.layers);
+  for (const layer of layers) layer.toggleAttribute("hidden", !shown.has(layer.dataset.layer ?? ""));
+}
+
+/** @param {Hour} h @param {boolean} first */
+function hourSlot(h, first) {
+  const slot = document.createElement("div");
+  slot.className = first ? "slot tile cur" : "slot tile";
+  const chance = h.precipitation_probability ?? 0;
+  slot.append(
+    span("t caps", first ? "Now" : hourLabel(h.time)),
+    iconElement(h.icon),
+    span("v num", degrees(h.temperature)),
+    span("p num", chance >= 25 ? `${Math.round(chance)}%` : ""),
+  );
+  slot.title = h.condition;
+  return slot;
+}
+
+/**
+ * @param {Day} d
+ * @param {number} index
+ * @param {number} low the lowest low shown
+ * @param {number} high the highest high shown
+ * @param {boolean} columns a column of a strip (a tile) rather than a row of a list
+ */
+function daySlot(d, index, low, high, columns) {
   const el = document.createElement("div");
-  el.className = "day";
+  el.className = columns ? "day tile" : "day";
   el.title = d.condition;
-  el.append(span("name", weekday.format(new Date(y, m - 1, day))), svg, temps);
+  const bar = rangeBar(d.min, d.max, low, high);
+  const track = span("track");
+  const fill = document.createElement("i");
+  fill.style.marginLeft = `${bar.start}%`;
+  fill.style.width = `${bar.size}%`;
+  track.append(fill);
+  const chance = d.precipitation_probability ?? 0;
+  el.append(
+    span("d", dayLabel(d.date, index)),
+    iconElement(d.icon),
+    span("pp num", chance >= 25 ? `${Math.round(chance)}%` : ""),
+    span("hi num", degrees(d.max)),
+    span("lo num", degrees(d.min)),
+    track,
+  );
   return el;
+}
+
+/** The hourly strip and the days, as many as their boxes hold (measured: it depends on the layout). */
+function renderLists() {
+  if (!data) return;
+  const { forecast, fetchedAt, current } = data;
+  const nHours = Math.min(MAX_HOURS, slotCount(els.hours.clientWidth, SLOT_MIN, SLOT_GAP));
+  const hourly = forecast.hourly ?? [];
+  const upcoming = upcomingHours(hourly, placeNow(current.time, fetchedAt, Date.now()), nHours);
+  els.hours.replaceChildren(...upcoming.map((h, i) => hourSlot(h, i === 0)));
+  els.hours.toggleAttribute("data-no-p", !upcoming.some((h) => (h.precipitation_probability ?? 0) >= 25));
+  hourKey = upcoming[0]?.time ?? "";
+  card.toggleAttribute("data-no-hours", hourly.length === 0);
+
+  // The card's list starts tomorrow (today is the big number); the forecast's with today.
+  const days = variant === "forecast" ? forecast.days : forecast.days.slice(1);
+  const columns = card.dataset["days"] === "cols";
+  const nDays = columns ? slotCount(els.days.clientWidth, COL_MIN, SLOT_GAP) : slotCount(els.days.clientHeight, ROW_MIN);
+  const shown = days.slice(0, Math.min(nDays, columns ? 7 : MAX_ROWS));
+  const low = Math.min(...shown.map((d) => d.min));
+  const high = Math.max(...shown.map((d) => d.max));
+  const first = variant === "forecast" ? 0 : 1;
+  els.days.replaceChildren(...shown.map((d, i) => daySlot(d, i + first, low, high, columns)));
+}
+
+function render() {
+  if (!data) return;
+  card.dataset["state"] = "ready";
+  renderNow();
+  renderLists();
+}
+
+/** @param {string} title @param {string} hint */
+function showError(title, hint) {
+  data = undefined;
+  card.dataset["state"] = "error";
+  setText(els.statusTitle, title);
+  setText(els.statusHint, hint);
 }
 
 async function load() {
   const params = placeParams();
   if (!params) {
-    data = undefined;
-    card.dataset.state = "error";
-    return showStatus("Set a city in this widget's settings");
+    showError("Set a city", "Add a city (or a latitude and longitude) in this widget's settings.");
+    return;
   }
   const mine = ++generation;
   lastTry = Date.now();
@@ -121,12 +197,12 @@ async function load() {
     const request = { ...params, units: settings.units };
     const [current, forecast] = await Promise.all([
       mypaper.plugin("weather", "current", request),
-      mypaper.plugin("weather", "forecast", { ...request, days: 6 }),
+      mypaper.plugin("weather", "forecast", { ...request, days: 7 }),
     ]);
     if (mine !== generation) return;
     // The plugin's shapes are documented in docs/writing-plugins.md.
-    data = { current: /** @type {Current} */ (current), forecast: /** @type {Forecast} */ (forecast) };
-    lastOk = Date.now();
+    data = { current: /** @type {Current} */ (current), forecast: /** @type {Forecast} */ (forecast), fetchedAt: Date.now() };
+    lastOk = data.fetchedAt;
     failed = false;
     render();
   } catch (err) {
@@ -134,16 +210,9 @@ async function load() {
     failed = true;
     // Keep showing the last good data if we have it.
     if (data) return;
-    card.dataset.state = "error";
     // MypaperError: `code` is one of the documented wire codes.
-    const code = /** @type {{ code?: string }} */ (err).code;
-    showStatus(
-      code === "NotFound"
-        ? `No place called "${settings.city}"`
-        : code === "PluginUnavailable"
-          ? "Weather service unavailable"
-          : "Couldn't load the weather",
-    );
+    const { title, hint } = errorInfo(/** @type {{ code?: string }} */ (err).code, settings.city);
+    showError(title, hint);
   }
 }
 
@@ -152,31 +221,45 @@ function maybeLoad() {
   if (!settingsKnown) return; // the first load comes with the settings
   const now = Date.now();
   if (failed ? now - lastTry >= RETRY_MS : now - lastOk >= REFRESH_MS) void load();
+  // The hour turned over since the strip was drawn.
+  else if (data) {
+    const first = upcomingHours(data.forecast.hourly ?? [], placeNow(data.current.time, data.fetchedAt, now), 1)[0];
+    if (first && first.time !== hourKey) renderLists();
+  }
 }
 
-trackSize((size) => {
-  const [w, h] = size.px;
-  const wide = w >= 290;
-  const tall = h >= 150;
-  layout = !wide && !tall
-    ? { name: "tiny", days: 0 }
-    : wide && !tall
-      ? { name: "side", days: w >= 380 ? 3 : 2 }
-      : !wide
-        ? { name: "stack", days: 3 }
-        : { name: "full", days: w >= 380 ? 5 : 4 };
-  card.dataset.layout = layout.name;
+// The size and the variant decide the layout (CSS arranges by data-layout) and what the days are.
+let box = { width: 0, height: 0 };
+function applyLayout() {
+  const layout = pickLayout(variant, box.width, box.height);
+  card.dataset.layout = layout;
+  card.dataset.days = variant === "forecast" && layout !== "tall" ? "cols" : "rows";
   render();
+}
+trackSize(({ px: [width, height] }) => {
+  box = { width, height };
+  applyLayout();
 });
 
-let settingsKnown = false;
+// The lists' counts depend on their boxes, which the layout sets.
+const lists = new ResizeObserver(renderLists);
+lists.observe(els.hours);
+lists.observe(els.days);
+
 trackSettings(defaults, (next) => {
+  const changedPlace = !settingsKnown || next.city !== settings.city || next.lat !== settings.lat || next.lon !== settings.lon || next.units !== settings.units;
   settings = next;
   settingsKnown = true;
-  lastOk = 0;
-  failed = false;
-  // Hidden: wait. `every` below loads as soon as the widget is shown (nothing is fresh).
-  if (mypaper.visible) void load();
+  variant = /** @type {Variant} */ (VARIANTS.includes(next.variant) ? next.variant : "card");
+  card.dataset.variant = variant;
+  card.dataset.motion = next.animate ? "on" : "off";
+  applyLayout();
+  if (changedPlace) {
+    lastOk = 0;
+    failed = false;
+    // Hidden: wait. `every` below loads as soon as the widget is shown (nothing is fresh).
+    if (mypaper.visible) void load();
+  }
 });
 
 // While visible: poll cheaply, and refresh when the plugin says its data changed.

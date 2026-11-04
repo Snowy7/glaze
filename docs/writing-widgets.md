@@ -4,7 +4,7 @@ A widget is a folder with a `widget.json` and a web page. No build step is requi
 doesn't need rebuilding or restarting to pick up a new folder. The contract is
 [widgets.md](widgets.md); this is the practical guide. The six bundled widgets in `widgets/` are
 complete, small examples: `clock` is the simplest, `system-monitor` and `weather` show responsive
-layouts and subscriptions. The rest of the bundled set (calendar, timer, todo, battery, network,
+layouts and subscriptions, `visualizer` the audio feed, `app-shortcuts` real app icons. The rest of the bundled set (calendar, timer, todo, battery, network,
 disk, search, rss and more) are good references for storage, lists, plugins and permissions.
 
 ## 1. A widget in two files
@@ -111,7 +111,9 @@ Handy URL parameters: `widget`, `cols`, `rows`, `cell`, `gap`, `dpi`, `bg` (`dar
 `photo`, `photo-dark`, `photo-light`, `checker`: check your widget over a busy wallpaper),
 `hidden=1`, `edit=1`, `settings=<json>`, `storage=<json>` (seed the instance storage),
 `media=playing|paused|none`, `battery=none|discharging|charging`, `net=wifi|ethernet|none`,
-`theme=<name>`, `plugin=mock|real`, the appearance (`surface=none|glass|solid`, `text=light|dark`,
+`shared=<json>` (seed shared storage: `{"activity":{"todo":{"2026-11-02":3}}}`), `batterypct=<0..100>`,
+`theme=<name>`, `plugin=mock|real`, the appearance (`style=minimal|depth|neon|paper|aero`,
+`surface=none|glass|solid`, `text=light|dark`,
 `scale=<0.5..2>`, `shadow=0|1`, `opacity`, `blur`, `radius`, `accent=<rrggbb>`, `tint=<rrggbb>`, or
 `appearance=<json>` with any field), `themecss=<css>`, and `ui=0` (hide the panel, for screenshots).
 
@@ -121,7 +123,12 @@ size (`min`, `default`, `max`, as columns), over a dark and a light photo-like b
 is picked for the light one). Options: `sizes=min,default,max` or `2x1,4x2`, `surfaces=none,glass`,
 `bgs=photo-dark,photo-light`, `text=light|dark`, `scale`, `speed=40` (makes `system.subscribe` tick
 40 times faster, so sparklines fill up within a screenshot), plus the data and appearance parameters
-above. `node scripts/shot.mjs <name> "/gallery.html?widget=hello" 1400x900` (in `packages/widget-sdk`,
+above. `styles=minimal,depth,…|all` makes the rows style x surface. **The wall**,
+`http://localhost:5173/wall.html?style=neon&surface=glass&bg=photo-dark`, shows every widget at once
+at one size (`size=default|min|max|3x2`, `only=a,b`, `skip=a`, `settings={"<id>":{…}}`), one headless
+screenshot to review the whole set in a style. The mock harness also fakes the audio spectrum
+(while *Visible* is on), `user.info` ("Ada Lovelace"), `appIcon` (generated tiles), `pickFile` (a
+browser file picker; the URLs only last until reload) and shared storage. `node scripts/shot.mjs <name> "/gallery.html?widget=hello" 1400x900` (in `packages/widget-sdk`,
 with `MYPAPER_HARNESS=http://localhost:5173`) takes a headless Edge screenshot of any harness URL and
 prints the png's path.
 
@@ -186,6 +193,24 @@ const { name, palette } = await mypaper.theme.current(); // palette may be missi
 // plugins listed in the manifest
 const w = await mypaper.plugin("weather", "current", { city: "Oslo" });
 mypaper.onPlugin("weather", "updated", () => refresh());
+
+// "audio": 64..128 floats in 0..1 (low to high frequency), ~30 per second while you are visible
+const stopAudio = mypaper.audio.spectrum((bins) => draw(bins), { bins: 96 });
+
+// "user": the signed-in user's display name
+const { name, account } = await mypaper.user.info();
+
+// The system file dialog (no permission: the dialog is the consent). The host copies the file into
+// your data folder and gives you a URL served from your own origin; keep it in storage.
+const picked = await mypaper.pickFile({ extensions: ["jpg", "png"], title: "Choose a photo" });
+if (picked) img.src = picked.url;      // null when the user cancelled
+
+// "launch": the icon of an exe, file, folder or shell:AppsFolder\<AUMID>, as a PNG data URL (or null)
+const icon = await mypaper.appIcon("C:\\Windows\\System32\\notepad.exe", 64);
+
+// "storage.shared:<ns>": a storage namespace shared with every widget declaring the same permission
+const activity = mypaper.storage.shared("activity");
+const todo = await activity.get<Record<string, number>>("todo");
 ```
 
 Errors reject with a `MypaperError` whose `code` is one of `PermissionDenied`, `NotFound`,
@@ -204,12 +229,35 @@ instead. The harness's wire log shows why.
 ## 4. Settings
 
 `settings` in the manifest are rendered by the shell (and Studio) as a form. Types: `boolean`,
-`string`, `color`, `select`, `number` and `list` (a list of records, like the launcher's
-shortcuts). Treat the values as untrusted: they come from a JSON file the user can edit. The
-bundled widgets keep only values whose type matches the default's (`kit.js`: `trackSettings`).
+`string`, `color`, `select`, `number`, `slider`, `font`, `file`, `image` and `list` (a list of
+records, like the launcher's shortcuts). Treat the values as untrusted: they come from a JSON file
+the user can edit. The bundled widgets keep only values whose type matches the default's
+(`kit.js`: `trackSettings`).
 
 Use `string` when "empty" must be a valid value (the weather widget's optional latitude and
 longitude): a `number` setting always has a number.
+
+The richer types (the full table is in [widgets.md](widgets.md#widget-manifest-widgetjson)):
+
+```json
+{ "key": "variant", "type": "select", "label": "Layout", "group": "Layout", "default": "flip",
+  "options": [ { "value": "desk", "label": "Desk", "icon": "▭" },
+               { "value": "flip", "label": "Flip", "icon": "▤" } ] },
+{ "key": "size", "type": "slider", "label": "Size", "min": 50, "max": 150, "step": 5, "unit": "%", "default": 100 },
+{ "key": "glow", "type": "color", "label": "Glow", "alpha": true, "default": "#7aa2ffcc" },
+{ "key": "face", "type": "font", "label": "Font", "default": "Segoe UI Variable Display" },
+{ "key": "photo", "type": "image", "label": "Photo", "default": "" }
+```
+
+- `slider` previews live in your widget while it is dragged (a `settings` event per move, nothing
+  saved until the user lets go), so apply settings changes cheaply and idempotently.
+- `color` with `alpha` gives `#rrggbbaa`; use it as is in CSS.
+- `image`/`file` values are `""` or a URL on your own origin that the host serves; use them in
+  `<img src>` or CSS `url()`. Never assume the file still exists: handle `onerror`.
+- `group` puts settings under a heading; keep a group's settings next to each other.
+- **Layout variants**: give a showpiece widget 2 or 3 layouts with a `variant` select, set
+  `document.documentElement.dataset.variant` from it, and let CSS do the rest
+  (`html[data-variant="flip"] .time { … }`), so a switch costs nothing.
 
 ## 5. Appearance and style
 
@@ -312,14 +360,47 @@ your inner elements. When you need the real size of an inner element (a list tha
 many rows as fit), observe it with a `ResizeObserver` instead, as `world-clock` and the stats
 widgets do.
 
+### Styles (design system v2)
+
+The user can also pick a **style** (`data-style` on `<html>`): `minimal` (today's flat look, the
+default), `depth` (raised cards under a key light, bevels, soft layered shadows), `neon` (glowing
+gradient outlines), `paper` (soft matte with a grain) and `aero` (glossy glass with a specular
+sheen). The kit does the work: stick to the kit's building blocks and your widget is right in all
+five. Concretely:
+
+| Use | For |
+|---|---|
+| `.card` | the root (the style lights it; with a surface it is inset by `--bleed` so shadows fit, and its padding shrinks by the same amount so your content does not move) |
+| `.panel` | a quiet group, visible only with a surface |
+| `.tile` | a group that paints in every style except `minimal`, **even on a bare wallpaper** (hourly slots, stat cells); in `minimal` it is a `.panel` |
+| `.btn`, `.btn.primary` | a button with a body; primary is filled with the highlight gradient |
+| `.chip`, `.field`, `.track` | pills, inputs, progress, each styled per style |
+| `.hero` | the big display text or numbers: gradient and embossed in `depth`, glowing in `neon`, letterpress in `paper`, glossy in `aero` |
+| `.glow`, `.glow-text` | the style's glow on an element or text (a dot, a ring, a badge) |
+| `.flow` | the slowly drifting accent gradient as a background (a bar, an underline) |
+| `var(--hi)`, `var(--hi-2)` | the highlight pair for strokes, fills and active states: the accent in `minimal`, the style's colors otherwise (the accent if it has a hue, else the style's signature pair: blue-violet `depth`, cyan-magenta `neon`, terracotta `paper`, sky-aqua `aero`) |
+| `var(--elev-1..3)`, `var(--bevel)`, `var(--sheen)`, `var(--rim)`, `var(--glow)` | the raw tokens, for your own raised or lit elements |
+
+Two small opt-outs and one trap: `.flat` on an `<svg>` removes the blanket drop-shadow bare
+wallpapers get (and neon's glow) for graphics that carry their own light; `.glow` on an `<svg>`
+element is a filter, not a box-shadow; and widget iframes are sandboxed **without `allow-forms`**,
+so a `<form>` never submits: handle `keydown` (Enter) and `click` yourself.
+
+Rules that matter more now: the iframe **clips** at its own edge, so outer shadows and glows only
+exist inside the box (use inset shadows, or leave room); never put a hard-coded color in a style
+rule; per-style tweaks of your own go under `html[data-style="neon"] …`, but try the kit's tokens
+first; check every style in the gallery (`gallery.html?widget=<id>&styles=all`) and the whole set
+at once in the wall (`wall.html?style=aero&surface=glass&bg=photo-light`).
+
 ### The house style
 
 The bundled widgets share one look, and copying `packages/widget-sdk/widget-kit/base.css` and
 `kit.js` into your folder gives you the parts:
 
-- Monochrome: neutral steps (`--t0` for emphasis, then `--t1`, `--t2`, `--t3`) and no hues.
-  `--accent` is white unless the user picks another color (or `auto`, the wallpaper's accent), so
-  it is how a widget gets color, without a setting of its own.
+- Neutral steps (`--t0` for emphasis, then `--t1`, `--t2`, `--t3`) and color only from
+  `--hi`/`--hi-2`/`--accent`. `--accent` is white unless the user picks another color (or `auto`,
+  the wallpaper's accent), so in `minimal` the widget is monochrome; the other styles put their own
+  highlight pair in `--hi` (or the user's accent if it has a hue), without a setting of its own.
 - Segoe UI Variable (`--font`), tabular numbers (`.num`) for anything that changes, light weights
   for big numbers, small caps labels (`.caps`).
 - Generous padding, soft shapes, one idea per widget.
@@ -335,7 +416,23 @@ Anything not listed in `permissions` is denied.
 | `launch` | `mypaper.launch` |
 | `network:<origin>` | `fetch` to that origin (for example `network:https://api.open-meteo.com`) |
 | `theme` | `mypaper.theme.*` |
+| `audio` | `mypaper.audio.spectrum` (loopback of the default output, only while you are visible) |
+| `user` | `mypaper.user.info` (display name) |
+| `storage.shared:<ns>` | `mypaper.storage.shared("<ns>")`, a namespace shared with the other widgets declaring it |
 | `clipboard.write` | reserved: no `mypaper` call uses it yet |
+
+`mypaper.pickFile` needs no permission, and `mypaper.appIcon` needs `launch`.
+
+## Placement and instances
+
+`"preset"` says where the widget lives: `desktop` (the default, on the grid below windows),
+`overlay` (a small always-on-top widget, click-through except its own pixels; the host shows it in
+a separate topmost layer outside edit mode, toggled with **Ctrl+Alt+Shift+O** or the tray; design
+it as a self-contained capsule that is fine over any window) or `popup` (opened from a bar module;
+see [widgets.md](widgets.md#placement-presets), the bars host owns placing it; render into the
+iframe like any widget and take your size from `mypaper.size`). `"instances"` limits how many the
+user can add: `single`, `multiple` (default) or `per-monitor`; the edit-mode palette and the
+host enforce it.
 | `plugins: [...]` (not a permission, a separate list) | calls to those plugins |
 
 Ask for the least you need: users see the list.
@@ -358,6 +455,10 @@ cost nothing.
   frame loop.
 - **Cache and debounce.** Save notes after a pause in typing, not per keystroke, and flush when
   hidden. Fetch network data at most every few minutes (the weather plugin caches for 10).
+- **Audio is costly for the host, so be frugal.** The host captures only while a *visible* widget
+  subscribes to `audio.spectrum`; draw with `frames(fn, 30)` (never faster than the 30 Hz feed), stop
+  drawing when every bin is zero (silence), and unsubscribe when the widget has no reason to listen.
+  Prefer one canvas over many elements, and pre-compute gradients once.
 - **Keep it small.** No frameworks for a clock. Avoid large `filter: blur()` areas and big images;
   decode artwork once and reuse it.
 - **Unsubscribe what you subscribed**, especially when the user changes a setting that makes a

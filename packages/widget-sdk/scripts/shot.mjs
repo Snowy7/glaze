@@ -29,7 +29,8 @@ const dir = join(tmpdir(), "mypaper-shots");
 mkdirSync(dir, { recursive: true });
 const out = join(dir, `${name}.png`);
 const base = process.env["MYPAPER_HARNESS"] ?? "http://localhost:5173";
-const profile = join(dir, "profile");
+// One profile per shot name, so several agents can shoot at once.
+const profile = join(dir, `profile-${name}`);
 rmSync(out, { force: true });
 
 const result = spawnSync(
@@ -52,5 +53,10 @@ for (let i = 0; i < 60 && !existsSync(out); i++) await new Promise((r) => setTim
 if (result.status !== 0 || !existsSync(out)) {
   console.error(`screenshot failed (exit ${result.status})`);
   process.exit(1);
+}
+try {
+  rmSync(profile, { recursive: true, force: true });
+} catch {
+  /* Edge may still hold the profile (EPERM); the next shot of this name clears it. */
 }
 console.log(out);

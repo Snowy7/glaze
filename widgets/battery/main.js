@@ -16,13 +16,14 @@ const els = {
   pct: $("#pct"),
   sub: $("#sub"),
   status: $("#status"),
+  ring: $("#ring", SVGElement),
   arc: $("#arc", SVGCircleElement),
   fill: $("#fill"),
 };
 
 /** Paints the latest stats with the current settings; cheap, called on every sample and setting. */
 function render() {
-  card.dataset.style = styleOf(settings.style);
+  card.dataset.view = styleOf(settings.style);
   if (!stats) return; // the card stays hidden until the first sample
   const state = batteryState(stats.battery);
 
@@ -39,6 +40,8 @@ function render() {
   live.hidden = false;
   none.hidden = true;
   card.dataset.state = state.kind;
+  // A plugged-in ring glows (style.css `.lit`; nothing in the minimal style).
+  els.ring.classList.toggle("lit", state.kind === "charging" || state.kind === "full");
   const status = statusText(state.kind);
   setText(els.pct, String(state.percent));
   setText(els.status, status);

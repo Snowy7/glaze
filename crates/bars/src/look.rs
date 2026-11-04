@@ -44,6 +44,7 @@ pub fn defaults(kind: BarKind) -> Appearance {
         font: Some(r#""Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif"#.into()),
         scale: Some(1.0),
         shadow: Some(false),
+        style: None,
     }
 }
 

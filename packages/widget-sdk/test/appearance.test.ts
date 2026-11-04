@@ -4,7 +4,9 @@ import {
   appearanceAttributes,
   appearanceRule,
   appearanceVars,
+  audioBins,
   normalizeAppearance,
+  sparkColors,
   withToneDefaults,
   type Appearance,
 } from "../src";
@@ -17,11 +19,15 @@ describe("attributes", () => {
       "data-surface": "none",
       "data-text": "light",
       "data-shadow": "on",
+      "data-style": "minimal",
+      "data-border": "on",
     });
-    expect(appearanceAttributes(look({ surface: "glass", text: "dark", shadow: false }))).toEqual({
+    expect(appearanceAttributes(look({ surface: "glass", text: "dark", shadow: false, style: "neon" }))).toEqual({
       "data-surface": "glass",
       "data-text": "dark",
       "data-shadow": "off",
+      "data-style": "neon",
+      "data-border": "on",
     });
   });
 });
@@ -126,6 +132,7 @@ describe("normalizeAppearance", () => {
       accent: "#12",
       border: "yes",
       shadow: null,
+      style: "glossy",
     });
     expect(a).toMatchObject({
       surface: "none",
@@ -138,8 +145,52 @@ describe("normalizeAppearance", () => {
       accent: DEFAULT_APPEARANCE.accent,
       border: true,
       shadow: true,
+      style: "minimal",
     });
+    expect(normalizeAppearance({ style: "aero" }).style).toBe("aero");
     expect(normalizeAppearance({ scale: 9 }).scale).toBe(2);
     expect(normalizeAppearance({ opacity: Number.NaN }).opacity).toBe(DEFAULT_APPEARANCE.opacity);
+  });
+});
+
+describe("style colors", () => {
+  it("gives a colorless accent the style's signature pair, per style", () => {
+    const white = appearanceVars(look({ style: "neon" }));
+    expect(white["--spark-rgb"]).toBe("0 229 255");
+    expect(white["--accent-2-rgb"]).toBe("255 43 214");
+    expect(appearanceVars(look({ style: "aero" }))["--spark-rgb"]).toBe("92 200 255");
+    // The ink accent of dark text is colorless too.
+    expect(appearanceVars(look({ style: "paper", accent: "#0a0a0c" }))["--spark-rgb"]).toBe("217 130 91");
+  });
+
+  it("keeps a chromatic accent and turns its hue for the companion", () => {
+    const [spark, spark2] = sparkColors([20, 209, 127], "depth");
+    expect(spark).toEqual([20, 209, 127]);
+    expect(spark2).not.toEqual(spark);
+    // 48 degrees from green (~155) is cyan-blue (~203): blue grows past red.
+    expect(spark2[2]).toBeGreaterThan(spark2[0]);
+    const v = appearanceVars(look({ style: "neon", accent: "#14d17f" }));
+    expect(v["--spark-rgb"]).toBe("20 209 127");
+    expect(v["--accent-rgb"]).toBe("20 209 127");
+  });
+});
+
+describe("style colors on light surfaces", () => {
+  it("deepens the signature pair for dark text, but never a chromatic accent", () => {
+    const light = appearanceVars(look({ style: "neon" }));
+    const dark = appearanceVars(look({ style: "neon", text: "dark", accent: "#0a0a0c" }));
+    const lightness = (rgb: string | undefined) => Math.max(...(rgb ?? "").split(" ").map(Number));
+    expect(lightness(dark["--spark-rgb"])).toBeLessThan(lightness(light["--spark-rgb"]));
+    expect(appearanceVars(look({ style: "neon", text: "dark", accent: "#14d17f" }))["--spark-rgb"]).toBe("20 209 127");
+  });
+});
+
+describe("audioBins", () => {
+  it("defaults to 64 and keeps requests inside the host's 64 to 128", () => {
+    expect(audioBins(undefined)).toBe(64);
+    expect(audioBins(Number.NaN)).toBe(64);
+    expect(audioBins(10)).toBe(64);
+    expect(audioBins(100.4)).toBe(100);
+    expect(audioBins(4096)).toBe(128);
   });
 });

@@ -1240,6 +1240,7 @@ dependencies = [
  "mypaper-desktop",
  "mypaper-theme",
  "notify",
+ "png",
  "serde",
  "serde_json",
  "webview2-com",

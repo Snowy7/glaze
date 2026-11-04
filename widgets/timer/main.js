@@ -1,5 +1,6 @@
 // @ts-check
 import { $, clamp, onVisible, pad2, setText, trackSettings, trackSize } from "./kit.js";
+import { dayKey, recordActivity } from "./activity.js";
 
 /** @typedef {"focus" | "short" | "long" | "custom"} Mode */
 /** @type {readonly Mode[]} */
@@ -124,7 +125,9 @@ function pause() {
 /** The countdown reached zero. Counts a focus session; may roll straight into the next one. */
 function finish() {
   const at = state.endsAt ?? Date.now();
-  state = { ...state, remaining: 0, endsAt: null, finishedAt: at, sessions: state.sessions + (state.mode === "focus" ? 1 : 0) };
+  // History for the activity heatmap: a focus session that ran out (not a reset or a skip), on the day it ended.
+  if (state.mode === "focus") recordActivity("timer", dayKey(new Date(at)), 1);
+  state ={ ...state, remaining: 0, endsAt: null, finishedAt: at, sessions: state.sessions + (state.mode === "focus" ? 1 : 0) };
   acked = false;
   // Only a finish we watched happen rolls on by itself; one found after a reload waits for the user.
   if (settings.autoAdvance && state.mode !== "custom" && Date.now() - at < 2500) {

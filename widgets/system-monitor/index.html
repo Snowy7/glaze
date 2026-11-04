@@ -8,17 +8,9 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- Shared gradient for the sparkline areas. -->
-    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
-      <defs>
-        <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="var(--accent)" stop-opacity="0.28" />
-          <stop offset="1" stop-color="var(--accent)" stop-opacity="0" />
-        </linearGradient>
-      </defs>
-    </svg>
-    <main class="card">
-      <div class="grid" id="grid"></div>
+    <main class="card sm" id="root">
+      <!-- main.js fills the stage for the chosen look: a grid of cells, plus a network readout. -->
+      <div class="stage" id="stage"></div>
     </main>
     <script src="mypaper.js"></script>
     <script type="module" src="main.js"></script>

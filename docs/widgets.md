@@ -102,10 +102,12 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   "entry": "index.html",
   "size": { "default": [2, 1], "min": [1, 1], "max": [4, 2] },
   "resizable": true,
+  "preset": "desktop",
+  "instances": "multiple",
   "permissions": ["system.stats"],
   "plugins": [],
   "settings": [
-    { "key": "format24", "type": "boolean", "label": "24-hour", "default": true },
+    { "key": "format24", "type": "boolean", "label": "24-hour", "default": true, "group": "Time" },
     { "key": "accent", "type": "color", "label": "Accent", "default": "#ffffff" },
     { "key": "city", "type": "string", "label": "City", "default": "" },
     { "key": "density", "type": "select", "label": "Density", "options": ["cozy", "compact"], "default": "cozy" },
@@ -117,8 +119,18 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
 - `id`: lowercase `[a-z0-9-]`, unique; it's the folder name too.
 - Required: `id`, `name`, `size.default`. Optional: `version`, `author`, `description`, `entry`
   (default `index.html`, a relative path inside the folder), `size.min` (default `[1, 1]`),
-  `size.max` (default: unbounded), `resizable` (default `true`), `permissions`, `plugins`,
-  `settings`. Unknown fields and unknown permissions are errors, so typos fail loudly.
+  `size.max` (default: unbounded), `resizable` (default `true`), `preset` (default `desktop`),
+  `instances` (default `multiple`), `permissions`, `plugins`, `settings`. Unknown fields and
+  unknown permissions are errors, so typos fail loudly.
+- `preset` is where the widget lives (see [Placement presets](#placement-presets)): `desktop`
+  (today's behavior), `overlay` (always on top, click-through except the widget) or `popup` (opened
+  from a bar module; the manifest field and SDK only, the bars host implements it). Any other value
+  is an error.
+- `instances` is how many the user may add: `single` (one in total, on any monitor), `multiple`
+  (the default, no limit) or `per-monitor` (at most one per monitor). The edit-mode palette greys
+  out **Add** and the ⋯ menu's **Duplicate** when the limit is reached, and the host refuses the
+  `add`/`duplicate` anyway (a layout file that already holds more is shown as it is: the rule only
+  stops *adding*). Any other value is an error.
 - `size` is in **grid cells**, `[columns, rows]`. `min <= default <= max`. `"resizable": false`
   locks the size to `default`.
 - `permissions` (anything not listed is denied):
@@ -129,6 +141,15 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
     enforced by the host's web resource filter (see [Network](#network)). No other network access.
     An origin is `scheme://host[:port]` with no path; schemes are `http`, `https`, `ws`, `wss`.
   - `theme`: read the current wallpaper palette and theme name.
+  - `audio`: the audio spectrum of whatever the default output device plays (`mypaper.audio`,
+    see [Audio spectrum](#audio-spectrum)). Capturing is the host's loopback of the speakers; nothing
+    is recorded or stored, and no microphone is touched.
+  - `user`: the signed-in user's display name (`mypaper.user.info`).
+  - `storage.shared:<namespace>`: read and write a storage namespace that every widget declaring the
+    same permission shares (`namespace` is `[a-z0-9-]+`, for example `storage.shared:activity` for the
+    todo list, the timer and the contribution heatmap). Values live in
+    `%APPDATA%\mypaper\widget-data\_shared\<namespace>.json` (1 MB per namespace). There is no
+    locking: give each writer its own keys.
   - `clipboard.write`: the shell adds `allow="clipboard-write"` to the widget's iframe, so
     `navigator.clipboard.writeText` works. There's no wire method for it.
 - `plugins`: plugin ids whose methods this widget may call (see Plugins).
@@ -147,10 +168,34 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   (with add and remove), and the widget receives an array of `{ <field key>: value }` objects.
   `fields` take the scalar types above, and their `default` is optional.
 
+  **More types** (the property schema; every one is also valid as a `list` field except `file`
+  and `image`):
+
+  | type | extra fields | value the widget receives |
+  |---|---|---|
+  | `slider` | `min`, `max` (both required), `step`, `unit` (a suffix such as `"px"` or `"%"`) | a number. Like `number`, but always a slider with a readout; while it is dragged the shell previews the value in the widget at once (a `settings` event), and saves once on release |
+  | `color` | `alpha: true` | `#rrggbb`, or `#rrggbbaa` when `alpha` is set (a plain `#rrggbb` is also accepted there). The form shows an opacity slider with the swatch, and with `alpha` it always saves `#rrggbbaa` (8 digits, even when opaque) |
+  | `file`, `image` | `extensions`: the allowed extensions without dots (`["jpg", "png"]`; `image` defaults to the common image formats) | a string: `""`, or the served URL of the picked file, which the host copied into the widget's data folder (see [Picking files](#picking-files)). `image` shows a thumbnail and **Clear** |
+  | `font` | | a CSS font-family name (for example `"Cascadia Code"`; at most 200 characters, none of `; { } < > \`). The form offers common fonts and a text box. The widget uses it as `font-family: var(--w-font, ...)`-style CSS, quoting the name |
+  | `select` | `options` may hold **objects** `{ "value", "label"?, "icon"? }` as well as plain strings (`icon` is a short glyph, an emoji or a symbol, shown beside or instead of the label; a select of 5 or fewer options with icons renders as an icon bar) | the option's `value` |
+
+  **Groups.** Any setting (and a `list`) may carry `"group": "Layout"`. The form shows a section
+  heading whenever the group changes from one setting to the next (settings without a group are
+  moved to the top, ungrouped, in their order), so keep a group's settings together: a group that
+  comes back later is a new section. Groups are presentation only: the
+  settings stay a flat list of keys. At most 64 characters.
+
   A saved value that doesn't fit its setting (wrong type, a number outside `min`/`max`, a select
-  value not in `options`, a color that isn't `#rrggbb`, a list longer than `maxItems` or with an
-  invalid field) is replaced by the default. List items get missing fields filled from the
-  field's default (or `false`, `0`, `""`, the first option, `#ffffff`) and unknown fields dropped.
+  value not in `options`, a color that isn't `#rrggbb` (or `#rrggbbaa` with `alpha`), a file that
+  isn't `""` or one of this widget's data URLs, a list longer than `maxItems` or with an invalid
+  field) is replaced by the default. List items get missing fields filled from the field's default
+  (or `false`, `0`, `""`, the first option, `#ffffff`) and unknown fields dropped.
+
+  **Manifest checks** (an error when the manifest loads): a `slider` needs `min < max` and a
+  positive `step`; `extensions` is a non-empty list of 1 to 16 letters and digits each (no dot);
+  the `default` of a `file` or `image` must be `""`; every `default` must itself be a valid value;
+  a `group` is at most 64 characters; an unknown field is an error. The `select` options keep the
+  shape they were written in when the host sends the manifest to the shell.
 - `$schema`: optional, ignored by the host. Point it at
   `packages/widget-sdk/schema/widget.schema.json` for editor validation and completion
   (`plugin.schema.json` for plugins).
@@ -172,10 +217,14 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
       "appearance": { "text": "dark" }
     }
   ],
+  "overlay": true,
   "appearance": { "surface": "glass", "opacity": 0.5 }
 }
 ```
 
+- `overlay` (top level, default `true`) says whether the topmost overlay layer is shown (see
+  [Placement presets](#placement-presets)); the hotkey, the tray and `--overlay` flip it, and the host
+  writes it.
 - `appearance` (top level: the user's look for every widget; per instance: that widget's own) holds
   only the fields it sets, with the names and values of [Appearance](#appearance). Both are
   optional and validated when the file loads (ranges, `#rrggbb`, unknown fields are errors, so the
@@ -231,6 +280,7 @@ so users and themes can restyle every widget without editing widget code.
 | `font` | a CSS font-family list | Segoe UI Variable |
 | `scale` | 0.5–2: content scale | 1 |
 | `shadow` | bool: soft text shadow, for legibility with `surface: none` | true |
+| `style` | `minimal`, `depth`, `neon`, `paper` or `aero`: the design language, see [Styles](#styles) | `minimal` |
 
 **Tone-aware defaults.** A near-black tint is dark on dark text, and a white accent vanishes on a
 light surface, so with `text: dark` the built-in defaults flip: a `tint` that is still `#101010`
@@ -262,6 +312,7 @@ the same data travels in `state`, see [Host ⇄ shell](#host--shell); the shell 
 | `data-surface="none\|glass\|solid"` | `surface` |
 | `data-text="light\|dark"` | `text` |
 | `data-shadow="on\|off"` | `shadow` |
+| `data-style="minimal\|depth\|neon\|paper\|aero"` | `style` |
 | `--surface` | `tint` at `opacity` (always opaque for `solid`) |
 | `--blur`, `--radius` | `blur`, `radius` (px) |
 | `--line` | the border color, or **transparent if `border` is false** |
@@ -284,11 +335,44 @@ Rules for widget authors that follow from this:
   re-sent after an appearance change. Use the size for the grid, and observe your own elements for
   anything you lay out by pixels.
 
+### Styles
+
+`style` is the widget's design language. The host only carries the name; the kit
+(`packages/widget-sdk/widget-kit/base.css`) turns it into light and material. `minimal` is the flat
+look every widget had before (and the default). The others add depth to the *surface* and to the
+kit's building blocks (`.card`, `.panel`, `.chip`, `.track`, `button`, `.field`, `.glow`), so a
+widget that sticks to the kit looks right in all five without knowing about them:
+
+| `data-style` | Is | Surface it likes |
+|---|---|---|
+| `minimal` | Flat, quiet, monochrome. | any |
+| `depth` | Raised cards under a soft key light: layered soft shadows, an inner top highlight, a bevel, a faint edge gradient. 3D without perspective. | glass or solid |
+| `neon` | A dark card with a glowing gradient outline, glow on accent elements and bright tracks. | solid or glass |
+| `paper` | Soft matte: warm low-contrast fills, a grain, shallow inset shadows, no gloss. | solid |
+| `aero` | Glossy glass: a specular sheen across the top, a bright rim, saturated blur. | glass |
+
+Every style also works with `surface: none`: the building blocks then keep their own light
+(a glow, a rim, a sheen) without painting a card.
+
+The kit exposes NEW optional CSS variables that a style sets and a widget or theme can use or
+override (all have defaults, so never required): `--elev-1`, `--elev-2`, `--elev-3` (box-shadow
+stacks for resting, raised and floating things), `--bevel` (an inset highlight/shade pair),
+`--sheen` (the specular gradient image), `--rim` (the edge gradient image), `--glow` (a color, the
+accent's glow, `transparent` when the style has none), `--glow-size` (px), `--grain` (a noise
+image, `none` for styles without), `--spark`/`--accent-2` and `--hi`/`--hi-2` (the highlight pair
+glows and gradients are made of: the accent and its neighbour in hue when the accent has a color,
+else the style's signature pair, deepened for dark text; `--hi` is the accent itself in `minimal`;
+`--accent-rgb`, `--spark-rgb`, `--accent-2-rgb` are channel triples for alphas) and `--flow` (the
+drifting accent gradient: the `.flow` class and `.track > i` animate it, at about 10 frames a
+second, only while the widget is visible, and build it from `--hi`/`--hi-2` on the element, so a
+widget may retint a bar locally by setting those two). `data-style` is also on `<html>` for widget CSS:
+`html[data-style="neon"] .time { … }`.
+
 **The CSP** allows `style-src 'self' 'unsafe-inline'`, so the kit can inject theme CSS.
 
 **Editing.** In edit mode, the toolbar's **Appearance** button edits the user layer (all widgets).
-Each widget's ⋯ menu has **Appearance** for the instance layer. Controls: surface (segmented:
-none / glass / solid), tint (color), opacity, blur and radius (sliders), border and text shadow
+Each widget's ⋯ menu has **Appearance** for the instance layer. Controls: style (segmented:
+minimal / depth / neon / paper / aero), surface (segmented: none / glass / solid), tint (color), opacity, blur and radius (sliders), border and text shadow
 (toggles), text (light / dark), accent (Auto, or a color), font (text field with presets) and scale
 (slider). A field the edited layer sets shows **Use default**, which clears it so the layer below
 shows through (an unset field shows that inherited value). Sliders and color pickers preview live on
@@ -354,6 +438,8 @@ interface Mypaper {
   storage: {                           // per instance, persisted
     get<T>(key: string): Promise<T | undefined>;
     set(key: string, value: unknown): Promise<void>;
+    // "storage.shared:<ns>": the same two calls on a namespace shared between widgets
+    shared(namespace: string): { get<T>(key: string): Promise<T | undefined>; set(key: string, value: unknown): Promise<void> };
   };
   system: {                            // "system.stats"
     stats(): Promise<{ cpu: number; memory: { used: number; total: number };
@@ -374,6 +460,13 @@ interface Mypaper {
            onChange(cb: (t: ThemeInfo) => void): () => void };             // "theme"
   plugin<T = unknown>(id: string, method: string, params?: unknown): Promise<T>; // declared in "plugins"
   onPlugin(id: string, event: string, cb: (data: unknown) => void): () => void;
+  audio: {                             // "audio"
+    // 64 to 128 floats in 0..1, log-spaced low to high, ~30 per second, only while visible.
+    spectrum(cb: (bins: number[]) => void, opts?: { bins?: number }): () => void;
+  };
+  user: { info(): Promise<{ name: string; account: string }> };   // "user"
+  pickFile(opts?: { extensions?: string[]; title?: string }): Promise<{ url: string; name: string } | null>;
+  appIcon(target: string, size?: number): Promise<string | null>; // "launch": a PNG data URL
 }
 ```
 
@@ -420,24 +513,28 @@ from the manifest *before* forwarding to the host (the host checks again, from d
 | method | params | result | needs |
 |---|---|---|---|
 | `hello` | `{ sdk }` | the handshake state above | |
-| `storage.get` | `{ key }` | the value, or `null` when missing | |
-| `storage.set` | `{ key, value }` | `null` (a missing `value`, which is what `undefined` becomes, deletes the key; 1 MB per instance) | |
+| `storage.get` | `{ key, shared? }` | the value, or `null` when missing | `storage.shared:<shared>` when `shared` is set |
+| `storage.set` | `{ key, value, shared? }` | `null` (a missing `value`, which is what `undefined` becomes, deletes the key; 1 MB per instance, or per shared namespace) | `storage.shared:<shared>` when `shared` is set |
 | `system.stats` | | `SystemStats` | `system.stats` |
 | `media.current` | | `MediaState` or `null` | `media` |
 | `media.control` | `{ action }` | `null` | `media` |
 | `launch` | `{ target }` | `null` | `launch` |
 | `theme.current` | | `ThemeInfo` | `theme` |
 | `plugin` | `{ plugin, method, params? }` | the plugin's result | `plugin` listed in `plugins` |
+| `user.info` | | `{ name, account }` | `user` |
+| `pickFile` | `{ extensions?, title? }` | `{ url, name }`, or `null` when cancelled | |
+| `appIcon` | `{ target, size? }` | a PNG data URL, or `null` | `launch` |
 | `subscribe` | see below | `null` | per topic |
 | `unsubscribe` | `{ sub }` | `null` | |
 
 **Subscriptions.** `subscribe` params are `{ sub, topic: "system", intervalMs }`,
-`{ sub, topic: "media" }`, `{ sub, topic: "theme" }` or
+`{ sub, topic: "media" }`, `{ sub, topic: "theme" }`, `{ sub, topic: "audio", bins? }` or
 `{ sub, topic: "plugin", plugin, event }`, where `sub` is an id the widget makes up. Values arrive
 as `{ mypaper: 1, event: "sub", data: { sub, value } }`:
 
 - `system`: one sample right away, then one per `intervalMs` (never faster than 1000).
 - `media`, `theme`: on change only (read the current value with `media.current` / `theme.current`).
+- `audio`: `value` is an array of `bins` floats, see [Audio spectrum](#audio-spectrum).
 - `plugin`: each matching plugin event's `data`.
 
 While a widget is not visible (`visibility: false`) nothing is delivered to it; `system` sends a
@@ -451,6 +548,119 @@ sample as soon as it is visible again.
 `error.data.code` is one of the five names above it is used; otherwise `-32601` is `NotFound`,
 `-32602` is `InvalidParams` and anything else is `Internal`. A plugin that isn't running, can't
 start or crashed mid-call is `PluginUnavailable`. The message is passed on.
+
+## Audio spectrum
+
+`mypaper.audio.spectrum(cb, { bins })` (permission `audio`) delivers what the default output device
+is playing, as a spectrum, for visualizers.
+
+- **Value**: a plain `number[]` of `bins` floats in `0..1` (default 64; 64 to 128, other values are
+  clamped), index 0 the lowest frequency. Bins are log-spaced from about 40 Hz to 16 kHz, with
+  level mapped from roughly -70..0 dB to 0..1, attack-fast and decay-slow smoothing applied by the
+  host (a widget can draw the values as they come). Silence is all zeros (sent once, then nothing
+  until sound returns, and a subscriber gets a frame every ~33 ms while audio plays).
+- **Rate**: ~30 Hz (one frame every 33 ms), one shared FFT for every subscriber, whatever the
+  count. Each subscriber gets its own `bins` resolution.
+- **Wire**: `subscribe` with `{ sub, topic: "audio", bins? }`; values arrive as the usual `sub`
+  event. Needs `audio` in `permissions`, else `PermissionDenied`.
+- **Host cost model**: capture is WASAPI loopback of the default render endpoint
+  (`IAudioClient` initialized with `AUDCLNT_STREAMFLAGS_LOOPBACK`) on a dedicated thread, started
+  by the first *visible* subscriber and stopped as soon as there is none: a subscription of a
+  widget that isn't visible (paused, covered, a hidden layer) doesn't count; a held host (user
+  pause, battery, lock, display off) stops capture and resumes it with the subscribers; the thread
+  and the audio client are released when capture stops, so the idle cost is zero. The default
+  device changing (headphones plugged in; the thread looks once a second) restarts the capture on
+  the new one at once, and a device that fails or goes away (`AUDCLNT_E_DEVICE_INVALIDATED`) is
+  retried after 1 s, 2 s, 4 s, 8 s, then every 10 s, never faster.
+- **Silence**: a silent device delivers no packets, so the host feeds the time that passes as
+  silence; the bars decay (about 2 s from full) and snap to zero, one all-zero frame is sent, and the
+  thread then polls every 100 ms (instead of every 33 ms) without computing or sending anything
+  until sound returns. A subscriber that subscribes during silence gets nothing until sound plays.
+- **Measured** (release build, the capture thread's own CPU time over 15 s): a tone playing, 30.2
+  frames/s at 0.21% of one core; silence, 0.000% (one frame sent).
+  End to end on the real host (debug build, the `visualizer` at 6x2 cells on a 2560x1440 monitor,
+  a test tone playing): the host process 2.6% of one core in a *debug* build (the unoptimized FFT;
+  release is the 0.21% above) and **WebView2 12 to 20% of one core** for the canvas at 30 fps (12.5%
+  `minimal`, 14.8% `neon` with no surface, 19.8% `neon` on glass: the backdrop blur and the glow add
+  to it). Silent, the whole thing is under 1% (the widget stops drawing and the capture thread
+  idles). So the feed is cheap and the canvas isn't free: a visualizer is for listening sessions;
+  keep it small, and prefer `surface: none` or `solid` over `glass` for it.
+- **Math** (pure and tested in `crates/widgets/src/audio.rs`): a 2048-sample Hann-windowed radix-2
+  FFT of the mono mix at the device's rate, magnitudes to dB, log-spaced bins (each the max of its
+  FFT bins; low bins interpolate), then smoothing.
+- **Mock harness**: the dev harness plays a fake spectrum (a few moving bumps over a tilted
+  floor) while *Visible* is on.
+
+## Picking files
+
+Widgets can't browse the disk, so the host does it:
+
+- `mypaper.pickFile({ extensions?, title? })` opens the system file dialog (filtered to the
+  extensions, without dots, for example `["jpg", "png"]`) and resolves with `{ url, name }`, or
+  `null` when the user cancels. The host **copies** the file into the instance's data folder,
+  `%APPDATA%\mypaper\widget-data\<instance-id>\files\<name>` (a numeric suffix when the name is
+  taken; 64 MB at most, else `InvalidParams`), and `url` is
+  `https://<widget-id>.widget.mypaper/__data/<instance-id>/<name>`, which the host serves (and only to
+  that widget's own origin, with the usual headers). The widget keeps the URL, usually in
+  `storage` or as a `file`/`image` setting. It needs no permission: the dialog is the consent, and
+  the widget gets nothing but the copy.
+- **Names and serving.** The stored name is the file's name made safe as one Windows path component
+  (no directory part, forbidden characters become `_`, reserved device names such as `nul` get a `_`
+  prefix, at most 100 characters with the extension kept); a taken name gets `-2`, `-3`, …. The
+  host serves only `/__data/<instance>/<name>` for an `<instance>` of that widget id and a name that
+  is exactly such a stored name, so nothing can reach another widget's files or leave the folder.
+  `__data` is therefore a reserved first path segment in a widget's own folder. `extensions` that are
+  not letters and digits, more than 32 of them, or a title over 200 characters are `InvalidParams`;
+  one dialog is open at a time (a second call is `Internal`).
+- The `file` and `image` **settings** call the same thing from the settings form: the shell sends
+  the host `{ type: "pickFile", instance, key, extensions }`; the host shows the dialog, copies the
+  file and stores the URL as that setting's value (a `state` follows). The dialog's filter comes
+  from the manifest (the setting's `extensions`, or the image formats), never from the message.
+  Removing the instance (in edit mode, or by deleting it from `widgets.json`) removes its data
+  folder; duplicating an instance copies its files and points the copy's file settings at them;
+  **Clear** only resets the setting.
+- `mypaper.appIcon(target, size = 64)` (permission `launch`) returns the app's icon as a PNG data
+  URL: `target` is an `.exe`, `.lnk` or any file path, a folder, or an AUMID written as
+  `shell:AppsFolder\<AUMID>` (what `launch` also opens). `size` is clamped to 16 to 256. `null` when
+  Windows has no icon. The host makes icons on a worker thread (started on first use), caches them
+  by target and size, and doesn't cache a failure.
+- `mypaper.user.info()` (permission `user`) returns `{ name, account }`: the display name
+  (`GetUserNameExW(NameDisplay)`, falling back to the account name) and the account name. It is read
+  on a worker thread once and cached.
+
+## Placement presets
+
+A manifest's `preset` says what kind of surface the widget is:
+
+| `preset` | Is |
+|---|---|
+| `desktop` | The default: on the desktop layer, below app windows, laid out on the grid. |
+| `overlay` | A small always-on-top widget (a now-playing pill, a clock chip). It has a cell and size on the grid like any widget, and the user edits it in edit mode with everything else, but outside edit mode it is shown in a separate **topmost, click-through-except-content** layer, one per monitor, that exists only while that monitor has a visible overlay instance. |
+| `popup` | Opens from a bar module (the bars host owns this; widgets-host does not place it, and does not show it on the desktop, in edit mode or in the palette). The manifest field and the SDK are defined here so widget authors and the bars agent share the contract: the bar passes a size and anchor, the widget renders into its iframe like any other. Everything else (settings, appearance, permissions) is as for `desktop`. |
+
+Overlay details:
+
+- **Window**: a top-level `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` window with a
+  WebView2 (the same shell page, told which instances to show), whose region is the union of the
+  overlay instances' rectangles, so clicks everywhere else go to the windows below. It never takes
+  focus from the window you are using.
+- **Toggle**: hotkey **Ctrl+Alt+Shift+O**, the tray item **Show overlay widgets** (in
+  mypaper-core's tray menu, which posts the message below with `wParam` 2; not in this crate), or
+  `mypaper-widgets --overlay on|off|toggle` (the registered window message `mypaper.widgets.overlay`,
+  `wParam` 1, 0 or 2, like edit mode). Off hides the topmost windows and releases their WebViews
+  immediately; the choice is remembered in `widgets.json` as `"overlay": true|false` (default
+  `true`). Overlay instances are shown nowhere while it is off, except in edit mode.
+- **State**: each layer's shell page gets its own `state` with `layer` set. The desktop layer's
+  `instances` leave out overlay-preset instances (unless editing) and popup ones (always); the overlay
+  layer's hold only the overlay-preset ones. `counts` and the palette (`widgets`, which leaves out
+  popups) are the same in both. The host refuses `add` and `duplicate` of a popup widget, and of a
+  widget whose `instances` rule is used up, with the unchanged state and a warning in the log.
+- **Pausing**: like the desktop layer, per monitor: a maximized or fullscreen window covering the
+  monitor hides that monitor's overlay (an overlay never draws over a game); a global hold freezes
+  it; lock and display off suspend it. In edit mode the overlay layer is hidden and the overlay
+  instances are drawn and edited in the desktop layer instead, so each instance is only ever
+  running once.
+- **Palette**: `desktop` and `overlay` widgets are offered; `popup` ones aren't.
 
 ## Host ⇄ shell
 
@@ -474,6 +684,11 @@ type HostToShell =
                     user: Partial<Appearance>;             // the user's layer (widgets.json "appearance")
                     accent: string };                      // the color "auto" stands for (palette.json, else #ffffff)
       themeCss: string | null;                             // the theme's widgets style sheet, as text
+      layer: "desktop" | "overlay";                        // which window this shell page lives in; `instances`
+                                                           // holds only what that layer shows (overlay: the
+                                                           // overlay-preset instances, outside edit mode)
+      counts: Record<string, number>;                      // widget id -> instances on ALL monitors (the
+                                                           // palette's `instances` rule needs it)
       editing: boolean; visible: boolean;
       error?: string }                                     // widgets.json doesn't parse
   | { type: "reply"; instance: string; id: number | string; result?: unknown;
@@ -490,6 +705,8 @@ type ShellToHost =
   | { type: "duplicate"; instance: string; cell: [number, number] }
   | { type: "remove"; instance: string }
   | { type: "settings"; instance: string; values: Record<string, unknown> }
+  | { type: "pickFile"; instance: string; key: string;     // a `file`/`image` setting: the host shows the
+      extensions?: string[] }                                // dialog, copies the file, sets the setting
   | { type: "appearance"; instance?: string;                // the user's layer, or an instance's own
       values: { [K in keyof Appearance]?: Appearance[K] | null } }  // null clears a field ("Use default")
   | { type: "edit"; on: boolean };                         // Done / Esc
@@ -602,15 +819,23 @@ is held.
 
 ## Bundled examples
 
-- **Widgets** (21, all on the widget kit, so every one follows the [Appearance](#appearance)):
-  - Time: `clock`, `analog-clock`, `world-clock`, `calendar`, `timer` (pomodoro and countdown),
-    `countdown`.
-  - System (`system.stats`): `system-monitor` (CPU, RAM, GPU and network sparklines), `disk`,
-    `battery`, `network` (connection name, signal and rates), `system-info` (uptime, CPU, memory,
-    GPU, disk, network and battery).
-  - Media and web: `now-playing` (`media`), `weather` (the weather plugin), `rss` (the rss plugin,
-    `launch`), `crypto` (`network:` to CoinGecko), `quote`, `photo` (a folder of images).
-  - Personal: `notes` (a sticky note, storage), `todo`, `launcher` (`launch`), `search` (`launch`).
+- **Widgets** (28, all on the widget kit, so every one follows the [Appearance](#appearance) and
+  every [style](#styles)). The showpieces have layout variants in their settings:
+  - Time: `clock` (desk, flip, minimal), `analog-clock`, `world-clock`, `calendar` (month, agenda
+    with local events in `storage`, strip), `timer` (pomodoro and countdown), `countdown`.
+  - System (`system.stats`): `system-monitor` (rings, bars, sparklines), `disk`, `battery`,
+    `network` (connection name, signal and rates), `system-info` (uptime, CPU, memory, GPU, disk,
+    network and battery).
+  - Media and web: `now-playing` (`media`; card, blurred art, strip), `visualizer` (`audio`; bars,
+    wave, circle), `media-pill` (`media`; `preset: overlay`, `instances: single`), `weather` (the
+    weather plugin: animated illustration, hourly and 5-day), `rss` (the rss plugin, `launch`),
+    `crypto` (`network:` to CoinGecko), `quote`, `photo` (a folder of images), `photo-frame` (picked
+    images with a Ken Burns effect, `image` settings).
+  - Personal: `notes` (a sticky note, storage), `todo` and `timer` (both log into
+    `storage.shared:activity`), `heatmap` (a contribution heatmap of that history), `greeting`
+    (`user`), `quick-toggles` (`launch`, `system.stats`: tiles that open the matching `ms-settings:`
+    page), `app-shortcuts` (`launch`: real app icons through `appIcon`), `launcher` (`launch`),
+    `search` (`launch`).
 - **Plugins**: `weather` (Rust, open-meteo, no API key) and `rss` (Rust, fetches and parses feeds).
   Each is built once and its exe copied next to its `plugin.json`:
   `cargo build --release -p mypaper-plugin-weather` and `-p mypaper-plugin-rss`, then copy

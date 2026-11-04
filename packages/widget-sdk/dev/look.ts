@@ -1,8 +1,8 @@
 // The harness's appearance: read from the URL, and the panel controls that edit it.
-//   surface=none|glass|solid  text=light|dark  scale=<0.5..2>  shadow=0|1  accent=<rrggbb>
+//   surface=none|glass|solid  style=minimal|depth|neon|paper|aero  text=light|dark  scale=<0.5..2>  shadow=0|1  accent=<rrggbb>
 //   appearance=<json, any Appearance fields>  themecss=<css>
 
-import { DEFAULT_APPEARANCE, normalizeAppearance } from "../src";
+import { DEFAULT_APPEARANCE, WIDGET_STYLES, normalizeAppearance } from "../src";
 import type { Appearance, AppearanceState } from "../src/types";
 
 /** Appearance fields from query params; the shortcuts win over the `appearance` JSON. */
@@ -17,6 +17,7 @@ export function lookFromParams(q: URLSearchParams): AppearanceState {
   const num = (key: string) => (q.has(key) ? Number(q.get(key)) : undefined);
   const shortcuts: Partial<Record<keyof Appearance, unknown>> = {
     surface: q.get("surface") ?? undefined,
+    style: q.get("style") ?? undefined,
     text: q.get("text") ?? undefined,
     scale: num("scale"),
     opacity: num("opacity"),
@@ -112,6 +113,7 @@ export function appearanceForm(look: AppearanceState, changed: () => void): HTML
     changed();
   });
   root.append(
+    row("Style", select(WIDGET_STYLES, a.style, (v) => set("style", v))),
     row("Surface", select(["none", "glass", "solid"], a.surface, (v) => set("surface", v))),
     row("Text", select(["light", "dark"], a.text, (v) => set("text", v))),
     row("Scale", range(a.scale, 0.5, 2, 0.05, (v) => set("scale", v))),

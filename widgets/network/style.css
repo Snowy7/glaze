@@ -4,7 +4,19 @@
      wide     (4x2)        name and rates on one row, graph below
      strip    (3x1, 4x1)   name, graph, rates on one row
    data-kind (wifi, ethernet, none, unknown) says what the icon shows; "unknown" means the host
-   sent no `network`, so only rates are left. data-spark=off drops the graph. */
+   sent no `network`, so only rates are left. data-spark=off drops the graph.
+   Color: download is the kit's --hi, upload its --hi-2 (dashed, so they differ in the minimal style
+   too, where both are the accent). Thin strokes (the graph's lines, the arrows) need more body than
+   a bright highlight has on a light wallpaper, so with dark text they mix toward the ink. */
+
+:root {
+  --line-1: var(--hi);
+  --line-2: var(--hi-2);
+}
+html[data-text="dark"] {
+  --line-1: color-mix(in srgb, var(--hi) 58%, rgb(var(--ink)));
+  --line-2: color-mix(in srgb, var(--hi-2) 58%, rgb(var(--ink)));
+}
 
 .card {
   --areas: "id rates";
@@ -30,18 +42,29 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: clamp(8px, 4cqh, 12px);
+  gap: clamp(6px, 3.5cqh, 12px);
 }
 .card[data-kind="unknown"] .id {
   display: none;
 }
-.icon {
+.badge {
   flex: none;
-  width: clamp(22px, 30cqh, 34px);
-  height: clamp(22px, 30cqh, 34px);
+  display: grid;
+  place-items: center;
+  width: clamp(28px, 36cqh, 42px);
+  aspect-ratio: 1;
+  border-radius: 30%;
+}
+/* The glyph is text-colored (it reads on light and dark wallpapers); the badge is washed with the highlight. */
+html .badge.tile {
+  background-color: color-mix(in srgb, var(--hi) 30%, transparent);
+}
+.icon {
+  width: 64%;
+  height: 64%;
   fill: none;
   stroke: var(--t0);
-  stroke-width: 1.7;
+  stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -71,6 +94,9 @@
 [data-kind="none"] .dot {
   fill: var(--t3);
 }
+[data-kind="none"] .slash {
+  stroke: var(--t2);
+}
 
 .who {
   min-width: 0;
@@ -79,7 +105,7 @@
   gap: 2px;
 }
 .name {
-  font-size: clamp(13px, 15cqh, 18px);
+  font-size: clamp(12.5px, 14cqh, 18px);
   font-weight: 600;
   line-height: 1.2;
 }
@@ -121,15 +147,15 @@
   width: 1.1em;
   height: 1.1em;
   fill: none;
-  stroke-width: 2;
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 .rate.down .arrow {
-  stroke: var(--accent);
+  stroke: var(--line-1);
 }
 .rate.up .arrow {
-  stroke: var(--t1);
+  stroke: var(--line-2);
 }
 .lab {
   grid-area: lab;
@@ -155,20 +181,47 @@
 .rate.up .val {
   color: var(--t1);
 }
+/* Small numbers stay solid: the hero gradients are for the big one of the tall layouts. */
+@container (max-height: 139px) {
+  .val b {
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    filter: none;
+  }
+}
 
 /* ---------------------------------------------------------------- the graph */
 
-.spark {
-  grid-area: spark;
+.graph {
+  grid-area: graph;
+  position: relative;
   display: var(--spark, none); /* layouts with room for the graph set --spark: block */
-  width: 100%;
-  height: 100%;
+  container: graph / size;
   min-height: 0;
+  overflow: hidden;
+}
+html:is([data-style="minimal"], :not([data-style]))[data-surface="none"] .graph {
+  border-radius: 0;
+  border-bottom: 1px solid var(--fill-2);
+}
+.spark {
+  position: absolute;
+  inset: 8px 0 3px;
+  width: 100%;
+  height: calc(100% - 11px);
   overflow: visible;
 }
 .area {
-  fill: url(#fade);
   stroke: none;
+}
+/* Flat tints under the lines (an SVG gradient fill did not paint in the harness's Chromium). */
+.area.down {
+  fill: var(--hi);
+  opacity: 0.28;
+}
+.area.up {
+  fill: var(--hi-2);
+  opacity: 0.14;
 }
 .line {
   fill: none;
@@ -177,17 +230,27 @@
   vector-effect: non-scaling-stroke;
 }
 .line.down {
-  stroke: var(--accent);
-  stroke-width: 1.6;
+  stroke: var(--line-1);
+  stroke-width: 1.8;
 }
 .line.up {
-  stroke: var(--t1);
-  stroke-width: 1.2;
+  stroke: var(--line-2);
+  stroke-width: 1.3;
   stroke-dasharray: 3 3;
 }
-/* Without a surface a baseline anchors the graph. */
-html[data-surface="none"] .spark {
-  border-bottom: 1px solid var(--fill-2);
+/* The scale of the graph, in the corner of its window (only when the window is tall enough). */
+.peak {
+  position: absolute;
+  top: 5px;
+  left: 8px;
+  display: none;
+  font-size: 9px;
+  color: var(--t2);
+}
+@container graph (min-height: 54px) and (min-width: 90px) {
+  .peak {
+    display: block;
+  }
 }
 
 /* ---------------------------------------------------------------- narrow: name above rates */
@@ -221,9 +284,9 @@ html[data-surface="none"] .spark {
     --spark: block;
   }
   .card {
-    --areas: "id" "rates" "spark";
+    --areas: "id" "rates" "graph";
     --cols: minmax(0, 1fr);
-    --rows: auto auto minmax(0, 1fr);
+    --rows: auto auto minmax(36px, 1fr);
     align-items: start;
   }
   .card[data-spark="off"] {
@@ -231,7 +294,7 @@ html[data-surface="none"] .spark {
     --rows: auto minmax(0, 1fr);
   }
   .card[data-kind="unknown"] {
-    --areas: "rates" "spark";
+    --areas: "rates" "graph";
     --rows: auto minmax(0, 1fr);
   }
   .card[data-kind="unknown"][data-spark="off"] {
@@ -263,21 +326,21 @@ html[data-surface="none"] .spark {
     height: 12px;
   }
   .val {
-    font-size: clamp(20px, 13cqh, 34px);
+    /* Narrow boxes shrink the figures so both rates still sit on one row (and the graph keeps its room). */
+    font-size: clamp(16px, min(13cqh, 10.5cqw), 34px);
   }
   .card[data-spark="off"] .val {
     font-size: clamp(24px, 17cqh, 44px);
   }
-  .spark {
+  .graph {
     align-self: stretch;
   }
 }
-
 /* ---------------------------------------------------------------- wide and tall (4x2): one row up top */
 
 @container (min-height: 140px) and (min-aspect-ratio: 9/5) {
   .card {
-    --areas: "id rates" "spark spark";
+    --areas: "id rates" "graph graph";
     --cols: minmax(0, 1fr) auto;
     --rows: auto minmax(0, 1fr);
     align-items: center;
@@ -287,7 +350,7 @@ html[data-surface="none"] .spark {
     --rows: minmax(0, 1fr);
   }
   .card[data-kind="unknown"] {
-    --areas: "rates" "spark";
+    --areas: "rates" "graph";
     --cols: minmax(0, 1fr);
   }
   .card[data-kind="unknown"][data-spark="off"] {
@@ -312,7 +375,7 @@ html[data-surface="none"] .spark {
     --spark: block;
   }
   .card {
-    --areas: "id spark rates";
+    --areas: "id graph rates";
     --cols: fit-content(40%) minmax(0, 1fr) auto;
     column-gap: clamp(14px, 8cqh, 24px);
   }
@@ -321,15 +384,15 @@ html[data-surface="none"] .spark {
     --cols: minmax(0, 1fr) auto;
   }
   .card[data-kind="unknown"] {
-    --areas: "spark rates";
+    --areas: "graph rates";
     --cols: minmax(0, 1fr) auto;
   }
   .card[data-kind="unknown"][data-spark="off"] {
     --areas: "rates";
     --cols: minmax(0, 1fr);
   }
-  .spark {
-    height: 56%;
+  .graph {
+    height: 66%;
     align-self: center;
   }
   .card[data-kind="unknown"] .rates {

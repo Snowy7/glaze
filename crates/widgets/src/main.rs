@@ -2,17 +2,19 @@
 //! (docs/widgets.md).
 //!
 //! ```text
-//! mypaper-widgets [--edit on|off|toggle]
+//! mypaper-widgets [--edit on|off|toggle] [--overlay on|off|toggle]
 //! ```
 //!
 //! Without arguments it hosts the widgets from `%APPDATA%\mypaper\widgets.json`
-//! (one instance per session). `--edit` is a tiny client: it asks the running
-//! host to turn edit mode on, off or over, and exits.
+//! (one instance per session). `--edit` and `--overlay` are tiny clients: they ask the
+//! running host to turn edit mode, or the overlay layer, on, off or over, and exit.
 
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod appicon;
+mod audio;
 mod bridge;
 mod display;
 mod files;
@@ -21,6 +23,8 @@ mod look;
 mod manifest;
 mod media;
 mod net;
+mod overlay;
+mod pick;
 mod plugins;
 mod registry;
 mod rpc;
@@ -28,6 +32,7 @@ mod stats;
 mod storage;
 mod surface;
 mod theme;
+mod userinfo;
 mod wake;
 
 use std::process::ExitCode;
@@ -41,7 +46,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
-const USAGE: &str = "usage: mypaper-widgets [--edit on|off|toggle]";
+const USAGE: &str = "usage: mypaper-widgets [--edit on|off|toggle] [--overlay on|off|toggle]";
 
 fn main() -> ExitCode {
     mypaper_desktop::init_logging();
@@ -53,8 +58,13 @@ fn main() -> ExitCode {
         .as_slice()
     {
         [] => {}
-        ["--edit", mode] => {
-            return match post_edit(mode) {
+        [flag @ ("--edit" | "--overlay"), mode] => {
+            let message = if *flag == "--edit" {
+                app::EDIT_MESSAGE
+            } else {
+                overlay::OVERLAY_MESSAGE
+            };
+            return match post_mode(flag, message, mode) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
                     log::error!("{e:#}");
@@ -99,19 +109,20 @@ fn main() -> ExitCode {
     }
 }
 
-/// `--edit`: posts `mypaper.widgets.edit` to the running host and exits.
-fn post_edit(mode: &str) -> Result<()> {
+/// `--edit` and `--overlay`: posts the registered window message `name` to the running host
+/// (`wParam` 0 off, 1 on, 2 toggle) and exits.
+fn post_mode(flag: &str, name: PCWSTR, mode: &str) -> Result<()> {
     let wparam = match mode {
         "off" => 0,
         "on" => 1,
         "toggle" => 2,
-        other => bail!("--edit takes on, off or toggle, not {other:?}\n{USAGE}"),
+        other => bail!("{flag} takes on, off or toggle, not {other:?}\n{USAGE}"),
     };
     // SAFETY: plain lookups and a post; nothing is created or activated.
     unsafe {
         let host = FindWindowExW(Some(HWND_MESSAGE), None, app::HOST_CLASS, PCWSTR::null())
             .context("mypaper-widgets isn't running")?;
-        let message = RegisterWindowMessageW(app::EDIT_MESSAGE);
+        let message = RegisterWindowMessageW(name);
         PostMessageW(Some(host), message, WPARAM(wparam), LPARAM(0))?;
     }
     Ok(())

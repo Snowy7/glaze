@@ -8,15 +8,19 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="card" id="card">
-      <div class="time num" id="time" aria-live="off">
-        <span class="hm"><span id="h">--</span><span class="colon">:</span><span id="m">--</span></span>
-        <span class="sec" id="s" hidden></span>
-        <span class="ampm" id="ampm" hidden></span>
+    <!-- main.js sets data-variant (desk | flip | minimal); style.css lays the same parts out per variant. -->
+    <main class="card" id="card" data-variant="desk">
+      <div class="stage" id="stage">
+        <div class="time num" id="time" aria-live="off">
+          <span class="hm hero"><span id="h">--</span><span class="colon">:</span><span id="m">--</span></span>
+          <span class="sup"><span class="sec" id="s" hidden></span><span class="ampm" id="ampm" hidden></span></span>
+        </div>
+        <div class="flip" id="flip"></div>
       </div>
+      <i class="bar flow" aria-hidden="true"></i>
       <div class="date" id="date">
-        <span class="weekday"><span class="l" id="wd-l"></span><span class="s" id="wd-s"></span></span>
-        <span class="day"><span class="l" id="d-l"></span><span class="s" id="d-s"></span></span>
+        <span class="wd"><span class="l" id="wd-l"></span><span class="s" id="wd-s"></span></span>
+        <span class="dt"><span class="l" id="d-l"></span><span class="s" id="d-s"></span></span>
       </div>
     </main>
     <script src="mypaper.js"></script>

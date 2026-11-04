@@ -10,7 +10,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use mypaper_theme::{Appearance, Color, LoadedTheme, Paint, Surface, TextTone};
+use mypaper_theme::{Appearance, Color, LoadedTheme, Paint, Surface, TextTone, WidgetStyle};
 use serde_json::{Map, Value};
 
 /// A style sheet bigger than this is ignored (it is sent to every widget on every change).
@@ -33,6 +33,7 @@ pub fn defaults() -> Appearance {
         font: Some("Segoe UI Variable".to_owned()),
         scale: Some(1.0),
         shadow: Some(true),
+        style: Some(WidgetStyle::Minimal),
     }
 }
 
@@ -181,8 +182,9 @@ mod tests {
         assert!(all.validate().is_ok());
         // `over` an empty layer keeps every field: nothing is None.
         let json = json_of(&all);
-        assert_eq!(json.len(), 11, "{json:?}");
+        assert_eq!(json.len(), 12, "{json:?}");
         assert_eq!(json["surface"], "none");
+        assert_eq!(json["style"], "minimal");
         assert_eq!(json["opacity"], 0.55);
         assert_eq!(json["accent"], "#ffffff");
     }
@@ -308,6 +310,14 @@ mod tests {
             "range"
         );
         assert!(edit(serde_json::json!({ "tint": "red" })).is_err(), "color");
+        assert_eq!(
+            edit(serde_json::json!({ "style": "neon" })).unwrap().style,
+            Some(WidgetStyle::Neon)
+        );
+        assert!(
+            edit(serde_json::json!({ "style": "glossy" })).is_err(),
+            "unknown style"
+        );
         assert!(
             edit(serde_json::json!({ "glow": 1 })).is_err(),
             "unknown field"

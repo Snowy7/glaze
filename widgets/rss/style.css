@@ -1,5 +1,6 @@
-/* A column of headlines separated by hairlines. main.js shows only what fits, plus a peek of the
-   next one under the fade (`data-clipped`). Sizes come from container queries on the page. */
+/* Headlines, as a list (separated by hairlines) or as cards (each on a tile): data-variant on .list.
+   main.js shows only what fits, plus a peek of the next one under the fade (`data-clipped`). Sizes
+   come from container queries on the page. */
 
 .card {
   display: flex;
@@ -42,16 +43,48 @@
   height: 1px;
   background: var(--fill-2);
 }
-button.item:hover {
+html[data-surface="none"] .item + .item::before {
+  background: rgb(var(--ink) / 0.2);
+}
+.list[data-variant="list"] button.item:hover {
   background: var(--fill-1);
   color: var(--t0);
 }
-html[data-surface="none"] button.item:hover {
+html[data-surface="none"] .list[data-variant="list"] button.item:hover {
   background: rgb(var(--halo) / 0.18);
 }
 .item:hover + .item::before,
 .item:hover::before {
   opacity: 0;
+}
+
+/* Cards: every headline is a tile of its own. */
+.list[data-variant="cards"] {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+.list[data-variant="cards"] .item {
+  padding: 0.6em 0.8em 0.62em;
+  border-radius: calc(var(--radius) * 0.55);
+}
+.list[data-variant="cards"] .item:first-child {
+  padding-top: 0.6em;
+}
+.list[data-variant="cards"] .item::before {
+  display: none;
+}
+/* On a tile's body the quiet steps get a step more ink (dark text over a light wallpaper greys out). */
+.list[data-variant="cards"] .meta .caps,
+.list[data-variant="cards"] .time {
+  color: var(--t1);
+}
+/* A card keeps its tile body on hover and lifts a pixel. */
+.list[data-variant="cards"] button.item {
+  transition: transform 0.12s;
+}
+.list[data-variant="cards"] button.item:hover {
+  transform: translateY(-1px);
 }
 
 .title {
@@ -78,7 +111,7 @@ html[data-surface="none"] button.item:hover {
 
 .meta {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.6em;
   margin-top: 0.4em;
   min-width: 0;
@@ -87,6 +120,17 @@ html[data-surface="none"] button.item:hover {
 }
 .source {
   letter-spacing: 0.09em;
+}
+/* A dot of the highlight pair before the source. */
+.source::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 0.7em;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: linear-gradient(135deg, var(--hi), var(--hi-2));
 }
 .time {
   flex: none;
@@ -101,6 +145,15 @@ html[data-surface="none"] button.item:hover {
   color: var(--t3);
 }
 
+/* The accent bar over the lead headline (only where the lead is large). */
+.lead-bar {
+  display: none;
+  width: 28px;
+  height: 3px;
+  margin-bottom: 0.55em;
+  border-radius: 3px;
+}
+
 /* The first headline leads once there is room. */
 @container (min-width: 300px) and (min-height: 190px) {
   .item:first-child .title {
@@ -111,6 +164,9 @@ html[data-surface="none"] button.item:hover {
   }
   .item:first-child {
     padding-bottom: 0.8em;
+  }
+  .item:first-child .lead-bar {
+    display: block;
   }
 }
 /* Room for a third line of the lead only when tall. */
@@ -140,20 +196,51 @@ html[data-surface="none"] button.item:hover {
   .item {
     padding-block: 0.3em;
   }
+  .list[data-variant="cards"] .item {
+    padding-block: 0.45em;
+  }
   .foot {
     display: none;
   }
 }
 
+/* ---------------------------------------------------------------- nothing to show */
+
 .msg {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-content: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: var(--pad);
   text-align: center;
   pointer-events: none;
+}
+.msg-icon {
+  display: grid;
+  place-items: center;
+  width: clamp(32px, 28cqmin, 52px);
+  aspect-ratio: 1;
+  margin-bottom: 4px;
+  border-radius: 32%;
+}
+html .msg-icon.tile {
+  background-color: color-mix(in srgb, var(--hi) 30%, transparent);
+}
+.msg-icon svg {
+  width: 58%;
+  height: 58%;
+  fill: none;
+  stroke: var(--t0);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.msg-icon circle {
+  fill: var(--t0);
+  stroke: none;
 }
 .msg-title {
   font-size: 14px;
@@ -161,13 +248,19 @@ html[data-surface="none"] button.item:hover {
   color: var(--t1);
 }
 .msg-hint {
-  color: var(--t3);
+  color: var(--t2);
+}
+/* A short box has room for the icon or the words, not both. */
+@container (max-height: 110px) {
+  .msg-icon {
+    display: none;
+  }
 }
 
 .foot {
   flex: none;
   padding: 0 0.5em;
-  color: var(--t3);
+  color: var(--t2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -2,7 +2,7 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "analog-clock",
   "name": "Analog Clock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "mypaper",
   "description": "A thin, calm analog clock with an optional seconds hand, numerals and date.",
   "entry": "index.html",

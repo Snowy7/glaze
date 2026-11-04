@@ -1,6 +1,7 @@
 // @ts-check
-import { $, clamp, trackSettings, trackSize } from "./kit.js";
+import { $, trackSettings } from "./kit.js";
 
+const card = $("#card");
 const grid = $("#grid");
 const empty = $("#empty");
 
@@ -15,7 +16,15 @@ const defaults = { shortcuts: /** @type {unknown} */ ([]), labels: "auto" };
 let settings = defaults;
 /** @type {Shortcut[]} */
 let shortcuts = [];
-let size = { w: 200, h: 96 };
+
+/** The room the grid has: the card's content box, in the (scale-corrected) pixels the layout lives in. */
+function inner() {
+  const style = getComputedStyle(card);
+  return {
+    w: card.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+    h: card.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+  };
+}
 
 /**
  * The list setting arrives as plain JSON from the user's layout file: keep only usable items.
@@ -45,15 +54,27 @@ function monogram({ label, target }) {
 }
 
 /**
- * How many tiles of this size fit in the card (the card pads by 6% of its short side, 8 to 14 px).
+ * How many tiles of this size fit in the card.
  * @param {number} tileW
  * @param {number} tileH
  */
 function capacity(tileW, tileH) {
-  const pad = clamp(0.06 * Math.min(size.w, size.h), 8, 14);
-  const cols = Math.floor((size.w - 2 * pad + GAP) / (tileW + GAP));
-  const rows = Math.floor((size.h - 2 * pad + GAP) / (tileH + GAP));
+  const room = inner();
+  const cols = Math.floor((room.w + GAP) / (tileW + GAP));
+  const rows = Math.floor((room.h + GAP) / (tileH + GAP));
   return { cols: Math.max(1, cols), rows: Math.max(1, rows) };
+}
+
+/** When the grid has to scroll, cut it at a whole row so no sliver of the next one peeks out. */
+function clipToWholeRows() {
+  grid.style.maxHeight = "";
+  const first = grid.firstElementChild;
+  if (!(first instanceof HTMLElement)) return;
+  const room = inner().h;
+  if (grid.scrollHeight <= room + 1) return;
+  const rowH = first.offsetHeight;
+  const rows = Math.max(1, Math.floor((room + GAP) / (rowH + GAP)));
+  grid.style.maxHeight = `${rows * (rowH + GAP) - GAP}px`;
 }
 
 /** The largest icon-only tile size at which every shortcut fits, or 0 if none does. */
@@ -83,13 +104,13 @@ function pickLayout() {
   return labeled.cols * labeled.rows >= 4 ? labels : compact(COMPACT_MIN);
 }
 
-/** @param {HTMLElement} tile @param {string} message */
-function flashFailure(tile, message) {
-  tile.dataset.failed = "";
-  tile.title = `Couldn't open: ${message}`;
+/** @param {HTMLElement} app @param {string} message */
+function flashFailure(app, message) {
+  app.dataset.failed = "";
+  app.title = `Couldn't open: ${message}`;
   setTimeout(() => {
-    delete tile.dataset.failed;
-    tile.title = tile.dataset.name ?? "";
+    delete app.dataset.failed;
+    app.title = app.dataset.name ?? "";
   }, 1600);
 }
 
@@ -101,15 +122,17 @@ function render() {
   empty.hidden = shortcuts.length > 0;
 
   grid.replaceChildren(
-    ...shortcuts.map((s) => {
+    ...shortcuts.map((s, i) => {
       const button = document.createElement("button");
-      button.className = "tile";
+      button.className = "app";
       button.dataset.name = `${s.label}`;
       button.title = s.label;
       button.setAttribute("aria-label", `${s.label} (${s.target})`);
+      // How far this one leans toward the second highlight color (style.css `--mix`).
+      button.style.setProperty("--m", `${(i * 37) % 100}%`);
 
       const mono = document.createElement("span");
-      mono.className = "mono";
+      mono.className = "mono tile";
       mono.textContent = monogram(s);
       const label = document.createElement("span");
       label.className = "label";
@@ -122,12 +145,12 @@ function render() {
       return button;
     }),
   );
+  clipToWholeRows();
 }
 
-trackSize((s) => {
-  size = { w: s.px[0], h: s.px[1] };
-  render();
-});
+// A ResizeObserver rather than `trackSize`: it fires after the page has taken its new size, padding
+// (which depends on the surface and style) and scale, which is what `inner` measures.
+new ResizeObserver(render).observe(card);
 
 trackSettings(defaults, (next) => {
   settings = next;

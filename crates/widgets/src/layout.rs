@@ -4,7 +4,7 @@
 //! Pure: no Win32. Lengths are DIPs (CSS pixels) relative to the monitor's
 //! top-left corner unless a name says otherwise.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -29,6 +29,10 @@ pub struct Layout {
     pub grid: GridSpec,
     #[serde(default)]
     pub instances: Vec<Instance>,
+    /// Whether the overlay layer is shown (docs/widgets.md, "Placement presets"); the tray,
+    /// the hotkey and `--overlay` flip it.
+    #[serde(default = "overlay_on")]
+    pub overlay: bool,
     /// The user's look for every widget (the "user" layer of docs/widgets.md, "Appearance").
     #[serde(default, skip_serializing_if = "is_blank", serialize_with = "layer")]
     pub appearance: Appearance,
@@ -36,6 +40,10 @@ pub struct Layout {
 
 fn version() -> u32 {
     VERSION
+}
+
+fn overlay_on() -> bool {
+    true
 }
 
 /// An appearance layer that sets nothing isn't written.
@@ -54,6 +62,7 @@ impl Default for Layout {
             version: VERSION,
             grid: GridSpec::default(),
             instances: Vec::new(),
+            overlay: true,
             appearance: Appearance::default(),
         }
     }
@@ -171,6 +180,25 @@ impl Layout {
             .iter_mut()
             .find(|i| i.instance == instance)
             .with_context(|| format!("no instance {instance:?}"))
+    }
+
+    /// Instances of each widget, over all monitors.
+    pub fn counts(&self) -> BTreeMap<&str, usize> {
+        let mut counts = BTreeMap::new();
+        for instance in &self.instances {
+            *counts.entry(instance.widget.as_str()).or_default() += 1;
+        }
+        counts
+    }
+
+    /// How many instances of `widget` exist, and how many of those `here` accepts (the ones on
+    /// one monitor): what the manifest's `instances` rule needs to decide an add.
+    pub fn count_of(&self, widget: &str, here: impl Fn(&Instance) -> bool) -> (usize, usize) {
+        let of_widget = self.instances.iter().filter(|i| i.widget == widget);
+        (
+            of_widget.clone().count(),
+            of_widget.filter(|i| here(i)).count(),
+        )
     }
 
     /// `<widget>-<n>` with the smallest unused `n`.
@@ -446,6 +474,38 @@ mod tests {
         let json = serde_json::to_string(&layout).unwrap();
         assert_eq!(Layout::parse(&json).unwrap(), layout);
         assert_eq!(Layout::parse("{}").unwrap(), Layout::default());
+    }
+
+    #[test]
+    fn instances_are_counted_per_widget_and_per_monitor() {
+        let mut layout = Layout::default();
+        layout.add("clock", "D1", [0, 0], [1, 1]);
+        layout.add("clock", "D1", [1, 0], [1, 1]);
+        layout.add("clock", "D2", [0, 0], [1, 1]);
+        layout.add("notes", "D2", [2, 0], [1, 1]);
+        assert_eq!(
+            layout.counts(),
+            BTreeMap::from([("clock", 3), ("notes", 1)])
+        );
+        let on = |device: &'static str| move |i: &Instance| i.monitor == device;
+        assert_eq!(layout.count_of("clock", on("D1")), (3, 2));
+        assert_eq!(layout.count_of("clock", on("D3")), (3, 0));
+        assert_eq!(layout.count_of("weather", on("D1")), (0, 0));
+        // Together with the manifest's rule: what an add is allowed.
+        let (total, here) = layout.count_of("notes", on("D1"));
+        assert!(crate::manifest::InstanceRule::PerMonitor.allows(total, here));
+        assert!(!crate::manifest::InstanceRule::Single.allows(total, here));
+    }
+
+    #[test]
+    fn the_overlay_switch_defaults_on_and_is_remembered() {
+        assert!(Layout::parse(LAYOUT).unwrap().overlay);
+        let off = Layout::parse(r#"{ "overlay": false }"#).unwrap();
+        assert!(!off.overlay);
+        let saved = serde_json::to_value(&off).unwrap();
+        assert_eq!(saved["overlay"], false);
+        assert_eq!(Layout::parse(&saved.to_string()).unwrap(), off);
+        assert!(Layout::parse(r#"{ "overlay": "no" }"#).is_err());
     }
 
     #[test]

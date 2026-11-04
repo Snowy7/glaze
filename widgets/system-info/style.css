@@ -1,5 +1,6 @@
-/* A header and rows of label and value. main.js decides how many rows fit and how many columns
-   there are (--cols, and --n rows per column); .row's height and the gap must match its ROW_H and GAP. */
+/* A header and rows of icon, label and value. main.js decides how many rows fit and how many
+   columns there are (--cols, and --n rows per column); .row's height and the gap must match its
+   ROW_H and GAP, and .head's height (plus its margin) its HEAD_H. */
 
 .card {
   display: flex;
@@ -14,12 +15,26 @@
   align-items: center;
   gap: 8px;
 }
+.mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 32%;
+}
+/* Glyphs are text-colored (they read on light and dark wallpapers); the tiles behind the mark and
+   the live gauges are washed with the highlight. */
+html .mark.tile,
+html .row[data-gauge] .ico.tile {
+  background-color: color-mix(in srgb, var(--hi) 30%, transparent);
+}
 .logo {
-  width: 20px;
-  height: 20px;
+  width: 15px;
+  height: 15px;
   fill: none;
   stroke: var(--t0);
-  stroke-width: 1.5;
+  stroke-width: 1.8;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
@@ -44,14 +59,43 @@
 .row {
   height: 24px;
   display: grid;
-  grid-template-columns: 62px minmax(0, 1fr);
+  grid-template-columns: 22px auto minmax(0, 1fr);
   grid-template-rows: 16px 3px;
+  column-gap: 8px;
   row-gap: 5px;
   align-items: center;
+}
+/* The glyph's tile spans both lines of the row. */
+.ico {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 32%;
+  align-self: center;
+}
+.ico svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--t1);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ico circle {
+  fill: var(--t1);
+  stroke: none;
+}
+.row[data-gauge] .ico svg {
+  stroke: var(--t0);
 }
 .key {
   font-size: 10px;
   white-space: nowrap;
+  /* The value is right-aligned, so a key only needs its own width; this keeps room for the value. */
+  padding-right: 6px;
 }
 .val {
   min-width: 0;
@@ -80,11 +124,20 @@
     display: none;
   }
 }
+/* A very narrow one (a big appearance scale) drops the glyph tiles too. */
+@container (max-width: 150px) {
+  .row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .ico {
+    display: none;
+  }
+}
 
 /* Under every row: a bar for CPU and RAM, a hairline for the rest. */
 .bar,
 .rule {
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
   height: 3px;
 }
 .bar > i {
@@ -93,4 +146,11 @@
 html[data-surface="none"] .rule {
   background: rgb(var(--ink) / 0.2);
   box-shadow: 0 0 0 0.5px rgb(var(--halo) / 0.18);
+}
+/* Without the glyph tile the bar and the hairline start at the left edge (after the rules above). */
+@container (max-width: 150px) {
+  .bar,
+  .rule {
+    grid-column: 1 / -1;
+  }
 }
