@@ -17,8 +17,8 @@ const POWER: Record<PowerMode, { label: string; next: PowerMode; icon: string }>
   performance: { label: "Best performance", next: "efficiency", icon: glyphs.gauge },
 };
 
-export async function open(anchor: HTMLElement): Promise<void> {
-  await show(quick, null, { anchor, align: "end", extent: 460 });
+export async function open(anchor: HTMLElement, keyboard = false): Promise<void> {
+  await show(quick, null, { anchor, align: "end", extent: 460, keyboard });
 }
 
 const quick = defineFlyout<null>("quick", (_props, ctx) => {

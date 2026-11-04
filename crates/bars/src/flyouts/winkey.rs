@@ -1,16 +1,22 @@
-//! The Windows key opens the launcher (docs/bars.md, "Launcher"), through a low-level keyboard
-//! hook (`WH_KEYBOARD_LL`) in our own process: Windows calls it on our thread, nothing is loaded
-//! into anyone else's. It's only installed while `launcher.winKey` is on and the native taskbar is
-//! hidden, on a thread of its own (a hook that answers late is dropped by Windows), and it decides
-//! with a few comparisons and atomic loads per key.
+//! The Windows key opens the launcher (docs/bars.md, "Launcher"), and Win+N and Win+A open the
+//! notifications and quick settings flyouts, through a low-level keyboard hook (`WH_KEYBOARD_LL`)
+//! in our own process: Windows calls it on our thread, nothing is loaded into anyone else's. It's
+//! only installed while `launcher.winKey` is on and the native taskbar is hidden, on a thread of
+//! its own (a hook that answers late is dropped by Windows), and it decides with a few
+//! comparisons and atomic loads per key.
 //!
-//! Only a lone press and release replaces Start. Every key passes through untouched (Win+E,
-//! Win+Shift+S and the rest work as ever), except the release of a lone press: that one is
-//! replayed as the unassigned key `vkE8`, then the release, and swallowed only once the replay is
-//! in. Explorer sees a Windows key combination, so Start stays closed (AutoHotkey's "menu mask
-//! key"), and the launcher opens. The release goes through and Start opens as usual when a
-//! fullscreen app is in front, no launcher can open, the main loop is hung, or the replay failed
-//! (so the key never stays down).
+//! Only a lone press and release replaces Start, and only Win+N and Win+A (with nothing else
+//! held) replace the action center. Every other key passes through untouched (Win+E, Win+Shift+S
+//! and the rest work as ever).
+//! - The release of a lone press is replayed as the unassigned key `vkE8`, then the release, and
+//!   swallowed only once the replay is in. Explorer sees a Windows key combination, so Start
+//!   stays closed (AutoHotkey's "menu mask key"), and the launcher opens.
+//! - For Win+N and Win+A the mask key goes in *before* the letter, which is then swallowed (its
+//!   press, repeats and release): Explorer sees only Win, `vkE8`, and Win's release, a
+//!   combination, so neither Start nor the native panel opens.
+//!
+//! Everything goes through and Explorer acts as usual when a fullscreen app is in front, no bar
+//! can open the flyout, the main loop is hung, or the replay failed (so a key never stays down).
 
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -22,8 +28,9 @@ use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY,
-    KEYEVENTF_KEYUP, SendInput, VIRTUAL_KEY, VK_LWIN, VK_RWIN,
+    GetAsyncKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT,
+    KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, SendInput, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU,
+    VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetMessageW, HC_ACTION, IsHungAppWindow, KBDLLHOOKSTRUCT,
@@ -41,12 +48,48 @@ const MASK: VIRTUAL_KEY = VIRTUAL_KEY(0xE8);
 /// `dwExtraInfo` of the keys the bars inject themselves ("mypa"), so the hook lets them by.
 pub const OURS: usize = 0x6D79_7061;
 
+/// What a Windows key shortcut opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    /// The Windows key alone.
+    Launcher,
+    /// Win+N.
+    Notifications,
+    /// Win+A.
+    Quick,
+}
+
+impl Target {
+    /// The flyout's name in the page's `open` event.
+    pub fn flyout(self) -> &'static str {
+        match self {
+            Self::Launcher => "launcher",
+            Self::Notifications => "notifications",
+            Self::Quick => "quick",
+        }
+    }
+
+    /// The key after the Windows key.
+    fn of_letter(vk: u16) -> Option<Self> {
+        match vk {
+            0x4E => Some(Self::Notifications), // N
+            0x41 => Some(Self::Quick),         // A
+            _ => None,
+        }
+    }
+}
+
 /// What the hook does with one key event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Pass,
     /// The release of a lone Windows key press: swallow it, mask it and open the launcher.
     Open,
+    /// The letter of Win+N or Win+A: mask the combination, swallow the letter and open the flyout.
+    /// If the hook can't, [`Machine::cancel_swallow`] lets the letter through.
+    Panel(Target),
+    /// The rest of a swallowed letter (its repeats and its release).
+    Swallow,
 }
 
 /// Follows the Windows key: pressed, then whether anything else happened before its release.
@@ -56,6 +99,8 @@ pub struct Machine {
     held: Option<u16>,
     /// Something else was pressed while it was held.
     combo: bool,
+    /// The letter of Win+N / Win+A being swallowed, until its release.
+    swallowing: Option<u16>,
     /// The epoch this state belongs to (see [`Machine::sync`]).
     epoch: u32,
 }
@@ -73,11 +118,29 @@ impl Machine {
         if ours {
             return Action::Pass;
         }
+        if self.swallowing == Some(vk) {
+            if !down {
+                self.swallowing = None;
+            }
+            return Action::Swallow;
+        }
         match (self.held, down) {
             (Some(held), true) if vk == held => Action::Pass, // auto-repeat
             (Some(_), true) => {
+                // The first key after the Windows key, if it's N or A: the flyout, not the panel.
+                let panel = if self.combo {
+                    None
+                } else {
+                    Target::of_letter(vk)
+                };
                 self.combo = true;
-                Action::Pass
+                match panel {
+                    Some(target) => {
+                        self.swallowing = Some(vk);
+                        Action::Panel(target)
+                    }
+                    None => Action::Pass,
+                }
             }
             (Some(held), false) if vk == held => {
                 let lone = !self.combo;
@@ -92,6 +155,12 @@ impl Machine {
             }
             _ => Action::Pass,
         }
+    }
+
+    /// The hook couldn't open the flyout for the [`Action::Panel`] it was just given: the letter
+    /// goes through to Explorer after all, with its repeats and release.
+    pub fn cancel_swallow(&mut self) {
+        self.swallowing = None;
     }
 
     /// Forgets what was seen in an earlier epoch: a press that went down before the session
@@ -218,25 +287,54 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
             }
             hook.0.on_key(key.vkCode as u16, down, ours)
         });
-        if action == Action::Open && launcher_can_open() && replay_masked(key) {
-            HOOK.with(|hook| {
-                if let Ok(hook) = hook.try_borrow()
-                    && let Some(waker) = &hook.1
-                {
-                    waker.send(Msg::Flyout(Done::WinKey(Instant::now())));
+        match action {
+            // Swallowed; the replay carries the release.
+            Action::Open if launcher_can_open() && replay_masked(key) => {
+                open(Target::Launcher);
+                return LRESULT(1);
+            }
+            Action::Panel(target) => {
+                // Shift+Win+N and the like are Explorer's, even though Win went down first.
+                if launcher_can_open() && !modifiers_held() && send_mask() {
+                    open(target);
+                    return LRESULT(1);
                 }
-            });
-            return LRESULT(1); // swallowed; the replay carries the release
+                HOOK.with(|hook| {
+                    if let Ok(mut hook) = hook.try_borrow_mut() {
+                        hook.0.cancel_swallow();
+                    }
+                });
+            }
+            Action::Swallow => return LRESULT(1),
+            Action::Open | Action::Pass => {}
         }
     }
     // SAFETY: passes the event on, as every hook must.
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
-/// The mask key's press and release, then the Windows key's release as it came (its scan code
-/// and extended flag). Whether all three went in: if not, the real release must pass.
-fn replay_masked(release: &KBDLLHOOKSTRUCT) -> bool {
-    let key = |vk: VIRTUAL_KEY, scan: u16, flags: KEYBD_EVENT_FLAGS| INPUT {
+/// Tells the main loop to open `target`'s flyout.
+fn open(target: Target) {
+    HOOK.with(|hook| {
+        if let Ok(hook) = hook.try_borrow()
+            && let Some(waker) = &hook.1
+        {
+            waker.send(Msg::Flyout(Done::WinKey(Instant::now(), target)));
+        }
+    });
+}
+
+/// Is Shift, Ctrl or Alt down?
+fn modifiers_held() -> bool {
+    [VK_SHIFT, VK_CONTROL, VK_MENU]
+        // SAFETY: no preconditions.
+        .iter()
+        .any(|vk| unsafe { GetAsyncKeyState(i32::from(vk.0)) } < 0)
+}
+
+/// A key press or release of ours (`OURS` in its extra info).
+fn key_input(vk: VIRTUAL_KEY, scan: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
+    INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
             ki: KEYBDINPUT {
@@ -247,24 +345,41 @@ fn replay_masked(release: &KBDLLHOOKSTRUCT) -> bool {
                 ..Default::default()
             },
         },
-    };
+    }
+}
+
+/// Whether all of `inputs` went in.
+fn send(inputs: &[INPUT]) -> bool {
+    // SAFETY: a valid input array and its element size.
+    let sent = unsafe { SendInput(inputs, size_of::<INPUT>() as i32) };
+    sent as usize == inputs.len()
+}
+
+/// The mask key's press and release: Explorer sees the Windows key held with another key.
+fn send_mask() -> bool {
+    send(&[
+        key_input(MASK, 0, KEYBD_EVENT_FLAGS(0)),
+        key_input(MASK, 0, KEYEVENTF_KEYUP),
+    ])
+}
+
+/// The mask key's press and release, then the Windows key's release as it came (its scan code
+/// and extended flag). Whether all three went in: if not, the real release must pass.
+fn replay_masked(release: &KBDLLHOOKSTRUCT) -> bool {
     let extended = if release.flags.0 & LLKHF_EXTENDED.0 != 0 {
         KEYEVENTF_EXTENDEDKEY
     } else {
         KEYBD_EVENT_FLAGS(0)
     };
-    let inputs = [
-        key(MASK, 0, KEYBD_EVENT_FLAGS(0)),
-        key(MASK, 0, KEYEVENTF_KEYUP),
-        key(
+    send(&[
+        key_input(MASK, 0, KEYBD_EVENT_FLAGS(0)),
+        key_input(MASK, 0, KEYEVENTF_KEYUP),
+        key_input(
             VIRTUAL_KEY(release.vkCode as u16),
             release.scanCode as u16,
             KEYEVENTF_KEYUP | extended,
         ),
-    ];
-    // SAFETY: a valid input array and its element size.
-    let sent = unsafe { SendInput(&inputs, size_of::<INPUT>() as i32) };
-    sent as usize == inputs.len()
+    ])
 }
 
 #[cfg(test)]
@@ -299,6 +414,66 @@ mod tests {
             [Action::Pass, Action::Pass, Action::Open],
             "auto-repeat is still a lone press"
         );
+    }
+
+    const N: u16 = 0x4E;
+    const A: u16 = 0x41;
+
+    #[test]
+    fn win_n_and_win_a_open_their_flyouts_and_swallow_the_letter() {
+        use Action::{Panel, Pass, Swallow};
+        assert_eq!(
+            run(&[
+                (LWIN, true, false),
+                (N, true, false),
+                (N, true, false), // auto-repeat
+                (N, false, false),
+                (LWIN, false, false)
+            ]),
+            [Pass, Panel(Target::Notifications), Swallow, Swallow, Pass],
+            "the letter goes, and the Windows key's release isn't a lone press"
+        );
+        assert_eq!(
+            run(&[
+                (RWIN, true, false),
+                (A, true, false),
+                (A, false, false),
+                (RWIN, false, false)
+            ]),
+            [Pass, Panel(Target::Quick), Swallow, Pass]
+        );
+    }
+
+    #[test]
+    fn only_the_first_key_after_the_windows_key_can_be_a_panel() {
+        // Another key first (Win+E+N), or Win+Shift+N: Explorer's.
+        assert_eq!(
+            run(&[(LWIN, true, false), (E, true, false), (N, true, false)])[2],
+            Action::Pass
+        );
+        assert_eq!(
+            run(&[(LWIN, true, false), (SHIFT, true, false), (N, true, false)])[2],
+            Action::Pass
+        );
+        // N alone, or our own N, is nobody's business.
+        assert_eq!(run(&[(N, true, false), (N, false, false)]), [Action::Pass; 2]);
+        assert_eq!(
+            run(&[(LWIN, true, false), (N, true, true), (N, false, true)])[1..],
+            [Action::Pass; 2]
+        );
+    }
+
+    #[test]
+    fn a_panel_that_cannot_open_lets_the_letter_through() {
+        let mut machine = Machine::default();
+        machine.on_key(LWIN, true, false);
+        assert_eq!(
+            machine.on_key(A, true, false),
+            Action::Panel(Target::Quick)
+        );
+        machine.cancel_swallow();
+        assert_eq!(machine.on_key(A, false, false), Action::Pass);
+        assert_eq!(machine.on_key(LWIN, false, false), Action::Pass);
     }
 
     #[test]
