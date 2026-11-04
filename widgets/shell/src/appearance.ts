@@ -53,13 +53,27 @@ export function over(below: AppearanceValues, top: Layer): AppearanceValues {
   return merged;
 }
 
+// The built-in tint and accent, and what they become with dark text (a near-black tint would be dark
+// on dark, a white accent would vanish). Mirrors `look.rs` in the host, which sends final values;
+// this copy only exists so a live preview matches what the host will send.
+const DEFAULT_TINT = "#101010";
+const DEFAULT_ACCENT = "#ffffff";
+const DARK_TEXT_TINT = "#f2f2f2";
+const DARK_TEXT_ACCENT = "#0a0a0c";
+
 /**
  * What a widget shows: `own` over `user` over `base`, with `accent: auto` replaced by `autoAccent`
- * (the wallpaper palette's accent, resolved by the host).
+ * (the wallpaper palette's accent, resolved by the host). With dark text, a tint or accent that is
+ * still the built-in default becomes the dark-text default.
  */
 export function resolve(base: AppearanceValues, user: Layer, own: Layer, autoAccent: string): AppearanceValues {
   const merged = over(over(base, user), own);
-  return merged.accent === "auto" ? { ...merged, accent: autoAccent } : merged;
+  if (merged.accent === "auto") merged.accent = autoAccent;
+  if (merged.text === "dark") {
+    if (merged.tint.toLowerCase() === DEFAULT_TINT) merged.tint = DARK_TEXT_TINT;
+    if (merged.accent.toLowerCase() === DEFAULT_ACCENT) merged.accent = DARK_TEXT_ACCENT;
+  }
+  return merged;
 }
 
 export type Scope = { kind: "user" } | { kind: "instance"; instance: string };

@@ -42,8 +42,13 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   plus the whole monitor while edit mode is on. Clicks outside widgets go to the desktop (icons,
   right-click menu, rubber-band selection).
 - **Transparency.** WebView2 `DefaultBackgroundColor` is fully transparent, and the shell page's
-  background is transparent. Chromium paints an opaque backdrop behind an iframe whose
-  `color-scheme` differs from its embedder's, so widgets should leave `color-scheme` at its default.
+  background is transparent. Chromium paints an **opaque** backdrop behind an iframe whose
+  `color-scheme` differs from the one its embedding page resolves for the `<iframe>` element, which
+  shows as a dark (or white) rectangle in the corners outside a rounded card. So the shell pins
+  `color-scheme: dark` on its root and on every widget iframe, and **every widget document must pin
+  `:root { color-scheme: dark }` too**, whatever its text tone (the widget kit's `base.css` does; the
+  tone is `data-text`, not the color scheme). A widget on the default scheme gets an opaque white
+  backdrop. Keep `html` and `body` transparent and paint only your own card.
 - **Isolation.** Each widget has its own origin, `https://<id>.widget.mypaper/`, served from its
   folder by the host's network filter (see [Network](#network)), with a Content-Security-Policy on
   every response. (Not with `SetVirtualHostNameToFolderMapping`: mapped hosts bypass
@@ -216,16 +221,23 @@ so users and themes can restyle every widget without editing widget code.
 | Field | Values | Default |
 |---|---|---|
 | `surface` | `none` (no background: text sits on the wallpaper), `glass` (tinted and blurred), `solid` | **`none`** |
-| `tint` | `"#rrggbb"`: the surface color | `#101010` |
-| `opacity` | 0–1: surface opacity | 0.55 |
+| `tint` | `"#rrggbb"`: the surface color | `#101010` (`#f2f2f2` with dark text, see below) |
+| `opacity` | 0–1: opacity of a `glass` surface (a `solid` surface is always opaque) | 0.55 |
 | `blur` | 0–64 px: background blur (glass only) | 24 |
 | `radius` | 0–48 px: corner radius | 18 |
 | `border` | bool: hairline border | true |
 | `text` | `light` (for dark wallpapers) or `dark` | `light` |
-| `accent` | `"#rrggbb"` or `auto` (the wallpaper palette's accent) | `#ffffff` |
+| `accent` | `"#rrggbb"` or `auto` (the wallpaper palette's accent) | `#ffffff` (`#0a0a0c` with dark text, see below) |
 | `font` | a CSS font-family list | Segoe UI Variable |
 | `scale` | 0.5–2: content scale | 1 |
 | `shadow` | bool: soft text shadow, for legibility with `surface: none` | true |
+
+**Tone-aware defaults.** A near-black tint is dark on dark text, and a white accent vanishes on a
+light surface, so with `text: dark` the built-in defaults flip: a `tint` that is still `#101010`
+becomes `#f2f2f2`, and an `accent` that is still `#ffffff` becomes the ink, `#0a0a0c`. **The host
+does this, once, in the merge**, and sends the final values (any color a theme or the user chose
+stays; picking exactly the default color counts as the default). So the SDK has nothing to flip: it
+applies what it gets. The shell's live preview applies the same rule.
 
 **Layers**, lowest to highest (each set field wins over the layers below it):
 
@@ -250,16 +262,27 @@ the same data travels in `state`, see [Host ⇄ shell](#host--shell); the shell 
 | `data-surface="none\|glass\|solid"` | `surface` |
 | `data-text="light\|dark"` | `text` |
 | `data-shadow="on\|off"` | `shadow` |
-| `--surface` | `tint` at `opacity` |
+| `--surface` | `tint` at `opacity` (always opaque for `solid`) |
 | `--blur`, `--radius` | `blur`, `radius` (px) |
-| `--line` | the border color, or transparent if `border` is false |
+| `--line` | the border color, or **transparent if `border` is false** |
 | `--t0`…`--t3` | text steps from `text` |
 | `--fill-1`…`--fill-3` | fills from `text` |
+| `--ink`, `--halo`, `--on-accent` | the ink (as a channel triple), its opposite, the ink that reads on the accent |
 | `--accent`, `--font`, `--scale` | `accent`, `font`, `scale` |
 
 It also inserts `themeCss` as the last `<style>`. Widgets should use these variables and never
 hard-code a background, so a theme can restyle them. The widget's own CSS still works, and theme CSS
 can target `[data-widget="<id>"]` (set by the kit on `<html>`).
+
+Rules for widget authors that follow from this:
+
+- **`surface: solid` is always opaque**; `opacity` and `blur` only apply to `glass`.
+- **Dividers and hairlines inside a widget use `--fill-2`, not `--line`**: `--line` disappears when
+  the user turns the border off.
+- **Measure content with a `ResizeObserver`, not `size.onChange`.** `size` reports the widget's box
+  in CSS px, which does not follow `scale` (the kit applies `--scale` inside the page) and can be
+  re-sent after an appearance change. Use the size for the grid, and observe your own elements for
+  anything you lay out by pixels.
 
 **The CSP** allows `style-src 'self' 'unsafe-inline'`, so the kit can inject theme CSS.
 
@@ -579,14 +602,19 @@ is held.
 
 ## Bundled examples
 
-- **Widgets**:
-  - `clock`: time and date.
-  - `system-monitor`: CPU, RAM, GPU and network sparkline.
-  - `now-playing`: media with artwork and controls.
-  - `weather`: uses the weather plugin.
-  - `notes`: a sticky note, using storage.
-  - `launcher`: a grid of shortcuts, using launch.
-- **Plugins**: `weather` (Rust, open-meteo, no API key).
+- **Widgets** (21, all on the widget kit, so every one follows the [Appearance](#appearance)):
+  - Time: `clock`, `analog-clock`, `world-clock`, `calendar`, `timer` (pomodoro and countdown),
+    `countdown`.
+  - System (`system.stats`): `system-monitor` (CPU, RAM, GPU and network sparklines), `disk`,
+    `battery`, `network` (connection name, signal and rates), `system-info` (uptime, CPU, memory,
+    GPU, disk, network and battery).
+  - Media and web: `now-playing` (`media`), `weather` (the weather plugin), `rss` (the rss plugin,
+    `launch`), `crypto` (`network:` to CoinGecko), `quote`, `photo` (a folder of images).
+  - Personal: `notes` (a sticky note, storage), `todo`, `launcher` (`launch`), `search` (`launch`).
+- **Plugins**: `weather` (Rust, open-meteo, no API key) and `rss` (Rust, fetches and parses feeds).
+  Each is built once and its exe copied next to its `plugin.json`:
+  `cargo build --release -p mypaper-plugin-weather` and `-p mypaper-plugin-rss`, then copy
+  `weather.exe` / `rss.exe` into `plugins/weather/` / `plugins/rss/`.
 - **Tooling**: `packages/widget-sdk` has the typed SDK, the `mypaper.js` drop-in, the JSON
   Schemas and a mock host for developing widgets in a browser. Tutorials:
   [writing-widgets.md](writing-widgets.md) and [writing-plugins.md](writing-plugins.md).

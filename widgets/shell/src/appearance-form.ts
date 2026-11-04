@@ -72,7 +72,10 @@ export function buildAppearanceForm(options: AppearanceFormOptions): AppearanceF
     commit(key, null);
   }
 
-  const refresh = () => refreshers.forEach((r) => r());
+  const refresh = () => {
+    form.dataset.surface = valueOf("surface"); // opacity and blur only apply to glass: the CSS dims them
+    refreshers.forEach((r) => r());
+  };
 
   /** A labelled row for `key`. `inline` puts the control beside the label (toggles). */
   function row(key: Key, label: string, control: Control, inline = false, readout?: HTMLElement) {

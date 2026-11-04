@@ -1,10 +1,16 @@
 /*
  * Shell page. Monochrome on purpose: neutral grays and white, no accent hues, so it reads over any
- * wallpaper. Do not set `color-scheme` anywhere: Chromium paints an opaque backdrop behind iframes
- * whose color-scheme differs from their embedder's, which would break widget transparency.
+ * wallpaper.
+ *
+ * `color-scheme: dark` must match the widgets'. Chromium paints an OPAQUE backdrop behind an iframe
+ * whose document color-scheme differs from the one the embedding page resolves for the <iframe>
+ * element, which showed as a dark rectangle in the corners of rounded cards. The widget kit pins
+ * `:root { color-scheme: dark }` for every text tone, so the shell (and its iframes) are `dark` too.
+ * Nothing here paints a page background: html and body stay transparent.
  */
 
 :root {
+  color-scheme: dark;
   --surface: rgba(20, 20, 20, 0.82);
   --raised: rgba(40, 40, 40, 0.94);
   --raised-hover: rgba(62, 62, 62, 0.96);
@@ -80,6 +86,7 @@ button {
   height: 100%;
   border: 0;
   background: transparent;
+  color-scheme: dark; /* same as the widget documents (see the top of this file) */
 }
 
 .slot.selected {
@@ -798,6 +805,14 @@ input[type="range"]::-webkit-slider-thumb {
 .field.set > .row > .t,
 .field.set.inline > .t {
   color: var(--text);
+}
+
+/* Opacity and blur only apply to a glass surface (solid is always opaque). */
+.form[data-surface="none"] .field[data-key="opacity"],
+.form[data-surface="none"] .field[data-key="blur"],
+.form[data-surface="solid"] .field[data-key="opacity"],
+.form[data-surface="solid"] .field[data-key="blur"] {
+  opacity: 0.45;
 }
 
 .reset {

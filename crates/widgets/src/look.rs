@@ -87,8 +87,16 @@ pub fn base(skin: &Skin) -> Appearance {
     skin.appearance.over(&defaults())
 }
 
+/// What the default tint becomes with dark text (the near-black default would be dark on dark).
+const DARK_TEXT_TINT: Color = Color([0xf2, 0xf2, 0xf2]);
+/// What the default accent (white) becomes with dark text: the ink, since white would vanish.
+const DARK_TEXT_ACCENT: Color = Color([0x0a, 0x0a, 0x0c]);
+
 /// What a widget gets: `own` over `user` over `base`, every field set, `auto` replaced by
-/// `accent` (the palette's accent; [`accent`] picks it).
+/// `accent` (the palette's accent; [`accent`] picks it). With dark text, a tint or accent that is
+/// still the built-in default becomes the dark-text default (`#f2f2f2`, `#0a0a0c`): the host sends
+/// final values, so the widget kit has nothing to flip. (The shell mirrors this in
+/// `widgets/shell/src/appearance.ts` for live previews.)
 pub fn resolve(
     own: &Appearance,
     user: &Appearance,
@@ -98,6 +106,15 @@ pub fn resolve(
     let mut merged = own.over(&user.over(base));
     if merged.accent == Some(Paint::Auto) {
         merged.accent = Some(Paint::Color(accent));
+    }
+    if merged.text == Some(TextTone::Dark) {
+        let default = defaults();
+        if merged.tint == default.tint {
+            merged.tint = Some(DARK_TEXT_TINT);
+        }
+        if merged.accent == default.accent {
+            merged.accent = Some(Paint::Color(DARK_TEXT_ACCENT));
+        }
     }
     merged
 }
@@ -220,6 +237,40 @@ mod tests {
         };
         let got = resolve(&fixed, &none, &base, color("#14d17f"));
         assert_eq!(got.accent, Some(Paint::Color(color("#ff0000"))));
+    }
+
+    #[test]
+    fn dark_text_flips_the_default_tint_and_accent_but_not_chosen_ones() {
+        let dark = Appearance {
+            text: Some(TextTone::Dark),
+            ..Default::default()
+        };
+        let none = Appearance::default();
+        let got = resolve(&dark, &none, &defaults(), color("#14d17f"));
+        assert_eq!(got.tint, Some(color("#f2f2f2")));
+        assert_eq!(got.accent, Some(Paint::Color(color("#0a0a0c"))));
+
+        // Chosen colors stay, an auto accent is the palette's, and light text changes nothing.
+        let chosen = Appearance {
+            text: Some(TextTone::Dark),
+            tint: Some(color("#303040")),
+            accent: Some(Paint::Auto),
+            ..Default::default()
+        };
+        let got = resolve(&chosen, &none, &defaults(), color("#14d17f"));
+        assert_eq!(got.tint, Some(color("#303040")));
+        assert_eq!(got.accent, Some(Paint::Color(color("#14d17f"))));
+        let light = resolve(&none, &none, &defaults(), color("#14d17f"));
+        assert_eq!(light.tint, Some(color("#101010")));
+        assert_eq!(light.accent, Some(Paint::Color(color("#ffffff"))));
+
+        // A theme that sets the tint keeps it under dark text too.
+        let themed = Appearance {
+            tint: Some(color("#223344")),
+            ..Default::default()
+        };
+        let got = resolve(&dark, &none, &themed.over(&defaults()), color("#14d17f"));
+        assert_eq!(got.tint, Some(color("#223344")));
     }
 
     #[test]
