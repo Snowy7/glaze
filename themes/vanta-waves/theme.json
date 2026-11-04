@@ -1,0 +1,8 @@
+{
+  "name": "Waves",
+  "wallpaper": {
+    "kind": "web",
+    "url": "index.html",
+    "interactive": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Milky Way over Paranal",
+  "wallpaper": {
+    "kind": "video",
+    "source": "loop.mp4",
+    "fit": "contain",
+    "fps": 25
+  }
+}

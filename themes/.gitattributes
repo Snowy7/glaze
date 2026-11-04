@@ -1,0 +1,11 @@
+# Keep attribution byte counts and hashes stable across Windows/Linux checkouts.
+* text=auto eol=lf
+# Preserve the original GLSL formatting for license/source comparison.
+*/upstream.glsl whitespace=-blank-at-eol,-space-before-tab
+*/shaders/*.frag whitespace=-blank-at-eol,-space-before-tab
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.mp4 binary
+*.glb binary
+*.webp binary
