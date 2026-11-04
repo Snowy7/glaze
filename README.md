@@ -281,7 +281,8 @@ mypaper-core          supervisor · tray · panic hotkey · Windows styling + un
   ├─ mypaper-wallpaper   wgpu: one GPU device, one surface per monitor, behind the icons
   ├─ mypaper-widgets     a transparent WebView2 layer per monitor, above the icons
   │     └─ plugins       separate processes, JSON-RPC over stdio
-  └─ mypaper-bars        top bar and dock (app bars), native-taskbar control + journal
+  ├─ mypaper-bars        top bar and dock (app bars), native-taskbar control + journal
+  └─ mypaper-shell       the native shell (software Direct2D): the desktop right-click menu
 ```
 
 | Folder | What it owns |
@@ -290,6 +291,7 @@ mypaper-core          supervisor · tray · panic hotkey · Windows styling + un
 | `crates/wallpaper` | The engine: sources, frame pacing, palette, live config |
 | `crates/widgets`, `widgets/shell` | The widget host and its page ([docs/widgets.md](docs/widgets.md)) |
 | `crates/bars`, `bars/shell` | The top bar and dock ([docs/bars.md](docs/bars.md)) |
+| `crates/ui`, `crates/shell` | The native UI layer and the shell built on it ([docs/ui.md](docs/ui.md)) |
 | `crates/tweaks`, `crates/inject` | Windows styling with an undo journal; which windows may be styled |
 | `crates/desktop`, `crates/config`, `crates/theme` | Win32 plumbing, settings, theme format |
 | `packages/widget-sdk`, `widgets/`, `plugins/` | Widget SDK, the bundled widgets and plugins |
@@ -305,6 +307,7 @@ frontend, rust-lld and a DX12-only wgpu ([engine notes](docs/engine-notes.md)).
 | [widgets.md](docs/widgets.md) | The widget system: host, grid, edit mode, appearance, API, plugins |
 | [writing-widgets.md](docs/writing-widgets.md) · [writing-plugins.md](docs/writing-plugins.md) | Tutorials |
 | [bars.md](docs/bars.md) | Top bar, dock, menus, presets and taskbar |
+| [ui.md](docs/ui.md) | The native UI layer (`crates/ui`) and `mypaper-shell` |
 | [performance.md](docs/performance.md) | The harness, the budgets, and before/after startup numbers |
 | [windows-styling.md](docs/windows-styling.md) | Accent, borders, Mica, dark mode, and what is restored |
 | [web-and-app-wallpapers.md](docs/web-and-app-wallpapers.md) | Web and external-renderer wallpapers |

@@ -15,7 +15,7 @@ by default; everything else is opt-in):
 | [Desktop icons and icon size in the tray](#tray) | tray, **Desktop** submenu | documented (`IFolderView2`) |
 
 Nothing here injects code into another process. The one hook (the right-click menu's) lives in
-`mypaper-core`'s own threads.
+a thread of `mypaper-shell`, the native shell core supervises.
 
 ## Desktop right-click menu
 
@@ -31,8 +31,8 @@ Nothing here injects code into another process. The one hook (the right-click me
 }
 ```
 
-A right-click on the **bare desktop** opens mypaper's menu (a themed, custom-drawn window) instead of
-Explorer's. A right-click on an **icon**, on any window, on the taskbar, or with **Shift** held,
+A right-click on the **bare desktop** opens mypaper's menu (a themed window drawn by the native UI
+layer, [ui.md](ui.md)) instead of Explorer's. A right-click on an **icon**, on any window, on the taskbar, or with **Shift** held,
 always gets the native menu. **On by default** (no `desktop_menu` key, or one without `enabled`);
 with `"enabled": false` nothing is installed: no hook, no thread. The Studio toggle and the tray's
 **Desktop** submenu write that.
@@ -43,8 +43,9 @@ desktop menu takes **130 to 190 ms for its first window and 205 to 320 ms for th
 mypaper not running at all**, so the slowness is Windows' own (its XAML menu and the shell
 extensions), not ours; with mypaper running (menu off) it's the same with a web wallpaper (about
 230 ms) and 300 to 510 ms in the first seconds after start with an image wallpaper (six clicks;
-a hint of load from the wallpaper's start, not a steady cost). Our menu opens in **17 to 50 ms**
-(median 25) on the same clicks.
+a hint of load from the wallpaper's start, not a steady cost). Our menu opened in **17 to 50 ms**
+(median 25) on the same clicks when core hosted it, and in **11 to 15 ms** (median 13) from the
+shell ([below](#measured)).
 
 `items` is the menu top to bottom. Leave an item out to hide it, reorder to move it. Without `items`
 you get the list above (minus the custom entry). A mistyped item name is an error, like any other
@@ -71,14 +72,18 @@ The desktop's view comes from the documented route `IShellWindows::FindWindowSW(
 
 **Look.** The menu uses the same appearance variables as the bars: the built-in defaults, under the
 active theme's `bars.appearance` (`tint`, `opacity`, `radius`, `border`, `text`, `accent` (`auto`
-follows the wallpaper), `font`, `scale`, `shadow`). Differences: `blur` has no counterpart (a layered
-window cannot blur what is behind it without undocumented calls), so the panel is drawn as a nearly
-opaque tint (`opacity` is kept between 0.7 and 1), and `surface: none` still draws a panel.
+follows the wallpaper), `font`, `scale`, `shadow`), turned into the UI layer's tokens. Differences:
+`blur` has no counterpart yet (the engine's Liquid Glass comes to menus in N3), so the panel is drawn
+as a nearly opaque tint (`opacity` is kept between 0.7 and 1), and `surface: none` still draws a
+panel. Check marks and submenu chevrons are Segoe Fluent Icons glyphs (Segoe MDL2 Assets on
+Windows 10).
 
 ### How it works
 
+Both threads are `mypaper-shell`'s (`crates/shell/src/desktop_menu/`); core only supervises it.
+
 ```text
-hook thread                              menu thread
+hook thread                              the shell's UI thread
  WH_MOUSE_LL, a message loop, nothing else    COM, UI Automation, the menu windows
   │                                            │
   │  right press on the bare desktop?          │
@@ -95,7 +100,7 @@ hook thread                              menu thread
 - **The callback returns in microseconds.** For mouse moves, buttons other than the right one, and
   the wheel it does nothing but pass the event on. For the right button it asks a pure decision
   (`desktop_hit::Swallower`: a window-class check, the cached icon rectangles, Shift) and posts a
-  thread message. All slow work (COM calls to Explorer, UI Automation) happens on the menu thread,
+  message. All slow work (COM calls to Explorer, UI Automation) happens on the shell's UI thread,
   *while the button is still down*, so the release only has to draw. Measured numbers are
   [below](#measured).
 - **Icons always get the native menu.** The fast path knows where the icons are from the folder
@@ -113,18 +118,23 @@ hook thread                              menu thread
   never reached any window, Windows sometimes refuses a plain `SetForegroundWindow` (seen live); the
   menu then attaches its input queue to the foreground window's thread for the call, which works.
   Clicking anywhere outside the menu closes it even if focus could not be taken (the hook reports it).
-- **No lost clicks.** The hook posts to a hidden *window* of the menu thread, which only queues the
-  message. (A thread message would be discarded if it arrived while the thread was inside a COM call
-  to Explorer, losing the release of a swallowed right-click.) The main loop handles the queue in order.
+- **Submenus touch their parent.** A submenu opens against the parent's right edge (or its left
+  edge, without room) with no gap and no overlap, so no popup ever covers another (the engine's
+  glass will need that, plan N3). Over a submenu's shadow, the pointer still drives the parent.
+- **No lost clicks.** The hook posts to the shell's *inbox window*, which only queues the message.
+  (A thread message would be discarded if it arrived while the thread was inside a COM call to
+  Explorer, losing the release of a swallowed right-click.) The menu's own windows queue their
+  input the same way ([ui.md](ui.md), "Input"), and the loop handles both queues in order.
 - **Pre-created windows.** Creating a layered popup takes about 20 ms on the test machine, more than
-  everything else together, so the root and one submenu window are created hidden at start and reused.
+  everything else together, so the root and one submenu window are created hidden at start and
+  reused. A closed menu's windows keep no bitmaps.
 
 ### Measured
 
-Release build, Ryzen laptop, two 1440p monitors, injected input (`cargo run --release -p
-mypaper-desktop --example menu_live`). The callback times are measured inside it with
-`QueryPerformanceCounter`; "own" is the callback's work, and "chain" the time other programs' hooks
-(installed after ours) take when we pass the event on, which is not ours to control.
+Release build, Ryzen laptop, two 1440p monitors. The hook callback was timed inside it with
+`QueryPerformanceCounter` while the menu lived in core; the callback moved to the shell unchanged,
+and the timing instrumentation was removed with the move. "Own" is the callback's work; the time
+other programs' hooks (installed after ours) take when we pass the event on is not ours to control.
 
 | Event | Own cost, mean | Own cost, worst |
 |---|---|---|
@@ -135,10 +145,17 @@ mypaper-desktop --example menu_live`). The callback times are measured inside it
 The press is the only event that does real work: `WindowFromPoint` asks the window under the cursor
 to hit-test (a cross-process call), which is most of its cost. It happens once per right-click.
 
+The menu in `mypaper-shell`, 2026-11-04, injected from another process like hardware input
+(`cargo run --release -p mypaper-shell --example menu_live`, with the shell running):
+
 | Menu | |
 |---|---|
-| appears after the release (15 clicks, first one cold) | median **4.5 to 7 ms**, worst 8 ms, first 8 to 13 ms |
-| UI Automation confirmation (during the press, not on the critical path) | 4.6 to 5.4 ms, the first one 20 ms |
+| on screen after a quick click (press and release together: UI Automation's check and the desktop's state are on the critical path) | median **13.1 ms**, best 11.3, worst 14.5 (14 of 15 clicks) |
+| on screen after the release of a person's click (70 ms hold) | median **1.8 ms**, worst 21.4 ms |
+| Escape closes it (it has the focus) | 30 of 30 |
+| UI Automation confirmation (during the press; earlier measurement) | 4.6 to 5.4 ms, the first one 20 ms |
+
+What the shell costs is in [ui.md](ui.md#measured).
 
 ### When the native menu opens instead of ours
 
@@ -288,8 +305,8 @@ Note: like Explorer's View menu, changing the icon size makes Explorer re-save i
 | Cursor sets | `%LOCALAPPDATA%\mypaper\cursors\<built-in>`, `%APPDATA%\mypaper\cursors\<yours>` |
 | Styling journal (accent, dark mode, cursors) | `%LOCALAPPDATA%\mypaper\undo.json` |
 | Classic menu journal | `%LOCALAPPDATA%\mypaper\undo-shell.json` |
-| Code | `crates/desktop/src/{desktop_menu,menu_model,menu_ui,desktop_hit,desktop_view,raw_input}.rs`, `crates/tweaks/src/{cursors,cursor_art,classic_menu}.rs`, `crates/core/src/desktop_extras.rs` |
-| Live harnesses | `crates/desktop/examples/{menu_live,view_live,icons_live}.rs`, `crates/tweaks/examples/live_tweaks.rs` |
+| Code | `crates/shell/src/desktop_menu/` (the menu), `crates/ui` (drawing it, [ui.md](ui.md)), `crates/desktop/src/{desktop_hit,desktop_view,raw_input}.rs`, `crates/tweaks/src/{cursors,cursor_art,classic_menu}.rs`, `crates/core/src/desktop_extras.rs` |
+| Live harnesses | `crates/shell/examples/menu_live.rs`, `crates/desktop/examples/{view_live,icons_live}.rs`, `crates/tweaks/examples/live_tweaks.rs` |
 
 Studio edits all of these: Settings has the desktop right-click menu (items, order, custom
 commands) and the classic-menu switch, and the theme editor has the cursor picker and the
