@@ -182,8 +182,12 @@ exposes:
   without a match show a monogram.
 - Left click is UIA `Invoke`. Right click focuses the button (UIA `SetFocus`) and sends the
   context-menu key (Shift+F10), which the tray turns into the app's context menu.
-- If UI Automation is unavailable, the module shows a single `overflow` button that opens the
-  native overflow flyout (Win+B, Enter). The fallback is logged.
+- **With `taskbar.mode: hide` there are no tray icons**: Explorer removes a hidden taskbar's whole
+  XAML content from the UIA tree (measured: no `SystemTray.*` element at all), so there's nothing
+  to read or invoke. The icons are there in `keep` and `autohide` (an auto-hidden taskbar is only
+  slid off-screen), so use `autohide` to keep the tray module working.
+- If UI Automation is unavailable or finds no tray (as in `hide`), the module shows a single
+  `overflow` button that tries the native overflow flyout (Win+B, Enter). The fallback is logged.
 
 ## Dock
 

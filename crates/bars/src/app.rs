@@ -615,7 +615,7 @@ impl App {
                 .iter_mut()
                 .find(|b| b.kind == kind && b.monitor.device == monitor.device)
             {
-                Some(bar) => bar.update(monitor, geometry),
+                Some(bar) => changed |= bar.update(monitor, geometry),
                 None => {
                     self.next_bar += 1;
                     match Bar::new(self.next_bar, kind, monitor, geometry) {
@@ -1128,6 +1128,14 @@ impl App {
             .windows
             .iter()
             .find(|w| Some(w.hwnd) == self.foreground && !w.minimized);
+        log::debug!(
+            "activate {key}: in front {:?}; windows {:?}",
+            self.foreground,
+            item.windows
+                .iter()
+                .map(|w| (w.hwnd, w.minimized))
+                .collect::<Vec<_>>()
+        );
         match front {
             Some(window) => {
                 system::minimize(system::hwnd(window.hwnd));

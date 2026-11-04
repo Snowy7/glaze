@@ -10,21 +10,25 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use anyhow::{Context, Result};
 use mypaper_desktop::{Monitor, Rect};
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     CombineRgn, CreateRectRgn, DeleteObject, RGN_OR, SetWindowRgn,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
+};
 use windows::Win32::UI::Shell::{ABM_ACTIVATE, ABM_WINDOWPOSCHANGED, APPBARDATA, SHAppBarMessage};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, HWND_TOPMOST, IDC_ARROW, LWA_ALPHA,
-    LoadCursorW, MA_NOACTIVATE, PBT_APMPOWERSTATUSCHANGE, PostThreadMessageW, RegisterClassExW,
-    RegisterWindowMessageW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetLayeredWindowAttributes,
-    SetWindowPos, ShowWindow, WA_ACTIVE, WM_ACTIVATE, WM_APP, WM_CLOSE, WM_DISPLAYCHANGE,
-    WM_DPICHANGED, WM_ERASEBKGND, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_POWERBROADCAST, WM_TIMECHANGE,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT, GetAncestor, GetCursorPos,
+    HWND_TOPMOST, IDC_ARROW, LWA_ALPHA, LoadCursorW, MA_NOACTIVATE, PBT_APMPOWERSTATUSCHANGE,
+    PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW, SPI_SETWORKAREA, SW_HIDE,
+    SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetLayeredWindowAttributes, SetWindowPos, ShowWindow,
+    WA_ACTIVE, WM_ACTIVATE, WM_APP, WM_CLOSE, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_ERASEBKGND,
+    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_POWERBROADCAST, WM_SETTINGCHANGE, WM_TIMECHANGE,
     WM_WINDOWPOSCHANGED, WNDCLASSEXW, WS_CLIPCHILDREN, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WindowFromPoint,
 };
 use windows::core::{PCWSTR, w};
 
@@ -152,13 +156,23 @@ unsafe extern "system" fn bar_proc(
         // App bars must report these (SHAppBarMessage docs).
         WM_ACTIVATE => {
             appbar_notify(ABM_ACTIVATE);
-            // Activated, but not by a click: the main loop gives the foreground back.
-            if (wparam.0 & 0xFFFF) as u32 == WA_ACTIVE {
+            // Activated, but not by a click: the main loop gives the foreground back. A click on
+            // the page arrives as WA_ACTIVE too (the WebView's input window takes focus on mouse
+            // down), so it counts as a click while a button is held or the pointer is over this
+            // bar's visible part. When Windows picks us after an app minimized or closed, or
+            // WebView2 takes focus as it starts, the pointer is elsewhere.
+            if (wparam.0 & 0xFFFF) as u32 == WA_ACTIVE
+                && !mouse_button_down()
+                && !pointer_over(hwnd)
+            {
                 post(WM_BARS_ACTIVATED, 0, hwnd.0 as isize);
             }
         }
         WM_WINDOWPOSCHANGED => appbar_notify(ABM_WINDOWPOSCHANGED),
         WM_DISPLAYCHANGE => post(WM_BARS_DISPLAY, 0, 0),
+        // The work area moved (an app bar came or went, the taskbar changed): an auto-hiding dock
+        // sits at its edge.
+        WM_SETTINGCHANGE if wparam.0 as u32 == SPI_SETWORKAREA.0 => post(WM_BARS_DISPLAY, 0, 0),
         // The host places and scales bars itself; don't take Windows' suggested rect.
         WM_DPICHANGED => {
             post(WM_BARS_DISPLAY, 0, 0);
@@ -178,6 +192,24 @@ unsafe extern "system" fn bar_proc(
     }
     // SAFETY: default handling of a message we were called with.
     unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+}
+
+/// Is any mouse button held (physically or by injected input) right now?
+fn mouse_button_down() -> bool {
+    [VK_LBUTTON, VK_RBUTTON, VK_MBUTTON]
+        .into_iter()
+        // SAFETY: no preconditions.
+        .any(|vk| unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16 & 0x8000 != 0)
+}
+
+/// Is the pointer over the visible part of `bar` (the window under it, region respected, is the
+/// bar or its WebView)?
+fn pointer_over(bar: HWND) -> bool {
+    let mut point = POINT::default();
+    // SAFETY: read-only queries; `point` outlives the call.
+    unsafe {
+        GetCursorPos(&mut point).is_ok() && GetAncestor(WindowFromPoint(point), GA_ROOT) == bar
+    }
 }
 
 unsafe extern "system" fn edge_proc(
@@ -294,17 +326,20 @@ impl Bar {
         (self.rect.width, self.rect.height)
     }
 
-    /// Follows a changed monitor or config.
-    pub fn update(&mut self, monitor: Monitor, geometry: Geometry) {
+    /// Follows a changed monitor or config. Returns whether its geometry changed (the work areas
+    /// may then change too).
+    pub fn update(&mut self, monitor: Monitor, geometry: Geometry) -> bool {
         if monitor == self.monitor && geometry == self.geometry {
-            return;
+            return false;
         }
+        let moved = geometry != self.geometry || monitor.rect != self.monitor.rect;
         if geometry.edge != self.geometry.edge || !geometry.reserve {
             self.appbar = None; // re-registered on its new edge below, if it reserves
         }
         self.monitor = monitor;
         self.geometry = geometry;
         self.place();
+        moved
     }
 
     /// Explorer restarted: it forgot every app bar.

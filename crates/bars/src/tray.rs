@@ -250,13 +250,21 @@ fn run(rx: &Receiver<Cmd>, again: &Sender<Cmd>, waker: &Waker, icons: &std::path
     let mut sent = None;
     let mut report = |taskbar: &Option<Taskbar>,
                       descriptions: &mut HashMap<String, Option<String>>| {
-        let items = match taskbar {
-            Some(taskbar) => items(taskbar, descriptions, icons),
-            None => vec![fallback()],
+        // Nothing to read (a hidden taskbar has no tray in the UIA tree): the fallback button.
+        let found = taskbar
+            .as_ref()
+            .map(|taskbar| items(taskbar, descriptions, icons))
+            .unwrap_or_default();
+        let items = if found.is_empty() {
+            vec![fallback()]
+        } else {
+            found
         };
         if sent.as_ref() != Some(&items) {
-            if items.len() <= 1 && taskbar.is_some() {
-                log::info!("tray: no notification icons found through UI Automation");
+            if items.len() <= 1 {
+                log::info!(
+                    "tray: no notification icons through UI Automation; showing the overflow button"
+                );
             }
             waker.send(Msg::Tray(items.clone()));
             sent = Some(items);
