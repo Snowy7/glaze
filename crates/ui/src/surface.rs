@@ -208,6 +208,9 @@ pub struct Surface {
     origin: (i32, i32),
     size: (u32, u32),
     alpha: u8,
+    /// The engine glass wanted under the body, and whether it is open (only while shown).
+    glass: Cell<Option<crate::glass::Glass>>,
+    glass_open: Cell<bool>,
 }
 
 impl Surface {
@@ -287,6 +290,8 @@ impl Surface {
             origin: (0, 0),
             size: (0, 0),
             alpha: 255,
+            glass: Cell::new(None),
+            glass_open: Cell::new(false),
         })
     }
 
@@ -303,6 +308,50 @@ impl Surface {
     pub fn set_text_field(&self, field: Option<crate::TextField>) {
         if let Some(old) = self.shared.field.replace(field) {
             old.blur();
+        }
+    }
+
+    /// Puts engine glass under `glass.body` (or takes it away, `None`). While the window shows,
+    /// the glass follows it: opened on [`show`](Self::show), placed before every move, reshaped
+    /// here, closed on [`hide`](Self::hide) and drop (crate::glass).
+    pub fn set_glass(&self, glass: Option<crate::glass::Glass>) {
+        let old = self.glass.replace(glass);
+        if !self.glass_open.get() {
+            if glass.is_some() && self.is_visible() {
+                self.open_glass();
+            }
+            return;
+        }
+        let (Some(new), Some(backdrop)) = (glass, crate::glass::backdrop()) else {
+            self.close_glass();
+            return;
+        };
+        if old.is_none_or(|old| (old.body, old.radius) != (new.body, new.radius)) {
+            backdrop.place(self.hwnd, new.shape(self.origin), new.radius);
+        }
+        if old.is_none_or(|old| old.material != new.material) {
+            backdrop.material(self.hwnd, &new.material);
+        }
+    }
+
+    /// Whether engine glass is open under the surface.
+    pub fn has_glass(&self) -> bool {
+        self.glass_open.get()
+    }
+
+    fn open_glass(&self) {
+        if let (Some(glass), Some(backdrop)) = (self.glass.get(), crate::glass::backdrop()) {
+            let shape = glass.shape(self.origin);
+            let opened = backdrop.open(self.hwnd, shape, glass.radius, &glass.material);
+            self.glass_open.set(opened);
+        }
+    }
+
+    fn close_glass(&self) {
+        if self.glass_open.replace(false)
+            && let Some(backdrop) = crate::glass::backdrop()
+        {
+            backdrop.close(self.hwnd);
         }
     }
 
@@ -379,6 +428,10 @@ impl Surface {
         }
         if self.shared.desktop.is_some() {
             let _ = self.keep_above_desktop();
+        }
+        // After the content is on screen: the request may wait on the engine's loop.
+        if !self.glass_open.get() {
+            self.open_glass();
         }
     }
 
@@ -499,6 +552,7 @@ impl Surface {
     pub fn hide(&self) {
         // SAFETY: our own window.
         let _ = unsafe { ShowWindow(self.hwnd, SW_HIDE) };
+        self.close_glass();
     }
 
     pub fn is_visible(&self) -> bool {
@@ -590,6 +644,14 @@ impl Surface {
             cy: self.size.1 as i32,
         };
         let zero = POINT::default();
+        // The glass moves first (inside the engine's own handling of the request), so both
+        // windows land in the same composition frame.
+        if origin != self.origin
+            && self.glass_open.get()
+            && let (Some(glass), Some(backdrop)) = (self.glass.get(), crate::glass::backdrop())
+        {
+            backdrop.place(self.hwnd, glass.shape(origin), glass.radius);
+        }
         let dirty = source.map(|(_, area, _)| RECT {
             left: area.x as i32,
             top: area.y as i32,
@@ -644,6 +706,7 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
+        self.close_glass();
         self.discard_events();
         // SAFETY: our own window, destroyed on its creating thread.
         let _ = unsafe { DestroyWindow(self.hwnd) };
@@ -772,6 +835,18 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         if msg == WM_CHAR && focused && wparam.0 == 13 && !field.multiline() {
             return LRESULT(0);
+        }
+        // A single line has no use for Up, Down, Tab and the page keys: they move the
+        // selection of whatever the field filters (the launcher's results).
+        const NAVIGATION: [usize; 5] = [0x26, 0x28, 0x09, 0x21, 0x22];
+        if focused && !field.multiline() {
+            if msg == WM_KEYDOWN && NAVIGATION.contains(&wparam.0) {
+                push(id, Event::Key(wparam.0 as u16));
+                return LRESULT(0);
+            }
+            if msg == WM_CHAR && wparam.0 == 9 {
+                return LRESULT(0);
+            }
         }
         if msg == WM_TIMER && field.timer(wparam.0) {
             return field.send(msg, WPARAM(wparam.0 - 0x50000), lparam);

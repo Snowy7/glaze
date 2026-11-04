@@ -20,7 +20,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 
 use crate::focus;
-use crate::geom::{Point, Rect};
+use crate::geom::{Point, Rect, Rgba};
 use crate::icons;
 use crate::render::Ui;
 use crate::scene::{DisplayList, Hit, HitId, Op};
@@ -258,8 +258,13 @@ pub fn view<C>(
     ops.push(Op::Fill {
         rect: body,
         radius,
-        // Nearly opaque whatever the theme says: a tint has nothing behind it to blur yet.
-        color: tint.with_alpha(tint.a.clamp(0.7, 1.0)),
+        color: if tokens.glass.is_some() {
+            // The engine draws the glass (and its tint) under the body; this only takes clicks.
+            Rgba::HIT
+        } else {
+            // Nearly opaque whatever the theme says: a tint has nothing behind it to blur.
+            tint.with_alpha(tint.a.clamp(0.7, 1.0))
+        },
     });
     if tokens.border {
         ops.push(Op::Stroke {
@@ -438,6 +443,11 @@ impl<C: Clone> Menu<C> {
         let started = std::time::Instant::now();
         self.close();
         self.tokens = tokens.clone();
+        // Glass when the engine can draw it: the tokens' own, else the active style's.
+        self.tokens.glass = tokens
+            .glass
+            .filter(|_| crate::glass::available())
+            .or_else(crate::glass::style);
         let scale = screen.dpi.max(96) as f32 / 96.0 * tokens.scale.clamp(0.5, 2.0);
         let opened = self.push_panel(ui, items, None, scale, |size| {
             place(size, anchor, screen.work)
@@ -664,6 +674,11 @@ impl<C: Clone> Menu<C> {
         let list = view(&p.items, &p.layout, p.hover, &self.tokens);
         let at = (p.origin.0 - edge, p.origin.1 - edge);
         let size = ((w + 2 * edge) as u32, (h + 2 * edge) as u32);
+        p.surface.set_glass(self.tokens.glass.map(|material| crate::glass::Glass {
+            body: Rect::new(edge as f32, edge as f32, w as f32, h as f32),
+            radius: (self.tokens.radius * p.layout.scale).max(0.0),
+            material,
+        }));
         p.surface.present(ui, at, size, list)?;
         Ok(())
     }
