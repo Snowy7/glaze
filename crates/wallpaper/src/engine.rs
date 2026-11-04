@@ -467,6 +467,7 @@ impl Engine {
                     &self.gpu,
                     Draw {
                         screen: index,
+                        frame: self.frame,
                         size: screen.size(),
                         kept: &kept,
                         held: self.held,
