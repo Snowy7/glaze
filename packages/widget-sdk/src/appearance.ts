@@ -41,6 +41,7 @@ export interface AppearanceAttributes {
   "data-text": Appearance["text"];
   "data-shadow": "on" | "off";
   "data-style": Appearance["style"];
+  "data-border": "on" | "off";
 }
 
 /** Every `style`, in the order the Appearance panel lists them. */
@@ -139,13 +140,14 @@ export function normalizeAppearance(input: Partial<Record<keyof Appearance, unkn
   };
 }
 
-/** `data-surface`, `data-text`, `data-shadow` and `data-style`. */
+/** `data-surface`, `data-text`, `data-shadow`, `data-style` and `data-border`. */
 export function appearanceAttributes(a: Appearance): AppearanceAttributes {
   return {
     "data-surface": a.surface,
     "data-text": a.text,
     "data-shadow": a.shadow ? "on" : "off",
     "data-style": a.style,
+    "data-border": a.border ? "on" : "off",
   };
 }
 
@@ -195,6 +197,7 @@ export function appearanceVars(a: Appearance): Record<string, string> {
     "--accent-rgb": accentRgb.join(" "),
     "--spark": `rgb(${spark.join(" ")})`,
     "--spark-rgb": spark.join(" "),
+    "--on-spark": luminance(spark) > 0.3 ? "#0a0a0c" : "#ffffff",
     "--accent-2": `rgb(${spark2.join(" ")})`,
     "--accent-2-rgb": spark2.join(" "),
     "--on-accent": onAccent,

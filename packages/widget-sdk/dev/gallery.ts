@@ -2,12 +2,13 @@
 // backgrounds, each cell a live iframe with its own mock host. One headless screenshot of this page
 // shows everything a reviewer needs.
 //   widget=<id>  sizes=min,default,max | 2x1,3x2,...  surfaces=none,glass,solid
+//   styles=minimal,depth,...|all  rows are style x surface (default: the style param, or minimal)
 //   bgs=photo-dark,photo-light  text=auto|light|dark  scale=<n>  cell=<px> gap=<px>
 //   settings=<json>  storage=<json>  media=playing|paused|none  battery=none|discharging|charging
 //   net=wifi|ethernet|none  appearance=<json>  themecss=<css>
 //   speed=<n>  makes system.subscribe tick n times faster, so sparklines fill up within a screenshot
 
-import { MypaperError } from "../src";
+import { MypaperError, WIDGET_STYLES, normalizeAppearance } from "../src";
 import type { AppearanceState, Settings, SizeInfo, WidgetManifest } from "../src/types";
 import { FakeBackend } from "./fake";
 import { BridgeHost, type HostOutput } from "./host";
@@ -76,6 +77,8 @@ async function main() {
   const unique = sizes.filter((s, i) => sizes.findIndex((t) => t[0] === s[0] && t[1] === s[1]) === i);
   const surfaces = list("surfaces", "none,glass,solid");
   const base = lookFromParams(q);
+  const styleParam = q.get("styles");
+  const styles = styleParam === "all" ? [...WIDGET_STYLES] : styleParam ? list("styles", "") : [base.appearance.style];
   const settings: Settings = withDefaults(m.settings ?? [], json("settings"));
 
   for (const bg of list("bgs", "photo-dark,photo-light")) {
@@ -89,7 +92,7 @@ async function main() {
     const textParam = q.get("text") ?? "auto";
     const text = textParam === "light" || textParam === "dark" ? textParam : bg.includes("light") ? "dark" : "light";
 
-    for (const surface of surfaces) {
+    for (const [style, surface] of styles.flatMap((st) => surfaces.map((su): [string, string] => [st, su]))) {
       const line = document.createElement("div");
       line.className = "rowline";
       for (const [cols, rows] of unique) {
@@ -101,7 +104,7 @@ async function main() {
         cell.style.height = `${h}px`;
         const tag = document.createElement("div");
         tag.className = "tag";
-        tag.textContent = `${surface} ${cols}x${rows} ${text}`;
+        tag.textContent = `${style} ${surface} ${cols}x${rows} ${text}`;
         const frame = document.createElement("iframe");
         frame.title = m.name;
         frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
@@ -114,6 +117,7 @@ async function main() {
         const look: AppearanceState = {
           appearance: {
             ...base.appearance,
+            style: normalizeAppearance({ style }).style,
             text: q.has("text") && q.get("text") !== "auto" ? base.appearance.text : text,
             surface: surface === "glass" || surface === "solid" ? surface : "none",
           },

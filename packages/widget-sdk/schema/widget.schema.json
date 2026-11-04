@@ -4,51 +4,112 @@
   "title": "mypaper widget manifest",
   "description": "widget.json: the manifest of a mypaper widget. See docs/widgets.md.",
   "type": "object",
-  "required": ["id", "name", "version", "entry", "size"],
+  "required": [
+    "id",
+    "name",
+    "version",
+    "entry",
+    "size"
+  ],
   "additionalProperties": false,
   "properties": {
-    "$schema": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
     "id": {
       "type": "string",
       "pattern": "^[a-z0-9-]+$",
       "description": "Lowercase [a-z0-9-], unique. Also the folder name."
     },
-    "name": { "type": "string", "minLength": 1 },
-    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+([-+].+)?$" },
-    "author": { "type": "string" },
-    "description": { "type": "string" },
-    "entry": { "type": "string", "minLength": 1, "description": "The HTML file to load, relative to the widget folder." },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+([-+].+)?$"
+    },
+    "author": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "entry": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The HTML file to load, relative to the widget folder."
+    },
     "size": {
       "type": "object",
       "description": "In grid cells, [columns, rows]. min <= default <= max.",
-      "required": ["default", "min", "max"],
+      "required": [
+        "default",
+        "min",
+        "max"
+      ],
       "additionalProperties": false,
       "properties": {
-        "default": { "$ref": "#/definitions/cells" },
-        "min": { "$ref": "#/definitions/cells" },
-        "max": { "$ref": "#/definitions/cells" }
+        "default": {
+          "$ref": "#/definitions/cells"
+        },
+        "min": {
+          "$ref": "#/definitions/cells"
+        },
+        "max": {
+          "$ref": "#/definitions/cells"
+        }
       }
     },
-    "resizable": { "type": "boolean", "default": true, "description": "false locks the size to size.default." },
+    "resizable": {
+      "type": "boolean",
+      "default": true,
+      "description": "false locks the size to size.default."
+    },
     "permissions": {
       "type": "array",
       "uniqueItems": true,
       "description": "Anything not listed is denied.",
       "items": {
         "type": "string",
-        "pattern": "^(system\\.stats|media|launch|theme|clipboard\\.write|network:https?://[^\\s/]+)$"
+        "pattern": "^(system.stats|media|launch|theme|audio|user|clipboard.write|network:https?://[^s/]+)$"
       }
     },
     "plugins": {
       "type": "array",
       "uniqueItems": true,
       "description": "Plugin ids whose methods this widget may call.",
-      "items": { "type": "string", "pattern": "^[a-z0-9-]+$" }
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]+$"
+      }
     },
     "settings": {
       "type": "array",
       "description": "Rendered by the shell in edit mode and by Studio.",
-      "items": { "$ref": "#/definitions/setting" }
+      "items": {
+        "$ref": "#/definitions/setting"
+      }
+    },
+    "preset": {
+      "type": "string",
+      "enum": [
+        "desktop",
+        "overlay",
+        "popup"
+      ],
+      "default": "desktop",
+      "description": "desktop: on the grid, below windows. overlay: always on top, click-through except the widget. popup: opened from a bar module (bars host)."
+    },
+    "instances": {
+      "type": "string",
+      "enum": [
+        "single",
+        "multiple",
+        "per-monitor"
+      ],
+      "default": "multiple",
+      "description": "How many instances the user may add: one in total, any number, or one per monitor."
     }
   },
   "definitions": {
@@ -56,54 +117,195 @@
       "type": "array",
       "minItems": 2,
       "maxItems": 2,
-      "items": { "type": "integer", "minimum": 1 }
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
     },
     "settingBase": {
       "type": "object",
-      "required": ["key", "type", "label"],
+      "required": [
+        "key",
+        "type",
+        "label"
+      ],
       "properties": {
-        "key": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
-        "label": { "type": "string", "minLength": 1 }
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "group": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "A section heading in the settings form, shown when it changes from one setting to the next."
+        }
       }
     },
     "scalarSetting": {
       "allOf": [
-        { "$ref": "#/definitions/settingBase" },
+        {
+          "$ref": "#/definitions/settingBase"
+        },
         {
           "oneOf": [
             {
               "properties": {
-                "type": { "const": "boolean" },
-                "default": { "type": "boolean" }
+                "type": {
+                  "const": "boolean"
+                },
+                "default": {
+                  "type": "boolean"
+                }
               }
             },
             {
               "properties": {
-                "type": { "const": "string" },
-                "default": { "type": "string" }
+                "type": {
+                  "const": "string"
+                },
+                "default": {
+                  "type": "string"
+                }
               }
             },
             {
               "properties": {
-                "type": { "const": "color" },
-                "default": { "type": "string", "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$" }
+                "type": {
+                  "const": "color"
+                },
+                "default": {
+                  "type": "string",
+                  "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+                },
+                "alpha": {
+                  "type": "boolean",
+                  "description": "Allow #rrggbbaa (an opacity slider in the form)."
+                }
               }
             },
             {
-              "required": ["options"],
+              "required": [
+                "options"
+              ],
               "properties": {
-                "type": { "const": "select" },
-                "options": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-                "default": { "type": "string" }
+                "type": {
+                  "const": "select"
+                },
+                "options": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "value"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "icon": {
+                            "type": "string",
+                            "description": "A short glyph, an emoji or a symbol."
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "default": {
+                  "type": "string"
+                }
               }
             },
             {
               "properties": {
-                "type": { "const": "number" },
-                "min": { "type": "number" },
-                "max": { "type": "number" },
-                "step": { "type": "number", "exclusiveMinimum": 0 },
-                "default": { "type": "number" }
+                "type": {
+                  "const": "number"
+                },
+                "min": {
+                  "type": "number"
+                },
+                "max": {
+                  "type": "number"
+                },
+                "step": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "default": {
+                  "type": "number"
+                }
+              }
+            },
+            {
+              "required": [
+                "min",
+                "max"
+              ],
+              "properties": {
+                "type": {
+                  "const": "slider"
+                },
+                "min": {
+                  "type": "number"
+                },
+                "max": {
+                  "type": "number"
+                },
+                "step": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "default": {
+                  "type": "number"
+                }
+              }
+            },
+            {
+              "properties": {
+                "type": {
+                  "const": "font"
+                },
+                "default": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "file",
+                    "image"
+                  ]
+                },
+                "extensions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9]+$"
+                  }
+                },
+                "default": {
+                  "type": "string"
+                }
               }
             }
           ]
@@ -114,27 +316,47 @@
       "oneOf": [
         {
           "allOf": [
-            { "$ref": "#/definitions/scalarSetting" },
-            { "required": ["default"] }
+            {
+              "$ref": "#/definitions/scalarSetting"
+            },
+            {
+              "required": [
+                "default"
+              ]
+            }
           ]
         },
         {
           "allOf": [
-            { "$ref": "#/definitions/settingBase" },
             {
-              "required": ["fields", "default"],
+              "$ref": "#/definitions/settingBase"
+            },
+            {
+              "required": [
+                "fields",
+                "default"
+              ],
               "properties": {
-                "type": { "const": "list" },
+                "type": {
+                  "const": "list"
+                },
                 "fields": {
                   "type": "array",
                   "minItems": 1,
                   "description": "The columns of each item. Scalar settings only, defaults optional.",
-                  "items": { "$ref": "#/definitions/scalarSetting" }
+                  "items": {
+                    "$ref": "#/definitions/scalarSetting"
+                  }
                 },
-                "maxItems": { "type": "integer", "minimum": 1 },
+                "maxItems": {
+                  "type": "integer",
+                  "minimum": 1
+                },
                 "default": {
                   "type": "array",
-                  "items": { "type": "object" }
+                  "items": {
+                    "type": "object"
+                  }
                 }
               }
             }

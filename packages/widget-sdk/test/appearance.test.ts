@@ -20,12 +20,14 @@ describe("attributes", () => {
       "data-text": "light",
       "data-shadow": "on",
       "data-style": "minimal",
+      "data-border": "on",
     });
     expect(appearanceAttributes(look({ surface: "glass", text: "dark", shadow: false, style: "neon" }))).toEqual({
       "data-surface": "glass",
       "data-text": "dark",
       "data-shadow": "off",
       "data-style": "neon",
+      "data-border": "on",
     });
   });
 });

@@ -131,6 +131,61 @@ export function every(ms, fn) {
 }
 
 /**
+ * Calls `fn(dtMs, nowMs)` on every animation frame, only while the widget is visible; the loop
+ * stops by itself when it is hidden (and `fps`, if given, caps the rate: 30 is plenty for a
+ * visualizer, 10 for ambient motion). Returns a stop function.
+ * @param {(dtMs: number, nowMs: number) => void} fn
+ * @param {number} [fps]
+ * @returns {() => void}
+ */
+export function frames(fn, fps = 60) {
+  const minGap = 1000 / fps - 1;
+  let raf = 0;
+  let last = 0;
+  /** @param {number} now */
+  const tick = (now) => {
+    raf = requestAnimationFrame(tick);
+    if (now - last < minGap) return;
+    const dt = last === 0 ? 16 : now - last;
+    last = now;
+    fn(dt, now);
+  };
+  return onVisible(
+    () => {
+      last = 0;
+      raf = requestAnimationFrame(tick);
+    },
+    () => cancelAnimationFrame(raf),
+  );
+}
+
+/**
+ * Keeps a canvas's backing store at its CSS size times the device pixel ratio, and calls
+ * `onResize(width, height, dpr)` (CSS px) now and whenever it changes. Draw in CSS px after
+ * `ctx.setTransform(dpr, 0, 0, dpr, 0, 0)`.
+ * @param {HTMLCanvasElement} canvas
+ * @param {(width: number, height: number, dpr: number) => void} onResize
+ * @returns {() => void}
+ */
+export function fitCanvas(canvas, onResize) {
+  const apply = () => {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const { width, height } = canvas.getBoundingClientRect();
+    // The page is laid out at 1/scale and scaled up; offsetWidth is the layout size.
+    const w = canvas.offsetWidth || width;
+    const h = canvas.offsetHeight || height;
+    if (w < 1 || h < 1) return;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    onResize(w, h, dpr);
+  };
+  const observer = new ResizeObserver(apply);
+  observer.observe(canvas);
+  apply();
+  return () => observer.disconnect();
+}
+
+/**
  * @param {number} n
  * @param {number} lo
  * @param {number} hi
