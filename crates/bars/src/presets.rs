@@ -215,14 +215,18 @@ pub fn layered(raw: &Map<String, Value>) -> Result<Value, serde_json::Error> {
 fn fold_shared(raw: &Map<String, Value>) -> Map<String, Value> {
     let mut out = raw.clone();
     for field in ["look", "animation"] {
-        let Some(shared) = raw.get(field) else { continue };
+        let Some(shared) = raw.get(field) else {
+            continue;
+        };
         for bar in ["top", "dock"] {
             let mut layered = shared.clone();
             if let Some(own) = raw.get(bar).and_then(|b| b.get(field)) {
                 merge(&mut layered, own);
             }
             // A bar that isn't an object is the strict parse's to report.
-            if let Value::Object(section) = out.entry(bar).or_insert_with(|| Value::Object(Map::new())) {
+            if let Value::Object(section) =
+                out.entry(bar).or_insert_with(|| Value::Object(Map::new()))
+            {
                 section.insert(field.to_owned(), layered);
             }
         }
@@ -261,7 +265,7 @@ pub fn merge(base: &mut Value, over: &Value) {
 mod tests {
     use super::*;
     use crate::BarsConfig;
-    use crate::config::{TopConfig, DockConfig};
+    use crate::config::{DockConfig, TopConfig};
     use serde_json::json;
 
     #[test]
@@ -310,7 +314,10 @@ mod tests {
         assert_eq!(folded["top"]["look"], json!({ "tint": 0.9, "noise": 0.1 }));
         assert_eq!(folded["dock"]["look"], json!({ "tint": 0.3, "noise": 0.1 }));
         assert_eq!(folded["dock"]["animation"]["duration"], 100);
-        assert_eq!(folded["look"], raw["look"], "the shared layer stays as written");
+        assert_eq!(
+            folded["look"], raw["look"],
+            "the shared layer stays as written"
+        );
     }
 
     #[test]
@@ -326,13 +333,21 @@ mod tests {
                 let mut bar = design.bundle();
                 merge(&mut bar, &json!({ "look": { "background": background } }));
                 let parsed = serde_json::from_value::<TopConfig>(bar);
-                assert!(parsed.is_ok(), "{design:?} + {background}: {:?}", parsed.err());
+                assert!(
+                    parsed.is_ok(),
+                    "{design:?} + {background}: {:?}",
+                    parsed.err()
+                );
             }
             for design in DockDesign::ALL {
                 let mut bar = design.bundle();
                 merge(&mut bar, &json!({ "look": { "background": background } }));
                 let parsed = serde_json::from_value::<DockConfig>(bar);
-                assert!(parsed.is_ok(), "{design:?} + {background}: {:?}", parsed.err());
+                assert!(
+                    parsed.is_ok(),
+                    "{design:?} + {background}: {:?}",
+                    parsed.err()
+                );
             }
         }
     }
@@ -341,9 +356,13 @@ mod tests {
     /// preset's) choice.
     #[test]
     fn designs_parse_and_leave_placement_alone() {
-        let owned = ["design", "enabled", "monitors", "position", "pinned", "autohide"];
+        let owned = [
+            "design", "enabled", "monitors", "position", "pinned", "autohide",
+        ];
         let check = |name: String, bundle: Value| {
-            let object = bundle.as_object().unwrap_or_else(|| panic!("{name} is not an object"));
+            let object = bundle
+                .as_object()
+                .unwrap_or_else(|| panic!("{name} is not an object"));
             assert!(!object.is_empty(), "{name} is empty or broken");
             for key in owned {
                 assert!(!object.contains_key(key), "{name} sets {key}");
@@ -371,7 +390,15 @@ mod tests {
         for preset in Preset::ALL {
             let bundle = preset.bundle();
             let object = bundle.as_object().expect("a preset is an object");
-            for owned in ["version", "preset", "taskbar", "overrides", "vars", "look", "animation"] {
+            for owned in [
+                "version",
+                "preset",
+                "taskbar",
+                "overrides",
+                "vars",
+                "look",
+                "animation",
+            ] {
                 assert!(!object.contains_key(owned), "{preset:?} sets {owned}");
             }
             assert!(

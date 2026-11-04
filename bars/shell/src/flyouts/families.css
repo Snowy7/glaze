@@ -15,6 +15,16 @@
   --fly-bg: rgb(246 246 248);
   --fly-tint-default: 0.78;
 }
+/* Liquid flyouts bend more than their bar (a menu bar's lens is subtle) and frost a little, like
+   Apple's regular glass, so their text stays legible over anything. */
+.layer {
+  --lq-refraction: 0.85;
+  --lq-blur: 3;
+  --fly-liquid-tint: 0.34;
+}
+[data-scheme="light"] .layer {
+  --fly-liquid-tint: 0.42;
+}
 [data-fly-blur="on"] .layer {
   --fly-shadow: 0 0 0 1px var(--edge), inset 0 1px 0 rgb(255 255 255 / 0.07), 0 10px 30px var(--drop), 0 2px 6px var(--drop);
 }

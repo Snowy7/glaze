@@ -11,7 +11,7 @@
     "corners": "squircle",
     "border": { "rest": { "width": 1, "color": "#ffffff14" }, "hover": { "color": "#ffffff29" } },
     "shadow": { "rest": { "y": 2, "blur": 4, "color": "#00000073" } },
-    "glass": { "rim": 0.2 },
+    "glass": { "highlight": 0.2 },
     "items": {
       "radius": 8,
       "hover": { "background": "#ffffff14", "color": "#ffffff" },

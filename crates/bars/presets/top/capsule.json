@@ -5,29 +5,86 @@
   "padding": 6,
   "spacing": 2,
   "width": "auto",
-  "left": ["start", "app"],
-  "center": ["clock"],
-  "right": ["media", "network", "volume", "battery", "quick"],
-  "clock": { "format": "ddd d MMM  HH:mm" },
+  "left": [
+    "start",
+    "app"
+  ],
+  "center": [
+    "clock"
+  ],
+  "right": [
+    "media",
+    "network",
+    "volume",
+    "battery",
+    "quick"
+  ],
+  "clock": {
+    "format": "ddd d MMM  HH:mm"
+  },
   "look": {
     "scheme": "auto",
     "family": "macos",
     "glyphs": "symbols",
-    "font": { "family": "\"SF Pro Text\", \"SF Pro\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, sans-serif", "size": 13, "weight": 500 },
-    "background": { "type": "wallpaper", "brightness": 1.08 },
+    "font": {
+      "family": "\"SF Pro Text\", \"SF Pro\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, sans-serif",
+      "size": 13,
+      "weight": 500
+    },
+    "background": {
+      "type": "wallpaper",
+      "brightness": 1.08
+    },
     "tint": 0.26,
     "saturation": 1.9,
     "noise": 0.01,
     "radius": 18,
-    "border": { "rest": { "width": 1, "color": "#ffffff3d" } },
-    "shadow": { "rest": { "y": 3, "blur": 10, "color": "#0000002e" } },
-    "glass": { "rim": 0.9, "sheen": 0.35, "depth": 0.25 },
+    "border": {
+      "rest": {
+        "width": 1,
+        "color": "#ffffff3d"
+      }
+    },
+    "shadow": {
+      "rest": {
+        "y": 3,
+        "blur": 10,
+        "color": "#0000002e"
+      }
+    },
+    "glass": {
+      "style": "liquid",
+      "intensity": 1,
+      "refraction": 0.75,
+      "highlight": 0.9,
+      "tint": 0.1,
+      "blur": 0.5,
+      "depth": 0.25
+    },
     "items": {
       "radius": 13,
-      "rest": { "color": "text" },
-      "hover": { "background": "var(--fill-2)" },
-      "active": { "background": "var(--fill-3)", "scale": 0.96 }
+      "rest": {
+        "color": "text"
+      },
+      "hover": {
+        "background": "var(--fill-2)"
+      },
+      "active": {
+        "background": "var(--fill-3)",
+        "scale": 0.96
+      }
     }
   },
-  "animation": { "duration": 320, "curve": "spring-soft", "bar": { "style": "pop" }, "open": { "style": "scale", "curve": "spring", "duration": 260 } }
+  "animation": {
+    "duration": 320,
+    "curve": "spring-soft",
+    "bar": {
+      "style": "pop"
+    },
+    "open": {
+      "style": "scale",
+      "curve": "spring",
+      "duration": 260
+    }
+  }
 }

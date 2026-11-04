@@ -254,11 +254,19 @@ impl Fill {
                         image.position
                     );
                 }
-                check(&format!("{name}.brightness"), Some(image.brightness), 0.0..=2.0)?;
+                check(
+                    &format!("{name}.brightness"),
+                    Some(image.brightness),
+                    0.0..=2.0,
+                )?;
                 check(&format!("{name}.blur"), Some(image.blur), 0.0..=64.0)
             }
             Fill::Wallpaper(wallpaper) => {
-                check(&format!("{name}.brightness"), Some(wallpaper.brightness), 0.0..=2.0)?;
+                check(
+                    &format!("{name}.brightness"),
+                    Some(wallpaper.brightness),
+                    0.0..=2.0,
+                )?;
                 check(&format!("{name}.blur"), Some(wallpaper.blur), 0.0..=64.0)?;
                 if !(2..=600).contains(&wallpaper.interval) {
                     bail!("{name}.interval must be between 2 and 600 seconds");
@@ -266,7 +274,11 @@ impl Fill {
                 Ok(())
             }
             Fill::Blur(blur) => {
-                check(&format!("{name}.brightness"), Some(blur.brightness), 0.0..=2.0)?;
+                check(
+                    &format!("{name}.brightness"),
+                    Some(blur.brightness),
+                    0.0..=2.0,
+                )?;
                 check(&format!("{name}.blur"), Some(blur.blur), 0.0..=64.0)
             }
         }
@@ -508,17 +520,106 @@ pub enum Glyphs {
     Symbols,
 }
 
-/// What makes glass read as glass, each 0..1: a fine specular `rim` along the lit edge, a soft
-/// `sheen` falling from the top, and `depth`, an inner shadow toward the bottom edge.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+/// The glass material (docs/bars.md, "Glass").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GlassKind {
+    /// Liquid Glass: what's behind, bent by a lens along the rim and nearly clear in the middle,
+    /// lit by a specular rim.
+    Liquid,
+    /// Frosted: what's behind, blurred (wallpaper glass, or Windows' live blur).
+    Frosted,
+    /// The fill alone, no glass highlights.
+    None,
+}
+
+/// What makes glass read as glass. `style` picks the material (missing: `frosted`, or `liquid`
+/// when the theme's appearance style is liquid); the knobs are the widgets' names, each 0..1
+/// unless noted: `intensity` scales the whole effect, `refraction` how far the rim bends what's
+/// behind, `highlight` the specular rim, `tint` the tint over the glass (missing: `look.tint`),
+/// `blur` (DIPs 0..32) a light blur of what's behind. `sheen` (a soft light falling from the
+/// top) and `depth` (an inner shadow toward the bottom) work for both materials. A string is
+/// shorthand for the style: `"glass": "liquid"`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize)]
 pub struct GlassStyle {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rim: Option<f32>,
+    pub style: Option<GlassKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub intensity: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refraction: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub highlight: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tint: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blur: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sheen: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depth: Option<f32>,
+}
+
+impl<'de> Deserialize<'de> for GlassStyle {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(default, deny_unknown_fields)]
+        #[derive(Default)]
+        struct Full {
+            style: Option<GlassKind>,
+            intensity: Option<f32>,
+            refraction: Option<f32>,
+            highlight: Option<f32>,
+            tint: Option<f32>,
+            blur: Option<f32>,
+            sheen: Option<f32>,
+            depth: Option<f32>,
+        }
+        let value = Value::deserialize(deserializer)?;
+        if value.is_string() {
+            let style = GlassKind::deserialize(value).map_err(serde::de::Error::custom)?;
+            return Ok(Self {
+                style: Some(style),
+                ..Self::default()
+            });
+        }
+        let Full {
+            style,
+            intensity,
+            refraction,
+            highlight,
+            tint,
+            blur,
+            sheen,
+            depth,
+        } = Full::deserialize(value).map_err(serde::de::Error::custom)?;
+        Ok(Self {
+            style,
+            intensity,
+            refraction,
+            highlight,
+            tint,
+            blur,
+            sheen,
+            depth,
+        })
+    }
+}
+
+impl GlassStyle {
+    fn validate(&self, name: &str) -> Result<()> {
+        for (field, value) in [
+            ("intensity", self.intensity),
+            ("refraction", self.refraction),
+            ("highlight", self.highlight),
+            ("tint", self.tint),
+            ("sheen", self.sheen),
+            ("depth", self.depth),
+        ] {
+            check(&format!("{name}.{field}"), value, 0.0..=1.0)?;
+        }
+        check(&format!("{name}.blur"), self.blur, 0.0..=32.0)
+    }
 }
 
 /// The flyouts and menus a bar opens: live blur behind them (default on, where Windows can) and
@@ -616,14 +717,12 @@ impl Look {
         check(&format!("{path}.saturation"), self.saturation, 0.0..=3.0)?;
         check(&format!("{path}.noise"), self.noise, 0.0..=0.5)?;
         check(&format!("{path}.radius"), self.radius, 0.0..=64.0)?;
-        for (field, value) in [
-            ("rim", self.glass.rim),
-            ("sheen", self.glass.sheen),
-            ("depth", self.glass.depth),
-        ] {
-            check(&format!("{path}.glass.{field}"), value, 0.0..=1.0)?;
-        }
-        check(&format!("{path}.flyouts.tint"), self.flyouts.tint, 0.0..=1.0)?;
+        self.glass.validate(&format!("{path}.glass"))?;
+        check(
+            &format!("{path}.flyouts.tint"),
+            self.flyouts.tint,
+            0.0..=1.0,
+        )?;
         self.font.validate(&format!("{path}.font"))?;
         for (state, border) in self.border.each() {
             border.validate(&format!("{path}.border.{state}"))?;
@@ -634,7 +733,11 @@ impl Look {
         for (state, shadow) in self.shadow.each() {
             shadow.validate(&format!("{path}.shadow.{state}"))?;
         }
-        check(&format!("{path}.items.radius"), self.items.radius, 0.0..=32.0)?;
+        check(
+            &format!("{path}.items.radius"),
+            self.items.radius,
+            0.0..=32.0,
+        )?;
         for (state, item) in [
             ("rest", &self.items.rest),
             ("hover", &self.items.hover),
@@ -741,6 +844,8 @@ pub enum MotionStyle {
     Fade,
     Pop,
     Scale,
+    /// Flyouts only: grows out of the button that opened it (iOS 26 and macOS Tahoe menus).
+    Morph,
     None,
 }
 
@@ -901,8 +1006,10 @@ mod tests {
             look(r#"{ "background": { "type": "image", "path": "a.png", "fit": "tile", "position": "left 30%" } }"#)
                 .is_ok()
         );
-        let blur = look(r#"{ "background": { "type": "blur" }, "glass": { "rim": 0.6 }, "flyouts": { "blur": false } }"#).unwrap();
-        assert!(matches!(blur.background, Some(Fill::Blur(BlurFill { brightness, .. })) if brightness == 1.0));
+        let blur = look(r#"{ "background": { "type": "blur" }, "glass": { "highlight": 0.6 }, "flyouts": { "blur": false } }"#).unwrap();
+        assert!(
+            matches!(blur.background, Some(Fill::Blur(BlurFill { brightness, .. })) if brightness == 1.0)
+        );
         assert!(
             look(r#"{ "family": "macos", "glyphs": "fluent", "font": { "family": "\"Segoe UI Variable Display\", sans-serif", "size": 13, "weight": 600 } }"#)
                 .is_ok()
@@ -910,7 +1017,9 @@ mod tests {
         for bad in [
             r#"{ "background": { "type": "glass" } }"#,
             r#"{ "background": { "type": "blur", "blur": 90 } }"#,
-            r#"{ "glass": { "rim": 2 } }"#,
+            r#"{ "glass": { "highlight": 2 } }"#,
+            r#"{ "glass": "glossy" }"#,
+            r#"{ "glass": { "refraction": 1.5 } }"#,
             r#"{ "flyouts": { "tint": -1 } }"#,
             r#"{ "font": { "family": "x; } body { color: red" } }"#,
             r#"{ "font": { "size": 40 } }"#,

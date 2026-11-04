@@ -27,6 +27,9 @@ pub struct Look {
     pub font: String,
     pub scale: f32,
     pub shadow: bool,
+    /// The appearance's design style by name (`liquid` makes the bars' glass liquid by default).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
 }
 
 const WHITE: Color = Color([0xff; 3]);
@@ -79,6 +82,10 @@ pub fn resolve(
         font: merged.font.unwrap_or_default(),
         scale: merged.scale.unwrap_or(1.0),
         shadow: merged.shadow.unwrap_or(false),
+        style: merged
+            .style
+            .and_then(|style| serde_json::to_value(style).ok())
+            .and_then(|name| name.as_str().map(str::to_owned)),
     }
 }
 

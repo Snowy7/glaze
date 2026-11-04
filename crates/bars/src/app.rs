@@ -1573,6 +1573,7 @@ impl App {
                 self.set_glass(index, &panes);
                 done
             }
+            Method::Capture { rect } => self.capture_behind(index, rect),
             // Routed to `flyout` before `call`.
             Method::Flyout(_) => Err(BarError::internal("a flyout request reached call()")),
             Method::Run { module, trigger } => self.run_action(index, &module, trigger),

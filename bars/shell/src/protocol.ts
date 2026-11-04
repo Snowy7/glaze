@@ -47,6 +47,8 @@ export type DockDesign = (typeof DOCK_DESIGNS)[number];
 export type Family = "mono" | "fluent" | "macos" | "material";
 /** The module glyph set. */
 export type Glyphs = "default" | "fluent" | "symbols";
+/** Liquid Glass (refraction, liquid.ts), frosted (blur), or no glass. */
+export type GlassStyle = "liquid" | "frosted" | "none";
 export type TopLayout = "strip" | "floating" | "islands";
 /** `full`, `auto` (hug the content), DIPs, or `"<n>%"`. */
 export type Dimension = "full" | "auto" | number | `${number}%`;
@@ -123,8 +125,17 @@ export interface Look {
   family?: Family;
   glyphs?: Glyphs;
   font: { family?: string; size?: number; weight?: number };
-  /** Glass highlights, 0–1. */
-  glass: { rim?: number; sheen?: number; depth?: number };
+  /** The glass material and its knobs (0–1; blur in DIPs). */
+  glass: {
+    style?: GlassStyle;
+    intensity?: number;
+    refraction?: number;
+    highlight?: number;
+    tint?: number;
+    blur?: number;
+    sheen?: number;
+    depth?: number;
+  };
   /** The flyouts this bar opens: live blur behind them, and their tint's opacity. */
   flyouts: { blur?: boolean; tint?: number };
   background?: Fill;
@@ -149,7 +160,8 @@ export interface Spring {
 }
 /** A named curve, a cubic-bezier `[x1, y1, x2, y2]`, or a spring. */
 export type Curve = string | [number, number, number, number] | Spring;
-export type MotionStyle = "slide" | "fade" | "pop" | "scale" | "none";
+/** `morph` (flyouts): grows out of the button that opened it. */
+export type MotionStyle = "slide" | "fade" | "pop" | "scale" | "morph" | "none";
 
 /** A node of the animation tree (docs/bars.md, "Animation"). */
 export interface Motion {
@@ -307,6 +319,8 @@ export interface Appearance {
   font: string;
   scale: number;
   shadow: boolean;
+  /** The appearance's design style by name (the widgets'; `liquid` makes glass liquid by default). */
+  style?: string;
 }
 
 /** Windows' colors: `[base, light-1, light-2, light-3, dark-1, dark-2, dark-3]`. */
@@ -350,6 +364,8 @@ export interface Mode {
   performance: boolean;
   /** Live blur draws under this window's glass (Windows 11, transparency effects on, not performance mode). */
   blur: boolean;
+  /** Liquid glass may draw (transparency effects on, not performance mode). */
+  liquid: boolean;
 }
 
 /** A piece of glass for live blur: `rect` in DIPs from the window's top-left. */
@@ -482,6 +498,8 @@ export interface EventMap extends FlyoutEvents {
   visibility: boolean;
   /** Auto-hide dock: the pointer touched the screen edge, slide in. */
   reveal: null;
+  /** What's behind this bar may have changed (its window moved, the wallpaper changed): liquid glass captures again. */
+  behind: unknown;
 }
 
 export type EventName = keyof EventMap;
@@ -531,6 +549,8 @@ export interface MethodMap extends FlyoutMethods {
   region: { params: { rects: [number, number, number, number][] }; result: null };
   /** Where the page's live-blur glass is; sent every frame one moves (glass.ts). */
   glass: { params: { panes: Pane[] }; result: null };
+  /** What's behind `rect` (DIPs from the window's top-left) without our windows, for liquid glass: a URL and the rect it covers. */
+  capture: { params: { rect: [number, number, number, number] }; result: { url: string; rect: [number, number, number, number] } };
   /** Runs the `exec`/`open` action bars.json binds to a module's input. */
   run: { params: { module: ModuleName; trigger: Trigger }; result: null };
   /** Windows Search. */

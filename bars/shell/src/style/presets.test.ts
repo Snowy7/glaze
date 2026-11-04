@@ -4,7 +4,7 @@ import { DOCK_DESIGNS, PRESETS as PRESET_NAMES, TOP_DESIGNS, type Mode, type Pre
 import { dockBand, topBand } from "../protocol";
 import { effectiveLook, pageTokens } from "./apply";
 
-const mode: Mode = { reduceMotion: false, performance: false, blur: true };
+const mode: Mode = { reduceMotion: false, performance: false, blur: true, liquid: true };
 
 describe("designs and presets", () => {
   it("merges objects deeply, replaces lists, and switches tagged variants whole", () => {

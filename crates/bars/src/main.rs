@@ -20,6 +20,7 @@ mod audio;
 mod bar;
 mod blur;
 mod bridge;
+mod capture;
 mod custom;
 mod desktops;
 mod first_paint;

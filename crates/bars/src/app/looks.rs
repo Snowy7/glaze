@@ -3,14 +3,17 @@
 //! pack and copied images (`appearance`); reduce-motion, performance mode and whether live blur
 //! is on (`mode`); and the wallpaper-glass snapshot with where the bar's window sits on its
 //! monitor (`backdrop`). Each is re-sent to a bar only when it changed. Live blur itself (the
-//! page's `glass` panes) is drawn here too, through `crate::blur`.
+//! page's `glass` panes) is drawn here too, through `crate::blur`, and liquid glass's captures
+//! of what's behind a bar (`capture`, `crate::capture`), with `behind` telling a bar when what's
+//! behind it changed (its window moved, the wallpaper changed).
 
 use std::collections::{BTreeMap, HashMap};
 
 use anyhow::Result;
 use mypaper_bars::BarsConfig;
 use mypaper_bars::config::Performance;
-use mypaper_bars::style::{Fill, Look, Motion, ReduceMotion};
+use mypaper_bars::style::{Fill, GlassKind, Look, Motion, ReduceMotion};
+use mypaper_desktop::Rect;
 use serde_json::{Value, json};
 
 use super::App;
@@ -18,8 +21,9 @@ use crate::accent::{self, System};
 use crate::assets::{Assets, is_image_path};
 use crate::bar::Bar;
 use crate::blur::{self, LiveBlur, Pane};
-use crate::bridge::BarKind;
-use crate::glass::{Backdrop, Glass};
+use crate::bridge::{BarError, BarKind};
+use crate::capture::Behind;
+use crate::glass::{BACKDROP_HOST, Backdrop, Glass};
 use crate::look::{self, Pack};
 use crate::wake::Waker;
 
@@ -35,6 +39,8 @@ pub(super) struct Looks {
     pub live: Option<LiveBlur>,
     /// Settings → Personalization → Colors → Transparency effects.
     transparency: bool,
+    /// Liquid glass's captures of what's behind the bars.
+    pub behind: Behind,
     /// What each bar last got per event, so unchanged ones aren't re-sent.
     sent: HashMap<(u32, &'static str), String>,
 }
@@ -44,9 +50,11 @@ impl Looks {
         let live = LiveBlur::new()
             .inspect_err(|e| log::warn!("no live blur: {e:#}"))
             .ok();
+        let backdrop = mypaper_bars::files::local("backdrop")?;
         Ok(Self {
             system: accent::read(),
-            glass: Glass::new(mypaper_bars::files::local("backdrop")?, waker),
+            behind: Behind::new(backdrop.join("behind")),
+            glass: Glass::new(backdrop, waker),
             assets: Assets::new(mypaper_bars::files::local("bars-assets")?),
             pack: None,
             vars: BTreeMap::new(),
@@ -62,6 +70,9 @@ impl Looks {
         self.sent.retain(|(id, _), _| *id != bar);
     }
 }
+
+/// Seconds between wallpaper snapshots a liquid bar asks for (as wallpaper glass's default).
+const DEFAULT_INTERVAL: u32 = 10;
 
 /// The look a bar draws: its own (`top.look` or `dock.look`, already layered over its design's
 /// and the shared one).
@@ -153,7 +164,9 @@ impl App {
         let performance = self.performance(bar);
         let blur =
             self.looks.live.is_some() && bar.has_blur() && self.looks.transparency && !performance;
-        json!({ "reduceMotion": reduce, "performance": performance, "blur": blur })
+        // Liquid glass needs no compositor: only the user's transparency choice and full power.
+        let liquid = self.looks.transparency && !performance;
+        json!({ "reduceMotion": reduce, "performance": performance, "blur": blur, "liquid": liquid })
     }
 
     /// The `backdrop` event: the wallpaper snapshot of the bar's monitor, its size and where the
@@ -184,10 +197,19 @@ impl App {
             if !bar.ready {
                 continue;
             }
+            // What's behind it changes when its window moves or the wallpaper's snapshot does.
+            let behind = json!([
+                bar.rect.x,
+                bar.rect.y,
+                bar.rect.width,
+                bar.rect.height,
+                self.looks.glass.url(&bar.monitor.device)
+            ]);
             let events = [
                 ("appearance", self.look_payload(bar)),
                 ("mode", self.mode_payload(bar)),
                 ("backdrop", self.backdrop_payload(bar)),
+                ("behind", behind),
             ];
             for (event, data) in events {
                 let message = json!({ "event": event, "data": data }).to_string();
@@ -207,10 +229,65 @@ impl App {
             .bars
             .iter()
             .filter(|bar| !bar.hidden && !self.performance(bar))
-            .filter_map(|bar| bar_look(bar).wallpaper())
-            .map(|wallpaper| wallpaper.interval)
+            .filter_map(|bar| match bar_look(bar).wallpaper() {
+                Some(wallpaper) => Some(wallpaper.interval),
+                // A liquid bar re-captures on each snapshot, so it follows the wallpaper too.
+                None => self.liquid(bar).then_some(DEFAULT_INTERVAL),
+            })
             .min();
         self.looks.glass.request(interval);
+    }
+
+    /// Whether `bar` draws liquid glass: its look says so, or says nothing while the theme's
+    /// appearance style is liquid (the page decides the same way, `style/look.ts`).
+    fn liquid(&self, bar: &Bar) -> bool {
+        match bar_look(bar).glass.style {
+            Some(kind) => kind == GlassKind::Liquid,
+            None => self.look(bar.kind).style.as_deref() == Some("liquid"),
+        }
+    }
+
+    /// The page's `capture` request: `rect` (DIPs from the window's top-left) as the screen
+    /// shows it without the bars, clipped to the monitor. Answers the file's URL and the rect
+    /// it covers (DIPs from the window's top-left).
+    pub(super) fn capture_behind(
+        &mut self,
+        index: usize,
+        rect: [f64; 4],
+    ) -> Result<Value, BarError> {
+        let bar = &self.bars[index];
+        if rect.iter().any(|v| !v.is_finite()) || rect[2] <= 0.0 || rect[3] <= 0.0 {
+            return Err(BarError::invalid("capture: a rect with a size"));
+        }
+        let scale = bar.scale();
+        let monitor = bar.monitor.rect;
+        let px = |v: f64| (v * scale).round() as i32;
+        let x0 = (bar.rect.x + px(rect[0])).max(monitor.x);
+        let y0 = (bar.rect.y + px(rect[1])).max(monitor.y);
+        let x1 = (bar.rect.x + px(rect[0] + rect[2])).min(monitor.x + monitor.width);
+        let y1 = (bar.rect.y + px(rect[1] + rect[3])).min(monitor.y + monitor.height);
+        if x1 <= x0 || y1 <= y0 {
+            return Err(BarError::invalid("capture: the rect is off the monitor"));
+        }
+        let area = Rect {
+            x: x0,
+            y: y0,
+            width: x1 - x0,
+            height: y1 - y0,
+        };
+        let ours: Vec<_> = self.bars.iter().map(Bar::hwnd).collect();
+        let id = bar.id;
+        let (origin_x, origin_y) = (bar.rect.x, bar.rect.y);
+        let file = self
+            .looks
+            .behind
+            .capture(id, &ours, area)
+            .map_err(|e| BarError::unavailable(format!("{e:#}")))?;
+        let dip = |v: i32| f64::from(v) / scale;
+        Ok(json!({
+            "url": format!("https://{BACKDROP_HOST}/behind/{file}"),
+            "rect": [dip(x0 - origin_x), dip(y0 - origin_y), dip(area.width), dip(area.height)],
+        }))
     }
 
     /// The page's `glass` request: where its live-blur panes are now.

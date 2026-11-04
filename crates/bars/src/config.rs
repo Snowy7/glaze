@@ -1379,15 +1379,22 @@ mod tests {
                  "icons": "mono", "tray": { "host": true } }"#,
         )
         .unwrap();
-        assert_eq!((config.top.design, config.dock.design), (TopDesign::Islands, DockDesign::Islands));
+        assert_eq!(
+            (config.top.design, config.dock.design),
+            (TopDesign::Islands, DockDesign::Islands)
+        );
         assert_eq!(config.top.layout, TopLayout::Islands);
         assert!(config.top.right.contains(&ModuleRef::Break));
         assert_eq!(config.dock.indicator, IndicatorStyle::Bar);
         assert!(config.dock.enabled && config.dock.monitors == Monitors::All);
-        assert!(matches!(config.top.look.background, Some(crate::style::Fill::Solid { .. })));
+        assert!(matches!(
+            config.top.look.background,
+            Some(crate::style::Fill::Solid { .. })
+        ));
         assert_eq!(config.taskbar.mode, TaskbarMode::Hide);
 
-        let win = BarsConfig::parse(r#"{ "preset": "windows11", "taskbar": { "mode": "hide" } }"#).unwrap();
+        let win = BarsConfig::parse(r#"{ "preset": "windows11", "taskbar": { "mode": "hide" } }"#)
+            .unwrap();
         assert!(!win.top.enabled);
         assert_eq!(win.dock.design, DockDesign::Windows11);
         assert_eq!(win.dock.style, DockStyle::Taskbar);
@@ -1400,19 +1407,36 @@ mod tests {
             r#"{ "top": { "design": "macos" }, "dock": { "design": "windows11", "enabled": true } }"#,
         )
         .unwrap();
-        assert_eq!(config.preset, Preset::Monochrome, "the preset only fills what's unnamed");
+        assert_eq!(
+            config.preset,
+            Preset::Monochrome,
+            "the preset only fills what's unnamed"
+        );
         assert_eq!(config.top.height, 24.0);
         assert_eq!(config.top.look.family, Some(Family::Macos));
         assert_eq!(config.dock.style, DockStyle::Taskbar);
         assert_eq!(config.dock.look.family, Some(Family::Fluent));
-        assert_eq!(config.dock.clock.format.as_deref(), Some("HH:mm\ndd/MM/yyyy"));
+        assert_eq!(
+            config.dock.clock.format.as_deref(),
+            Some("HH:mm\ndd/MM/yyyy")
+        );
 
         // A bar's design beats the preset's choice for it; the other bar keeps the preset's.
         let config =
-            BarsConfig::parse(r#"{ "preset": "macos", "dock": { "design": "chromeos" } }"#).unwrap();
-        assert_eq!((config.top.design, config.dock.design), (TopDesign::Macos, DockDesign::Chromeos));
-        assert!(BarsConfig::parse(r#"{ "top": { "design": "windows11" } }"#).is_err(), "a dock design");
-        assert!(BarsConfig::parse(r#"{ "dock": { "design": "capsule" } }"#).is_err(), "a top design");
+            BarsConfig::parse(r#"{ "preset": "macos", "dock": { "design": "chromeos" } }"#)
+                .unwrap();
+        assert_eq!(
+            (config.top.design, config.dock.design),
+            (TopDesign::Macos, DockDesign::Chromeos)
+        );
+        assert!(
+            BarsConfig::parse(r#"{ "top": { "design": "windows11" } }"#).is_err(),
+            "a dock design"
+        );
+        assert!(
+            BarsConfig::parse(r#"{ "dock": { "design": "capsule" } }"#).is_err(),
+            "a top design"
+        );
     }
 
     #[test]
@@ -1427,7 +1451,11 @@ mod tests {
         assert_eq!(config.top.look.tint, Some(0.9), "the bar's own wins");
         assert_eq!(config.dock.look.tint, Some(0.2), "then the shared look");
         assert_eq!(config.top.look.noise, Some(0.3));
-        assert_eq!(config.dock.look.saturation, Some(1.85), "the design's fills the rest");
+        assert_eq!(
+            config.dock.look.saturation,
+            Some(1.85),
+            "the design's fills the rest"
+        );
         assert_eq!(config.top.animation.duration, Some(90.0));
         assert_eq!(config.dock.animation.duration, Some(90.0));
 
@@ -1436,16 +1464,26 @@ mod tests {
             r##"{ "top": { "look": { "background": { "type": "solid", "color": "#101010" } } } }"##,
         )
         .unwrap();
-        assert!(matches!(config.top.look.background, Some(crate::style::Fill::Solid { .. })));
-        assert!(config.dock.look.wallpaper().is_some(), "the dock keeps its design's glass");
+        assert!(matches!(
+            config.top.look.background,
+            Some(crate::style::Fill::Solid { .. })
+        ));
+        assert!(
+            config.dock.look.wallpaper().is_some(),
+            "the dock keeps its design's glass"
+        );
     }
 
     #[test]
     fn bar_looks_are_checked_with_their_paths() {
         let error = BarsConfig::parse(r#"{ "dock": { "look": { "tint": 4 } } }"#).unwrap_err();
         assert!(format!("{error:#}").contains("dock.look.tint"), "{error:#}");
-        let error = BarsConfig::parse(r#"{ "top": { "animation": { "magnify": {} } } }"#).unwrap_err();
-        assert!(format!("{error:#}").contains("top.animation.magnify"), "{error:#}");
+        let error =
+            BarsConfig::parse(r#"{ "top": { "animation": { "magnify": {} } } }"#).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("top.animation.magnify"),
+            "{error:#}"
+        );
         assert!(BarsConfig::parse(r#"{ "dock": { "button": 4 } }"#).is_err());
     }
 
@@ -1456,10 +1494,16 @@ mod tests {
                  "overrides": { "secondary": { "top": { "design": "minimal" } } } }"#,
         )
         .unwrap();
-        assert_eq!(config.for_monitor("DISPLAY1", true).unwrap().top.design, TopDesign::Macos);
+        assert_eq!(
+            config.for_monitor("DISPLAY1", true).unwrap().top.design,
+            TopDesign::Macos
+        );
         let second = config.for_monitor("DISPLAY2", false).unwrap();
         assert_eq!(second.top.design, TopDesign::Minimal);
-        assert!(matches!(second.top.look.background, Some(crate::style::Fill::None)));
+        assert!(matches!(
+            second.top.look.background,
+            Some(crate::style::Fill::None)
+        ));
     }
 
     #[test]
@@ -1467,7 +1511,10 @@ mod tests {
         let dir = crate::files::temp_dir("config-none");
         let missing = BarsConfig::load(&dir.join(FILE)).unwrap();
         assert_eq!(missing, BarsConfig::parse("{}").unwrap());
-        assert!(missing.top.look.wallpaper().is_some(), "the default design's look");
+        assert!(
+            missing.top.look.wallpaper().is_some(),
+            "the default design's look"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -98,6 +98,11 @@ pub enum Method {
     Glass {
         panes: Vec<crate::blur::Pane>,
     },
+    /// What's behind a part of the window (DIPs from its top-left), for liquid glass
+    /// (`crate::capture`).
+    Capture {
+        rect: [f64; 4],
+    },
     /// A flyout's request (`crate::flyouts::Request`, the methods in `flyouts::METHODS`).
     #[serde(skip)]
     Flyout(crate::flyouts::Request),

@@ -8,7 +8,7 @@
     "saturation": 1.15,
     "noise": 0.025,
     "border": { "rest": { "width": 1, "color": "#ffffff14" } },
-    "glass": { "rim": 0.25 },
+    "glass": { "highlight": 0.25 },
     "items": {
       "radius": 7,
       "hover": { "background": "#ffffff1a", "color": "#ffffff" },

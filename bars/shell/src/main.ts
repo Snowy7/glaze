@@ -3,6 +3,7 @@ import { dockStyles } from "./dock/styles";
 import { initSurfaces, setSurfaceConfig } from "./flyouts";
 import { connect, fire, on } from "./host";
 import { createGlass } from "./glass";
+import { createLiquid } from "./liquid";
 import { initOverlay } from "./overlay";
 import type { BarsConfig } from "./protocol";
 import { createRegion } from "./region";
@@ -31,11 +32,15 @@ async function main(): Promise<void> {
 
   const region = createRegion((rects) => fire("region", { rects }));
   const glass = createGlass((panes) => fire("glass", { panes }));
+  const liquid = createLiquid();
   // Whatever moves the region may move glass too (glass also follows animations by itself).
   const invalidate = () => {
     region.invalidate();
     glass.invalidate();
+    liquid.invalidate();
   };
+  on("behind", () => liquid.recapture());
+  on("reveal", () => liquid.invalidate());
   initOverlay(overlay, invalidate);
 
   let bar: Bar | undefined;
@@ -64,6 +69,7 @@ async function main(): Promise<void> {
     state.look = look;
     applyLook(state);
     glass.invalidate();
+    liquid.invalidate();
     const next = JSON.stringify(look.iconPack);
     if (next !== pack) {
       pack = next;
@@ -74,6 +80,7 @@ async function main(): Promise<void> {
     state.mode = mode;
     applyLook(state);
     glass.invalidate();
+    liquid.invalidate();
   });
   on("backdrop", (backdrop) => {
     state.backdrop = backdrop;

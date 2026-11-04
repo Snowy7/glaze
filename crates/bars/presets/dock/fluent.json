@@ -26,7 +26,7 @@
     "radius": 10,
     "border": { "rest": { "width": 1, "color": "var(--edge)" } },
     "shadow": { "rest": { "y": 2, "blur": 8, "color": "#00000047" } },
-    "glass": { "rim": 0.3 },
+    "glass": { "highlight": 0.3 },
     "items": {
       "radius": 6,
       "rest": { "color": "text" },

@@ -71,9 +71,19 @@ impl Pane {
     /// Ranges a page could get wrong; the host never trusts them blindly.
     pub fn valid(&self) -> bool {
         let [x, y, w, h] = self.rect;
-        [x, y, w, h, self.radius, self.opacity, self.saturation, self.brightness, self.blur]
-            .iter()
-            .all(|v| v.is_finite())
+        [
+            x,
+            y,
+            w,
+            h,
+            self.radius,
+            self.opacity,
+            self.saturation,
+            self.brightness,
+            self.blur,
+        ]
+        .iter()
+        .all(|v| v.is_finite())
             && w >= 0.0
             && h >= 0.0
             && (0.0..=1.0).contains(&self.opacity)
@@ -414,12 +424,16 @@ mod tests {
             assert!((grey[i * 4] - grey[i * 4 + 1]).abs() < 1e-6);
             assert!((grey[i * 4 + 1] - grey[i * 4 + 2]).abs() < 1e-6);
         }
-        assert!((color_matrix(1.0, 0.5)[0] - 0.5).abs() < 1e-6, "brightness scales");
+        assert!(
+            (color_matrix(1.0, 0.5)[0] - 0.5).abs() < 1e-6,
+            "brightness scales"
+        );
     }
 
     #[test]
     fn panes_are_checked_and_share_materials() {
-        let pane: Pane = serde_json::from_str(r#"{ "rect": [0, 0, 100, 40], "radius": 8 }"#).unwrap();
+        let pane: Pane =
+            serde_json::from_str(r#"{ "rect": [0, 0, 100, 40], "radius": 8 }"#).unwrap();
         assert!(pane.valid());
         assert_eq!((pane.opacity, pane.saturation), (1.0, 1.0));
         let near = Pane {
@@ -428,9 +442,18 @@ mod tests {
         };
         assert_eq!(pane.material(), near.material());
         for bad in [
-            Pane { opacity: 2.0, ..pane.clone() },
-            Pane { rect: [0.0, 0.0, -1.0, 4.0], ..pane.clone() },
-            Pane { saturation: f64::NAN, ..pane.clone() },
+            Pane {
+                opacity: 2.0,
+                ..pane.clone()
+            },
+            Pane {
+                rect: [0.0, 0.0, -1.0, 4.0],
+                ..pane.clone()
+            },
+            Pane {
+                saturation: f64::NAN,
+                ..pane.clone()
+            },
         ] {
             assert!(!bad.valid(), "{bad:?}");
         }

@@ -58,7 +58,7 @@ export function pageTokens({ kind, config, look, mode, backdrop }: PageLook): {
   const appearance = schemed(look.appearance, scheme);
   const base = appearanceTokens(appearance);
   const live = mode.blur && !mode.performance;
-  const surface = lookTokens(barLook, appearance, scheme, look.system, look.assets, live);
+  const surface = lookTokens(barLook, appearance, scheme, look.system, look.assets, live, mode.liquid && !mode.performance);
   const motion = motionTokens(style.animation, kind, mode.reduceMotion || mode.performance);
   const glass = backdropTokens(backdrop);
   const attrs: Record<string, string> = {

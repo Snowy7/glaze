@@ -9,9 +9,10 @@
 
 use std::time::{Duration, Instant};
 
-use windows_numerics::{Vector2, Vector3};
 use windows::Foundation::{IPropertyValue, PropertyValue};
-use windows::Graphics::Effects::{IGraphicsEffect, IGraphicsEffect_Impl, IGraphicsEffectSource, IGraphicsEffectSource_Impl};
+use windows::Graphics::Effects::{
+    IGraphicsEffect, IGraphicsEffect_Impl, IGraphicsEffectSource, IGraphicsEffectSource_Impl,
+};
 use windows::UI::Color;
 use windows::UI::Composition::{CompositionEffectSourceParameter, Compositor};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
@@ -26,6 +27,7 @@ use windows::Win32::System::WinRT::{
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::{BOOL, GUID, HSTRING, Interface, PCWSTR, implement, w};
+use windows_numerics::{Vector2, Vector3};
 
 /// D2D1's color matrix effect (CLSID_D2D1ColorMatrix).
 const COLOR_MATRIX: GUID = GUID::from_u128(0x921f03d6_641c_47df_852d_b4bb6153ae11);
@@ -103,7 +105,10 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LR
 }
 
 fn main() -> windows::core::Result<()> {
-    let seconds: u64 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(6);
+    let seconds: u64 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(6);
     unsafe {
         windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(
             windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
@@ -153,23 +158,32 @@ fn main() -> windows::core::Result<()> {
         root.SetRelativeSizeAdjustment(Vector2 { X: 1.0, Y: 1.0 })?;
         target.SetRoot(&root)?;
 
-        let glass = |index: f32, brush: &windows::UI::Composition::CompositionBrush, radius: f32| {
-            let sprite = compositor.CreateSpriteVisual()?;
-            sprite.SetBrush(brush)?;
-            let size = Vector2 { X: 440.0, Y: 300.0 };
-            sprite.SetOffset(Vector3 { X: 30.0 + index * 480.0, Y: 60.0, Z: 0.0 })?;
-            sprite.SetSize(size)?;
-            let shape = compositor.CreateRoundedRectangleGeometry()?;
-            shape.SetSize(size)?;
-            shape.SetCornerRadius(Vector2 { X: radius, Y: radius })?;
-            sprite.SetClip(&compositor.CreateGeometricClipWithGeometry(&shape)?)?;
-            root.Children()?.InsertAtTop(&sprite)?;
-            windows::core::Result::Ok(sprite)
-        };
+        let glass =
+            |index: f32, brush: &windows::UI::Composition::CompositionBrush, radius: f32| {
+                let sprite = compositor.CreateSpriteVisual()?;
+                sprite.SetBrush(brush)?;
+                let size = Vector2 { X: 440.0, Y: 300.0 };
+                sprite.SetOffset(Vector3 {
+                    X: 30.0 + index * 480.0,
+                    Y: 60.0,
+                    Z: 0.0,
+                })?;
+                sprite.SetSize(size)?;
+                let shape = compositor.CreateRoundedRectangleGeometry()?;
+                shape.SetSize(size)?;
+                shape.SetCornerRadius(Vector2 {
+                    X: radius,
+                    Y: radius,
+                })?;
+                sprite.SetClip(&compositor.CreateGeometricClipWithGeometry(&shape)?)?;
+                root.Children()?.InsertAtTop(&sprite)?;
+                windows::core::Result::Ok(sprite)
+            };
         let plain = compositor.CreateHostBackdropBrush()?;
         let _a = glass(0.0, &plain.cast()?, 24.0)?;
 
-        let source: IGraphicsEffectSource = CompositionEffectSourceParameter::Create(&HSTRING::from("backdrop"))?.cast()?;
+        let source: IGraphicsEffectSource =
+            CompositionEffectSourceParameter::Create(&HSTRING::from("backdrop"))?.cast()?;
         let effect: IGraphicsEffect = ColorMatrix {
             matrix: saturate(1.9, 1.05),
             source,
@@ -177,14 +191,26 @@ fn main() -> windows::core::Result<()> {
         .into();
         let factory = compositor.CreateEffectFactory(&effect)?;
         let saturated = factory.CreateBrush()?;
-        saturated.SetSourceParameter(&HSTRING::from("backdrop"), &compositor.CreateHostBackdropBrush()?)?;
+        saturated.SetSourceParameter(
+            &HSTRING::from("backdrop"),
+            &compositor.CreateHostBackdropBrush()?,
+        )?;
         let _b = glass(1.0, &saturated.cast()?, 24.0)?;
 
         // A tinted one: the saturated glass with a light tint over it (what the page would draw).
         let _c = glass(2.0, &saturated.cast()?, 40.0)?;
         let tint = compositor.CreateSpriteVisual()?;
-        tint.SetBrush(&compositor.CreateColorBrushWithColor(Color { A: 90, R: 245, G: 245, B: 250 })?)?;
-        tint.SetOffset(Vector3 { X: 30.0 + 2.0 * 480.0, Y: 60.0, Z: 0.0 })?;
+        tint.SetBrush(&compositor.CreateColorBrushWithColor(Color {
+            A: 90,
+            R: 245,
+            G: 245,
+            B: 250,
+        })?)?;
+        tint.SetOffset(Vector3 {
+            X: 30.0 + 2.0 * 480.0,
+            Y: 60.0,
+            Z: 0.0,
+        })?;
         tint.SetSize(Vector2 { X: 440.0, Y: 300.0 })?;
         let shape = compositor.CreateRoundedRectangleGeometry()?;
         shape.SetSize(Vector2 { X: 440.0, Y: 300.0 })?;

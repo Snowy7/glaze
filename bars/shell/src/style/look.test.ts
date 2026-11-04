@@ -145,12 +145,12 @@ describe("live blur and glass", () => {
 
   it("carries glass highlights, type, family and the flyouts' material", () => {
     const { attrs, vars } = tokens(
-      { family: "macos", glyphs: "symbols", glass: { rim: 0.6, sheen: 0.2 }, font: { family: "SF Pro Text", size: 13, weight: 500 }, flyouts: { tint: 0.5 } },
+      { family: "macos", glyphs: "symbols", glass: { highlight: 0.6, sheen: 0.2 }, font: { family: "SF Pro Text", size: 13, weight: 500 }, flyouts: { tint: 0.5 } },
       {},
       true,
     );
     expect(attrs).toMatchObject({ "data-family": "macos", "data-glyphs": "symbols", "data-fly-blur": "on" });
-    expect(vars).toMatchObject({ "--g-rim": "0.6", "--g-sheen": "0.2", "--g-depth": "0", "--bar-font": "SF Pro Text", "--bar-size": "13px", "--bar-weight": "500", "--fly-tint": "0.5" });
+    expect(vars).toMatchObject({ "--g-highlight": "0.6", "--g-sheen": "0.2", "--g-depth": "0", "--bar-font": "SF Pro Text", "--bar-size": "13px", "--bar-weight": "500", "--fly-tint": "0.5" });
     expect(tokens({ flyouts: { blur: false } }, {}, true).attrs["data-fly-blur"]).toBe("off");
     expect(tokens({}).attrs["data-fly-blur"]).toBe("off");
   });

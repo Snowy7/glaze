@@ -10,7 +10,7 @@
     "noise": 0.025,
     "border": { "rest": { "width": 1, "color": "#ffffff14" } },
     "shadow": { "rest": { "y": 3, "blur": 10, "color": "#00000052" } },
-    "glass": { "rim": 0.35 },
+    "glass": { "highlight": 0.35 },
     "items": {
       "radius": 7,
       "hover": { "background": "#ffffff1a", "color": "#ffffff" },

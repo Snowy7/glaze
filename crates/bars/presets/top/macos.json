@@ -3,26 +3,76 @@
   "height": 24,
   "padding": 10,
   "spacing": 0,
-  "left": ["start", "app", "workspaces"],
+  "left": [
+    "start",
+    "app",
+    "workspaces"
+  ],
   "center": [],
-  "right": ["media", "tray", "battery", "network", "volume", "quick", "clock"],
-  "clock": { "format": "ddd d MMM  HH:mm" },
+  "right": [
+    "media",
+    "tray",
+    "battery",
+    "network",
+    "volume",
+    "quick",
+    "clock"
+  ],
+  "clock": {
+    "format": "ddd d MMM  HH:mm"
+  },
   "look": {
     "scheme": "auto",
     "family": "macos",
     "glyphs": "symbols",
-    "font": { "family": "\"SF Pro Text\", \"SF Pro\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, sans-serif", "size": 13, "weight": 400 },
-    "background": { "type": "wallpaper", "brightness": 1.04 },
+    "font": {
+      "family": "\"SF Pro Text\", \"SF Pro\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, sans-serif",
+      "size": 13,
+      "weight": 400
+    },
+    "background": {
+      "type": "wallpaper",
+      "brightness": 1.04
+    },
     "tint": 0.42,
     "saturation": 1.8,
     "noise": 0.012,
-    "border": { "rest": { "width": 0 } },
+    "border": {
+      "rest": {
+        "width": 0
+      }
+    },
     "items": {
       "radius": 5,
-      "rest": { "color": "text" },
-      "hover": { "background": "var(--fill-2)" },
-      "active": { "background": "var(--fill-3)" }
+      "rest": {
+        "color": "text"
+      },
+      "hover": {
+        "background": "var(--fill-2)"
+      },
+      "active": {
+        "background": "var(--fill-3)"
+      }
+    },
+    "glass": {
+      "style": "liquid",
+      "intensity": 0.85,
+      "refraction": 0.4,
+      "highlight": 0.55,
+      "tint": 0.14,
+      "blur": 1
     }
   },
-  "animation": { "duration": 240, "curve": "spring", "bar": { "style": "slide" }, "open": { "style": "fade", "curve": "ease-out", "duration": 110 } }
+  "animation": {
+    "duration": 240,
+    "curve": "spring",
+    "bar": {
+      "style": "slide"
+    },
+    "open": {
+      "style": "fade",
+      "curve": "ease-out",
+      "duration": 110
+    }
+  }
 }

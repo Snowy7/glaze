@@ -84,25 +84,29 @@ const TRACKS = [
 ];
 
 /** A stand-in wallpaper, as CSS and as the snapshot the engine would publish (an SVG). */
-function wallpaper(kind: string, w: number, h: number): { css: string; snapshot: string } {
+function wallpaper(kind: string, w: number, h: number): { css: string; snapshot: string; sharp: string } {
   const blobs =
     kind === "light"
       ? [["18%", "30%", "#ffffff"], ["85%", "80%", "#d8dde6"], ["50%", "100%", "#c9d4ea"]]
-      : kind === "vivid"
+      : kind === "vivid" || kind === "grid"
         ? [["15%", "20%", "#ff5fa2"], ["80%", "25%", "#6b5cff"], ["40%", "95%", "#00c2c7"], ["95%", "95%", "#ffb347"]]
         : [["18%", "30%", "#4a5160"], ["85%", "80%", "#3b3346"], ["45%", "100%", "#2b3a4a"]];
-  const base = kind === "light" ? "#eceef2" : kind === "vivid" ? "#1b1530" : "#17181c";
+  const base = kind === "light" ? "#eceef2" : kind === "vivid" || kind === "grid" ? "#1b1530" : "#17181c";
   const gradients = blobs
     .map(([x, y, c], i) => `<radialGradient id="g${i}" cx="${x}" cy="${y}" r="45%"><stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>`)
     .join("");
   const rects = blobs.map((_, i) => `<rect width="100%" height="100%" fill="url(#g${i})"/>`).join("");
-  // Some detail, so glass visibly blurs what's behind it.
-  const stripes = Array.from({ length: 24 }, (_, i) => `<rect x="${(i * w) / 24}" y="0" width="${w / 60}" height="${h}" fill="#fff" opacity=".07"/>`).join("");
+  // Some detail, so glass visibly blurs what's behind it (`grid`: a lot, to see refraction).
+  const stripes =
+    kind === "grid"
+      ? Array.from({ length: Math.ceil(w / 28) }, (_, i) => `<rect x="${i * 28}" y="0" width="3" height="${h}" fill="#fff" opacity=".55"/>`).join("") +
+        Array.from({ length: Math.ceil(h / 28) }, (_, i) => `<rect x="0" y="${i * 28}" width="${w}" height="3" fill="#fff" opacity=".3"/>`).join("")
+      : Array.from({ length: 24 }, (_, i) => `<rect x="${(i * w) / 24}" y="0" width="${w / 60}" height="${h}" fill="#fff" opacity=".07"/>`).join("");
   const picture = (blur: number) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><defs>${gradients}<filter id="b" x="0" y="0" width="1" height="1"><feGaussianBlur stdDeviation="${blur}" edgeMode="duplicate"/></filter></defs><g filter="${blur ? "url(#b)" : "none"}"><rect width="100%" height="100%" fill="${base}"/>${rects}${stripes}</g></svg>`;
   const url = (svg: string) => `data:image/svg+xml,${encodeURIComponent(svg)}`;
   const css = `html{background:url("${url(picture(0))}") 0 0 / 100% 100% no-repeat,${base}}`;
-  return { css, snapshot: url(picture(28)) };
+  return { css, snapshot: url(picture(28)), sharp: url(picture(0)) };
 }
 
 const isPreset = (name: string | null): name is Preset => !!name && name in PRESETS;
@@ -240,7 +244,20 @@ export function createMockTransport(): Transport {
     }, 400);
   }
 
-  const click = q.get("click");
+  // ?debug: a line of liquid-glass state, for headless screenshots.
+  if (q.has("debug")) {
+    setTimeout(() => {
+      const el = document.createElement("pre");
+      el.style.cssText = "position:fixed;left:8px;bottom:8px;margin:0;color:#ff0;font:12px monospace;z-index:99";
+      const panes = [...document.querySelectorAll<HTMLElement>(".surface, .layer")];
+      el.textContent = JSON.stringify({
+        html: Object.fromEntries(["data-liquid", "data-fly-liquid", "data-glass-style", "data-fill", "data-live"].map((a) => [a, document.documentElement.getAttribute(a)])),
+        panes: panes.map((p) => ({ c: p.className, liquid: getComputedStyle(p).getPropertyValue("--liquid"), lens: !!p.querySelector(":scope > .lens"), bg: p.querySelector<HTMLElement>(":scope > .lens")?.style.backgroundImage.slice(0, 30) })),
+      });
+      document.body.append(el);
+    }, 1200);
+  }
+    const click = q.get("click");
   if (click) setTimeout(() => (document.querySelector(click) as HTMLElement | null)?.click(), 500);
 
   // ?dump=<selector>: after 2 s, the matching elements' boxes go into body[data-dump] (read it
@@ -296,7 +313,7 @@ export function createMockTransport(): Transport {
           monitor: { device: "\\\\.\\DISPLAY1", primary: true, width: innerWidth, height: innerHeight },
           config,
           look,
-          mode: { reduceMotion: q.has("reduce"), performance: q.has("perf"), blur: !q.has("noblur") },
+          mode: { reduceMotion: q.has("reduce"), performance: q.has("perf"), blur: !q.has("noblur"), liquid: !q.has("noliquid") },
           // The mock's window is the whole monitor.
           backdrop: { url: art.snapshot, width: innerWidth, height: innerHeight, x: 0, y: 0 },
           dpi: 96,
@@ -351,6 +368,11 @@ export function createMockTransport(): Transport {
           emitApps();
         }
         break;
+      }
+      case "capture": {
+        // The stand-in wallpaper is what's behind everything here.
+        reply(message.id, { url: art.sharp, rect: [0, 0, innerWidth, innerHeight] });
+        return;
       }
       case "previewOpen": {
         reply(
