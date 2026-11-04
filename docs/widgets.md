@@ -179,6 +179,16 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   | `font` | | a CSS font-family name (for example `"Cascadia Code"`; at most 200 characters, none of `; { } < > \`). The form offers common fonts and a text box. The widget uses it as `font-family: var(--w-font, ...)`-style CSS, quoting the name |
   | `select` | `options` may hold **objects** `{ "value", "label"?, "icon"? }` as well as plain strings (`icon` is a short glyph, an emoji or a symbol, shown beside or instead of the label; a select of 5 or fewer options with icons renders as an icon bar) | the option's `value` |
 
+  **Places.** `{ "key": "city", "type": "place", "label": "Location", "search": { "plugin":
+  "weather", "method": "search" }, "default": null }`. The value is `null` (automatic: where this PC
+  is) or `{ name, lat?, lon?, region?, country? }` (a picked town; without coordinates the widget looks
+  the name up, and a plain string an older text setting saved reads as `{ name }`). The form offers
+  **Automatic** and a search as you type: about 300 ms after two characters it calls the widget's
+  own `plugin` `method` with `{ query }` (through the host, with the widget's permissions; the
+  plugin must be in `plugins`) and lists the answers, `{ name, admin1, admin2, country,
+  country_code, lat, lon, population }` with nulls allowed; only a picked candidate is saved (as
+  `{ name, lat, lon, region: admin1, country }`), never the typed text. Not valid as a `list` field.
+
   **Groups.** Any setting (and a `list`) may carry `"group": "Layout"`. The form shows a section
   heading whenever the group changes from one setting to the next (settings without a group are
   moved to the top, ungrouped, in their order), so keep a group's settings together: a group that
@@ -427,6 +437,9 @@ interface Mypaper {
   settings: {
     get(): Promise<Record<string, unknown>>;
     onChange(cb: (s: Record<string, unknown>) => void): () => void;
+    // Saves some of the widget's own settings, checked against its manifest like a form edit
+    // (no permission: they are its own). onChange follows with the new values.
+    set(values: Record<string, unknown>): Promise<void>;
   };
   size: {
     // px is in CSS pixels (what innerWidth/innerHeight report); dpi is the monitor's (96 = 100%).
@@ -522,6 +535,7 @@ from the manifest *before* forwarding to the host (the host checks again, from d
 | `theme.current` | | `ThemeInfo` | `theme` |
 | `plugin` | `{ plugin, method, params? }` | the plugin's result | `plugin` listed in `plugins` |
 | `user.info` | | `{ name, account }` | `user` |
+| `settings.set` | `{ values }` | `null` (`InvalidParams` when a key isn't declared or a value doesn't fit) | |
 | `pickFile` | `{ extensions?, title? }` | `{ url, name }`, or `null` when cancelled | |
 | `appIcon` | `{ target, size? }` | a PNG data URL, or `null` | `launch` |
 | `subscribe` | see below | `null` | per topic |
@@ -819,23 +833,32 @@ is held.
 
 ## Bundled examples
 
-- **Widgets** (28, all on the widget kit, so every one follows the [Appearance](#appearance) and
-  every [style](#styles)). The showpieces have layout variants in their settings:
-  - Time: `clock` (desk, flip, minimal), `analog-clock`, `world-clock`, `calendar` (month, agenda
-    with local events in `storage`, strip), `timer` (pomodoro and countdown), `countdown`.
-  - System (`system.stats`): `system-monitor` (rings, bars, sparklines), `disk`, `battery`,
-    `network` (connection name, signal and rates), `system-info` (uptime, CPU, memory, GPU, disk,
-    network and battery).
-  - Media and web: `now-playing` (`media`; card, blurred art, strip), `visualizer` (`audio`; bars,
-    wave, circle), `media-pill` (`media`; `preset: overlay`, `instances: single`), `weather` (the
-    weather plugin: animated illustration, hourly and 5-day), `rss` (the rss plugin, `launch`),
-    `crypto` (`network:` to CoinGecko), `quote`, `photo` (a folder of images), `photo-frame` (picked
-    images with a Ken Burns effect, `image` settings).
-  - Personal: `notes` (a sticky note, storage), `todo` and `timer` (both log into
-    `storage.shared:activity`), `heatmap` (a contribution heatmap of that history), `greeting`
-    (`user`), `quick-toggles` (`launch`, `system.stats`: tiles that open the matching `ms-settings:`
-    page), `app-shortcuts` (`launch`: real app icons through `appIcon`), `launcher` (`launch`),
-    `search` (`launch`).
+- **Widgets** (17, all on the widget kit, so every one follows the [Appearance](#appearance) and
+  every [style](#styles)). Variants are faces (`variant`) and sizes of one widget, not widgets:
+  - Time: `clock` (`user`; faces Digital, Flip, Analog, Greeting and World with a `zones` list),
+    `calendar` (month, agenda with local events in `storage`, strip), `timer` (pomodoro and
+    countdown), `countdown` (a big number or a ring).
+  - System (`system.stats`): `system-monitor` ("System": CPU, memory, GPU, network, drives and
+    battery as rings, bars or graphs), `quick-toggles` (`launch`: tiles that open the matching
+    `ms-settings:` page).
+  - Media and web: `now-playing` (`media`, `audio`; card, artwork backdrop, strip, and a
+    Visualizer look that captures audio only while it shows), `media-pill` (`media`;
+    `preset: overlay`, `instances: single`), `weather` (the weather plugin, `launch`; Automatic
+    location or a picked town, a `place` setting), `rss` (the rss plugin, `launch`), `crypto`
+    (`network:` to CoinGecko), `quote`, `photo` (picked images, full bleed, matted or polaroid, with a
+    Ken Burns drift).
+  - Personal: `launcher` (`launch`: real app icons through `appIcon`, as a dock, grid or list,
+    under an optional search bar), `notes` (a sticky note, storage), `todo` and `timer` (both log
+    into `storage.shared:activity`), `heatmap` (a contribution heatmap of that history).
+- **Replaced widgets.** A manifest may list the ids it took over in `"replaces"`, each with the
+  settings an instance of the old widget gets: `{ "analog-clock": { "variant": "analog" } }`. When
+  `widgets.json` loads (and when widgets are rescanned), an instance whose widget isn't installed
+  but is replaced moves onto the new widget: its id (and so its storage) stays, the implied
+  settings win over its saved ones, and picked-file URLs move to the new widget's origin. The host
+  saves the migrated file (never one that doesn't parse), so Studio sees the new ids. An installed
+  folder with the old id wins over the mapping. The bundled mapping: `analog-clock`, `world-clock`,
+  `greeting` → `clock`; `system-info`, `disk`, `network`, `battery` → `system-monitor`;
+  `app-shortcuts`, `search` → `launcher`; `visualizer` → `now-playing`; `photo-frame` → `photo`.
 - **Plugins**: `weather` (Rust, open-meteo, no API key) and `rss` (Rust, fetches and parses feeds).
   Each is built once and its exe copied next to its `plugin.json`:
   `cargo build --release -p mypaper-plugin-weather` and `-p mypaper-plugin-rss`, then copy

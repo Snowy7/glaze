@@ -9,6 +9,10 @@
   </head>
   <body>
     <main class="card" id="card">
+      <div class="head label" id="head" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="6.2" cy="17.8" r="1.4" fill="currentColor" stroke="none" /><path d="M4.5 10.5a9 9 0 0 1 9 9M4.5 4.5a15 15 0 0 1 15 15" /></svg>
+        <span class="ellipsis" id="head-title">Headlines</span>
+      </div>
       <div class="list" id="list" role="list" data-variant="list"></div>
       <div class="msg" id="msg" hidden>
         <div class="msg-icon tile">
@@ -18,9 +22,9 @@
           </svg>
         </div>
         <div class="msg-title" id="msg-title"></div>
-        <div class="msg-hint caps" id="msg-hint"></div>
+        <div class="msg-hint" id="msg-hint"></div>
       </div>
-      <div class="foot caps" id="foot" hidden></div>
+      <div class="foot" id="foot" hidden></div>
     </main>
     <script src="mypaper.js"></script>
     <script type="module" src="main.js"></script>

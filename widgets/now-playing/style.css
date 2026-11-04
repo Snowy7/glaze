@@ -1,4 +1,4 @@
-/* Now playing. `data-variant` on <html> (card | blur | strip) and the size of the card pick the
+/* Now playing. `data-variant` on <html> (card | blur | strip | viz) and the size of the card pick the
    layout; main.js only feeds data. Three layouts, by the card's own box (.np is a size container):
      col      the default: cover on top, then text, scrubber, controls (portrait and square boxes)
      row      cover left, a text column right (landscape boxes at least ~130px high)
@@ -652,4 +652,76 @@ html[data-variant="blur"][data-surface="none"]:not([data-style="minimal"]) .np {
 }
 :root[data-variant="strip"][data-surface="none"] .np.card {
   padding: 8px 14px 8px 8px;
+}
+
+/* ---------------------------------------------------------------- the visualizer look
+   The sound's spectrum fills the lower part of the card, under the track: a small cover, the
+   title and artist, and the play button. No scrubber. In silence the bars rest as a row of dots.
+   spectrum.js reads its colors from --viz-1 and --viz-2. */
+
+.np {
+  --viz-1: var(--hi);
+  --viz-2: var(--hi-2);
+}
+/* On a light wallpaper the bright highlights wash out: pulled toward the ink. */
+html[data-text="dark"] .np {
+  --viz-1: color-mix(in srgb, var(--hi) 62%, rgb(var(--ink)));
+  --viz-2: color-mix(in srgb, var(--hi-2) 62%, rgb(var(--ink)));
+}
+.spectrum {
+  display: none;
+}
+html[data-variant="viz"] .spectrum {
+  display: block;
+  position: absolute;
+  left: var(--pad);
+  right: var(--pad);
+  bottom: var(--pad);
+  width: calc(100% - 2 * var(--pad));
+  height: calc(62% - var(--pad));
+}
+html[data-variant="viz"] .body {
+  --art: clamp(36px, 22cqh, 64px);
+  --title: clamp(13px, 7cqh, 20px);
+  --artist: clamp(11px, 5cqh, 14px);
+  height: auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto;
+  grid-template-areas: "art info controls";
+  align-content: start;
+  align-items: center;
+  justify-items: stretch;
+  column-gap: clamp(8px, 4cqw, 14px);
+  text-align: left;
+}
+html[data-variant="viz"] :is(.scrub, .skip, .over, .eyebrow) {
+  display: none;
+}
+html[data-variant="viz"] .cover {
+  transform: none;
+}
+html[data-variant="viz"] .controls {
+  width: auto;
+}
+html[data-variant="viz"] .info .eyebrow {
+  justify-content: flex-start;
+}
+/* One row: the track as two small lines at the top, the spectrum under it, no cover or button. */
+@container (max-height: 129px) {
+  html[data-variant="viz"] .body {
+    --title: 13px;
+    --artist: 11px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "info";
+  }
+  html[data-variant="viz"] :is(.cover, .controls) {
+    display: none;
+  }
+  html[data-variant="viz"] .spectrum {
+    height: calc(56% - var(--pad));
+  }
+}
+/* Nothing playing and no sound: the hint is the whole story. */
+html[data-variant="viz"] .np[data-state="empty"] .info {
+  opacity: 0.9;
 }

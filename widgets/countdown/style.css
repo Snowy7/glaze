@@ -60,11 +60,11 @@
   gap: calc(var(--fs) * 0.4);
   font-size: var(--fs);
 }
+/* The hero: the number, and its word beside it. */
 .unit {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.28em;
+  align-items: baseline;
+  gap: 0.16em;
 }
 .unit .v {
   font-size: 1em;
@@ -74,7 +74,20 @@
   white-space: nowrap;
 }
 .unit .l {
-  font-size: clamp(9px, 0.21em, 12px);
+  font-size: max(11px, 0.34em);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--t1);
+}
+/* What is left after the hero: "11 h 11 min". */
+.rest {
+  margin: 0;
+  font-size: clamp(11px, calc(var(--fs) * 0.24), 15px);
+  font-weight: 500;
+  color: var(--t1);
+}
+.rest[hidden] {
+  display: none;
 }
 
 /* "Today!", "Done": the same size and weight as the numerals. */
@@ -90,7 +103,7 @@
 /* ---- digits */
 
 .card[data-layout^="digits"] {
-  --fs: max(16px, min(calc(var(--w) / var(--k)), calc((var(--h) - 30px - var(--foot)) / 1.35), 88px));
+  --fs: max(16px, min(calc(var(--w) / var(--k)), calc((var(--h) - 44px - var(--foot)) / 1.05), 96px));
 }
 .card[data-layout="digits-tiny"] .foot,
 .card[data-layout="digits"] .foot {
@@ -217,4 +230,48 @@ html[data-surface="none"] .trk {
 }
 .card[data-layout="ring-tiny"] .info {
   display: none;
+}
+
+/* One short row (2x1, 3x1): the title and what is left stacked beside the hero, which gets the
+   whole height. */
+@container (max-height: 124px) and (min-width: 170px) {
+  .card[data-layout="digits"] {
+    --fs: max(16px, min(calc((var(--w) - 92px) / var(--k)), calc(var(--h) / 1.02), 96px));
+  }
+  .card[data-layout="digits"] .info {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: 1fr auto auto 1fr;
+    column-gap: 0.9em;
+    row-gap: 2px;
+    align-items: center;
+  }
+  .card[data-layout="digits"] .units {
+    grid-column: 1;
+    grid-row: 1 / -1;
+  }
+  .card[data-layout="digits"] .title {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 12px;
+  }
+  .card[data-layout="digits"] .rest {
+    grid-column: 2;
+    grid-row: 3;
+    font-size: 12px;
+  }
+  .card[data-layout="digits"] .bar {
+    display: none;
+  }
+}
+@container (max-height: 124px) and (min-width: 280px) {
+  .card[data-layout="digits"] .info {
+    grid-template-rows: 1fr auto auto auto 1fr;
+  }
+  .card[data-layout="digits"] .foot {
+    display: block;
+    grid-column: 2;
+    grid-row: 4;
+    font-size: 11.5px;
+  }
 }

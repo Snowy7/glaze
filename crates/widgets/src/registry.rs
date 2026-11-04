@@ -4,6 +4,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use serde_json::{Map, Value};
+
 use crate::manifest::{PLUGIN_MANIFEST, PluginManifest, WIDGET_MANIFEST, WidgetManifest};
 
 pub struct Installed {
@@ -74,6 +76,18 @@ impl Registry {
         self.widgets.get(id)
     }
 
+    /// The installed widget that replaced `old` (its manifest's `replaces`), with the settings
+    /// an instance of `old` gets. None while `old` itself is installed: a folder wins.
+    pub fn replacement(&self, old: &str) -> Option<(&str, &Map<String, Value>)> {
+        if self.widgets.contains_key(old) {
+            return None;
+        }
+        self.widgets.iter().find_map(|(id, installed)| {
+            let settings = installed.manifest.replaces.get(old)?;
+            Some((id.as_str(), settings))
+        })
+    }
+
     /// The manifest as it is on disk right now: what permission checks use.
     pub fn manifest_on_disk(&self, id: &str) -> Option<WidgetManifest> {
         let installed = self.get(id)?;
@@ -138,6 +152,34 @@ mod tests {
             Registry::widget_of(&changed, &[user, bundled]),
             Some("notes".into())
         );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_replaced_id_resolves_unless_its_folder_exists() {
+        let root = crate::files::temp_dir("registry-replaces");
+        let dir = root.join("clock");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(WIDGET_MANIFEST),
+            r#"{ "id": "clock", "name": "Clock", "size": { "default": [2, 1] },
+                 "settings": [{ "key": "face", "type": "string", "label": "Face", "default": "" }],
+                 "replaces": { "analog-clock": { "face": "analog" } } }"#,
+        )
+        .unwrap();
+        let (id, settings) = Registry::scan(std::slice::from_ref(&root))
+            .replacement("analog-clock")
+            .map(|(id, s)| (id.to_owned(), s.clone()))
+            .unwrap();
+        assert_eq!(
+            (id.as_str(), &settings["face"]),
+            ("clock", &Value::from("analog"))
+        );
+
+        widget(&root, "analog-clock", "My own analog clock");
+        let registry = Registry::scan(&[root.clone()]);
+        assert!(registry.replacement("analog-clock").is_none());
+        assert!(registry.replacement("nothing").is_none());
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

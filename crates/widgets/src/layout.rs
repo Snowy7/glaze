@@ -12,8 +12,8 @@ use mypaper_theme::Appearance;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 
-use crate::look;
 use crate::manifest::{WidgetManifest, valid_id};
+use crate::{look, pick};
 
 pub const VERSION: u32 = 1;
 
@@ -272,6 +272,42 @@ impl Layout {
         Ok(())
     }
 
+    /// Moves instances of a widget that was merged into another onto that one (docs/widgets.md,
+    /// "Replaced widgets"). `replacement(old)` is the new widget and the settings the old one
+    /// implies; they win over the instance's saved values. Picked files keep working: their
+    /// URLs move to the new widget's origin (the files live in the instance's folder). The
+    /// instance id stays, and with it the instance's storage. Returns whether anything moved.
+    pub fn migrate<'a>(
+        &mut self,
+        replacement: impl Fn(&str) -> Option<(&'a str, &'a Map<String, Value>)>,
+    ) -> bool {
+        let mut moved = false;
+        for instance in &mut self.instances {
+            let Some((widget, implied)) = replacement(&instance.widget) else {
+                continue;
+            };
+            log::info!(
+                "{}: {} was merged into {widget}",
+                instance.instance,
+                instance.widget
+            );
+            for value in instance.settings.values_mut() {
+                let rebased = value
+                    .as_str()
+                    .and_then(pick::parse_data_url)
+                    .filter(|url| url.widget == instance.widget)
+                    .map(|url| pick::data_url(widget, &url.instance, &url.name));
+                if let Some(url) = rebased {
+                    *value = Value::String(url);
+                }
+            }
+            instance.settings.extend(implied.clone());
+            instance.widget = widget.to_owned();
+            moved = true;
+        }
+        moved
+    }
+
     /// Merges setting values into an instance's saved settings.
     pub fn set_settings(&mut self, instance: &str, values: Map<String, Value>) -> Result<()> {
         self.get_mut(instance)?.settings.extend(values);
@@ -465,6 +501,40 @@ mod tests {
             "clock",
         )
         .unwrap()
+    }
+
+    #[test]
+    fn migrate_moves_replaced_instances_and_rebases_their_files() {
+        let mut layout = Layout::parse(
+            r#"{ "instances": [
+                { "instance": "photo-frame-1", "widget": "photo-frame", "monitor": "m", "cell": [0, 0], "size": [3, 2],
+                  "settings": { "variant": "matte", "shuffle": true,
+                                "image1": "https://photo-frame.widget.mypaper/__data/photo-frame-1/a.jpg" } },
+                { "instance": "clock-1", "widget": "clock", "monitor": "m", "cell": [3, 0], "size": [2, 1] }
+            ] }"#,
+        )
+        .unwrap();
+        let implied = Map::from_iter([("variant".to_owned(), Value::from("polaroid"))]);
+        let replacement = |old: &str| (old == "photo-frame").then_some(("photo", &implied));
+
+        assert!(layout.migrate(replacement));
+        let moved = &layout.instances[0];
+        assert_eq!(
+            moved.instance, "photo-frame-1",
+            "the id, and so the storage, stay"
+        );
+        assert_eq!(moved.widget, "photo");
+        assert_eq!(
+            moved.settings["variant"], "polaroid",
+            "the implied settings win"
+        );
+        assert_eq!(moved.settings["shuffle"], true, "the rest is kept");
+        assert_eq!(
+            moved.settings["image1"],
+            "https://photo.widget.mypaper/__data/photo-frame-1/a.jpg"
+        );
+        assert_eq!(layout.instances[1].widget, "clock");
+        assert!(!layout.migrate(replacement), "nothing left to move");
     }
 
     #[test]

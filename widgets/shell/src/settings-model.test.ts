@@ -12,6 +12,7 @@ import {
   sections,
   selectStyle,
 } from "./settings-model";
+import { placeLine, readCandidates, readPlace } from "./settings-model";
 
 const str = (key: string, group?: string): SettingDef => ({
   key,
@@ -103,5 +104,24 @@ describe("readouts, fonts and files", () => {
     expect(fileName("https://photo.widget.mypaper/__data/photo-1/a.png?v=2#x")).toBe("a.png");
     expect(fileName("")).toBe("");
     expect(fileName("/x/%E0%A4%A")).toBe("%E0%A4%A"); // not valid percent-encoding: shown as is
+  });
+});
+
+describe("place settings", () => {
+  it("reads a saved place, and anything else as automatic", () => {
+    expect(readPlace({ name: "Bergen", lat: 60.39, lon: 5.32, extra: 1 })).toEqual({ name: "Bergen", lat: 60.39, lon: 5.32 });
+    expect(readPlace({ name: "Oslo" })).toEqual({ name: "Oslo" });
+    for (const auto of [null, "", { name: "" }, 3, { lat: 1, lon: 2 }]) expect(readPlace(auto)).toBeNull();
+  });
+
+  it("keeps well-formed candidates and says where each one is", () => {
+    const found = readCandidates([
+      { name: "Springfield", admin1: "Illinois", country: "United States", lat: 39.8, lon: -89.6 },
+      { name: "Nowhere", lat: "x", lon: 1 },
+      null,
+    ]);
+    expect(found.map(placeLine)).toEqual(["Springfield, Illinois, United States"]);
+    expect(placeLine({ name: "Monaco", admin1: "Monaco", country: "Monaco", lat: 43.7, lon: 7.4 })).toBe("Monaco");
+    expect(readCandidates("nope")).toEqual([]);
   });
 });

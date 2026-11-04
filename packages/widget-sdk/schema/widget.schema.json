@@ -91,6 +91,17 @@
         "$ref": "#/definitions/setting"
       }
     },
+    "replaces": {
+      "type": "object",
+      "description": "Widget ids this one took over, each with the settings an instance of the old widget gets. The host moves such instances onto this widget when widgets.json loads.",
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]*$",
+        "maxLength": 64
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
     "preset": {
       "type": "string",
       "enum": [
@@ -361,8 +372,96 @@
               }
             }
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/definitions/settingBase"
+            },
+            {
+              "required": [
+                "default"
+              ],
+              "description": "A place: null is automatic (where this PC is), else { name, lat?, lon? }. The form suggests towns as you type from `search`, a method of one of this widget's plugins, called with { query }.",
+              "properties": {
+                "type": {
+                  "const": "place"
+                },
+                "search": {
+                  "type": "object",
+                  "required": [
+                    "plugin",
+                    "method"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "plugin": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "method": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "default": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/definitions/place"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
         }
       ]
+    },
+    "place": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lon": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "region": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "For showing: the state or province (a search candidate's admin1)."
+        },
+        "country": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "For showing."
+        }
+      },
+      "dependentRequired": {
+        "lat": [
+          "lon"
+        ],
+        "lon": [
+          "lat"
+        ]
+      }
     }
   }
 }

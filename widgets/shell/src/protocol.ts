@@ -59,7 +59,34 @@ export interface ListSetting extends SettingBase<"list", Record<string, string |
   maxItems?: number;
 }
 
-export type SettingDef = ScalarSetting | ListSetting;
+/** A `place` value other than automatic: a name, and its coordinates when known. */
+export interface Place {
+  name: string;
+  lat?: number;
+  lon?: number;
+  /** For showing: the state or province (a candidate's `admin1`). */
+  region?: string;
+  country?: string;
+}
+
+/** A town suggestion, as a `place` setting's `search` method answers `{ query }`. */
+export interface PlaceCandidate {
+  name: string;
+  admin1?: string | null;
+  admin2?: string | null;
+  country?: string | null;
+  country_code?: string | null;
+  lat: number;
+  lon: number;
+  population?: number | null;
+}
+
+/** A place: null is automatic, else a picked town; the form searches with `search`. */
+export interface PlaceSetting extends SettingBase<"place", Place | null> {
+  search?: { plugin: string; method: string };
+}
+
+export type SettingDef = ScalarSetting | ListSetting | PlaceSetting;
 
 /** Where a widget lives: the desktop layer, an always-on-top overlay, or a bar's popup. */
 export type Preset = "desktop" | "overlay" | "popup";

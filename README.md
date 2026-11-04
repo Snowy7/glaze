@@ -69,16 +69,20 @@ The bundled photos and video are public-domain NASA media ([credits](themes/CRED
 
 ### Widgets
 
-28 widgets, each in its own sandbox:
+17 widgets, each in its own sandbox, each with faces and sizes instead of near-duplicates:
 
-- **Time**: clock (desk, flip or minimal), analog clock, world clock, calendar (month, agenda or
-  week), countdown, timer.
-- **Media**: now playing (card, art backdrop or strip), media pill, audio visualizer.
-- **Web**: weather (animated scenes, hourly and 5-day), RSS, crypto.
-- **System**: system monitor (rings, bars or sparklines), battery, network, disk, system info, quick
-  toggles.
-- **Tools and personal**: notes, todo, activity heatmap, launcher, app shortcuts, search, quote,
-  greeting, photo, and photo frame.
+- **Time**: clock (digital, flip, analog, greeting, or your cities around the world), calendar
+  (month, agenda or week), countdown, timer.
+- **Media**: now playing (card, artwork backdrop, strip, or the sound's spectrum), media pill.
+- **Web**: weather (where you are, or any town; animated sky, hourly and the week), RSS, crypto.
+- **System**: system (CPU, memory, GPU, network, drives and battery, as rings, bars or graphs),
+  quick toggles.
+- **Tools and personal**: launcher (your apps under a web search bar), photos, notes, todo, activity
+  heatmap, quote.
+
+Layouts that named a widget merged into another (analog clock, world clock, greeting, system info,
+disk, network, battery, app shortcuts, search, visualizer, photo frame) keep working: they open as
+the right face of the widget that replaced them.
 
 **Five design styles** apply to every widget:
 - **minimal**;
