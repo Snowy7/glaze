@@ -265,6 +265,7 @@ Note: like Explorer's View menu, changing the icon size makes Explorer re-save i
 | Code | `crates/desktop/src/{desktop_menu,menu_model,menu_ui,desktop_hit,desktop_view,raw_input}.rs`, `crates/tweaks/src/{cursors,cursor_art,classic_menu}.rs`, `crates/core/src/desktop_extras.rs` |
 | Live harnesses | `crates/desktop/examples/{menu_live,view_live,icons_live}.rs`, `crates/tweaks/examples/live_tweaks.rs` |
 
-Studio does not edit these yet (the files are the interface). **Studio's Windows-styling editor
-rejects a `windows.cursors` field** until its mirror struct (`apps/studio/src-tauri/src/manifest.rs`,
-`WindowsStyle`) gets `cursors: Option<String>`.
+Studio edits all of these: Settings has the desktop right-click menu (items, order, custom
+commands) and the classic-menu switch, and the theme editor has the cursor picker and the
+`interactive` switch for web and scene themes. The files stay the interface, so a text editor
+works too.

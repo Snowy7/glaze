@@ -11,11 +11,13 @@ use std::time::UNIX_EPOCH;
 use anyhow::{Context, Result, bail};
 use windows::Win32::Foundation::SIZE;
 use windows::Win32::Graphics::Gdi::{
-    BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, GetDC, GetDIBits, GetObjectW, HGDIOBJ, ReleaseDC,
+    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, GetDC, GetDIBits, GetObjectW,
+    HGDIOBJ, ReleaseDC,
 };
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
 use windows::Win32::UI::Shell::{
-    IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF, SIIGBF_THUMBNAILONLY,
+    IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF, SIIGBF_BIGGERSIZEOK,
+    SIIGBF_THUMBNAILONLY,
 };
 use windows::core::{Owned, PCWSTR};
 
@@ -34,18 +36,27 @@ fn cache_dir() -> Result<PathBuf> {
 
 /// 64-bit FNV-1a: stable across Rust versions, unlike `DefaultHasher`.
 pub fn fnv1a(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
+        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    })
 }
 
 /// The cache file name for a video: changes with its path, size and modified time.
 fn cache_name(source: &Path, len: u64, modified_nanos: u128) -> String {
-    let key = format!("{}|{len}|{modified_nanos}", source.to_string_lossy().to_lowercase());
+    let key = format!(
+        "{}|{len}|{modified_nanos}",
+        source.to_string_lossy().to_lowercase()
+    );
     format!("{:016x}.png", fnv1a(key.as_bytes()))
 }
 
 fn cache_path(source: &Path) -> Result<PathBuf> {
-    let meta = std::fs::metadata(source).with_context(|| format!("reading {}", source.display()))?;
-    let modified = meta.modified()?.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let meta =
+        std::fs::metadata(source).with_context(|| format!("reading {}", source.display()))?;
+    let modified = meta
+        .modified()?
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
     Ok(cache_dir()?.join(cache_name(source, meta.len(), modified)))
 }
 
@@ -99,8 +110,12 @@ impl Drop for ComScope {
 
 /// Asks the shell for the file's thumbnail (never a generic icon).
 fn shell_thumbnail(source: &Path) -> Result<Rgba> {
-    shell_image(source.as_os_str(), SIZE_PX, SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK)
-        .context("Windows has no thumbnail provider for this video")
+    shell_image(
+        source.as_os_str(),
+        SIZE_PX,
+        SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK,
+    )
+    .context("Windows has no thumbnail provider for this video")
 }
 
 /// The shell's image for a parsing name (a path, or `shell:AppsFolder\<AUMID>`),
@@ -109,17 +124,23 @@ pub fn shell_image(parsing_name: &OsStr, size: SIZE, flags: SIIGBF) -> Result<Rg
     let _com = ComScope::enter();
     let wide: Vec<u16> = parsing_name.encode_wide().chain(Some(0)).collect();
     // SAFETY: `wide` is a NUL-terminated UTF-16 name that outlives the call.
-    let factory: IShellItemImageFactory = unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) }
-        .with_context(|| format!("opening {} in the shell", parsing_name.to_string_lossy()))?;
+    let factory: IShellItemImageFactory =
+        unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) }
+            .with_context(|| format!("opening {} in the shell", parsing_name.to_string_lossy()))?;
     // SAFETY: plain COM call; the bitmap it returns is ours to delete.
-    let bitmap = unsafe { factory.GetImage(size, flags) }.context("the shell has no image for this item")?;
+    let bitmap =
+        unsafe { factory.GetImage(size, flags) }.context("the shell has no image for this item")?;
     // SAFETY: `bitmap` is a fresh GDI handle that nothing else deletes.
     let bitmap = unsafe { Owned::new(bitmap) };
 
     let mut info = BITMAP::default();
     // SAFETY: `info` is a BITMAP-sized buffer and `bitmap` is a valid GDI bitmap.
     let got = unsafe {
-        GetObjectW(HGDIOBJ((*bitmap).0), size_of::<BITMAP>() as i32, Some(std::ptr::from_mut(&mut info).cast::<c_void>()))
+        GetObjectW(
+            HGDIOBJ((*bitmap).0),
+            size_of::<BITMAP>() as i32,
+            Some(std::ptr::from_mut(&mut info).cast::<c_void>()),
+        )
     };
     if got == 0 || info.bmWidth <= 0 || info.bmHeight <= 0 {
         bail!("the thumbnail bitmap is empty");
@@ -142,7 +163,15 @@ pub fn shell_image(parsing_name: &OsStr, size: SIZE, flags: SIIGBF) -> Result<Rg
     // SAFETY: the screen DC is released below; `pixels` holds `height` rows of `width` BGRA pixels.
     let rows = unsafe {
         let dc = GetDC(None);
-        let rows = GetDIBits(dc, *bitmap, 0, height as u32, Some(pixels.as_mut_ptr().cast::<c_void>()), &mut header, DIB_RGB_COLORS);
+        let rows = GetDIBits(
+            dc,
+            *bitmap,
+            0,
+            height as u32,
+            Some(pixels.as_mut_ptr().cast::<c_void>()),
+            &mut header,
+            DIB_RGB_COLORS,
+        );
         ReleaseDC(None, dc);
         rows
     };
@@ -150,7 +179,11 @@ pub fn shell_image(parsing_name: &OsStr, size: SIZE, flags: SIIGBF) -> Result<Rg
         bail!("could not read the thumbnail's pixels");
     }
     bgra_to_rgba(&mut pixels);
-    Ok(Rgba { width: width as u32, height: height as u32, pixels })
+    Ok(Rgba {
+        width: width as u32,
+        height: height as u32,
+        pixels,
+    })
 }
 
 /// Swaps B and R in place. Shell thumbnails of video are opaque, but some
@@ -183,7 +216,11 @@ mod tests {
     fn cache_names_change_with_the_file_and_are_stable() {
         let video = Path::new(r"C:\Videos\Loop.mp4");
         let name = cache_name(video, 1000, 5);
-        assert_eq!(name, cache_name(Path::new(r"c:\videos\loop.mp4"), 1000, 5), "case-insensitive like NTFS");
+        assert_eq!(
+            name,
+            cache_name(Path::new(r"c:\videos\loop.mp4"), 1000, 5),
+            "case-insensitive like NTFS"
+        );
         assert_ne!(name, cache_name(video, 1001, 5));
         assert_ne!(name, cache_name(video, 1000, 6));
         assert_ne!(name, cache_name(Path::new(r"C:\Videos\Other.mp4"), 1000, 5));
@@ -205,9 +242,15 @@ mod tests {
 
     #[test]
     fn png_encoding_round_trips() {
-        let image = Rgba { width: 2, height: 1, pixels: vec![255, 0, 0, 255, 0, 0, 255, 255] };
+        let image = Rgba {
+            width: 2,
+            height: 1,
+            pixels: vec![255, 0, 0, 255, 0, 0, 255, 255],
+        };
         let bytes = encode_png(&image).unwrap();
-        let mut reader = png::Decoder::new(std::io::Cursor::new(bytes)).read_info().unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
+            .read_info()
+            .unwrap();
         let mut decoded = vec![0; reader.output_buffer_size().unwrap()];
         let frame = reader.next_frame(&mut decoded).unwrap();
         assert_eq!((frame.width, frame.height), (2, 1));

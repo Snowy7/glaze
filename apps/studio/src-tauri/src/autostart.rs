@@ -31,7 +31,8 @@ pub fn set(enabled: bool) -> Result<Autostart> {
 
 /// Runs `mypaper-core --autostart <command>` and parses its one-line JSON answer.
 fn run(command: &str) -> Result<Autostart> {
-    let core = crate::engine::find_core().context("mypaper-core.exe not found; build the workspace first")?;
+    let core = crate::engine::find_core()
+        .context("mypaper-core.exe not found; build the workspace first")?;
     let output = Command::new(&core)
         .args(["--autostart", command])
         .creation_flags(CREATE_NO_WINDOW)

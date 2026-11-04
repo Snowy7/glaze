@@ -131,12 +131,18 @@ impl From<source::Resolved> for SourceInfo {
             presets: if is_app {
                 source::ARG_PRESETS
                     .iter()
-                    .map(|p| PresetInfo { id: p.id, label: p.label, args: source::join_args(p.args) })
+                    .map(|p| PresetInfo {
+                        id: p.id,
+                        label: p.label,
+                        args: source::join_args(p.args),
+                    })
                     .collect()
             } else {
                 Vec::new()
             },
-            default_args: source::suggested_preset(path).filter(|_| is_app).map_or_else(String::new, |p| source::join_args(p.args)),
+            default_args: source::suggested_preset(path)
+                .filter(|_| is_app)
+                .map_or_else(String::new, |p| source::join_args(p.args)),
             kind,
             source,
         }
@@ -146,7 +152,9 @@ impl From<source::Resolved> for SourceInfo {
 /// What a picked file or folder would become, or why it can't be a theme.
 #[tauri::command]
 pub async fn inspect_source(path: PathBuf) -> CmdResult<SourceInfo> {
-    source::resolve(&path.to_string_lossy()).map(Into::into).map_err(text)
+    source::resolve(&path.to_string_lossy())
+        .map(Into::into)
+        .map_err(text)
 }
 
 /// Checks a typed web address.
@@ -172,8 +180,11 @@ pub async fn create_theme(app: AppHandle, request: CreateThemeRequest) -> CmdRes
         let dir = themes::create_in(&root, &request.theme)?;
         let mut entry = themes::entry(&dir, Origin::User, None);
         if request.apply {
-            update(ConfigPatch { theme: Some(entry.apply_as.clone()), ..Default::default() })
-                .context("the theme was created but could not be applied")?;
+            update(ConfigPatch {
+                theme: Some(entry.apply_as.clone()),
+                ..Default::default()
+            })
+            .context("the theme was created but could not be applied")?;
             entry.active = true;
         }
         Ok(entry)
@@ -239,7 +250,8 @@ pub async fn set_skin(dir: PathBuf, kind: SkinKind, skin: SkinEdit) -> CmdResult
 /// Copies a style sheet into a user theme; resolves to the path for the skin's `css`.
 #[tauri::command]
 pub async fn import_skin_css(dir: PathBuf, kind: SkinKind, source: PathBuf) -> CmdResult<String> {
-    let import = || themes::import_skin_css(&dir, &mypaper_config::user_themes_dir()?, kind, &source);
+    let import =
+        || themes::import_skin_css(&dir, &mypaper_config::user_themes_dir()?, kind, &source);
     import().map_err(text)
 }
 
@@ -254,15 +266,22 @@ pub struct ActiveSkins {
 pub async fn active_skins() -> ActiveSkins {
     let skins = || -> Result<ActiveSkins> {
         let theme = LoadedTheme::load(mypaper_theme::locate(Some(&load_config()?.theme))?)?.theme;
-        let look = |skin: Option<mypaper_theme::Skin>| Look(skin.and_then(|s| s.appearance).unwrap_or_default());
-        Ok(ActiveSkins { widgets: look(theme.widgets), bars: look(theme.bars) })
+        let look = |skin: Option<mypaper_theme::Skin>| {
+            Look(skin.and_then(|s| s.appearance).unwrap_or_default())
+        };
+        Ok(ActiveSkins {
+            widgets: look(theme.widgets),
+            bars: look(theme.bars),
+        })
     };
     skins().unwrap_or_default()
 }
 
 #[tauri::command]
 pub async fn get_bars() -> CmdResult<BarsState> {
-    bars::path().and_then(|path| bars::load_from(&path)).map_err(text)
+    bars::path()
+        .and_then(|path| bars::load_from(&path))
+        .map_err(text)
 }
 
 /// The host's defaults, presets and geometry: what the page merges a `bars.json` against.
@@ -274,13 +293,17 @@ pub async fn bars_catalog() -> CmdResult<Catalog> {
 /// Writes the whole document, after the host's schema has accepted it.
 #[tauri::command]
 pub async fn set_bars(doc: Doc) -> CmdResult<BarsState> {
-    bars::path().and_then(|path| bars::save_to(&path, &doc)).map_err(text)
+    bars::path()
+        .and_then(|path| bars::save_to(&path, &doc))
+        .map_err(text)
 }
 
 /// Writes an empty `bars.json` (all defaults), for when the file on disk can't be parsed.
 #[tauri::command]
 pub async fn reset_bars() -> CmdResult<BarsState> {
-    bars::path().and_then(|path| bars::reset_at(&path)).map_err(text)
+    bars::path()
+        .and_then(|path| bars::reset_at(&path))
+        .map_err(text)
 }
 
 #[derive(Debug, Serialize)]
@@ -306,10 +329,16 @@ pub struct ThemeVars {
 pub async fn theme_vars() -> ThemeVars {
     let read = || -> Result<ThemeVars> {
         let loaded = LoadedTheme::load(mypaper_theme::locate(Some(&load_config()?.theme))?)?;
-        let mut found = ThemeVars { theme: loaded.theme.name.clone(), ..ThemeVars::default() };
-        let Some(css) = loaded.theme.bars.and_then(|skin| skin.css) else { return Ok(found) };
+        let mut found = ThemeVars {
+            theme: loaded.theme.name.clone(),
+            ..ThemeVars::default()
+        };
+        let Some(css) = loaded.theme.bars.and_then(|skin| skin.css) else {
+            return Ok(found);
+        };
         let path = loaded.dir.join(&css);
-        let sheet = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let sheet = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?;
         found.css = Some(css.display().to_string());
         found.vars = vars::declared(&sheet)
             .with_context(|| format!("in {}", path.display()))?
@@ -318,7 +347,10 @@ pub async fn theme_vars() -> ThemeVars {
             .collect();
         Ok(found)
     };
-    read().unwrap_or_else(|e| ThemeVars { error: Some(text(e)), ..ThemeVars::default() })
+    read().unwrap_or_else(|e| ThemeVars {
+        error: Some(text(e)),
+        ..ThemeVars::default()
+    })
 }
 
 /// The icon packs to choose from: bundled with the bars page, then the user's.
@@ -360,13 +392,24 @@ pub async fn create_icon_pack(name: String) -> CmdResult<()> {
 /// Gives the app at `target` the picture at `image`, in one of the user's packs.
 #[tauri::command]
 pub async fn set_app_icon(pack: String, target: String, image: PathBuf) -> CmdResult<()> {
-    let set = || iconpacks::set_app_icon(&iconpacks::user_pack_dir(&iconpacks::user_root()?, &pack)?, &target, &image);
+    let set = || {
+        iconpacks::set_app_icon(
+            &iconpacks::user_pack_dir(&iconpacks::user_root()?, &pack)?,
+            &target,
+            &image,
+        )
+    };
     set().map_err(text)
 }
 
 #[tauri::command]
 pub async fn remove_app_icon(pack: String, index: usize) -> CmdResult<()> {
-    let remove = || iconpacks::remove_app_icon(&iconpacks::user_pack_dir(&iconpacks::user_root()?, &pack)?, index);
+    let remove = || {
+        iconpacks::remove_app_icon(
+            &iconpacks::user_pack_dir(&iconpacks::user_root()?, &pack)?,
+            index,
+        )
+    };
     remove().map_err(text)
 }
 
@@ -388,7 +431,9 @@ pub async fn set_interactive(dir: PathBuf, on: bool) -> CmdResult<Option<bool>> 
 /// The cursor sets in `%APPDATA%\mypaper\cursors`.
 #[tauri::command]
 pub async fn list_cursor_sets() -> Vec<String> {
-    mypaper_config::dir().map(|dir| themes::user_cursor_sets(&dir.join("cursors"))).unwrap_or_default()
+    mypaper_config::dir()
+        .map(|dir| themes::user_cursor_sets(&dir.join("cursors")))
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Serialize)]
@@ -402,13 +447,21 @@ pub struct MonitorInfo {
 
 #[tauri::command]
 pub async fn list_monitors(app: AppHandle) -> CmdResult<Vec<MonitorInfo>> {
-    let primary = app.primary_monitor().map_err(|e| e.to_string())?.and_then(|m| m.name().cloned());
+    let primary = app
+        .primary_monitor()
+        .map_err(|e| e.to_string())?
+        .and_then(|m| m.name().cloned());
     let monitors = app.available_monitors().map_err(|e| e.to_string())?;
     Ok(monitors
         .iter()
         .filter_map(|m| {
             let device = m.name()?.clone();
-            Some(MonitorInfo { primary: primary.as_ref() == Some(&device), device, width: m.size().width, height: m.size().height })
+            Some(MonitorInfo {
+                primary: primary.as_ref() == Some(&device),
+                device,
+                width: m.size().width,
+                height: m.size().height,
+            })
         })
         .collect())
 }
@@ -420,7 +473,9 @@ pub async fn dock_icon(app: AppHandle, path: String) -> CmdResult<String> {
         .await
         .map_err(|e| e.to_string())?
         .map_err(text)?;
-    app.asset_protocol_scope().allow_file(&file).map_err(|e| e.to_string())?;
+    app.asset_protocol_scope()
+        .allow_file(&file)
+        .map_err(|e| e.to_string())?;
     Ok(file.display().to_string())
 }
 

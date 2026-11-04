@@ -74,7 +74,10 @@ pub fn components() -> Vec<Component> {
             id,
             exe,
             running: processes.iter().any(|p| p.name.eq_ignore_ascii_case(exe)),
-            path: studio.as_deref().and_then(|studio| find_exe_from(studio, exe)).map(|p| p.display().to_string()),
+            path: studio
+                .as_deref()
+                .and_then(|studio| find_exe_from(studio, exe))
+                .map(|p| p.display().to_string()),
         })
         .collect()
 }
@@ -92,7 +95,9 @@ fn find_exe_from(exe: &Path, name: &str) -> Option<PathBuf> {
     }
     exe.ancestors()
         .skip(1)
-        .flat_map(|dir| ["release", "debug"].map(|profile| dir.join("target").join(profile).join(name)))
+        .flat_map(|dir| {
+            ["release", "debug"].map(|profile| dir.join("target").join(profile).join(name))
+        })
         .filter(|path| path.is_file())
         .max_by_key(|path| std::fs::metadata(path).and_then(|m| m.modified()).ok())
 }
@@ -134,7 +139,11 @@ pub fn stop() -> Result<()> {
     let ours = || {
         processes()
             .into_iter()
-            .filter(|p| [CORE_EXE, WALLPAPER_EXE].iter().any(|exe| p.name.eq_ignore_ascii_case(exe)))
+            .filter(|p| {
+                [CORE_EXE, WALLPAPER_EXE]
+                    .iter()
+                    .any(|exe| p.name.eq_ignore_ascii_case(exe))
+            })
             .collect::<Vec<_>>()
     };
     for process in ours() {
@@ -170,7 +179,11 @@ fn processes() -> Vec<Process> {
     // SAFETY: `entry.dwSize` is set and the snapshot is valid for these calls.
     let mut more = unsafe { Process32FirstW(*snapshot, &mut entry) }.is_ok();
     while more {
-        let len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(entry.szExeFile.len());
+        let len = entry
+            .szExeFile
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(entry.szExeFile.len());
         found.push(Process {
             pid: entry.th32ProcessID,
             name: String::from_utf16_lossy(&entry.szExeFile[..len]),
@@ -198,7 +211,8 @@ fn post_quit(pid: u32) {
     while more {
         if entry.th32OwnerProcessID == pid {
             // SAFETY: posting a message to a thread id has no memory-safety requirements.
-            let _ = unsafe { PostThreadMessageW(entry.th32ThreadID, WM_QUIT, WPARAM(0), LPARAM(0)) };
+            let _ =
+                unsafe { PostThreadMessageW(entry.th32ThreadID, WM_QUIT, WPARAM(0), LPARAM(0)) };
         }
         // SAFETY: as above.
         more = unsafe { Thread32Next(*snapshot, &mut entry) }.is_ok();
@@ -228,7 +242,13 @@ mod tests {
     #[test]
     fn finds_core_beside_studio_or_in_a_parent_target() {
         let root = temp_dir("core");
-        let studio = root.join("apps").join("studio").join("src-tauri").join("target").join("debug").join("mypaper-studio.exe");
+        let studio = root
+            .join("apps")
+            .join("studio")
+            .join("src-tauri")
+            .join("target")
+            .join("debug")
+            .join("mypaper-studio.exe");
         std::fs::create_dir_all(studio.parent().unwrap()).unwrap();
         assert_eq!(find_exe_from(&studio, CORE_EXE), None);
 
@@ -236,7 +256,11 @@ mod tests {
         std::fs::create_dir_all(built.parent().unwrap()).unwrap();
         std::fs::write(&built, "").unwrap();
         assert_eq!(find_exe_from(&studio, CORE_EXE), Some(built));
-        assert_eq!(find_exe_from(&studio, "mypaper-bars.exe"), None, "each program is looked up by its own name");
+        assert_eq!(
+            find_exe_from(&studio, "mypaper-bars.exe"),
+            None,
+            "each program is looked up by its own name"
+        );
 
         let beside = studio.with_file_name(CORE_EXE);
         std::fs::write(&beside, "").unwrap();

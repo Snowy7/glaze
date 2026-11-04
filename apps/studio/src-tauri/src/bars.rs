@@ -64,7 +64,12 @@ pub fn load_from(path: &Path) -> Result<BarsState> {
         ),
         None => (blank(), None),
     };
-    Ok(BarsState { doc, exists: text.is_some(), path: path.display().to_string(), problem })
+    Ok(BarsState {
+        doc,
+        exists: text.is_some(),
+        path: path.display().to_string(),
+        problem,
+    })
 }
 
 /// Checks `doc` with the host's schema and writes it. A file that doesn't parse is never replaced
@@ -74,8 +79,12 @@ pub fn save_to(path: &Path, doc: &Doc) -> Result<BarsState> {
     BarsConfig::parse(&text).context("the bars host would refuse these settings")?;
     let existing = fsio::read_optional(path)?;
     if let Some(existing) = &existing {
-        BarsConfig::parse(existing)
-            .with_context(|| format!("{} can't be read, so Studio won't overwrite it", path.display()))?;
+        BarsConfig::parse(existing).with_context(|| {
+            format!(
+                "{} can't be read, so Studio won't overwrite it",
+                path.display()
+            )
+        })?;
         // The same document in other formatting isn't a change.
         if parse_doc(existing).is_ok_and(|current| current == *doc) {
             return load_from(path);
@@ -121,7 +130,10 @@ pub fn catalog() -> Result<Catalog> {
             let Value::String(id) = serde_json::to_value(preset)? else {
                 anyhow::bail!("a preset serializes to its name")
             };
-            Ok(PresetInfo { id, bundle: preset.bundle() })
+            Ok(PresetInfo {
+                id,
+                bundle: preset.bundle(),
+            })
         })
         .collect::<Result<_>>()?;
     Ok(Catalog {
@@ -134,22 +146,28 @@ pub fn catalog() -> Result<Catalog> {
     })
 }
 
-/// The host merges a file over its preset key by key, `look.background` included. A preset whose
-/// background has keys the chosen type doesn't take (monochrome's `brightness`, islands' `color`)
-/// leaves them in the merged object, and the host then refuses it. So not every background type is
-/// available over every preset; this asks the host's parser which are, rather than restating its
-/// rules.
+/// Which background types each preset can take, asked of the host's parser rather than restating
+/// its merge rules. Since a background of another `type` replaces the preset's whole, that is
+/// every type today; the UI still reads this so a future restriction shows up by itself.
 fn background_types() -> Result<Value> {
     let samples = [
         ("none", json!({ "type": "none" })),
         ("solid", json!({ "type": "solid", "color": "#000000" })),
-        ("gradient", json!({ "type": "gradient", "stops": ["#000000", "#ffffff"] })),
-        ("image", json!({ "type": "image", "path": "background.png" })),
+        (
+            "gradient",
+            json!({ "type": "gradient", "stops": ["#000000", "#ffffff"] }),
+        ),
+        (
+            "image",
+            json!({ "type": "image", "path": "background.png" }),
+        ),
         ("wallpaper", json!({ "type": "wallpaper" })),
     ];
     let mut by_preset = Map::new();
     for preset in Preset::ALL {
-        let Value::String(id) = serde_json::to_value(preset)? else { anyhow::bail!("a preset serializes to its name") };
+        let Value::String(id) = serde_json::to_value(preset)? else {
+            anyhow::bail!("a preset serializes to its name")
+        };
         let allowed: Vec<&str> = samples
             .iter()
             .filter(|(_, background)| {
@@ -205,7 +223,8 @@ fn geometry() -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use mypaper_bars_schema::config::{
-        Action, BuiltinAction, Dimension, IndicatorStyle, LauncherLayout, Monitors, ModuleRef, Running,
+        Action, BuiltinAction, Dimension, IndicatorStyle, LauncherLayout, ModuleRef, Monitors,
+        Running,
     };
 
     use super::*;
@@ -326,7 +345,10 @@ mod tests {
         assert!(config.tray.host && config.audio.switch_output);
         assert!(matches!(config.dock.monitors, Monitors::All));
         let click = &config.modules[&ModuleRef::Builtin(mypaper_bars_schema::Module::Clock)].click;
-        assert_eq!(click.left, Some(Action::Builtin(BuiltinAction::Notifications)));
+        assert_eq!(
+            click.left,
+            Some(Action::Builtin(BuiltinAction::Notifications))
+        );
         assert!(matches!(click.middle, Some(Action::Exec { .. })));
         assert!(matches!(click.right, Some(Action::Open { .. })));
         assert_eq!(config.custom_modules().count(), 2);
@@ -359,13 +381,19 @@ mod tests {
             assert_eq!(load_from(&path).unwrap().problem, None, "{preset:?}");
 
             // The bundle itself, written out as the user's own file.
-            let Value::Object(mut bundle) = preset.bundle() else { panic!("{preset:?} is an object") };
+            let Value::Object(mut bundle) = preset.bundle() else {
+                panic!("{preset:?} is an object")
+            };
             // Merged over the default preset, a bundle would keep that preset's leftover keys, so
             // as a standalone file it names its own preset.
             bundle.insert("preset".into(), serde_json::to_value(preset).unwrap());
             let saved = save_to(&path, &bundle).unwrap();
             assert_eq!(saved.problem, None, "{preset:?}");
-            assert_eq!(Value::Object(saved.doc), Value::Object(bundle), "{preset:?}");
+            assert_eq!(
+                Value::Object(saved.doc),
+                Value::Object(bundle),
+                "{preset:?}"
+            );
         }
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -377,11 +405,19 @@ mod tests {
         let mut parts = docs.split("```json");
         parts.next();
         for part in parts {
-            let Some((block, _)) = part.split_once("```") else { continue };
+            let Some((block, _)) = part.split_once("```") else {
+                continue;
+            };
             let block = block.trim();
             // A bars.json fragment is `"key": …`; a whole file starts with `{ "version"`.
-            let text = if block.starts_with('"') { format!("{{ {block} }}") } else { block.to_owned() };
-            let Ok(value) = serde_json::from_str::<Value>(&text) else { continue };
+            let text = if block.starts_with('"') {
+                format!("{{ {block} }}")
+            } else {
+                block.to_owned()
+            };
+            let Ok(value) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
             if value.get("version").is_some() || block.starts_with('"') {
                 blocks.push(value);
             }
@@ -392,7 +428,11 @@ mod tests {
     #[test]
     fn the_examples_in_the_docs_are_valid_files() {
         let examples = doc_examples();
-        assert!(examples.len() >= 5, "found only {} examples in docs/bars.md", examples.len());
+        assert!(
+            examples.len() >= 5,
+            "found only {} examples in docs/bars.md",
+            examples.len()
+        );
         let dir = temp_dir("bars-docs");
         for example in examples {
             let path = write(&dir, &serde_json::to_string_pretty(&example).unwrap());
@@ -412,7 +452,14 @@ mod tests {
         let newer = r#"{ "version": 1, "top": { "height": 30, "frosting": 3 } }"#;
         let path = write(&dir, newer);
         let state = load_from(&path).unwrap();
-        assert!(state.problem.as_deref().is_some_and(|p| p.contains("frosting")), "{:?}", state.problem);
+        assert!(
+            state
+                .problem
+                .as_deref()
+                .is_some_and(|p| p.contains("frosting")),
+            "{:?}",
+            state.problem
+        );
         assert_eq!(state.doc["top"]["frosting"], 3);
         assert!(save_to(&path, &state.doc).is_err());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), newer);
@@ -423,12 +470,21 @@ mod tests {
         doc.insert("look".into(), json(r#"{ "tint": 3 }"#));
         let error = format!("{:#}", save_to(&good, &doc).unwrap_err());
         assert!(error.contains("look.tint"), "{error}");
-        doc.insert("look".into(), json(r#"{ "background": { "type": "image", "path": "" } }"#));
+        doc.insert(
+            "look".into(),
+            json(r#"{ "background": { "type": "image", "path": "" } }"#),
+        );
         assert!(save_to(&good, &doc).is_err());
-        doc.insert("top".into(), json(r#"{ "left": ["clock"], "right": ["clock"] }"#));
+        doc.insert(
+            "top".into(),
+            json(r#"{ "left": ["clock"], "right": ["clock"] }"#),
+        );
         doc.remove("look");
         assert!(format!("{:#}", save_to(&good, &doc).unwrap_err()).contains("twice"));
-        assert_eq!(std::fs::read_to_string(&good).unwrap(), r#"{ "version": 1 }"#);
+        assert_eq!(
+            std::fs::read_to_string(&good).unwrap(),
+            r#"{ "version": 1 }"#
+        );
 
         // Text that isn't JSON at all is an error, not a "problem": there is no document to show.
         let broken = write(&dir, "{ nope");
@@ -443,14 +499,20 @@ mod tests {
         let path = dir.join("mypaper").join(FILE);
         let state = load_from(&path).unwrap();
         assert!(!state.exists && state.problem.is_none());
-        assert_eq!(Value::Object(state.doc.clone()), json(r#"{ "version": 1 }"#));
+        assert_eq!(
+            Value::Object(state.doc.clone()),
+            json(r#"{ "version": 1 }"#)
+        );
 
         let mut doc = state.doc;
         doc.insert("dock".into(), json(r#"{ "enabled": true }"#));
         let saved = save_to(&path, &doc).unwrap();
         assert!(saved.exists);
         assert!(!path.with_file_name("bars.json.studio.tmp").exists());
-        assert_eq!(json(&std::fs::read_to_string(&path).unwrap()), json(r#"{ "version": 1, "dock": { "enabled": true } }"#));
+        assert_eq!(
+            json(&std::fs::read_to_string(&path).unwrap()),
+            json(r#"{ "version": 1, "dock": { "enabled": true } }"#)
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -458,44 +520,76 @@ mod tests {
     fn the_catalog_carries_the_hosts_defaults_presets_and_geometry() {
         let catalog = catalog().unwrap();
         let ids: Vec<&str> = catalog.presets.iter().map(|p| p.id.as_str()).collect();
-        assert_eq!(ids, ["monochrome", "macos", "windows11", "islands", "neon-glass", "floating"]);
+        assert_eq!(
+            ids,
+            [
+                "monochrome",
+                "macos",
+                "windows11",
+                "islands",
+                "neon-glass",
+                "floating"
+            ]
+        );
         assert_eq!(catalog.defaults["top"]["height"], 32.0);
         assert_eq!(catalog.defaults["dock"]["magnify"]["scale"], 1.5);
         assert_eq!(catalog.geometry["top"]["floating"]["margin"], 8.0);
         assert_eq!(catalog.geometry["top"]["islands"]["padding"], 4.0);
         assert_eq!(catalog.geometry["dock"]["taskbar"]["size"], 24.0);
         assert_eq!(catalog.geometry["dock"]["floating"]["padding"], 5.0);
-        assert!(catalog.named_curves.contains(&"spring-bouncy") && catalog.color_tokens.contains(&"accent"));
+        assert!(
+            catalog.named_curves.contains(&"spring-bouncy")
+                && catalog.color_tokens.contains(&"accent")
+        );
     }
 
     #[test]
-    fn a_files_background_type_is_limited_by_what_its_preset_leaves_behind() {
-        // The host's merge keeps a preset's background keys, so these combinations don't parse.
+    fn every_background_type_is_available_over_every_preset() {
+        // A background of another type replaces the preset's whole (the host's merge treats a
+        // changed `type` tag as a new variant), so nothing the preset left behind gets in the way.
         let background = |preset: &str, background: &str| {
-            BarsConfig::parse(&format!(r#"{{ "preset": "{preset}", "look": {{ "background": {background} }} }}"#)).is_ok()
+            BarsConfig::parse(&format!(
+                r#"{{ "preset": "{preset}", "look": {{ "background": {background} }} }}"#
+            ))
+            .is_ok()
         };
-        assert!(background("monochrome", r#"{ "type": "wallpaper", "brightness": 1 }"#));
-        assert!(background("monochrome", r#"{ "type": "image", "path": "a.png" }"#));
-        assert!(!background("monochrome", r##"{ "type": "solid", "color": "#000" }"##));
-        assert!(!background("islands", r#"{ "type": "wallpaper" }"#));
-        assert!(background("floating", r##"{ "type": "solid", "color": "#000" }"##));
+        assert!(background(
+            "monochrome",
+            r#"{ "type": "wallpaper", "brightness": 1 }"#
+        ));
+        assert!(background(
+            "monochrome",
+            r##"{ "type": "solid", "color": "#000" }"##
+        ));
+        assert!(background("islands", r#"{ "type": "wallpaper" }"#));
 
         let catalog = background_types().unwrap();
-        // `none` takes no keys, so it ignores what the preset left behind.
-        assert_eq!(catalog["monochrome"], json(r#"["none", "image", "wallpaper"]"#));
-        assert_eq!(catalog["neon-glass"], json(r#"["none", "image", "wallpaper"]"#));
-        assert_eq!(catalog["islands"], json(r#"["none", "solid"]"#));
-        assert_eq!(catalog["floating"], json(r#"["none", "solid", "gradient", "image", "wallpaper"]"#));
-        assert_eq!(catalog["macos"], catalog["floating"]);
+        let all = json(r#"["none", "solid", "gradient", "image", "wallpaper"]"#);
+        for preset in [
+            "monochrome",
+            "macos",
+            "windows11",
+            "islands",
+            "neon-glass",
+            "floating",
+        ] {
+            assert_eq!(catalog[preset], all, "{preset}");
+        }
     }
 
     /// The quoted strings of `export const <name> = [ … ] as const` in the page's schema file.
     fn ts_list(name: &str) -> Vec<String> {
         let source = include_str!("../../src/lib/barsSchema.ts");
-        let start = source.find(&format!("export const {name} = [")).unwrap_or_else(|| panic!("{name} is not in barsSchema.ts"));
+        let start = source
+            .find(&format!("export const {name} = ["))
+            .unwrap_or_else(|| panic!("{name} is not in barsSchema.ts"));
         let body = &source[start..];
         let body = &body[body.find('[').unwrap() + 1..body.find("] as const").unwrap()];
-        body.split('"').skip(1).step_by(2).map(str::to_owned).collect()
+        body.split('"')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_owned)
+            .collect()
     }
 
     #[test]
@@ -505,10 +599,18 @@ mod tests {
             assert!(result.is_ok(), "{what}: {:#}", result.unwrap_err());
         };
         for module in ts_list("BUILTIN_MODULES") {
-            parses(&module, format!(r#"{{ "top": {{ "left": ["{module}"], "center": [], "right": [] }} }}"#));
+            parses(
+                &module,
+                format!(r#"{{ "top": {{ "left": ["{module}"], "center": [], "right": [] }} }}"#),
+            );
         }
         for action in ts_list("BUILTIN_ACTIONS") {
-            parses(&action, format!(r#"{{ "modules": {{ "clock": {{ "click": {{ "left": "{action}" }} }} }} }}"#));
+            parses(
+                &action,
+                format!(
+                    r#"{{ "modules": {{ "clock": {{ "click": {{ "left": "{action}" }} }} }} }}"#
+                ),
+            );
         }
         for curve in ts_list("NAMED_CURVES") {
             assert!(NAMED_CURVES.contains(&curve.as_str()), "{curve}");
@@ -533,13 +635,22 @@ mod tests {
             }
         }
         for value in ts_list("LAUNCHER_LAYOUTS") {
-            parses(&value, format!(r#"{{ "launcher": {{ "layout": "{value}" }} }}"#));
+            parses(
+                &value,
+                format!(r#"{{ "launcher": {{ "layout": "{value}" }} }}"#),
+            );
         }
         for value in ts_list("CORNERS") {
-            parses(&value, format!(r#"{{ "look": {{ "corners": "{value}" }} }}"#));
+            parses(
+                &value,
+                format!(r#"{{ "look": {{ "corners": "{value}" }} }}"#),
+            );
         }
         for value in ts_list("MOTION_STYLES") {
-            parses(&value, format!(r#"{{ "animation": {{ "bar": {{ "style": "{value}" }} }} }}"#));
+            parses(
+                &value,
+                format!(r#"{{ "animation": {{ "bar": {{ "style": "{value}" }} }} }}"#),
+            );
         }
         for value in ts_list("COLOR_TOKENS") {
             assert!(COLOR_TOKENS.contains(&value.as_str()), "{value}");

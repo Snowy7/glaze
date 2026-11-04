@@ -38,7 +38,8 @@ pub fn icon_in(dir: &Path, source: &str) -> Result<PathBuf> {
     if target.is_file() {
         return Ok(target);
     }
-    let image = thumbs::shell_image(OsStr::new(source), SIZE_PX, SIIGBF_ICONONLY).with_context(|| format!("getting the icon of {source}"))?;
+    let image = thumbs::shell_image(OsStr::new(source), SIZE_PX, SIIGBF_ICONONLY)
+        .with_context(|| format!("getting the icon of {source}"))?;
     fsio::write_atomic(&target, thumbs::encode_png(&image)?)?;
     Ok(target)
 }
@@ -67,7 +68,9 @@ mod tests {
         let first = icon_in(&dir, exe).unwrap();
         let bytes = std::fs::read(&first).unwrap();
         assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
-        let reader = png::Decoder::new(std::io::Cursor::new(&bytes)).read_info().unwrap();
+        let reader = png::Decoder::new(std::io::Cursor::new(&bytes))
+            .read_info()
+            .unwrap();
         assert_eq!(reader.info().width, 64);
 
         assert_eq!(icon_in(&dir, exe).unwrap(), first);

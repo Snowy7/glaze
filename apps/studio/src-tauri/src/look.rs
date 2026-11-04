@@ -24,7 +24,10 @@ impl Look {
         let Value::Object(map) = serde_json::from_str(&serde_json::to_string(&self.0)?)? else {
             unreachable!("Appearance serializes to an object")
         };
-        Ok(map.into_iter().filter(|(_, value)| !value.is_null()).collect())
+        Ok(map
+            .into_iter()
+            .filter(|(_, value)| !value.is_null())
+            .collect())
     }
 
     /// Range checks (opacity, blur, radius, scale).
@@ -35,7 +38,9 @@ impl Look {
 
 impl Serialize for Look {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.to_map().map_err(S::Error::custom)?.serialize(serializer)
+        self.to_map()
+            .map_err(S::Error::custom)?
+            .serialize(serializer)
     }
 }
 
@@ -45,9 +50,15 @@ mod tests {
 
     #[test]
     fn only_set_fields_are_written_and_floats_stay_short() {
-        let look: Look = serde_json::from_str(r##"{ "surface": "glass", "opacity": 0.55, "accent": "auto", "tint": "#101010" }"##).unwrap();
+        let look: Look = serde_json::from_str(
+            r##"{ "surface": "glass", "opacity": 0.55, "accent": "auto", "tint": "#101010" }"##,
+        )
+        .unwrap();
         let text = serde_json::to_string(&look).unwrap();
-        assert!(text.contains("\"opacity\":0.55,") || text.contains("\"opacity\":0.55}"), "{text}");
+        assert!(
+            text.contains("\"opacity\":0.55,") || text.contains("\"opacity\":0.55}"),
+            "{text}"
+        );
         assert!(!text.contains("null") && !text.contains("blur"), "{text}");
         assert_eq!(serde_json::from_str::<Look>(&text).unwrap(), look);
         assert!(Look::default().is_empty() && !look.is_empty());

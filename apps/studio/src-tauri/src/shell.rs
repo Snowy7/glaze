@@ -8,7 +8,8 @@ use std::ffi::c_void;
 use tauri::{Theme, WebviewWindow, WindowEvent};
 use windows::Win32::Foundation::{COLORREF, HWND};
 use windows::Win32::Graphics::Dwm::{
-    DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DWMWINDOWATTRIBUTE, DwmSetWindowAttribute,
+    DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DWMWINDOWATTRIBUTE,
+    DwmSetWindowAttribute,
 };
 
 struct Chrome {
@@ -17,8 +18,16 @@ struct Chrome {
     border: u32,
 }
 
-const DARK: Chrome = Chrome { caption: 0x14_14_14, text: 0xd4_d4_d4, border: 0x2e_2e_2e };
-const LIGHT: Chrome = Chrome { caption: 0xe8_e8_e8, text: 0x2c_2c_2c, border: 0xdc_dc_dc };
+const DARK: Chrome = Chrome {
+    caption: 0x14_14_14,
+    text: 0xd4_d4_d4,
+    border: 0x2e_2e_2e,
+};
+const LIGHT: Chrome = Chrome {
+    caption: 0xe8_e8_e8,
+    text: 0x2c_2c_2c,
+    border: 0xdc_dc_dc,
+};
 
 /// `0xRRGGBB` as the `0x00BBGGRR` a `COLORREF` wants.
 fn colorref(rgb: u32) -> COLORREF {
@@ -29,7 +38,14 @@ fn set(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE, rgb: u32) {
     let value = colorref(rgb);
     // SAFETY: `value` is a COLORREF-sized value that lives through the call.
     // Failure (Windows 10) just leaves the default chrome.
-    let _ = unsafe { DwmSetWindowAttribute(hwnd, attribute, std::ptr::from_ref(&value).cast::<c_void>(), size_of::<COLORREF>() as u32) };
+    let _ = unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            attribute,
+            std::ptr::from_ref(&value).cast::<c_void>(),
+            size_of::<COLORREF>() as u32,
+        )
+    };
 }
 
 fn apply(window: &WebviewWindow, theme: Theme) {

@@ -11,7 +11,9 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, HWND_MESSAGE, PostMessageW, RegisterWindowMessageW};
+use windows::Win32::UI::WindowsAndMessaging::{
+    FindWindowExW, HWND_MESSAGE, PostMessageW, RegisterWindowMessageW,
+};
 use windows::core::w;
 
 use crate::fsio;
@@ -90,14 +92,24 @@ fn yes() -> bool {
 }
 
 fn read_widget(dir: &Path, origin: Origin) -> WidgetInfo {
-    let folder = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let folder = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let path = dir.join(MANIFEST);
     let parsed = std::fs::read_to_string(&path)
         .with_context(|| format!("reading {}", path.display()))
-        .and_then(|text| serde_json::from_str::<Manifest>(&text).with_context(|| format!("in {}", path.display())));
+        .and_then(|text| {
+            serde_json::from_str::<Manifest>(&text)
+                .with_context(|| format!("in {}", path.display()))
+        });
     match parsed {
         Ok(m) => WidgetInfo {
-            size: WidgetSize { default: m.size.default, min: m.size.min.unwrap_or([1, 1]), max: m.size.max },
+            size: WidgetSize {
+                default: m.size.default,
+                min: m.size.min.unwrap_or([1, 1]),
+                max: m.size.max,
+            },
             id: m.id,
             name: m.name,
             version: m.version,
@@ -116,7 +128,11 @@ fn read_widget(dir: &Path, origin: Origin) -> WidgetInfo {
             version: None,
             author: None,
             description: None,
-            size: WidgetSize { default: [1, 1], min: [1, 1], max: None },
+            size: WidgetSize {
+                default: [1, 1],
+                min: [1, 1],
+                max: None,
+            },
             resizable: true,
             permissions: Vec::new(),
             preset: desktop(),
@@ -142,7 +158,12 @@ fn widget_dirs(root: &Path) -> Vec<PathBuf> {
 
 /// The `widgets/` folder beside the exe or any parent, like the themes folder.
 pub fn bundled_root() -> Option<PathBuf> {
-    std::env::current_exe().ok()?.ancestors().skip(1).map(|dir| dir.join("widgets")).find(|dir| dir.is_dir())
+    std::env::current_exe()
+        .ok()?
+        .ancestors()
+        .skip(1)
+        .map(|dir| dir.join("widgets"))
+        .find(|dir| dir.is_dir())
 }
 
 /// Bundled widgets plus the user's; a user widget wins over a bundled one with the same id.
@@ -194,7 +215,9 @@ pub struct Layout {
 }
 
 fn skeleton() -> Map<String, Value> {
-    let Value::Object(map) = json!({ "version": 1, "grid": { "cell": 0, "gap": 8, "margin": 16 }, "instances": [] }) else {
+    let Value::Object(map) =
+        json!({ "version": 1, "grid": { "cell": 0, "gap": 8, "margin": 16 }, "instances": [] })
+    else {
         unreachable!("a JSON object literal")
     };
     map
@@ -213,7 +236,12 @@ fn render(map: Map<String, Value>) -> Result<String> {
 
 pub fn read_layout(text: Option<&str>) -> Result<Layout> {
     let Some(text) = text else {
-        return Ok(Layout { appearance: Look::default(), instances: Vec::new(), overlay: true, exists: false });
+        return Ok(Layout {
+            appearance: Look::default(),
+            instances: Vec::new(),
+            overlay: true,
+            exists: false,
+        });
     };
     let mut doc = parse_object(text)?;
     let overlay = doc.get("overlay").and_then(Value::as_bool).unwrap_or(true);
@@ -229,7 +257,12 @@ pub fn read_layout(text: Option<&str>) -> Result<Layout> {
         Some(_) => bail!("instances must be a list"),
         None => Vec::new(),
     };
-    Ok(Layout { appearance, instances, overlay, exists: true })
+    Ok(Layout {
+        appearance,
+        instances,
+        overlay,
+        exists: true,
+    })
 }
 
 /// The document with the overlay layer on or off.
@@ -299,7 +332,8 @@ pub fn layout_path() -> Result<PathBuf> {
 
 pub fn load() -> Result<Layout> {
     let path = layout_path()?;
-    read_layout(fsio::read_optional(&path)?.as_deref()).with_context(|| format!("in {}", path.display()))
+    read_layout(fsio::read_optional(&path)?.as_deref())
+        .with_context(|| format!("in {}", path.display()))
 }
 
 /// Reads the file, applies `edit`, and writes if the text changed. The host
@@ -350,7 +384,8 @@ fn post_to_host(name: windows::core::PCWSTR, wparam: usize) -> Result<()> {
             .ok()
             .filter(|hwnd| *hwnd != HWND::default())
             .context("the widget host isn't running (mypaper-widgets.exe)")?;
-        PostMessageW(Some(host), message, WPARAM(wparam), LPARAM(0)).context("posting to the widget host")?;
+        PostMessageW(Some(host), message, WPARAM(wparam), LPARAM(0))
+            .context("posting to the widget host")?;
     }
     Ok(())
 }
@@ -388,7 +423,9 @@ mod tests {
         assert!(layout.exists);
         assert_eq!(layout.instances.len(), 2);
         assert_eq!(layout.instances[0].cell, Some([0, 0]));
-        assert!(!layout.instances[0].appearance.is_empty() && layout.instances[1].appearance.is_empty());
+        assert!(
+            !layout.instances[0].appearance.is_empty() && layout.instances[1].appearance.is_empty()
+        );
         assert_eq!(layout.appearance.0.blur, Some(30.0));
 
         let none = read_layout(None).unwrap();
@@ -399,13 +436,21 @@ mod tests {
 
     #[test]
     fn editing_the_global_look_keeps_instances_grid_and_unknown_fields() {
-        let look: Look = serde_json::from_str(r##"{ "surface": "solid", "tint": "#202020", "opacity": 0.8, "accent": "auto" }"##).unwrap();
+        let look: Look = serde_json::from_str(
+            r##"{ "surface": "solid", "tint": "#202020", "opacity": 0.8, "accent": "auto" }"##,
+        )
+        .unwrap();
         let text = with_appearance(Some(LAYOUT), &look).unwrap();
 
         let mut expected = json(LAYOUT);
-        expected["appearance"] = json(r##"{ "surface": "solid", "tint": "#202020", "opacity": 0.8, "accent": "auto" }"##);
+        expected["appearance"] = json(
+            r##"{ "surface": "solid", "tint": "#202020", "opacity": 0.8, "accent": "auto" }"##,
+        );
         assert_eq!(json(&text), expected, "{text}");
-        assert!(text.find("\"grid\"").unwrap() < text.find("\"appearance\"").unwrap(), "key order is kept");
+        assert!(
+            text.find("\"grid\"").unwrap() < text.find("\"appearance\"").unwrap(),
+            "key order is kept"
+        );
 
         // Clearing every field removes the section.
         let cleared = with_appearance(Some(&text), &Look::default()).unwrap();
@@ -429,7 +474,8 @@ mod tests {
         assert_eq!(json(&with_overlay(None, false).unwrap())["overlay"], false);
 
         // A style in the global look is part of the same layer.
-        let look: Look = serde_json::from_str(r#"{ "style": "aero", "surface": "glass" }"#).unwrap();
+        let look: Look =
+            serde_json::from_str(r#"{ "style": "aero", "surface": "glass" }"#).unwrap();
         let styled = with_appearance(Some(&on), &look).unwrap();
         assert_eq!(json(&styled)["appearance"]["style"], "aero");
         assert_eq!(read_layout(Some(&styled)).unwrap().appearance, look);
@@ -462,8 +508,14 @@ mod tests {
 
         let reset = json(&with_instance_look_cleared(LAYOUT, "clock-1").unwrap());
         let mut expected = json(LAYOUT);
-        expected["instances"][0].as_object_mut().unwrap().remove("appearance");
-        assert_eq!(reset, expected, "settings and unknown fields stay on the instance");
+        expected["instances"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("appearance");
+        assert_eq!(
+            reset, expected,
+            "settings and unknown fields stay on the instance"
+        );
         assert!(with_instance_look_cleared(LAYOUT, "nope-9").is_err());
     }
 
@@ -482,10 +534,18 @@ mod tests {
             "clock",
             r#"{ "id": "clock", "name": "Clock", "size": { "default": [2, 1], "max": [4, 2] }, "permissions": ["launch"], "settings": [] }"#,
         );
-        write_widget(&bundled, "notes", r#"{ "id": "notes", "name": "Notes", "size": { "default": [2, 2] }, "resizable": false }"#);
+        write_widget(
+            &bundled,
+            "notes",
+            r#"{ "id": "notes", "name": "Notes", "size": { "default": [2, 2] }, "resizable": false }"#,
+        );
         write_widget(&bundled, "broken", r#"{ "id": "broken" }"#);
         std::fs::create_dir_all(bundled.join("shell")).unwrap(); // not a widget
-        write_widget(&user, "clock", r#"{ "id": "clock", "name": "My Clock", "size": { "default": [1, 1] } }"#);
+        write_widget(
+            &user,
+            "clock",
+            r#"{ "id": "clock", "name": "My Clock", "size": { "default": [1, 1] } }"#,
+        );
 
         let widgets = list_from(Some(&bundled), Some(&user));
         let names: Vec<_> = widgets.iter().map(|w| w.name.as_str()).collect();
@@ -495,11 +555,21 @@ mod tests {
         assert_eq!(clock.size.min, [1, 1]);
         let notes = &widgets[2];
         assert!(!notes.resizable && notes.size.max.is_none() && notes.origin == Origin::Bundled);
-        assert!(widgets[0].error.is_some(), "a broken manifest is listed with its error");
+        assert!(
+            widgets[0].error.is_some(),
+            "a broken manifest is listed with its error"
+        );
 
         let bundled_clock = list_from(Some(&bundled), None);
         let clock = bundled_clock.iter().find(|w| w.id == "clock").unwrap();
-        assert_eq!((clock.size.default, clock.size.max, clock.permissions.as_slice()), ([2, 1], Some([4, 2]), ["launch".to_string()].as_slice()));
+        assert_eq!(
+            (
+                clock.size.default,
+                clock.size.max,
+                clock.permissions.as_slice()
+            ),
+            ([2, 1], Some([4, 2]), ["launch".to_string()].as_slice())
+        );
         std::fs::remove_dir_all(&work).unwrap();
     }
 }

@@ -39,9 +39,16 @@ pub fn user_root() -> Result<PathBuf> {
 
 /// The packs that ship with the bars page, beside the exe or any parent (built, or its sources).
 pub fn bundled_root() -> Option<PathBuf> {
-    std::env::current_exe().ok()?.ancestors().skip(1).find_map(|dir| {
-        ["bars/shell/dist/icons", "bars/shell/public/icons"].into_iter().map(|rel| dir.join(rel)).find(|path| path.is_dir())
-    })
+    std::env::current_exe()
+        .ok()?
+        .ancestors()
+        .skip(1)
+        .find_map(|dir| {
+            ["bars/shell/dist/icons", "bars/shell/public/icons"]
+                .into_iter()
+                .map(|rel| dir.join(rel))
+                .find(|path| path.is_dir())
+        })
 }
 
 fn pack_dirs(root: &Path) -> Vec<PathBuf> {
@@ -52,18 +59,28 @@ fn pack_dirs(root: &Path) -> Vec<PathBuf> {
         .map(|entry| entry.path())
         .filter(|path| path.join(MANIFEST).is_file())
         .collect();
-    dirs.sort_by_key(|dir| dir.file_name().map(|name| name.to_string_lossy().to_lowercase()));
+    dirs.sort_by_key(|dir| {
+        dir.file_name()
+            .map(|name| name.to_string_lossy().to_lowercase())
+    });
     dirs
 }
 
 fn info(dir: &Path, bundled: bool) -> PackInfo {
-    let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     match IconPack::load(dir) {
         Ok(pack) => PackInfo {
             title: pack.name.clone(),
             mono: pack.mono,
             entries: pack.entries.len(),
-            apps: pack.entries.iter().filter(|e| e.umid.is_some() || e.path.is_some()).count(),
+            apps: pack
+                .entries
+                .iter()
+                .filter(|e| e.umid.is_some() || e.path.is_some())
+                .count(),
             previews: pack
                 .entries
                 .iter()
@@ -96,7 +113,10 @@ pub fn list_from(bundled: Option<&Path>, user: Option<&Path>) -> Vec<PackInfo> {
     for (root, is_bundled) in [(user, false), (bundled, true)] {
         for dir in root.map(pack_dirs).unwrap_or_default() {
             let pack = info(&dir, is_bundled);
-            if !packs.iter().any(|p| p.name.eq_ignore_ascii_case(&pack.name)) {
+            if !packs
+                .iter()
+                .any(|p| p.name.eq_ignore_ascii_case(&pack.name))
+            {
                 packs.push(pack);
             }
         }
@@ -109,7 +129,9 @@ pub fn list_from(bundled: Option<&Path>, user: Option<&Path>) -> Vec<PackInfo> {
 pub fn user_pack_dir(root: &Path, name: &str) -> Result<PathBuf> {
     let bad = !(1..=64).contains(&name.len())
         || name.starts_with('.')
-        || name.chars().any(|c| !(c.is_ascii_alphanumeric() || " _.-".contains(c)));
+        || name
+            .chars()
+            .any(|c| !(c.is_ascii_alphanumeric() || " _.-".contains(c)));
     if bad {
         bail!("a pack name is 1-64 letters, digits, spaces, '.', '_' or '-'");
     }
@@ -123,7 +145,10 @@ pub fn create(root: &Path, name: &str) -> Result<PathBuf> {
         return Ok(dir);
     }
     let manifest = json!({ "name": name, "mono": false, "entries": [] });
-    fsio::write_atomic(&dir.join(MANIFEST), serde_json::to_string_pretty(&manifest)? + "\n")?;
+    fsio::write_atomic(
+        &dir.join(MANIFEST),
+        serde_json::to_string_pretty(&manifest)? + "\n",
+    )?;
     Ok(dir)
 }
 
@@ -152,14 +177,20 @@ pub fn apps(dir: &Path) -> Result<Vec<AppIcon>> {
                 (_, Some(umid)) => ("umid", umid.clone()),
                 _ => return None,
             };
-            Some(AppIcon { index, kind, target, file: dir.join(&entry.icon).display().to_string() })
+            Some(AppIcon {
+                index,
+                kind,
+                target,
+                file: dir.join(&entry.icon).display().to_string(),
+            })
         })
         .collect())
 }
 
 fn read_manifest(dir: &Path) -> Result<Map<String, Value>> {
     let path = dir.join(MANIFEST);
-    let text = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    let text =
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     match serde_json::from_str(&text).with_context(|| format!("in {}", path.display()))? {
         Value::Object(map) => Ok(map),
         _ => bail!("{} must hold a JSON object", path.display()),
@@ -182,18 +213,40 @@ fn entries_mut(manifest: &mut Map<String, Value>) -> Result<&mut Vec<Value>> {
 
 /// A file name for `image` inside the pack that no other entry's icon uses.
 fn free_name(dir: &Path, image: &Path, taken: &[String]) -> Result<String> {
-    let extension = image.extension().and_then(|e| e.to_str()).map(str::to_lowercase).filter(|e| IMAGE_TYPES.contains(&e.as_str()));
-    let Some(extension) = extension else { bail!("pick an image ({})", IMAGE_TYPES.join(", ")) };
+    let extension = image
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_lowercase)
+        .filter(|e| IMAGE_TYPES.contains(&e.as_str()));
+    let Some(extension) = extension else {
+        bail!("pick an image ({})", IMAGE_TYPES.join(", "))
+    };
     let stem: String = image
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default()
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
-    let stem = if stem.is_empty() { "icon".to_owned() } else { stem };
+    let stem = if stem.is_empty() {
+        "icon".to_owned()
+    } else {
+        stem
+    };
     (1..)
-        .map(|n| if n == 1 { format!("{stem}.{extension}") } else { format!("{stem}-{n}.{extension}") })
+        .map(|n| {
+            if n == 1 {
+                format!("{stem}.{extension}")
+            } else {
+                format!("{stem}-{n}.{extension}")
+            }
+        })
         .find(|name| !taken.contains(name) && !dir.join(name).exists())
         .context("no free file name")
 }
@@ -205,14 +258,22 @@ pub fn set_app_icon(dir: &Path, target: &str, image: &Path) -> Result<()> {
         bail!("an app needs a path");
     }
     let mut manifest = read_manifest(dir)?;
-    let taken: Vec<String> = entries_mut(&mut manifest)?.iter().filter_map(|e| e["icon"].as_str().map(str::to_owned)).collect();
+    let taken: Vec<String> = entries_mut(&mut manifest)?
+        .iter()
+        .filter_map(|e| e["icon"].as_str().map(str::to_owned))
+        .collect();
     let name = free_name(dir, image, &taken)?;
     let copied = dir.join(&name);
-    std::fs::copy(image, &copied).with_context(|| format!("copying {} into the pack", image.display()))?;
+    std::fs::copy(image, &copied)
+        .with_context(|| format!("copying {} into the pack", image.display()))?;
 
     let entries = entries_mut(&mut manifest)?;
     let entry = json!({ "path": target, "icon": name });
-    let replaced = entries.iter_mut().find(|e| e["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(target)));
+    let replaced = entries.iter_mut().find(|e| {
+        e["path"]
+            .as_str()
+            .is_some_and(|p| p.eq_ignore_ascii_case(target))
+    });
     let old = match replaced {
         Some(slot) => Some(std::mem::replace(slot, entry)),
         None => {
@@ -234,7 +295,9 @@ pub fn set_app_icon(dir: &Path, target: &str, image: &Path) -> Result<()> {
 pub fn remove_app_icon(dir: &Path, index: usize) -> Result<()> {
     let mut manifest = read_manifest(dir)?;
     let entries = entries_mut(&mut manifest)?;
-    if index >= entries.len() || !(entries[index].get("path").is_some() || entries[index].get("umid").is_some()) {
+    if index >= entries.len()
+        || !(entries[index].get("path").is_some() || entries[index].get("umid").is_some())
+    {
         bail!("there is no app icon at {index}");
     }
     let removed = entries.remove(index);
@@ -247,7 +310,10 @@ pub fn remove_app_icon(dir: &Path, index: usize) -> Result<()> {
 fn drop_unused_image(dir: &Path, manifest: &Map<String, Value>, icon: Option<&str>) {
     let Some(icon) = icon else { return };
     let used = manifest.get("missing").and_then(Value::as_str) == Some(icon)
-        || manifest.get("entries").and_then(Value::as_array).is_some_and(|entries| entries.iter().any(|e| e["icon"].as_str() == Some(icon)));
+        || manifest
+            .get("entries")
+            .and_then(Value::as_array)
+            .is_some_and(|entries| entries.iter().any(|e| e["icon"].as_str() == Some(icon)));
     if !used {
         let _ = std::fs::remove_file(dir.join(icon));
     }
@@ -268,7 +334,11 @@ mod tests {
     fn packs_are_listed_with_what_they_hold_and_the_users_win() {
         let work = temp_dir("packs-list");
         let (bundled, user) = (work.join("bundled"), work.join("user"));
-        for (root, name, mono) in [(&bundled, "mono", true), (&bundled, "plain", false), (&user, "MONO", false)] {
+        for (root, name, mono) in [
+            (&bundled, "mono", true),
+            (&bundled, "plain", false),
+            (&user, "MONO", false),
+        ] {
             let dir = root.join(name);
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("a.svg"), "<svg/>").unwrap();
@@ -279,7 +349,11 @@ mod tests {
             .unwrap();
         }
         std::fs::create_dir_all(user.join("broken")).unwrap();
-        std::fs::write(user.join("broken").join(MANIFEST), r#"{ "name": "B", "entries": [ { "icon": "x.svg" } ] }"#).unwrap();
+        std::fs::write(
+            user.join("broken").join(MANIFEST),
+            r#"{ "name": "B", "entries": [ { "icon": "x.svg" } ] }"#,
+        )
+        .unwrap();
 
         let packs = list_from(Some(&bundled), Some(&user));
         let names: Vec<(&str, bool)> = packs.iter().map(|p| (p.name.as_str(), p.bundled)).collect();
@@ -288,7 +362,14 @@ mod tests {
         let plain = &packs[0];
         assert_eq!((plain.entries, plain.apps, plain.mono), (2, 1, false));
         assert_eq!(plain.previews.len(), 2);
-        assert!(packs[1].error.as_deref().is_some_and(|e| e.contains("exactly one")), "{:?}", packs[1].error);
+        assert!(
+            packs[1]
+                .error
+                .as_deref()
+                .is_some_and(|e| e.contains("exactly one")),
+            "{:?}",
+            packs[1].error
+        );
         std::fs::remove_dir_all(&work).unwrap();
     }
 
@@ -296,10 +377,16 @@ mod tests {
     fn app_icons_are_added_replaced_and_removed_with_their_pictures() {
         let work = temp_dir("packs-apps");
         let root = work.join("icons");
-        assert!(user_pack_dir(&root, "../escape").is_err() && user_pack_dir(&root, ".hidden").is_err());
+        assert!(
+            user_pack_dir(&root, "../escape").is_err() && user_pack_dir(&root, ".hidden").is_err()
+        );
         let dir = create(&root, "My icons").unwrap();
         assert!(IconPack::load(&dir).unwrap().entries.is_empty());
-        assert_eq!(create(&root, "My icons").unwrap(), dir, "creating twice keeps the first");
+        assert_eq!(
+            create(&root, "My icons").unwrap(),
+            dir,
+            "creating twice keeps the first"
+        );
 
         let images = work.join("images");
         std::fs::create_dir_all(&images).unwrap();
@@ -307,8 +394,14 @@ mod tests {
         set_app_icon(&dir, r"C:\Tools\term.exe", &picture(&images, "code.svg")).unwrap();
         let listed = apps(&dir).unwrap();
         assert_eq!(listed.len(), 2);
-        assert_eq!((listed[0].kind, listed[0].target.as_str()), ("path", r"C:\Tools\code.exe"));
-        assert_ne!(listed[0].file, listed[1].file, "two apps never share a copy that one removal could delete");
+        assert_eq!(
+            (listed[0].kind, listed[0].target.as_str()),
+            ("path", r"C:\Tools\code.exe")
+        );
+        assert_ne!(
+            listed[0].file, listed[1].file,
+            "two apps never share a copy that one removal could delete"
+        );
         assert!(Path::new(&listed[0].file).is_file() && Path::new(&listed[1].file).is_file());
 
         // Picking again for the same app (any case) replaces its entry and drops the old copy.
@@ -327,7 +420,11 @@ mod tests {
         assert!(set_app_icon(&dir, r"C:\a.exe", &picture(&images, "notes.txt")).is_err());
         assert!(set_app_icon(&dir, " ", &picture(&images, "x.svg")).is_err());
         assert_eq!(IconPack::load(&dir).unwrap().entries.len(), 1);
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2, "icons.json and better.png only");
+        assert_eq!(
+            std::fs::read_dir(&dir).unwrap().count(),
+            2,
+            "icons.json and better.png only"
+        );
         std::fs::remove_dir_all(&work).unwrap();
     }
 }

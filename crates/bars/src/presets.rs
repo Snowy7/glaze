@@ -56,8 +56,17 @@ impl Preset {
 }
 
 /// Deep-merges `over` into `base`: objects merge key by key, anything else (arrays included) is
-/// replaced.
+/// replaced. An object whose `type` tag differs from the base's (a tagged union switching
+/// variants, e.g. a `look.background` going from `wallpaper` to `solid`) replaces it whole: the
+/// old variant's fields mean nothing to the new one.
 pub fn merge(base: &mut Value, over: &Value) {
+    let switches_variant = over
+        .get("type")
+        .is_some_and(|tag| base.get("type") != Some(tag));
+    if switches_variant {
+        *base = over.clone();
+        return;
+    }
     match (base, over) {
         (Value::Object(base), Value::Object(over)) => {
             for (key, value) in over {
@@ -91,6 +100,46 @@ mod tests {
             base,
             json!({ "top": { "height": 28, "left": ["clock"] }, "look": { "noise": 0.1 }, "dock": { "size": 40 } })
         );
+    }
+
+    #[test]
+    fn a_different_variant_replaces_the_tagged_object_whole() {
+        let mut base =
+            json!({ "look": { "background": { "type": "wallpaper", "brightness": 0.9 } } });
+        merge(
+            &mut base,
+            &json!({ "look": { "background": { "type": "solid", "color": "#101010" } } }),
+        );
+        assert_eq!(
+            base,
+            json!({ "look": { "background": { "type": "solid", "color": "#101010" } } })
+        );
+        // Same variant: still a deep merge.
+        merge(
+            &mut base,
+            &json!({ "look": { "background": { "type": "solid", "opacity": 0.5 } } }),
+        );
+        assert_eq!(base["look"]["background"]["color"], "#101010");
+        assert_eq!(base["look"]["background"]["opacity"], 0.5);
+    }
+
+    #[test]
+    fn every_preset_can_switch_to_any_background_type() {
+        for preset in Preset::ALL {
+            for background in [
+                json!({ "type": "solid", "color": "#202020" }),
+                json!({ "type": "none" }),
+            ] {
+                let mut file = preset.bundle();
+                merge(&mut file, &json!({ "look": { "background": background } }));
+                let parsed = serde_json::from_value::<BarsConfig>(file.clone());
+                assert!(
+                    parsed.is_ok(),
+                    "{preset:?} + {background}: {:?}",
+                    parsed.err()
+                );
+            }
+        }
     }
 
     #[test]

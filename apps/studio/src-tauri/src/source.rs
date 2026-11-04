@@ -96,14 +96,20 @@ pub struct Resolved {
 pub fn resolve(input: &str) -> Result<Resolved> {
     let input = input.trim();
     if has_web_scheme(input) {
-        return Ok(Resolved { kind: Kind::Web, source: check_url(input)?.to_owned() });
+        return Ok(Resolved {
+            kind: Kind::Web,
+            source: check_url(input)?.to_owned(),
+        });
     }
     if input.contains("://") {
         bail!("only http:// and https:// addresses can be wallpapers");
     }
     let path = std::path::absolute(input).context("resolving the source path")?;
     let kind = check(&path)?;
-    Ok(Resolved { kind, source: path.to_string_lossy().into_owned() })
+    Ok(Resolved {
+        kind,
+        source: path.to_string_lossy().into_owned(),
+    })
 }
 
 /// A launch-argument preset for program wallpapers; `{hwnd}` becomes the handle
@@ -115,14 +121,19 @@ pub struct ArgPreset {
     pub args: &'static [&'static str],
 }
 
-pub const UNITY_PLAYER: ArgPreset =
-    ArgPreset { id: "unity", label: "Unity player", args: &["-parentHWND", "{hwnd}", "delayed"] };
+pub const UNITY_PLAYER: ArgPreset = ArgPreset {
+    id: "unity",
+    label: "Unity player",
+    args: &["-parentHWND", "{hwnd}", "delayed"],
+};
 
 pub const ARG_PRESETS: &[ArgPreset] = &[UNITY_PLAYER];
 
 /// Unity players ship `UnityPlayer.dll` beside the exe, which is a safe tell.
 pub fn suggested_preset(exe: &Path) -> Option<ArgPreset> {
-    exe.with_file_name("UnityPlayer.dll").is_file().then_some(UNITY_PLAYER)
+    exe.with_file_name("UnityPlayer.dll")
+        .is_file()
+        .then_some(UNITY_PLAYER)
 }
 
 /// Splits a command-line style string: whitespace separates arguments and
@@ -162,9 +173,16 @@ pub fn split_args(text: &str) -> Result<Vec<String>> {
 /// The inverse of `split_args`, for showing arguments in a text field.
 pub fn join_args<S: AsRef<str>>(args: &[S]) -> String {
     let quote = |arg: &str| {
-        if arg.is_empty() || arg.contains(char::is_whitespace) { format!("\"{arg}\"") } else { arg.to_owned() }
+        if arg.is_empty() || arg.contains(char::is_whitespace) {
+            format!("\"{arg}\"")
+        } else {
+            arg.to_owned()
+        }
     };
-    args.iter().map(|arg| quote(arg.as_ref())).collect::<Vec<_>>().join(" ")
+    args.iter()
+        .map(|arg| quote(arg.as_ref()))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// A folder is a slideshow; a file is classified by its extension.
@@ -175,7 +193,8 @@ pub fn detect(path: &Path) -> Result<Kind> {
     if !path.exists() {
         bail!("{} does not exist", path.display());
     }
-    let ext = extension(path).with_context(|| format!("{} has no file extension", path.display()))?;
+    let ext =
+        extension(path).with_context(|| format!("{} has no file extension", path.display()))?;
     kind_for_extension(&ext).with_context(|| format!("unsupported file type .{ext}"))
 }
 
@@ -199,10 +218,23 @@ pub fn first_image_in(dir: &Path) -> Option<std::path::PathBuf> {
 
 /// A readable default theme name: the file or folder name without its extension.
 pub fn suggested_name(path: &Path) -> String {
-    let stem = if path.is_dir() { path.file_name() } else { path.file_stem() };
+    let stem = if path.is_dir() {
+        path.file_name()
+    } else {
+        path.file_stem()
+    };
     let raw = stem.map(|s| s.to_string_lossy().replace(['_', '-'], " "));
-    let name = raw.as_deref().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ");
-    if name.is_empty() { "My theme".into() } else { name }
+    let name = raw
+        .as_deref()
+        .unwrap_or("")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if name.is_empty() {
+        "My theme".into()
+    } else {
+        name
+    }
 }
 
 /// A theme name for a web address: its host without `www.`.
@@ -210,7 +242,11 @@ pub fn url_name(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let host = rest.split(['/', '?', '#', ':']).next().unwrap_or("");
     let host = host.strip_prefix("www.").unwrap_or(host);
-    if host.is_empty() { "Web page".into() } else { host.into() }
+    if host.is_empty() {
+        "Web page".into()
+    } else {
+        host.into()
+    }
 }
 
 const RESERVED: &[&str] = &[
@@ -319,9 +355,15 @@ pub(crate) mod tests {
 
     #[test]
     fn names_come_from_the_path() {
-        assert_eq!(suggested_name(Path::new("C:/pics/my_cool-photo.jpg")), "my cool photo");
+        assert_eq!(
+            suggested_name(Path::new("C:/pics/my_cool-photo.jpg")),
+            "my cool photo"
+        );
         assert_eq!(suggested_name(Path::new("")), "My theme");
-        assert_eq!(url_name("https://www.example.com:8080/clock?x=1"), "example.com");
+        assert_eq!(
+            url_name("https://www.example.com:8080/clock?x=1"),
+            "example.com"
+        );
         assert_eq!(url_name("http://localhost"), "localhost");
     }
 
@@ -360,14 +402,28 @@ pub(crate) mod tests {
 
     #[test]
     fn web_addresses_must_be_http_with_a_host() {
-        assert_eq!(check_url("  https://example.com/a?b=1 ").unwrap(), "https://example.com/a?b=1");
+        assert_eq!(
+            check_url("  https://example.com/a?b=1 ").unwrap(),
+            "https://example.com/a?b=1"
+        );
         assert!(check_url("HTTP://localhost:8080").is_ok());
-        for bad in ["example.com", "ftp://example.com", "https://", "https:///path", "https://:80", "https://a b.com", ""] {
+        for bad in [
+            "example.com",
+            "ftp://example.com",
+            "https://",
+            "https:///path",
+            "https://:80",
+            "https://a b.com",
+            "",
+        ] {
             assert!(check_url(bad).is_err(), "{bad:?} should be rejected");
         }
         assert!(resolve("file:///C:/x.html").is_err());
         let web = resolve("https://example.com").unwrap();
-        assert_eq!((web.kind, web.source.as_str()), (Kind::Web, "https://example.com"));
+        assert_eq!(
+            (web.kind, web.source.as_str()),
+            (Kind::Web, "https://example.com")
+        );
     }
 
     #[test]
@@ -379,7 +435,9 @@ pub(crate) mod tests {
         assert_eq!(resolved.kind, Kind::Web);
         let text = manifest("Clock", resolved.kind, &resolved.source, Fit::Cover, &[]);
         let loaded = LoadedTheme::parse(PathBuf::from("themes/clock"), &text).unwrap();
-        let Wallpaper::Web(web) = loaded.theme.wallpaper else { panic!("expected a web theme") };
+        let Wallpaper::Web(web) = loaded.theme.wallpaper else {
+            panic!("expected a web theme")
+        };
         assert_eq!(PathBuf::from(web.url), page);
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -387,9 +445,15 @@ pub(crate) mod tests {
     #[test]
     fn args_split_like_a_command_line_and_join_back() {
         let split = |text: &str| split_args(text).unwrap();
-        assert_eq!(split("-parentHWND {hwnd} delayed"), ["-parentHWND", "{hwnd}", "delayed"]);
+        assert_eq!(
+            split("-parentHWND {hwnd} delayed"),
+            ["-parentHWND", "{hwnd}", "delayed"]
+        );
         assert_eq!(split("  a   b "), ["a", "b"]);
-        assert_eq!(split(r#"--dir "C:\My Games\x" --flag"#), ["--dir", r"C:\My Games\x", "--flag"]);
+        assert_eq!(
+            split(r#"--dir "C:\My Games\x" --flag"#),
+            ["--dir", r"C:\My Games\x", "--flag"]
+        );
         assert_eq!(split(r#"--name="a b""#), ["--name=a b"]);
         assert_eq!(split(r#""" x"#), ["", "x"]);
         assert!(split("").is_empty());
@@ -421,7 +485,9 @@ pub(crate) mod tests {
         let args = split_args(&join_args(UNITY_PLAYER.args)).unwrap();
         let text = manifest("Game", Kind::App, r"C:\Games\Game.exe", Fit::Cover, &args);
         let loaded = LoadedTheme::parse(PathBuf::from("themes/game"), &text).unwrap();
-        let Wallpaper::App(app) = loaded.theme.wallpaper else { panic!("expected an app theme") };
+        let Wallpaper::App(app) = loaded.theme.wallpaper else {
+            panic!("expected an app theme")
+        };
         assert_eq!(app.command, PathBuf::from(r"C:\Games\Game.exe"));
         assert_eq!(app.args, ["-parentHWND", "{hwnd}", "delayed"]);
         assert!(!manifest("Game", Kind::App, r"C:\g.exe", Fit::Cover, &[]).contains("args"));

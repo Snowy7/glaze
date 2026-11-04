@@ -19,7 +19,10 @@ pub fn read_optional(path: &Path) -> Result<Option<String>> {
 pub fn write_atomic(path: &Path, contents: impl AsRef<[u8]>) -> Result<()> {
     let dir = path.parent().context("the path has no parent folder")?;
     std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
-    let mut name = path.file_name().context("the path has no file name")?.to_os_string();
+    let mut name = path
+        .file_name()
+        .context("the path has no file name")?
+        .to_os_string();
     name.push(".studio.tmp");
     let temp = path.with_file_name(name);
     std::fs::write(&temp, contents).with_context(|| format!("writing {}", temp.display()))?;

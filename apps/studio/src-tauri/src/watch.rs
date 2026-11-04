@@ -86,16 +86,55 @@ mod tests {
     fn only_the_files_studio_follows_count() {
         let dir = Path::new(r"C:\Users\me\AppData\Roaming\mypaper");
         let at = |rel: &str| classify(dir, &dir.join(rel));
-        assert_eq!(at("config.json"), Changes { config: true, ..Changes::default() });
+        assert_eq!(
+            at("config.json"),
+            Changes {
+                config: true,
+                ..Changes::default()
+            }
+        );
         assert_eq!(at("config.json.tmp"), Changes::default());
-        assert_eq!(at(r"themes\neon\theme.json"), Changes { themes: true, ..Changes::default() });
-        assert_eq!(at("themes"), Changes { themes: true, ..Changes::default() });
+        assert_eq!(
+            at(r"themes\neon\theme.json"),
+            Changes {
+                themes: true,
+                ..Changes::default()
+            }
+        );
+        assert_eq!(
+            at("themes"),
+            Changes {
+                themes: true,
+                ..Changes::default()
+            }
+        );
         assert_eq!(at("themes-backup"), Changes::default());
-        assert_eq!(at("bars.json"), Changes { bars: true, ..Changes::default() });
+        assert_eq!(
+            at("bars.json"),
+            Changes {
+                bars: true,
+                ..Changes::default()
+            }
+        );
         assert_eq!(at("bars.json.studio.tmp"), Changes::default());
-        assert_eq!(at("widgets.json"), Changes { widgets: true, ..Changes::default() });
-        assert_eq!(at(r"widgets\mine\widget.json"), Changes { widgets: true, ..Changes::default() });
+        assert_eq!(
+            at("widgets.json"),
+            Changes {
+                widgets: true,
+                ..Changes::default()
+            }
+        );
+        assert_eq!(
+            at(r"widgets\mine\widget.json"),
+            Changes {
+                widgets: true,
+                ..Changes::default()
+            }
+        );
         assert_eq!(at(r"widget-data\clock-1.json"), Changes::default());
-        assert_eq!(classify(dir, Path::new(r"D:\elsewhere\config.json")), Changes::default());
+        assert_eq!(
+            classify(dir, Path::new(r"D:\elsewhere\config.json")),
+            Changes::default()
+        );
     }
 }

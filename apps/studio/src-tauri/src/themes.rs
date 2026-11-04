@@ -74,8 +74,16 @@ pub fn list(active: Option<&str>) -> ThemeList {
 
     let mut themes = Vec::new();
     for root in &roots {
-        let origin = if user.as_deref() == Some(root.as_path()) { Origin::User } else { Origin::Bundled };
-        themes.extend(theme_dirs(root).into_iter().map(|dir| entry(&dir, origin, active_dir.as_deref())));
+        let origin = if user.as_deref() == Some(root.as_path()) {
+            Origin::User
+        } else {
+            Origin::Bundled
+        };
+        themes.extend(
+            theme_dirs(root)
+                .into_iter()
+                .map(|dir| entry(&dir, origin, active_dir.as_deref())),
+        );
     }
     if let Some(dir) = &active_dir
         && !themes.iter().any(|t| canonical(Path::new(&t.dir)) == *dir)
@@ -103,15 +111,23 @@ fn theme_dirs(root: &Path) -> Vec<PathBuf> {
 
 pub fn entry(dir: &Path, origin: Origin, active_dir: Option<&Path>) -> ThemeEntry {
     let canonical_dir = canonical(dir);
-    let folder = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let folder = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let loaded = LoadedTheme::load(dir);
     let (name, kind, error) = match &loaded {
-        Ok(t) => (t.theme.name.clone(), Some(Kind::of(&t.theme.wallpaper)), None),
+        Ok(t) => (
+            t.theme.name.clone(),
+            Some(Kind::of(&t.theme.wallpaper)),
+            None,
+        ),
         Err(e) => (folder.clone(), None, Some(format!("{e:#}"))),
     };
     // A bare folder name is only safe if it resolves back to this folder
     // (a user theme can shadow a bundled one of the same name).
-    let by_name = origin != Origin::External && resolve(&folder).is_some_and(|d| canonical(&d) == canonical_dir);
+    let by_name = origin != Origin::External
+        && resolve(&folder).is_some_and(|d| canonical(&d) == canonical_dir);
     let loaded_ok = loaded.as_ref().ok();
     let preview = preview(dir, loaded_ok);
     ThemeEntry {
@@ -127,7 +143,11 @@ pub fn entry(dir: &Path, origin: Origin, active_dir: Option<&Path>) -> ThemeEntr
         widgets_skin: loaded_ok.is_some_and(|t| t.theme.widgets.is_some()),
         bars_skin: loaded_ok.is_some_and(|t| t.theme.bars.is_some()),
         active: active_dir == Some(canonical_dir.as_path()),
-        apply_as: if by_name { folder } else { dir.display().to_string() },
+        apply_as: if by_name {
+            folder
+        } else {
+            dir.display().to_string()
+        },
     }
 }
 
@@ -149,7 +169,9 @@ fn preview(dir: &Path, loaded: Option<&LoadedTheme>) -> Option<PathBuf> {
         .map(|name| dir.join(name))
         .find(|p| p.is_file())
         .or_else(|| match &loaded?.theme.wallpaper {
-            Wallpaper::Image(i) => Some(loaded?.asset(&i.source)).filter(|p| p.is_file() && source::is_image(p)),
+            Wallpaper::Image(i) => {
+                Some(loaded?.asset(&i.source)).filter(|p| p.is_file() && source::is_image(p))
+            }
             Wallpaper::Slideshow(s) => source::first_image_in(&loaded?.asset(&s.folder)),
             Wallpaper::Video(_) => thumbs::cached(&video_source(loaded)?),
             _ => None,
@@ -180,7 +202,13 @@ pub struct NewTheme {
 /// The first of `<base>`, `<base>-2`, `<base>-3`, ... that doesn't exist in `root`.
 fn free_dir(root: &Path, base: &str) -> Result<PathBuf> {
     (1u32..)
-        .map(|n| root.join(if n == 1 { base.to_owned() } else { format!("{base}-{n}") }))
+        .map(|n| {
+            root.join(if n == 1 {
+                base.to_owned()
+            } else {
+                format!("{base}-{n}")
+            })
+        })
         .find(|dir| !dir.exists())
         .context("no free theme folder name")
 }
@@ -193,7 +221,11 @@ pub fn create_in(root: &Path, new: &NewTheme) -> Result<PathBuf> {
         bail!("give the theme a name");
     }
     let source::Resolved { kind, source } = source::resolve(&new.source)?;
-    let args = if kind == Kind::App { source::split_args(new.args.as_deref().unwrap_or(""))? } else { Vec::new() };
+    let args = if kind == Kind::App {
+        source::split_args(new.args.as_deref().unwrap_or(""))?
+    } else {
+        Vec::new()
+    };
     let text = source::manifest(name, kind, &source, new.fit.unwrap_or_default(), &args);
 
     std::fs::create_dir_all(root).with_context(|| format!("creating {}", root.display()))?;
@@ -216,7 +248,10 @@ pub fn create_in(root: &Path, new: &NewTheme) -> Result<PathBuf> {
 /// Returns the new folder; the original is untouched.
 pub fn duplicate_into(root: &Path, src: &Path) -> Result<PathBuf> {
     let original = LoadedTheme::load(src)?;
-    let folder = src.file_name().map(|n| n.to_string_lossy().into_owned()).context("the theme folder has no name")?;
+    let folder = src
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .context("the theme folder has no name")?;
     std::fs::create_dir_all(root).with_context(|| format!("creating {}", root.display()))?;
     if canonical(root).starts_with(canonical(src)) {
         bail!("can't copy a theme into its own folder");
@@ -226,7 +261,10 @@ pub fn duplicate_into(root: &Path, src: &Path) -> Result<PathBuf> {
     let copied = copy_dir(src, &dir).and_then(|()| {
         let path = dir.join(MANIFEST);
         let text = std::fs::read_to_string(&path)?;
-        std::fs::write(&path, manifest::with_name(&text, &format!("{} (copy)", original.theme.name))?)?;
+        std::fs::write(
+            &path,
+            manifest::with_name(&text, &format!("{} (copy)", original.theme.name))?,
+        )?;
         LoadedTheme::load(&dir).map(drop)
     });
     if let Err(e) = copied {
@@ -247,7 +285,8 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
         if kind.is_dir() {
             copy_dir(&entry.path(), &target)?;
         } else if kind.is_file() {
-            std::fs::copy(entry.path(), &target).with_context(|| format!("copying {}", entry.path().display()))?;
+            std::fs::copy(entry.path(), &target)
+                .with_context(|| format!("copying {}", entry.path().display()))?;
         }
     }
     Ok(())
@@ -263,7 +302,9 @@ pub fn is_user_theme(dir: &Path, user_root: &Path) -> bool {
 pub fn read_style(dir: &Path) -> Result<WindowsStyle> {
     LoadedTheme::load(dir)?;
     let path = dir.join(MANIFEST);
-    manifest::read_style(&std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?)
+    manifest::read_style(
+        &std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?,
+    )
 }
 
 /// Writes `style` into a user theme's `theme.json`, leaving every other field
@@ -275,7 +316,8 @@ pub fn save_style(dir: &Path, user_root: &Path, style: &WindowsStyle) -> Result<
         bail!("only themes in your themes folder can be edited; duplicate this one first");
     }
     let path = dir.join(MANIFEST);
-    let original = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    let original =
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     if manifest::read_style(&original)? == *style {
         return Ok(());
     }
@@ -291,7 +333,9 @@ pub fn save_style(dir: &Path, user_root: &Path, style: &WindowsStyle) -> Result<
 pub fn read_interactive(dir: &Path) -> Result<Option<bool>> {
     LoadedTheme::load(dir)?;
     let path = dir.join(MANIFEST);
-    manifest::read_interactive(&std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?)
+    manifest::read_interactive(
+        &std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?,
+    )
 }
 
 /// Turns `wallpaper.interactive` on or off in a user theme, checked like `save_style`.
@@ -300,12 +344,14 @@ pub fn save_interactive(dir: &Path, user_root: &Path, on: bool) -> Result<()> {
         bail!("only themes in your themes folder can be edited; duplicate this one first");
     }
     let path = dir.join(MANIFEST);
-    let original = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    let original =
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     if manifest::read_interactive(&original)? == Some(on) {
         return Ok(());
     }
     let updated = manifest::with_interactive(&original, on)?;
-    LoadedTheme::parse(dir.to_path_buf(), &updated).context("this wallpaper setting was refused")?;
+    LoadedTheme::parse(dir.to_path_buf(), &updated)
+        .context("this wallpaper setting was refused")?;
     fsio::write_atomic(&path, updated)
 }
 
@@ -327,7 +373,10 @@ pub fn user_cursor_sets(root: &Path) -> Vec<String> {
 pub fn read_skin(dir: &Path, kind: SkinKind) -> Result<SkinEdit> {
     LoadedTheme::load(dir)?;
     let path = dir.join(MANIFEST);
-    manifest::read_skin(&std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?, kind)
+    manifest::read_skin(
+        &std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?,
+        kind,
+    )
 }
 
 /// Writes a skin into a user theme's `theme.json`, leaving every other field
@@ -338,30 +387,41 @@ pub fn save_skin(dir: &Path, user_root: &Path, kind: SkinKind, skin: &SkinEdit) 
         bail!("only themes in your themes folder can be edited; duplicate this one first");
     }
     let path = dir.join(MANIFEST);
-    let original = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    let original =
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     if manifest::read_skin(&original, kind)? == *skin {
         return Ok(());
     }
     let updated = manifest::with_skin(&original, kind, skin)?;
-    LoadedTheme::parse(dir.to_path_buf(), &updated).with_context(|| format!("these {} values were refused", kind.key()))?;
+    LoadedTheme::parse(dir.to_path_buf(), &updated)
+        .with_context(|| format!("these {} values were refused", kind.key()))?;
     fsio::write_atomic(&path, updated)
 }
 
 /// Brings a style sheet into a user theme and returns the path to put in the
 /// skin's `css`. A file already inside the theme folder is used where it is;
 /// any other is copied in as `<kind>.css` (replacing the last one picked).
-pub fn import_skin_css(dir: &Path, user_root: &Path, kind: SkinKind, source: &Path) -> Result<String> {
+pub fn import_skin_css(
+    dir: &Path,
+    user_root: &Path,
+    kind: SkinKind,
+    source: &Path,
+) -> Result<String> {
     if !is_user_theme(dir, user_root) {
         bail!("only themes in your themes folder can be edited; duplicate this one first");
     }
-    if !source.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("css")) {
+    if !source
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("css"))
+    {
         bail!("pick a .css file");
     }
     if let Ok(inside) = canonical(source).strip_prefix(canonical(dir)) {
         return Ok(inside.display().to_string());
     }
     let name = format!("{}.css", kind.key());
-    std::fs::copy(source, dir.join(&name)).with_context(|| format!("copying {} into the theme", source.display()))?;
+    std::fs::copy(source, dir.join(&name))
+        .with_context(|| format!("copying {} into the theme", source.display()))?;
     Ok(name)
 }
 
@@ -371,7 +431,12 @@ mod tests {
     use crate::source::tests::temp_dir;
 
     fn image_theme(source: &Path, name: &str) -> NewTheme {
-        NewTheme { source: source.to_string_lossy().into_owned(), name: name.into(), fit: Some(Fit::Contain), args: None }
+        NewTheme {
+            source: source.to_string_lossy().into_owned(),
+            name: name.into(),
+            fit: Some(Fit::Contain),
+            args: None,
+        }
     }
 
     #[test]
@@ -388,7 +453,9 @@ mod tests {
 
         let loaded = LoadedTheme::load(&first).unwrap();
         assert_eq!(loaded.theme.name, "My Photo");
-        let Wallpaper::Image(image) = loaded.theme.wallpaper else { panic!("not an image theme") };
+        let Wallpaper::Image(image) = loaded.theme.wallpaper else {
+            panic!("not an image theme")
+        };
         assert_eq!(image.source, photo);
         assert_eq!(image.fit, Fit::Contain);
         std::fs::remove_dir_all(&work).unwrap();
@@ -440,11 +507,27 @@ mod tests {
     fn web_and_app_themes_are_created_with_their_options() {
         let work = temp_dir("web-app");
         let root = work.join("themes");
-        let web = NewTheme { source: " https://example.com/clock ".into(), name: "Clock".into(), fit: None, args: None };
+        let web = NewTheme {
+            source: " https://example.com/clock ".into(),
+            name: "Clock".into(),
+            fit: None,
+            args: None,
+        };
         let dir = create_in(&root, &web).unwrap();
-        let Wallpaper::Web(w) = LoadedTheme::load(&dir).unwrap().theme.wallpaper else { panic!("not a web theme") };
+        let Wallpaper::Web(w) = LoadedTheme::load(&dir).unwrap().theme.wallpaper else {
+            panic!("not a web theme")
+        };
         assert_eq!(w.url, "https://example.com/clock");
-        assert!(create_in(&root, &NewTheme { source: "example.com".into(), ..web }).is_err());
+        assert!(
+            create_in(
+                &root,
+                &NewTheme {
+                    source: "example.com".into(),
+                    ..web
+                }
+            )
+            .is_err()
+        );
 
         let exe = work.join("Player.exe");
         std::fs::write(&exe, "").unwrap();
@@ -455,10 +538,26 @@ mod tests {
             args: Some(source::join_args(source::UNITY_PLAYER.args)),
         };
         let dir = create_in(&root, &app).unwrap();
-        let Wallpaper::App(a) = LoadedTheme::load(&dir).unwrap().theme.wallpaper else { panic!("not an app theme") };
+        let Wallpaper::App(a) = LoadedTheme::load(&dir).unwrap().theme.wallpaper else {
+            panic!("not an app theme")
+        };
         assert_eq!(a.args, ["-parentHWND", "{hwnd}", "delayed"]);
-        assert!(create_in(&root, &NewTheme { args: Some("\"open".into()), name: "Bad".into(), ..app }).is_err());
-        assert_eq!(theme_dirs(&root).len(), 2, "the failed attempts left nothing behind");
+        assert!(
+            create_in(
+                &root,
+                &NewTheme {
+                    args: Some("\"open".into()),
+                    name: "Bad".into(),
+                    ..app
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(
+            theme_dirs(&root).len(),
+            2,
+            "the failed attempts left nothing behind"
+        );
         std::fs::remove_dir_all(&work).unwrap();
     }
 
@@ -466,9 +565,17 @@ mod tests {
     fn shader_theme(root: &Path, folder: &str) -> PathBuf {
         let dir = root.join(folder);
         std::fs::create_dir_all(dir.join("assets")).unwrap();
-        std::fs::write(dir.join("a.wgsl"), "fn wallpaper(f: vec2f) -> vec4f { return vec4f(0.0); }").unwrap();
+        std::fs::write(
+            dir.join("a.wgsl"),
+            "fn wallpaper(f: vec2f) -> vec4f { return vec4f(0.0); }",
+        )
+        .unwrap();
         std::fs::write(dir.join("assets").join("noise.png"), [1, 2, 3]).unwrap();
-        std::fs::write(dir.join(MANIFEST), r#"{ "name": "Shady", "wallpaper": { "kind": "shader", "source": "a.wgsl" } }"#).unwrap();
+        std::fs::write(
+            dir.join(MANIFEST),
+            r#"{ "name": "Shady", "wallpaper": { "kind": "shader", "source": "a.wgsl" } }"#,
+        )
+        .unwrap();
         dir
     }
 
@@ -482,13 +589,26 @@ mod tests {
         let second = duplicate_into(&mine, &bundled).unwrap();
         assert_eq!(first.file_name().unwrap(), "shady-copy");
         assert_eq!(second.file_name().unwrap(), "shady-copy-2");
-        assert_eq!(std::fs::read(first.join("assets").join("noise.png")).unwrap(), [1, 2, 3]);
+        assert_eq!(
+            std::fs::read(first.join("assets").join("noise.png")).unwrap(),
+            [1, 2, 3]
+        );
         assert!(first.join("a.wgsl").is_file());
 
-        assert_eq!(LoadedTheme::load(&first).unwrap().theme.name, "Shady (copy)");
-        assert_eq!(LoadedTheme::load(&bundled).unwrap().theme.name, "Shady", "the original is untouched");
+        assert_eq!(
+            LoadedTheme::load(&first).unwrap().theme.name,
+            "Shady (copy)"
+        );
+        assert_eq!(
+            LoadedTheme::load(&bundled).unwrap().theme.name,
+            "Shady",
+            "the original is untouched"
+        );
 
-        assert!(duplicate_into(&bundled, &bundled).is_err(), "not into itself");
+        assert!(
+            duplicate_into(&bundled, &bundled).is_err(),
+            "not into itself"
+        );
         assert!(duplicate_into(&mine, &work.join("missing")).is_err());
         assert_eq!(theme_dirs(&mine).len(), 2);
         std::fs::remove_dir_all(&work).unwrap();
@@ -504,11 +624,21 @@ mod tests {
         assert!(!is_user_theme(&bundled, &mine));
         assert!(!is_user_theme(&mine, &mine));
         assert!(!is_user_theme(&own.join("assets"), &mine));
-        assert!(!is_user_theme(&own.join("..").join("..").join("bundled").join("shady"), &mine));
+        assert!(!is_user_theme(
+            &own.join("..").join("..").join("bundled").join("shady"),
+            &mine
+        ));
 
-        let style = WindowsStyle { corners: Some("square".into()), ..Default::default() };
+        let style = WindowsStyle {
+            corners: Some("square".into()),
+            ..Default::default()
+        };
         assert!(save_style(&bundled, &mine, &style).is_err());
-        assert!(!std::fs::read_to_string(bundled.join(MANIFEST)).unwrap().contains("windows"));
+        assert!(
+            !std::fs::read_to_string(bundled.join(MANIFEST))
+                .unwrap()
+                .contains("windows")
+        );
         std::fs::remove_dir_all(&work).unwrap();
     }
 
@@ -520,24 +650,48 @@ mod tests {
         let before = LoadedTheme::load(&dir).unwrap();
 
         let skin = SkinEdit {
-            appearance: serde_json::from_str(r##"{ "surface": "solid", "tint": "#202020", "radius": 12, "shadow": false }"##).unwrap(),
+            appearance: serde_json::from_str(
+                r##"{ "surface": "solid", "tint": "#202020", "radius": 12, "shadow": false }"##,
+            )
+            .unwrap(),
             css: Some("widgets.css".into()),
         };
         save_skin(&dir, &mine, SkinKind::Widgets, &skin).unwrap();
         assert_eq!(read_skin(&dir, SkinKind::Widgets).unwrap(), skin);
-        assert_eq!(read_skin(&dir, SkinKind::Bars).unwrap(), SkinEdit::default());
+        assert_eq!(
+            read_skin(&dir, SkinKind::Bars).unwrap(),
+            SkinEdit::default()
+        );
         let loaded = LoadedTheme::load(&dir).unwrap();
         assert_eq!(loaded.theme.wallpaper, before.theme.wallpaper);
         let widgets = loaded.theme.widgets.unwrap();
-        assert_eq!(widgets.appearance.unwrap().surface, Some(mypaper_theme::Surface::Solid));
-        assert!(entry(&dir, Origin::User, None).widgets_skin && !entry(&dir, Origin::User, None).bars_skin);
+        assert_eq!(
+            widgets.appearance.unwrap().surface,
+            Some(mypaper_theme::Surface::Solid)
+        );
+        assert!(
+            entry(&dir, Origin::User, None).widgets_skin
+                && !entry(&dir, Origin::User, None).bars_skin
+        );
 
         // Out-of-range and escaping values are refused, and the file stays as it was.
         let good = std::fs::read_to_string(dir.join(MANIFEST)).unwrap();
-        let loud = SkinEdit { appearance: serde_json::from_str(r#"{ "blur": 500 }"#).unwrap(), css: None };
-        let error = format!("{:#}", save_skin(&dir, &mine, SkinKind::Bars, &loud).unwrap_err());
-        assert!(error.contains("refused") && error.contains("blur"), "{error}");
-        let escaping = SkinEdit { css: Some(r"..\..\x.css".into()), ..Default::default() };
+        let loud = SkinEdit {
+            appearance: serde_json::from_str(r#"{ "blur": 500 }"#).unwrap(),
+            css: None,
+        };
+        let error = format!(
+            "{:#}",
+            save_skin(&dir, &mine, SkinKind::Bars, &loud).unwrap_err()
+        );
+        assert!(
+            error.contains("refused") && error.contains("blur"),
+            "{error}"
+        );
+        let escaping = SkinEdit {
+            css: Some(r"..\..\x.css".into()),
+            ..Default::default()
+        };
         assert!(save_skin(&dir, &mine, SkinKind::Bars, &escaping).is_err());
         assert_eq!(std::fs::read_to_string(dir.join(MANIFEST)).unwrap(), good);
         assert!(!dir.join("theme.json.studio.tmp").exists());
@@ -559,10 +713,19 @@ mod tests {
         let outside = work.join("fancy.css");
         std::fs::write(&outside, "body{}").unwrap();
 
-        assert_eq!(import_skin_css(&dir, &mine, SkinKind::Bars, &outside).unwrap(), "bars.css");
-        assert_eq!(std::fs::read_to_string(dir.join("bars.css")).unwrap(), "body{}");
+        assert_eq!(
+            import_skin_css(&dir, &mine, SkinKind::Bars, &outside).unwrap(),
+            "bars.css"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("bars.css")).unwrap(),
+            "body{}"
+        );
         std::fs::write(dir.join("mine.css"), "x").unwrap();
-        assert_eq!(import_skin_css(&dir, &mine, SkinKind::Bars, &dir.join("mine.css")).unwrap(), "mine.css");
+        assert_eq!(
+            import_skin_css(&dir, &mine, SkinKind::Bars, &dir.join("mine.css")).unwrap(),
+            "mine.css"
+        );
 
         std::fs::write(work.join("notes.txt"), "").unwrap();
         assert!(import_skin_css(&dir, &mine, SkinKind::Bars, &work.join("notes.txt")).is_err());
@@ -593,16 +756,29 @@ mod tests {
         assert!(entry(&dir, Origin::User, None).styled);
 
         let good = std::fs::read_to_string(dir.join(MANIFEST)).unwrap();
-        let bad = WindowsStyle { accent: Some("orange".into()), ..Default::default() };
+        let bad = WindowsStyle {
+            accent: Some("orange".into()),
+            ..Default::default()
+        };
         let error = format!("{:#}", save_style(&dir, &mine, &bad).unwrap_err());
         assert!(error.contains("refused"), "{error}");
-        assert_eq!(std::fs::read_to_string(dir.join(MANIFEST)).unwrap(), good, "a refused edit leaves the file alone");
+        assert_eq!(
+            std::fs::read_to_string(dir.join(MANIFEST)).unwrap(),
+            good,
+            "a refused edit leaves the file alone"
+        );
         assert!(!dir.join("theme.json.tmp").exists());
 
         save_style(&dir, &mine, &WindowsStyle::default()).unwrap();
         assert!(!entry(&dir, Origin::User, None).styled);
         let after = LoadedTheme::load(&dir).unwrap();
-        assert_eq!(after.theme.wallpaper, LoadedTheme::parse(dir.clone(), &before).unwrap().theme.wallpaper);
+        assert_eq!(
+            after.theme.wallpaper,
+            LoadedTheme::parse(dir.clone(), &before)
+                .unwrap()
+                .theme
+                .wallpaper
+        );
         std::fs::remove_dir_all(&work).unwrap();
     }
 
@@ -613,20 +789,44 @@ mod tests {
         let dir = mine.join("page");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("index.html"), "<p>hi</p>").unwrap();
-        std::fs::write(dir.join(MANIFEST), r#"{ "name": "Page", "wallpaper": { "kind": "web", "url": "index.html" } }"#).unwrap();
+        std::fs::write(
+            dir.join(MANIFEST),
+            r#"{ "name": "Page", "wallpaper": { "kind": "web", "url": "index.html" } }"#,
+        )
+        .unwrap();
 
         assert_eq!(read_interactive(&dir).unwrap(), Some(false));
         save_interactive(&dir, &mine, true).unwrap();
-        save_style(&dir, &mine, &WindowsStyle { cursors: Some("mypaper-light".into()), ..Default::default() }).unwrap();
-        let Wallpaper::Web(web) = LoadedTheme::load(&dir).unwrap().theme.wallpaper else { panic!("a web wallpaper") };
+        save_style(
+            &dir,
+            &mine,
+            &WindowsStyle {
+                cursors: Some("mypaper-light".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let Wallpaper::Web(web) = LoadedTheme::load(&dir).unwrap().theme.wallpaper else {
+            panic!("a web wallpaper")
+        };
         assert!(web.interactive);
-        assert_eq!(read_style(&dir).unwrap().cursors.as_deref(), Some("mypaper-light"));
+        assert_eq!(
+            read_style(&dir).unwrap().cursors.as_deref(),
+            Some("mypaper-light")
+        );
         assert_eq!(read_interactive(&dir).unwrap(), Some(true));
 
         // Off removes the key; the cursors stay.
         save_interactive(&dir, &mine, false).unwrap();
-        assert!(!std::fs::read_to_string(dir.join(MANIFEST)).unwrap().contains("interactive"));
-        assert_eq!(read_style(&dir).unwrap().cursors.as_deref(), Some("mypaper-light"));
+        assert!(
+            !std::fs::read_to_string(dir.join(MANIFEST))
+                .unwrap()
+                .contains("interactive")
+        );
+        assert_eq!(
+            read_style(&dir).unwrap().cursors.as_deref(),
+            Some("mypaper-light")
+        );
 
         // Not for themes outside the user folder, nor for wallpapers that can't use it.
         assert!(save_interactive(&dir, &work.join("elsewhere"), true).is_err());
