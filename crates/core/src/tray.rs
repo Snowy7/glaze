@@ -1,7 +1,8 @@
-//! The tray icon and its right-click menu: pause, theme picker, widget edit
-//! mode, studio, restart and quit. Everything goes through `config.json` (the wallpaper
-//! applies it live) or a message to the supervisor loop, so the tray holds
-//! no state of its own.
+//! The tray icon (the mypaper logo) and its right-click menu: pause, theme
+//! picker, widget edit mode, the shell bars (`bars.json`), studio, restart
+//! and quit. Everything goes through `config.json` / `bars.json` (the
+//! processes apply them live) or a message to the supervisor loop, so the
+//! tray holds no state of its own.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -9,23 +10,26 @@ use std::process::Command as Process;
 use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
 
 use anyhow::{Context, Result};
+use mypaper_bars::{BarsConfig, TaskbarMode};
 use mypaper_config::Config;
 use mypaper_desktop::{ConfigWatcher, watch_config};
 use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetSystemMetricsForDpi};
 use windows::Win32::UI::Shell::{
     NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION,
     NOTIFYICON_VERSION_4, NOTIFYICONDATAW, Shell_NotifyIconW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreateIcon, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon,
-    DestroyMenu, DestroyWindow, FindWindowExW, HICON, HMENU, HWND_MESSAGE, IDI_APPLICATION,
-    LoadIconW, MENU_ITEM_FLAGS, MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING,
-    PostMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW,
-    SetForegroundWindow, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, WM_APP,
-    WM_CONTEXTMENU, WM_NULL, WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_POPUP,
+    AppendMenuW, CreateIconFromResourceEx, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
+    DestroyIcon, DestroyMenu, DestroyWindow, FindWindowExW, HICON, HMENU, HWND_MESSAGE,
+    IDI_APPLICATION, LR_DEFAULTCOLOR, LoadIconW, MENU_ITEM_FLAGS, MF_CHECKED, MF_GRAYED, MF_POPUP,
+    MF_SEPARATOR, MF_STRING, PostMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassExW,
+    RegisterWindowMessageW, SM_CXSMICON, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_RETURNCMD,
+    TPM_RIGHTBUTTON, TrackPopupMenu, WM_APP, WM_CONTEXTMENU, WM_NULL, WNDCLASSEXW,
+    WS_EX_TOOLWINDOW, WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -45,6 +49,11 @@ const ID_STUDIO: usize = 2;
 const ID_RESTART: usize = 3;
 const ID_QUIT: usize = 4;
 const ID_EDIT_WIDGETS: usize = 5;
+const ID_TOP_BAR: usize = 6;
+const ID_DOCK: usize = 7;
+const ID_TASKBAR_KEEP: usize = 8;
+const ID_TASKBAR_AUTOHIDE: usize = 9;
+const ID_TASKBAR_HIDE: usize = 10;
 /// Theme `i` in the Themes submenu has id `ID_THEME + i`.
 const ID_THEME: usize = 100;
 
@@ -212,41 +221,47 @@ fn tooltip() -> String {
     format!("mypaper: {name}")
 }
 
-/// A round gradient badge, drawn in code so no icon asset has to ship.
+/// The mypaper logo, every size (16–256 px PNG entries; 16–32 px are a hand-tuned small mark).
+/// Rendered from `assets/logo/mark.svg` and `mark-small.svg` by `scripts/render-logo.ps1`.
+const LOGO: &[u8] = include_bytes!("../../../assets/logo/mypaper.ico");
+
+/// The logo at the tray's small-icon size for the system DPI.
 fn make_icon() -> HICON {
-    const N: usize = 32;
-    let mut colors = [0u8; N * N * 4]; // BGRA
-    let mut mask = [0xFFu8; N * N / 8]; // 1 bits are transparent
-    let radius = N as f32 / 2.0;
-    for y in 0..N {
-        for x in 0..N {
-            let (dx, dy) = (x as f32 + 0.5 - radius, y as f32 + 0.5 - radius);
-            if dx * dx + dy * dy > (radius - 1.0).powi(2) {
-                continue;
-            }
-            let t = y as f32 / (N - 1) as f32;
-            let mix = |from: f32, to: f32| (from + (to - from) * t) as u8;
-            // Teal to violet, top to bottom.
-            let pixel = [mix(191.0, 237.0), mix(212.0, 58.0), mix(45.0, 124.0), 255];
-            colors[(y * N + x) * 4..][..4].copy_from_slice(&pixel);
-            mask[y * (N / 8) + x / 8] &= !(0x80 >> (x % 8));
-        }
-    }
-    // SAFETY: both buffers match the stated 32x32 size and formats.
-    let icon = unsafe {
-        let hinstance = GetModuleHandleW(None).ok().map(Into::into);
-        CreateIcon(
-            hinstance,
-            N as i32,
-            N as i32,
-            1,
-            32,
-            mask.as_ptr(),
-            colors.as_ptr(),
-        )
-    };
+    // SAFETY: no preconditions.
+    let size = unsafe { GetSystemMetricsForDpi(SM_CXSMICON, GetDpiForSystem()) }.max(16);
+    let icon = ico_image(LOGO, size as u32).and_then(|image| {
+        // SAFETY: `image` is one complete icon image (PNG or DIB) from the file; 0x30000 is
+        // the icon format version the API asks for.
+        unsafe { CreateIconFromResourceEx(image, true, 0x0003_0000, size, size, LR_DEFAULTCOLOR) }
+            .ok()
+    });
     // SAFETY: loads a shared system icon; no ownership is taken.
-    icon.unwrap_or_else(|_| unsafe { LoadIconW(None, IDI_APPLICATION) }.unwrap_or_default())
+    icon.unwrap_or_else(|| unsafe { LoadIconW(None, IDI_APPLICATION) }.unwrap_or_default())
+}
+
+/// The image in an `.ico` file that suits `size` px best: the smallest at least that big, else
+/// the biggest.
+fn ico_image(ico: &[u8], size: u32) -> Option<&[u8]> {
+    let count = u16::from_le_bytes(ico.get(4..6)?.try_into().ok()?);
+    let entries: Vec<(u32, &[u8])> = (0..usize::from(count))
+        .filter_map(|i| {
+            let entry = ico.get(6 + i * 16..6 + (i + 1) * 16)?;
+            let side = if entry[0] == 0 {
+                256
+            } else {
+                u32::from(entry[0])
+            };
+            let len = u32::from_le_bytes(entry[8..12].try_into().ok()?) as usize;
+            let offset = u32::from_le_bytes(entry[12..16].try_into().ok()?) as usize;
+            Some((side, ico.get(offset..offset.checked_add(len)?)?))
+        })
+        .collect();
+    let fits = entries
+        .iter()
+        .filter(|(side, _)| *side >= size)
+        .min_by_key(|(side, _)| *side);
+    fits.or_else(|| entries.iter().max_by_key(|(side, _)| *side))
+        .map(|(_, image)| *image)
 }
 
 /// What a menu item asks for.
@@ -257,6 +272,9 @@ enum Command {
     OpenStudio,
     RestartWallpaper,
     EditWidgets,
+    ToggleTopBar,
+    ToggleDock,
+    SetTaskbar(TaskbarMode),
     Quit,
 }
 
@@ -268,6 +286,11 @@ fn decode(id: usize, themes: &[String]) -> Option<Command> {
         ID_RESTART => Some(Command::RestartWallpaper),
         ID_QUIT => Some(Command::Quit),
         ID_EDIT_WIDGETS => Some(Command::EditWidgets),
+        ID_TOP_BAR => Some(Command::ToggleTopBar),
+        ID_DOCK => Some(Command::ToggleDock),
+        ID_TASKBAR_KEEP => Some(Command::SetTaskbar(TaskbarMode::Keep)),
+        ID_TASKBAR_AUTOHIDE => Some(Command::SetTaskbar(TaskbarMode::Autohide)),
+        ID_TASKBAR_HIDE => Some(Command::SetTaskbar(TaskbarMode::Hide)),
         id if id >= ID_THEME => themes.get(id - ID_THEME).cloned().map(Command::SetTheme),
         _ => None,
     }
@@ -282,14 +305,45 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
     let studio = std::env::current_exe()
         .ok()
         .and_then(|exe| find_studio(&exe));
+    let bars = mypaper_bars::config::path()
+        .and_then(|path| BarsConfig::load(&path))
+        .unwrap_or_else(|e| {
+            log::warn!("{e:#}");
+            BarsConfig::default()
+        });
 
     // SAFETY: menus are created, shown and destroyed within this call, on our thread.
     let chosen = unsafe {
         let Ok(menu) = CreatePopupMenu() else { return };
-        let Ok(submenu) = CreatePopupMenu() else {
+        let (Ok(submenu), Ok(bars_menu), Ok(taskbar_menu)) =
+            (CreatePopupMenu(), CreatePopupMenu(), CreatePopupMenu())
+        else {
             let _ = DestroyMenu(menu);
             return;
         };
+        let check = |on: bool| if on { MF_CHECKED } else { MENU_ITEM_FLAGS(0) };
+        append(
+            bars_menu,
+            MF_STRING | check(bars.top.enabled),
+            ID_TOP_BAR,
+            "Top bar",
+        );
+        append(
+            bars_menu,
+            MF_STRING | check(bars.dock.enabled),
+            ID_DOCK,
+            "Dock",
+        );
+        for (id, mode, label) in [
+            (ID_TASKBAR_KEEP, TaskbarMode::Keep, "Keep"),
+            (ID_TASKBAR_AUTOHIDE, TaskbarMode::Autohide, "Auto-hide"),
+            (ID_TASKBAR_HIDE, TaskbarMode::Hide, "Hide"),
+        ] {
+            let flags = MF_STRING | check(bars.taskbar.mode == mode);
+            append(taskbar_menu, flags, id, label);
+        }
+        append(bars_menu, MF_SEPARATOR, 0, "");
+        append(bars_menu, MF_POPUP, taskbar_menu.0 as usize, "Taskbar");
         for (i, name) in themes.iter().enumerate() {
             let checked = if is_active(&config.theme, name) {
                 MF_CHECKED
@@ -312,6 +366,7 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
             MF_GRAYED
         };
         append(menu, MF_STRING, ID_EDIT_WIDGETS, "Edit widgets");
+        append(menu, MF_POPUP, bars_menu.0 as usize, "Bars");
         append(menu, MF_STRING | studio_flags, ID_STUDIO, "Open Studio");
         append(menu, MF_STRING, ID_RESTART, "Restart wallpaper");
         append(menu, MF_SEPARATOR, 0, "");
@@ -357,6 +412,9 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
             };
         }
         Some(Command::EditWidgets) => toggle_widget_edit_mode(),
+        Some(Command::ToggleTopBar) => edit_bars("top", "enabled", !bars.top.enabled),
+        Some(Command::ToggleDock) => edit_bars("dock", "enabled", !bars.dock.enabled),
+        Some(Command::SetTaskbar(mode)) => edit_bars("taskbar", "mode", mode),
         // SAFETY: posts WM_QUIT to this thread's queue; the supervisor loop cleans up.
         Some(Command::Quit) => unsafe { PostQuitMessage(0) },
         None => {}
@@ -381,6 +439,16 @@ fn toggle_widget_edit_mode() {
             }
             _ => log::warn!("widget host is not running; cannot toggle edit mode"),
         }
+    }
+}
+
+/// Sets one field of `bars.json` (the bars apply it live). Like the config, a file that doesn't
+/// parse is left alone.
+fn edit_bars(section: &str, key: &str, value: impl serde::Serialize) {
+    let result = mypaper_bars::config::path()
+        .and_then(|path| mypaper_bars::config::set_field(&path, section, key, value));
+    if let Err(e) = result {
+        log::error!("could not update bars.json: {e:#}");
     }
 }
 
@@ -482,6 +550,24 @@ mod tests {
     }
 
     #[test]
+    fn the_logo_has_an_image_for_every_tray_size() {
+        // An entry is a PNG (its width: big-endian at byte 16, in IHDR) or a DIB (biWidth:
+        // little-endian at byte 4).
+        let side = |size| {
+            let image = ico_image(LOGO, size).expect("an image");
+            if image.starts_with(b"\x89PNG") {
+                u32::from_be_bytes(image[16..20].try_into().unwrap())
+            } else {
+                u32::from_le_bytes(image[4..8].try_into().unwrap())
+            }
+        };
+        assert_eq!(side(16), 16);
+        assert!(side(20) >= 20, "the next size up");
+        assert_eq!(side(1000), 256, "too big: the biggest there is");
+        assert_eq!(ico_image(b"\0\0\x01\0\x01\0", 16), None, "a truncated file");
+    }
+
+    #[test]
     fn active_theme_matches_name_or_folder_path() {
         assert!(is_active("aurora", "aurora"));
         assert!(is_active("Aurora", "aurora"));
@@ -495,6 +581,11 @@ mod tests {
         assert_eq!(decode(ID_PAUSE, &themes), Some(Command::TogglePause));
         assert_eq!(decode(ID_QUIT, &themes), Some(Command::Quit));
         assert_eq!(decode(ID_EDIT_WIDGETS, &themes), Some(Command::EditWidgets));
+        assert_eq!(decode(ID_DOCK, &themes), Some(Command::ToggleDock));
+        assert_eq!(
+            decode(ID_TASKBAR_HIDE, &themes),
+            Some(Command::SetTaskbar(TaskbarMode::Hide))
+        );
         assert_eq!(
             decode(ID_THEME + 1, &themes),
             Some(Command::SetTheme("zen".into()))

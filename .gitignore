@@ -8,6 +8,8 @@ apps/studio/src-tauri/target
 apps/studio/src-tauri/gen
 widgets/shell/node_modules
 widgets/shell/dist
+bars/shell/node_modules
+bars/shell/dist
 packages/*/node_modules
 packages/*/dist
 # A built plugin binary dropped next to its plugin.json for local use.

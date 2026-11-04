@@ -13,7 +13,7 @@ mod power;
 pub use config_watch::{ConfigWatcher, watch_config, watch_file};
 pub use control::{ControlWindow, WM_FACT};
 pub use cover::{WindowEvents, covered_monitors};
-pub use fullscreen::fullscreen_app_in_front;
+pub use fullscreen::{fullscreen_app_in_front, fullscreen_app_monitor};
 pub use host::DesktopHost;
 pub use monitors::{Monitor, Rect, monitor_infos, monitors};
 pub use power::on_battery;

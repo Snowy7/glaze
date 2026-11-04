@@ -1,6 +1,6 @@
-//! mypaper-core: the supervisor. Starts the wallpaper engine and the widget
-//! host, restarts them when they crash or the desktop changes, and owns the
-//! panic hotkey.
+//! mypaper-core: the supervisor. Starts the wallpaper engine, the widget
+//! host and the shell bars, restarts them when they crash or the desktop
+//! changes, and owns the panic hotkey.
 //!
 //! ```text
 //! mypaper-core [THEME]
@@ -16,6 +16,7 @@
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod bars;
 mod child;
 mod restart;
 mod styling;
@@ -110,6 +111,11 @@ fn run() -> Result<()> {
         styling.set_theme(&theme.to_string_lossy());
     }
 
+    // The same for the native taskbar: a run that crashed may have left it hidden. Put it back
+    // before the bars start (they apply their mode again from scratch).
+    bars::stop_leftover();
+    bars::replay_journal();
+
     // The wallpaper is essential: when it stops for good, so does mypaper.
     // The widget host is optional: if it is missing or gives up, mypaper
     // keeps running without widgets.
@@ -130,9 +136,21 @@ fn run() -> Result<()> {
         log::warn!("{e:#}; continuing without widgets");
         widgets = None;
     }
+    // The shell bars are optional too (docs/bars.md). When they stop for good, the taskbar
+    // journal is replayed so the native taskbar is never left hidden.
+    let bars_exe = std::env::current_exe()?.with_file_name("mypaper-bars.exe");
+    let mut shell_bars = bars_exe
+        .exists()
+        .then(|| Supervised::new("shell bars", bars_exe, Vec::new()));
+    if let Some(child) = &mut shell_bars
+        && let Err(e) = child.start()
+    {
+        log::warn!("{e:#}; continuing without the shell bars");
+        shell_bars = None;
+    }
 
     loop {
-        let children = [Some(&wallpaper), widgets.as_ref()];
+        let children = [Some(&wallpaper), widgets.as_ref(), shell_bars.as_ref()];
         let handles: Vec<HANDLE> = children
             .iter()
             .flatten()
@@ -167,11 +185,19 @@ fn run() -> Result<()> {
                         break;
                     }
                 }
-                _ => {
+                name if widgets.as_ref().is_some_and(|w| w.name == name) => {
                     if let Some(host) = &mut widgets
                         && host.on_exit()? == Outcome::Stopped
                     {
                         widgets = None;
+                    }
+                }
+                _ => {
+                    if let Some(child) = &mut shell_bars
+                        && child.on_exit()? == Outcome::Stopped
+                    {
+                        shell_bars = None;
+                        bars::replay_journal();
                     }
                 }
             }
@@ -182,6 +208,13 @@ fn run() -> Result<()> {
         {
             log::warn!("{e:#}; continuing without widgets");
             widgets = None;
+        }
+        if let Some(child) = &mut shell_bars
+            && let Err(e) = child.restart_if_due()
+        {
+            log::warn!("{e:#}; continuing without the shell bars");
+            shell_bars = None;
+            bars::replay_journal();
         }
         let pumped = pump();
         match pumped.signal {
@@ -210,6 +243,12 @@ fn run() -> Result<()> {
         }
     }
 
+    // The bars first: they put the native taskbar back as they exit. If they had to be killed,
+    // or crashed earlier, the journal does it.
+    if let Some(child) = &mut shell_bars {
+        child.stop_gracefully(bars::ask_to_close, bars::GRACE);
+    }
+    bars::replay_journal();
     if let Some(host) = &mut widgets {
         host.stop();
     }

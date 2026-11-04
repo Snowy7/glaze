@@ -6,7 +6,8 @@ use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use windows::Win32::Foundation::HANDLE;
+use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
+use windows::Win32::System::Threading::WaitForSingleObject;
 
 use crate::restart::{Decision, Restarts};
 
@@ -105,5 +106,25 @@ impl Supervised {
             let _ = child.kill();
             let _ = child.wait();
         }
+    }
+
+    /// Asks the child to exit with `ask` (so it can clean up), waits up to `grace`, and kills it
+    /// if it's still running then. Returns whether it exited on its own.
+    pub fn stop_gracefully(&mut self, ask: impl FnOnce() -> bool, grace: Duration) -> bool {
+        self.restart_at = None;
+        let Some(mut child) = self.child.take() else {
+            return true;
+        };
+        let asked = ask();
+        let handle = HANDLE(child.as_raw_handle());
+        let millis = grace.as_millis().min(u128::from(u32::MAX - 1)) as u32;
+        // SAFETY: the child's process handle stays valid while `child` is alive.
+        let exited = asked && unsafe { WaitForSingleObject(handle, millis) } == WAIT_OBJECT_0;
+        if !exited {
+            log::warn!("the {} didn't exit in time; killing it", self.name);
+            let _ = child.kill();
+        }
+        let _ = child.wait();
+        exited
     }
 }
