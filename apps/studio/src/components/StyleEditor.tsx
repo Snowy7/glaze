@@ -1,8 +1,8 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { api, errorText, pickFolder, type Backdrop, type Corners, type ThemeEntry, type WindowsStyle } from "../lib/api";
 import { SaveFooter } from "./SaveFooter";
-import { Segmented, Select } from "./ui";
+import { Button, ColorField, Segmented, Select } from "./ui";
 
 const UNSET: WindowsStyle = {
   accent: null,
@@ -82,7 +82,7 @@ export function StyleEditor({ theme }: { theme: ThemeEntry }) {
       <div className="flex-1 overflow-y-auto px-6 py-5">
         <StylePreview style={draft} />
 
-        <div className="mt-6 divide-y divide-line">
+        <div className="mt-5 divide-y divide-line rounded-xl bg-surface shadow-card ring-1 ring-line-strong">
           <PaintRow label="Accent color" hint="Taskbar, Start and highlights." allowAuto value={draft.accent} onChange={(v) => set("accent", v)} />
           <PaintRow label="Window border" hint="The thin outline around windows." allowAuto value={draft.border} onChange={(v) => set("border", v)} />
           <PaintRow label="Title bar" hint="Background of window title bars." value={draft.caption} onChange={(v) => set("caption", v)} />
@@ -126,10 +126,10 @@ export function StyleEditor({ theme }: { theme: ThemeEntry }) {
 
 function Row({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
   return (
-    <div className="py-4 first:pt-0">
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <span className="text-[13.5px] font-medium text-ink">{label}</span>
-        <span className="truncate text-xs text-ink-3">{hint}</span>
+    <div className="px-4 py-3.5">
+      <div className="mb-2.5">
+        <div className="text-[13.5px] font-medium text-ink">{label}</div>
+        <div className="text-[12px] text-ink-3">{hint}</div>
       </div>
       {children}
     </div>
@@ -209,14 +209,15 @@ function CursorsPicker({ value, onChange }: { value: string | null; onChange: (v
         <div className="flex items-center gap-2">
           <Select<string>
             label="Cursor set"
+            size="sm"
             className="w-48"
             value={sets.includes(value) ? value : ""}
             options={[...(sets.includes(value) ? [] : [{ value: "", label: "A folder" }]), ...sets.map((set) => ({ value: set, label: set }))]}
             onChange={(next) => next !== "" && onChange(next)}
           />
-          <button type="button" onClick={() => void pickFolder().then((folder) => folder && onChange(folder))} className="h-10 shrink-0 cursor-default rounded-lg px-3 text-[13px] font-medium text-ink ring-1 ring-line-strong hover:bg-surface-hi">
+          <Button size="sm" onClick={() => void pickFolder().then((folder) => folder && onChange(folder))}>
             Folder…
-          </button>
+          </Button>
           {!sets.includes(value) && (
             <span className="selectable min-w-0 truncate font-mono text-xs text-ink-3" title={value}>
               {value}
@@ -247,7 +248,6 @@ function PaintRow({
   value: string | null;
   onChange: (value: string | null) => void;
 }) {
-  const pickerId = useId();
   const mode: PaintMode = value === null ? "unset" : value === "auto" ? "auto" : "color";
   const options: { value: PaintMode; label: string }[] = [
     { value: "unset", label: "Don't change" },
@@ -257,28 +257,15 @@ function PaintRow({
 
   return (
     <Row label={label} hint={hint}>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Segmented<PaintMode>
-          className="min-w-0 flex-1"
           label={label}
           hideLabel
           value={mode}
           options={options}
           onChange={(next) => onChange(next === "unset" ? null : next === "auto" ? "auto" : isHex(value) ? value : DEFAULT_COLOR)}
         />
-        {mode === "color" && (
-          <label htmlFor={pickerId} className="flex shrink-0 cursor-default items-center gap-2 rounded-lg bg-canvas py-1 pr-3 pl-1 ring-1 ring-line-strong hover:ring-line-hi has-focus-visible:outline-2 has-focus-visible:outline-ink">
-            <input
-              id={pickerId}
-              type="color"
-              aria-label={`${label} color`}
-              value={isHex(value) ? value.toLowerCase() : DEFAULT_COLOR}
-              onChange={(e) => onChange(e.target.value)}
-              className="size-7 cursor-default rounded-md border-0 bg-transparent p-0"
-            />
-            <span className="font-mono text-xs text-ink-2 uppercase">{isHex(value) ? value : DEFAULT_COLOR}</span>
-          </label>
-        )}
+        {mode === "color" && <ColorField label={`${label} color`} value={isHex(value) ? value : DEFAULT_COLOR} onChange={onChange} />}
       </div>
     </Row>
   );
@@ -293,8 +280,8 @@ function StylePreview({ style }: { style: WindowsStyle }) {
   return (
     <div
       aria-hidden
-      className="relative grid h-40 place-items-center overflow-hidden rounded-xl ring-1 ring-line"
-      style={{ background: "linear-gradient(135deg, var(--surface-hi), var(--canvas))" }}
+      className="relative grid h-44 place-items-center overflow-hidden rounded-xl shadow-card ring-1 ring-line-strong"
+      style={{ background: "radial-gradient(80% 120% at 20% 0%, var(--surface-top), transparent 60%), linear-gradient(135deg, var(--surface-hi), var(--canvas))" }}
     >
       <div
         className="w-56 overflow-hidden shadow-card"

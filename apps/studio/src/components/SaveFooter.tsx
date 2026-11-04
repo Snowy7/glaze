@@ -1,4 +1,4 @@
-import { Check, RotateCcw } from "lucide-react";
+import { Check, RotateCcw, TriangleAlert } from "lucide-react";
 
 import { Button } from "./ui";
 
@@ -18,9 +18,10 @@ type Props = {
 /** The bottom bar of an explicit-save editor sheet: clear, revert, save. */
 export function SaveFooter({ dirty, saving, justSaved, error, cleared, onClear, onRevert, onSave }: Props) {
   return (
-    <footer className="border-t border-line bg-sidebar px-6 py-4">
+    <footer className="border-t border-line-strong bg-sidebar px-6 py-3.5">
       {error && (
-        <p role="alert" className="selectable mb-3 text-[13px] text-ink">
+        <p role="alert" className="selectable mb-3 flex items-start gap-2 text-[13px] text-ink">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
           {error}
         </p>
       )}
@@ -29,10 +30,16 @@ export function SaveFooter({ dirty, saving, justSaved, error, cleared, onClear, 
           Clear all
         </Button>
         <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-3" aria-live="polite">
-          {justSaved && !dirty && (
+          {dirty ? (
             <>
-              <Check className="size-3.5" aria-hidden /> Saved
+              <span className="size-1.5 rounded-full bg-ink" aria-hidden /> Unsaved changes
             </>
+          ) : (
+            justSaved && (
+              <>
+                <Check className="size-3.5" aria-hidden /> Saved
+              </>
+            )
           )}
         </span>
         <Button disabled={!dirty} onClick={onRevert}>
