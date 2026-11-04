@@ -1119,6 +1119,7 @@ dependencies = [
  "webview2-com",
  "windows",
  "windows-core",
+ "windows-numerics",
 ]
 
 [[package]]

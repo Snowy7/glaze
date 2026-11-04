@@ -83,7 +83,8 @@ body {
   -webkit-user-select: none;
 }
 body {
-  font: 400 13px/1 var(--font), "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  /* The bar's own type (look.font) over the appearance's. */
+  font: var(--bar-weight, 400) var(--bar-size, 13px) / 1 var(--bar-font, var(--font)), "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   color: var(--t0);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -187,14 +188,134 @@ img {
   background-repeat: no-repeat;
   background-attachment: fixed;
 }
+/* The tint, the grain, and what makes glass read as glass (look.glass, each 0–1): a soft sheen
+   falling from the top, a fine specular rim brightest along the lit top edge, and depth, an inner
+   shadow pooling at the bottom. */
 .surface::before {
   z-index: -1;
-  background: var(--s-noise, none), linear-gradient(var(--s-tint, transparent), var(--s-tint, transparent));
+  --sheen: linear-gradient(180deg, rgb(255 255 255 / calc(var(--g-sheen, 0) * 0.2)), rgb(255 255 255 / 0) 62%);
+  background: var(--sheen), var(--s-noise, none), linear-gradient(var(--s-tint, transparent), var(--s-tint, transparent));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / calc(var(--g-highlight, 0) * 0.24)),
+    inset 0 0 0 0.5px rgb(255 255 255 / calc(var(--g-highlight, 0) * 0.12)),
+    inset 0 -16px 20px -16px rgb(0 0 0 / calc(var(--g-depth, 0) * 0.5));
 }
 [data-fill="tint"] .surface::before,
 [data-fill="solid"] .surface::before,
 [data-fill="none"] .surface::before {
-  background: var(--s-noise, none);
+  background: var(--sheen), var(--s-noise, none);
+}
+/* A strip is flush with the screen edge: no rim along it. */
+[data-layout="strip"] .top.surface::before {
+  box-shadow: inset 0 -16px 20px -16px rgb(0 0 0 / calc(var(--g-depth, 0) * 0.5));
+}
+
+/* Live blur (glass.ts, crates/bars/src/blur.rs): Windows blurs what's behind every element whose
+   --glass is 1, under the page; the page only tints it. Surfaces with a `blur` fill, and the
+   flyouts and menus (data-fly-blur), while live blur is on. */
+[data-live="on"][data-fill="blur"] .surface {
+  --glass: 1;
+}
+[data-live="on"][data-fill="blur"] .surface > .bg {
+  background: transparent;
+}
+[data-fly-blur="on"] :is(.layer, .dock-label) {
+  --glass: 1;
+  --glass-sat: var(--fly-sat, 1.5);
+  --glass-bright: 1;
+  --glass-blur: 0;
+  background: var(--fly-glass);
+}
+/* Liquid glass (liquid.ts): what's behind, bent along the rim and clear in the middle. Panes are
+   the surfaces (over a fill liquid can stand in for) and, unless look.flyouts.blur is off, the
+   flyouts. Until a pane's first capture arrives it keeps its fallback: wallpaper glass, or live
+   blur for a flyout. */
+[data-liquid="on"] .surface,
+[data-fly-liquid="on"] .layer {
+  --liquid: 1;
+  overflow: clip;
+  isolation: isolate;
+}
+[data-fly-liquid="on"] .layer.lensed {
+  --glass: 0;
+  background: transparent;
+}
+.lens {
+  position: absolute;
+  z-index: -2;
+  pointer-events: none;
+  border-radius: inherit;
+  background-repeat: no-repeat;
+  filter: saturate(var(--glass-sat, 1.25)) brightness(var(--glass-bright, 1)) var(--lens);
+  visibility: hidden;
+}
+.lensed > .lens {
+  visibility: visible;
+}
+.lensed > .bg {
+  visibility: hidden;
+}
+/* The rim: one thin specular edge, a touch brighter along the top; brighter on hover and press. */
+.shine {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: inherit;
+  corner-shape: inherit;
+  padding: 1px;
+  --h: var(--lq-highlight, 0.75);
+  background: linear-gradient(180deg, rgb(255 255 255 / calc(var(--h) * 0.55)), rgb(255 255 255 / calc(var(--h) * 0.22)) 45%, rgb(255 255 255 / calc(var(--h) * 0.16))) border-box;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  transition: --h var(--m-hover) var(--m-hover-ease);
+}
+:is(.surface, .layer):hover > .shine,
+.pill:hover > .pill-surface > .shine {
+  --h: calc(var(--lq-highlight, 0.75) * 1.25);
+}
+:is(.surface, .layer):active > .shine {
+  --h: calc(var(--lq-highlight, 0.75) * 1.45);
+}
+@property --h {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.75;
+}
+/* Depth only where a look asks for it: by default the lens alone gives the glass its thickness. */
+[data-liquid="on"] .surface::before,
+[data-fly-liquid="on"] .layer.lensed::before {
+  box-shadow: inset 0 -12px 20px -12px rgb(0 0 0 / calc(var(--g-depth, 0) * 0.6));
+}
+[data-liquid="on"] .surface::after {
+  display: none;
+}
+[data-liquid="on"][data-layout="strip"] .top.surface > .shine {
+  padding: 0 0 1px;
+}
+/* A flyout's tint, over its lens. */
+[data-fly-liquid="on"] .layer.lensed::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: rgb(from var(--fly-bg) r g b / var(--fly-liquid-tint, 0.3));
+}
+/* Items on liquid glass: a lit pill under the pointer, pressed in on press. */
+[data-liquid="on"] button.mod:hover {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / calc(var(--lq-highlight, 0.75) * 0.35)), var(--iglow);
+}
+[data-liquid="on"] button.mod:active {
+  scale: 0.95;
+}
+
+/* The mock host runs in a browser, where the wallpaper is the page: blur it there. */
+[data-mock][data-live="on"][data-fill="blur"] .surface > .bg,
+[data-mock][data-fly-blur="on"] :is(.layer, .dock-label) {
+  backdrop-filter: blur(28px) saturate(var(--glass-sat, 1.5)) brightness(var(--glass-bright, 1));
 }
 .surface::after {
   z-index: 3;
@@ -204,9 +325,8 @@ img {
     linear-gradient(#000 0 0) content-box exclude,
     linear-gradient(#000 0 0);
 }
-/* Glass without the engine's snapshot: what's behind is the wallpaper (bars reserve their band),
-   so the page's own blur only matters under popovers. */
-[data-surface="glass"]:not([data-fill="wallpaper"]) .surface > .bg {
+/* A plain glass tint: the page's own blur only matters under popovers (and in the mock). */
+[data-surface="glass"][data-fill="tint"] .surface > .bg {
   backdrop-filter: blur(var(--blur)) saturate(1.5);
 }
 [data-surface="none"] .surface > .bg,
@@ -285,6 +405,7 @@ button.mod::after,
 
 .top {
   --mod-h: calc(var(--bar-h) - 6px);
+  font-weight: var(--bar-weight, 400);
   position: fixed;
   top: var(--bar-margin, 0px);
   left: var(--bar-margin, 0px);
@@ -294,7 +415,7 @@ button.mod::after,
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 0 var(--bar-pad, 5px);
-  font-size: calc(13px * var(--scale));
+  font-size: calc(var(--bar-size, 13px) * var(--scale));
   color: var(--t1);
 }
 [data-position="bottom"] .top {
@@ -536,17 +657,11 @@ button.mod.clock {
   position: absolute;
   pointer-events: auto;
   color: var(--t0);
-  font-size: calc(13px * var(--scale));
+  font-size: var(--fly-font, calc(13px * var(--scale)));
   background: var(--raised);
-  border-radius: 10px;
+  border-radius: var(--menu-radius, 10px);
   corner-shape: var(--corner);
-  box-shadow:
-    0 0 0 1px var(--edge),
-    0 10px 30px var(--drop),
-    0 2px 6px var(--drop);
-}
-[data-surface="glass"] .layer {
-  backdrop-filter: blur(var(--blur)) saturate(1.5);
+  box-shadow: var(--fly-shadow, 0 0 0 1px var(--edge), 0 10px 30px var(--drop), 0 2px 6px var(--drop));
 }
 /* Every flyout (flyout.ts) enters from the side toward its anchor, in the `open` style. */
 .flyout {
@@ -562,6 +677,12 @@ button.mod.clock {
 }
 [data-m-open="scale"] .flyout {
   animation-name: fly-scale;
+}
+[data-m-open="morph"] .flyout {
+  animation-name: fly-morph;
+}
+[data-m-open="morph"] .flyout.leaving {
+  animation-name: fly-morph-out;
 }
 [data-m-open="none"] .flyout {
   animation: none;
@@ -597,6 +718,23 @@ button.mod.clock {
     scale: 0.82;
   }
 }
+/* Morph: the flyout grows out of the button that opened it (its origin is toward the anchor), and
+   folds back into it. */
+@keyframes fly-morph {
+  from {
+    opacity: 0;
+    scale: 0.42 0.16;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+@keyframes fly-morph-out {
+  to {
+    opacity: 0;
+    scale: 0.5 0.2;
+  }
+}
 @keyframes fly-out {
   to {
     opacity: 0;
@@ -629,8 +767,8 @@ button.mod.clock {
   outline: none;
 }
 .menu-item.primary {
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--on, var(--t0));
+  color: var(--on-ink, var(--raised));
   font-weight: 600;
 }
 .menu-item.primary:hover,
@@ -1320,7 +1458,7 @@ button.mod.clock {
   background-color: color-mix(in srgb, var(--ind-attention) 30%, transparent);
 }
 .dock.taskbar .mod {
-  font-size: calc(12px * var(--scale));
+  font-size: calc(var(--bar-size, 12px) * var(--scale));
 }
 /* The show-desktop sliver at the far end, like Windows. */
 .dock.taskbar .slot.extra.desktop {

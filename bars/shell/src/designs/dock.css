@@ -1,0 +1,433 @@
+/* Dock designs (docs/bars.md, "Designs and presets"): a partial `dock` with its own look and motion
+   (crates/bars/presets/dock/<id>.json) plus the rules here, scoped by `data-design` on a dock's
+   page. Metrics follow each system: Windows 11's 48 DIP taskbar with 40 DIP buttons, Windows 10's
+   40 DIPs with 48 DIP buttons, ChromeOS's 48 DIP shelf, macOS's dock of 48 pt icons. */
+
+/* --- Monochrome ----------------------------------------------------------------------------------- */
+
+:root[data-bar="dock"][data-design="monochrome"] .pill-surface {
+  box-shadow:
+    var(--glow),
+    var(--shade-now),
+    inset 0 1px 0 rgb(255 255 255 / 0.07);
+}
+
+/* --- macOS: a frosted plate, magnify, running dots, the trash past a divider ------------------------- */
+
+:root[data-bar="dock"][data-design="macos"][data-scheme="light"] .surface {
+  --s-tint: rgb(250 250 252 / 0.2);
+}
+:root[data-bar="dock"][data-design="macos"][data-scheme="dark"] .surface {
+  --s-tint: rgb(28 28 30 / 0.2);
+}
+:root[data-bar="dock"][data-design="macos"] .pill-surface {
+  box-shadow: var(--shade-now);
+}
+:root[data-bar="dock"][data-design="macos"] .pic img {
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.22));
+}
+:root[data-bar="dock"][data-design="macos"] .dot {
+  width: 3.5px;
+  height: 3.5px;
+  background: color-mix(in srgb, var(--t0) 70%, transparent);
+}
+:root[data-bar="dock"][data-design="macos"] .slot[data-state="active"] .dot {
+  width: 3.5px;
+  background: color-mix(in srgb, var(--t0) 85%, transparent);
+}
+:root[data-bar="dock"][data-design="macos"][data-position="bottom"] .dot {
+  bottom: -5.5px;
+}
+:root[data-bar="dock"][data-design="macos"] .divider {
+  background: color-mix(in srgb, var(--t0) 22%, transparent);
+}
+:root[data-bar="dock"][data-design="macos"] .dock-label {
+  padding: 5px 11px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* --- Windows 11: the taskbar --------------------------------------------------------------------------
+   48 DIPs; 40×40 task buttons with 4 DIP corners, a subtle fill on hover and on the app in front;
+   the running pill is 6×3 DIPs (16 in front, in the accent); pressing squeezes the icon. */
+
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .pill {
+  margin: 0;
+  width: 100%;
+  padding: 0 12px 0 0;
+}
+:root[data-bar="dock"][data-design="windows11"][data-scheme="dark"] .surface {
+  --s-tint: rgb(28 28 28 / 0.84);
+}
+:root[data-bar="dock"][data-design="windows11"][data-scheme="light"] .surface {
+  --s-tint: rgb(238 240 244 / 0.86);
+}
+:root[data-bar="dock"][data-design="windows11"] .pill-surface {
+  border-radius: 0;
+}
+:root[data-bar="dock"][data-design="windows11"][data-edge="bottom"] .pill-surface::after {
+  padding: 1px 0 0 0;
+}
+:root[data-bar="dock"][data-design="windows11"][data-edge="top"] .pill-surface::after {
+  padding: 0 0 1px 0;
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .slot {
+  height: 40px;
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .icon {
+  top: 8px;
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .slot[data-state="active"] > .tile {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), inset 0 -1px 0 rgb(0 0 0 / 0.06);
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .slot .pic {
+  transition: scale 120ms cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .slot:active .pic {
+  scale: 0.84;
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .dot {
+  bottom: 1px;
+  border-radius: 1.5px;
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .slot[data-state="active"] .dot {
+  background: var(--ind-active);
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .mod {
+  height: 40px;
+  padding: 0 8px;
+  border-radius: 4px;
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .mod > * {
+  transition: scale var(--m-press) var(--m-press-ease);
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .mod:active > * {
+  scale: 0.9;
+}
+:root[data-bar="dock"][data-design="windows11"] .mod[data-module="start"] {
+  width: 40px;
+  justify-content: center;
+  padding: 0;
+}
+:root[data-bar="dock"][data-design="windows11"] .mod[data-module="start"] .glyph {
+  width: 22px;
+  height: 22px;
+  background: var(--win11-logo) center / contain no-repeat;
+}
+:root[data-bar="dock"][data-design="windows11"] .mod[data-module="start"] .glyph > svg {
+  visibility: hidden;
+}
+:root[data-bar="dock"][data-design="windows11"] .mod.search {
+  width: 214px;
+  height: 32px;
+  margin: 0 4px;
+  gap: 10px;
+  padding: 0 14px;
+  border-radius: 99px;
+  --i-bgc: var(--fill-1);
+  --i-bgc-hover: var(--fill-2);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  color: var(--t2);
+  font-size: 12.5px;
+}
+:root[data-bar="dock"][data-design="windows11"] .search-label {
+  display: inline;
+}
+:root[data-bar="dock"][data-design="windows11"] .mod.search .glyph {
+  width: 15px;
+  height: 15px;
+}
+:root[data-bar="dock"][data-design="windows11"] button.mod.clock {
+  text-align: right;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.34;
+  padding: 0 10px;
+}
+:root[data-bar="dock"][data-design="windows11"] .tb-end .mod.icon-only {
+  padding: 0 6px;
+}
+:root[data-bar="dock"][data-design="windows11"] .dock.taskbar .tb-end {
+  gap: 0;
+}
+/* Network, volume and battery are one button. */
+:root[data-bar="dock"][data-design="windows11"] .tb-end:has(> .mod:is([data-module="network"], [data-module="volume"], [data-module="battery"]):hover) > .mod:is([data-module="network"], [data-module="volume"], [data-module="battery"]) {
+  --ibgc: var(--i-bgc-hover);
+}
+:root[data-bar="dock"][data-design="windows11"] .mod[data-module="network"] {
+  border-radius: 4px 0 0 4px;
+  padding-right: 4px;
+}
+:root[data-bar="dock"][data-design="windows11"] .mod[data-module="volume"] {
+  border-radius: 0;
+  padding: 0 4px;
+}
+:root[data-bar="dock"][data-design="windows11"] .mod[data-module="battery"] {
+  border-radius: 0 4px 4px 0;
+  padding-left: 4px;
+}
+:root[data-bar="dock"][data-design="windows11"] .battery-pct {
+  display: none;
+}
+
+/* --- Windows 10: the taskbar ----------------------------------------------------------------------------
+   40 DIPs, square 48 DIP buttons, the running bar under the icon (full width in front), the search box
+   a light field, the clock on two lines and the action center at the end. */
+
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .pill {
+  margin: 0;
+  width: 100%;
+  padding: 0;
+}
+:root[data-bar="dock"][data-design="windows10"] .surface {
+  --s-tint: rgb(16 16 16 / 0.86);
+}
+:root[data-bar="dock"][data-design="windows10"] .pill-surface {
+  border-radius: 0;
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .slot {
+  height: 40px;
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .icon {
+  top: 8px;
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .slot > .tile {
+  border-radius: 0;
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .dot {
+  bottom: 0;
+  width: calc(100% - 8px);
+  height: 2px;
+  border-radius: 0;
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .slot[data-state="active"] .dot {
+  width: 100%;
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .slot[data-state="active"] > .tile {
+  background-color: rgb(255 255 255 / 0.12);
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .mod {
+  height: 40px;
+  padding: 0 8px;
+  border-radius: 0;
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .tb-start {
+  gap: 0;
+}
+:root[data-bar="dock"][data-design="windows10"] .mod[data-module="start"] {
+  width: 48px;
+  justify-content: center;
+  padding: 0;
+}
+:root[data-bar="dock"][data-design="windows10"] .mod[data-module="start"] .glyph {
+  width: 17px;
+  height: 17px;
+  background: var(--win10-logo) center / contain no-repeat;
+}
+:root[data-bar="dock"][data-design="windows10"] .mod[data-module="start"] .glyph > svg {
+  visibility: hidden;
+}
+:root[data-bar="dock"][data-design="windows10"] .mod.search {
+  width: 344px;
+  gap: 12px;
+  padding: 0 12px;
+  --i-bgc: #f2f2f2;
+  --i-bgc-hover: #ffffff;
+  --i-bgc-active: #ffffff;
+  --i-fg: #3d3d3d;
+  --i-fg-hover: #3d3d3d;
+  --i-fg-active: #3d3d3d;
+  font-size: 13px;
+}
+:root[data-bar="dock"][data-design="windows10"] .search-label {
+  display: inline;
+}
+:root[data-bar="dock"][data-design="windows10"] .search-label {
+  font-size: 0;
+}
+:root[data-bar="dock"][data-design="windows10"] .search-label::after {
+  content: "Type here to search";
+  font-size: 13px;
+}
+:root[data-bar="dock"][data-design="windows10"] button.mod.clock {
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 0 8px;
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .tb-end {
+  gap: 0;
+}
+:root[data-bar="dock"][data-design="windows10"] .tb-end .mod.icon-only {
+  padding: 0 6px;
+}
+:root[data-bar="dock"][data-design="windows10"] .battery-pct {
+  display: none;
+}
+:root[data-bar="dock"][data-design="windows10"] .dock.taskbar .slot.extra.desktop {
+  width: 6px;
+  margin-left: 2px;
+}
+
+/* --- ChromeOS: the shelf -----------------------------------------------------------------------------------
+   48 DIPs, a launcher circle at the start, the apps centered with dots under them, and the status
+   area (time, network, volume, battery) as one rounded pill at the end. */
+
+:root[data-bar="dock"][data-design="chromeos"] .dock.taskbar .pill {
+  margin: 0;
+  width: 100%;
+  padding: 0 8px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .surface {
+  --s-tint: rgb(30 31 34 / 0.62);
+}
+:root[data-bar="dock"][data-design="chromeos"] .pill-surface {
+  border-radius: 0;
+}
+:root[data-bar="dock"][data-design="chromeos"] .dock.taskbar .slot {
+  height: 40px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .dock.taskbar .icon {
+  top: 4px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .dock.taskbar .slot > .tile {
+  border-radius: 12px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .dock.taskbar .dot {
+  bottom: 0;
+  width: 4px;
+  height: 4px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .dock.taskbar .slot[data-state="active"] .dot {
+  width: 12px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .dock.taskbar .mod {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 16px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .mod[data-module="start"] {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+:root[data-bar="dock"][data-design="chromeos"] .mod[data-module="start"] .glyph {
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+:root[data-bar="dock"][data-design="chromeos"] .mod[data-module="start"] .glyph > svg {
+  visibility: hidden;
+}
+/* The status area: one pill. */
+:root[data-bar="dock"][data-design="chromeos"] .dock.taskbar .tb-end {
+  gap: 0;
+}
+:root[data-bar="dock"][data-design="chromeos"] .tb-end > .mod:is([data-module="clock"], [data-module="network"], [data-module="volume"], [data-module="battery"]) {
+  --ibgc: rgb(255 255 255 / 0.1);
+  border-radius: 0;
+  padding: 0 5px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .tb-end > .mod[data-module="clock"] {
+  border-radius: 16px 0 0 16px;
+  padding: 0 6px 0 14px;
+  font-weight: 500;
+}
+:root[data-bar="dock"][data-design="chromeos"] .tb-end > .mod[data-module="battery"] {
+  border-radius: 0 16px 16px 0;
+  padding: 0 12px 0 5px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .tb-end:has(> .mod:is([data-module="clock"], [data-module="network"], [data-module="volume"], [data-module="battery"]):hover) > .mod:is([data-module="clock"], [data-module="network"], [data-module="volume"], [data-module="battery"]) {
+  --ibgc: rgb(255 255 255 / 0.18);
+}
+:root[data-bar="dock"][data-design="chromeos"] .tb-end > .mod[data-module="notifications"] {
+  margin-right: 6px;
+}
+:root[data-bar="dock"][data-design="chromeos"] .battery-pct {
+  display: none;
+}
+
+/* --- Fluent: a floating Windows 11 dock -----------------------------------------------------------------------
+   The taskbar's buttons and pills in a rounded acrylic island that hugs its contents. */
+
+:root[data-bar="dock"][data-design="fluent"] .dock.taskbar .pill {
+  display: flex;
+  width: auto;
+  margin-inline: auto;
+  padding: 0 6px;
+  gap: 2px;
+}
+:root[data-bar="dock"][data-design="fluent"][data-scheme="dark"] .surface {
+  --s-tint: rgb(36 36 38 / 0.74);
+}
+:root[data-bar="dock"][data-design="fluent"][data-scheme="light"] .surface {
+  --s-tint: rgb(246 246 248 / 0.78);
+}
+:root[data-bar="dock"][data-design="fluent"] .dock.taskbar .tb-end {
+  padding-left: 6px;
+  margin-left: 4px;
+  border-left: 1px solid var(--edge);
+}
+:root[data-bar="dock"][data-design="fluent"] .dock.taskbar .slot .pic {
+  transition: scale 120ms cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+:root[data-bar="dock"][data-design="fluent"] .dock.taskbar .slot:active .pic {
+  scale: 0.84;
+}
+:root[data-bar="dock"][data-design="fluent"] .dock.taskbar .dot {
+  bottom: 1px;
+  border-radius: 1.5px;
+}
+:root[data-bar="dock"][data-design="fluent"] .dock.taskbar .mod {
+  height: 40px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+:root[data-bar="dock"][data-design="fluent"] .mod[data-module="start"] {
+  width: 40px;
+  justify-content: center;
+  padding: 0;
+}
+:root[data-bar="dock"][data-design="fluent"] .mod[data-module="start"] .glyph {
+  width: 22px;
+  height: 22px;
+  background: var(--win11-logo) center / contain no-repeat;
+}
+:root[data-bar="dock"][data-design="fluent"] .mod[data-module="start"] .glyph > svg {
+  visibility: hidden;
+}
+:root[data-bar="dock"][data-design="fluent"] button.mod.clock {
+  font-size: 12px;
+  padding: 0 10px;
+}
+:root[data-bar="dock"][data-design="fluent"] .battery-pct {
+  display: none;
+}
+
+/* --- Islands ----------------------------------------------------------------------------------------------------- */
+
+:root[data-bar="dock"][data-design="islands"][data-scheme="light"] .surface {
+  --s-fill-color: rgb(250 250 251 / 0.92);
+}
+:root[data-bar="dock"][data-design="islands"] .surface {
+  box-shadow:
+    var(--glow),
+    var(--shade-now),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+
+/* --- Neon ---------------------------------------------------------------------------------------------------------- */
+
+:root[data-bar="dock"][data-design="neon"] .pic img {
+  filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.5));
+}
+:root[data-bar="dock"][data-design="neon"] .slot:hover .pic img {
+  filter: drop-shadow(0 0 10px rgb(255 43 214 / 0.55)) drop-shadow(0 2px 6px rgb(0 0 0 / 0.5));
+}
+:root[data-bar="dock"][data-design="neon"] .dock-label {
+  box-shadow:
+    0 0 0 1px rgb(0 229 255 / 0.4),
+    0 0 16px rgb(0 229 255 / 0.25);
+}

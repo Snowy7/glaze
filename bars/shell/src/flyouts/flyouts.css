@@ -5,6 +5,10 @@
    presets and themes can retime them. */
 
 :root {
+  /* "On" (a toggle, today, a primary button): a fill and the ink on it. Families retune these
+     (families.css); mono is the text color as a fill. */
+  --on: var(--t0);
+  --on-ink: var(--raised);
   --fly-radius: 14px;
   --fly-duration: 160ms;
   --fly-gap: 10px;
@@ -13,6 +17,12 @@
 
 .flyout.layer {
   border-radius: var(--fly-radius);
+}
+/* Scrollbars: thin, in the text color, over the content. */
+.layer,
+.layer * {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(from var(--t0) r g b / 0.28) transparent;
 }
 
 /* --- Shared pieces ------------------------------------------------------------------------------ */
@@ -99,8 +109,8 @@
   background: var(--fill-3);
 }
 .fly-button.primary {
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--on);
+  color: var(--on-ink);
 }
 .fly-button.primary:hover {
   background: var(--t1);
@@ -223,7 +233,7 @@
 .fly-slider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 99px;
-  background: linear-gradient(to right, var(--t0) var(--value, 0%), var(--fill-3) var(--value, 0%));
+  background: linear-gradient(to right, var(--on) var(--value, 0%), var(--fill-3) var(--value, 0%));
 }
 .fly-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -231,8 +241,8 @@
   height: 16px;
   margin-top: -6px;
   border-radius: 50%;
-  background: var(--t0);
-  box-shadow: 0 0 0 3px var(--raised), 0 1px 4px var(--drop);
+  background: var(--thumb, var(--t0));
+  box-shadow: 0 0 0 3px var(--thumb-ring, var(--raised)), 0 1px 4px var(--drop);
   transition: transform var(--fly-duration) var(--ease);
 }
 .fly-slider:active::-webkit-slider-thumb {
@@ -267,11 +277,11 @@
   transition: transform var(--fly-duration) var(--ease), background-color var(--fly-duration) var(--ease);
 }
 .fly-switch[data-on="true"] {
-  background: var(--t0);
+  background: var(--on);
 }
 .fly-switch[data-on="true"]::after {
   transform: translateX(16px);
-  background: var(--raised);
+  background: var(--on-ink);
 }
 
 /* A quick-settings tile; on, it inverts. */
@@ -286,8 +296,8 @@
   transition: background-color var(--fly-duration) var(--ease), color var(--fly-duration) var(--ease);
 }
 .fly-tile[data-on="true"] {
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--on);
+  color: var(--on-ink);
   box-shadow: none;
 }
 .fly-tile[data-disabled] {
@@ -932,8 +942,8 @@
   color: var(--t3);
 }
 .cal-day.is-today {
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--cal-today, var(--on));
+  color: var(--cal-today-ink, var(--on-ink));
   font-weight: 700;
 }
 .cal-zones {
@@ -966,57 +976,200 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* --- Notifications ------------------------------------------------------------------------------ */
+/* --- Notifications (notification-center.ts) ------------------------------------------------------
+   Groups per app (a stack until opened), cards with the app's icon, the title and the time on one
+   line, two lines of body; × and swipe dismiss. Cards are quiet fills: hierarchy comes from type and
+   the icons, not from heavy boxes. */
 
 .notif-panel {
   width: 380px;
+  gap: 8px;
+}
+.notif-header .fly-actions {
+  gap: 6px;
+}
+.notif-dnd,
+.notif-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 99px;
+  background: var(--fill-1);
+  color: var(--t1);
+  font-size: 0.85em;
+  transition: background-color var(--fly-duration) var(--ease), color var(--fly-duration) var(--ease);
+}
+.notif-dnd .glyph {
+  width: 1em;
+  height: 1em;
+}
+.notif-dnd:hover,
+.notif-clear:hover {
+  background: var(--fill-2);
+  color: var(--t0);
+}
+.notif-dnd[data-on="true"] {
+  background: var(--on);
+  color: var(--on-ink);
 }
 .notif-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: 480px;
-  margin: 0 -4px;
-  padding: 0 4px;
+  gap: 14px;
+  max-height: 460px;
+  margin: 0 -6px;
+  padding: 2px 6px 10px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .notif-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  transition: opacity var(--fly-duration) var(--ease), translate var(--fly-duration) var(--ease);
 }
-.notif-app {
+.notif-group.is-leaving {
+  opacity: 0;
+  translate: 24px 0;
+}
+.notif-group-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--t2);
+  min-height: 24px;
+  padding: 0 2px 0 4px;
+  color: var(--t1);
   font-size: 0.85em;
   font-weight: 600;
 }
-.notif-app-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  font-size: 0.7em;
+.notif-group-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: contain;
+  font-size: 9px;
 }
-.notif-item {
+.notif-group-toggle {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 99px;
+  background: var(--fill-1);
+  color: var(--t1);
+  font-size: 0.92em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.notif-group-toggle:hover {
+  background: var(--fill-2);
+  color: var(--t0);
+}
+.notif-group-clear {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  opacity: 0;
+}
+.notif-group:hover .notif-group-clear,
+.notif-group-clear:focus-visible {
+  opacity: 1;
+}
+.notif-stack {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 10px 8px 10px 12px;
-  border-radius: 11px;
+  gap: 6px;
+}
+/* A closed stack: the cards under the newest one peek out below it. */
+.notif-stack[data-more]::before,
+.notif-stack[data-more="2"]::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 100%;
+  height: 6px;
+  border-radius: 0 0 10px 10px;
   background: var(--fill-1);
+  box-shadow: inset 0 -1px 0 var(--edge), inset 1px 0 0 var(--edge), inset -1px 0 0 var(--edge);
+}
+.notif-stack[data-more="2"]::after {
+  left: 20px;
+  right: 20px;
+  margin-top: 5px;
+  height: 5px;
+  opacity: 0.6;
+}
+.notif-stack[data-more] {
+  margin-bottom: 10px;
+  cursor: default;
+}
+.notif-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 11px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--notif-card, var(--fill-1));
   box-shadow: inset 0 0 0 1px var(--edge);
-  transition: opacity var(--fly-duration) var(--ease), transform var(--fly-duration) var(--ease);
+  touch-action: pan-y;
+  transition:
+    background-color var(--fly-duration) var(--ease),
+    opacity var(--fly-duration) var(--ease),
+    translate var(--fly-duration) var(--ease);
 }
-.notif-item.is-leaving {
+.notif-card:hover {
+  background: var(--notif-card-hover, var(--fill-2));
+}
+.notif-card.is-dragging {
+  transition: none;
+}
+.notif-card.is-leaving {
   opacity: 0;
-  transform: translateX(16px);
+  translate: 40px 0;
 }
-.notif-head {
+.notif-icon,
+.notif-card .notif-badge-slot > * {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  object-fit: contain;
+}
+.notif-group-head .notif-badge-slot > * {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-size: 9px;
+}
+.notif-badge-slot {
+  display: contents;
+}
+.notif-monogram {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  background: linear-gradient(160deg, hsl(var(--hue, 210) 62% 58%), hsl(calc(var(--hue, 210) + 24) 58% 42%));
+  box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.25);
+}
+.notif-group-icon.notif-monogram {
+  font-size: 9px;
+  border-radius: 4px;
+}
+.notif-text {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.notif-line {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
+  padding-right: 18px;
 }
 .notif-title {
   flex: 1;
@@ -1028,27 +1181,94 @@
   white-space: nowrap;
 }
 .notif-time {
-  color: var(--t3);
+  flex: none;
+  color: var(--t2);
   font-size: 0.8em;
-}
-.notif-head .fly-icon-button {
-  width: 24px;
-  height: 24px;
-  opacity: 0;
-}
-.notif-item:hover .notif-head .fly-icon-button,
-.notif-head .fly-icon-button:focus-visible {
-  opacity: 1;
+  font-variant-numeric: tabular-nums;
 }
 .notif-body {
-  padding-right: 8px;
   color: var(--t1);
   font-size: 0.92em;
-  line-height: 1.4;
+  line-height: 1.38;
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.notif-group[data-open="true"] .notif-body {
+  -webkit-line-clamp: 4;
+}
+.notif-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  opacity: 0;
+  background: var(--fill-2);
+}
+.notif-card:hover .notif-dismiss,
+.notif-dismiss:focus-visible {
+  opacity: 1;
+}
+.notif-card:hover .notif-time {
+  visibility: hidden;
+}
+.notif-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 34px 12px 30px;
+  text-align: center;
+}
+.notif-empty-glyph {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--fill-1);
+  color: var(--t2);
+}
+.notif-empty-glyph .glyph {
+  width: 22px;
+  height: 22px;
+}
+.notif-empty-title {
+  color: var(--t0);
+  font-weight: 600;
+}
+.notif-empty-detail {
+  color: var(--t2);
+  font-size: 0.9em;
+}
+.notif-month {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--edge);
+}
+.notif-month-title {
+  align-self: flex-start;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--t0);
+  font-weight: 600;
+}
+.notif-month-title:hover {
+  background: var(--fill-1);
+}
+.notif-month-grid .cal-day {
+  justify-self: center;
+  width: 32px;
+  height: 32px;
+  aspect-ratio: 1;
+  font-size: 0.92em;
 }
 
 /* The bell. */
@@ -1063,8 +1283,8 @@
   height: 15px;
   padding: 0 4px;
   border-radius: 99px;
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--badge, var(--on));
+  color: var(--badge-ink, var(--on-ink));
   font-size: 9.5px;
   font-weight: 700;
   line-height: 15px;
@@ -1159,6 +1379,6 @@
   letter-spacing: 0.03em;
 }
 .fly-row.is-current .lang-badge {
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--on);
+  color: var(--on-ink);
 }

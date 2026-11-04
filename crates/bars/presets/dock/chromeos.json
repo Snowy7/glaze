@@ -1,0 +1,40 @@
+{
+  "style": "taskbar",
+  "size": 32,
+  "padding": 8,
+  "margin": 0,
+  "spacing": 4,
+  "button": 40,
+  "magnify": false,
+  "indicator": "dot",
+  "counter": false,
+  "align": "center",
+  "left": ["start"],
+  "right": ["tray", "notifications", "clock", "network", "volume", "battery"],
+  "extras": [],
+  "clock": { "format": "MMM d  H:mm" },
+  "look": {
+    "scheme": "dark",
+    "family": "material",
+    "font": { "family": "\"Google Sans Text\", \"Google Sans\", Roboto, \"Segoe UI Variable Text\", \"Segoe UI\", sans-serif", "size": 13, "weight": 500 },
+    "background": { "type": "wallpaper", "brightness": 0.8 },
+    "tint": 0.62,
+    "saturation": 1.3,
+    "noise": 0,
+    "radius": 0,
+    "border": { "rest": { "width": 0 } },
+    "items": {
+      "radius": 20,
+      "rest": { "color": "#e3e3e3" },
+      "hover": { "background": "#ffffff1a" },
+      "active": { "background": "#ffffff26" }
+    },
+    "indicator": { "running": "#c4c7c5", "active": "#a8c7fa", "attention": "#fdd663" }
+  },
+  "animation": {
+    "duration": 200,
+    "curve": [0.2, 0, 0, 1],
+    "bar": { "style": "slide" },
+    "open": { "style": "scale", "curve": [0.05, 0.7, 0.1, 1], "duration": 240 }
+  }
+}

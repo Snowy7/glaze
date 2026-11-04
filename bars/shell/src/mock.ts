@@ -1,14 +1,18 @@
 // Dev-only host: lets the page run in a plain browser (and for screenshots) with realistic data.
 // Loaded by `connect()` only when `window.chrome.webview` is absent.
 //
-//   ?bar=top|dock   ?preset=monochrome|macos|windows11|islands|neon-glass|floating
+//   ?bar=top|dock   ?preset=<pairing>   ?top=<top design>   ?dock=<dock design>
+//   ?click=<selector>: clicks it once the bar is up (opens a module's flyout, for screenshots)
+//   ?embed: a live preview inside another page (Studio): the parent posts
+//     { type: "mypaper-bars", bars: <a bars.json, or part of one> } and the bar redraws with it,
+//     resolved like the host does (designs, preset, the file). The query's own settings go under it.
 //   ?pos=bottom|top|left|right   ?size=48   ?h=28   ?autohide=1   ?scheme=light|dark
 //   ?text=light|dark   ?surface=none|glass|solid   ?wall=dark|light|vivid   ?reduce=1   ?perf=1
 
 import { flyoutMock, flyoutStart } from "./flyouts/mock";
 import { LAUNCHER_LAYOUTS } from "./flyouts/protocol";
 import type { Transport } from "./host";
-import { mockConfig, PRESETS } from "./mock-config";
+import { deepMerge, DOCK_BUNDLES, mockConfig, PRESETS, TOP_BUNDLES } from "./mock-config";
 import type {
   Appearance,
   BarKind,
@@ -83,25 +87,29 @@ const TRACKS = [
 ];
 
 /** A stand-in wallpaper, as CSS and as the snapshot the engine would publish (an SVG). */
-function wallpaper(kind: string, w: number, h: number): { css: string; snapshot: string } {
+function wallpaper(kind: string, w: number, h: number): { css: string; snapshot: string; sharp: string } {
   const blobs =
     kind === "light"
       ? [["18%", "30%", "#ffffff"], ["85%", "80%", "#d8dde6"], ["50%", "100%", "#c9d4ea"]]
-      : kind === "vivid"
+      : kind === "vivid" || kind === "grid"
         ? [["15%", "20%", "#ff5fa2"], ["80%", "25%", "#6b5cff"], ["40%", "95%", "#00c2c7"], ["95%", "95%", "#ffb347"]]
         : [["18%", "30%", "#4a5160"], ["85%", "80%", "#3b3346"], ["45%", "100%", "#2b3a4a"]];
-  const base = kind === "light" ? "#eceef2" : kind === "vivid" ? "#1b1530" : "#17181c";
+  const base = kind === "light" ? "#eceef2" : kind === "vivid" || kind === "grid" ? "#1b1530" : "#17181c";
   const gradients = blobs
     .map(([x, y, c], i) => `<radialGradient id="g${i}" cx="${x}" cy="${y}" r="45%"><stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>`)
     .join("");
   const rects = blobs.map((_, i) => `<rect width="100%" height="100%" fill="url(#g${i})"/>`).join("");
-  // Some detail, so glass visibly blurs what's behind it.
-  const stripes = Array.from({ length: 24 }, (_, i) => `<rect x="${(i * w) / 24}" y="0" width="${w / 60}" height="${h}" fill="#fff" opacity=".07"/>`).join("");
+  // Some detail, so glass visibly blurs what's behind it (`grid`: a lot, to see refraction).
+  const stripes =
+    kind === "grid"
+      ? Array.from({ length: Math.ceil(w / 28) }, (_, i) => `<rect x="${i * 28}" y="0" width="3" height="${h}" fill="#fff" opacity=".55"/>`).join("") +
+        Array.from({ length: Math.ceil(h / 28) }, (_, i) => `<rect x="0" y="${i * 28}" width="${w}" height="3" fill="#fff" opacity=".3"/>`).join("")
+      : Array.from({ length: 24 }, (_, i) => `<rect x="${(i * w) / 24}" y="0" width="${w / 60}" height="${h}" fill="#fff" opacity=".07"/>`).join("");
   const picture = (blur: number) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><defs>${gradients}<filter id="b" x="0" y="0" width="1" height="1"><feGaussianBlur stdDeviation="${blur}" edgeMode="duplicate"/></filter></defs><g filter="${blur ? "url(#b)" : "none"}"><rect width="100%" height="100%" fill="${base}"/>${rects}${stripes}</g></svg>`;
   const url = (svg: string) => `data:image/svg+xml,${encodeURIComponent(svg)}`;
   const css = `html{background:url("${url(picture(0))}") 0 0 / 100% 100% no-repeat,${base}}`;
-  return { css, snapshot: url(picture(28)) };
+  return { css, snapshot: url(picture(28)), sharp: url(picture(0)) };
 }
 
 const isPreset = (name: string | null): name is Preset => !!name && name in PRESETS;
@@ -118,6 +126,10 @@ export function createMockTransport(): Transport {
   const autohide = q.has("autohide");
   const presetName = q.get("preset");
   const preset: Preset = isPreset(presetName) ? presetName : "monochrome";
+  const topDesign = q.get("top");
+  const dockDesign = q.get("dock");
+  // The mock blurs what's behind glass with backdrop-filter: here the wallpaper is the page.
+  document.documentElement.dataset.mock = "";
 
   const appearance: Appearance = {
     surface,
@@ -133,14 +145,16 @@ export function createMockTransport(): Transport {
     shadow: false,
   };
   const scheme = q.get("scheme");
-  const config = mockConfig(preset, {
+  const fromQuery: Parameters<typeof mockConfig>[1] = {
     dock: {
+      ...(dockDesign && dockDesign in DOCK_BUNDLES ? { design: dockDesign } : {}),
       enabled: true,
       ...(position ? { position } : {}),
       ...(q.has("size") ? { size: Number(q.get("size")) } : {}),
       ...(autohide ? { autohide } : {}),
     },
     top: {
+      ...(topDesign && topDesign in TOP_BUNDLES ? { design: topDesign } : {}),
       ...(q.has("h") ? { height: Number(q.get("h")) } : {}),
       // `?flyouts`: every module with a flyout, for previewing them.
       ...(q.has("flyouts")
@@ -156,7 +170,8 @@ export function createMockTransport(): Transport {
     },
     calendar: { zones: [{ zone: "America/New_York" }, { zone: "Asia/Tokyo", label: "Tokyo office" }] },
     ...(scheme === "light" || scheme === "dark" ? { look: { scheme } } : {}),
-  });
+  };
+  let config = mockConfig(preset, fromQuery);
   const look: LookPayload = {
     appearance,
     themeCss: null,
@@ -233,6 +248,20 @@ export function createMockTransport(): Transport {
     }, 400);
   }
 
+  // ?embed: the parent page sends a bars.json to preview (see the top of this file).
+  if (q.has("embed")) {
+    window.addEventListener("message", (event: MessageEvent<unknown>) => {
+      const data = event.data;
+      if (typeof data !== "object" || data === null || !("type" in data) || data.type !== "mypaper-bars" || !("bars" in data)) return;
+      const bars = data.bars as { preset?: string };
+      const named = bars.preset && isPreset(bars.preset) ? bars.preset : preset;
+      config = mockConfig(named, deepMerge(fromQuery, bars) as Parameters<typeof mockConfig>[1]);
+      emit("config", config);
+    });
+  }
+  const click = q.get("click");
+  if (click) setTimeout(() => (document.querySelector(click) as HTMLElement | null)?.click(), 500);
+
   // ?dump=<selector>: after 2 s, the matching elements' boxes go into body[data-dump] (read it
   // with a headless browser's --dump-dom).
   const dump = q.get("dump");
@@ -286,7 +315,7 @@ export function createMockTransport(): Transport {
           monitor: { device: "\\\\.\\DISPLAY1", primary: true, width: innerWidth, height: innerHeight },
           config,
           look,
-          mode: { reduceMotion: q.has("reduce"), performance: q.has("perf") },
+          mode: { reduceMotion: q.has("reduce"), performance: q.has("perf"), blur: !q.has("noblur"), liquid: !q.has("noliquid") },
           // The mock's window is the whole monitor.
           backdrop: { url: art.snapshot, width: innerWidth, height: innerHeight, x: 0, y: 0 },
           dpi: 96,
@@ -342,6 +371,11 @@ export function createMockTransport(): Transport {
         }
         break;
       }
+      case "capture": {
+        // The stand-in wallpaper is what's behind everything here.
+        reply(message.id, { url: art.sharp, rect: [0, 0, innerWidth, innerHeight] });
+        return;
+      }
       case "previewOpen": {
         reply(
           message.id,
@@ -393,7 +427,8 @@ export function createMockTransport(): Transport {
   return {
     postMessage(message) {
       if (!isRequest(message)) return;
-      if (message.method !== "region") console.debug("[mock host]", message.method, message.params);
+      if (message.method === "glass") (window as { glassPanes?: unknown }).glassPanes = message.params.panes;
+      else if (message.method !== "region") console.debug("[mock host]", message.method, message.params);
       else console.debug("[mock host] region", JSON.stringify(message.params.rects));
       request(message);
     },

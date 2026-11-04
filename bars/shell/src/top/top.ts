@@ -9,7 +9,7 @@ import { h, surface } from "../dom";
 import { createScope, type Scope } from "../host";
 import { closeMenu } from "../menu";
 import { layerRects } from "../overlay";
-import type { BarsConfig, ModuleName } from "../protocol";
+import type { BarKind, BarsConfig, ModuleName } from "../protocol";
 import { buildModule, groupsOf } from "./build";
 
 export function createTop(root: HTMLElement, config: BarsConfig): Bar {
@@ -61,9 +61,9 @@ export function createTop(root: HTMLElement, config: BarsConfig): Bar {
   };
 }
 
-/** Builds a module and binds the actions bars.json gives it. */
-export function mount(name: ModuleName, config: BarsConfig, scope: Scope): HTMLElement {
-  const el = buildModule(name, config, scope);
+/** Builds a module for the `kind` bar and binds the actions bars.json gives it. */
+export function mount(name: ModuleName, config: BarsConfig, scope: Scope, kind: BarKind = "top"): HTMLElement {
+  const el = buildModule(name, config, scope, kind);
   scope.add(bindActions(el, name, config.modules[name]));
   return el;
 }

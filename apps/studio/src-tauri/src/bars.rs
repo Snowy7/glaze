@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use mypaper_bars_schema::config::{DockStyle, TopLayout};
 use mypaper_bars_schema::style::{COLOR_TOKENS, NAMED_CURVES};
+use mypaper_bars_schema::presets::{DockDesign, TopDesign};
 use mypaper_bars_schema::{BarsConfig, Preset};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -108,6 +109,10 @@ pub struct Catalog {
     /// `BarsConfig::default()`, the bottom layer of every merge.
     pub defaults: Value,
     pub presets: Vec<PresetInfo>,
+    /// Each bar's designs: a partial `top` (or `dock`) with its look and motion. Studio layers
+    /// them as the host does (`presets::layered`): design, preset, then the file.
+    pub top_designs: Vec<PresetInfo>,
+    pub dock_designs: Vec<PresetInfo>,
     /// Margin, padding, spacing (and size) a missing field takes, per top layout and dock style.
     pub geometry: Value,
     pub named_curves: Vec<&'static str>,
@@ -123,22 +128,27 @@ pub struct PresetInfo {
     pub bundle: Value,
 }
 
-pub fn catalog() -> Result<Catalog> {
-    let presets = Preset::ALL
-        .iter()
-        .map(|preset| {
-            let Value::String(id) = serde_json::to_value(preset)? else {
-                anyhow::bail!("a preset serializes to its name")
+/// Each entry's name (its serialized id) with its bundle.
+fn infos<T: Serialize>(all: &[T], bundle: impl Fn(&T) -> Value) -> Result<Vec<PresetInfo>> {
+    all.iter()
+        .map(|entry| {
+            let Value::String(id) = serde_json::to_value(entry)? else {
+                anyhow::bail!("a preset or design serializes to its name")
             };
             Ok(PresetInfo {
                 id,
-                bundle: preset.bundle(),
+                bundle: bundle(entry),
             })
         })
-        .collect::<Result<_>>()?;
+        .collect()
+}
+
+pub fn catalog() -> Result<Catalog> {
     Ok(Catalog {
         defaults: serde_json::to_value(BarsConfig::default())?,
-        presets,
+        presets: infos(&Preset::ALL, |p| p.bundle())?,
+        top_designs: infos(&TopDesign::ALL, |d| d.bundle())?,
+        dock_designs: infos(&DockDesign::ALL, |d| d.bundle())?,
         geometry: geometry()?,
         named_curves: NAMED_CURVES.to_vec(),
         color_tokens: COLOR_TOKENS.to_vec(),
@@ -162,6 +172,7 @@ fn background_types() -> Result<Value> {
             json!({ "type": "image", "path": "background.png" }),
         ),
         ("wallpaper", json!({ "type": "wallpaper" })),
+        ("blur", json!({ "type": "blur" })),
     ];
     let mut by_preset = Map::new();
     for preset in Preset::ALL {
@@ -526,11 +537,16 @@ mod tests {
                 "monochrome",
                 "macos",
                 "windows11",
+                "windows10",
+                "chromeos",
                 "islands",
                 "neon-glass",
                 "floating"
             ]
         );
+        assert_eq!(catalog.top_designs.len(), TopDesign::ALL.len());
+        assert_eq!(catalog.dock_designs[2].id, "windows11");
+        assert_eq!(catalog.dock_designs[2].bundle["style"], "taskbar");
         assert_eq!(catalog.defaults["top"]["height"], 32.0);
         assert_eq!(catalog.defaults["dock"]["magnify"]["scale"], 1.5);
         assert_eq!(catalog.geometry["top"]["floating"]["margin"], 8.0);
@@ -564,7 +580,7 @@ mod tests {
         assert!(background("islands", r#"{ "type": "wallpaper" }"#));
 
         let catalog = background_types().unwrap();
-        let all = json(r#"["none", "solid", "gradient", "image", "wallpaper"]"#);
+        let all = json(r#"["none", "solid", "gradient", "image", "wallpaper", "blur"]"#);
         for preset in [
             "monochrome",
             "macos",
@@ -651,6 +667,18 @@ mod tests {
                 &value,
                 format!(r#"{{ "animation": {{ "bar": {{ "style": "{value}" }} }} }}"#),
             );
+        }
+        for value in ts_list("TOP_DESIGNS") {
+            parses(&value, format!(r#"{{ "top": {{ "design": "{value}" }} }}"#));
+        }
+        for value in ts_list("DOCK_DESIGNS") {
+            parses(&value, format!(r#"{{ "dock": {{ "design": "{value}" }} }}"#));
+        }
+        for value in ts_list("GLASS_STYLES") {
+            parses(&value, format!(r#"{{ "top": {{ "look": {{ "glass": "{value}" }} }} }}"#));
+        }
+        for value in ts_list("FAMILIES") {
+            parses(&value, format!(r#"{{ "dock": {{ "look": {{ "family": "{value}" }} }} }}"#));
         }
         for value in ts_list("COLOR_TOKENS") {
             assert!(COLOR_TOKENS.contains(&value.as_str()), "{value}");

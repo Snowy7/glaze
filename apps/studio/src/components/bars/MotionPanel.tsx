@@ -24,7 +24,7 @@ const LEAF_INFO: Record<Leaf, { label: string; hint: string }> = {
   attention: { label: "Attention", hint: "An app asking for attention" },
 };
 
-const STYLE_LABELS: Record<MotionStyle, string> = { slide: "Slide", fade: "Fade", pop: "Pop", scale: "Scale", none: "None" };
+const STYLE_LABELS: Record<MotionStyle, string> = { slide: "Slide", fade: "Fade", pop: "Pop", scale: "Scale", morph: "Morph (flyouts)", none: "None" };
 const REDUCE: readonly { value: ReduceMotion; label: string; hint?: string }[] = [
   { value: "system", label: "Follow Windows", hint: "Windows' \"Animation effects\" setting, followed live" },
   { value: "always", label: "Always reduce" },

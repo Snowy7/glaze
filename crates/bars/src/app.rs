@@ -732,7 +732,8 @@ impl App {
                 }
                 None => {
                     self.next_bar += 1;
-                    match Bar::new(self.next_bar, kind, monitor, config, geometry) {
+                    let live = self.looks.live.as_ref();
+                    match Bar::new(self.next_bar, kind, monitor, config, geometry, live) {
                         Ok(bar) => {
                             log::info!("{kind:?} bar on {}", bar.monitor.device);
                             self.bars.push(bar);
@@ -1089,7 +1090,10 @@ impl App {
         if !self.active.contains(&Topic::Clock) {
             self.timers.clock = None;
         } else if self.timers.clock.is_none() {
-            let seconds = self.bars.iter().any(|b| b.config.top.clock.seconds);
+            let seconds = self.bars.iter().any(|b| match b.kind {
+                BarKind::Top => b.config.top.clock.seconds,
+                BarKind::Dock => b.config.dock.clock.seconds,
+            });
             let wait = next_tick(epoch_ms(), seconds);
             self.timers.clock = Some(Instant::now() + wait);
         }
@@ -1434,6 +1438,7 @@ impl App {
             self.flyouts.watches.forget(id);
             self.flyouts.page_loaded(id);
             self.bars[index].set_room(0.0);
+            self.set_glass(index, &[]); // the old page's panes
             if self.keyboard == Some(id) {
                 self.keyboard = None;
             }
@@ -1564,6 +1569,11 @@ impl App {
                 self.bars[index].set_region(rects);
                 done
             }
+            Method::Glass { panes } => {
+                self.set_glass(index, &panes);
+                done
+            }
+            Method::Capture { rect } => self.capture_behind(index, rect),
             // Routed to `flyout` before `call`.
             Method::Flyout(_) => Err(BarError::internal("a flyout request reached call()")),
             Method::Run { module, trigger } => self.run_action(index, &module, trigger),
@@ -1679,7 +1689,8 @@ impl App {
         }
         log::info!("bars.json changed");
         let taskbar_changed = config.taskbar != self.config.taskbar;
-        let clock_changed = config.top.clock != self.config.top.clock;
+        let clock_changed = (&config.top.clock, &config.dock.clock)
+            != (&self.config.top.clock, &self.config.dock.clock);
         self.config = config;
         if taskbar_changed {
             self.apply_taskbar();

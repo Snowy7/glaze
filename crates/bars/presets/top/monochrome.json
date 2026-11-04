@@ -1,0 +1,19 @@
+{
+  "layout": "strip",
+  "height": 32,
+  "look": {
+    "family": "mono",
+    "background": { "type": "wallpaper", "brightness": 0.85 },
+    "tint": 0.6,
+    "saturation": 1.15,
+    "noise": 0.025,
+    "border": { "rest": { "width": 1, "color": "#ffffff14" } },
+    "glass": { "highlight": 0.25 },
+    "items": {
+      "radius": 7,
+      "hover": { "background": "#ffffff1a", "color": "#ffffff" },
+      "active": { "background": "#ffffff2b", "color": "#ffffff" }
+    }
+  },
+  "animation": { "duration": 200, "curve": "smooth", "bar": { "style": "fade" }, "open": { "style": "pop", "duration": 150 } }
+}

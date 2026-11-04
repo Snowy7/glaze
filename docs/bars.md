@@ -41,6 +41,13 @@ commit as the code.
     Each wallpaper snapshot costs the engine's frame thread 0.04–0.08 ms (copying the read-back
     pixels); encoding and writing it takes 1.7–2.2 ms on a side thread; the GPU pyramid and
     readback took about 1 ms on the integrated GPU in a headless test. Nothing runs while held.
+  - Measured with designs and glass (release build, two 1440p monitors, the macOS top bar and dock
+    on each, the Aurora shader animating behind, 10 s per row): idle bars 0.36% CPU / 0.28% GPU 3D
+    for WebView2, 0.02% CPU for the host; a liquid Control Center open 0.37% / 0.13% (its lens is
+    drawn once, then kept); opening and closing it 12 times in 10 s 0.81% / 0.50%, the host 0.15%.
+    DWM's own share (2.4–9.3% 3D) moves with the wallpaper, not with the glass. A liquid capture
+    (the screen behind a pane) took 3.6–15 ms (a 576×109 dock, a 2560×38 menu bar), writing it
+    under 1 ms.
 
 ## Process
 
@@ -93,6 +100,7 @@ mypaper-wallpaper ── writes %LOCALAPPDATA%\mypaper\backdrop\<DEVICE>.bmp ─
   "preset": "monochrome",
   "taskbar": { "mode": "keep", "alignment": "center" },
   "top": {
+    "design": "macos",
     "enabled": true,
     "monitors": "all",
     "layout": "strip",
@@ -101,9 +109,11 @@ mypaper-wallpaper ── writes %LOCALAPPDATA%\mypaper\backdrop\<DEVICE>.bmp ─
     "left":   ["start", "workspaces", "app"],
     "center": ["clock"],
     "right":  ["media", "tray", "network", "volume", "battery", "quick", "power"],
-    "clock":  { "seconds": false, "format": "ddd d MMM  HH:mm" }
+    "clock":  { "seconds": false, "format": "ddd d MMM  HH:mm" },
+    "look":   { "glass": { "style": "liquid", "refraction": 0.5 } }
   },
   "dock": {
+    "design": "macos",
     "enabled": true,
     "monitors": "primary",
     "style": "floating",
@@ -113,6 +123,8 @@ mypaper-wallpaper ── writes %LOCALAPPDATA%\mypaper\backdrop\<DEVICE>.bmp ─
     "magnify": { "scale": 1.5, "range": 3 },
     "running": true,
     "indicator": "dot",
+    "look": { "glass": { "highlight": 0.4 } },
+    "animation": { "open": { "style": "slide" } },
     "pinned": [
       { "path": "C:\\Windows\\explorer.exe", "name": "File Explorer" },
       { "path": "shell:AppsFolder\\Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", "name": "Terminal" }
@@ -130,12 +142,22 @@ mypaper-wallpaper ── writes %LOCALAPPDATA%\mypaper\backdrop\<DEVICE>.bmp ─
 }
 ```
 
-- **Every field is optional**; a missing one takes the preset's value, else the default shown
-  above, except `dock.enabled` (default `false`) and `dock.pinned` (below). `{}` is the same as no
-  file.
-- **Layers.** The file is deep-merged over its **preset** (objects merge key by key; lists and
-  values are replaced), and per-monitor **overrides** over that (see "Per-monitor overrides"). A
-  theme adds `appearance`, CSS and variables (see "Look").
+- **Every field is optional**; a missing one takes the bar's design's or the preset's value, else
+  the default shown above, except `dock.enabled` (default `false`) and `dock.pinned` (below). `{}`
+  is the same as no file.
+- **Each bar is styled on its own.** `top.design` and `dock.design` pick each bar's design (see
+  "Designs and presets"); `top.look` / `dock.look` and `top.animation` / `dock.animation` are each
+  bar's own look and motion. The root `look` and `animation` are shared: they apply to both bars,
+  under each bar's own. So any top bar goes with any dock: a macOS menu bar over a Windows 11
+  taskbar is `{ "top": { "design": "macos" }, "dock": { "design": "windows11", "enabled": true } }`.
+- **Layers**, lowest first (`presets::layered`): each bar's **design**, the **preset** (a pairing of
+  designs), the file's shared `look` and `animation` (folded under each bar), the file's bar
+  fields. Objects merge key by key, lists and values are replaced, and an object whose `type`
+  differs from the one below (a background switching kinds) replaces it whole. Per-monitor
+  **overrides** go over all that (see "Per-monitor overrides"). A theme adds `appearance`, CSS and
+  variables (see "Look").
+- **Files from before designs** need no change: their `preset` now names the designs it was made
+  of, so `{ "preset": "islands", "dock": { "enabled": true } }` looks as it did.
 - **`taskbar.mode`**: `keep` (untouched), `autohide`, or `hide` (hidden completely, on every
   monitor; its space goes to our bars).
   - Changing it takes effect live. Leaving `hide` or `autohide` restores the exact previous state from
@@ -177,8 +199,10 @@ mypaper-wallpaper ── writes %LOCALAPPDATA%\mypaper\backdrop\<DEVICE>.bmp ─
   `DISPLAY2`, any case).
 - **`top.clock.format`** tokens: `dddd` `ddd` `d` `dd` `MMMM` `MMM` `MM` `M` `yyyy` `yy` `HH` `H`
   `hh` `h` `mm` `ss` `tt`; `'quoted text'` and anything else is literal (a `\n` makes two lines).
-  Default `ddd d MMM  HH:mm`, or `ddd d MMM  HH:mm:ss` with `seconds`. At most 64 characters. The
-  dock's `taskbar` style uses the same clock settings.
+  Default `ddd d MMM  HH:mm`, or `ddd d MMM  HH:mm:ss` with `seconds`. At most 64 characters. A
+  `taskbar` dock's clock has its own, `dock.clock` (a taskbar's is often two lines).
+- **`dock.button`** (16–240): a `taskbar` task button's length along the bar (missing: the icon plus
+  16, or 168 with `titles`; Windows 11 is 40, Windows 10 48).
 - **`dock.pinned[].path`** is an exe, a shortcut (`.lnk`), a folder, or an `shell:AppsFolder\<AUMID>`
   path (Store apps). **Missing `pinned`** means the native taskbar's pinned shortcuts
   (`%APPDATA%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*.lnk`, in name order;
@@ -227,20 +251,49 @@ still make a valid config, checked when the file loads.
 }
 ```
 
-## Presets
+## Designs and presets
 
-A preset is a partial `bars.json` (`crates/bars/presets/<name>.json`: layout, look, motion, dock
-behavior) plus CSS the page bundles (`bars/shell/src/presets/presets.css`, scoped by
-`data-preset`). The user's fields go over it.
+Each bar has a **design**: its whole character, as a partial `top` (or `dock`) with its own look
+and motion (`crates/bars/presets/top/<id>.json`, `presets/dock/<id>.json`), plus CSS the page
+bundles (`bars/shell/src/designs/`, scoped by `data-design`). Metrics follow the system each one
+is after. Designs never decide whether a bar shows, where, or its pins.
 
-| `preset` | Top bar | Dock | Look and motion |
-|---|---|---|---|
-| `monochrome` (default) | strip, 32 | floating, dots | black wallpaper glass (tint 0.6), white type, fine grain, fade-in, pop flyouts |
-| `macos` | strip, 28, clock on the right | floating, 52 px, magnify 1.8, trash | light or dark with Windows (`scheme: auto`), very translucent vibrant glass, squircle 22, spring motion |
-| `windows11` | off | `taskbar`: Start, search box, centered task buttons, tray, two-line clock, show-desktop sliver | Mica-like glass by light/dark mode, accent pill indicators, mono icon pack, Fluent timing |
-| `islands` | islands, one pill per group | floating, bar indicators | solid dark pills, squircle 12, hover borders, snappy pop-in |
-| `neon-glass` | floating, hugging its modules | floating, glow indicators | dark wallpaper glass, magenta→cyan gradient edge, violet glow, neon clock, overshoot motion |
-| `floating` | floating, full width | floating, 10 DIP margin | wallpaper glass, squircle 14, soft spring |
+| `top.design` | What it is |
+|---|---|
+| `monochrome` (default) | a black wallpaper-glass strip, 32, white type |
+| `macos` | the macOS (Tahoe) menu bar: 24, no surface, white type on the wallpaper, the app's name in bold, SF-style monochrome status icons, the time on the right; its flyouts are the macOS family in liquid glass |
+| `fluent` | a Windows 11 bar: 32, Mica-like wallpaper glass, Segoe UI Variable 12, Segoe Fluent Icons, 4 DIP subtle-fill buttons, network/volume/battery as one button opening quick settings |
+| `capsule` | a floating liquid-glass pill hugging its modules, 36, iPadOS/visionOS style; its flyouts morph out of their button |
+| `minimal` | no surface: the clock in the middle, workspaces and a few status icons, a soft text shadow |
+| `islands` | a transparent rail with one solid pill per group |
+| `neon` | floating dark glass with a magenta-to-cyan edge and glow |
+| `floating` | a detached, rounded bar |
+
+| `dock.design` | What it is |
+|---|---|
+| `monochrome` (default) | a black glass pill with dots |
+| `macos` | the macOS dock: a clear liquid-glass plate with a thin rim, 20 corners, 48 icons, magnify 1.65, 3.5 DIP running dots, the trash past a divider |
+| `windows11` | the Windows 11 taskbar: 48, 40×40 buttons with 4 DIP corners, centered with Start and a pill search box, 6×3 running pills (16 and accent in front), press squeezes the icon, network/volume/battery as one button, two-line clock, bell, show-desktop sliver |
+| `windows10` | the Windows 10 taskbar: 40, left-aligned, 48 DIP square buttons, underline indicators, the light "Type here to search" field, two-line clock |
+| `chromeos` | the ChromeOS shelf: 48, a launcher circle, centered apps with dots, the status area (time, network, volume, battery) as one pill |
+| `fluent` | the Windows 11 taskbar as a floating, rounded acrylic island hugging its contents |
+| `islands` | a solid pill with bar indicators |
+| `neon` | dark glass, glow indicators |
+| `floating` | a detached, rounded pill |
+
+A **preset** is a pairing (`crates/bars/presets/<name>.json`): which design each bar starts from,
+and whether each bar is on. `preset` picks it; a bar's own `design` beats it.
+
+| `preset` | Top bar | Dock |
+|---|---|---|
+| `monochrome` (default) | `monochrome` | `monochrome` |
+| `macos` | `macos` | `macos` |
+| `windows11` | off (`fluent` when turned on) | `windows11`, on, every monitor |
+| `windows10` | off (`fluent`) | `windows10`, on, every monitor |
+| `chromeos` | off (`minimal`) | `chromeos`, on, every monitor |
+| `islands` | `islands` | `islands` |
+| `neon-glass` | `neon` | `neon` |
+| `floating` | `floating` | `floating` |
 
 ## Layouts and geometry
 
@@ -333,9 +386,33 @@ items (module buttons, task buttons):
   glow, scale 0.5–1.5 }`. Active is pressed, a module whose flyout is open (`.mod.is-open`), and the
   app in front on a task button.
 - **`indicator`**: the running indicator's colors (`running`, `active`, `attention`).
+- **`family`**: what the flyouts and menus this bar opens are drawn after: `mono` (mypaper's own,
+  default), `fluent` (Windows 11: acrylic, 8 DIP corners, accent toggles, quick-settings tiles with
+  their label under them, Start's footer band), `macos` (Control Center modules with round glyph
+  badges, 22 pt sliders, accent menu rows, a red today) or `material` (ChromeOS: 20 DIP bubbles, pill
+  tiles, thick sliders). `data-family` on `<html>`.
+- **`glyphs`**: the module glyph set: `default` (mypaper's), `fluent` (the Segoe Fluent Icons font,
+  pixel-exact on Windows 11; Segoe MDL2 Assets on 10) or `symbols` (SF Symbols-style outlines). An
+  icon pack's keys win over the set's.
+- **`font`**: `{ family (a CSS font-family list), size (9–24), weight (100–900) }`: the bar's type.
+- **`glass`**: the material: `style` `liquid` (see "Liquid glass"), `frosted` (wallpaper glass or
+  live blur, by `background`) or `none`, with the widgets' knob names, each 0–1: `intensity`
+  (scales the whole effect), `refraction` (how far the rim bends), `highlight` (the specular edge),
+  `tint` (the tint over liquid glass; missing: 0.06), `blur` (DIPs 0–32, light), and `sheen` and
+  `depth` (a soft top light and an inner shadow; off unless a design asks). A string is the style
+  alone: `"glass": "liquid"`. Missing `style`: `liquid` when the theme's appearance style is
+  `liquid` (the widgets' Liquid Glass), else `frosted`, so one theme switch makes the whole desktop
+  liquid. The macOS designs default to liquid; the Windows designs to frosted.
+  The theme's `bars.glass` knobs (`intensity`, `refraction`, `highlight`, shared with the
+  widgets) fill in what a bar's `look.glass` leaves out.
+- **`flyouts`**: `{ blur, tint }`: whether this bar's flyouts are glass (default on; off: solid)
+  and their tint's opacity (missing: the family's).
+- **`background: { "type": "blur", "brightness", "blur" }`** is live blur: Windows' own blur of
+  whatever is behind (see "Live blur"). An auto-hiding dock with wallpaper glass draws live blur
+  instead whenever it can, since it slides in over windows.
 
 The page sets the appearance and the look as CSS variables and `data-*` attributes on `<html>`
-(see "Styling"), plus `data-bar="top|dock"`, `data-edge`, `data-preset`, and inserts its generated
+(see "Styling"), plus `data-bar="top|dock"`, `data-edge`, `data-preset`, `data-design`, and inserts its generated
 CSS (icon pack, module overrides) and then the theme CSS last.
 
 ### Wallpaper glass
@@ -366,6 +443,60 @@ content. But mypaper owns the wallpaper's pixels, so the engine publishes them:
   `background-attachment: fixed`, sized to the monitor and offset by the window's place on it, so
   it lines up with the real wallpaper behind the bar; the tint, grain and border go over it. Until
   a snapshot exists the surface uses the plain tint.
+
+### Live blur
+
+A WebView can't see behind its window, so `backdrop-filter` only blurs the page's own pixels.
+Windows can (`crates/bars/src/blur.rs`):
+
+- Each bar window opts into host backdrop brushes (`DWMWA_USE_HOSTBACKDROPBRUSH`, Windows 11) and
+  gets a `Windows.UI.Composition` target *under* its child windows, so under the transparent
+  WebView. The page reports its glass as panes (`glass`: rounded rects with an opacity and a
+  material, `bars/shell/src/glass.ts`): every element whose computed `--glass` is 1 (surfaces with
+  a `blur` fill, and the flyouts while `data-fly-blur` is on). It sends them whenever they change,
+  and every frame while an animation or transition moves one (a flyout popping in, the dock's pill
+  stretching), so the blur moves with them.
+- Each pane is a sprite of the host backdrop (DWM's own acrylic blur), through an optional extra
+  Gaussian blur and a color matrix (saturation, brightness), clipped to an anti-aliased rounded
+  rect (a squircle's radius is scaled to the circle that hugs it). The page draws the tint, rim and
+  grain over it, so there are no grey or black fringes. It renders while the window is inactive.
+- It's on (`mode.blur`) when the window got a target, transparency effects are on (Settings →
+  Personalization → Colors, `EnableTransparency`, followed live), and performance mode is off.
+  Otherwise the page uses an opaque tint. Nothing polls: DWM redraws a sprite only when what's
+  behind it changes. `examples/glass-spike.rs` is the spike that proved it.
+
+### Liquid glass
+
+Liquid Glass (macOS Tahoe, iOS 26) is clear: what's behind bends along a thick rim, the middle is
+nearly clear, and one thin specular edge catches the light. That needs the pixels behind, and a page
+has none, so the host captures them (`crates/bars/src/capture.rs`) and the page lenses them
+(`bars/shell/src/liquid.ts`):
+
+- **Capture.** The page asks (`capture { rect }`). The host copies that part of the screen with GDI
+  (`BitBlt` from the screen DC) while every bar window is excluded from capture
+  (`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, documented; it takes effect at once). The
+  copy is the wallpaper's current frame over the desktop, or the windows behind a flyout. It's
+  written as a 24-bit BMP to `%LOCALAPPDATA%\mypaper\backdrop\behind\` (two per bar, emptied at
+  start) and served from `backdrop.bars.mypaper`. There's no capture session and no border. While a
+  bar is excluded (a few milliseconds), a screen recording doesn't show it; `examples/capture-spike.rs`
+  measured the copy and the exclusion.
+- **When.** A pane is captured when it appears, when it moves or grows past its capture, and when
+  the host says what's behind changed (`behind`: the bar's window moved, or the wallpaper's
+  snapshot did; liquid bars ask the engine for snapshots every 10 s, like wallpaper glass). A
+  flyout is captured as it opens; until then it shows live blur.
+- **Lens.** Each pane (an element whose computed `--liquid` is 1) gets a `.lens` layer showing the
+  capture aligned with the screen, through an SVG filter: a displacement map drawn from the pane's
+  rounded-rect distance field (outward at the rim, fading across a convex bezel to none in the
+  middle), applied per color channel at slightly different strengths (chromatic fringing where it
+  bends), after a light blur. Edges flush with the screen, or closer to it than the lens reaches,
+  get no rim. A `.shine` layer draws the one thin specular edge, brighter on hover and press.
+- **Cost.** A map is drawn when a pane's size changes, a capture made as above; in between nothing
+  runs, and Chromium keeps the filtered layer as it is (see "Principles" for the measurements).
+- **Flyouts** are frosted Liquid Glass (Apple's regular variant: a stronger lens, a 12 DIP blur, the
+  family's tint), so text stays legible over anything.
+- It's on (`mode.liquid`) when transparency effects are on and performance mode is off, for
+  surfaces over a fill it can stand in for (`wallpaper`, `blur`, or the plain tint); a solid,
+  gradient or picture fill stays as it is.
 
 ### Theme variables
 
@@ -426,7 +557,9 @@ Every animation is CSS, timed by variables the page sets from the **animation tr
   `press` and `open` (flyouts and menus) may sit under any node; `magnify`, `bounce` (launch) and
   `attention` only under `bar.dock`. A node itself is its bar's **show** animation (the top bar
   appearing, the dock's auto-hide reveal). Other shapes are rejected.
-- **Fields**: `enabled`, `duration` (ms, 0–5000), `curve`, `style` (`slide`, `fade`, `pop`,
+- **Per bar.** `top.animation` and `dock.animation` are whole trees of this shape, layered like
+  looks: the bar's design's, the shared `animation`, then the bar's own.
+- **Fields**: `enabled`, `duration` (ms, 0–5000), `curve`, `style` (`slide`, `fade`, `pop`, `morph` (flyouts: grow out of the button),
   `scale`, `none`; for shows and `open`).
 - **Inheritance**: for each field the most specific value wins, in this order: `animation`, `bar`,
   `bar.<top|dock>`, then the leaf under each of those. Any `enabled: false` on the path turns the
@@ -456,7 +589,7 @@ These are the items of the top bar and of a `taskbar` dock. Each is a small comp
 | `search` | a search glyph (a search box in `windows11`) | Windows Search (Win+S, on the user's click) |
 | `workspaces` | virtual desktops: count and current (`VirtualDesktopIDs` / `CurrentVirtualDesktop` under `HKCU\…\Explorer\VirtualDesktops`, watched with `RegNotifyChangeKeyValue`; absent values mean one desktop) | switch desktop: Win+Ctrl+arrow, sent only on the user's click (once per step) |
 | `app` | the foreground app's name and icon (the last app window in front: clicking a bar doesn't change it) | — |
-| `clock` | time and date (format in `bars.json` → `top.clock`) | opens the calendar |
+| `clock` | time and date (format in `bars.json` → `top.clock`, or `dock.clock` on a taskbar) | opens the notification center, with the month under it (as Windows 11's clock and macOS's date do); the `calendar` action opens the calendar |
 | `media` | now playing (SMTC): title and artist | play/pause; scroll for next and previous |
 | `tray` | the pinned notification-area icons, then a chevron (see below) | clicks go to the icon's app; the chevron opens the overflow grid |
 | `network` | wifi signal and name (WLAN API) / ethernet (the interface table: an up, physical, wired interface) / offline; changes from `NotifyIpInterfaceChange` and WLAN notifications | opens the network flyout |
@@ -697,7 +830,7 @@ replace the taskbar's own menus; nothing goes into Explorer.
   `network`, `mixer`, `language`, `calendar`, `notifications`, `tray`, `menu`). The shared pieces
   are `.fly-panel`, `.fly-header`, `.fly-row`, `.fly-tile[data-on]`, `.fly-slider`, `.fly-switch`,
   `.fly-list`, `.fly-notice` and `.fly-footer`. Each flyout's parts are prefixed with its name
-  (`.launcher-tile`, `.qs-tiles`, `.net-item`, `.mix-app`, `.cal-day.is-today`, `.notif-item`,
+  (`.launcher-tile`, `.qs-tiles`, `.net-item`, `.mix-app`, `.cal-day.is-today`, `.notif-card`, `.notif-stack`,
   `.tray-cell`, `.lang-badge`). They're drawn from the appearance tokens like the bars, and
   monochrome by default: "on" is the text color as a fill. Durations and curves are `--fly-duration`
   and `--ease`, so presets retime them. The flyouts' glyphs are in `flyouts/glyphs.ts`.
@@ -842,6 +975,8 @@ loaded anywhere else.
 
 ### Calendar
 
+The `calendar` action opens it; the clock opens the notification center, which has the month too.
+
 Today (weekday, date, time), a month grid you page through (buttons, the wheel, "Today"), and the
 extra clocks of `calendar.zones` (local time, day, offset from here). Everything comes from Intl,
 and the first weekday is the locale's unless `calendar.firstDay` says otherwise. "Calendar" opens
@@ -872,6 +1007,14 @@ flyout there was no way to reach it at all. Checked live on build 26300 (unpacka
 Win+N opened it under the top bar and listed the machine's real toasts (57 at the time), grouped by
 app, with Clear all. The first open is the slow one (a lane starts, then one logo is read per app),
 so the panel shows "Loading…" for a moment.
+
+**The view** (`bars/shell/src/flyouts/notification-center.ts`): toasts grouped by app, newest
+group first; a group of several is a stack (the newest card, the rest peeking under it) until it's
+opened. Each card has its app's icon: the toast's logo, else the Start menu's icon for an app of that
+name (the launcher's index), else a monogram in a hue of the app's own. A swipe sideways or the ×
+that shows on hover dismisses one; a group's × clears the group; "Clear all" clears everything. The
+header shows Do Not Disturb (it opens its setting: changing it has no documented API). The month
+sits under the list, as on Windows 11. Scrollbars are thin and in the text color in every flyout.
 
 ### Tray host
 
@@ -996,6 +1139,8 @@ events to a bar only after it said `hello`.
 | `previewPlace` | `{ windows: { hwnd, rect: [x, y, width, height] }[] }` (DIPs from the window's top-left) | — |
 | `previewClose` | — | — |
 | `region` | `{ rects: [x, y, width, height][] }` (DIPs from the window's top-left, at most 64) | — |
+| `glass` | `{ panes: [{ rect: [x, y, width, height], radius, opacity, saturation, brightness, blur }] }` (at most 32): where live blur goes (see "Live blur") | — |
+| `capture` | `{ rect }` (DIPs from the window's top-left): what's behind it, for liquid glass | `{ url, rect }` (the copy, and the part of the screen it covers, clipped to the monitor) |
 
 `pin` of an item that's already pinned moves it to `index`. `reorder`'s paths are matched
 case-insensitively; pins it doesn't list keep their order after the listed ones.
@@ -1044,9 +1189,10 @@ once it has the answer, so the reply may come after other messages:
 | `stats` | `{ cpu, memory: { used, total } }` |
 | `custom` | `{ [id]: { text, icon?, tooltip?, class?, error? } }` |
 | `trash` | `{ full }` |
-| `appearance` | `{ appearance, themeCss, system: { accent: [base, light-1..3, dark-1..3], scheme }, vars, iconPack, assets }` (`vars`: the theme's variables as CSS values; `iconPack`: the pack with its `base` URL, or null; `assets`: image paths in bars.json → URLs) |
-| `mode` | `{ reduceMotion, performance }` |
+| `appearance` | `{ appearance (with `style`, the appearance's design style by name), themeCss, system: { accent: [base, light-1..3, dark-1..3], scheme }, vars, iconPack, assets }` (`vars`: the theme's variables as CSS values; `iconPack`: the pack with its `base` URL, or null; `assets`: image paths in bars.json → URLs) |
+| `mode` | `{ reduceMotion, performance, blur, liquid }` (`blur`: live blur draws for this window; `liquid`: liquid glass may draw) |
 | `backdrop` | `{ url, width, height, x, y }` (the monitor's size and the window's offset on it, DIPs), or null |
+| `behind` | what's behind the bar may have changed (its window moved, the wallpaper's snapshot changed): liquid glass captures again |
 | `config` | the parsed `bars.json` for this monitor, defaults filled in |
 | `visibility` | bool |
 | `reveal` | null: an auto-hiding dock's edge was touched |
@@ -1106,9 +1252,14 @@ The page and the host are built so new bars, flyouts and looks are additions, no
   `DockStyle` to a page factory (both built-in styles share `dock.ts`); `DockConfig::band`
   (`crates/bars/src/config.rs`) gives its band. The window, app-bar, auto-hide, region, item and
   activation machinery is shared. The page sets `data-style` on `<html>`.
+- **Designs.** A design is `crates/bars/presets/top/<id>.json` or `presets/dock/<id>.json` (added
+  to `TopDesign` or `DockDesign` and its `ALL` list, and to `TOP_DESIGNS` / `DOCK_DESIGNS` in
+  `bars/shell/src/protocol.ts`; the tests check that each parses, has a look, and never sets
+  `enabled`, `monitors`, `position`, `autohide` or pins) and its rules in
+  `bars/shell/src/designs/top.css` or `dock.css`, scoped by `data-bar` and `data-design`.
 - **Presets.** A preset is `crates/bars/presets/<name>.json` (added to `Preset` and its `ALL` list;
   the tests check that every preset parses and never sets `taskbar`, `vars` or pins) and its
-  section of `bars/shell/src/presets/presets.css`.
+  pairing: which design each bar starts from, and whether each bar is on (no look of its own).
 - **Flyouts.** `bars/shell/src/flyout.ts` is the one mechanism for anything that opens over the
   screen. `defineFlyout(id, render)` registers one; modules open it with `toggle(props, { anchor,
   place })`. One is open at a time; it closes on Escape, an outside press and window blur; it's part
@@ -1125,7 +1276,10 @@ The page and the host are built so new bars, flyouts and looks are additions, no
 - **Styling.** Everything is drawn from CSS variables and attributes, and the theme's CSS is
   inserted last (`<style id="theme-css">`, after the generated `<style id="look-css">`), so presets
   and themes restyle without code:
-  - on `<html>`: `data-bar="top|dock"`, `data-preset`, `data-edge` and `data-position`
+  - on `<html>`: `data-bar="top|dock"`, `data-preset`, `data-design`, `data-family`,
+    `data-glyphs`, `data-glass-style` (`liquid|frosted|none`), `data-live` and `data-fly-blur`
+    (live blur on the bar's blur fill and its flyouts), `data-liquid` and `data-fly-liquid` (liquid
+    glass on its surfaces and flyouts), `data-edge` and `data-position`
     (`top|bottom|left|right`), `data-layout` (top bar), `data-style`, `data-indicator`,
     `data-attention` (dock), `data-surface`, `data-text`, `data-shadow`, `data-scheme`,
     `data-system-scheme`, `data-fill` (`tint|none|solid|gradient|image|wallpaper`), `data-backdrop`
@@ -1171,6 +1325,11 @@ cargo build -p mypaper-bars
 target\debug\mypaper-bars.exe      # or let mypaper-core start it
 ```
 
+- **Mock parameters** besides those below: `top=<design>`, `dock=<design>`, `wall=grid` (a
+  high-contrast stand-in, to see refraction), `click=<selector>` (clicks it once the bar is up: opens
+  a flyout), `noblur`, `noliquid`, and `embed`: inside another page (Studio), the parent posts
+  `{ type: "mypaper-bars", bars: <bars.json or part of one> }` and the bar redraws with it, resolved
+  like the host does.
 - Without a WebView2 host, `pnpm -C bars/shell dev` (or the built page in a browser) runs against a
   mock host that resolves presets from the same bundles: `?bar=top|dock&preset=<name>&pos=bottom|top|left|right&autohide=1&scheme=light|dark&wall=dark|light|vivid&reduce=1&perf=1`,
   plus `poke=<selector>` (the pointer arrives there: magnify, labels, previews) and `dump=<selector>`

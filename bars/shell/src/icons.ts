@@ -4,8 +4,8 @@
 
 import type { VolumeGlyph } from "./top/logic";
 
-const svg = (key: string, inner: string): string =>
-  `<svg data-glyph="${key}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+const svg = (key: string, inner: string, attrs = ""): string =>
+  `<svg data-glyph="${key}"${attrs} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
 
 const FILL = `fill="currentColor" stroke="none"`;
 
@@ -72,14 +72,16 @@ export const icons = {
         );
     }
   },
-  /** Battery outline with a fill proportional to `fraction` (0-1). */
+  /** Battery outline with a fill proportional to `fraction` (0-1); `data-level` (tenths) is for glyph sets. */
   battery: (fraction: number): string => {
-    const w = Math.max(0, Math.min(1, fraction)) * 8.4;
+    const f = Math.max(0, Math.min(1, fraction));
+    const w = f * 8.4;
     return svg(
       "battery",
       `<rect x="1.5" y="4.25" width="11.5" height="7.5" rx="2"/><path d="M14.7 7v2"/>${
         w > 0.4 ? `<rect x="3.15" y="5.9" width="${w.toFixed(2)}" height="4.2" rx=".9" ${FILL}/>` : ""
       }`,
+      ` data-level="${Math.round(f * 10)}"`,
     );
   },
   bolt: svg("bolt", `<path d="M9 1.8 4.2 9h3.1L6.8 14.2 11.8 7H8.6Z" ${FILL}/>`),

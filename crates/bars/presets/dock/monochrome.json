@@ -1,0 +1,27 @@
+{
+  "style": "floating",
+  "indicator": "dot",
+  "magnify": { "scale": 1.5, "range": 3 },
+  "look": {
+    "family": "mono",
+    "background": { "type": "wallpaper", "brightness": 0.85 },
+    "tint": 0.6,
+    "saturation": 1.15,
+    "noise": 0.025,
+    "border": { "rest": { "width": 1, "color": "#ffffff14" } },
+    "shadow": { "rest": { "y": 3, "blur": 10, "color": "#00000052" } },
+    "glass": { "highlight": 0.35 },
+    "items": {
+      "radius": 7,
+      "hover": { "background": "#ffffff1a", "color": "#ffffff" },
+      "active": { "background": "#ffffff2b", "color": "#ffffff" }
+    },
+    "indicator": { "running": "#ffffff73", "active": "#ffffff", "attention": "#ffffff" }
+  },
+  "animation": {
+    "duration": 200,
+    "curve": "smooth",
+    "bar": { "style": "slide", "dock": { "bounce": { "duration": 520 } } },
+    "open": { "style": "pop", "duration": 150 }
+  }
+}
