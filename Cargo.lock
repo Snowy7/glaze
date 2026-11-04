@@ -1155,6 +1155,7 @@ dependencies = [
  "mypaper-config",
  "notify",
  "windows",
+ "windows-numerics",
 ]
 
 [[package]]

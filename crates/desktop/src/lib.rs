@@ -4,11 +4,17 @@
 mod config_watch;
 mod control;
 mod cover;
+pub mod desktop_hit;
+pub mod desktop_menu;
+pub mod desktop_view;
 mod fullscreen;
 pub mod hold;
 mod host;
+mod menu_model;
+mod menu_ui;
 mod monitors;
 mod power;
+pub mod raw_input;
 
 pub use config_watch::{ConfigWatcher, watch_config, watch_file};
 pub use control::{ControlWindow, WM_FACT};
