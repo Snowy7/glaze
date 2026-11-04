@@ -16,5 +16,8 @@ serde_json.workspace = true
 # Blocking HTTP with rustls; no async runtime, no default features (no gzip, no native-tls).
 ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Devices_Geolocation", "Foundation", "Networking_Connectivity", "Win32_System_WinRT"] }
+
 [lints]
 workspace = true
