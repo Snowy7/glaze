@@ -1646,10 +1646,25 @@ impl App {
                 GetWindowThreadProcessId(GetForegroundWindow(), Some(&mut pid));
                 pid == std::process::id()
             };
-            if ours {
+            // A press on another module closed it: that click keeps the bar in front.
+            if ours && !self.pointer_over_bar() {
                 self.hand_back(None);
             }
         }
+    }
+
+    /// Is the pointer over the visible part of a bar (the window under it, region respected)?
+    fn pointer_over_bar(&self) -> bool {
+        use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
+        let mut point = POINT::default();
+        // SAFETY: read-only queries; `point` outlives the call.
+        let under = unsafe {
+            if GetCursorPos(&mut point).is_err() {
+                return false;
+            }
+            GetAncestor(WindowFromPoint(point), GA_ROOT)
+        };
+        self.bars.iter().any(|bar| bar.hwnd() == under)
     }
 
     /// Edits the launcher's pins (`launcher.pinned`; until the first edit, the dock's) and tells

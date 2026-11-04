@@ -23,7 +23,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     KEYEVENTF_KEYUP, SendInput, VIRTUAL_KEY, VK_LWIN, VK_RWIN,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, HC_ACTION, KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSG,
+    CallNextHookEx, DispatchMessageW, GetMessageW, HC_ACTION, KBDLLHOOKSTRUCT, MSG,
     PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN,
     WM_QUIT, WM_SYSKEYDOWN,
 };
@@ -34,6 +34,9 @@ use crate::wake::{Msg, Waker};
 /// Unassigned virtual key: pressed between the Windows key's press and release, it makes them a
 /// combination, so Start doesn't open.
 const MASK: VIRTUAL_KEY = VIRTUAL_KEY(0xE8);
+
+/// `dwExtraInfo` of the keys the bars inject themselves ("mypa"), so the hook lets them by.
+pub const OURS: usize = 0x6D79_7061;
 
 /// What the hook does with one key event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,9 +60,14 @@ fn is_win(vk: u16) -> bool {
 }
 
 impl Machine {
-    /// One key event. `injected` input (other tools', our own replay) is never a lone press,
-    /// but another key injected while the Windows key is held still makes it a combination.
-    pub fn on_key(&mut self, vk: u16, down: bool, injected: bool) -> Action {
+    /// One key event. `ours` is input the bars injected themselves (the replay below, the native
+    /// Start fallback, desktop switching): it passes and changes nothing, so the fallback can't
+    /// loop back here. Everyone else's input counts, injected or not (on-screen keyboards,
+    /// remote desktop, key remappers).
+    pub fn on_key(&mut self, vk: u16, down: bool, ours: bool) -> Action {
+        if ours {
+            return Action::Pass;
+        }
         match (self.held, down) {
             (Some(held), true) if vk == held => Action::Pass, // auto-repeat
             (Some(_), true) => {
@@ -70,13 +78,9 @@ impl Machine {
                 let lone = !self.combo;
                 self.held = None;
                 self.combo = false;
-                if lone && !injected {
-                    Action::Open
-                } else {
-                    Action::Pass
-                }
+                if lone { Action::Open } else { Action::Pass }
             }
-            (None, true) if is_win(vk) && !injected => {
+            (None, true) if is_win(vk) => {
                 self.held = Some(vk);
                 self.combo = false;
                 Action::Pass
@@ -163,7 +167,7 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
         // SAFETY: for WH_KEYBOARD_LL with HC_ACTION, lParam is a KBDLLHOOKSTRUCT.
         let key = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
-        let injected = key.flags.0 & LLKHF_INJECTED.0 != 0;
+        let ours = key.dwExtraInfo == OURS;
         let vk = key.vkCode as u16;
         let action = HOOK.with(|hook| {
             let Ok(mut hook) = hook.try_borrow_mut() else {
@@ -173,7 +177,7 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
                 hook.0.reset();
                 return Action::Pass;
             }
-            hook.0.on_key(vk, down, injected)
+            hook.0.on_key(vk, down, ours)
         });
         if action == Action::Open && !mypaper_desktop::fullscreen_app_in_front() {
             replay_masked(VIRTUAL_KEY(vk));
@@ -199,6 +203,7 @@ fn replay_masked(win: VIRTUAL_KEY) {
             ki: KEYBDINPUT {
                 wVk: vk,
                 dwFlags: flags,
+                dwExtraInfo: OURS,
                 ..Default::default()
             },
         },
@@ -225,7 +230,7 @@ mod tests {
         let mut machine = Machine::default();
         events
             .iter()
-            .map(|&(vk, down, injected)| machine.on_key(vk, down, injected))
+            .map(|&(vk, down, ours)| machine.on_key(vk, down, ours))
             .collect()
     }
 
@@ -276,15 +281,15 @@ mod tests {
             ])[2],
             Action::Pass
         );
-        // A tool's injected key during the press.
+        // Our own keys during the press (desktop switching) don't count either way.
         assert_eq!(
             run(&[(LWIN, true, false), (E, true, true), (LWIN, false, false)])[2],
-            Action::Pass
+            Action::Open
         );
     }
 
     #[test]
-    fn injected_presses_and_strays_never_open_it() {
+    fn our_own_input_and_strays_never_open_it() {
         assert_eq!(
             run(&[(LWIN, true, true), (LWIN, false, true)]),
             [Action::Pass; 2]

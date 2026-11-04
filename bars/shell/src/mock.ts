@@ -4,6 +4,8 @@
 //   ?bar=top|dock   ?pos=bottom|left|right   ?size=48   ?h=28   ?autohide=1
 //   ?text=light|dark   ?surface=none|glass|solid   ?wall=dark|light
 
+import { flyoutMock, flyoutStart } from "./flyouts/mock";
+import { LAUNCHER_LAYOUTS } from "./flyouts/protocol";
 import type { Transport } from "./host";
 import type {
   Appearance,
@@ -103,7 +105,7 @@ export function createMockTransport(): Transport {
       height: Number(q.get("h")) || 28,
       left: ["start", "workspaces", "app"],
       center: ["media"],
-      right: ["tray", "stats", "network", "volume", "battery", "quick", "clock", "power"],
+      right: ["tray", "stats", "language", "network", "volume", "battery", "quick", "notifications", "clock", "power"],
       clock: { seconds: false, format: "ddd d MMM  HH:mm" },
     },
     dock: {
@@ -117,6 +119,18 @@ export function createMockTransport(): Transport {
       running: true,
       pinned: [],
     },
+    launcher: {
+      winKey: true,
+      layout: LAUNCHER_LAYOUTS.find((l) => l === q.get("launcher")) ?? "win11",
+      pinned: ["Terminal", "Firefox", "Visual Studio Code", "File Explorer", "Spotify", "Settings", "Photos", "Calculator"].map((name) => ({
+        path: `shell:AppsFolder\\${name.replace(/\s/g, "")}`,
+        name,
+      })),
+      files: true,
+    },
+    tray: { host: false },
+    calendar: { zones: [{ zone: "America/New_York" }, { zone: "Asia/Tokyo", label: "Tokyo office" }] },
+    audio: { switchOutput: false },
   };
 
   // A stand-in wallpaper, so glass and shadows read the way they will on the desktop.
@@ -151,11 +165,14 @@ export function createMockTransport(): Transport {
     emit("network", { kind: "wifi", name: "Home-5G", signal: 72 });
     emit("battery", { percent: 84, charging: true });
     emit("tray", [
-      { id: "sync", name: "Dropbox" },
-      { id: "chat", name: "Signal", icon: ICONS.mail },
-      { id: "overflow", name: "Show hidden icons" },
+      { id: "sync", name: "Dropbox", pinned: true },
+      { id: "chat", name: "Signal", icon: ICONS.mail, pinned: true },
+      { id: "music", name: "Spotify", icon: ICONS.music, pinned: false },
+      { id: "photos", name: "Photos backup", icon: ICONS.photos, pinned: false },
+      { id: "code", name: "Code helper", icon: ICONS.code, pinned: false },
     ]);
     emit("workspaces", workspaces);
+    flyoutStart(emit);
     let cpu = 18;
     let mem = 9.4e9;
     const stats = () => {
@@ -180,6 +197,8 @@ export function createMockTransport(): Transport {
   }
 
   const request = (message: Request) => {
+    const flyout = flyoutMock(message, emit);
+    if (flyout !== undefined) return reply(message.id, flyout);
     switch (message.method) {
       case "hello": {
         const result: Hello = {

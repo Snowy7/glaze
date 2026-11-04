@@ -13,7 +13,7 @@
 import { h } from "./dom";
 import type { Point, Size } from "./geometry";
 import { createScope, type Scope } from "./host";
-import { mountLayer } from "./overlay";
+import { mountLayer, type Layer } from "./overlay";
 
 export interface FlyoutContext {
   /** Closes this flyout. */
@@ -75,9 +75,13 @@ export function defineFlyout<P>(id: string, render: FlyoutRender<P>): Flyout<P> 
     el.tabIndex = -1;
     if (options.origin) el.style.setProperty("--origin", options.origin);
     const scope = createScope();
-    const ctx: FlyoutContext = { close: () => close(), reposition: () => layer.reposition(), scope };
+    // `reposition` may run while rendering (a subscription replaying its latest value): before the
+    // layer exists there's nothing to place yet.
+    let layer: Layer | undefined;
+    const ctx: FlyoutContext = { close: () => close(), reposition: () => layer?.reposition(), scope };
     el.append(render(props, ctx));
-    const layer = mountLayer(el, options.place);
+    const mounted = mountLayer(el, options.place);
+    layer = mounted;
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -96,7 +100,7 @@ export function defineFlyout<P>(id: string, render: FlyoutRender<P>): Flyout<P> 
       document.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("blur", close);
       scope.dispose();
-      layer.remove();
+      mounted.remove();
       options.onClose?.();
     }
 

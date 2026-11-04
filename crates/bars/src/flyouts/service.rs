@@ -54,6 +54,8 @@ pub struct Flyouts {
     waiting: Vec<(u32, u64)>,
     history: History,
     history_path: Option<PathBuf>,
+    /// The signed-in user, for the launcher's footer.
+    user: std::cell::OnceCell<String>,
     start_menu: Option<notify::RecommendedWatcher>,
 
     dirty: BTreeSet<Watched>,
@@ -72,6 +74,7 @@ impl Flyouts {
                 .map(History::load)
                 .unwrap_or_default(),
             history_path,
+            user: std::cell::OnceCell::new(),
             waker,
             icons,
             watches: Watches::default(),
@@ -111,7 +114,12 @@ impl Flyouts {
     }
 
     fn apps_value(&self) -> Value {
-        json!({ "apps": self.index.as_deref().unwrap_or_default(), "recent": self.history.recent })
+        let user = self.user.get_or_init(index::user_name);
+        json!({
+            "apps": self.index.as_deref().unwrap_or_default(),
+            "recent": self.history.recent,
+            "user": { "name": user },
+        })
     }
 
     /// Rebuilds the index on the apps lane.

@@ -2,13 +2,23 @@
 // current through host events; clicks become host commands.
 
 import { formatClock } from "../clock-format";
-import { button, glyph, glyphLetter, h, rectOf, viewport } from "../dom";
+import { button, glyph, h, rectOf, viewport } from "../dom";
+import {
+  languageModule,
+  notificationsModule,
+  openCalendar,
+  openLauncher,
+  openMixer,
+  openNetwork,
+  openQuick,
+  trayModule,
+} from "../flyouts";
 import { placePopover, type Rect } from "../geometry";
 import { fire, request, type Scope } from "../host";
 import { icons } from "../icons";
 import { openMenu, type MenuEntry } from "../menu";
 import { mountLayer, type Layer } from "../overlay";
-import type { BarsConfig, Module, TrayItem } from "../protocol";
+import type { BarsConfig, Module } from "../protocol";
 import { mediaLabel, signalLevel, volumeDelta, volumeGlyph, workspaceSteps } from "./logic";
 
 export interface TopCtx {
@@ -26,7 +36,7 @@ const underStrip = (el: Element, config: BarsConfig): Rect => {
 const start: Factory = () => {
   const el = button("mod icon-only", glyph(icons.mark));
   el.title = "Start";
-  el.addEventListener("click", () => fire("start"));
+  el.addEventListener("click", () => openLauncher(el));
   return el;
 };
 
@@ -75,7 +85,7 @@ const app: Factory = ({ scope }) => {
 
 const clock: Factory = ({ config, scope }) => {
   const el = button("mod clock");
-  el.addEventListener("click", () => fire("actionCenter", { panel: "notifications" }));
+  el.addEventListener("click", () => openCalendar(el));
   scope.on("clock", ({ now }) => {
     const date = new Date(now);
     el.textContent = formatClock(config.top.clock.format, date);
@@ -110,33 +120,10 @@ const media: Factory = ({ scope }) => {
   return el;
 };
 
-const trayButton = (item: TrayItem): HTMLButtonElement => {
-  const content =
-    item.id === "overflow"
-      ? glyph(icons.chevron)
-      : item.icon
-        ? Object.assign(h("img", "tray-icon"), { src: item.icon, alt: "" })
-        : h("span", "tray-chip", glyphLetter(item.name));
-  const el = button("mod tray-item", content);
-  el.title = item.name;
-  el.addEventListener("click", () => fire("tray", { id: item.id, button: "left" }));
-  el.addEventListener("contextmenu", (event) => {
-    event.preventDefault();
-    fire("tray", { id: item.id, button: "right" });
-  });
-  return el;
-};
-
-const tray: Factory = ({ scope }) => {
-  const el = h("div", "tray");
-  scope.on("tray", (items) => el.replaceChildren(...items.map(trayButton)));
-  return el;
-};
-
 const network: Factory = ({ scope }) => {
   const g = glyph();
   const el = button("mod icon-only", g);
-  el.addEventListener("click", () => fire("actionCenter", { panel: "quick" }));
+  el.addEventListener("click", () => openNetwork(el));
   scope.on("network", (info) => {
     g.innerHTML =
       info.kind === "wifi" ? icons.wifi(signalLevel(info.signal)) : info.kind === "ethernet" ? icons.ethernet : icons.offline;
@@ -203,8 +190,10 @@ const volume: Factory = ({ scope, config }) => {
       });
   };
 
-  el.addEventListener("click", () => {
-    if (!state) return;
+  // Click: the mixer; middle click: mute.
+  el.addEventListener("click", () => openMixer(el));
+  el.addEventListener("auxclick", (event) => {
+    if (event.button !== 1 || !state) return;
     request("volume", { mute: !state.muted })
       .then((result) => {
         state = result;
@@ -248,7 +237,7 @@ const battery: Factory = ({ scope }) => {
 const quick: Factory = () => {
   const el = button("mod icon-only", glyph(icons.quick));
   el.title = "Quick settings";
-  el.addEventListener("click", () => fire("actionCenter", { panel: "quick" }));
+  el.addEventListener("click", () => openQuick(el));
   return el;
 };
 
@@ -316,11 +305,13 @@ export const factories: Record<Module, Factory> = {
   app,
   clock,
   media,
-  tray,
+  tray: trayModule,
   network,
   volume,
   battery,
   quick,
   power,
   stats,
+  language: languageModule,
+  notifications: notificationsModule,
 };

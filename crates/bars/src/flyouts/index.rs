@@ -179,6 +179,26 @@ impl History {
     }
 }
 
+/// The signed-in user's display name ("Ada Lovelace"), else their account name.
+pub fn user_name() -> String {
+    use windows::Win32::Security::Authentication::Identity::{GetUserNameExW, NameDisplay};
+    let mut buffer = [0u16; 256];
+    let mut len = buffer.len() as u32;
+    // SAFETY: the buffer and its length outlive the call.
+    let ok = unsafe {
+        GetUserNameExW(
+            NameDisplay,
+            Some(windows::core::PWSTR(buffer.as_mut_ptr())),
+            &mut len,
+        )
+    };
+    let name = ok
+        .then(|| String::from_utf16_lossy(&buffer[..len as usize]))
+        .filter(|n| !n.trim().is_empty());
+    name.or_else(|| std::env::var("USERNAME").ok())
+        .unwrap_or_else(|| "User".into())
+}
+
 pub fn epoch_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -419,7 +439,12 @@ mod tests {
         let names: Vec<&str> = apps.iter().map(|a| a.name.as_str()).collect();
         assert_eq!(
             names,
-            ["File Explorer", "Microsoft Edge", "Terminal", "Visual Studio Code"]
+            [
+                "File Explorer",
+                "Microsoft Edge",
+                "Terminal",
+                "Visual Studio Code"
+            ]
         );
         assert_eq!(apps[1].keywords, ["msedge"], "the exe's name is a keyword");
         assert_eq!(

@@ -173,6 +173,8 @@ fn keys(chord: &[VIRTUAL_KEY]) {
                 ki: KEYBDINPUT {
                     wVk: vk,
                     dwFlags: flags,
+                    // The launcher's Windows key hook lets our own keys by.
+                    dwExtraInfo: crate::flyouts::winkey::OURS,
                     ..Default::default()
                 },
             },

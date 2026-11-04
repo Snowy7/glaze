@@ -1,6 +1,8 @@
 // The page ⇄ host wire protocol (docs/bars.md, "Bridge"). The Rust host (crates/bars) speaks the
 // other side. Every message is one JSON object through WebView2 `postMessage`.
 
+import type { CalendarConfig, FlyoutEvents, FlyoutMethods, LauncherConfig } from "./flyouts/protocol";
+
 /** Top-bar modules, in the order they are documented. */
 export const MODULES = [
   "start",
@@ -15,6 +17,8 @@ export const MODULES = [
   "quick",
   "power",
   "stats",
+  "language",
+  "notifications",
 ] as const;
 export type Module = (typeof MODULES)[number];
 
@@ -58,6 +62,11 @@ export interface BarsConfig {
     running: boolean;
     pinned: Pinned[];
   };
+  launcher: LauncherConfig;
+  tray: { host: boolean };
+  calendar: CalendarConfig;
+  /** `switchOutput`: the mixer may switch the default output (an undocumented API). */
+  audio: { switchOutput: boolean };
 }
 
 /** Resolved appearance: every field set (docs/widgets.md, "Appearance"). */
@@ -142,9 +151,11 @@ export interface TrayItem {
   id: string;
   name: string;
   icon?: string;
+  /** Shown in the bar (the user pinned it in Windows); the rest are in the overflow. */
+  pinned: boolean;
 }
 
-export interface EventMap {
+export interface EventMap extends FlyoutEvents {
   apps: DockItem[];
   foreground: { name: string; icon?: string } | null;
   /** Milliseconds since the Unix epoch; the page formats it. */
@@ -178,7 +189,7 @@ export type HostReply =
 
 // --- Page → host ---------------------------------------------------------------------------------
 
-export interface MethodMap {
+export interface MethodMap extends FlyoutMethods {
   hello: { params: undefined; result: Hello };
   activate: { params: { app: string } | { hwnd: number }; result: null };
   launch: { params: { path: string; newInstance?: boolean }; result: null };
@@ -196,7 +207,11 @@ export interface MethodMap {
     result: { level: number; muted: boolean };
   };
   media: { params: { action: "toggle" | "next" | "previous" }; result: null };
-  tray: { params: { id: string; button: "left" | "right" }; result: null };
+  /** `rect`: the icon in the bar (DIPs from the window's top-left), for apps that place a popup beside it. */
+  tray: {
+    params: { id: string; button: "left" | "right" | "middle" | "double"; rect?: [number, number, number, number] };
+    result: null;
+  };
   power: { params: { action: "lock" | "sleep" | "signout" | "restart" | "shutdown" }; result: null };
   workspace: { params: { direction: "left" | "right" }; result: null };
   /** An `ms-settings:` URI only. */

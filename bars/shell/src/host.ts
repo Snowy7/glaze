@@ -26,7 +26,7 @@ const pending = new Map<number, { resolve(value: unknown): void; reject(error: E
 const listeners = new Map<string, Set<(data: unknown) => void>>();
 const latest = new Map<string, unknown>();
 // Events that mean "now", not "the current state": never replayed.
-const TRANSIENT: ReadonlySet<string> = new Set<EventName>(["reveal"]);
+const TRANSIENT: ReadonlySet<string> = new Set<EventName>(["reveal", "open"]);
 
 function handleMessage(data: unknown): void {
   if (typeof data !== "object" || data === null) return;

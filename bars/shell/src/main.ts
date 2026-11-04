@@ -1,6 +1,7 @@
 import { applyAppearance } from "./appearance";
 import type { Bar } from "./bar";
 import { dockStyles } from "./dock/styles";
+import { initSurfaces, setSurfaceConfig } from "./flyouts";
 import { connect, fire, on } from "./host";
 import { initOverlay } from "./overlay";
 import type { BarsConfig } from "./protocol";
@@ -23,7 +24,9 @@ async function main(): Promise<void> {
 
   let bar: Bar | undefined;
   region.provide(() => bar?.rects() ?? []);
+  initSurfaces(hello);
   const build = (config: BarsConfig) => {
+    setSurfaceConfig(config);
     bar?.destroy();
     if (hello.bar === "top") {
       html.removeAttribute("data-position");
