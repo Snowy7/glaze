@@ -512,15 +512,9 @@ impl Engine {
         // First frame of a newly loaded theme: publish its palette, once.
         if drew && std::mem::take(&mut self.palette_due) {
             startup::ready("wallpaper", "first_frame_ms");
-            let size = self.screens.first().map_or((1, 1), Screen::size);
-            palette::publish(
-                &self.gpu,
-                self.source.as_mut(),
-                &self.theme.dir,
-                size,
-                self.clock,
-                self.frame,
-            );
+            if let Some(kept) = self.screens.iter().find_map(|s| s.kept.as_ref()) {
+                palette::publish(&self.gpu, kept, &self.theme.dir);
+            }
         }
 
         // Once per theme load, too: the same frame, full size, for the Windows wallpaper (a
