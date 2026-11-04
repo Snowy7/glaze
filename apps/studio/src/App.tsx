@@ -1,8 +1,8 @@
-import { RotateCw, TriangleAlert, X } from "lucide-react";
+import { CircleCheck, RotateCw, TriangleAlert, X } from "lucide-react";
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 
 import { Sidebar, type View } from "./components/Sidebar";
-import { Button } from "./components/ui";
+import { Button, IconButton } from "./components/ui";
 import { StudioProvider, useStudio } from "./lib/studio";
 import { Bars } from "./views/Bars";
 import { Gallery } from "./views/Gallery";
@@ -26,9 +26,11 @@ function Shell() {
     <div className="flex h-full bg-sidebar">
       <Sidebar view={view} onNavigate={setView} />
       <main
-        // Re-key per view so each one fades in.
+        // Re-key per view so each one fades in (and starts at the top).
         key={view}
-        className="min-w-0 flex-1 animate-rise overflow-y-auto rounded-tl-2xl border-t border-l border-line bg-canvas px-9 pt-9 pb-8"
+        data-scroll-root
+        // `--page-px` is the side gutter; `Page`'s sticky header reaches across it.
+        className="min-w-0 flex-1 animate-rise overflow-y-auto rounded-tl-xl border-t border-l border-line-strong bg-canvas px-(--page-px) scroll-pt-32 pb-12 [--page-px:1.5rem] [scrollbar-gutter:stable] lg:[--page-px:2rem] 2xl:[--page-px:2.75rem]"
       >
         <ErrorBoundary inline>
           {view === "gallery" && <Gallery onNavigate={setView} />}
@@ -51,18 +53,15 @@ function Toaster() {
         <div
           key={toast.id}
           role={toast.tone === "error" ? "alert" : "status"}
-          className="selectable pointer-events-auto flex max-w-xl animate-rise items-start gap-3 rounded-xl bg-surface-hi py-2.5 pr-2 pl-4 text-[13px] text-ink shadow-card ring-1 ring-line-hi"
+          className="selectable pointer-events-auto flex max-w-xl animate-rise items-start gap-2.5 rounded-xl bg-surface-hi py-2 pr-2 pl-3.5 text-[13px] text-ink shadow-pop ring-1 ring-line-hi"
         >
-          {toast.tone === "error" && <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />}
-          <span className="py-0.5">{toast.message}</span>
-          <button
-            type="button"
-            onClick={dismissToast}
-            aria-label="Dismiss"
-            className="grid size-6 shrink-0 cursor-default place-items-center rounded-md text-ink-3 transition-colors hover:bg-line hover:text-ink"
-          >
-            <X className="size-3.5" aria-hidden />
-          </button>
+          {toast.tone === "error" ? (
+            <TriangleAlert className="mt-1 size-4 shrink-0" aria-hidden />
+          ) : (
+            <CircleCheck className="mt-1 size-4 shrink-0 text-ink-2" aria-hidden />
+          )}
+          <span className="py-0.5 leading-relaxed">{toast.message}</span>
+          <IconButton icon={X} label="Dismiss" size="sm" variant="ghost" onClick={dismissToast} />
         </div>
       )}
     </div>
