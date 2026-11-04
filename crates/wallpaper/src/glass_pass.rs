@@ -89,7 +89,7 @@ impl GlassPass {
         }
     }
 
-    fn set_plates(&mut self, plates: Vec<Plate>) {
+    pub(crate) fn set_plates(&mut self, plates: Vec<Plate>) {
         for (i, monitor) in self.monitors.iter().enumerate() {
             // Compare only this monitor's plates; identical publications cause zero drawing.
             let before = self.plates.iter().filter(|p| overlaps(p, monitor));

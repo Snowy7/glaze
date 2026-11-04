@@ -48,7 +48,7 @@ impl Opening {
             let instance = instance();
             let adapter =
                 pollster::block_on(instance.request_adapter(&adapter_options(None, preference)))?;
-            let (device, queue) = open_device(&adapter)?;
+            let (device, queue) = open_device(&adapter, crate::timing::requested())?;
             Ok(Opened {
                 instance,
                 adapter,
@@ -108,7 +108,7 @@ impl Gpu {
             adapter = pollster::block_on(
                 instance.request_adapter(&adapter_options(Some(first), preference)),
             )?;
-            (device, queue) = open_device(&adapter)?;
+            (device, queue) = open_device(&adapter, crate::timing::requested())?;
         }
         let info = adapter.get_info();
         log::info!(
@@ -143,8 +143,8 @@ impl Gpu {
         Ok((gpu, surfaces))
     }
 
-    /// A device with no windows, for tests that render to textures. `None`
-    /// on a machine without a DX12 GPU.
+    /// A device with no windows, for tests that render to textures, with timestamp queries
+    /// where the adapter has them (the frame lab). `None` on a machine without a DX12 GPU.
     #[cfg(test)]
     pub fn headless() -> Option<Self> {
         let instance = instance();
@@ -152,7 +152,7 @@ impl Gpu {
             instance.request_adapter(&adapter_options(None, GpuPreference::Integrated)),
         )
         .ok()?;
-        let (device, queue) = open_device(&adapter).ok()?;
+        let (device, queue) = open_device(&adapter, true).ok()?;
         let format = wgpu::TextureFormat::Bgra8Unorm;
         let blit = Blitter::new(&device, format);
         Some(Self {
@@ -387,21 +387,30 @@ fn instance() -> wgpu::Instance {
     wgpu::Instance::new(desc)
 }
 
-/// Opens the device and queue, routing GPU errors to the log.
-fn open_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue)> {
+/// Fixed 4 MiB suballocation blocks, the allocator's minimum. Anything larger (every screen-sized
+/// texture) gets a heap of exactly its own size. `MemoryUsage` grows blocks from 8 to 64 MiB and
+/// reserved 124 MiB for four 2560x1440 textures (56 MiB). On this integrated GPU every heap is
+/// private memory, and a released one is not given back (docs/engine-notes.md, Memory).
+const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::Manual {
+    suballocated_device_memory_block_size: 4 << 20..4 << 20,
+};
+
+/// Opens the device and queue, routing GPU errors to the log. `timing` adds the timestamp
+/// features the adapter supports.
+fn open_device(adapter: &wgpu::Adapter, timing: bool) -> Result<(wgpu::Device, wgpu::Queue)> {
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("mypaper"),
         // 16-bit normalized formats: the planes of 10-bit (P010) video.
         required_features: adapter.features().intersection(
             wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
-                | if crate::timing::requested() {
+                | if timing {
                     crate::timing::FEATURES
                 } else {
                     wgpu::Features::empty()
                 },
         ),
         required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
-        memory_hints: wgpu::MemoryHints::MemoryUsage,
+        memory_hints: MEMORY_HINTS,
         ..Default::default()
     }))?;
     device.on_uncaptured_error(std::sync::Arc::new(|e| log::error!("GPU: {e}")));
