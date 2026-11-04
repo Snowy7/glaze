@@ -1,6 +1,6 @@
-//! UI Automation through AccessKit. Each surface has an adapter from the start (it holds no
-//! tree), and the tree is built from the surface's hit items only when a client first asks
-//! (`WM_GETOBJECT`). Until then updates cost nothing.
+//! UI Automation through AccessKit. Every surface retains its latest hit snapshot; startup
+//! surfaces can defer the adapter itself until WM_GETOBJECT. Neither constructor builds a tree
+//! before a client asks, and updates do no UIA work while the adapter is inactive or deferred.
 
 use std::rc::Rc;
 use std::sync::Arc;

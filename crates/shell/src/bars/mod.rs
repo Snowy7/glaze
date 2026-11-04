@@ -1045,6 +1045,7 @@ impl Bars {
                         tokens,
                         self.system.animations && !performance,
                     )?;
+                    bar.hidden = self.asleep || self.fullscreen.as_deref() == Some(&monitor.device);
                     if kind == BarKind::Dock {
                         bar.items = self.services.dock_items(
                             &config,
