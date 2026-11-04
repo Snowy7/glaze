@@ -1,464 +1,548 @@
-//! `%APPDATA%\mypaper\bars.json`: the top bar, dock and native-taskbar settings
-//! (docs/bars.md, "Config"). The structs mirror the document. `mypaper-bars`
-//! rejects unknown fields, but Studio keeps them: every struct collects what it
-//! doesn't know in `extra` (a `serde_json::Map`) and writes it back, so editing
-//! never drops something another tool or a newer version put there.
+//! `%APPDATA%\mypaper\bars.json` (docs/bars.md, "Config"). Studio handles the file as the JSON
+//! document it is: the page edits it, and what Studio's Rust side adds is the host's own schema
+//! (`mypaper-bars-schema`, which compiles `crates/bars`' source) to refuse anything the bars host
+//! would refuse. So nothing is mirrored here, and nothing the page doesn't touch is dropped: the
+//! document goes out and comes back as `serde_json::Value`, key order included.
+//!
+//! Also here: the catalog the page merges against (the defaults, the presets and the geometry
+//! defaults), so the page shows the same effective values the host computes.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, ensure};
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use anyhow::{Context, Result};
+use mypaper_bars_schema::config::{DockStyle, TopLayout};
+use mypaper_bars_schema::style::{COLOR_TOKENS, NAMED_CURVES};
+use mypaper_bars_schema::{BarsConfig, Preset};
+use serde::Serialize;
+use serde_json::{Map, Value, json};
 
 use crate::fsio;
-use crate::look::Look;
 
 pub const FILE: &str = "bars.json";
 
-type Extra = Map<String, Value>;
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TaskbarMode {
-    /// Untouched.
-    #[default]
-    Keep,
-    Autohide,
-    /// Hidden on every monitor; its space goes to our bars.
-    Hide,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Alignment {
-    Center,
-    Left,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Taskbar {
-    pub mode: TaskbarMode,
-    /// Omitted: leave Windows' own setting alone.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub alignment: Option<Alignment>,
-    #[serde(flatten)]
-    pub extra: Extra,
-}
-
-/// The top-bar items (docs/bars.md, "Modules").
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Module {
-    Start,
-    Workspaces,
-    App,
-    Clock,
-    Media,
-    Tray,
-    Network,
-    Volume,
-    Battery,
-    Quick,
-    Power,
-    Stats,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MonitorKeyword {
-    All,
-    Primary,
-}
-
-/// `"all"`, `"primary"`, or device names such as `\\.\DISPLAY2`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Monitors {
-    Keyword(MonitorKeyword),
-    Devices(Vec<String>),
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Clock {
-    pub seconds: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub format: Option<String>,
-    #[serde(flatten)]
-    pub extra: Extra,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct TopBar {
-    pub enabled: bool,
-    pub monitors: Monitors,
-    /// DIPs.
-    pub height: u32,
-    pub left: Vec<Module>,
-    pub center: Vec<Module>,
-    pub right: Vec<Module>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub clock: Option<Clock>,
-    #[serde(flatten)]
-    pub extra: Extra,
-}
-
-impl Default for TopBar {
-    fn default() -> Self {
-        use Module::*;
-        Self {
-            enabled: true,
-            monitors: Monitors::Keyword(MonitorKeyword::All),
-            height: 32,
-            left: vec![Start, Workspaces, App],
-            center: vec![Module::Clock],
-            right: vec![Media, Tray, Network, Volume, Battery, Quick, Power],
-            clock: None,
-            extra: Extra::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum DockPosition {
-    #[default]
-    Bottom,
-    Left,
-    Right,
-}
-
-/// A pinned dock item: an exe, `.lnk`, folder or `shell:AppsFolder\<AUMID>` path.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Pinned {
-    pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(flatten)]
-    pub extra: Extra,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Dock {
-    pub enabled: bool,
-    pub monitors: Monitors,
-    pub position: DockPosition,
-    /// DIPs.
-    pub size: u32,
-    pub autohide: bool,
-    pub magnify: bool,
-    /// Show running apps that aren't pinned.
-    pub running: bool,
-    pub pinned: Vec<Pinned>,
-    #[serde(flatten)]
-    pub extra: Extra,
-}
-
-impl Default for Dock {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            monitors: Monitors::Keyword(MonitorKeyword::Primary),
-            position: DockPosition::Bottom,
-            size: 48,
-            autohide: false,
-            magnify: true,
-            running: true,
-            pinned: Vec::new(),
-            extra: Extra::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct BarsConfig {
-    pub version: u32,
-    pub taskbar: Taskbar,
-    pub top: TopBar,
-    pub dock: Dock,
-    pub appearance: Look,
-    #[serde(flatten)]
-    pub extra: Extra,
-}
-
-impl Default for BarsConfig {
-    fn default() -> Self {
-        Self {
-            version: 1,
-            taskbar: Taskbar::default(),
-            top: TopBar::default(),
-            dock: Dock::default(),
-            appearance: Look::default(),
-            extra: Extra::new(),
-        }
-    }
-}
-
-/// DIP ranges the editor offers; the bars page uses whatever is in the file.
-pub const TOP_HEIGHT: std::ops::RangeInclusive<u32> = 20..=64;
-pub const DOCK_SIZE: std::ops::RangeInclusive<u32> = 24..=128;
-
-impl BarsConfig {
-    /// What `mypaper-bars` would refuse or misread. Run before every write.
-    pub fn validate(&self) -> Result<()> {
-        ensure!(self.version == 1, "bars.json version must be 1, got {}", self.version);
-        ensure!(TOP_HEIGHT.contains(&self.top.height), "top.height must be between {} and {}", TOP_HEIGHT.start(), TOP_HEIGHT.end());
-        ensure!(DOCK_SIZE.contains(&self.dock.size), "dock.size must be between {} and {}", DOCK_SIZE.start(), DOCK_SIZE.end());
-
-        let mut placed = HashSet::new();
-        for module in self.top.left.iter().chain(&self.top.center).chain(&self.top.right) {
-            ensure!(placed.insert(*module), "the {module:?} module is placed twice");
-        }
-        for (what, monitors) in [("top", &self.top.monitors), ("dock", &self.dock.monitors)] {
-            if let Monitors::Devices(devices) = monitors {
-                ensure!(!devices.is_empty() && devices.iter().all(|d| !d.trim().is_empty()), "{what}.monitors needs at least one monitor");
-            }
-        }
-        let mut paths = HashSet::new();
-        for item in &self.dock.pinned {
-            ensure!(!item.path.trim().is_empty(), "a pinned item has no path");
-            ensure!(paths.insert(item.path.to_lowercase()), "{} is pinned twice", item.path);
-        }
-        self.appearance.validate()
-    }
-
-    /// Dotted paths of every field Studio doesn't know. `mypaper-bars` rejects
-    /// the whole file while any are present, so the editor says so.
-    pub fn unknown_fields(&self) -> Vec<String> {
-        let mut found = Vec::new();
-        let mut note = |prefix: &str, extra: &Extra| found.extend(extra.keys().map(|key| format!("{prefix}{key}")));
-        note("", &self.extra);
-        note("taskbar.", &self.taskbar.extra);
-        note("top.", &self.top.extra);
-        if let Some(clock) = &self.top.clock {
-            note("top.clock.", &clock.extra);
-        }
-        note("dock.", &self.dock.extra);
-        for item in &self.dock.pinned {
-            note("dock.pinned[].", &item.extra);
-        }
-        found
-    }
-}
-
-pub fn parse(text: &str) -> Result<BarsConfig> {
-    serde_json::from_str(text).map_err(Into::into)
-}
-
-pub fn render(config: &BarsConfig) -> Result<String> {
-    Ok(serde_json::to_string_pretty(config)? + "\n")
-}
+pub type Doc = Map<String, Value>;
 
 /// What the Bars page needs to show the file.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BarsState {
-    pub config: BarsConfig,
-    /// False: these are the built-in defaults, and no file has been written yet.
+    /// The file as written (`{ "version": 1 }` when there is none yet).
+    pub doc: Doc,
+    /// False: no file yet; the first change creates it.
     pub exists: bool,
     pub path: String,
-    /// Problems that don't stop the file from loading but that the bars would trip on.
-    pub warnings: Vec<String>,
+    /// Why the bars host would refuse this file, when it would. The page then shows the problem
+    /// instead of the editors: nothing can be saved until the file parses again.
+    pub problem: Option<String>,
 }
 
 pub fn path() -> Result<PathBuf> {
     Ok(mypaper_config::dir()?.join(FILE))
 }
 
+fn blank() -> Doc {
+    Doc::from_iter([("version".to_owned(), Value::from(1))])
+}
+
+fn parse_doc(text: &str) -> Result<Doc> {
+    match serde_json::from_str(text).context("bars.json is not valid JSON")? {
+        Value::Object(map) => Ok(map),
+        _ => anyhow::bail!("bars.json must hold a JSON object"),
+    }
+}
+
+fn render(doc: &Doc) -> Result<String> {
+    Ok(serde_json::to_string_pretty(doc)? + "\n")
+}
+
 pub fn load_from(path: &Path) -> Result<BarsState> {
     let text = fsio::read_optional(path)?;
-    let config = match &text {
-        Some(text) => parse(text).with_context(|| format!("in {}", path.display()))?,
-        None => BarsConfig::default(),
+    let (doc, problem) = match &text {
+        Some(text) => (
+            parse_doc(text).with_context(|| format!("in {}", path.display()))?,
+            BarsConfig::parse(text).err().map(|e| format!("{e:#}")),
+        ),
+        None => (blank(), None),
     };
-    let mut warnings = Vec::new();
-    if !config.unknown_fields().is_empty() {
-        warnings.push(format!(
-            "{} has fields mypaper doesn't know ({}). Studio keeps them, but the bars ignore the whole file until they are removed.",
-            FILE,
-            config.unknown_fields().join(", ")
-        ));
-    }
-    if let Err(e) = config.validate() {
-        warnings.push(format!("{e:#}"));
-    }
-    Ok(BarsState { config, exists: text.is_some(), path: path.display().to_string(), warnings })
+    Ok(BarsState { doc, exists: text.is_some(), path: path.display().to_string(), problem })
 }
 
-/// Validates and writes `config`. A file that doesn't parse is never replaced
-/// (it may be mid-edit in a text editor): fix or reset it first.
-pub fn save_to(path: &Path, config: &BarsConfig) -> Result<BarsState> {
-    config.validate()?;
+/// Checks `doc` with the host's schema and writes it. A file that doesn't parse is never replaced
+/// (it may be mid-edit in a text editor, or written by a newer version): fix or reset it first.
+pub fn save_to(path: &Path, doc: &Doc) -> Result<BarsState> {
+    let text = render(doc)?;
+    BarsConfig::parse(&text).context("the bars host would refuse these settings")?;
     let existing = fsio::read_optional(path)?;
-    if let Some(text) = &existing {
-        parse(text).with_context(|| format!("{} can't be read, so Studio won't overwrite it", path.display()))?;
+    if let Some(existing) = &existing {
+        BarsConfig::parse(existing)
+            .with_context(|| format!("{} can't be read, so Studio won't overwrite it", path.display()))?;
+        // The same document in other formatting isn't a change.
+        if parse_doc(existing).is_ok_and(|current| current == *doc) {
+            return load_from(path);
+        }
     }
-    let rendered = render(config)?;
-    if existing.as_deref() != Some(rendered.as_str()) {
-        fsio::write_atomic(path, rendered)?;
-    }
+    fsio::write_atomic(path, text)?;
     load_from(path)
 }
 
-/// Replaces the file with the defaults.
+/// Replaces the file with an empty config (all defaults).
 pub fn reset_at(path: &Path) -> Result<BarsState> {
-    fsio::write_atomic(path, render(&BarsConfig::default())?)?;
+    fsio::write_atomic(path, render(&blank())?)?;
     load_from(path)
+}
+
+/// Studio-only facts about bars.json the page can't derive: the host's defaults, its presets and
+/// the geometry defaults that depend on the layout.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Catalog {
+    /// `BarsConfig::default()`, the bottom layer of every merge.
+    pub defaults: Value,
+    pub presets: Vec<PresetInfo>,
+    /// Margin, padding, spacing (and size) a missing field takes, per top layout and dock style.
+    pub geometry: Value,
+    pub named_curves: Vec<&'static str>,
+    pub color_tokens: Vec<&'static str>,
+    /// For each preset, the `look.background` types a file can choose (see [`background_types`]).
+    pub background_types: Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PresetInfo {
+    pub id: String,
+    /// The preset's partial `bars.json`.
+    pub bundle: Value,
+}
+
+pub fn catalog() -> Result<Catalog> {
+    let presets = Preset::ALL
+        .iter()
+        .map(|preset| {
+            let Value::String(id) = serde_json::to_value(preset)? else {
+                anyhow::bail!("a preset serializes to its name")
+            };
+            Ok(PresetInfo { id, bundle: preset.bundle() })
+        })
+        .collect::<Result<_>>()?;
+    Ok(Catalog {
+        defaults: serde_json::to_value(BarsConfig::default())?,
+        presets,
+        geometry: geometry()?,
+        named_curves: NAMED_CURVES.to_vec(),
+        color_tokens: COLOR_TOKENS.to_vec(),
+        background_types: background_types()?,
+    })
+}
+
+/// The host merges a file over its preset key by key, `look.background` included. A preset whose
+/// background has keys the chosen type doesn't take (monochrome's `brightness`, islands' `color`)
+/// leaves them in the merged object, and the host then refuses it. So not every background type is
+/// available over every preset; this asks the host's parser which are, rather than restating its
+/// rules.
+fn background_types() -> Result<Value> {
+    let samples = [
+        ("none", json!({ "type": "none" })),
+        ("solid", json!({ "type": "solid", "color": "#000000" })),
+        ("gradient", json!({ "type": "gradient", "stops": ["#000000", "#ffffff"] })),
+        ("image", json!({ "type": "image", "path": "background.png" })),
+        ("wallpaper", json!({ "type": "wallpaper" })),
+    ];
+    let mut by_preset = Map::new();
+    for preset in Preset::ALL {
+        let Value::String(id) = serde_json::to_value(preset)? else { anyhow::bail!("a preset serializes to its name") };
+        let allowed: Vec<&str> = samples
+            .iter()
+            .filter(|(_, background)| {
+                let doc = json!({ "preset": id, "look": { "background": background } });
+                BarsConfig::parse(&doc.to_string()).is_ok()
+            })
+            .map(|(name, _)| *name)
+            .collect();
+        by_preset.insert(id, json!(allowed));
+    }
+    Ok(Value::Object(by_preset))
+}
+
+/// What `BarsConfig::resolve` fills in for each layout and dock style, asked of the host's code.
+fn geometry() -> Result<Value> {
+    let resolved = |layout: TopLayout, style: DockStyle| -> Result<Value> {
+        let mut config = BarsConfig::default();
+        config.top.layout = layout;
+        config.dock.style = style;
+        config.resolve(Vec::new);
+        Ok(serde_json::to_value(&config)?)
+    };
+    let top = |layout: TopLayout| -> Result<Value> {
+        let config = resolved(layout, DockStyle::Floating)?;
+        Ok(json!({
+            "margin": config["top"]["margin"],
+            "padding": config["top"]["padding"],
+            "spacing": config["top"]["spacing"],
+        }))
+    };
+    let dock = |style: DockStyle| -> Result<Value> {
+        let config = resolved(TopLayout::Strip, style)?;
+        Ok(json!({
+            "size": config["dock"]["size"],
+            "margin": config["dock"]["margin"],
+            "padding": config["dock"]["padding"],
+            "spacing": config["dock"]["spacing"],
+        }))
+    };
+    Ok(json!({
+        "top": {
+            "strip": top(TopLayout::Strip)?,
+            "floating": top(TopLayout::Floating)?,
+            "islands": top(TopLayout::Islands)?,
+        },
+        "dock": {
+            "floating": dock(DockStyle::Floating)?,
+            "taskbar": dock(DockStyle::Taskbar)?,
+        },
+    }))
 }
 
 #[cfg(test)]
 mod tests {
+    use mypaper_bars_schema::config::{
+        Action, BuiltinAction, Dimension, IndicatorStyle, LauncherLayout, Monitors, ModuleRef, Running,
+    };
+
     use super::*;
     use crate::source::tests::temp_dir;
-
-    const FULL: &str = r#"{
-  "version": 1,
-  "taskbar": { "mode": "hide", "alignment": "left" },
-  "top": {
-    "enabled": true, "monitors": ["\\\\.\\DISPLAY2"], "height": 36,
-    "left": ["start"], "center": ["clock"], "right": ["volume", "power"],
-    "clock": { "seconds": true, "format": "HH:mm", "tz": "UTC" },
-    "theme_hint": 7
-  },
-  "dock": {
-    "enabled": true, "monitors": "primary", "position": "left", "size": 56,
-    "autohide": true, "magnify": false, "running": false,
-    "pinned": [ { "path": "C:\\Windows\\explorer.exe", "name": "File Explorer", "badge": "pro" } ]
-  },
-  "appearance": { "surface": "glass", "opacity": 0.6 },
-  "future": { "a": [1, 2] }
-}"#;
 
     fn json(text: &str) -> Value {
         serde_json::from_str(text).unwrap()
     }
 
-    #[test]
-    fn a_full_file_round_trips_and_keeps_fields_it_does_not_know() {
-        let config = parse(FULL).unwrap();
-        assert_eq!(config.taskbar.mode, TaskbarMode::Hide);
-        assert_eq!(config.top.monitors, Monitors::Devices(vec![r"\\.\DISPLAY2".into()]));
-        assert_eq!(config.dock.position, DockPosition::Left);
-        assert_eq!(config.top.right, [Module::Volume, Module::Power]);
-        assert_eq!(
-            config.unknown_fields(),
-            ["future", "top.theme_hint", "top.clock.tz", "dock.pinned[].badge"]
-        );
+    /// A `bars.json` that uses every feature of the schema, as the docs and presets spell them.
+    const EVERYTHING: &str = r##"{
+  "version": 1,
+  "preset": "floating",
+  "taskbar": { "mode": "hide", "alignment": "left" },
+  "top": {
+    "enabled": true, "monitors": ["\\\\.\\DISPLAY2", "DISPLAY3"], "layout": "islands", "position": "bottom",
+    "height": 36, "margin": 6, "padding": 5, "spacing": 3, "width": "60%",
+    "left": ["start", "search", "|", "workspaces", "app"],
+    "center": ["clock", "custom:weather"],
+    "right": ["media", "|", "tray", "language", "notifications", "network", "volume", "battery", "stats", "quick", "power"],
+    "clock": { "seconds": true, "format": "HH:mm\nd/M/yyyy" }
+  },
+  "dock": {
+    "enabled": true, "monitors": "all", "style": "taskbar", "position": "left",
+    "size": 28, "margin": 2, "padding": 10, "spacing": 5, "autohide": true,
+    "magnify": { "enabled": true, "scale": 1.7, "range": 4 }, "running": "monitor",
+    "split": true, "counter": false, "titles": true, "indicator": "pill",
+    "preview": { "enabled": true, "delay": 300 }, "bounce": false, "attention": "bounce",
+    "extras": ["desktop", "trash"], "align": "start",
+    "left": ["start", "search", "|", "custom:notes"], "right": ["tray", "language", "clock"],
+    "pinned": [
+      { "path": "C:\\Windows\\explorer.exe", "name": "File Explorer" },
+      { "path": "shell:AppsFolder\\Microsoft.WindowsTerminal_8wekyb3d8bbwe!App" }
+    ]
+  },
+  "launcher": { "winKey": false, "layout": "dashboard", "files": false, "pinned": [ { "path": "C:\\Tools\\thing.exe", "name": "Thing" } ] },
+  "tray": { "host": true },
+  "calendar": { "zones": [ { "zone": "America/New_York" }, { "zone": "Asia/Tokyo", "label": "Tokyo office" } ], "firstDay": "monday" },
+  "audio": { "switchOutput": true },
+  "look": {
+    "scheme": "dark",
+    "background": { "type": "gradient", "kind": "radial", "angle": 200, "stops": ["#101820", { "color": "accent", "at": 0.6 }, "var(--tone)"] },
+    "tint": 0.5, "saturation": 1.4, "noise": 0.04, "radius": 14, "corners": "squircle",
+    "border": { "rest": { "width": 1, "color": { "kind": "conic", "angle": 120, "stops": ["#ff2bd6", "#00e5ff"] } }, "hover": { "width": 1.5 }, "active": { "color": "system-accent-light-2" } },
+    "glow": { "rest": { "color": "#a04cff", "size": 10, "opacity": 0.38 }, "hover": { "color": "accent", "size": 14, "opacity": 0.6 } },
+    "shadow": { "rest": { "x": 0, "y": 3, "blur": 10, "spread": -2, "color": "#00000052" }, "active": { "y": 1 } },
+    "items": {
+      "radius": 8,
+      "rest": { "color": "text", "scale": 1 },
+      "hover": { "background": "#ffffff1a", "scale": 1.04, "glow": { "color": "#ff2bd6", "size": 14, "opacity": 0.55 } },
+      "active": { "background": { "angle": 90, "stops": ["#ff2bd640", "#00e5ff40"] }, "border": { "width": 1, "color": "#ffffff33" }, "color": "#ffffff" }
+    },
+    "indicator": { "running": "#ffffff73", "active": "accent", "attention": "#ffb340" }
+  },
+  "animation": {
+    "enabled": true, "duration": 200, "curve": "smooth", "reduceMotion": "always",
+    "bar": {
+      "style": "slide",
+      "top": { "duration": 240, "hover": { "enabled": false } },
+      "dock": {
+        "curve": { "mass": 1, "stiffness": 220, "damping": 20 },
+        "magnify": { "duration": 70, "curve": "linear" }, "bounce": { "duration": 520, "curve": [0.3, 0, 0.4, 1] },
+        "attention": { "curve": "ease-in-out" }, "hover": { "enabled": false }, "press": { "curve": "spring-bouncy" }, "open": { "style": "scale" }
+      }
+    },
+    "hover": { "duration": 120 }, "press": { "curve": "snappy" }, "open": { "style": "pop", "duration": 160, "curve": "overshoot" }
+  },
+  "modules": {
+    "clock": {
+      "click": {
+        "left": "notifications", "middle": { "exec": "notepad.exe", "args": ["todo.txt"] },
+        "right": { "open": "ms-settings:dateandtime" }, "wheelUp": "volume-up", "wheelDown": "default"
+      },
+      "style": { "color": "accent", "background": "#ffffff10", "border": { "width": 1, "color": "#ffffff20" }, "padding": 12, "radius": 8, "size": 13, "weight": 650 }
+    },
+    "quick": { "icon": "C:\\Icons\\sliders.svg" },
+    "search": { "click": { "left": "none" } },
+    "custom:weather": {
+      "command": "curl.exe", "args": ["-s", "wttr.in/?format=%c+%t"], "interval": 900,
+      "click": { "left": { "open": "https://wttr.in" } }
+    },
+    "custom:notes": { "command": "powershell.exe", "icon": "notes" }
+  },
+  "icons": "My icons",
+  "performance": "auto",
+  "vars": { "--glow": "#00ffaa", "--glow-size": 18, "--labels": true, "--shape": "sharp" },
+  "appearance": { "surface": "glass", "tint": "#101010", "opacity": 0.5, "blur": 30, "radius": 12, "border": true, "text": "light", "accent": "auto", "font": "Segoe UI Variable", "scale": 1, "shadow": false },
+  "overrides": {
+    "secondary": { "top": { "enabled": false } },
+    "DISPLAY3": { "preset": "macos", "dock": { "enabled": true, "position": "right", "size": 40 }, "performance": "on" }
+  }
+}"##;
 
-        // Edit through the typed model, then compare with the original document.
-        let mut edited = config.clone();
-        edited.top.height = 40;
-        edited.dock.pinned[0].name = Some("Explorer".into());
-        let text = render(&edited).unwrap();
-        let mut expected = json(FULL);
-        expected["top"]["height"] = 40.into();
-        expected["dock"]["pinned"][0]["name"] = "Explorer".into();
-        assert_eq!(json(&text), expected, "{text}");
-        assert_eq!(parse(&text).unwrap(), edited);
+    fn write(dir: &Path, text: &str) -> PathBuf {
+        let path = dir.join(FILE);
+        std::fs::write(&path, text).unwrap();
+        path
     }
 
     #[test]
-    fn unset_optionals_are_left_out_of_the_file() {
-        let mut config = BarsConfig::default();
-        config.appearance.0.opacity = Some(0.55);
-        let value = json(&render(&config).unwrap());
-        assert!(value["taskbar"].get("alignment").is_none());
-        assert!(value["top"].get("clock").is_none());
-        assert_eq!(value["appearance"], json(r#"{ "opacity": 0.55 }"#));
-        assert_eq!(parse(&render(&config).unwrap()).unwrap(), config);
+    fn a_file_using_every_feature_is_read_and_written_back_exactly() {
+        let dir = temp_dir("bars-everything");
+        let path = write(&dir, EVERYTHING);
+
+        let state = load_from(&path).unwrap();
+        assert_eq!(state.problem, None);
+        assert!(state.exists);
+        assert_eq!(Value::Object(state.doc.clone()), json(EVERYTHING));
+
+        // The host's own types understand every part of it.
+        let config = BarsConfig::parse(EVERYTHING).unwrap();
+        assert_eq!(config.top.width, Some(Dimension::Percent(60.0)));
+        assert_eq!(config.top.center[1], ModuleRef::Custom("weather".into()));
+        assert_eq!(config.top.left[2], ModuleRef::Break);
+        assert_eq!(config.dock.running, Running::Monitor);
+        assert_eq!(config.dock.indicator, IndicatorStyle::Pill);
+        assert_eq!(config.launcher.layout, LauncherLayout::Dashboard);
+        assert!(config.tray.host && config.audio.switch_output);
+        assert!(matches!(config.dock.monitors, Monitors::All));
+        let click = &config.modules[&ModuleRef::Builtin(mypaper_bars_schema::Module::Clock)].click;
+        assert_eq!(click.left, Some(Action::Builtin(BuiltinAction::Notifications)));
+        assert!(matches!(click.middle, Some(Action::Exec { .. })));
+        assert!(matches!(click.right, Some(Action::Open { .. })));
+        assert_eq!(config.custom_modules().count(), 2);
+
+        // Saving what was read changes nothing: not the document, not the bytes on disk.
+        let saved = save_to(&path, &state.doc).unwrap();
+        assert_eq!(Value::Object(saved.doc), json(EVERYTHING));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), EVERYTHING);
+
+        // An edit touches only what it set, including inside the deepest sections.
+        let mut doc = state.doc;
+        doc["look"]["tint"] = 0.3.into();
+        doc["animation"]["bar"]["dock"]["bounce"]["duration"] = 480.into();
+        save_to(&path, &doc).unwrap();
+        let mut expected = json(EVERYTHING);
+        expected["look"]["tint"] = 0.3.into();
+        expected["animation"]["bar"]["dock"]["bounce"]["duration"] = 480.into();
+        assert_eq!(json(&std::fs::read_to_string(&path).unwrap()), expected);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
-    fn missing_pieces_take_the_documented_defaults() {
-        let config = parse("{}").unwrap();
-        assert_eq!(config, BarsConfig::default());
-        assert!(config.top.enabled && !config.dock.enabled);
-        assert_eq!(config.taskbar.mode, TaskbarMode::Keep);
-        assert_eq!(config.top.height, 32);
-        assert_eq!((config.dock.size, config.dock.magnify, config.dock.running), (48, true, true));
-        assert_eq!(config.top.center, [Module::Clock]);
+    fn every_preset_is_a_valid_file_and_survives_a_round_trip() {
+        let dir = temp_dir("bars-presets");
+        for preset in Preset::ALL {
+            let mut doc = Doc::new();
+            doc.insert("version".into(), 1.into());
+            doc.insert("preset".into(), serde_json::to_value(preset).unwrap());
+            let path = write(&dir, &render(&doc).unwrap());
+            assert_eq!(load_from(&path).unwrap().problem, None, "{preset:?}");
 
-        // A partial section keeps its other defaults.
-        let partial = parse(r#"{ "dock": { "enabled": true } }"#).unwrap();
-        assert!(partial.dock.enabled && partial.dock.running && partial.top.enabled);
-        config.validate().unwrap();
+            // The bundle itself, written out as the user's own file.
+            let Value::Object(mut bundle) = preset.bundle() else { panic!("{preset:?} is an object") };
+            // Merged over the default preset, a bundle would keep that preset's leftover keys, so
+            // as a standalone file it names its own preset.
+            bundle.insert("preset".into(), serde_json::to_value(preset).unwrap());
+            let saved = save_to(&path, &bundle).unwrap();
+            assert_eq!(saved.problem, None, "{preset:?}");
+            assert_eq!(Value::Object(saved.doc), Value::Object(bundle), "{preset:?}");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The JSON blocks of docs/bars.md that are `bars.json` documents or fragments of one.
+    fn doc_examples() -> Vec<Value> {
+        let docs = include_str!("../../../../docs/bars.md");
+        let mut blocks = Vec::new();
+        let mut parts = docs.split("```json");
+        parts.next();
+        for part in parts {
+            let Some((block, _)) = part.split_once("```") else { continue };
+            let block = block.trim();
+            // A bars.json fragment is `"key": …`; a whole file starts with `{ "version"`.
+            let text = if block.starts_with('"') { format!("{{ {block} }}") } else { block.to_owned() };
+            let Ok(value) = serde_json::from_str::<Value>(&text) else { continue };
+            if value.get("version").is_some() || block.starts_with('"') {
+                blocks.push(value);
+            }
+        }
+        blocks
     }
 
     #[test]
-    fn no_file_shows_the_defaults_and_saving_creates_it() {
+    fn the_examples_in_the_docs_are_valid_files() {
+        let examples = doc_examples();
+        assert!(examples.len() >= 5, "found only {} examples in docs/bars.md", examples.len());
+        let dir = temp_dir("bars-docs");
+        for example in examples {
+            let path = write(&dir, &serde_json::to_string_pretty(&example).unwrap());
+            let state = load_from(&path).unwrap();
+            assert_eq!(state.problem, None, "{example}");
+            assert_eq!(Value::Object(state.doc.clone()), example);
+            save_to(&path, &state.doc).unwrap();
+            assert_eq!(json(&std::fs::read_to_string(&path).unwrap()), example);
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn what_the_host_would_refuse_is_reported_and_never_overwritten() {
+        let dir = temp_dir("bars-refused");
+        // A field from a newer version: the host rejects the file, Studio shows why and keeps it.
+        let newer = r#"{ "version": 1, "top": { "height": 30, "frosting": 3 } }"#;
+        let path = write(&dir, newer);
+        let state = load_from(&path).unwrap();
+        assert!(state.problem.as_deref().is_some_and(|p| p.contains("frosting")), "{:?}", state.problem);
+        assert_eq!(state.doc["top"]["frosting"], 3);
+        assert!(save_to(&path, &state.doc).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), newer);
+
+        // A value the host checks.
+        let good = write(&dir, r#"{ "version": 1 }"#);
+        let mut doc = load_from(&good).unwrap().doc;
+        doc.insert("look".into(), json(r#"{ "tint": 3 }"#));
+        let error = format!("{:#}", save_to(&good, &doc).unwrap_err());
+        assert!(error.contains("look.tint"), "{error}");
+        doc.insert("look".into(), json(r#"{ "background": { "type": "image", "path": "" } }"#));
+        assert!(save_to(&good, &doc).is_err());
+        doc.insert("top".into(), json(r#"{ "left": ["clock"], "right": ["clock"] }"#));
+        doc.remove("look");
+        assert!(format!("{:#}", save_to(&good, &doc).unwrap_err()).contains("twice"));
+        assert_eq!(std::fs::read_to_string(&good).unwrap(), r#"{ "version": 1 }"#);
+
+        // Text that isn't JSON at all is an error, not a "problem": there is no document to show.
+        let broken = write(&dir, "{ nope");
+        assert!(load_from(&broken).is_err());
+        assert_eq!(reset_at(&broken).unwrap().problem, None);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn no_file_shows_an_empty_config_and_the_first_save_creates_it() {
         let dir = temp_dir("bars-missing");
         let path = dir.join("mypaper").join(FILE);
         let state = load_from(&path).unwrap();
-        assert!(!state.exists && state.warnings.is_empty());
-        assert_eq!(state.config, BarsConfig::default());
+        assert!(!state.exists && state.problem.is_none());
+        assert_eq!(Value::Object(state.doc.clone()), json(r#"{ "version": 1 }"#));
 
-        let mut config = state.config;
-        config.dock.enabled = true;
-        let saved = save_to(&path, &config).unwrap();
+        let mut doc = state.doc;
+        doc.insert("dock".into(), json(r#"{ "enabled": true }"#));
+        let saved = save_to(&path, &doc).unwrap();
         assert!(saved.exists);
-        assert_eq!(load_from(&path).unwrap().config, config);
         assert!(!path.with_file_name("bars.json.studio.tmp").exists());
+        assert_eq!(json(&std::fs::read_to_string(&path).unwrap()), json(r#"{ "version": 1, "dock": { "enabled": true } }"#));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
-    fn saving_keeps_unknown_fields_in_the_file_on_disk() {
-        let dir = temp_dir("bars-keep");
-        let path = dir.join(FILE);
-        std::fs::write(&path, FULL).unwrap();
-        let state = load_from(&path).unwrap();
-        assert_eq!(state.warnings.len(), 1, "{:?}", state.warnings);
-
-        let mut config = state.config;
-        config.top.right.pop();
-        save_to(&path, &config).unwrap();
-        let on_disk = json(&std::fs::read_to_string(&path).unwrap());
-        assert_eq!(on_disk["future"], json(r#"{ "a": [1, 2] }"#));
-        assert_eq!(on_disk["top"]["theme_hint"], 7);
-        assert_eq!(on_disk["top"]["right"], json(r#"["volume"]"#));
-        assert_eq!(on_disk["dock"]["pinned"][0]["badge"], "pro");
-        std::fs::remove_dir_all(&dir).unwrap();
+    fn the_catalog_carries_the_hosts_defaults_presets_and_geometry() {
+        let catalog = catalog().unwrap();
+        let ids: Vec<&str> = catalog.presets.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["monochrome", "macos", "windows11", "islands", "neon-glass", "floating"]);
+        assert_eq!(catalog.defaults["top"]["height"], 32.0);
+        assert_eq!(catalog.defaults["dock"]["magnify"]["scale"], 1.5);
+        assert_eq!(catalog.geometry["top"]["floating"]["margin"], 8.0);
+        assert_eq!(catalog.geometry["top"]["islands"]["padding"], 4.0);
+        assert_eq!(catalog.geometry["dock"]["taskbar"]["size"], 24.0);
+        assert_eq!(catalog.geometry["dock"]["floating"]["padding"], 5.0);
+        assert!(catalog.named_curves.contains(&"spring-bouncy") && catalog.color_tokens.contains(&"accent"));
     }
 
     #[test]
-    fn bad_values_are_refused_before_anything_is_written() {
-        let dir = temp_dir("bars-invalid");
-        let path = dir.join(FILE);
-        let refused = |change: fn(&mut BarsConfig)| {
-            let mut config = BarsConfig::default();
-            change(&mut config);
-            save_to(&path, &config).is_err()
+    fn a_files_background_type_is_limited_by_what_its_preset_leaves_behind() {
+        // The host's merge keeps a preset's background keys, so these combinations don't parse.
+        let background = |preset: &str, background: &str| {
+            BarsConfig::parse(&format!(r#"{{ "preset": "{preset}", "look": {{ "background": {background} }} }}"#)).is_ok()
         };
-        assert!(refused(|c| c.top.height = 4), "top height");
-        assert!(refused(|c| c.dock.size = 400), "dock size");
-        assert!(refused(|c| c.top.left.push(Module::Clock)), "a module placed twice");
-        assert!(refused(|c| c.dock.monitors = Monitors::Devices(vec![])), "no monitors");
-        assert!(refused(|c| c.dock.pinned = vec![pin("C:\\a.exe"), pin("c:\\A.exe")]), "pinned twice");
-        assert!(refused(|c| c.appearance.0.opacity = Some(2.0)), "opacity");
-        assert!(!path.exists());
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(background("monochrome", r#"{ "type": "wallpaper", "brightness": 1 }"#));
+        assert!(background("monochrome", r#"{ "type": "image", "path": "a.png" }"#));
+        assert!(!background("monochrome", r##"{ "type": "solid", "color": "#000" }"##));
+        assert!(!background("islands", r#"{ "type": "wallpaper" }"#));
+        assert!(background("floating", r##"{ "type": "solid", "color": "#000" }"##));
+
+        let catalog = background_types().unwrap();
+        // `none` takes no keys, so it ignores what the preset left behind.
+        assert_eq!(catalog["monochrome"], json(r#"["none", "image", "wallpaper"]"#));
+        assert_eq!(catalog["neon-glass"], json(r#"["none", "image", "wallpaper"]"#));
+        assert_eq!(catalog["islands"], json(r#"["none", "solid"]"#));
+        assert_eq!(catalog["floating"], json(r#"["none", "solid", "gradient", "image", "wallpaper"]"#));
+        assert_eq!(catalog["macos"], catalog["floating"]);
     }
 
-    fn pin(path: &str) -> Pinned {
-        Pinned { path: path.into(), name: None, extra: Extra::new() }
+    /// The quoted strings of `export const <name> = [ … ] as const` in the page's schema file.
+    fn ts_list(name: &str) -> Vec<String> {
+        let source = include_str!("../../src/lib/barsSchema.ts");
+        let start = source.find(&format!("export const {name} = [")).unwrap_or_else(|| panic!("{name} is not in barsSchema.ts"));
+        let body = &source[start..];
+        let body = &body[body.find('[').unwrap() + 1..body.find("] as const").unwrap()];
+        body.split('"').skip(1).step_by(2).map(str::to_owned).collect()
     }
 
     #[test]
-    fn a_broken_file_is_reported_and_never_overwritten() {
-        let dir = temp_dir("bars-broken");
-        let path = dir.join(FILE);
-        std::fs::write(&path, r#"{ "top": { "height": "tall" } }"#).unwrap();
-        assert!(load_from(&path).is_err());
-        assert!(save_to(&path, &BarsConfig::default()).is_err());
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{ "top": { "height": "tall" } }"#);
-
-        let reset = reset_at(&path).unwrap();
-        assert_eq!(reset.config, BarsConfig::default());
-        std::fs::remove_dir_all(&dir).unwrap();
+    fn the_pages_lists_only_name_things_the_schema_accepts() {
+        let parses = |what: &str, doc: String| {
+            let result = BarsConfig::parse(&doc);
+            assert!(result.is_ok(), "{what}: {:#}", result.unwrap_err());
+        };
+        for module in ts_list("BUILTIN_MODULES") {
+            parses(&module, format!(r#"{{ "top": {{ "left": ["{module}"], "center": [], "right": [] }} }}"#));
+        }
+        for action in ts_list("BUILTIN_ACTIONS") {
+            parses(&action, format!(r#"{{ "modules": {{ "clock": {{ "click": {{ "left": "{action}" }} }} }} }}"#));
+        }
+        for curve in ts_list("NAMED_CURVES") {
+            assert!(NAMED_CURVES.contains(&curve.as_str()), "{curve}");
+        }
+        assert_eq!(ts_list("NAMED_CURVES"), NAMED_CURVES);
+        for (key, values) in [
+            ("layout", ts_list("TOP_LAYOUTS")),
+            ("position", ts_list("TOP_POSITIONS")),
+        ] {
+            for value in values {
+                parses(&value, format!(r#"{{ "top": {{ "{key}": "{value}" }} }}"#));
+            }
+        }
+        for (key, values) in [
+            ("style", ts_list("DOCK_STYLES")),
+            ("position", ts_list("DOCK_POSITIONS")),
+            ("indicator", ts_list("INDICATORS")),
+            ("attention", ts_list("ATTENTIONS")),
+        ] {
+            for value in values {
+                parses(&value, format!(r#"{{ "dock": {{ "{key}": "{value}" }} }}"#));
+            }
+        }
+        for value in ts_list("LAUNCHER_LAYOUTS") {
+            parses(&value, format!(r#"{{ "launcher": {{ "layout": "{value}" }} }}"#));
+        }
+        for value in ts_list("CORNERS") {
+            parses(&value, format!(r#"{{ "look": {{ "corners": "{value}" }} }}"#));
+        }
+        for value in ts_list("MOTION_STYLES") {
+            parses(&value, format!(r#"{{ "animation": {{ "bar": {{ "style": "{value}" }} }} }}"#));
+        }
+        for value in ts_list("COLOR_TOKENS") {
+            assert!(COLOR_TOKENS.contains(&value.as_str()), "{value}");
+        }
     }
 }

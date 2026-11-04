@@ -1,115 +1,139 @@
-import {
-  DOCK_SIZE,
-  TOP_HEIGHT,
-  type BarsConfig,
-  type DockPosition,
-  type TaskbarAlignment,
-  type TaskbarMode,
-} from "../../lib/api";
-import { Block, Group, INPUT_CLASS, Row, Segmented, Slider, ToggleRow } from "../ui";
-import { ModuleLayout } from "./ModuleLayout";
+import { X } from "lucide-react";
+
+import { topGeometry } from "../../lib/barsDoc";
+import { useBars } from "../../lib/barsContext";
+import { OVERRIDE_SECTIONS, type Monitors, type TaskbarAlignment, type TaskbarMode, type TopLayout, type TopPosition } from "../../lib/barsSchema";
+import { Block, Group, IconButton, INPUT_CLASS, Row, Segmented, Slider } from "../ui";
+import { ChoiceSetting, GeometrySetting, SettingRow, SliderSetting, ToggleSetting, boolAt, px, stringAt } from "./BarSettings";
 import { MonitorPicker } from "./MonitorPicker";
-import { PinnedList } from "./PinnedList";
 
-/** Applies a change to the `bars.json` being edited. */
-export type EditBars = (change: (config: BarsConfig) => BarsConfig) => void;
+const LAYOUTS: readonly { value: TopLayout; label: string; hint?: string }[] = [
+  { value: "strip", label: "Strip", hint: "Edge to edge, square" },
+  { value: "floating", label: "Floating", hint: "Detached from the edges, rounded" },
+  { value: "islands", label: "Islands", hint: "A transparent rail with one pill per group" },
+];
 
-type PanelProps = { config: BarsConfig; edit: EditBars };
+const POSITIONS: readonly { value: TopPosition; label: string }[] = [
+  { value: "top", label: "Top" },
+  { value: "bottom", label: "Bottom" },
+];
 
-const px = (value: number) => `${value}px`;
-
-const DEFAULT_CLOCK_FORMAT = "ddd d MMM  HH:mm";
-
-export function TopBarPanel({ config, edit }: PanelProps) {
-  const { top } = config;
-  const change = (patch: Partial<BarsConfig["top"]>) => edit((c) => ({ ...c, top: { ...c.top, ...patch } }));
+export function TopBarPanel() {
+  const { resolved, catalog, set } = useBars();
+  const { top } = resolved;
+  const geometry = topGeometry(resolved, catalog);
   const clockPlaced = [...top.left, ...top.center, ...top.right].includes("clock");
-
-  function changeClock(patch: { seconds?: boolean; format?: string }) {
-    edit((c) => {
-      const { format, ...rest } = { seconds: false, ...c.top.clock, ...patch };
-      // An empty format means "the default", which is the same as leaving it out.
-      return { ...c, top: { ...c.top, clock: format ? { ...rest, format } : rest } };
-    });
-  }
 
   return (
     <div className="flex flex-col gap-6">
       <Group>
-        <ToggleRow title="Top bar" detail="A macOS-style bar along the top of the screen. Maximized windows stop below it." checked={top.enabled} onChange={(enabled) => change({ enabled })} />
+        <ToggleSetting path={["top", "enabled"]} title="Top bar" detail="A bar along a screen edge. Maximized windows stop below it." fallback />
         <Block title="Monitors" detail="Where the top bar appears.">
-          <MonitorPicker label="Top bar monitors" value={top.monitors} onChange={(monitors) => change({ monitors })} />
+          <MonitorPicker label="Top bar monitors" value={top.monitors} onChange={(monitors: Monitors) => set(["top", "monitors"], monitors)} />
         </Block>
-        <Row title="Height" detail="In device-independent pixels.">
-          <Slider className="w-64" label="Top bar height" value={top.height} min={TOP_HEIGHT.min} max={TOP_HEIGHT.max} format={px} onChange={(height) => change({ height })} />
-        </Row>
       </Group>
 
-      <Group title="Modules">
-        <Block title="Layout" detail="What the bar shows, and where.">
-          <ModuleLayout value={top} onChange={(placement) => change(placement)} />
-        </Block>
+      <Group title="Shape">
+        <ChoiceSetting<TopLayout> path={["top", "layout"]} title="Layout" detail={LAYOUTS.find((l) => l.value === top.layout)?.hint} options={LAYOUTS} fallback="strip" wide />
+        <ChoiceSetting<TopPosition> path={["top", "position"]} title="Edge" detail="Which screen edge it sits on." options={POSITIONS} fallback="top" />
+        <SliderSetting path={["top", "height"]} title="Height" detail="The bar itself, in device-independent pixels." min={20} max={80} fallback={32} format={px} />
+        <GeometrySetting path={["top", "margin"]} title="Margin" detail={top.layout === "strip" ? "Keeps it off the screen edges. A strip has none by default." : "Keeps it off the screen edges, and sets the gap between islands."} shown={geometry.margin} min={0} max={64} />
+        <GeometrySetting path={["top", "padding"]} title="Padding" detail="Inside the bar, or inside each island." shown={geometry.padding} min={0} max={48} />
+        <GeometrySetting path={["top", "spacing"]} title="Spacing" detail="Between modules." shown={geometry.spacing} min={0} max={32} />
+        {top.layout === "floating" && <WidthSetting />}
       </Group>
 
       <Group title="Clock">
-        <ToggleRow
+        <ToggleSetting
+          path={["top", "clock", "seconds"]}
           title="Show seconds"
-          detail={clockPlaced ? "The clock then ticks every second instead of every minute." : "Add the Clock module to the layout to show it."}
-          checked={top.clock?.seconds ?? false}
-          onChange={(seconds) => changeClock({ seconds })}
+          detail={clockPlaced ? "The clock then ticks every second instead of every minute." : "Add the Clock module to a bar to show it."}
         />
-        <Row title="Format" detail="Leave empty for the default. Day, date, month and 24-hour time look like the placeholder.">
+        <SettingRow title="Format" detail="Day, date, month and 24-hour time look like the placeholder. A \n makes two lines. At most 64 characters." path={["top", "clock", "format"]}>
           <input
             aria-label="Clock format"
-            value={top.clock?.format ?? ""}
-            placeholder={DEFAULT_CLOCK_FORMAT}
+            value={stringAt(resolved, ["top", "clock", "format"]) ?? ""}
+            placeholder={boolAt(resolved, ["top", "clock", "seconds"]) ? "ddd d MMM  HH:mm:ss" : "ddd d MMM  HH:mm"}
+            maxLength={64}
             spellCheck={false}
-            onChange={(e) => changeClock({ format: e.currentTarget.value })}
+            onChange={(e) => set(["top", "clock", "format"], e.currentTarget.value === "" ? undefined : e.currentTarget.value)}
             className={`${INPUT_CLASS} w-56 font-mono text-[13px]`}
           />
-        </Row>
+        </SettingRow>
       </Group>
+
+      <OverridesList />
     </div>
   );
 }
 
-const POSITIONS: readonly { value: DockPosition; label: string }[] = [
-  { value: "bottom", label: "Bottom" },
-  { value: "left", label: "Left" },
-  { value: "right", label: "Right" },
-];
+type WidthMode = "full" | "auto" | "percent" | "pixels";
 
-export function DockPanel({ config, edit }: PanelProps) {
-  const { dock } = config;
-  const change = (patch: Partial<BarsConfig["dock"]>) => edit((c) => ({ ...c, dock: { ...c.dock, ...patch } }));
+/** `top.width` of a floating bar: the whole edge, hugging its modules, a share, or DIPs. */
+function WidthSetting() {
+  const { resolved, set } = useBars();
+  const width = resolved.top.width;
+  const mode: WidthMode = width === null || width === "full" ? "full" : width === "auto" ? "auto" : typeof width === "number" ? "pixels" : "percent";
+  const percent = typeof width === "string" ? Number.parseFloat(width) || 60 : 60;
+  const pixels = typeof width === "number" ? width : 800;
+
+  function pick(next: WidthMode) {
+    set(["top", "width"], next === "full" ? "full" : next === "auto" ? "auto" : next === "percent" ? `${percent}%` : pixels);
+  }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Group>
-        <ToggleRow title="Dock" detail="App icons in a floating dock. It can replace the Windows taskbar." checked={dock.enabled} onChange={(enabled) => change({ enabled })} />
-        <Block title="Monitors" detail="Where the dock appears.">
-          <MonitorPicker label="Dock monitors" value={dock.monitors} onChange={(monitors) => change({ monitors })} />
-        </Block>
-        <Row title="Position" detail="Which screen edge the dock sits on.">
-          <Segmented<DockPosition> className="w-64" label="Dock position" hideLabel value={dock.position} options={POSITIONS} onChange={(position) => change({ position })} />
-        </Row>
-        <Row title="Icon size" detail="In device-independent pixels.">
-          <Slider className="w-64" label="Dock icon size" value={dock.size} min={DOCK_SIZE.min} max={DOCK_SIZE.max} format={px} onChange={(size) => change({ size })} />
-        </Row>
-      </Group>
+    <SettingRow title="Width" detail="How much of the edge a floating bar takes; it stays centered." path={["top", "width"]}>
+      <div className="flex w-96 flex-col gap-2">
+        <Segmented<WidthMode>
+          label="Width"
+          hideLabel
+          value={mode}
+          onChange={pick}
+          options={[
+            { value: "full", label: "Full" },
+            { value: "auto", label: "Hug modules" },
+            { value: "percent", label: "Share" },
+            { value: "pixels", label: "Pixels" },
+          ]}
+        />
+        {mode === "percent" && <Slider label="Width share" value={percent} min={10} max={100} step={5} format={(v) => `${v}%`} onChange={(v) => set(["top", "width"], `${v}%`)} />}
+        {mode === "pixels" && <Slider label="Width in pixels" value={pixels} min={120} max={3840} step={10} format={px} onChange={(v) => set(["top", "width"], v)} />}
+      </div>
+    </SettingRow>
+  );
+}
 
-      <Group>
-        <ToggleRow title="Auto-hide" detail="Slides away after a second without the pointer and takes no screen space. Touch the screen edge to bring it back." checked={dock.autohide} onChange={(autohide) => change({ autohide })} />
-        <ToggleRow title="Magnify" detail="Icons grow under the pointer. Off while Windows is set to reduce motion." checked={dock.magnify} onChange={(magnify) => change({ magnify })} />
-        <ToggleRow title="Show running apps" detail="Apps that aren't pinned appear after the pinned ones while they run." checked={dock.running} onChange={(running) => change({ running })} />
-      </Group>
-
-      <Group title="Pinned">
-        <Block title="Pinned items" detail="Shown first, in this order. Programs, shortcuts, folders and Store apps all work.">
-          <PinnedList items={dock.pinned} onChange={(pinned) => change({ pinned })} />
-        </Block>
-      </Group>
-    </div>
+/** The file's per-monitor overrides: what each sets, and a way to drop one. */
+function OverridesList() {
+  const { doc, update } = useBars();
+  const entries = Object.entries(doc.overrides ?? {});
+  if (entries.length === 0) return null;
+  return (
+    <Group title="Per-monitor overrides">
+      <Block title="Set in bars.json" detail="Each override is a partial config merged over the rest for one monitor (a device name, primary or secondary). Edit them in the file; here you can drop one.">
+        <ul className="divide-y divide-line overflow-hidden rounded-xl bg-canvas ring-1 ring-line">
+          {entries.map(([monitor, override]) => (
+            <li key={monitor} className="flex items-center gap-3 px-3 py-2">
+              <span className="font-mono text-[13px] text-ink">{monitor}</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-ink-3">
+                {OVERRIDE_SECTIONS.filter((section) => override[section] !== undefined).join(", ") || "empty"}
+              </span>
+              <IconButton
+                icon={X}
+                label={`Remove the override for ${monitor}`}
+                onClick={() =>
+                  update((d) => {
+                    const { [monitor]: _gone, ...rest } = d.overrides ?? {};
+                    const { overrides: _old, ...others } = d;
+                    return Object.keys(rest).length > 0 ? { ...others, overrides: rest } : others;
+                  })
+                }
+              />
+            </li>
+          ))}
+        </ul>
+      </Block>
+    </Group>
   );
 }
 
@@ -122,7 +146,7 @@ const MODES: readonly { value: TaskbarMode; label: string }[] = [
 const MODE_HELP: Record<TaskbarMode, string> = {
   keep: "The Windows taskbar stays exactly as it is.",
   autohide: "The Windows taskbar hides until you push the pointer against the screen edge.",
-  hide: "The Windows taskbar is hidden completely, on every monitor, and its space goes to your bars. Turn the dock on to replace it.",
+  hide: "The Windows taskbar is hidden completely, on every monitor, and its space goes to your bars. Turn the dock on to replace it (the Windows 11 preset is a complete replacement).",
 };
 
 type AlignmentChoice = TaskbarAlignment | "default";
@@ -133,15 +157,15 @@ const ALIGNMENTS: readonly { value: AlignmentChoice; label: string }[] = [
   { value: "left", label: "Left" },
 ];
 
-export function TaskbarPanel({ config, edit }: PanelProps) {
-  const { taskbar, dock } = config;
-  const change = (patch: Partial<BarsConfig["taskbar"]>) => edit((c) => ({ ...c, taskbar: { ...c.taskbar, ...patch } }));
+export function TaskbarPanel() {
+  const { resolved, set } = useBars();
+  const { taskbar, dock } = resolved;
 
   return (
     <div className="flex flex-col gap-6">
       <Group>
-        <Block title="Windows taskbar" detail="What mypaper does to the native taskbar.">
-          <Segmented<TaskbarMode> label="Taskbar mode" hideLabel value={taskbar.mode} options={MODES} onChange={(mode) => change({ mode })} />
+        <Block title="Windows taskbar" detail="What mypaper does to the native taskbar. Presets never change this: replacing it is always your choice.">
+          <Segmented<TaskbarMode> label="Taskbar mode" hideLabel value={taskbar.mode} options={MODES} onChange={(mode) => set(["taskbar", "mode"], mode === "keep" ? undefined : mode)} />
           <p className="mt-3 text-[13px] text-ink-2">{MODE_HELP[taskbar.mode]}</p>
           <p className="mt-2 text-xs text-ink-3">
             Nothing is ever left changed: mypaper puts the taskbar back exactly as it was when the bars quit, on the panic hotkey, and at the next start after a crash.
@@ -152,19 +176,14 @@ export function TaskbarPanel({ config, edit }: PanelProps) {
             </p>
           )}
         </Block>
-        <Row title="Alignment" detail="Where Windows 11 puts the taskbar icons. Only applies while the taskbar is visible.">
+        <Row title="Alignment" detail="Where Windows 11 puts the taskbar icons. Leave it to Windows' choice to change nothing; the original is restored when you do.">
           <Segmented<AlignmentChoice>
             className="w-72"
             label="Taskbar alignment"
             hideLabel
             value={taskbar.alignment ?? "default"}
             options={ALIGNMENTS}
-            onChange={(choice) =>
-              edit((c) => {
-                const { alignment: _old, ...rest } = c.taskbar;
-                return { ...c, taskbar: choice === "default" ? rest : { ...rest, alignment: choice } };
-              })
-            }
+            onChange={(choice) => set(["taskbar", "alignment"], choice === "default" ? undefined : choice)}
           />
         </Row>
       </Group>

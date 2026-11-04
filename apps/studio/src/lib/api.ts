@@ -5,12 +5,32 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
-/** `%APPDATA%\mypaper\config.json`, exactly as the engine reads it. */
+import type { BarsDoc, FillType, Json, PresetId } from "./barsSchema";
+
+/** The built-in rows of the desktop right-click menu (docs/desktop-extras.md). */
+export const MENU_BUILTINS = ["separator", "view", "sort", "refresh", "new", "paste", "wallpaper", "widgets", "display", "personalize", "terminal", "more"] as const;
+export type MenuBuiltin = (typeof MENU_BUILTINS)[number];
+export type MenuCustom = { label: string; command: string; args: string[] };
+export type MenuEntry = MenuBuiltin | MenuCustom;
+
+/** `%APPDATA%\mypaper\config.json` as the engine reads it: every setting, defaults filled in. */
 export type Config = {
   theme: string;
   paused: boolean;
   pause_on_battery: boolean;
   pause_on_fullscreen: boolean;
+  /** Also set a still of the theme as the Windows wallpaper (see docs/performance.md). */
+  static_snapshot: boolean;
+  /** Windows 11: the full classic context menu everywhere (needs an Explorer restart). */
+  classic_context_menu: boolean;
+  desktop_menu: { enabled: boolean; items: MenuEntry[] };
+  /** The menu's items when `items` is left out. */
+  desktop_menu_default: MenuEntry[];
+};
+
+/** What `update_config` takes: only the keys to change. */
+export type ConfigPatch = Partial<Omit<Config, "desktop_menu" | "desktop_menu_default">> & {
+  desktop_menu?: { enabled?: boolean; items?: MenuEntry[] };
 };
 
 export type Kind = "shader" | "image" | "slideshow" | "video" | "scene" | "web" | "app";
@@ -76,6 +96,8 @@ export type WindowsStyle = {
   corners: Corners | null;
   backdrop: Backdrop | null;
   dark_mode: boolean | null;
+  /** `mypaper-dark`, `mypaper-light`, a set in `%APPDATA%\mypaper\cursors`, or a folder of .cur / .ani files. */
+  cursors: string | null;
 };
 
 export type EngineStatus = {
@@ -89,7 +111,8 @@ export type ComponentId = "core" | "wallpaper" | "widgets" | "bars";
 /** One mypaper program: is it running, and where Studio found it. */
 export type Component = { id: ComponentId; exe: string; running: boolean; path: string | null };
 
-export type Autostart = { enabled: boolean; command: string | null };
+/** `mypaper-core --autostart status`: `task` is a Task Scheduler logon task, `run-key` the Run registry value. */
+export type Autostart = { enabled: boolean; method: "task" | "run-key" | null; command: string | null };
 export type Changes = { config: boolean; themes: boolean; bars: boolean; widgets: boolean };
 
 // --- Appearance (docs/widgets.md, "Appearance") ---
@@ -97,8 +120,13 @@ export type Changes = { config: boolean; themes: boolean; bars: boolean; widgets
 export type Surface = "none" | "glass" | "solid";
 export type TextTone = "light" | "dark";
 
+/** The widget design language (docs/widgets.md, "Styles"). Bars ignore it. */
+export const WIDGET_STYLES = ["minimal", "depth", "neon", "paper", "aero"] as const;
+export type WidgetStyle = (typeof WIDGET_STYLES)[number];
+
 /** One layer of how widgets or bars look. An absent field means "use the layer below". */
 export type Appearance = {
+  style?: WidgetStyle;
   surface?: Surface;
   /** `#rrggbb`. */
   tint?: string;
@@ -126,70 +154,71 @@ export type SkinEdit = { appearance: Appearance; css: string | null };
 
 export type ActiveSkins = { widgets: Appearance; bars: Appearance };
 
-// --- Bars (docs/bars.md, "Config") ---
+export type MonitorInfo = { device: string; primary: boolean; width: number; height: number };
 
-export const BAR_MODULES = [
-  "start",
-  "workspaces",
-  "app",
-  "clock",
-  "media",
-  "tray",
-  "network",
-  "volume",
-  "battery",
-  "quick",
-  "power",
-  "stats",
-] as const;
-export type BarModule = (typeof BAR_MODULES)[number];
+// --- Bars (docs/bars.md) ---
 
-/** `all`, `primary`, or device names such as `\\.\DISPLAY2`. */
-export type Monitors = "all" | "primary" | string[];
-export type TaskbarMode = "keep" | "autohide" | "hide";
-export type TaskbarAlignment = "center" | "left";
-export type DockPosition = "bottom" | "left" | "right";
-
-export type PinnedItem = { path: string; name?: string };
-
-export type BarsConfig = {
-  version: number;
-  taskbar: { mode: TaskbarMode; alignment?: TaskbarAlignment };
-  top: {
-    enabled: boolean;
-    monitors: Monitors;
-    height: number;
-    left: BarModule[];
-    center: BarModule[];
-    right: BarModule[];
-    clock?: { seconds: boolean; format?: string };
-  };
-  dock: {
-    enabled: boolean;
-    monitors: Monitors;
-    position: DockPosition;
-    size: number;
-    autohide: boolean;
-    magnify: boolean;
-    running: boolean;
-    pinned: PinnedItem[];
-  };
-  appearance: Appearance;
-};
-
-/** Size limits `bars.json` is checked against (mirrors bars.rs). */
-export const TOP_HEIGHT = { min: 20, max: 64 } as const;
-export const DOCK_SIZE = { min: 24, max: 128 } as const;
-
+/** `bars.json` as the page edits it: the document itself. The Rust side checks it with the host's schema. */
 export type BarsState = {
-  config: BarsConfig;
-  /** False: these are the built-in defaults and no file has been written yet. */
+  /** The file as written (`{ "version": 1 }` when there is none). */
+  doc: BarsDoc;
+  /** False: no file yet; the first change creates it. */
   exists: boolean;
   path: string;
-  warnings: string[];
+  /** Why the bars host would refuse the file, when it would. */
+  problem: string | null;
 };
 
-export type MonitorInfo = { device: string; primary: boolean; width: number; height: number };
+export type Geometry = { margin: number; padding: number; spacing: number };
+
+/** The host's own defaults, presets and geometry: what a document is merged against. */
+export type BarsCatalog = {
+  defaults: BarsDoc;
+  presets: { id: PresetId; bundle: BarsDoc }[];
+  geometry: {
+    top: Record<"strip" | "floating" | "islands", Geometry>;
+    dock: Record<"floating" | "taskbar", Geometry & { size: number }>;
+  };
+  namedCurves: string[];
+  colorTokens: string[];
+  /** For each preset, the `look.background` types a file can choose over it (the host merges them key by key). */
+  backgroundTypes: Record<PresetId, FillType[]>;
+};
+
+export type VarType = "color" | "number" | "length" | "select" | "bool";
+
+/** One variable a theme's bars CSS declares (docs/bars.md, "Theme variables"). */
+export type ThemeVar = {
+  name: string;
+  type: VarType;
+  label: string;
+  group?: string;
+  description?: string;
+  default: Json;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit: "px" | "em" | "rem" | "%" | "ms" | "deg";
+  options?: string[];
+};
+
+export type ThemeVars = { theme: string; css: string | null; vars: ThemeVar[]; error: string | null };
+
+export type IconPackInfo = {
+  /** The folder name: what `bars.json` → `icons` takes. */
+  name: string;
+  title: string;
+  /** Ships with the bars page. */
+  bundled: boolean;
+  mono: boolean;
+  entries: number;
+  apps: number;
+  /** Absolute paths of a few of its icons. */
+  previews: string[];
+  error: string | null;
+};
+
+export type AppIcon = { index: number; kind: "path" | "umid"; target: string; file: string };
 
 // --- Widgets (docs/widgets.md) ---
 
@@ -203,6 +232,8 @@ export type WidgetInfo = {
   size: { default: [number, number]; min: [number, number]; max: [number, number] | null };
   resizable: boolean;
   permissions: string[];
+  /** Where it lives: below windows, always on top, or opened from a bar module. */
+  preset: "desktop" | "overlay" | "popup";
   origin: "bundled" | "user";
   dir: string;
   /** The manifest doesn't load. */
@@ -222,12 +253,14 @@ export type Layout = {
   /** The user layer: `widgets.json` → `appearance`. */
   appearance: Appearance;
   instances: PlacedWidget[];
+  /** Whether the topmost overlay widgets are shown (`widgets.json` → `overlay`; on unless turned off). */
+  overlay: boolean;
   exists: boolean;
 };
 
 export const api = {
   getConfig: () => invoke<Config>("get_config"),
-  updateConfig: (patch: Partial<Config>) => invoke<Config>("update_config", { patch }),
+  updateConfig: (patch: ConfigPatch) => invoke<Config>("update_config", { patch }),
   resetConfig: () => invoke<Config>("reset_config"),
   listThemes: () => invoke<ThemeList>("list_themes"),
   inspectSource: (path: string) => invoke<SourceInfo>("inspect_source", { path }),
@@ -242,15 +275,26 @@ export const api = {
   /** Copies a style sheet into the theme; resolves to the path for the skin's `css`. */
   importSkinCss: (dir: string, kind: SkinKind, source: string) => invoke<string>("import_skin_css", { dir, kind, source }),
   activeSkins: () => invoke<ActiveSkins>("active_skins"),
+  getInteractive: (dir: string) => invoke<boolean | null>("get_interactive", { dir }),
+  setInteractive: (dir: string, on: boolean) => invoke<boolean | null>("set_interactive", { dir, on }),
+  listCursorSets: () => invoke<string[]>("list_cursor_sets"),
   getBars: () => invoke<BarsState>("get_bars"),
-  setBars: (config: BarsConfig) => invoke<BarsState>("set_bars", { config }),
+  barsCatalog: () => invoke<BarsCatalog>("bars_catalog"),
+  setBars: (doc: BarsDoc) => invoke<BarsState>("set_bars", { doc }),
   resetBars: () => invoke<BarsState>("reset_bars"),
+  themeVars: () => invoke<ThemeVars>("theme_vars"),
+  listIconPacks: () => invoke<IconPackInfo[]>("list_icon_packs"),
+  iconPackApps: (pack: string) => invoke<AppIcon[]>("icon_pack_apps", { pack }),
+  createIconPack: (name: string) => invoke<void>("create_icon_pack", { name }),
+  setAppIcon: (pack: string, target: string, image: string) => invoke<void>("set_app_icon", { pack, target, image }),
+  removeAppIcon: (pack: string, index: number) => invoke<void>("remove_app_icon", { pack, index }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
   /** The absolute path of a PNG icon for a dock item; load it with `fileUrl`. */
   dockIcon: (path: string) => invoke<string>("dock_icon", { path }),
   listWidgets: () => invoke<WidgetInfo[]>("list_widgets"),
   getLayout: () => invoke<Layout>("get_layout"),
   setWidgetsAppearance: (appearance: Appearance) => invoke<Layout>("set_widgets_appearance", { appearance }),
+  setWidgetsOverlay: (on: boolean) => invoke<Layout>("set_widgets_overlay", { on }),
   removeInstance: (instance: string) => invoke<Layout>("remove_instance", { instance }),
   resetInstanceLook: (instance: string) => invoke<Layout>("reset_instance_look", { instance }),
   toggleWidgetEdit: () => invoke<void>("toggle_widget_edit"),
@@ -307,6 +351,20 @@ export function pickDockApp(): Promise<string | null> {
     directory: false,
     filters: [{ name: "Programs and shortcuts", extensions: ["exe", "lnk"] }],
   });
+}
+
+/** A picture for an icon, a background or a module: the types the bars page can draw. */
+export function pickImage(): Promise<string | null> {
+  return open({
+    multiple: false,
+    directory: false,
+    filters: [{ name: "Images", extensions: ["svg", "png", "ico", "webp", "jpg", "jpeg"] }],
+  });
+}
+
+/** Any file, for the program or document a click should run. */
+export function pickAnyFile(): Promise<string | null> {
+  return open({ multiple: false, directory: false });
 }
 
 export function pickStyleSheet(): Promise<string | null> {

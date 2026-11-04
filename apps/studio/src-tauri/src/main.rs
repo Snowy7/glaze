@@ -11,8 +11,10 @@ mod autostart;
 mod bars;
 mod capture;
 mod commands;
+mod config_edit;
 mod engine;
 mod fsio;
+mod iconpacks;
 mod icons;
 mod look;
 mod manifest;
@@ -61,14 +63,25 @@ fn main() {
             commands::set_skin,
             commands::import_skin_css,
             commands::active_skins,
+            commands::get_interactive,
+            commands::set_interactive,
+            commands::list_cursor_sets,
             commands::get_bars,
+            commands::bars_catalog,
             commands::set_bars,
             commands::reset_bars,
+            commands::theme_vars,
+            commands::list_icon_packs,
+            commands::icon_pack_apps,
+            commands::create_icon_pack,
+            commands::set_app_icon,
+            commands::remove_app_icon,
             commands::list_monitors,
             commands::dock_icon,
             commands::list_widgets,
             commands::get_layout,
             commands::set_widgets_appearance,
+            commands::set_widgets_overlay,
             commands::remove_instance,
             commands::reset_instance_look,
             commands::toggle_widget_edit,

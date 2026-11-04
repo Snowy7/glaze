@@ -1,0 +1,19 @@
+[package]
+name = "mypaper-bars-schema"
+description = "The pure half of crates/bars (bars.json, presets, look and motion, theme variables, icon packs), compiled for Studio without the bars host's WebView2."
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# Standalone, like Studio itself: not a member of the repo's engine workspace. It is a path
+# dependency of Studio only, so Studio's `cargo test` and `cargo clippy` don't run on it.
+[workspace]
+
+[dependencies]
+mypaper-config = { path = "../../../crates/config" }
+mypaper-theme = { path = "../../../crates/theme" }
+
+anyhow = "1"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }

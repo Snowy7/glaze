@@ -2,7 +2,7 @@ import { LayoutDashboard, MousePointerClick, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AppearanceEditor } from "../components/AppearanceEditor";
-import { Banner, Button, ConfirmButton, EmptyState, PageHeader, SaveStatus, Segmented, Skeleton } from "../components/ui";
+import { Banner, Button, ConfirmButton, EmptyState, Group, PageHeader, Row, SaveStatus, Segmented, Skeleton, ToggleRow } from "../components/ui";
 import { setCount } from "../lib/appearance";
 import { api, errorText, type Layout, type PlacedWidget, type WidgetInfo } from "../lib/api";
 import { useActiveSkins, useInstalledWidgets } from "../lib/hooks";
@@ -42,6 +42,7 @@ export function Widgets() {
   }
 
   const placed = layout.value?.instances ?? [];
+  const overlays = (installed ?? []).filter((w) => w.preset === "overlay");
   const tabs: readonly { value: Tab; label: string }[] = [
     { value: "installed", label: installed ? `Installed · ${installed.length}` : "Installed" },
     { value: "placed", label: `On the desktop · ${placed.length}` },
@@ -116,6 +117,19 @@ export function Widgets() {
 
         {tab === "look" &&
           (layout.value ? (
+            <div className="flex flex-col gap-6">
+            <Group title="Overlay widgets">
+              <ToggleRow
+                title="Show overlay widgets"
+                detail="Widgets whose preset is overlay stay on top of your windows in a click-through layer: only the widget itself takes the mouse, and it never takes focus. Off hides them everywhere except in edit mode. Hotkey Ctrl+Alt+Shift+O."
+                checked={layout.value.overlay}
+                onChange={(on) => void change(() => api.setWidgetsOverlay(on))}
+              />
+              <Row
+                title="Overlay widgets installed"
+                detail={overlays.length === 0 ? "None. A widget opts in with \"preset\": \"overlay\" in its widget.json." : overlays.map((w) => w.name).join(", ")}
+              />
+            </Group>
             <div className="rounded-2xl bg-surface p-5 shadow-card ring-1 ring-line">
               <p className="mb-4 text-[13px] text-ink-3">
                 Applies to every widget. A single widget can still override it from its menu in edit mode.
@@ -127,6 +141,7 @@ export function Widgets() {
                 below={[skins.widgets]}
                 fallback="the theme"
               />
+            </div>
             </div>
           ) : (
             !layout.error && <Skeleton className="h-64 rounded-2xl" />
@@ -150,7 +165,14 @@ function WidgetCard({ widget, count }: { widget: WidgetInfo; count: number }) {
             {widget.version && ` · ${widget.version}`}
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-surface-hi px-2 py-0.5 text-[11px] font-medium text-ink-2">{widget.origin === "user" ? "Yours" : "Built in"}</span>
+        <span className="flex shrink-0 gap-1.5">
+          {widget.preset !== "desktop" && (
+            <span className="rounded-full bg-surface-hi px-2 py-0.5 text-[11px] font-medium text-ink-2" title={widget.preset === "overlay" ? "Always on top, click-through except the widget" : "Opened from a bar module"}>
+              {widget.preset === "overlay" ? "Overlay" : "Popup"}
+            </span>
+          )}
+          <span className="rounded-full bg-surface-hi px-2 py-0.5 text-[11px] font-medium text-ink-2">{widget.origin === "user" ? "Yours" : "Built in"}</span>
+        </span>
       </div>
 
       {widget.error ? (

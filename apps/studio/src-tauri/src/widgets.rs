@@ -49,6 +49,8 @@ pub struct WidgetInfo {
     pub size: WidgetSize,
     pub resizable: bool,
     pub permissions: Vec<String>,
+    /// Where it lives: `desktop` (below windows), `overlay` (always on top) or `popup` (a bar opens it).
+    pub preset: String,
     pub origin: Origin,
     pub dir: String,
     /// The manifest doesn't load; the other fields are placeholders.
@@ -68,6 +70,12 @@ struct Manifest {
     resizable: bool,
     #[serde(default)]
     permissions: Vec<String>,
+    #[serde(default = "desktop")]
+    preset: String,
+}
+
+fn desktop() -> String {
+    "desktop".to_owned()
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,6 +105,7 @@ fn read_widget(dir: &Path, origin: Origin) -> WidgetInfo {
             description: m.description,
             resizable: m.resizable,
             permissions: m.permissions,
+            preset: m.preset,
             origin,
             dir: dir.display().to_string(),
             error: None,
@@ -110,6 +119,7 @@ fn read_widget(dir: &Path, origin: Origin) -> WidgetInfo {
             size: WidgetSize { default: [1, 1], min: [1, 1], max: None },
             resizable: true,
             permissions: Vec::new(),
+            preset: desktop(),
             origin,
             dir: dir.display().to_string(),
             error: Some(format!("{e:#}")),
@@ -177,6 +187,8 @@ pub struct Layout {
     /// The user layer (`widgets.json` → `appearance`).
     pub appearance: Look,
     pub instances: Vec<Instance>,
+    /// Whether the topmost overlay layer is shown (`widgets.json` → `overlay`, default on).
+    pub overlay: bool,
     /// False: there is no `widgets.json` yet.
     pub exists: bool,
 }
@@ -201,9 +213,10 @@ fn render(map: Map<String, Value>) -> Result<String> {
 
 pub fn read_layout(text: Option<&str>) -> Result<Layout> {
     let Some(text) = text else {
-        return Ok(Layout { appearance: Look::default(), instances: Vec::new(), exists: false });
+        return Ok(Layout { appearance: Look::default(), instances: Vec::new(), overlay: true, exists: false });
     };
     let mut doc = parse_object(text)?;
+    let overlay = doc.get("overlay").and_then(Value::as_bool).unwrap_or(true);
     let appearance = match doc.remove("appearance") {
         Some(value) => serde_json::from_value(value).context("reading the appearance section")?,
         None => Look::default(),
@@ -216,7 +229,17 @@ pub fn read_layout(text: Option<&str>) -> Result<Layout> {
         Some(_) => bail!("instances must be a list"),
         None => Vec::new(),
     };
-    Ok(Layout { appearance, instances, exists: true })
+    Ok(Layout { appearance, instances, overlay, exists: true })
+}
+
+/// The document with the overlay layer on or off.
+pub fn with_overlay(text: Option<&str>, on: bool) -> Result<String> {
+    let mut doc = match text {
+        Some(text) => parse_object(text)?,
+        None => skeleton(),
+    };
+    doc.insert("overlay".into(), Value::Bool(on));
+    render(doc)
 }
 
 /// The document with its global `appearance` replaced (removed when `look` is empty).
@@ -303,24 +326,39 @@ pub fn clear_instance_look(id: &str) -> Result<Layout> {
     update(|text| with_instance_look_cleared(text.context("there is no widgets.json yet")?, id))
 }
 
+/// Turns the overlay layer on or off. The running host hears it through its registered message
+/// (`mypaper.widgets.overlay`, `wParam` 1 or 0) and applies it at once; the choice is also written
+/// to `widgets.json`, so it holds when the host isn't running.
+pub fn set_overlay(on: bool) -> Result<Layout> {
+    let layout = update(|text| with_overlay(text, on))?;
+    // No host running is fine: it reads the file when it starts.
+    let _ = post_to_host(w!("mypaper.widgets.overlay"), usize::from(on));
+    Ok(layout)
+}
+
 // --- the host's edit mode ---
 
-/// Posts the registered `mypaper.widgets.edit` message (`wParam` 2 = toggle) to
-/// the host's message-only window.
-pub fn toggle_edit_mode() -> Result<()> {
+/// Posts the registered message `name` to the host's message-only window.
+fn post_to_host(name: windows::core::PCWSTR, wparam: usize) -> Result<()> {
     // SAFETY: plain Win32 calls on constant strings; the posted message carries no pointers.
     unsafe {
-        let message = RegisterWindowMessageW(w!("mypaper.widgets.edit"));
+        let message = RegisterWindowMessageW(name);
         if message == 0 {
-            bail!("couldn't register the edit-mode message");
+            bail!("couldn't register the widget host's message");
         }
         let host = FindWindowExW(Some(HWND_MESSAGE), None, w!("mypaper.widgets.host"), None)
             .ok()
             .filter(|hwnd| *hwnd != HWND::default())
             .context("the widget host isn't running (mypaper-widgets.exe)")?;
-        PostMessageW(Some(host), message, WPARAM(2), LPARAM(0)).context("posting to the widget host")?;
+        PostMessageW(Some(host), message, WPARAM(wparam), LPARAM(0)).context("posting to the widget host")?;
     }
     Ok(())
+}
+
+/// Posts the registered `mypaper.widgets.edit` message (`wParam` 2 = toggle) to
+/// the host's message-only window.
+pub fn toggle_edit_mode() -> Result<()> {
+    post_to_host(w!("mypaper.widgets.edit"), 2)
 }
 
 #[cfg(test)]
@@ -374,6 +412,28 @@ mod tests {
         let mut without = json(LAYOUT);
         without.as_object_mut().unwrap().remove("appearance");
         assert_eq!(json(&cleared), without);
+    }
+
+    #[test]
+    fn the_overlay_layer_defaults_on_and_the_switch_edits_only_its_key() {
+        assert!(read_layout(None).unwrap().overlay && read_layout(Some(LAYOUT)).unwrap().overlay);
+
+        let off = with_overlay(Some(LAYOUT), false).unwrap();
+        assert!(!read_layout(Some(&off)).unwrap().overlay);
+        let mut expected = json(LAYOUT);
+        expected["overlay"] = false.into();
+        assert_eq!(json(&off), expected);
+
+        let on = with_overlay(Some(&off), true).unwrap();
+        assert!(read_layout(Some(&on)).unwrap().overlay);
+        assert_eq!(json(&with_overlay(None, false).unwrap())["overlay"], false);
+
+        // A style in the global look is part of the same layer.
+        let look: Look = serde_json::from_str(r#"{ "style": "aero", "surface": "glass" }"#).unwrap();
+        let styled = with_appearance(Some(&on), &look).unwrap();
+        assert_eq!(json(&styled)["appearance"]["style"], "aero");
+        assert_eq!(read_layout(Some(&styled)).unwrap().appearance, look);
+        assert!(serde_json::from_str::<Look>(r#"{ "style": "glossy" }"#).is_err());
     }
 
     #[test]

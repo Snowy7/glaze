@@ -6,14 +6,17 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use mypaper_bars_schema::vars::{self, VarDecl};
 use mypaper_config::Config;
 use mypaper_theme::LoadedTheme;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use crate::autostart::{self, Autostart};
-use crate::bars::{self, BarsConfig, BarsState};
+use crate::bars::{self, BarsState, Catalog, Doc};
+use crate::config_edit::{self, ConfigPatch, ConfigState};
 use crate::engine::{self, Component, EngineStatus};
+use crate::iconpacks::{self, AppIcon, PackInfo};
 use crate::icons;
 use crate::look::Look;
 use crate::manifest::{SkinEdit, SkinKind, WindowsStyle};
@@ -41,27 +44,6 @@ fn load_config() -> Result<Config> {
     config
 }
 
-/// A partial config update; absent fields are left alone.
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-pub struct ConfigPatch {
-    theme: Option<String>,
-    paused: Option<bool>,
-    pause_on_battery: Option<bool>,
-    pause_on_fullscreen: Option<bool>,
-}
-
-impl ConfigPatch {
-    fn apply(self, config: &mut Config) {
-        if let Some(theme) = self.theme {
-            config.theme = theme;
-        }
-        config.paused = self.paused.unwrap_or(config.paused);
-        config.pause_on_battery = self.pause_on_battery.unwrap_or(config.pause_on_battery);
-        config.pause_on_fullscreen = self.pause_on_fullscreen.unwrap_or(config.pause_on_fullscreen);
-    }
-}
-
 /// Refuses themes the engine couldn't load, since it stops (rather than
 /// crash-loops) on a config it can't use.
 fn check_theme(theme: &str) -> Result<()> {
@@ -70,36 +52,30 @@ fn check_theme(theme: &str) -> Result<()> {
     Ok(())
 }
 
+/// Applies a patch to `config.json`, changing only the keys it names (see `config_edit`).
 fn update(patch: ConfigPatch) -> Result<Config> {
-    let mut config = load_config()?;
-    let before = config.clone();
     if let Some(theme) = &patch.theme {
         check_theme(theme).with_context(|| format!("can't apply theme {theme:?}"))?;
     }
-    patch.apply(&mut config);
-    // Skip no-op saves: each real save makes the engine reload.
-    if config != before {
-        config.save()?;
-    }
-    Ok(config)
+    config_edit::update_at(&mypaper_config::path()?, patch)
 }
 
 #[tauri::command]
-pub async fn get_config() -> CmdResult<Config> {
-    load_config().map_err(text)
+pub async fn get_config() -> CmdResult<ConfigState> {
+    load_config().map(Into::into).map_err(text)
 }
 
 #[tauri::command]
-pub async fn update_config(patch: ConfigPatch) -> CmdResult<Config> {
-    update(patch).map_err(text)
+pub async fn update_config(patch: ConfigPatch) -> CmdResult<ConfigState> {
+    update(patch).map(Into::into).map_err(text)
 }
 
 /// Writes the defaults, for when the file on disk can't be parsed.
 #[tauri::command]
-pub async fn reset_config() -> CmdResult<Config> {
+pub async fn reset_config() -> CmdResult<ConfigState> {
     let config = Config::default();
     config.save().map_err(text)?;
-    Ok(config)
+    Ok(config.into())
 }
 
 /// The webview may only read preview images of themes we listed.
@@ -289,15 +265,130 @@ pub async fn get_bars() -> CmdResult<BarsState> {
     bars::path().and_then(|path| bars::load_from(&path)).map_err(text)
 }
 
+/// The host's defaults, presets and geometry: what the page merges a `bars.json` against.
 #[tauri::command]
-pub async fn set_bars(config: BarsConfig) -> CmdResult<BarsState> {
-    bars::path().and_then(|path| bars::save_to(&path, &config)).map_err(text)
+pub async fn bars_catalog() -> CmdResult<Catalog> {
+    bars::catalog().map_err(text)
 }
 
-/// Writes the default `bars.json`, for when the file on disk can't be parsed.
+/// Writes the whole document, after the host's schema has accepted it.
+#[tauri::command]
+pub async fn set_bars(doc: Doc) -> CmdResult<BarsState> {
+    bars::path().and_then(|path| bars::save_to(&path, &doc)).map_err(text)
+}
+
+/// Writes an empty `bars.json` (all defaults), for when the file on disk can't be parsed.
 #[tauri::command]
 pub async fn reset_bars() -> CmdResult<BarsState> {
     bars::path().and_then(|path| bars::reset_at(&path)).map_err(text)
+}
+
+#[derive(Debug, Serialize)]
+pub struct ThemeVar {
+    name: String,
+    #[serde(flatten)]
+    decl: VarDecl,
+}
+
+/// The active theme's tunable bars variables (docs/bars.md, "Theme variables").
+#[derive(Debug, Default, Serialize)]
+pub struct ThemeVars {
+    /// The active theme's name.
+    theme: String,
+    /// Its bars style sheet, when it has one.
+    css: Option<String>,
+    vars: Vec<ThemeVar>,
+    /// The theme or its declarations couldn't be read.
+    error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn theme_vars() -> ThemeVars {
+    let read = || -> Result<ThemeVars> {
+        let loaded = LoadedTheme::load(mypaper_theme::locate(Some(&load_config()?.theme))?)?;
+        let mut found = ThemeVars { theme: loaded.theme.name.clone(), ..ThemeVars::default() };
+        let Some(css) = loaded.theme.bars.and_then(|skin| skin.css) else { return Ok(found) };
+        let path = loaded.dir.join(&css);
+        let sheet = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        found.css = Some(css.display().to_string());
+        found.vars = vars::declared(&sheet)
+            .with_context(|| format!("in {}", path.display()))?
+            .into_iter()
+            .map(|(name, decl)| ThemeVar { name, decl })
+            .collect();
+        Ok(found)
+    };
+    read().unwrap_or_else(|e| ThemeVars { error: Some(text(e)), ..ThemeVars::default() })
+}
+
+/// The icon packs to choose from: bundled with the bars page, then the user's.
+#[tauri::command]
+pub async fn list_icon_packs(app: AppHandle) -> CmdResult<Vec<PackInfo>> {
+    let user = iconpacks::user_root().ok();
+    let packs = iconpacks::list_from(iconpacks::bundled_root().as_deref(), user.as_deref());
+    let scope = app.asset_protocol_scope();
+    for preview in packs.iter().flat_map(|p| &p.previews) {
+        let _ = scope.allow_file(preview);
+    }
+    Ok(packs)
+}
+
+/// The per-app icons of one of the user's packs.
+#[tauri::command]
+pub async fn icon_pack_apps(app: AppHandle, pack: String) -> CmdResult<Vec<AppIcon>> {
+    let list = || -> Result<Vec<AppIcon>> {
+        let apps = iconpacks::apps(&iconpacks::user_pack_dir(&iconpacks::user_root()?, &pack)?)?;
+        let scope = app.asset_protocol_scope();
+        for icon in &apps {
+            let _ = scope.allow_file(&icon.file);
+        }
+        Ok(apps)
+    };
+    list().map_err(text)
+}
+
+/// Makes an empty pack of the user's own (and does nothing if it exists).
+#[tauri::command]
+pub async fn create_icon_pack(name: String) -> CmdResult<()> {
+    let make = || -> Result<()> {
+        iconpacks::create(&iconpacks::user_root()?, &name)?;
+        Ok(())
+    };
+    make().map_err(text)
+}
+
+/// Gives the app at `target` the picture at `image`, in one of the user's packs.
+#[tauri::command]
+pub async fn set_app_icon(pack: String, target: String, image: PathBuf) -> CmdResult<()> {
+    let set = || iconpacks::set_app_icon(&iconpacks::user_pack_dir(&iconpacks::user_root()?, &pack)?, &target, &image);
+    set().map_err(text)
+}
+
+#[tauri::command]
+pub async fn remove_app_icon(pack: String, index: usize) -> CmdResult<()> {
+    let remove = || iconpacks::remove_app_icon(&iconpacks::user_pack_dir(&iconpacks::user_root()?, &pack)?, index);
+    remove().map_err(text)
+}
+
+/// Whether a web or 3D scene theme forwards the mouse; null for the other kinds.
+#[tauri::command]
+pub async fn get_interactive(dir: PathBuf) -> CmdResult<Option<bool>> {
+    themes::read_interactive(&dir).map_err(text)
+}
+
+#[tauri::command]
+pub async fn set_interactive(dir: PathBuf, on: bool) -> CmdResult<Option<bool>> {
+    let save = || -> Result<Option<bool>> {
+        themes::save_interactive(&dir, &mypaper_config::user_themes_dir()?, on)?;
+        themes::read_interactive(&dir)
+    };
+    save().map_err(text)
+}
+
+/// The cursor sets in `%APPDATA%\mypaper\cursors`.
+#[tauri::command]
+pub async fn list_cursor_sets() -> Vec<String> {
+    mypaper_config::dir().map(|dir| themes::user_cursor_sets(&dir.join("cursors"))).unwrap_or_default()
 }
 
 #[derive(Debug, Serialize)]
@@ -359,6 +450,12 @@ pub async fn reset_instance_look(instance: String) -> CmdResult<Layout> {
     widgets::clear_instance_look(&instance).map_err(text)
 }
 
+/// Shows or hides the topmost overlay widgets.
+#[tauri::command]
+pub async fn set_widgets_overlay(on: bool) -> CmdResult<Layout> {
+    widgets::set_overlay(on).map_err(text)
+}
+
 /// Toggles the widget host's edit mode on the desktop.
 #[tauri::command]
 pub async fn toggle_widget_edit() -> CmdResult<()> {
@@ -395,30 +492,4 @@ pub async fn get_autostart() -> Autostart {
 #[tauri::command]
 pub async fn set_autostart(enabled: bool) -> CmdResult<Autostart> {
     autostart::set(enabled).map_err(text)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_patch_changes_only_the_fields_it_names() {
-        let mut config = Config::default();
-        ConfigPatch { paused: Some(true), ..Default::default() }.apply(&mut config);
-        assert_eq!(config, Config { paused: true, ..Config::default() });
-
-        ConfigPatch { theme: Some("photo".into()), pause_on_battery: Some(false), ..Default::default() }
-            .apply(&mut config);
-        assert_eq!(
-            config,
-            Config { theme: "photo".into(), paused: true, pause_on_battery: false, pause_on_fullscreen: true, ..Config::default() }
-        );
-    }
-
-    #[test]
-    fn patches_deserialize_from_partial_json() {
-        let patch: ConfigPatch = serde_json::from_str(r#"{ "pause_on_fullscreen": false }"#).unwrap();
-        assert_eq!(patch.pause_on_fullscreen, Some(false));
-        assert!(patch.theme.is_none() && patch.paused.is_none());
-    }
 }

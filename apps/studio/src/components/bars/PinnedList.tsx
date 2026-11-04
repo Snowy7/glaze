@@ -1,7 +1,8 @@
 import { AppWindow, GripVertical, Plus, X } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 
-import { pickDockApp, type PinnedItem } from "../../lib/api";
+import { pickDockApp } from "../../lib/api";
+import type { Pinned as PinnedItem } from "../../lib/barsSchema";
 import { useDockIcon } from "../../lib/hooks";
 import { useStudio } from "../../lib/studio";
 import { Button, IconButton, INPUT_CLASS } from "../ui";

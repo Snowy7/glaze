@@ -11,6 +11,8 @@ license = "MIT"
 [dependencies]
 mypaper-config = { path = "../../../crates/config" }
 mypaper-theme = { path = "../../../crates/theme" }
+# The bars.json schema: crates/bars' own source, without the host's WebView2 (see that crate).
+mypaper-bars-schema = { path = "../bars-schema" }
 
 anyhow = "1"
 notify = { version = "8", default-features = false }

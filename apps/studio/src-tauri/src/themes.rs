@@ -287,6 +287,42 @@ pub fn save_style(dir: &Path, user_root: &Path, style: &WindowsStyle) -> Result<
     Ok(())
 }
 
+/// Whether a web or 3D scene theme forwards the mouse to the wallpaper; `None` for other kinds.
+pub fn read_interactive(dir: &Path) -> Result<Option<bool>> {
+    LoadedTheme::load(dir)?;
+    let path = dir.join(MANIFEST);
+    manifest::read_interactive(&std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?)
+}
+
+/// Turns `wallpaper.interactive` on or off in a user theme, checked like `save_style`.
+pub fn save_interactive(dir: &Path, user_root: &Path, on: bool) -> Result<()> {
+    if !is_user_theme(dir, user_root) {
+        bail!("only themes in your themes folder can be edited; duplicate this one first");
+    }
+    let path = dir.join(MANIFEST);
+    let original = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    if manifest::read_interactive(&original)? == Some(on) {
+        return Ok(());
+    }
+    let updated = manifest::with_interactive(&original, on)?;
+    LoadedTheme::parse(dir.to_path_buf(), &updated).context("this wallpaper setting was refused")?;
+    fsio::write_atomic(&path, updated)
+}
+
+/// The cursor sets the user made: the folders of `%APPDATA%\mypaper\cursors` (docs/desktop-extras.md).
+/// The built-in `mypaper-dark` and `mypaper-light` aren't folders there until first used.
+pub fn user_cursor_sets(root: &Path) -> Vec<String> {
+    let mut sets: Vec<String> = std::fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| entry.path().is_dir())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .collect();
+    sets.sort_by_key(|name| name.to_lowercase());
+    sets
+}
+
 /// A `widgets` / `bars` section of a theme's `theme.json`, as the editor shows it.
 pub fn read_skin(dir: &Path, kind: SkinKind) -> Result<SkinEdit> {
     LoadedTheme::load(dir)?;
@@ -567,6 +603,44 @@ mod tests {
         assert!(!entry(&dir, Origin::User, None).styled);
         let after = LoadedTheme::load(&dir).unwrap();
         assert_eq!(after.theme.wallpaper, LoadedTheme::parse(dir.clone(), &before).unwrap().theme.wallpaper);
+        std::fs::remove_dir_all(&work).unwrap();
+    }
+
+    #[test]
+    fn cursors_and_interactive_are_saved_into_user_themes_and_checked() {
+        let work = temp_dir("interactive");
+        let mine = work.join("mine");
+        let dir = mine.join("page");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("index.html"), "<p>hi</p>").unwrap();
+        std::fs::write(dir.join(MANIFEST), r#"{ "name": "Page", "wallpaper": { "kind": "web", "url": "index.html" } }"#).unwrap();
+
+        assert_eq!(read_interactive(&dir).unwrap(), Some(false));
+        save_interactive(&dir, &mine, true).unwrap();
+        save_style(&dir, &mine, &WindowsStyle { cursors: Some("mypaper-light".into()), ..Default::default() }).unwrap();
+        let Wallpaper::Web(web) = LoadedTheme::load(&dir).unwrap().theme.wallpaper else { panic!("a web wallpaper") };
+        assert!(web.interactive);
+        assert_eq!(read_style(&dir).unwrap().cursors.as_deref(), Some("mypaper-light"));
+        assert_eq!(read_interactive(&dir).unwrap(), Some(true));
+
+        // Off removes the key; the cursors stay.
+        save_interactive(&dir, &mine, false).unwrap();
+        assert!(!std::fs::read_to_string(dir.join(MANIFEST)).unwrap().contains("interactive"));
+        assert_eq!(read_style(&dir).unwrap().cursors.as_deref(), Some("mypaper-light"));
+
+        // Not for themes outside the user folder, nor for wallpapers that can't use it.
+        assert!(save_interactive(&dir, &work.join("elsewhere"), true).is_err());
+        let shader = shader_theme(&mine, "shader");
+        assert_eq!(read_interactive(&shader).unwrap(), None);
+        assert!(save_interactive(&shader, &mine, true).is_err());
+
+        // The folders of the user's cursor sets.
+        let cursors = work.join("cursors");
+        assert!(user_cursor_sets(&cursors).is_empty());
+        std::fs::create_dir_all(cursors.join("Zebra")).unwrap();
+        std::fs::create_dir_all(cursors.join("amber")).unwrap();
+        std::fs::write(cursors.join("stray.txt"), "").unwrap();
+        assert_eq!(user_cursor_sets(&cursors), ["amber", "Zebra"]);
         std::fs::remove_dir_all(&work).unwrap();
     }
 }

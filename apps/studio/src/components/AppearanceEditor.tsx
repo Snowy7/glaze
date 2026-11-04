@@ -4,6 +4,7 @@ import { useId, useState, type ReactNode } from "react";
 import { BUILT_IN, FONT_PRESETS, resolve, setCount, without } from "../lib/appearance";
 import type { Appearance, SkinKind, Surface, TextTone } from "../lib/api";
 import { AppearancePreview, type BarLayout } from "./AppearancePreview";
+import { StylePicker, styleBlurb } from "./StylePicker";
 import { Button, ColorField, INPUT_CLASS, Segmented, Slider, Switch } from "./ui";
 
 type Props = {
@@ -17,6 +18,8 @@ type Props = {
   fallback: string;
   /** The top bar's modules, drawn in the bars preview. */
   layout?: BarLayout;
+  /** Leave out the sticky preview (the Bars page has its own). */
+  hidePreview?: boolean;
 };
 
 const SURFACES: readonly { value: Surface; label: string; hint: string }[] = [
@@ -39,7 +42,7 @@ const px = (value: number) => `${value}px`;
  * from the layers below, dimmed, and touching one sets it. Put it on a `bg-surface`
  * card: the live preview sticks to the top while the fields scroll.
  */
-export function AppearanceEditor({ target, value, onChange, below = [], fallback, layout }: Props) {
+export function AppearanceEditor({ target, value, onChange, below = [], fallback, layout, hidePreview = false }: Props) {
   const inherited = resolve(BUILT_IN[target], ...below);
   const shown = resolve(inherited, value);
   const set = <K extends keyof Appearance>(key: K, next: Appearance[K]) => onChange({ ...value, [key]: next });
@@ -54,9 +57,11 @@ export function AppearanceEditor({ target, value, onChange, below = [], fallback
 
   return (
     <div className="bg-surface">
-      <div className="sticky top-0 z-10 -mx-1 bg-surface px-1 pt-1 pb-4">
-        <AppearancePreview target={target} base={BUILT_IN[target]} layers={[...below, value]} layout={layout} />
-      </div>
+      {!hidePreview && (
+        <div className="sticky top-0 z-10 -mx-1 bg-surface px-1 pt-1 pb-4">
+          <AppearancePreview target={target} base={BUILT_IN[target]} layers={[...below, value]} layout={layout} />
+        </div>
+      )}
 
       <div className="mb-1 flex items-center justify-between gap-3">
         <p className="text-xs text-ink-3" aria-live="polite">
@@ -68,6 +73,13 @@ export function AppearanceEditor({ target, value, onChange, below = [], fallback
       </div>
 
       <div className="divide-y divide-line">
+        {target === "widgets" &&
+          field(
+            "style",
+            "Style",
+            styleBlurb(shown.style),
+            <StylePicker look={shown} value={shown.style} onChange={(v) => set("style", v)} />,
+          )}
         {field(
           "surface",
           "Surface",
