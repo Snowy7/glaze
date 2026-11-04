@@ -1,5 +1,5 @@
 //! Native-shell lifetime and taskbar recovery. Core never touches the journal while the shell
-//! is alive; start-time replay and the early hide belong to the shell.
+//! owns its journal lease. A replacement paints first and waits for core's replay to finish.
 
 use std::time::{Duration, Instant};
 

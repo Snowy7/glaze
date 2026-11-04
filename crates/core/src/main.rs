@@ -99,8 +99,9 @@ fn run() -> Result<()> {
     }
     bars::wait_for_shell();
     bars::stop_leftover()?;
-    // The shell owns startup replay and the early hide. Core never writes the journal
-    // while it is alive. Start it before the wallpaper and all of core's optional work.
+    // The shell paints before acquiring the taskbar journal and hiding Explorer. Start it
+    // before the wallpaper and all of core's optional work.
+    startup::ready("core", "shell_spawn_begin_ms");
     let mut shell = start_optional("shell", exe.with_file_name("mypaper-shell.exe"));
     startup::ready("core", "shell_spawn_ms");
 
@@ -178,13 +179,26 @@ fn run() -> Result<()> {
                     }
                 }
                 name if shell.as_ref().is_some_and(|s| s.name == name) => {
-                    // The wait above proved the shell exited: it cannot race this replay.
-                    bars::replay_journal();
-                    if let Some(child) = &mut shell
-                        && child.on_exit()? == Outcome::Stopped
+                    // The exited shell released its lease. Its replacement may paint while
+                    // core owns the journal, then waits before changing Explorer or the journal.
+                    let journal = mypaper_bars::taskbar::JournalLease::acquire()?;
+                    if let Err(e) = mypaper_bars::taskbar::Taskbar::native()
+                        .and_then(|mut t| t.restore_visibility())
                     {
-                        shell = None;
+                        log::warn!("revealing the native taskbar after shell exit: {e:#}");
                     }
+                    if let Some(child) = &mut shell {
+                        if child.on_exit()? == Outcome::Stopped {
+                            shell = None;
+                        } else if let Err(e) = child.restart_if_due() {
+                            log::warn!("{e:#}; continuing without the shell");
+                            shell = None;
+                        }
+                    }
+                    // The new shell presents first, then waits on this lease before any
+                    // journal access. Explorer's synchronous restore overlaps its renderer startup.
+                    bars::replay_journal();
+                    drop(journal);
                 }
                 _ => {}
             }

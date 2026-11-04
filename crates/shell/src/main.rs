@@ -64,8 +64,10 @@ fn run() -> Result<()> {
     let parent = parent_process();
     anyhow::ensure!(parent.is_some(), "could not watch the shell supervisor");
     let bars_start = bars::prepare()?;
+    startup::ready("shell", "prepared_ms");
     let _com = Com::init();
     let mut ui = Ui::new()?;
+    startup::ready("shell", "factories_ms");
     let bars = bars::Bars::new(&mut ui, bars_start)?;
     let inbox = Inbox::new()?;
     let _watchers = watch_files();

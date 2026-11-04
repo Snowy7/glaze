@@ -237,6 +237,7 @@ mod tests {
         assert!(ticker.armed());
         // SAFETY: waits on our own timer.
         assert_eq!(
+            // SAFETY: the ticker owns this valid timer handle throughout the bounded wait.
             unsafe { WaitForSingleObject(ticker.handle(), 200) },
             WAIT_OBJECT_0
         );
@@ -245,6 +246,7 @@ mod tests {
         assert!(!ticker.armed());
         // SAFETY: as above.
         assert_eq!(
+            // SAFETY: the disarmed ticker still owns this valid handle throughout the wait.
             unsafe { WaitForSingleObject(ticker.handle(), 100) },
             WAIT_TIMEOUT
         );

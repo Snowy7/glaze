@@ -19,7 +19,7 @@ use mypaper_bars::{
     events::{self, Broadcast},
     style::Family,
     system,
-    taskbar::{NativeShell, Taskbar, Wanted},
+    taskbar::{JournalLease, NativeShell, Taskbar, Wanted},
     trash::{self, TrashWatch},
     tray_data::Click,
 };
@@ -66,7 +66,8 @@ pub struct Bars {
     services: Services,
     config: BarsConfig,
     taskbar: Taskbar<NativeShell>,
-    broadcast: Broadcast,
+    journal: Option<JournalLease>,
+    broadcast: Option<Broadcast>,
     _control: Option<mypaper_desktop::ControlWindow>,
     trash: Option<TrashWatch>,
     ticker: Ticker,
@@ -97,35 +98,37 @@ pub struct Startup {
 }
 impl Drop for Startup {
     fn drop(&mut self) {
-        if self.config.is_some() {
+        if self.config.is_some()
+            && let Ok(_lease) = JournalLease::acquire()
+        {
             let _ = providers::replay();
         }
     }
 }
 pub fn prepare() -> Result<Startup> {
-    providers::replay()?;
     let config = load_config()?;
+    startup::ready("shell", "config_ms");
     let startup = Startup {
         config: Some(config),
     };
-    hide_early(startup.config.as_ref().unwrap())?;
     Ok(startup)
 }
 
 impl Bars {
-    /// Called before menus/widgets; factories/fonts load after the early taskbar hide.
+    /// Present the bars before starting Explorer services, hooks or provider workers.
     pub fn new(ui: &mut Ui, mut startup: Startup) -> Result<Self> {
         let config = startup.config.as_ref().unwrap().clone();
         let taskbar = Taskbar::native()?;
-        let broadcast = Broadcast::new()?;
         let services = Services::new()?;
+        startup::ready("shell", "services_ms");
         let mut bars = Self {
             bars: vec![],
             monitors: vec![],
             services,
             config,
             taskbar,
-            broadcast,
+            journal: None,
+            broadcast: None,
             _control: None,
             trash: None,
             ticker: Ticker::new()?,
@@ -150,9 +153,16 @@ impl Bars {
             preview_close: None,
         };
         bars.read_theme();
-        bars.reconcile()?;
+        startup::ready("shell", "theme_ms");
+        bars.reconcile(ui)?;
+        startup::ready("shell", "surfaces_ms");
         bars.paint(ui, Instant::now())?;
         startup::ready("shell", "bars_painted_ms");
+        bars.journal = Some(JournalLease::acquire()?);
+        providers::replay()?;
+        startup::ready("shell", "replayed_ms");
+        bars.broadcast = Some(Broadcast::new()?);
+        bars.services.start();
         bars._control =
             mypaper_desktop::ControlWindow::new(windows::core::w!("mypaper.bars.control"))
                 .inspect_err(|e| log::warn!("bar power/session notifications: {e:#}"))
@@ -189,9 +199,7 @@ impl Bars {
         .flatten()
         .min()
         .map_or(u32::MAX, |at| {
-            at.saturating_duration_since(Instant::now())
-                .as_millis()
-                .min(u128::from(u32::MAX - 1)) as u32
+            services::wait_ms(at.saturating_duration_since(Instant::now()))
         })
     }
     pub fn config_changed(&mut self) {
@@ -285,8 +293,8 @@ impl Bars {
     /// All drawing is gated by data changes or active animation. The ticker cancels at rest.
     pub fn tick(&mut self, ui: &mut Ui) {
         let now = Instant::now();
-        let (changed, config, theme) = self.services.tick(now);
-        if config || theme {
+        let changes = self.services.tick(now);
+        if changes.config || changes.theme {
             self.config_changed();
         }
         if services::take_due(&mut self.config_due, now) {
@@ -294,7 +302,7 @@ impl Bars {
                 Ok(config) => {
                     self.config = config;
                     self.read_theme();
-                    if let Err(e) = self.reconcile() {
+                    if let Err(e) = self.reconcile(ui) {
                         log::error!("bars: {e:#}");
                     }
                     self.apply_taskbar();
@@ -324,7 +332,7 @@ impl Bars {
                         .any(|old| old.device == m.device && old.rect == m.rect && old.dpi == m.dpi)
                 });
             if changed {
-                if let Err(e) = self.reconcile() {
+                if let Err(e) = self.reconcile(ui) {
                     log::error!("display layout: {e:#}");
                 }
                 self.update_items();
@@ -337,9 +345,11 @@ impl Bars {
                 }
             }
         }
-        if changed {
+        if changes.data {
             self.update_items();
             self.dirty();
+        }
+        if changes.data || changes.moved {
             let fullscreen = fullscreen_app_monitor()
                 .and_then(|rect| monitor_infos().into_iter().find(|m| m.rect == rect))
                 .map(|m| m.device);
@@ -347,10 +357,10 @@ impl Bars {
                 self.fullscreen = fullscreen;
                 self.subscribe();
             }
-            if self.config.taskbar.mode == TaskbarMode::Hide {
-                self.rehide_due
-                    .get_or_insert(now + Duration::from_millis(50));
-            }
+        }
+        if changes.taskbar && self.config.taskbar.mode == TaskbarMode::Hide {
+            self.rehide_due
+                .get_or_insert(now + Duration::from_millis(50));
         }
         if services::take_due(&mut self.rehide_due, now)
             && self.config.taskbar.mode == TaskbarMode::Hide
@@ -977,7 +987,7 @@ impl Bars {
         });
     }
 
-    fn reconcile(&mut self) -> Result<()> {
+    fn reconcile(&mut self, ui: &mut Ui) -> Result<()> {
         self.press = None;
         self.preview = None;
         self.preview_due = None;
@@ -987,6 +997,7 @@ impl Bars {
             menu.close();
         }
         let monitors = monitor_infos();
+        startup::ready("shell", "monitors_ms");
         for old in &self.monitors {
             if !monitors.iter().any(|m| m.device == old.device) {
                 glass::publish(glass::Source::Bars, old, &[]);
@@ -1025,13 +1036,30 @@ impl Bars {
                     if performance && let Some(material) = tokens.material.take() {
                         tokens.fill = material.tint.with_alpha(0.88);
                     }
-                    self.bars.push(Bar::new(
+                    let mut bar = Bar::new(
                         kind,
                         config.clone(),
                         monitor.clone(),
                         tokens,
                         self.system.animations && !performance,
-                    )?);
+                    )?;
+                    bar.hidden = self.asleep || self.fullscreen.as_deref() == Some(&monitor.device);
+                    if kind == BarKind::Dock {
+                        bar.items = self.services.dock_items(
+                            &config,
+                            providers::apps::window_monitor(bar.surface.hwnd()),
+                        );
+                    }
+                    // Present immediately: creating the remaining windows is not part of this
+                    // surface's first-frame dependency chain.
+                    bar.paint(
+                        ui,
+                        &self.services.model,
+                        &mut self.images,
+                        Instant::now(),
+                        false,
+                    )?;
+                    self.bars.push(bar);
                 }
             }
         }
@@ -1085,7 +1113,11 @@ impl Bars {
         });
         if trash != self.trash.is_some() {
             self.trash = trash
-                .then(|| TrashWatch::new(self.broadcast.hwnd()))
+                .then(|| {
+                    self.broadcast
+                        .as_ref()
+                        .and_then(|b| TrashWatch::new(b.hwnd()))
+                })
                 .flatten();
             if trash {
                 self.services.model.trash_full = providers::trash::full();
@@ -1164,6 +1196,10 @@ impl Bars {
 
 impl Drop for Bars {
     fn drop(&mut self) {
+        // Construction can fail before the post-paint handoff from core.
+        if self.journal.is_none() {
+            self.journal = JournalLease::acquire().ok();
+        }
         providers::hooks::watch_taskbar(false);
         self.services.tray_host.set_active(false);
         for monitor in monitor_infos() {
@@ -1190,36 +1226,4 @@ fn load_config() -> Result<BarsConfig> {
     }
     config.resolve(services::default_pins);
     Ok(config)
-}
-
-/// Hide only the taskbar windows before the UI's factories/fonts load. The full mode waits
-/// until the bars are painted so Explorer's work-area negotiation cannot delay first paint.
-struct HideOnly(NativeShell);
-impl providers::taskbar::Shell for HideOnly {
-    fn appbar_state(&self) -> u32 {
-        self.0.appbar_state()
-    }
-    fn set_appbar_state(&mut self, _: u32) -> Result<()> {
-        Ok(())
-    }
-    fn set_hidden(&mut self, hidden: bool) -> Result<()> {
-        self.0.set_hidden(hidden)
-    }
-    fn alignment(&self) -> Result<Option<u32>> {
-        self.0.alignment()
-    }
-    fn set_alignment(&mut self, _: Option<u32>) -> Result<()> {
-        Ok(())
-    }
-}
-fn hide_early(config: &BarsConfig) -> Result<()> {
-    if config.taskbar.mode == TaskbarMode::Hide && (config.top.enabled || config.dock.enabled) {
-        let path = providers::files::local(providers::taskbar::JOURNAL)?;
-        Taskbar::new(HideOnly(NativeShell), path).apply(Wanted {
-            mode: TaskbarMode::Hide,
-            alignment: config.taskbar.alignment,
-        })?;
-        startup::ready("shell", "taskbar_hidden_ms");
-    }
-    Ok(())
 }

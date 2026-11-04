@@ -47,11 +47,20 @@ impl Tokens {
             }),
         };
         let material = (style == NativeStyle::Liquid && fill.a < 0.999).then_some(Material {
-            clarity: 1.0 - look.glass.tint.or(look.tint).unwrap_or(0.12),
+            clarity: look
+                .glass
+                .clarity
+                .unwrap_or_else(|| 1.0 - look.glass.tint.or(look.tint).unwrap_or(0.12)),
             blur: look.glass.blur.unwrap_or(12.0),
             refraction: look.glass.refraction.unwrap_or(0.6),
             highlight: look.glass.highlight.unwrap_or(0.75),
-            tint,
+            tint: tint.with_alpha(
+                look.glass
+                    .tint
+                    .or(look.tint)
+                    .or(appearance.opacity)
+                    .unwrap_or(0.12),
+            ),
         });
         let mut font = TextStyle::new(
             &font_family(look.font.family.as_deref().unwrap_or("Segoe UI")),

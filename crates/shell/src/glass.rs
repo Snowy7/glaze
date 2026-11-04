@@ -29,6 +29,10 @@ pub struct Plate {
 /// Who owns a set of plates; each source replaces only its own per monitor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Source {
+    #[allow(
+        dead_code,
+        reason = "the standalone widget fixture publishes only Widgets"
+    )]
     Bars,
     Widgets,
 }
@@ -38,6 +42,7 @@ struct Merger {
     sets: BTreeMap<(Source, String), Vec<ipc::Plate>>,
     writer: Option<ipc::Writer>,
     failed: bool,
+    published: Vec<ipc::Plate>,
 }
 
 thread_local! {
@@ -48,12 +53,10 @@ thread_local! {
 /// republish the merged snapshot.
 pub fn publish(source: Source, monitor: &Monitor, plates: &[Plate]) {
     let (ox, oy) = (monitor.rect.x as f32, monitor.rect.y as f32);
-    let tag = (source as u64 + 1) << 56;
     let converted = plates
         .iter()
-        .enumerate()
-        .map(|(i, p)| ipc::Plate {
-            id: if p.id != 0 { p.id } else { tag | i as u64 },
+        .map(|p| ipc::Plate {
+            id: p.id,
             rect: [
                 p.rect.left + ox,
                 p.rect.top + oy,
@@ -88,24 +91,87 @@ impl Merger {
                 Ok(writer) => self.writer = Some(writer),
                 Err(e) => {
                     self.failed = true;
-                    log::error!("glass transport unavailable, surfaces fall back to tint: {e:#}");
+                    log::error!("glass transport unavailable: {e:#}");
                 }
             }
         }
         let Some(writer) = &mut self.writer else {
             return;
         };
-        let all: Vec<ipc::Plate> = self.sets.values().flatten().copied().collect();
+        let all = merged(&self.sets);
         if all.len() > ipc::MAX_PLATES {
-            log::warn!(
-                "{} plates; the engine draws the first {}",
+            log::error!(
+                "{} plates exceeds the whole-desktop limit of {}",
                 all.len(),
                 ipc::MAX_PLATES
             );
+            return;
         }
-        let n = all.len().min(ipc::MAX_PLATES);
-        if let Err(e) = writer.publish(&all[..n]) {
+        if all == self.published {
+            return;
+        }
+        if let Err(e) = writer.publish(&all) {
             log::error!("glass publish: {e:#}");
+        } else {
+            self.published = all;
         }
+    }
+}
+
+/// Auto ids include the monitor group as well as the source and local shape index.
+/// Explicit ids (widget HWNDs) stay intact for overlay exclusion.
+fn merged(sets: &BTreeMap<(Source, String), Vec<ipc::Plate>>) -> Vec<ipc::Plate> {
+    sets.iter()
+        .enumerate()
+        .flat_map(|(group, ((source, _), plates))| {
+            plates.iter().enumerate().map(move |(i, p)| ipc::Plate {
+                id: if p.id == 0 {
+                    ((*source as u64 + 1) << 56) | ((group as u64) << 32) | i as u64
+                } else {
+                    p.id
+                },
+                ..*p
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn complete_snapshot_preserves_both_monitors_and_widgets_with_unique_ids() {
+        let plate = ipc::Plate {
+            id: 0,
+            rect: [-2560.0, 8.0, 2400.0, 32.0],
+            radius: 12.0,
+            material: ipc::Material::default(),
+        };
+        let mut sets = BTreeMap::from([
+            ((Source::Bars, "DISPLAY1".into()), vec![plate, plate]),
+            ((Source::Bars, "DISPLAY2".into()), vec![plate, plate]),
+            (
+                (Source::Widgets, "DISPLAY1".into()),
+                vec![ipc::Plate { id: 12345, ..plate }],
+            ),
+        ]);
+        let all = merged(&sets);
+        assert_eq!(all.len(), 5);
+        let ids: std::collections::BTreeSet<_> = all.iter().map(|p| p.id).collect();
+        assert_eq!(
+            ids.len(),
+            all.len(),
+            "auto ids must not repeat on the second monitor"
+        );
+        assert_eq!(all[4].id, 12345, "widget HWND identity is preserved");
+        sets.insert((Source::Bars, "DISPLAY1".into()), vec![]);
+        let remaining = merged(&sets);
+        assert_eq!(remaining.len(), 3);
+        assert!(remaining.iter().any(|p| p.id == 12345));
+        assert_eq!(
+            remaining[0].rect, plate.rect,
+            "geometry is used without interpolation"
+        );
     }
 }
