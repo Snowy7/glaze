@@ -13,7 +13,6 @@
   "right": ["network", "volume", "battery", "clock"],
   "extras": [],
   "preview": { "delay": 400 },
-  "clock": { "format": "HH:mm" },
   "look": {
     "scheme": "auto",
     "family": "fluent",

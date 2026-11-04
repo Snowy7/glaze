@@ -97,7 +97,7 @@ function defaults(): BarsConfig {
       align: "center",
       left: ["start", "search"],
       right: ["tray", "network", "volume", "battery", "clock"],
-      clock: { seconds: false, format: "ddd d MMM  HH:mm" },
+      clock: { seconds: false, format: null },
       pinned: [],
       look: emptyLook(),
       animation: {},

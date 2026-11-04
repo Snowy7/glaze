@@ -21,6 +21,7 @@ mod bar;
 mod blur;
 mod bridge;
 mod capture;
+mod clock;
 mod custom;
 mod desktops;
 mod first_paint;

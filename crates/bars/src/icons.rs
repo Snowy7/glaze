@@ -27,8 +27,9 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
 use windows::Win32::UI::Shell::{
-    IShellItem, IShellItemImageFactory, IShellLinkW, SHCreateItemFromParsingName,
-    SIGDN_NORMALDISPLAY, SIIGBF_ICONONLY, ShellLink,
+    FOLDERID_CommonPrograms, FOLDERID_Programs, IShellItem, IShellItemImageFactory, IShellLinkW,
+    KF_FLAG_DEFAULT, SHCreateItemFromParsingName, SHGetKnownFolderPath, SIGDN_NORMALDISPLAY,
+    SIIGBF_ICONONLY, ShellLink,
 };
 use windows::core::{GUID, HSTRING, Interface, PWSTR, w};
 
@@ -38,6 +39,88 @@ use crate::wake::{Msg, Waker};
 /// The virtual host the icon cache is mapped to.
 pub const ICON_HOST: &str = "icons.bars.mypaper";
 const ICON_SIZE: i32 = 64;
+
+/// Resolves toast app identities using the same shell images and PNG cache as dock icons.
+/// Construct on a COM-initialized worker; Start Menu shortcuts are indexed only on a miss.
+pub struct AppIconResolver {
+    wic: Option<IWICImagingFactory>,
+    shortcuts: std::cell::OnceCell<HashMap<String, PathBuf>>,
+}
+
+impl AppIconResolver {
+    pub fn new() -> Self {
+        // SAFETY: COM is initialized by the lane; the factory stays on that thread.
+        let wic =
+            unsafe { CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER) }.ok();
+        Self {
+            wic,
+            shortcuts: std::cell::OnceCell::new(),
+        }
+    }
+
+    pub fn icon(&self, aumid: &str, dir: &Path) -> Option<String> {
+        if aumid.is_empty() {
+            return None;
+        }
+        let wic = self.wic.as_ref()?;
+        let from_path = |path: &str| {
+            shell_item(path).and_then(|item| icon(&item, &path.to_lowercase(), wic, dir))
+        };
+        let shortcuts = self.shortcuts.get_or_init(start_menu_app_ids);
+        shortcuts
+            .get(&aumid.to_lowercase())
+            .and_then(|path| {
+                let path = path.to_string_lossy();
+                from_path(&path).or_else(|| resolve_link(&path).0.and_then(|exe| from_path(&exe)))
+            })
+            .or_else(|| from_path(&format!(r"shell:AppsFolder\{aumid}")))
+    }
+}
+
+/// The real user/common Start Menu folders, also when APPDATA is redirected for a preview.
+pub fn start_menu_dirs() -> Vec<PathBuf> {
+    [FOLDERID_Programs, FOLDERID_CommonPrograms]
+        .iter()
+        .filter_map(|id| {
+            // SAFETY: the returned string is ours to free.
+            unsafe {
+                let path = SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None).ok()?;
+                let text = path.to_string().ok();
+                CoTaskMemFree(Some(path.0.cast()));
+                text.map(PathBuf::from)
+            }
+        })
+        .collect()
+}
+
+/// Match System.AppUserModel.ID, never a display-name guess; user shortcuts take precedence.
+fn start_menu_app_ids() -> HashMap<String, PathBuf> {
+    let mut found = HashMap::new();
+    for root in start_menu_dirs() {
+        let mut dirs = vec![root];
+        while let Some(dir) = dirs.pop() {
+            let mut entries: Vec<_> = std::fs::read_dir(dir)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .collect();
+            entries.sort_by_key(|entry| entry.path());
+            for entry in entries {
+                let path = entry.path();
+                if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                    dirs.push(path);
+                } else if path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("lnk"))
+                    && let Some(aumid) = resolve_link(&path.to_string_lossy()).1
+                {
+                    found.entry(aumid.to_lowercase()).or_insert(path);
+                }
+            }
+        }
+    }
+    found
+}
 
 /// Something to name and draw.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

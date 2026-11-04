@@ -130,6 +130,8 @@ export interface Languages {
 export interface NotificationItem {
   id: number;
   app: string;
+  aumid?: string;
+  packageFamilyName?: string;
   icon?: string;
   title: string;
   body: string;

@@ -1,10 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { formatClock } from "./clock-format";
+import { clockText, formatClock } from "./clock-format";
 
 // Wednesday 4 March 2026, 14:05:09 local.
 const afternoon = new Date(2026, 2, 4, 14, 5, 9);
 const midnight = new Date(2026, 0, 9, 0, 7, 3);
 const f = (format: string, date = afternoon) => formatClock(format, date, "en-US");
+
+describe("the taskbar clock", () => {
+  const system = { time: "2:05 PM", timeWithSeconds: "2:05:09 PM", date: "3/4/2026" };
+
+  it("uses Windows' strings, including custom regional formats and seconds", () => {
+    expect(clockText({ format: null, seconds: false }, afternoon, system)).toBe("2:05 PM\n3/4/2026");
+    expect(clockText({ format: null, seconds: true }, afternoon, system)).toBe("2:05:09 PM\n3/4/2026");
+    expect(clockText({ format: null, seconds: false }, afternoon, { ...system, time: "14.05", date: "2026-03-04" })).toBe("14.05\n2026-03-04");
+  });
+
+  it("keeps explicit token formats as the override", () => {
+    expect(clockText({ format: "HH:mm\ndd/MM/yyyy", seconds: false }, afternoon, system)).toBe("14:05\n04/03/2026");
+    expect(clockText({ format: "", seconds: false }, afternoon, system)).toBe("");
+  });
+
+  it("uses Intl in browser previews, respecting the locale's hour cycle", () => {
+    expect(clockText({ format: null, seconds: false }, afternoon, undefined, "en-US")).toBe("2:05 PM\n3/4/2026");
+    expect(clockText({ format: null, seconds: false }, afternoon, undefined, "en-GB")).toBe("14:05\n04/03/2026");
+  });
+});
 
 describe("formatClock", () => {
   it("formats the docs example", () => {

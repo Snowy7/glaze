@@ -29,7 +29,7 @@ use windows::Win32::UI::Shell::{
     ABM_GETSTATE, ABM_SETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowExW, GWL_EXSTYLE, GetLayeredWindowAttributes, GetWindowLongPtrW,
+    FindWindowExW, GWL_EXSTYLE, GetLayeredWindowAttributes, GetShellWindow, GetWindowLongPtrW,
     GetWindowThreadProcessId, IsWindowVisible, LAYERED_WINDOW_ATTRIBUTES_FLAGS, LWA_ALPHA,
     SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA, SendMessageTimeoutW, SetLayeredWindowAttributes,
     SetWindowLongPtrW, ShowWindow, ShowWindowAsync, WM_SETTINGCHANGE, WS_EX_LAYERED,
@@ -406,10 +406,22 @@ fn unveil(hwnd: HWND) {
     }
 }
 
-/// Explorer's `Shell_TrayWnd`: the first one `explorer.exe` owns (the bars' tray host makes one
-/// too, kept above Explorer's so apps find it, and so may another shell).
+/// The desktop shell's primary tray, independent of Z-order or other Explorer processes.
 pub fn explorer_tray() -> Option<HWND> {
-    explorer_windows(w!("Shell_TrayWnd")).into_iter().next()
+    let mut shell_pid = 0;
+    // SAFETY: read-only queries; the shell HWND is null while Explorer is down.
+    unsafe { GetWindowThreadProcessId(GetShellWindow(), Some(&mut shell_pid)) };
+    if shell_pid == 0 {
+        return None;
+    }
+    explorer_windows(w!("Shell_TrayWnd"))
+        .into_iter()
+        .find(|&hwnd| {
+            let mut pid = 0;
+            // SAFETY: read-only query on a just-found taskbar.
+            unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+            pid == shell_pid
+        })
 }
 
 /// Every top-level window of `class` that `explorer.exe` owns.

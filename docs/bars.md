@@ -200,7 +200,10 @@ mypaper-wallpaper ── writes %LOCALAPPDATA%\mypaper\backdrop\<DEVICE>.bmp ─
 - **`top.clock.format`** tokens: `dddd` `ddd` `d` `dd` `MMMM` `MMM` `MM` `M` `yyyy` `yy` `HH` `H`
   `hh` `h` `mm` `ss` `tt`; `'quoted text'` and anything else is literal (a `\n` makes two lines).
   Default `ddd d MMM  HH:mm`, or `ddd d MMM  HH:mm:ss` with `seconds`. At most 64 characters. A
-  `taskbar` dock's clock has its own, `dock.clock` (a taskbar's is often two lines).
+  `taskbar` dock's clock has its own, `dock.clock`. With no explicit `dock.clock.format`, it shows
+  Windows' short time and short date on two lines, including Regional format overrides and the
+  user's 12/24-hour choice. `seconds` uses Windows' time format with seconds. The host reads the
+  NLS patterns and formats them in Windows; `clock-format.ts` still renders explicit token formats.
 - **`dock.button`** (16–240): a `taskbar` task button's length along the bar (missing: the icon plus
   16, or 168 with `titles`; Windows 11 is 40, Windows 10 48).
 - **`dock.pinned[].path`** is an exe, a shortcut (`.lnk`), a folder, or an `shell:AppsFolder\<AUMID>`
@@ -995,7 +998,9 @@ on build 26300, unpackaged:
 - Removing one toast (`RemoveNotification`) works unpackaged; `ClearNotifications` may not, so
   "Clear all" falls back to removing them one by one.
 
-No sparse package was needed, so none is shipped. The flyout groups toasts by app, newest first
+No sparse package was needed, so none is shipped. Each toast includes its display name (`app`),
+AppUserModelID (`aumid`) and, when packaged, `packageFamilyName`. The flyout groups by identity
+(falling back to the name when no identity is available), newest first
 (the app's logo from `AppDisplayInfo.GetLogo`, the title and body from the toast's text elements),
 with dismiss, clear all and a link to the notification center. With access turned off in Settings
 it says so and links to `ms-settings:privacy-notifications`.
@@ -1010,8 +1015,10 @@ so the panel shows "Loading…" for a moment.
 
 **The view** (`bars/shell/src/flyouts/notification-center.ts`): toasts grouped by app, newest
 group first; a group of several is a stack (the newest card, the rest peeking under it) until it's
-opened. Each card has its app's icon: the toast's logo, else the Start menu's icon for an app of that
-name (the launcher's index), else a monogram in a hue of the app's own. A swipe sideways or the ×
+opened. Each card has its app's icon: `AppInfo.DisplayInfo.GetLogo`, else the Start Menu shortcut
+whose `System.AppUserModel.ID` matches the AUMID (user before common), else its AppsFolder item.
+Shortcut/exe images use the dock's shell image factory and PNG cache at `icons.bars.mypaper`.
+A true miss keeps the monogram; display-name prefixes never select another app's icon. A swipe sideways or the ×
 that shows on hover dismisses one; a group's × clears the group; "Clear all" clears everything. The
 header shows Do Not Disturb (it opens its setting: changing it has no documented API). The month
 sits under the list, as on Windows 11. Scrollbars are thin and in the text color in every flyout.
@@ -1054,8 +1061,14 @@ stop makes every app re-add its icons. While Explorer's tray isn't there it wait
    shares its data with the receiving process, so the host copies it into a block shared with
    Explorer and copies the answer back. A forward Explorer didn't take in time keeps what it points
    at (the icon copies, the shared block): Explorer may still read it later, and a small leak beats
-   a read of freed memory. Only a `Shell_TrayWnd` of `explorer.exe` is forwarded to, and forwards
-   nested more than 4 deep are refused, so two hosts can't bounce a message between them. `ABM_GETTASKBARPOS` is answered with the bar's rect, so
+   a read of freed memory. The target is the primary `Shell_TrayWnd` owned by the desktop shell's
+   Explorer process, independent of Z-order; its class and owner are rechecked before forwarding,
+   and this process is never a target. `ABM_GETAUTOHIDEBAR` / `ABM_GETAUTOHIDEBAREX` read a snapshot
+   of Explorer's auto-hide owners, for all four edges of each monitor. Chromium repeats those
+   lookups from app-bar callbacks; forwarding them synchronously nests the same lookup indefinitely.
+   The snapshot is captured before hosting and refreshed off the window-procedure stack after
+   state/registration changes, geometry changes or a new lookup (and when a lookup is over 3 s old).
+   The depth guard remains as a safety net. `ABM_GETTASKBARPOS` is answered with the bar's rect, so
    apps open their popups near our tray. `WM_COMMAND`, `SC_TASKLIST` and the `WM_USER` range go to
    Explorer as they came (sent or posted). Registered messages don't: they're broadcasts Explorer
    gets itself.
