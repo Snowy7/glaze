@@ -181,7 +181,28 @@ impl GlassPass {
 
     /// Reads every live writer's plates (after its `mypaper.glass` message, and at startup).
     pub fn reload(&mut self) {
-        self.set_plates(glass::read_all(alive));
+        let plates = glass::read_all(alive);
+        for (index, monitor) in self.monitors.iter().enumerate() {
+            let count = plates
+                .iter()
+                .filter(|p| overlaps(rect_of(p), monitor))
+                .count();
+            let previous = self
+                .moving
+                .iter()
+                .filter(|m| !m.leaving && overlaps(rect_of(&m.plate), monitor))
+                .count();
+            let level = if previous == count {
+                log::Level::Debug
+            } else {
+                log::Level::Info
+            };
+            log::log!(
+                level,
+                "glass screen {index} {monitor:?}: loaded {count} plates"
+            );
+        }
+        self.set_plates(plates);
     }
 
     /// Makes `plates` the targets: known ids spring to their new rects, new ones grow in, gone
@@ -289,6 +310,13 @@ impl GlassPass {
         self.fill(&mut instances, &monitor, size);
         let drawn = !instances.is_empty() && copy_src;
         if let Some(shown) = self.shown.get_mut(index) {
+            if drawn && !*shown {
+                log::info!(
+                    "glass screen {index} {monitor:?}: first draw, {} plates on {size:?}",
+                    instances.len()
+                );
+                log::debug!("glass screen {index}: {instances:?}");
+            }
             *shown = drawn;
         }
         if drawn {
@@ -749,6 +777,25 @@ mod tests {
         assert_eq!(out[0].shape[0], 22.0);
         glass.fill(&mut out, &RIGHT, (2560, 1440));
         assert!(out.is_empty(), "not on a screen it doesn't touch");
+    }
+
+    #[test]
+    fn left_monitor_mapping_uses_its_origin_and_the_presented_frame_size() {
+        // Enumeration starts with the primary; DISPLAY2 is left and nine pixels lower.
+        let left = Rect { y: 9, ..LEFT };
+        let mut glass = pass(&[RIGHT, left]);
+        glass.set_plates(vec![plate("calendar-1", [-2544, 77, 309, 307])]);
+        assert!(!glass.take_dirty(0));
+        assert!(glass.take_dirty(1));
+        glass.moving[0].at = glass.moving[0].target;
+        glass.moving[0].fade = 1.0;
+        let mut out = Vec::new();
+        glass.fill(&mut out, &glass.monitors[1], (2560, 1440));
+        assert_eq!(out[0].rect, [16.0, 68.0, 309.0, 307.0]);
+        // A shader's 0.75 intermediate target must not be confused with the final frame.
+        glass.fill(&mut out, &glass.monitors[1], (1920, 1080));
+        assert_eq!(out[0].rect, [12.0, 51.0, 231.75, 230.25]);
+        assert_eq!(out[0].shape[0], 16.5);
     }
 
     #[test]

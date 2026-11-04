@@ -3,7 +3,7 @@
 // (a bell with the count). Their flyouts open from here.
 
 import { button, glyph, h, rectOf } from "../dom";
-import { defineFlyout } from "../flyout";
+import { closeFlyout, defineFlyout } from "../flyout";
 import { fire, request, type Scope } from "../host";
 import type { BarsConfig, TrayItem } from "../protocol";
 import { glyphs } from "./glyphs";
@@ -23,7 +23,11 @@ type Click = "left" | "right" | "middle" | "double";
 
 /** Forwards a click on an icon, with where the icon is (apps put their menus beside it). */
 function forward(id: string, click: Click, el: HTMLElement): void {
-  fire("tray", { id, button: click, rect: rectOf(el) });
+  const rect = rectOf(el);
+  // Native app menus belong to another process. Remove our topmost web flyout before handing
+  // over, so it cannot cover their menu or leave its shadow behind it.
+  closeFlyout(true);
+  fire("tray", { id, button: click, rect });
 }
 
 /** One notification-area icon as a button: left, right, middle and double clicks go to its app. */

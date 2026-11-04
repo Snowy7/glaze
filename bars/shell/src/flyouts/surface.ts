@@ -3,8 +3,9 @@
 // the bar's window for it and shrinks it after), and the keyboard for the ones you type into.
 
 import { closeFlyout, flyoutOpen, type Flyout } from "../flyout";
+import { barAnchor } from "../anchor";
 import { rectOf, viewport } from "../dom";
-import { placePopover, type Align, type Point, type Rect, type Size } from "../geometry";
+import { placePopover, type Align, type Point, type Size } from "../geometry";
 import { fire, request } from "../host";
 import { dockBand, topBand, type BarsConfig, type Hello } from "../protocol";
 
@@ -86,9 +87,15 @@ function releaseRoom(): void {
 export function placement(anchor: HTMLElement, align: Align): { place(size: Size): Point; origin: string } {
   const [x, y, w, h] = rectOf(anchor);
   if (isTop()) {
-    const strip: Rect = [x, 0, w, barsConfig().top.height];
+    const strip = barAnchor(anchor).rect;
     const origin = align === "start" ? "0 0" : align === "end" ? "100% 0" : "50% 0";
-    return { place: (size) => placePopover(strip, size, viewport(), "below", align, 6), origin };
+    return { place: (size) => {
+      // A dropdown can grow after opening (for example, the mixer's device list).
+      void ensureRoom(size.h + 20);
+      const bounds = viewport();
+      bounds.h = Math.max(bounds.h, strip[1] + strip[3] + 12 + size.h + 8);
+      return placePopover(strip, size, bounds, "below", align, 12);
+    }, origin };
   }
   const position = barsConfig().dock.position;
   const side = position === "bottom" ? "above" : position === "left" ? "right" : "left";

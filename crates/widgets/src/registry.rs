@@ -177,7 +177,7 @@ mod tests {
         );
 
         widget(&root, "analog-clock", "My own analog clock");
-        let registry = Registry::scan(&[root.clone()]);
+        let registry = Registry::scan(std::slice::from_ref(&root));
         assert!(registry.replacement("analog-clock").is_none());
         assert!(registry.replacement("nothing").is_none());
         std::fs::remove_dir_all(&root).unwrap();

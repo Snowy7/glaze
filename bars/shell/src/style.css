@@ -213,17 +213,20 @@ img {
 /* Live blur (glass.ts, crates/bars/src/blur.rs): Windows blurs what's behind every element whose
    --glass is 1, under the page; the page only tints it. Surfaces with a `blur` fill, and the
    flyouts and menus (data-fly-blur), while live blur is on. */
-[data-live="on"][data-fill="blur"] .surface {
+[data-native-glass="on"] .surface {
   --glass: 1;
+  --glass-blur: var(--blur, 24px);
+  --lq-blur: var(--blur, 24px);
 }
-[data-live="on"][data-fill="blur"] .surface > .bg {
+[data-native-glass="on"] .surface > .bg {
   background: transparent;
 }
 [data-fly-blur="on"] :is(.layer, .dock-label) {
   --glass: 1;
   --glass-sat: var(--fly-sat, 1.5);
   --glass-bright: 1;
-  --glass-blur: 0;
+  --glass-blur: var(--blur, 24px);
+  --lq-blur: var(--blur, 24px);
   background: var(--fly-glass);
 }
 /* Liquid glass (liquid.ts): what's behind, bent along the rim and clear in the middle. Panes are
@@ -233,23 +236,29 @@ img {
 [data-liquid="on"] .surface,
 [data-fly-liquid="on"] .layer {
   --liquid: 1;
-  overflow: clip;
   isolation: isolate;
 }
 [data-fly-liquid="on"] .layer.lensed {
-  --glass: 0;
   background: transparent;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12), 0 8px 24px rgb(0 0 0 / .18);
+}
+.lens-clip {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
 }
 .lens {
   position: absolute;
-  z-index: -2;
   pointer-events: none;
   border-radius: inherit;
   background-repeat: no-repeat;
   filter: saturate(var(--glass-sat, 1.25)) brightness(var(--glass-bright, 1)) var(--lens);
   visibility: hidden;
 }
-.lensed > .lens {
+.lensed > .lens-clip > .lens {
   visibility: visible;
 }
 .lensed > .bg {
@@ -662,6 +671,7 @@ button.mod.clock {
   border-radius: var(--menu-radius, 10px);
   corner-shape: var(--corner);
   box-shadow: var(--fly-shadow, 0 0 0 1px var(--edge), 0 10px 30px var(--drop), 0 2px 6px var(--drop));
+  overflow: visible;
 }
 /* Every flyout (flyout.ts) enters from the side toward its anchor, in the `open` style. */
 .flyout {

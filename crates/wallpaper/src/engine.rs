@@ -109,7 +109,9 @@ impl Engine {
         startup::ready("wallpaper", "source_ms");
         let mut snapshot = Snapshot::new();
         snapshot.theme_loaded(loaded);
-        let backdrop = Backdrop::new(monitors.as_deref(), |i| source.native(i));
+        let backdrop = Backdrop::new(monitors.as_deref(), |i| {
+            source.native(i) || !screens[i].copy_src
+        });
         let glass = GlassPass::new(monitors.as_deref());
         Ok(Self {
             theme,
@@ -454,7 +456,8 @@ impl Engine {
         self.source = source;
         self.theme = theme;
         self.palette_due = true;
-        self.backdrop.reset(|i| self.source.native(i));
+        self.backdrop
+            .reset(|i| self.source.native(i) || !self.screens[i].copy_src);
         self.snapshot.theme_loaded(true);
         self.next_frame = Instant::now();
         // A new source starts with every screen visible.

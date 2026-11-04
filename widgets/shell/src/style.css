@@ -80,6 +80,7 @@ button {
 }
 
 .slot iframe {
+  z-index: 1;
   position: absolute;
   inset: 0;
   width: 100%;
@@ -88,6 +89,10 @@ button {
   background: transparent;
   color-scheme: dark; /* same as the widget documents (see the top of this file) */
 }
+
+.widget-glass { position: absolute; z-index: 0; overflow: hidden; pointer-events: none; }
+.widget-glass-image { position: absolute; background-repeat: no-repeat; }
+.widget-glass-wash { position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12), inset 1px 1.5px 0 -.5px rgb(255 255 255 / var(--specular, .55)), inset -1px -1.5px 0 -.5px rgb(255 255 255 / .18); }
 
 .slot.selected {
   z-index: 2;

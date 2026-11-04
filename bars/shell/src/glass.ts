@@ -1,6 +1,6 @@
 // Live blur, the page's side (docs/bars.md, "Live blur"). Windows blurs what's behind the window
 // (crates/bars/src/blur.rs); the page says where: every element whose computed `--glass` is 1
-// (style.css sets it on surfaces with a `blur` fill and on flyouts while `data-live` is on) is a
+// (style.css sets it on eligible glass surfaces and flyouts while live blur is on) is a
 // pane, with its box on screen (transforms included), corner radius, opacity, and its material
 // from `--glass-sat`, `--glass-bright` and `--glass-blur`. Panes go to the host whenever they
 // change: on layout changes, on resizes, and every frame while an animation or transition runs

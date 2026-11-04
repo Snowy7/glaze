@@ -1,5 +1,5 @@
 // Liquid glass (docs/widgets.md, "Liquid glass"): while a widget's look is liquid glass
-// (`data-style="liquid"` with `data-surface="glass"`), the wallpaper draws the glass under its
+// (`data-style="liquid"` with `data-surface="glass"`), the shell draws the glass under its
 // card and the page draws only the content. This tells the shell where the card is: its box on
 // the page and its corner radius, again whenever they change (a resize, a transition, a new
 // look), at most once a frame. The drop-in runs it; with the ES module, call it yourself.

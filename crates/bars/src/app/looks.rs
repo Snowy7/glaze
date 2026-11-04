@@ -239,12 +239,17 @@ impl App {
         self.looks.glass.request(interval);
     }
 
-    /// Whether `bar` draws liquid glass: its look says so, or says nothing while the theme's
-    /// appearance style is liquid (the page decides the same way, `style/look.ts`).
+    /// The bar's explicit material, else the desktop appearance (also sent to the page).
     fn liquid(&self, bar: &Bar) -> bool {
-        match bar_look(bar).glass.style {
-            Some(kind) => kind == GlassKind::Liquid,
-            None => self.look(bar.kind).style.as_deref() == Some("liquid"),
+        look::glass_kind(bar_look(bar).glass.style, &self.look(bar.kind)) == GlassKind::Liquid
+    }
+
+    /// A window appeared, moved or closed behind the bars; a static wallpaper sends no frames.
+    pub(super) fn recapture_glass(&self) {
+        for (index, bar) in self.bars.iter().enumerate() {
+            if bar.ready && !bar.hidden && self.liquid(bar) && !self.performance(bar) {
+                self.post_event(index, "behind", &Value::Null);
+            }
         }
     }
 

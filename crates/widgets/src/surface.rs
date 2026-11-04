@@ -184,6 +184,19 @@ fn filter_request(
             return args.SetResponse(&response);
         }
         log::debug!("allowed {url} (from {from:?})");
+        if url.starts_with(crate::backdrop::PREFIX) {
+            let body = crate::backdrop::image(&url);
+            let stream = body
+                .as_deref()
+                .and_then(|body| SHCreateMemStream(Some(body)));
+            let response = env.CreateWebResourceResponse(
+                stream.as_ref(),
+                if body.is_some() { 200 } else { 404 },
+                w!("Backdrop"),
+                w!("Content-Type: image/bmp\r\nCache-Control: no-cache"),
+            )?;
+            return args.SetResponse(&response);
+        }
         // Widget hosts aren't on the network: we serve them, CSP included.
         if let Some(Party::Widget(widget)) = Origin::of_url(&url).as_ref().map(Origin::party) {
             let (status, reason, headers, body) = widget_file(policy, widget, &url);

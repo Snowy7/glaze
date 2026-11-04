@@ -5,9 +5,10 @@ import { inflate, type Point, type Rect, type Size } from "./geometry";
 import { layoutBox } from "./dom";
 
 /** Room around a layer for its shadow, so the region doesn't clip it. */
-const SHADOW_MARGIN = 16;
+const SHADOW_MARGIN = 64;
 
 const layers = new Set<HTMLElement>();
+let nextLayer = 0;
 let host: HTMLElement | undefined;
 let onChange: () => void = () => {};
 
@@ -27,6 +28,8 @@ export function mountLayer(el: HTMLElement, place: (size: Size) => Point): Layer
   if (!host) throw new Error("overlay not initialised");
   el.classList.add("layer");
   host.append(el);
+  // A child/replacement menu must be above a parent still playing its exit animation.
+  el.style.zIndex = String(++nextLayer);
   layers.add(el);
   const reposition = () => {
     const { x, y } = place({ w: el.offsetWidth, h: el.offsetHeight });

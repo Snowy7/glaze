@@ -15,6 +15,7 @@
 mod app;
 mod appicon;
 mod audio;
+mod backdrop;
 mod bridge;
 mod display;
 mod files;

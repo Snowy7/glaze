@@ -237,6 +237,16 @@ pub fn decide(
         return Verdict::Block;
     }
     let from = initiator.map(Origin::party);
+    if target.host == "backdrop.widgets.mypaper" {
+        return if target.scheme == "https"
+            && target.port.is_none()
+            && matches!(from, Some(Party::Shell))
+        {
+            Verdict::Allow
+        } else {
+            Verdict::Block
+        };
+    }
     let ok = match target.party() {
         Party::Shell => matches!(from, None | Some(Party::Shell)),
         Party::Widget(id) => match from {
@@ -252,6 +262,15 @@ pub fn decide(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wallpaper_backdrops_are_only_available_to_the_shell() {
+        let url = "https://backdrop.widgets.mypaper/DISPLAY2.bmp";
+        let check = |from: Option<&str>| decide(url, from.map(origin).as_ref(), false, |_, _| true);
+        assert_eq!(check(Some("https://shell.mypaper")), Verdict::Allow);
+        assert_eq!(check(Some("https://clock.widget.mypaper")), Verdict::Block);
+        assert_eq!(check(None), Verdict::Block);
+    }
 
     #[test]
     fn widget_files_get_a_policy_of_their_declared_origins() {
