@@ -18,11 +18,9 @@ use windows::Win32::System::Threading::{
     GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,
 };
 use windows::Win32::UI::Shell::{
-    BHID_EnumItems, FOLDERID_AppsFolder, FOLDERID_CommonPrograms, FOLDERID_Programs,
-    IEnumShellItems, IShellItem, KF_FLAG_DEFAULT, SHGetKnownFolderItem, SHGetKnownFolderPath,
-    SIGDN_NORMALDISPLAY, SIGDN_PARENTRELATIVEPARSING,
+    BHID_EnumItems, FOLDERID_AppsFolder, IEnumShellItems, IShellItem, KF_FLAG_DEFAULT,
+    SHGetKnownFolderItem, SIGDN_NORMALDISPLAY, SIGDN_PARENTRELATIVEPARSING,
 };
-use windows::core::GUID;
 
 /// One app.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -350,22 +348,9 @@ fn apps_folder() -> Vec<(String, String, IShellItem)> {
     out
 }
 
-fn known_folder(id: &GUID) -> Option<PathBuf> {
-    // SAFETY: the returned string is ours to free.
-    unsafe {
-        let path = SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None).ok()?;
-        let text = path.to_string().ok();
-        CoTaskMemFree(Some(path.0.cast()));
-        text.map(PathBuf::from)
-    }
-}
-
 /// The Start Menu folders (user and common) the index follows.
 pub fn start_menu_dirs() -> Vec<PathBuf> {
-    [FOLDERID_Programs, FOLDERID_CommonPrograms]
-        .iter()
-        .filter_map(known_folder)
-        .collect()
+    crate::icons::start_menu_dirs()
 }
 
 /// The Start Menu shortcuts and their target exes' names.

@@ -16,12 +16,17 @@ use windows::UI::Notifications::Management::{
     UserNotificationListener, UserNotificationListenerAccessStatus,
 };
 use windows::UI::Notifications::{KnownNotificationBindings, NotificationKinds, UserNotification};
-use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
+use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Notification {
     pub id: u32,
     pub app: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aumid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package_family_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
     pub title: String,
@@ -60,19 +65,22 @@ pub fn order(list: &mut [Notification]) {
 pub struct NotificationsLane {
     listener: Option<UserNotificationListener>,
     /// App → its logo's URL in the icon cache.
-    logos: HashMap<String, Option<String>>,
+    logos: HashMap<(Option<String>, Option<String>, String), Option<String>>,
+    app_icons: crate::icons::AppIconResolver,
     icons: PathBuf,
 }
 
 impl NotificationsLane {
     pub fn new(icons: PathBuf) -> Self {
-        // SAFETY: COM for this thread (MTA), kept for its life.
-        let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+        // SAFETY: COM for this thread (shell icons want an STA), kept for its life.
+        let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+        let _ = std::fs::create_dir_all(&icons);
         Self {
             listener: UserNotificationListener::Current()
                 .inspect_err(|e| log::info!("notifications: no listener: {e}"))
                 .ok(),
             logos: HashMap::new(),
+            app_icons: crate::icons::AppIconResolver::new(),
             icons,
         }
     }
@@ -124,15 +132,22 @@ impl NotificationsLane {
                     .and_then(|d| d.DisplayName().ok())
                     .map(|n| n.to_string())
                     .unwrap_or_default();
-                let key = info
+                let aumid = info
                     .as_ref()
                     .and_then(|i| i.AppUserModelId().ok())
                     .map(|i| i.to_string())
-                    .unwrap_or_else(|| app.clone());
+                    .filter(|id| !id.is_empty());
+                let package_family_name = info.as_ref()
+                    .and_then(|i| i.PackageFamilyName().ok())
+                    .map(|id| id.to_string())
+                    .filter(|id| !id.is_empty());
+                let key = (aumid.clone(), package_family_name.clone(), app.clone());
                 let icon = match self.logos.get(&key) {
                     Some(icon) => icon.clone(),
                     None => {
-                        let icon = display.as_ref().and_then(|d| self.logo(d));
+                        let icon = display.as_ref().and_then(|d| self.logo(d))
+                            .or_else(|| aumid.as_deref().and_then(|id| self.app_icons.icon(id, &self.icons)));
+                        log::debug!("notifications: {app:?} aumid={aumid:?} package={package_family_name:?} icon={icon:?}");
                         self.logos.insert(key, icon.clone());
                         icon
                     }
@@ -153,6 +168,8 @@ impl NotificationsLane {
                 Some(Notification {
                     id: toast.Id().ok()?,
                     app,
+                    aumid,
+                    package_family_name,
                     icon,
                     title,
                     body,
@@ -235,6 +252,8 @@ mod tests {
         let n = |id, at| Notification {
             id,
             app: String::new(),
+            aumid: None,
+            package_family_name: None,
             icon: None,
             title: String::new(),
             body: String::new(),

@@ -2,7 +2,7 @@
 // current through host events; clicks become host commands.
 
 import { barAnchor } from "../anchor";
-import { formatClock } from "../clock-format";
+import { clockText } from "../clock-format";
 import { button, glyph, h, viewport } from "../dom";
 import {
   languageModule,
@@ -102,12 +102,12 @@ const app: Factory = ({ scope }) => {
 
 const clock: Factory = ({ config, scope, kind }) => {
   const el = button("mod clock");
-  const { format } = kind === "dock" ? config.dock.clock : config.top.clock;
+  const options = kind === "dock" ? config.dock.clock : config.top.clock;
   // As on Windows 11 and macOS, the clock opens the notification center (with the month under it).
   el.addEventListener("click", () => openNotifications(el));
-  scope.on("clock", ({ now }) => {
+  scope.on("clock", ({ now, system }) => {
     const date = new Date(now);
-    el.textContent = formatClock(format, date);
+    el.textContent = clockText(options, date, system);
     el.title = date.toLocaleDateString(undefined, { dateStyle: "full" });
   });
   return el;

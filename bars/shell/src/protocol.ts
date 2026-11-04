@@ -236,7 +236,13 @@ export interface ModuleOptions {
 
 export interface ClockConfig {
   seconds: boolean;
-  format: string;
+  format: string | null;
+}
+
+export interface SystemClock {
+  time: string;
+  timeWithSeconds: string;
+  date: string;
 }
 
 /** `bars.json`, resolved for this bar's monitor, with every default filled in by the host. */
@@ -478,7 +484,7 @@ export interface EventMap extends FlyoutEvents {
   apps: DockItem[];
   foreground: { name: string; icon?: string } | null;
   /** Milliseconds since the Unix epoch; the page formats it. */
-  clock: { now: number };
+  clock: { now: number; system?: SystemClock | null };
   media: MediaInfo | null;
   /** `level` is 0–1. Null when there is no output device. */
   volume: { level: number; muted: boolean } | null;

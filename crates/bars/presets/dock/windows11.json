@@ -13,7 +13,6 @@
   "right": ["tray", "network", "volume", "battery", "clock", "notifications"],
   "extras": ["desktop"],
   "preview": { "delay": 400 },
-  "clock": { "format": "HH:mm\ndd/MM/yyyy" },
   "look": {
     "scheme": "auto",
     "family": "fluent",

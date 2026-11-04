@@ -300,6 +300,7 @@ impl App {
 
     /// Windows' colors, light/dark mode, transparency or animation setting may have changed.
     pub(super) fn settings_changed(&mut self) {
+        self.emit(crate::bridge::Topic::Clock);
         let system = accent::read();
         let transparency = blur::transparency_on();
         if system != self.looks.system || transparency != self.looks.transparency {

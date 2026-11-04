@@ -47,7 +47,7 @@ describe("designs and presets", () => {
     expect(mixed.top.look.tint).toBe(0.9);
     expect(mixed.dock.look.tint).toBe(0.2);
     expect(mixed.top.look.noise).toBe(0.3);
-    expect(mixed.dock.clock.format).toBe("HH:mm\ndd/MM/yyyy");
+    expect(mixed.dock.clock.format).toBeNull();
   });
 
   it("turns an auto-hiding dock's wallpaper glass into live blur", () => {
