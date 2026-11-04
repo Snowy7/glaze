@@ -319,7 +319,7 @@ mod tests {
         let value = serde_json::to_value(&state).unwrap();
         assert_eq!(value["static_snapshot"], true);
         assert_eq!(value["classic_context_menu"], false);
-        assert_eq!(value["desktop_menu"]["enabled"], false);
+        assert_eq!(value["desktop_menu"]["enabled"], true);
         assert_eq!(
             value["desktop_menu"]["items"].as_array().unwrap().len(),
             default_items().len()

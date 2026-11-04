@@ -149,8 +149,8 @@ fn run() -> Result<()> {
         styling.set_theme(theme);
     }
 
-    // The desktop right-click menu and the classic-menu switch, both opt-in via config.json
-    // (docs/desktop-extras.md). Nothing is installed unless asked for.
+    // The desktop right-click menu (on by default) and the classic-menu switch (opt-in), via
+    // config.json (docs/desktop-extras.md). With the menu turned off nothing is installed.
     let mut extras = DesktopExtras::new(&config);
 
     let panicked = loop {

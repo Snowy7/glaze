@@ -2,11 +2,12 @@
 
 Explorer's own UI (its menus, its title bars' contents, the taskbar's XAML) can only be restyled by
 code that runs *inside* Explorer. mypaper does not do that. This document is what can be done
-**outside** it, with supported or well-known APIs, always opt-in and always reversible:
+**outside** it, with supported or well-known APIs, always reversible (the right-click menu is on
+by default; everything else is opt-in):
 
 | Feature | Switch | API status |
 |---|---|---|
-| [Our own desktop right-click menu](#desktop-right-click-menu) | `desktop_menu.enabled` in `config.json` | documented (`SetWindowsHookEx`, UI Automation, `IFolderView2`) |
+| [Our own desktop right-click menu](#desktop-right-click-menu) (on by default) | `desktop_menu.enabled` in `config.json` | documented (`SetWindowsHookEx`, UI Automation, `IFolderView2`) |
 | [Cursor themes](#cursor-themes) | `windows.cursors` in `theme.json` | documented (`SPI_SETCURSORS`, the Mouse control panel's registry values) |
 | [Win11 classic context menu](#win11-classic-context-menu) | `classic_context_menu` in `config.json` | **undocumented** registry key, widely used |
 | [Interactive wallpapers](#interactive-wallpapers) | `wallpaper.interactive` in `theme.json` | documented (Raw Input) |
@@ -32,8 +33,18 @@ Nothing here injects code into another process. The one hook (the right-click me
 
 A right-click on the **bare desktop** opens mypaper's menu (a themed, custom-drawn window) instead of
 Explorer's. A right-click on an **icon**, on any window, on the taskbar, or with **Shift** held,
-always gets the native menu. Off by default; with `enabled: false` (or no `desktop_menu` key) nothing
-is installed: no hook, no thread.
+always gets the native menu. **On by default** (no `desktop_menu` key, or one without `enabled`);
+with `"enabled": false` nothing is installed: no hook, no thread. The Studio toggle and the tray's
+**Desktop** submenu write that.
+
+**Why it's on.** Measured on the test machine (build 26300, two 1440p monitors, injected right
+clicks on the bare desktop, a poll every millisecond for the menu's window), the native Windows 11
+desktop menu takes **130 to 190 ms for its first window and 205 to 320 ms for the full menu with
+mypaper not running at all**, so the slowness is Windows' own (its XAML menu and the shell
+extensions), not ours; with mypaper running (menu off) it's the same with a web wallpaper (about
+230 ms) and 300 to 510 ms in the first seconds after start with an image wallpaper (six clicks;
+a hint of load from the wallpaper's start, not a steady cost). Our menu opens in **17 to 50 ms**
+(median 25) on the same clicks.
 
 `items` is the menu top to bottom. Leave an item out to hide it, reorder to move it. Without `items`
 you get the list above (minus the custom entry). A mistyped item name is an error, like any other
@@ -128,6 +139,21 @@ to hit-test (a cross-process call), which is most of its cost. It happens once p
 |---|---|
 | appears after the release (15 clicks, first one cold) | median **4.5 to 7 ms**, worst 8 ms, first 8 to 13 ms |
 | UI Automation confirmation (during the press, not on the critical path) | 4.6 to 5.4 ms, the first one 20 ms |
+
+### When the native menu opens instead of ours
+
+All by design or by the limits of a hook that must stay cheap; in each, the next right-click is ours:
+- On an **icon** (its whole cell, label included), on any window, with **Shift**, and on a widget.
+- **While a fullscreen app is in front** (an exclusive-fullscreen game, presentation mode, or a
+  window that covers its whole monitor and has no title bar: borderless games, F11 video, a
+  screenshot overlay) the hook is *removed*, on every monitor. The hook comes back when the
+  foreground changes, which a right-click on the desktop itself causes, but the click that caused it
+  has already gone by: so the first right-click on the desktop of a second monitor, with a fullscreen
+  window still in front on the first, gets the native menu (reproduced live with Windows'
+  Snipping Tool overlay in front). A maximized window *with* a title bar never counts.
+- The cached icon rectangles were stale (an icon moved): UI Automation notices and the click is
+  replayed to the desktop, after UI Automation's answer (5 to 20 ms).
+- The session is locked or the display is off.
 
 ### Limits
 

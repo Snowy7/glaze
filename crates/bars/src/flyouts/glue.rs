@@ -4,7 +4,8 @@
 //! directly; app.rs only calls in.
 
 use super::*;
-use crate::bridge::bar_modules;
+use crate::bridge::{Panel, bar_modules};
+use crate::flyouts::winkey::Target;
 use mypaper_bars::{Module, ModuleRef};
 
 /// A Windows key press the main loop gets to later than this (it was busy) is dropped: a
@@ -138,7 +139,7 @@ impl App {
                     post_to(&self.bars, bar, &message);
                 }
             }
-            Done::WinKey(at) => self.open_launcher(at),
+            Done::WinKey(at, target) => self.open_from_key(at, target),
             Done::Index(apps) => {
                 let (value, replies) = self.flyouts.index_built(apps);
                 for (bar, id, result) in replies {
@@ -181,16 +182,21 @@ impl App {
         );
     }
 
-    /// A lone Windows key press (at `at`): the launcher opens on the monitor the user works on
-    /// (the app in front's), on a bar with the start module if there's one, and takes the
-    /// keyboard. With no bar to show it, the native Start menu opens instead.
-    pub(super) fn open_launcher(&mut self, at: Instant) {
+    /// A Windows key shortcut (at `at`): `target`'s flyout opens on the monitor the user works on
+    /// (the app in front's), on a bar with its module (`start`, `notifications`, `quick`) if
+    /// there's one, and takes the keyboard. With no bar to show it, the native panel opens instead.
+    pub(super) fn open_from_key(&mut self, at: Instant, target: Target) {
         if at.elapsed() > STALE_PRESS {
             return log::info!(
                 "launcher: a Windows key press {:?} old; not opening",
                 at.elapsed()
             );
         }
+        let module = match target {
+            Target::Launcher => Module::Start,
+            Target::Notifications => Module::Notifications,
+            Target::Quick => Module::Quick,
+        };
         let mut rect = windows::Win32::Foundation::RECT::default();
         let center = self.foreground.and_then(|window| {
             // SAFETY: a read-only query; `rect` outlives it.
@@ -210,15 +216,23 @@ impl App {
             .filter(|(_, b)| b.ready && !b.hidden)
             .max_by_key(|(_, b)| {
                 let here = center.is_some_and(|(x, y)| b.monitor.rect.contains_point(x, y));
-                let start = has_module(b, Module::Start);
-                (here, start, b.kind == BarKind::Top, b.monitor.primary)
+                let has = has_module(b, module);
+                (here, has, b.kind == BarKind::Top, b.monitor.primary)
             })
             .map(|(index, _)| index);
         let Some(index) = index else {
-            return system::start_menu();
+            return match target {
+                Target::Launcher => system::start_menu(),
+                Target::Notifications => system::action_center(Panel::Notifications),
+                Target::Quick => system::action_center(Panel::Quick),
+            };
         };
+        log::debug!(
+            "Windows key: opening the {} flyout on bar {index}",
+            target.flyout()
+        );
         self.take_keyboard(index, true, false);
-        self.post_event(index, "open", &json!({ "flyout": "launcher" }));
+        self.post_event(index, "open", &json!({ "flyout": target.flyout() }));
     }
 
     /// Makes the bar the foreground window with the keyboard in its page (a flyout that types),
