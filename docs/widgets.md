@@ -578,6 +578,13 @@ is playing, as a spectrum, for visualizers.
   until sound returns. A subscriber that subscribes during silence gets nothing until sound plays.
 - **Measured** (release build, the capture thread's own CPU time over 15 s): a tone playing, 30.2
   frames/s at 0.21% of one core; silence, 0.000% (one frame sent).
+  End to end on the real host (debug build, the `visualizer` at 6x2 cells on a 2560x1440 monitor,
+  a test tone playing): the host process 2.6% of one core in a *debug* build (the unoptimized FFT;
+  release is the 0.21% above) and **WebView2 12 to 20% of one core** for the canvas at 30 fps (12.5%
+  `minimal`, 14.8% `neon` with no surface, 19.8% `neon` on glass: the backdrop blur and the glow add
+  to it). Silent, the whole thing is under 1% (the widget stops drawing and the capture thread
+  idles). So the feed is cheap and the canvas isn't free: a visualizer is for listening sessions;
+  keep it small, and prefer `surface: none` or `solid` over `glass` for it.
 - **Math** (pure and tested in `crates/widgets/src/audio.rs`): a 2048-sample Hann-windowed radix-2
   FFT of the mono mix at the device's rate, magnitudes to dB, log-spaced bins (each the max of its
   FFT bins; low bins interpolate), then smoothing.
