@@ -12,8 +12,8 @@ import type { NotificationItem, NotificationList } from "./protocol";
 import { show } from "./surface";
 import { appIcon, header, iconButton, notice, settingsLink } from "./ui";
 
-export async function open(anchor: HTMLElement): Promise<void> {
-  await show(notifications, null, { anchor, align: "end", extent: 600 });
+export async function open(anchor: HTMLElement, keyboard = false): Promise<void> {
+  await show(notifications, null, { anchor, align: "end", extent: 600, keyboard });
 }
 
 /** Toasts grouped by app, the apps in the order of their newest toast. */

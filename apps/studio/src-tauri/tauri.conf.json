@@ -16,9 +16,9 @@
         "label": "main",
         "create": false,
         "title": "mypaper Studio",
-        "width": 1100,
-        "height": 720,
-        "minWidth": 880,
+        "width": 1280,
+        "height": 820,
+        "minWidth": 900,
         "minHeight": 600,
         "center": true,
         "dragDropEnabled": false

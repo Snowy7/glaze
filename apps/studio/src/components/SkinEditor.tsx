@@ -78,12 +78,12 @@ export function SkinEditor({ theme, kind }: { theme: ThemeEntry; kind: SkinKind 
   return (
     <>
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="rounded-2xl bg-surface p-4 ring-1 ring-line">
+        <div className="rounded-xl bg-surface px-4 pt-3 pb-1 shadow-card ring-1 ring-line-strong">
           <AppearanceEditor target={kind} value={draft.appearance} onChange={(appearance) => edit({ appearance })} fallback="the built-in look" />
         </div>
 
-        <div className="mt-5 flex items-center gap-3 rounded-2xl bg-surface p-4 ring-1 ring-line">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-hi text-ink-2">
+        <div className="mt-4 flex items-center gap-3 rounded-xl bg-surface p-4 shadow-card ring-1 ring-line-strong">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-hi text-ink-2 ring-1 ring-line-strong">
             <FileCode className="size-4" aria-hidden />
           </span>
           <div className="min-w-0 flex-1">
@@ -93,8 +93,10 @@ export function SkinEditor({ theme, kind }: { theme: ThemeEntry; kind: SkinKind 
             </div>
             <div className="mt-0.5 text-xs text-ink-3">{CSS_HINT[kind]}</div>
           </div>
-          <Button onClick={() => void chooseCss()}>{draft.css ? "Replace" : "Choose"}</Button>
-          {draft.css && <IconButton icon={X} label="Remove style sheet" onClick={() => edit({ css: null })} />}
+          <Button size="sm" onClick={() => void chooseCss()}>
+            {draft.css ? "Replace" : "Choose"}
+          </Button>
+          {draft.css && <IconButton icon={X} size="sm" variant="ghost" label="Remove style sheet" onClick={() => edit({ css: null })} />}
         </div>
       </div>
 

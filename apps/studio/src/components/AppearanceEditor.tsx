@@ -1,11 +1,11 @@
 import { RotateCcw } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { BUILT_IN, FONT_PRESETS, resolve, setCount, without } from "../lib/appearance";
 import type { Appearance, SkinKind, Surface, TextTone } from "../lib/api";
 import { AppearancePreview, type BarLayout } from "./AppearancePreview";
 import { StylePicker, styleBlurb } from "./StylePicker";
-import { Button, ColorField, INPUT_CLASS, Segmented, Slider, Switch } from "./ui";
+import { Button, ColorField, Combobox, IconButton, Segmented, Slider, Switch, units } from "./ui";
 
 type Props = {
   target: SkinKind;
@@ -18,7 +18,7 @@ type Props = {
   fallback: string;
   /** The top bar's modules, drawn in the bars preview. */
   layout?: BarLayout;
-  /** Leave out the sticky preview (the Bars page has its own). */
+  /** Leave out the sticky preview (the page shows its own, e.g. beside the fields). */
   hidePreview?: boolean;
 };
 
@@ -33,14 +33,14 @@ const TONES: readonly { value: TextTone; label: string; hint: string }[] = [
   { value: "dark", label: "Dark", hint: "For light wallpapers" },
 ];
 
-const percent = (value: number) => `${Math.round(value * 100)}%`;
-const px = (value: number) => `${value}px`;
+const FONT_OPTIONS = FONT_PRESETS.map((preset) => ({ value: preset.value, label: preset.label }));
 
 /**
  * Edits one layer of widget or bar appearance (docs/widgets.md, "Appearance").
- * Every field is either set or "default": unset fields show the value they get
- * from the layers below, dimmed, and touching one sets it. Put it on a `bg-surface`
- * card: the live preview sticks to the top while the fields scroll.
+ * Every field is either set (marked, with a reset) or "default": unset fields
+ * show, dimmed, the value they get from the layers below, and touching one sets
+ * it. Fields sit beside their labels when there is room and under them when not.
+ * It has no card of its own: put it on one.
  */
 export function AppearanceEditor({ target, value, onChange, below = [], fallback, layout, hidePreview = false }: Props) {
   const inherited = resolve(BUILT_IN[target], ...below);
@@ -49,14 +49,14 @@ export function AppearanceEditor({ target, value, onChange, below = [], fallback
   const count = setCount(value);
 
   /** A field's row: its label, whether it's set, and the control. */
-  const field = <K extends keyof Appearance>(key: K, label: string, hint: string, control: ReactNode, note?: string) => (
-    <Field label={label} hint={note ?? hint} isSet={value[key] !== undefined} onUseDefault={() => onChange(without(value, key))}>
+  const field = <K extends keyof Appearance>(key: K, label: string, hint: string, control: ReactNode, stacked = false) => (
+    <Field label={label} hint={hint} stacked={stacked} isSet={value[key] !== undefined} onUseDefault={() => onChange(without(value, key))}>
       {control}
     </Field>
   );
 
   return (
-    <div className="bg-surface">
+    <div className="@container">
       {!hidePreview && (
         <div className="sticky top-0 z-10 -mx-1 bg-surface px-1 pt-1 pb-4">
           <AppearancePreview target={target} base={BUILT_IN[target]} layers={[...below, value]} layout={layout} />
@@ -64,22 +64,16 @@ export function AppearanceEditor({ target, value, onChange, below = [], fallback
       )}
 
       <div className="mb-1 flex items-center justify-between gap-3">
-        <p className="text-xs text-ink-3" aria-live="polite">
+        <p className="text-[12.5px] text-ink-3" aria-live="polite">
           {count === 0 ? `Everything follows ${fallback}.` : `${count} ${count === 1 ? "field" : "fields"} set; the rest follow ${fallback}.`}
         </p>
-        <Button variant="ghost" icon={RotateCcw} disabled={count === 0} onClick={() => onChange({})}>
+        <Button variant="ghost" size="sm" icon={RotateCcw} disabled={count === 0} onClick={() => onChange({})}>
           Use all defaults
         </Button>
       </div>
 
       <div className="divide-y divide-line">
-        {target === "widgets" &&
-          field(
-            "style",
-            "Style",
-            styleBlurb(shown.style),
-            <StylePicker look={shown} value={shown.style} onChange={(v) => set("style", v)} />,
-          )}
+        {target === "widgets" && field("style", "Style", styleBlurb(shown.style), <StylePicker look={shown} value={shown.style} onChange={(v) => set("style", v)} />, true)}
         {field(
           "surface",
           "Surface",
@@ -91,94 +85,83 @@ export function AppearanceEditor({ target, value, onChange, below = [], fallback
           "opacity",
           "Opacity",
           "How solid the surface is.",
-          <Slider label="Opacity" value={shown.opacity} min={0} max={1} step={0.01} format={percent} onChange={(v) => set("opacity", v)} />,
+          <Slider label="Opacity" value={shown.opacity} min={0} max={1} step={0.01} {...units.percent} onChange={(v) => set("opacity", v)} />,
         )}
         {field(
           "blur",
           "Blur",
-          "Background blur behind the surface.",
-          <Slider label="Blur" value={shown.blur} min={0} max={64} format={px} onChange={(v) => set("blur", v)} />,
-          shown.surface === "glass" ? undefined : "Only glass surfaces blur.",
+          shown.surface === "glass" ? "Background blur behind the surface." : "Only glass surfaces blur.",
+          <Slider label="Blur" value={shown.blur} min={0} max={64} {...units.px} onChange={(v) => set("blur", v)} />,
         )}
         {field(
           "radius",
           "Corner radius",
           target === "bars" ? "Defaults: square top bar, rounded dock." : "How round the corners are.",
-          <Slider label="Corner radius" value={shown.radius} min={0} max={48} format={px} onChange={(v) => set("radius", v)} />,
+          <Slider label="Corner radius" value={shown.radius} min={0} max={48} {...units.px} onChange={(v) => set("radius", v)} />,
         )}
         {field(
           "scale",
           "Scale",
           "Size of the content.",
-          <Slider label="Scale" value={shown.scale} min={0.5} max={2} step={0.05} format={(v) => `${v.toFixed(2)}x`} onChange={(v) => set("scale", v)} />,
+          <Slider label="Scale" value={shown.scale} min={0.5} max={2} step={0.05} {...units.times} onChange={(v) => set("scale", v)} />,
         )}
-        {field(
-          "border",
-          "Border",
-          "A hairline around the surface.",
-          <SwitchLine label="Border" checked={shown.border} onChange={(v) => set("border", v)} />,
-        )}
+        {field("border", "Border", "A hairline around the surface.", <SwitchLine label="Border" checked={shown.border} onChange={(v) => set("border", v)} />)}
         {field(
           "shadow",
           "Text shadow",
-          "A soft shadow that keeps text readable without a surface.",
+          "Keeps text readable without a surface.",
           <SwitchLine label="Text shadow" checked={shown.shadow} onChange={(v) => set("shadow", v)} />,
         )}
         {field(
           "text",
           "Text",
-          "Light text for dark wallpapers, dark text for light ones.",
+          "Light text for dark wallpapers, dark for light ones.",
           <Segmented<TextTone> label="Text" hideLabel value={shown.text} options={TONES} onChange={(v) => set("text", v)} />,
         )}
         {field("accent", "Accent", "Highlights. Auto takes it from the wallpaper.", <AccentControl value={shown.accent} onChange={(v) => set("accent", v)} />)}
-        {field("font", "Font", "A CSS font-family list.", <FontControl value={shown.font} onChange={(v) => set("font", v)} />)}
+        {field(
+          "font",
+          "Font",
+          "A preset, or any CSS font-family list.",
+          <Combobox label="Font" value={shown.font} options={FONT_OPTIONS} placeholder="Segoe UI Variable, sans-serif" onChange={(v) => set("font", v)} className="w-full max-w-80" />,
+        )}
       </div>
     </div>
   );
 }
 
-function Field({
-  label,
-  hint,
-  isSet,
-  onUseDefault,
-  children,
-}: {
-  label: string;
-  hint: string;
-  isSet: boolean;
-  onUseDefault: () => void;
-  children: ReactNode;
-}) {
+/**
+ * One field: label and hint, the control, and a reset while it's set. A bar on the left
+ * marks a set field. Two lines in a narrow editor (or when `stacked`), one row in a wide one.
+ */
+function Field({ label, hint, isSet, onUseDefault, stacked, children }: { label: string; hint: string; isSet: boolean; onUseDefault: () => void; stacked: boolean; children: ReactNode }) {
+  const wide = stacked ? "" : "@[36rem]:grid-cols-[11.5rem_minmax(0,1fr)_1.875rem] @[36rem]:[grid-template-areas:'label_control_reset']";
   return (
-    <div className="py-3.5">
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <div className="min-w-0">
-          <span className="text-[13.5px] font-medium text-ink">{label}</span>
-          <span className="ml-2 text-xs text-ink-3">{hint}</span>
+    <div className={`relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2.5 py-3.5 [grid-template-areas:'label_reset'_'control_control'] ${wide}`}>
+      <span
+        aria-hidden
+        className={`absolute top-1/2 -left-2.5 h-6 w-[3px] -translate-y-1/2 rounded-full bg-ink transition-[opacity,transform] duration-200 ${isSet ? "scale-y-100 opacity-100" : "scale-y-0 opacity-0"}`}
+      />
+      <div className="min-w-0 [grid-area:label]">
+        <div className="flex items-center gap-2 text-[13px] font-medium text-ink">
+          {label}
+          {!isSet && <span className="text-[11px] font-normal text-ink-4">Default</span>}
         </div>
-        {isSet ? (
-          <button
-            type="button"
-            onClick={onUseDefault}
-            className="shrink-0 cursor-default rounded-md px-1.5 py-0.5 text-xs font-medium text-ink-2 ring-1 ring-line-strong transition hover:bg-surface-hi hover:text-ink hover:ring-line-hi"
-          >
-            Use default
-          </button>
-        ) : (
-          <span className="shrink-0 px-1.5 text-xs text-ink-3">Default</span>
-        )}
+        <div className="mt-0.5 text-[12px] leading-snug text-ink-3">{hint}</div>
       </div>
-      <div className={isSet ? "" : "opacity-55 transition-opacity focus-within:opacity-100 hover:opacity-100"}>{children}</div>
+      <div className={`min-w-0 [grid-area:control] ${isSet ? "" : "opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100"}`}>{children}</div>
+      <div className="flex justify-end [grid-area:reset]">
+        {isSet && <IconButton icon={RotateCcw} size="sm" variant="ghost" label={`${label}: use default`} onClick={onUseDefault} />}
+      </div>
     </div>
   );
 }
 
 function SwitchLine({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2.5">
       <Switch label={label} checked={checked} onChange={onChange} />
-      <span className="text-[13px] text-ink-2">{checked ? "On" : "Off"}</span>
+      <span className="text-[12.5px] text-ink-2">{checked ? "On" : "Off"}</span>
     </div>
   );
 }
@@ -186,9 +169,8 @@ function SwitchLine({ label, checked, onChange }: { label: string; checked: bool
 function AccentControl({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const isAuto = value === "auto";
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2">
       <Segmented<"auto" | "color">
-        className="min-w-0 flex-1"
         label="Accent"
         hideLabel
         value={isAuto ? "auto" : "color"}
@@ -199,43 +181,6 @@ function AccentControl({ value, onChange }: { value: string; onChange: (value: s
         onChange={(mode) => onChange(mode === "auto" ? "auto" : "#ffffff")}
       />
       {!isAuto && <ColorField label="Accent color" value={value} onChange={onChange} />}
-    </div>
-  );
-}
-
-const CUSTOM = "custom";
-
-/** Presets, or a typed font-family list. "Custom" stays selected while you type, even if it matches a preset. */
-function FontControl({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const inputId = useId();
-  const [custom, setCustom] = useState(!FONT_PRESETS.some((p) => p.value === value));
-  return (
-    <div className="space-y-2">
-      <Segmented<string>
-        label="Font"
-        hideLabel
-        value={custom ? CUSTOM : value}
-        options={[...FONT_PRESETS.map((p) => ({ value: p.value, label: p.label })), { value: CUSTOM, label: "Custom" }]}
-        onChange={(next) => {
-          setCustom(next === CUSTOM);
-          if (next !== CUSTOM) onChange(next);
-        }}
-      />
-      {custom && (
-        <>
-          <label htmlFor={inputId} className="sr-only">
-            Font family list
-          </label>
-          <input
-            id={inputId}
-            value={value}
-            onChange={(e) => onChange(e.currentTarget.value)}
-            spellCheck={false}
-            placeholder="Segoe UI Variable, sans-serif"
-            className={INPUT_CLASS}
-          />
-        </>
-      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-//! mypaper's own right-click menu for the bare desktop (opt-in,
+//! mypaper's own right-click menu for the bare desktop (on by default,
 //! `desktop_menu.enabled`; docs/desktop-extras.md).
 //!
 //! **Two threads, both ours; nothing is injected anywhere.**

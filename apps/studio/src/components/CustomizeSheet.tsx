@@ -6,7 +6,8 @@ import { useStudio } from "../lib/studio";
 import { SkinEditor } from "./SkinEditor";
 import { StyleEditor } from "./StyleEditor";
 import { WallpaperEditor } from "./WallpaperEditor";
-import { Button, IconButton, Segmented } from "./ui";
+import { ThemePreview } from "./ThemeCard";
+import { Button, IconButton, Tabs } from "./ui";
 
 type Props = {
   theme: ThemeEntry;
@@ -41,22 +42,27 @@ export function CustomizeSheet({ theme, onClose, onDuplicated }: Props) {
   return (
     <dialog
       ref={ref}
+      // The sheet itself takes focus on open (not the first button); Tab moves into it.
+      autoFocus
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(event) => event.target === event.currentTarget && ref.current?.close()}
-      className="m-0 ml-auto h-dvh max-h-none w-[min(36rem,100vw)] max-w-none animate-slide-in overflow-hidden border-l border-line-strong bg-sidebar p-0 text-ink-2 shadow-card open:flex open:flex-col"
+      className="m-0 ml-auto h-dvh outline-none max-h-none w-[min(38rem,100vw)] max-w-none animate-slide-in overflow-hidden border-l border-line-strong bg-sidebar p-0 text-ink-2 shadow-pop open:flex open:flex-col 2xl:w-[42rem]"
     >
-      <header className="border-b border-line px-6 pt-5 pb-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 id={titleId} className="font-display text-xl font-semibold tracking-tight text-ink">
-              Customize
-            </h2>
-            <p className="mt-0.5 truncate text-[13px] text-ink-3">{theme.name}</p>
+      <header className="border-b border-line-strong px-6 pt-5">
+        <div className="flex items-center gap-3.5">
+          <div className="aspect-[16/10] w-16 shrink-0 overflow-hidden rounded-md ring-1 ring-line-strong">
+            <ThemePreview name={theme.name} kind={theme.kind} preview={theme.preview} />
           </div>
-          <IconButton icon={X} label="Close" onClick={() => ref.current?.close()} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-medium text-ink-3">Customize</p>
+            <h2 id={titleId} className="truncate font-display text-lg leading-tight font-semibold tracking-tight text-ink">
+              {theme.name}
+            </h2>
+          </div>
+          <IconButton icon={X} variant="ghost" label="Close" onClick={() => ref.current?.close()} />
         </div>
-        <Segmented<Tab> label="Section" hideLabel className="mt-4" value={tab} options={tabs} onChange={setTab} />
+        <Tabs<Tab> label="Section" className="mt-3 -mx-2.5" value={tab} options={tabs} onChange={setTab} />
       </header>
 
       {theme.origin !== "user" ? (
@@ -76,8 +82,8 @@ function ReadOnly({ theme, onDuplicated }: Pick<Props, "theme" | "onDuplicated">
   const { duplicateTheme, busy } = useStudio();
   const copying = busy.has(`duplicate:${theme.id}`);
   return (
-    <div className="flex flex-1 flex-col items-start px-6 py-6">
-      <span className="mb-4 grid size-11 place-items-center rounded-xl bg-surface-hi text-ink-2">
+    <div className="flex flex-1 flex-col items-start px-6 py-8">
+      <span className="mb-4 grid size-11 place-items-center rounded-xl bg-surface-hi text-ink-2 ring-1 ring-line-strong">
         <Lock className="size-5" aria-hidden />
       </span>
       <p className="font-display text-base font-semibold text-ink">{theme.origin === "bundled" ? "Built-in themes are read-only" : "This theme lives outside your themes folder"}</p>

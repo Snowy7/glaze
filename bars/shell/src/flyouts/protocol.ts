@@ -212,6 +212,7 @@ export interface FlyoutEvents {
   /** The `notifications` module's topic; `count` is null when they can't be read. */
   notifications: { count: number | null };
   launcherPins: Pin[];
-  /** The Windows key: open the launcher (transient). */
-  open: { flyout: "launcher" };
+  /** The Windows key (the launcher), Win+N (notifications) and Win+A (quick settings): open the
+   * flyout (transient). */
+  open: { flyout: "launcher" | "notifications" | "quick" };
 }

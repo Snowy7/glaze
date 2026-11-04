@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Plus, RotateCcw, X } from "lucide-react";
 import { useState } from "react";
 
 import { MENU_BUILTINS, type MenuBuiltin, type MenuEntry } from "../lib/api";
-import { Button, IconButton, INPUT_BASE, Select } from "./ui";
+import { Button, IconButton, Select, TextInput } from "./ui";
 
 const LABELS: Record<MenuBuiltin, string> = {
   separator: "Separator",
@@ -45,16 +45,27 @@ export function DesktopMenuEditor({ items, defaults, onChange }: Props) {
 
   return (
     <div className="space-y-3">
-      <ol aria-label="Menu items" className="divide-y divide-line overflow-hidden rounded-xl bg-canvas ring-1 ring-line">
+      <ol aria-label="Menu items" className="overflow-hidden rounded-lg bg-canvas p-1 ring-1 ring-line-strong ring-inset">
         {items.map((entry, index) => (
-          <li key={`${labelOf(entry)}:${index}`} className="flex items-center gap-2 px-3 py-1.5">
-            <span className={`min-w-0 flex-1 truncate text-[13px] ${entry === "separator" ? "text-ink-3" : "text-ink"}`}>
-              {entry === "separator" ? "────────" : labelOf(entry)}
-              {typeof entry === "object" && <span className="selectable ml-2 font-mono text-[11.5px] text-ink-3">{[entry.command, ...entry.args].join(" ")}</span>}
+          <li key={`${labelOf(entry)}:${index}`} className="group flex h-9 items-center gap-1 rounded-md pr-1 pl-3 transition-colors hover:bg-surface-hi focus-within:bg-surface-hi">
+            <span className="w-5 shrink-0 text-right font-mono text-[11px] text-ink-4 tabular-nums">{index + 1}</span>
+            {entry === "separator" ? (
+              <span className="flex min-w-0 flex-1 items-center gap-2 pl-2 text-[12px] text-ink-4">
+                <span className="h-px flex-1 bg-line-hi/60" aria-hidden />
+                Separator
+                <span className="h-px w-6 bg-line-hi/60" aria-hidden />
+              </span>
+            ) : (
+              <span className="min-w-0 flex-1 truncate pl-2 text-[13px] text-ink">
+                {labelOf(entry)}
+                {typeof entry === "object" && <span className="selectable ml-2 font-mono text-[11.5px] text-ink-3">{[entry.command, ...entry.args].join(" ")}</span>}
+              </span>
+            )}
+            <span className="flex gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              <IconButton icon={ArrowUp} size="sm" variant="ghost" label={`Move ${labelOf(entry)} up`} disabled={index === 0} onClick={() => onChange(moved(items, index, -1))} />
+              <IconButton icon={ArrowDown} size="sm" variant="ghost" label={`Move ${labelOf(entry)} down`} disabled={index === items.length - 1} onClick={() => onChange(moved(items, index, 1))} />
+              <IconButton icon={X} size="sm" variant="ghost" label={`Hide ${labelOf(entry)}`} onClick={() => onChange(items.filter((_, i) => i !== index))} />
             </span>
-            <IconButton icon={ArrowUp} label={`Move ${labelOf(entry)} up`} disabled={index === 0} onClick={() => onChange(moved(items, index, -1))} className="size-8" />
-            <IconButton icon={ArrowDown} label={`Move ${labelOf(entry)} down`} disabled={index === items.length - 1} onClick={() => onChange(moved(items, index, 1))} className="size-8" />
-            <IconButton icon={X} label={`Hide ${labelOf(entry)}`} onClick={() => onChange(items.filter((_, i) => i !== index))} className="size-8" />
           </li>
         ))}
         {items.length === 0 && <li className="px-3 py-3 text-[13px] text-ink-3">An empty menu. Add something back below.</li>}
@@ -63,29 +74,32 @@ export function DesktopMenuEditor({ items, defaults, onChange }: Props) {
       <div className="flex flex-wrap items-center gap-2">
         <Select<MenuBuiltin | "">
           label="Add a built-in item"
-          className="w-64"
+          size="sm"
+          className="w-60"
           value={addition}
-          options={[{ value: "", label: "Add a built-in item…" }, ...hidden.map((b) => ({ value: b, label: LABELS[b] }))]}
+          options={[{ value: "", label: hidden.length > 0 ? "Add a built-in item…" : "Every built-in item is in" }, ...hidden.map((b) => ({ value: b, label: LABELS[b] }))]}
           onChange={(next) => {
             if (next !== "") onChange([...items, next]);
             setAddition("");
           }}
         />
-        <Button icon={Plus} onClick={() => onChange([...items, "separator"])}>
+        <Button size="sm" icon={Plus} onClick={() => onChange([...items, "separator"])}>
           Separator
         </Button>
-        <Button icon={RotateCcw} disabled={isDefault} onClick={() => onChange(defaults)}>
+        <Button size="sm" variant="ghost" icon={RotateCcw} disabled={isDefault} onClick={() => onChange(defaults)} className="ml-auto">
           Reset the menu
         </Button>
       </div>
 
-      <div className="rounded-xl bg-canvas p-3 ring-1 ring-line">
-        <div className="mb-2 text-[12.5px] font-medium text-ink-2">Your own command</div>
+      <div className="rounded-lg bg-canvas p-3 ring-1 ring-line-strong ring-inset">
+        <div className="mb-2 text-[12.5px] font-medium text-ink">Your own command</div>
         <div className="flex flex-wrap gap-2">
-          <input aria-label="Custom item label" value={label} placeholder="Label" onChange={(e) => setLabel(e.currentTarget.value)} className={`${INPUT_BASE} h-9 w-36`} />
-          <input aria-label="Custom item command" value={command} placeholder="notepad.exe" spellCheck={false} onChange={(e) => setCommand(e.currentTarget.value)} className={`${INPUT_BASE} h-9 min-w-40 flex-1 font-mono text-[13px]`} />
-          <input aria-label="Custom item arguments" value={args} placeholder="Arguments" spellCheck={false} onChange={(e) => setArgs(e.currentTarget.value)} className={`${INPUT_BASE} h-9 min-w-40 flex-1 font-mono text-[13px]`} />
+          <TextInput compact aria-label="Custom item label" value={label} placeholder="Label" onChange={(e) => setLabel(e.currentTarget.value)} className="w-36" />
+          <TextInput compact mono aria-label="Custom item command" value={command} placeholder="notepad.exe" onChange={(e) => setCommand(e.currentTarget.value)} className="min-w-40 flex-1" />
+          <TextInput compact mono aria-label="Custom item arguments" value={args} placeholder="Arguments" onChange={(e) => setArgs(e.currentTarget.value)} className="min-w-40 flex-1" />
           <Button
+            size="sm"
+            className="h-8"
             icon={Plus}
             disabled={label.trim() === "" || command.trim() === ""}
             onClick={() => {

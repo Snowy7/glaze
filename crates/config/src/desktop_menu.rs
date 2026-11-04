@@ -1,5 +1,5 @@
 //! `desktop_menu` in `config.json`: mypaper's own right-click menu for the
-//! bare desktop (docs/desktop-extras.md). Off by default.
+//! bare desktop (docs/desktop-extras.md). On by default; `"enabled": false` turns it off.
 //!
 //! ```json
 //! "desktop_menu": {
@@ -79,7 +79,7 @@ fn is_default_items(items: &[Entry]) -> bool {
 impl Default for DesktopMenu {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             items: default_items(),
         }
     }
@@ -156,13 +156,15 @@ mod tests {
     }
 
     #[test]
-    fn off_by_default_with_the_standard_items() {
+    fn on_by_default_with_the_standard_items() {
         let menu = parse("{}").unwrap();
-        assert!(!menu.enabled);
+        assert!(menu.enabled);
         assert_eq!(menu.items, default_items());
         assert_eq!(menu.items.first(), Some(&Entry::Builtin(Builtin::View)));
         assert_eq!(menu.items.last(), Some(&Entry::Builtin(Builtin::More)));
-        assert!(parse(r#"{ "enabled": true }"#).unwrap().enabled);
+        // Items without `enabled` (a file edited before the default changed) are on too.
+        assert!(parse(r#"{ "items": ["refresh"] }"#).unwrap().enabled);
+        assert!(!parse(r#"{ "enabled": false }"#).unwrap().enabled);
     }
 
     #[test]
@@ -242,7 +244,15 @@ mod tests {
     #[test]
     fn defaults_are_not_written_back_to_the_file() {
         let untouched = serde_json::to_value(DesktopMenu::default()).unwrap();
-        assert_eq!(untouched, serde_json::json!({ "enabled": false }));
+        assert_eq!(untouched, serde_json::json!({ "enabled": true }));
+        let off = DesktopMenu {
+            enabled: false,
+            ..DesktopMenu::default()
+        };
+        assert!(
+            !off.is_default(),
+            "turned off is a setting, so it's written"
+        );
         let custom = DesktopMenu {
             enabled: true,
             items: vec![Entry::Builtin(Builtin::Sort)],

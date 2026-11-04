@@ -31,7 +31,7 @@ export function WallpaperEditor({ theme }: { theme: ThemeEntry }) {
   return (
     <div className="flex-1 overflow-y-auto px-6 py-5">
       {interactive === undefined && !error ? (
-        <Skeleton className="h-20 rounded-2xl" />
+        <Skeleton className="h-20 rounded-xl" />
       ) : interactive === null ? (
         <p className="text-[13px] text-ink-3">This wallpaper kind has no options here. Only web pages and 3D scenes can react to the mouse.</p>
       ) : (
@@ -45,7 +45,7 @@ export function WallpaperEditor({ theme }: { theme: ThemeEntry }) {
           />
         </Group>
       )}
-      <ul className="mt-4 list-disc space-y-1.5 pl-5 text-[12.5px] text-ink-3">
+      <ul className="mt-5 list-disc space-y-1.5 pl-5 text-[12.5px] leading-relaxed text-ink-3 marker:text-ink-4">
         <li>Off by default. When off, nothing listens to the mouse at all.</li>
         <li>On, mypaper reads the mouse through Raw Input, like Lively does: no hook, nothing is swallowed, and the desktop behaves as before.</li>
         <li>Only the bare desktop counts: clicks on icons, windows, the taskbar or a widget never reach the wallpaper.</li>
