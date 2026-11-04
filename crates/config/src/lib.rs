@@ -4,10 +4,14 @@
 //! changes live (theme switch, pause), so there is no IPC to keep in sync.
 //! Missing fields take their defaults, so older files keep working.
 
+pub mod desktop_menu;
+
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+
+pub use desktop_menu::DesktopMenu;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -21,6 +25,13 @@ pub struct Config {
     /// Pause every screen while a fullscreen app or game is in front, so
     /// games get the whole GPU.
     pub pause_on_fullscreen: bool,
+    /// mypaper's own right-click menu for the bare desktop (opt-in). Left out
+    /// of the file while it is all defaults, so saving settings never freezes them.
+    #[serde(skip_serializing_if = "DesktopMenu::is_default")]
+    pub desktop_menu: DesktopMenu,
+    /// Windows 11: use the classic full context menu everywhere (undocumented
+    /// registry switch, opt-in, reversible; Explorer needs a restart to show it).
+    pub classic_context_menu: bool,
 }
 
 impl Default for Config {
@@ -30,6 +41,8 @@ impl Default for Config {
             paused: false,
             pause_on_battery: true,
             pause_on_fullscreen: true,
+            desktop_menu: DesktopMenu::default(),
+            classic_context_menu: false,
         }
     }
 }
@@ -62,7 +75,9 @@ impl Config {
     }
 
     pub fn parse(json: &str) -> Result<Self> {
-        Ok(serde_json::from_str(json)?)
+        let config: Self = serde_json::from_str(json)?;
+        config.desktop_menu.validate()?;
+        Ok(config)
     }
 
     /// Writes atomically (temp file + rename), so watchers never see a
@@ -92,6 +107,24 @@ mod tests {
             }
         );
         assert!(Config::parse(r#"{ "pause_on_batery": true }"#).is_err());
+    }
+
+    #[test]
+    fn the_desktop_menu_and_classic_menu_are_opt_in_and_checked() {
+        let config = Config::default();
+        assert!(!config.desktop_menu.enabled && !config.classic_context_menu);
+
+        let on = Config::parse(
+            r#"{ "desktop_menu": { "enabled": true, "items": ["refresh"] }, "classic_context_menu": true }"#,
+        )
+        .unwrap();
+        assert!(on.desktop_menu.enabled && on.classic_context_menu);
+        assert_eq!(on.desktop_menu.items.len(), 1);
+        // A bad custom item fails the whole config, like any other typo.
+        assert!(
+            Config::parse(r#"{ "desktop_menu": { "items": [{ "label": "", "command": "x" }] } }"#)
+                .is_err()
+        );
     }
 
     #[test]
