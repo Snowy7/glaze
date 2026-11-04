@@ -1,0 +1,14 @@
+# The performance promise, checked by `mypaper-perf` (docs/performance.md).
+#
+# Keys are `<component>.<measure>`; a limit binds a scenario only when that component runs in
+# it. Startup times are milliseconds from core's process creation (`.cold`: first start on a
+# fresh profile; `.warm`: median of the later starts). CPU is percent of the whole machine
+# (`_core_pct`: of one core). Memory is MB.
+#
+# Provisional limits; tightened from measurements.
+
+[default]
+"core.spawn_ms.warm" = 100
+"wallpaper.first_frame_ms.cold" = 1000
+"wallpaper.first_frame_ms.warm" = 500
+"total.cpu_held_pct" = 0.1

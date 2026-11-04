@@ -21,6 +21,10 @@ pub struct Config {
     /// Pause every screen while a fullscreen app or game is in front, so
     /// games get the whole GPU.
     pub pause_on_fullscreen: bool,
+    /// Also set a still of the theme as the Windows desktop wallpaper, so Windows shows the
+    /// theme's look before mypaper starts (docs/performance.md, "Static snapshot"). Turning it
+    /// off puts the user's own wallpaper back.
+    pub static_snapshot: bool,
 }
 
 impl Default for Config {
@@ -30,6 +34,7 @@ impl Default for Config {
             paused: false,
             pause_on_battery: true,
             pause_on_fullscreen: true,
+            static_snapshot: true,
         }
     }
 }

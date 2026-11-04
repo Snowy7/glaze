@@ -148,6 +148,7 @@ fn run() -> Result<()> {
         log::warn!("{e:#}; continuing without the shell bars");
         shell_bars = None;
     }
+    mypaper_desktop::startup::ready("core", "spawn_ms");
 
     loop {
         let children = [Some(&wallpaper), widgets.as_ref(), shell_bars.as_ref()];

@@ -11,7 +11,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
-use mypaper_desktop::{DesktopHost, EXIT_RESTART, Monitor};
+use mypaper_desktop::{DesktopHost, EXIT_RESTART, Monitor, startup, webview_env};
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::{
     AddScriptToExecuteOnDocumentCreatedCompletedHandler, CoreWebView2EnvironmentOptions,
@@ -415,6 +415,10 @@ impl Surface {
                     if let Some(args) = args {
                         let source = out_string(|p| args.Source(p))?;
                         let json = out_string(|p| args.WebMessageAsJson(p))?;
+                        if json == webview_env::PAINTED {
+                            startup::ready("widgets", "first_paint_ms");
+                            return Ok(());
+                        }
                         events.borrow_mut().push_back(WebEvent::Message {
                             surface,
                             source,
@@ -577,6 +581,16 @@ impl Surface {
             if let Err(e) = unsafe { web.webview.PostWebMessageAsJson(&HSTRING::from(json)) } {
                 log::warn!("couldn't message the shell: {e}");
             }
+        }
+    }
+
+    /// Asks the shell to answer once what it was just sent is on screen (the first-paint
+    /// marker, docs/performance.md).
+    pub fn probe_paint(&self) {
+        if let Some(web) = &self.web {
+            let script = HSTRING::from(webview_env::PAINT_PROBE);
+            // SAFETY: COM call on a live WebView; no completion handler is needed.
+            let _ = unsafe { web.webview.ExecuteScript(&script, None) };
         }
     }
 
