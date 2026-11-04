@@ -13,10 +13,10 @@ export type BarsEditor = {
   /** What the host will use: defaults, preset and file merged. */
   resolved: Resolved;
   catalog: BarsCatalog;
-  /** Sets the value at `path`; `undefined` removes it (and any object that empties). */
-  set: (path: Path, value: unknown) => void;
-  /** Changes several things at once. */
-  update: (change: (doc: BarsDoc) => BarsDoc) => void;
+  /** Sets the value at `path`; `undefined` removes it (and any object that empties). `label` names the undo step. */
+  set: (path: Path, value: unknown, label?: string) => void;
+  /** Changes several things at once; `label` names the undo step. */
+  update: (change: (doc: BarsDoc) => BarsDoc, label?: string) => void;
   /** Whether the file itself sets `path` (rather than the preset or a default). */
   has: (path: Path) => boolean;
 };
@@ -41,7 +41,7 @@ export function forBar(editor: BarsEditor, bar: BarKind): BarsEditor {
     ...editor,
     doc: { ...editor.doc, look: own?.look, animation: own?.animation },
     resolved: { ...editor.resolved, look: editor.resolved[bar].look, animation: editor.resolved[bar].animation },
-    set: (path, value) => editor.set(map(path), value),
+    set: (path, value, label) => editor.set(map(path), value, label),
     has: (path) => editor.has(map(path)),
   };
 }

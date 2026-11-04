@@ -1,5 +1,7 @@
 import { Check, ChevronDown, ChevronLeft, ChevronRight, GripVertical, LoaderCircle, Minus, Plus, Redo2, RotateCcw, TriangleAlert, Undo2, type LucideIcon } from "lucide-react";
 import {
+  createContext,
+  use,
   useEffect,
   useId,
   useRef,
@@ -594,19 +596,6 @@ export function Badge({ children, icon: Icon, tone = "neutral", title, className
   );
 }
 
-/** A page's title bar inside a scrolling page (the Bars page): the same as `PageBar`, reaching across the page's gutter. */
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
-  return (
-    <header className="-mx-(--page-px) mb-6 flex h-[3.25rem] items-center gap-3 border-b border-line px-(--page-px)">
-      <div className="flex min-w-0 flex-1 items-baseline gap-3">
-        <h1 className="shrink-0 font-display text-[15px] font-semibold tracking-tight text-ink">{title}</h1>
-        {subtitle && <p className="min-w-0 truncate text-[13px] text-ink-3">{subtitle}</p>}
-      </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-    </header>
-  );
-}
-
 export function Keycap({ children }: { children: ReactNode }) {
   return (
     <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-[5px] bg-surface-hi px-1.5 font-sans text-[11px] font-medium text-ink-2 shadow-[inset_0_-1px_0_var(--line-hi),inset_0_0_0_1px_var(--line-strong)]">
@@ -672,15 +661,11 @@ export function StatusDot({ state }: { state: "on" | "off" | "unknown" }) {
   );
 }
 
-/** "Saving" while an edit is on its way to disk, otherwise a calm confirmation. */
-export function SaveStatus({ saving }: { saving: boolean }) {
-  return (
-    <span className="flex items-center gap-1.5 text-[12px] text-ink-3" aria-live="polite">
-      {saving ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
-      {saving ? "Saving" : "Saved as you go"}
-    </span>
-  );
-}
+/**
+ * Whether the kit is inside an inspector: there, `Group`, `Row` and `Block` drop their cards and
+ * lay out like inspector properties, so settings written for a page read right in a panel too.
+ */
+const InspectorScope = createContext(false);
 
 /** A section card of rows (settings-style): a title and description over it, an action beside them. */
 export function Group({
@@ -696,6 +681,21 @@ export function Group({
   action?: ReactNode;
   className?: string;
 }) {
+  if (use(InspectorScope))
+    return (
+      <section aria-label={title} className={`flex flex-col gap-3.5 not-first:pt-3 ${className}`}>
+        {(title || action || description) && (
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              {title && <h3 className="ui-eyebrow">{title}</h3>}
+              {description && <p className="mt-1 text-[12px] leading-snug text-ink-3">{description}</p>}
+            </div>
+            {action}
+          </div>
+        )}
+        {children}
+      </section>
+    );
   return (
     <section aria-label={title} className={className}>
       {(title || action) && (
@@ -725,7 +725,28 @@ type RowProps = {
 
 /** A setting row: title and detail on the left, the control on the right (under them when the row is narrow). */
 export function Row({ title, detail, mono, children, htmlFor, detailId }: RowProps) {
-  const titleClass = "block text-[13px] font-medium text-ink";
+  const inInspector = use(InspectorScope);
+  const titleClass = inInspector ? "block text-[13px] text-ink-2" : "block text-[13px] font-medium text-ink";
+  if (inInspector)
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="min-w-[9rem] flex-1">
+          {htmlFor ? (
+            <label htmlFor={htmlFor} className={titleClass}>
+              {title}
+            </label>
+          ) : (
+            <div className={titleClass}>{title}</div>
+          )}
+          {detail && (
+            <div id={detailId} className={`mt-0.5 text-[12px] leading-snug text-ink-3 ${mono ? "selectable truncate font-mono" : ""}`}>
+              {detail}
+            </div>
+          )}
+        </div>
+        {children && <div className="inspector-control flex max-w-full min-w-0 items-center gap-2">{children}</div>}
+      </div>
+    );
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5">
       <div className="min-w-0 flex-[1_1_15rem]">
@@ -753,6 +774,14 @@ export function Row({ title, detail, mono, children, htmlFor, detailId }: RowPro
 
 /** Like `Row`, but the control gets the full width under the title. */
 export function Block({ title, detail, children }: { title: string; detail?: ReactNode; children: ReactNode }) {
+  if (use(InspectorScope))
+    return (
+      <div>
+        <div className="text-[13px] text-ink-2">{title}</div>
+        {detail && <div className="mt-0.5 text-[12px] leading-snug text-ink-3">{detail}</div>}
+        <div className="inspector-control mt-2">{children}</div>
+      </div>
+    );
   return (
     <div className="px-4 py-3.5">
       <div className="text-[13px] font-medium text-ink">{title}</div>
@@ -890,12 +919,14 @@ export function EditorLayout({ stage, inspector }: { stage: ReactNode; inspector
 /** The right-hand panel of an editing page: a header, presets, the common settings, More options. */
 export function Inspector({ label, children }: { label: string; children: ReactNode }) {
   return (
+    <InspectorScope value>
     <aside
       aria-label={label}
       className="flex w-[21rem] shrink-0 flex-col overflow-y-auto border-l border-line bg-sidebar [--control-h:1.875rem] [scrollbar-gutter:stable] max-[1100px]:w-full max-[1100px]:overflow-visible max-[1100px]:border-t max-[1100px]:border-l-0 2xl:w-[25rem]"
     >
       {children}
     </aside>
+    </InspectorScope>
   );
 }
 

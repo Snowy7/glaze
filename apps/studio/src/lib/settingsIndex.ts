@@ -25,7 +25,14 @@ const look = (field: string, title: string, keywords?: string): SettingEntry => 
 const windows = (id: string, title: string, keywords?: string): SettingEntry => ({ id: `windows.${id}`, title, section: "Windows", route: { page: "windows" }, keywords });
 const menu = (id: string, title: string, keywords?: string): SettingEntry => ({ id: `menu.${id}`, title, section: "Windows › Right-click menu", route: { page: "windows", select: "menu" }, keywords: `context menu ${keywords ?? ""}` });
 const settings = (id: string, title: string, keywords?: string): SettingEntry => ({ id: `settings.${id}`, title, section: "Settings", route: { page: "settings" }, keywords });
-const bars = (title: string, keywords: string): SettingEntry => ({ id: `bars.${title.toLowerCase().replace(/\W+/g, "-")}`, title, section: "Bars", route: { page: "bars" }, keywords });
+/** A Bars setting: `id` is its path in the file (see BarSettings), `bar` the bar whose inspector holds it. */
+const bars = (id: string, title: string, keywords: string, bar?: "top" | "dock"): SettingEntry => ({
+  id: `bars.${id}`,
+  title,
+  section: bar === "top" ? "Bars › Top bar" : bar === "dock" ? "Bars › Bottom bar" : "Bars",
+  route: { page: "bars", ...(bar && { select: bar }) },
+  keywords,
+});
 
 export const SETTINGS: readonly SettingEntry[] = [
   look("style", "Widget style", "minimal depth neon paper aero design"),
@@ -66,15 +73,35 @@ export const SETTINGS: readonly SettingEntry[] = [
 
   { id: "wallpaper.interactive", title: "Wallpaper reacts to the mouse", section: "Desktop › Wallpaper", route: { page: "desktop", select: { kind: "wallpaper" } }, keywords: "interactive web scene camera" },
 
-  bars("Bar presets", "top bar dock macos windows 11 islands neon"),
-  bars("Top bar", "menu bar height position strip floating islands"),
-  bars("Dock", "taskbar pinned apps magnify"),
-  bars("Bar modules", "clock tray battery volume network layout"),
-  bars("Bar look", "background glass color border glow shadow"),
-  bars("Bar motion", "animation speed spring"),
-  bars("Start menu and flyouts", "launcher calendar quick settings menus"),
-  bars("Icon packs", "app icons"),
-  bars("Windows taskbar", "hide taskbar auto-hide alignment"),
+  bars("preset", "Bar pairing", "preset macos windows 11 chromeos islands neon floating style"),
+  bars("top.enabled", "Show the top bar", "menu bar on off", "top"),
+  bars("top.design", "Top bar design", "menu bar style look macos windows", "top"),
+  bars("top.position", "Top bar edge", "menu bar bottom position", "top"),
+  bars("top.height", "Top bar height", "menu bar size", "top"),
+  bars("top.layout", "Top bar shape", "strip floating islands", "top"),
+  bars("top.modules", "Top bar modules", "clock tray battery volume network media add remove reorder", "top"),
+  bars("top.clock.seconds", "Clock seconds", "time format", "top"),
+  bars("dock.enabled", "Show the bottom bar", "dock taskbar on off", "dock"),
+  bars("dock.design", "Bottom bar design", "dock taskbar style look macos windows chromeos", "dock"),
+  bars("dock.style", "Bottom bar style", "dock floating taskbar", "dock"),
+  bars("dock.position", "Bottom bar edge", "dock left right top position", "dock"),
+  bars("dock.size", "Dock icon size", "bottom bar bigger smaller", "dock"),
+  bars("dock.autohide", "Auto-hide the dock", "bottom bar hide", "dock"),
+  bars("dock.magnify", "Dock magnify", "zoom bottom bar", "dock"),
+  bars("dock.pinned", "Pinned apps", "dock bottom bar pin programs shortcuts", "dock"),
+  bars("dock.indicator", "Running indicator", "dock dot bar glow", "dock"),
+  bars("dock.preview", "Window previews", "dock thumbnails hover", "dock"),
+  bars("look.scheme", "Bar light or dark", "dark mode light mode color", "top"),
+  bars("look.glass.style", "Bar glass", "liquid frosted blur transparency material", "top"),
+  bars("animation.enabled", "Bar animations", "motion speed spring curve", "top"),
+  bars("taskbar.mode", "Windows taskbar", "hide auto-hide keep"),
+  bars("launcher.layout", "Start menu layout", "launcher grid compact dashboard"),
+  bars("launcher.winKey", "Windows key opens the Start menu", "launcher keyboard"),
+  bars("calendar.zones", "Other time zones", "calendar world clock"),
+  bars("calendar.firstDay", "Week starts on", "calendar monday sunday"),
+  bars("icons", "Icon packs", "app icons glyphs"),
+  bars("animation.reduceMotion", "Reduce motion", "animation accessibility"),
+  bars("performance", "Save power", "performance battery blur animations"),
 ];
 
 /** Whether every word of `query` appears in the entry's title, section or keywords. */

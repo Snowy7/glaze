@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { api, fileUrl, onChanged, type ActiveSkins, type BarsCatalog, type MonitorInfo, type WidgetInfo } from "./api";
 import { resolve, type Resolved } from "./barsDoc";
+import type { BarsDoc } from "./barsSchema";
 import { useStudio } from "./studio";
 
 /** The wallpaper on screen as a CSS background, for small previews painted over it (look tiles). */
@@ -13,16 +14,18 @@ export function useWallpaperBackground(): string | null {
   return preview ? `center / cover no-repeat url("${fileUrl(preview)}")` : null;
 }
 
-/** The bars as the host will show them (file over preset over defaults), for the stage. Re-read when bars.json changes. */
-export function useBarsPreview(): { config: Resolved; catalog: BarsCatalog } | null {
-  const [preview, setPreview] = useState<{ config: Resolved; catalog: BarsCatalog } | null>(null);
+/** `bars.json` and what the host makes of it (designs, preset, the file), for the stage. Re-read when it changes. */
+export type BarsPreview = { doc: BarsDoc; config: Resolved; catalog: BarsCatalog };
+
+export function useBarsPreview(): BarsPreview | null {
+  const [preview, setPreview] = useState<BarsPreview | null>(null);
   useEffect(() => {
     let current = true;
     let catalog: Promise<BarsCatalog> | null = null;
     const refresh = () => {
       catalog ??= api.barsCatalog();
       void Promise.all([catalog, api.getBars()]).then(
-        ([loaded, state]) => current && !state.problem && setPreview({ config: resolve(loaded, state.doc), catalog: loaded }),
+        ([loaded, state]) => current && !state.problem && setPreview({ doc: state.doc, config: resolve(loaded, state.doc), catalog: loaded }),
         () => undefined,
       );
     };

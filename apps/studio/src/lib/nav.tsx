@@ -15,7 +15,7 @@ export type Route = (
   | { page: "themes"; view?: "gallery" | "new" }
   | { page: "themes"; view: "edit"; theme: string }
   | { page: "widgets"; select?: string; adding?: boolean }
-  | { page: "bars" }
+  | { page: "bars"; select?: "top" | "dock" }
   | { page: "windows"; select?: WindowsTarget }
   | { page: "settings" }
 ) & {

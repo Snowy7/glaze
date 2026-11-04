@@ -7,9 +7,9 @@ import type { ModuleRef } from "../../lib/barsSchema";
 import { describeModule } from "../../lib/modules";
 import { Outline } from "./Stage";
 
-// The top bar and the dock as silhouettes on the stage: their real position, size and shape from
-// the resolved `bars.json`, a glass surface, and each module's icon. The Bars page (phase 2) swaps
-// this for the real bars page in an iframe (docs/studio-ux.md, "Bars").
+// The top bar and the dock as silhouettes, for a Studio built without the bars page (the stage
+// normally runs the real one, BarsLayer.tsx): their real position, size and shape from the
+// resolved `bars.json`, a glass surface, and each module's icon.
 
 export type BarId = "top" | "dock";
 
@@ -30,7 +30,7 @@ function clock(): string {
   return new Date().toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).replace(",", "");
 }
 
-export function BarsLayer({ config, catalog, screen, selected, onSelect }: Props) {
+export function BarsSilhouette({ config, catalog, screen, selected, onSelect }: Props) {
   const [hovered, setHovered] = useState<BarId | null>(null);
   const light = config.look.scheme === "light";
   // A bar whose background is "none" is just its modules on the wallpaper (a macOS menu bar).

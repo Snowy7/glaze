@@ -40,14 +40,6 @@ export function ThemeVarsPanel() {
           <Row title="The theme's variables can't be read" detail={found.error} />
         </Group>
       )}
-      {!found.error && found.vars.length === 0 && (
-        <Group title="Theme variables">
-          <Row
-            title={found.css ? `${found.theme} declares no variables` : `${found.theme} has no bars style sheet`}
-            detail="A theme can declare tunable variables in a /* @mypaper-vars */ comment in its bars CSS. They show up here as controls."
-          />
-        </Group>
-      )}
       {groups.map((group) => (
         <Group key={group} title={group === "" ? `Theme variables · ${found.theme}` : group}>
           {found.vars.filter((v) => (v.group ?? "") === group).map((v) => (

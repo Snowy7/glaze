@@ -56,22 +56,13 @@ function Shell() {
           {route.page === "desktop" && <Desktop />}
           {route.page === "themes" && <Themes />}
           {route.page === "widgets" && <Widgets />}
-          {route.page === "bars" && <LegacyPage>{<Bars />}</LegacyPage>}
+          {route.page === "bars" && <Bars />}
           {route.page === "windows" && <Windows />}
           {route.page === "settings" && <Settings />}
         </ErrorBoundary>
       </main>
       <CommandPalette open={searching} onClose={() => setSearching(false)} />
       <Toaster />
-    </div>
-  );
-}
-
-/** A scrolling page with the side gutter, for the Bars page until it moves to the stage (docs/studio-ux.md, "Bars"). */
-function LegacyPage({ children }: { children: ReactNode }) {
-  return (
-    <div data-scroll-root className="min-h-0 flex-1 overflow-y-auto px-(--page-px) pb-12 [--page-px:var(--gutter)] [scrollbar-gutter:stable]">
-      {children}
     </div>
   );
 }

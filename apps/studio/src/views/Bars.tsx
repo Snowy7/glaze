@@ -1,77 +1,66 @@
+import { TriangleAlert, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { BarPreview } from "../components/bars/BarPreview";
-import { TaskbarPanel, TopBarPanel } from "../components/bars/BarPanels";
-import { DesignPicker } from "../components/bars/DesignPicker";
-import { DockPanel } from "../components/bars/DockPanel";
-import { IconsPanel } from "../components/bars/IconsPanel";
-import { LookPanel } from "../components/bars/LookPanel";
-import { MenusPanel } from "../components/bars/MenusPanel";
-import { ModulesPanel } from "../components/bars/ModulesPanel";
-import { MotionPanel } from "../components/bars/MotionPanel";
-import { PresetsPanel } from "../components/bars/PresetsPanel";
-import { Banner, Button, PageHeader, SaveStatus, Segmented, Skeleton } from "../components/ui";
+import { BarInspector, BarsOverview, ModuleCatalog, ModuleInspector } from "../components/bars/BarsInspector";
+import { BarsLayer, zonesOf, type BarPick, type ModuleMove } from "../components/stage/BarsLayer";
+import { DesktopScene } from "../components/stage/DesktopScene";
+import { StageTools } from "../components/stage/Stage";
+import { Button, EditorLayout, IconButton, Inspector, InspectorHeader, InspectorSection, PageBar, SaveState, Skeleton } from "../components/ui";
 import { api, errorText, type BarsCatalog, type BarsState } from "../lib/api";
-import { getIn, resolve, setIn, type Path } from "../lib/barsDoc";
-import { BarsContext, forBar, type BarsEditor } from "../lib/barsContext";
-import type { BarKind } from "../lib/barsSchema";
+import { getIn, resolve, setIn, type Path, type Resolved } from "../lib/barsDoc";
+import { BarsContext, type BarsEditor } from "../lib/barsContext";
+import type { ZoneId } from "../lib/barsGeometry";
+import { listOf, moveModule, zoneHolding } from "../lib/barsModules";
+import type { BarKind, ModuleRef } from "../lib/barsSchema";
+import { useDesktop } from "../lib/desktop";
+import { describeModule } from "../lib/modules";
+import { useNav } from "../lib/nav";
 import { useStudio } from "../lib/studio";
 import { useAutosaved } from "../lib/useAutosaved";
+import { useWallpaperDataUrl } from "../lib/wallpaperImage";
 
-type Tab = "presets" | "top" | "dock" | "menus" | "icons" | "taskbar";
+/** What the inspector shows: both bars, one bar, one of its modules, or the modules to add to it. */
+type View =
+  | { kind: "bars" }
+  | { kind: "bar"; bar: BarKind }
+  | { kind: "module"; bar: BarKind; zone: ZoneId; ref: ModuleRef }
+  | { kind: "add"; bar: BarKind; zone: ZoneId };
 
-const TABS: readonly { value: Tab; label: string }[] = [
-  { value: "presets", label: "Presets" },
-  { value: "top", label: "Top bar" },
-  { value: "dock", label: "Bottom bar" },
-  { value: "menus", label: "Menus" },
-  { value: "icons", label: "Icons" },
-  { value: "taskbar", label: "Windows taskbar" },
-];
+/** How big a picked bar is drawn at least (screen DIPs to pixels): its modules stay easy to point at and drag. */
+const BAR_ZOOM = 0.75;
 
-/** What each bar's editor has: its design, its layout, modules, its own look and its own motion. */
-type Section = "design" | "layout" | "modules" | "look" | "motion";
-const SECTIONS: readonly { value: Section; label: string }[] = [
-  { value: "design", label: "Design" },
-  { value: "layout", label: "Layout" },
-  { value: "modules", label: "Modules" },
-  { value: "look", label: "Look" },
-  { value: "motion", label: "Motion" },
-];
+const viewOf = (pick: BarPick): View => (pick.module ? { kind: "module", bar: pick.bar, zone: pick.module.zone, ref: pick.module.ref } : { kind: "bar", bar: pick.bar });
 
-/** One bar's editor; look and motion edit that bar's own (`top.look`, `dock.animation`...). */
-function BarEditor({ bar, editor }: { bar: BarKind; editor: BarsEditor }) {
-  const [section, setSection] = useState<Section>("design");
-  const scoped = useMemo(() => forBar(editor, bar), [editor, bar]);
-  return (
-    <>
-      <Segmented<Section> label="Part" hideLabel className="mb-6" value={section} options={SECTIONS} onChange={setSection} />
-      {section !== "design" && (
-        // The page's top padding scrolls under a sticky box, so it reaches up over it.
-        <div className="sticky -top-9 z-10 -mx-1 -mt-6 mb-5 bg-canvas px-1 pt-9 pb-2">
-          <BarPreview config={editor.resolved} catalog={editor.catalog} vars={editor.doc.vars} appearance={editor.doc.appearance} width={360} />
-        </div>
-      )}
-      {section === "design" && <DesignPicker bar={bar} />}
-      {section === "layout" && (bar === "top" ? <TopBarPanel /> : <DockPanel />)}
-      {section === "modules" && <ModulesPanel />}
-      <BarsContext value={scoped}>
-        {section === "look" && <LookPanel />}
-        {section === "motion" && <MotionPanel />}
-      </BarsContext>
-    </>
-  );
+/**
+ * The view as the file now stands: a module that moved is followed into its new list, and one
+ * that's gone (or a bar that lost its lists) falls back to its bar.
+ */
+function settle(view: View, config: Resolved): View {
+  if (view.kind === "bars" || view.kind === "bar") return view;
+  const zones = zonesOf(config, view.bar);
+  if (view.kind === "add") return zones.length > 0 ? view : { kind: "bar", bar: view.bar };
+  if (zones.includes(view.zone) && listOf(config, view.bar, view.zone).includes(view.ref)) return view;
+  const zone = zoneHolding(config, view.bar, view.ref, zones);
+  return zone ? { ...view, zone } : { kind: "bar", bar: view.bar };
 }
 
-/** The top bar, the dock and the Windows taskbar: edits `bars.json`, which `mypaper-bars` watches. */
+/**
+ * The top bar and the bottom bar, live on your desktop: click a bar or a module to change it,
+ * drag modules to move them. Edits `bars.json`, which the running bars follow as you go.
+ */
 export function Bars() {
+  const { route } = useNav();
   const { components, notify } = useStudio();
-  const [tab, setTab] = useState<Tab>("presets");
+  const desktop = useDesktop();
+  const wallpaper = useWallpaperDataUrl(desktop.active?.preview ?? null);
   const [catalog, setCatalog] = useState<BarsCatalog | null>(null);
+  const [view, setView] = useState<View>(route.page === "bars" && route.select ? { kind: "bar", bar: route.select } : { kind: "bars" });
+  const [zoomIn, setZoomIn] = useState(true);
   const file = useAutosaved<BarsState>({
     load: api.getBars,
     save: (state) => api.setBars(state.doc),
     concerns: (changes) => changes.bars,
+    label: "Change the bars",
   });
 
   useEffect(() => {
@@ -86,72 +75,129 @@ export function Bars() {
   }, [notify]);
 
   const state = file.value;
+  const problem = state?.problem ?? null;
   const editor = useMemo<BarsEditor | null>(() => {
-    if (!state || !catalog) return null;
+    if (!state || !catalog || state.problem) return null;
     const { doc } = state;
     return {
       doc,
       resolved: resolve(catalog, doc),
       catalog,
-      set: (path: Path, value: unknown) => file.edit((current) => ({ ...current, doc: setIn(current.doc, path, value) })),
-      update: (change) => file.edit((current) => ({ ...current, doc: change(current.doc) })),
+      set: (path: Path, value: unknown, label?: string) => file.edit((current) => ({ ...current, doc: setIn(current.doc, path, value) }), label),
+      update: (change, label) => file.edit((current) => ({ ...current, doc: change(current.doc) }), label),
       has: (path: Path) => getIn(doc, path) !== undefined,
     };
   }, [state, catalog, file.edit]);
 
   const running = components?.find((c) => c.id === "bars")?.running;
-  const problem = state?.problem ?? null;
+  const shown = editor ? settle(view, editor.resolved) : view;
+  const selection: BarPick | null = shown.kind === "bars" ? null : shown.kind === "module" ? { bar: shown.bar, module: { zone: shown.zone, ref: shown.ref } } : { bar: shown.bar };
 
-  async function reset() {
+  async function startOver() {
     try {
       await api.resetBars();
       await file.reload();
-      notify("bars.json reset to the defaults");
+      setView({ kind: "bars" });
+      notify("The bars are back to their defaults");
     } catch (e) {
       notify(errorText(e), "error");
     }
   }
 
+  function move({ from, to }: ModuleMove) {
+    if (!editor) return;
+    const { label } = describeModule(from.ref);
+    editor.update((doc) => moveModule(doc, editor.resolved, from, to), to ? `Move ${label}` : `Remove ${label}`);
+  }
+
+  // A file the bars can't read is never rewritten here: the way on is fixing it by hand, or starting over.
+  const trouble = file.error ? `Your bar settings can't be read: ${file.error}` : problem ? `The bars can't use your settings file as it is: ${problem}. Fix it in a text editor, or start over.` : null;
+
+  const toBar = (bar: BarKind) => setView({ kind: "bar", bar });
+  const inspector = (() => {
+    if (!editor) return trouble ? <Trouble message={trouble} onStartOver={() => void startOver()} /> : <InspectorLoading />;
+    switch (shown.kind) {
+      case "bars":
+        return <BarsOverview onPick={(pick) => setView(viewOf(pick))} />;
+      case "bar":
+        return <BarInspector key={shown.bar} bar={shown.bar} wallpaper={wallpaper} onPick={(pick) => setView(viewOf(pick))} onAdd={(zone) => setView({ kind: "add", bar: shown.bar, zone })} onBack={() => setView({ kind: "bars" })} />;
+      case "module":
+        return <ModuleInspector key={`${shown.bar}:${shown.ref}`} bar={shown.bar} zone={shown.zone} moduleRef={shown.ref} onBack={() => toBar(shown.bar)} />;
+      case "add":
+        return <ModuleCatalog key={shown.bar} bar={shown.bar} zone={shown.zone} onAdded={(zone, ref) => setView({ kind: "module", bar: shown.bar, zone, ref })} onBack={() => toBar(shown.bar)} />;
+    }
+  })();
+
   return (
     <>
-      <PageHeader
-        title="Bars"
-        subtitle={state ? (state.exists ? "Changes apply to the running bars as you make them." : "No bars.json yet: these are the defaults. Your first change creates it.") : "Loading"}
-        actions={<SaveStatus saving={file.saving} />}
+      <PageBar title="Bars" detail={state && running === false && !problem ? "Not running: your changes apply when the bars start" : undefined}>
+        <SaveState saving={file.saving} />
+      </PageBar>
+      <EditorLayout
+        stage={
+          <DesktopScene
+            desktop={desktop}
+            selection={null}
+            onSelect={() => setView({ kind: "bars" })}
+            editable={{}}
+            zoom={zoomIn && shown.kind !== "bars" ? BAR_ZOOM : undefined}
+            tools={
+              shown.kind !== "bars" && (
+                <StageTools>
+                  <IconButton icon={zoomIn ? ZoomOut : ZoomIn} variant="ghost" size="sm" label={zoomIn ? "Show the whole screen" : "Zoom in on the bar"} onClick={() => setZoomIn(!zoomIn)} />
+                </StageTools>
+              )
+            }
+            barsLayer={
+              editor && (
+                <BarsLayer
+                  doc={editor.doc}
+                  config={editor.resolved}
+                  catalog={editor.catalog}
+                  screen={desktop.grid.screen}
+                  wallpaper={wallpaper}
+                  mode="modules"
+                  selection={selection}
+                  onSelect={(pick) => setView(viewOf(pick))}
+                  onMove={move}
+                />
+              )
+            }
+          />
+        }
+        inspector={
+          <Inspector label="Inspector">
+            {editor ? <BarsContext value={editor}>{inspector}</BarsContext> : inspector}
+          </Inspector>
+        }
       />
-
-      {file.error && (
-        <Banner>
-          <span>bars.json can't be read: {file.error}</span>
-          <Button onClick={() => void reset()}>Reset to defaults</Button>
-        </Banner>
-      )}
-      {problem && (
-        <Banner>
-          <span>
-            The bars ignore bars.json as it is: {problem}. Studio won't change a file the bars can't read; fix it in a text editor, or start over.
-          </span>
-          <Button onClick={() => void reset()}>Reset to defaults</Button>
-        </Banner>
-      )}
-      {state && running === false && !problem && (
-        <p className="mb-5 text-[13px] text-ink-3">mypaper-bars isn't running. Your choices are saved, and apply when it starts.</p>
-      )}
-
-      {editor && !problem ? (
-        <BarsContext value={editor}>
-          <div className="max-w-3xl">
-            <Segmented<Tab> label="Section" hideLabel className="mb-6" value={tab} options={TABS} onChange={setTab} />
-            {tab === "presets" && <PresetsPanel />}
-            {(tab === "top" || tab === "dock") && <BarEditor key={tab} bar={tab} editor={editor} />}
-            {tab === "menus" && <MenusPanel />}
-            {tab === "icons" && <IconsPanel />}
-            {tab === "taskbar" && <TaskbarPanel />}
-          </div>
-        </BarsContext>
-      ) : (
-        !file.error && !problem && <Skeleton className="h-64 max-w-3xl rounded-2xl" />
-      )}
     </>
+  );
+}
+
+/** A bars file Studio won't change, and the way out. */
+function Trouble({ message, onStartOver }: { message: string; onStartOver: () => void }) {
+  return (
+    <>
+      <InspectorHeader icon={TriangleAlert} title="Bars" detail="Your settings need fixing" />
+      <InspectorSection>
+        <p role="alert" className="selectable text-[13px] leading-snug text-ink">
+          {message}
+        </p>
+        <Button size="sm" className="self-start" onClick={onStartOver}>
+          Start over
+        </Button>
+      </InspectorSection>
+    </>
+  );
+}
+
+function InspectorLoading() {
+  return (
+    <div className="flex flex-col gap-3 px-4 py-4" aria-busy>
+      <Skeleton className="h-9 rounded-lg" />
+      <Skeleton className="h-24 rounded-lg" />
+      <Skeleton className="h-40 rounded-lg" />
+    </div>
   );
 }

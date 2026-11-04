@@ -163,6 +163,9 @@ export function resolve(catalog: BarsCatalog, doc: BarsDoc): Resolved {
   const resolved = merged as Resolved;
   resolved.top.design = top;
   resolved.dock.design = dock;
+  // The host leaves an empty shared look or motion out of its defaults.
+  resolved.look ??= {};
+  resolved.animation ??= {};
   return resolved;
 }
 

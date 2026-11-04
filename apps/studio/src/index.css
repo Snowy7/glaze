@@ -436,6 +436,11 @@
   }
 }
 
+/* A control beside its label in the inspector never pushes past the panel. */
+.inspector-control > * {
+  max-width: 100%;
+}
+
 /* A setting search led to: it flashes once, so the eye lands on it. */
 .setting-anchor {
   scroll-margin: 5rem;

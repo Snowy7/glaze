@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { Appearance, ThemeEntry } from "../../lib/api";
 import type { Desktop } from "../../lib/desktop";
 import { displayName } from "../../lib/desktopGrid";
+import { useWallpaperDataUrl } from "../../lib/wallpaperImage";
 import type { Target } from "../../lib/nav";
 import { ThemePreview } from "../ThemeCard";
 import { Segmented } from "../ui";
@@ -21,18 +22,23 @@ type Props = {
   onSelect: (target: Target | null) => void;
   /** Which layers can be selected (the others are shown as they are). */
   editable: { wallpaper?: boolean; widgets?: boolean; bars?: boolean };
+  /** Replaces the bars as saved (the Bars page draws the file it is editing). */
+  barsLayer?: ReactNode;
   /** Drawn over everything else (the Windows samples). */
   overlay?: ReactNode;
   footer?: ReactNode;
   /** More tools beside the monitor switcher. */
   tools?: ReactNode;
   showGrid?: boolean;
+  /** The least scale to draw the desktop at (see Stage). */
+  zoom?: number;
 };
 
 /** The desktop on stage: the wallpaper, the widgets (live), the bars, and whatever the page adds on top. */
-export function DesktopScene({ desktop, theme, widgetLook, selection, onSelect, editable, overlay, footer, tools, showGrid }: Props) {
+export function DesktopScene({ desktop, theme, widgetLook, selection, onSelect, editable, barsLayer, overlay, footer, tools, showGrid, zoom }: Props) {
   const { grid, model, installed, skins, bars, monitors, monitor } = desktop;
   const wallpaper = theme === undefined ? desktop.active : theme;
+  const wallpaperImage = useWallpaperDataUrl(wallpaper?.preview ?? null);
   const select = (target: Target) => onSelect(target);
   const widgetSelection = selection?.kind === "widget" ? selection.instance : null;
 
@@ -40,6 +46,7 @@ export function DesktopScene({ desktop, theme, widgetLook, selection, onSelect, 
     <Stage
       label="Your desktop"
       screen={grid.screen}
+      zoom={zoom}
       onBackground={() => onSelect(null)}
       footer={footer}
       tools={
@@ -82,7 +89,18 @@ export function DesktopScene({ desktop, theme, widgetLook, selection, onSelect, 
         onPlace={editable.widgets ? (instance, cell, size) => model.put({ instance, cell, size }, "Arrange widget") : undefined}
         showGrid={showGrid}
       />
-      {bars && <BarsLayer config={bars.config} catalog={bars.catalog} screen={grid.screen} selected={selection?.kind === "bar" ? selection.bar : null} onSelect={editable.bars ? (bar) => select({ kind: "bar", bar }) : null} />}
+      {barsLayer ?? (bars && (
+        <BarsLayer
+          doc={bars.doc}
+          config={bars.config}
+          catalog={bars.catalog}
+          screen={grid.screen}
+          wallpaper={wallpaperImage}
+          mode={editable.bars ? "bars" : "show"}
+          selection={selection?.kind === "bar" ? { bar: selection.bar } : null}
+          onSelect={(pick) => select({ kind: "bar", bar: pick.bar })}
+        />
+      ))}
       {overlay}
     </Stage>
   );
