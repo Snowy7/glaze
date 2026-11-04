@@ -2,10 +2,10 @@
   "$schema": "../../packages/widget-sdk/schema/plugin.schema.json",
   "id": "weather",
   "name": "Weather",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "command": "weather.exe",
   "args": [],
-  "methods": ["current", "forecast"],
+  "methods": ["current", "forecast", "locate", "search"],
   "events": ["updated"],
-  "permissions": ["network:https://api.open-meteo.com", "network:https://geocoding-api.open-meteo.com"]
+  "permissions": ["location", "network:https://api.open-meteo.com", "network:https://geocoding-api.open-meteo.com", "network:https://ipwho.is", "network:https://api.bigdatacloud.net"]
 }

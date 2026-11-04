@@ -1,10 +1,11 @@
 //! mypaper weather plugin: JSON-RPC 2.0 over stdio (docs/widgets.md, "Plugins").
 //!
-//! Methods `current` and `forecast` take `{ lat, lon }` or `{ city }` (plus optional `units` and
-//! `days`). Data is cached for 10 minutes; while the host isn't suspended, stale entries are
+//! Methods `current` and `forecast` default to automatic location; `locate` reports the device's
+//! location and `search` disambiguates towns. Weather is cached for 10 minutes; stale entries are
 //! refreshed in the background and announced with an `updated` event.
 
 mod client;
+mod location;
 mod rpc;
 mod service;
 mod weather;
@@ -37,6 +38,10 @@ struct Plugin {
 }
 
 fn main() {
+    // Keep the MTA alive so worker completion never tears down the process's WinRT runtime
+    // between RPC calls that reuse cached activation factories.
+    #[cfg(windows)]
+    let _runtime = location::native::Apartment::new().ok();
     let plugin = Arc::new(Plugin {
         service: Service::new(OpenMeteo::new(), CACHE_TTL),
         out: Out::new(io::stdout()),
@@ -83,7 +88,10 @@ fn handle_line(plugin: &Arc<Plugin>, line: &str) -> bool {
             other => eprintln!("weather: ignoring notification \"{other}\""),
         },
         Ok(Incoming::Request { id, method, params }) => match method.as_str() {
-            "initialize" => send(plugin, &response(&id, json!({ "protocol": PROTOCOL }))),
+            "initialize" => match plugin.service.initialize(&params) {
+                Ok(()) => send(plugin, &response(&id, json!({ "protocol": PROTOCOL }))),
+                Err(error) => send(plugin, &error_response(&id, &error)),
+            },
             "shutdown" => {
                 send(plugin, &response(&id, Value::Null));
                 return false;
