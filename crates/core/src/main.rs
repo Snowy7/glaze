@@ -147,7 +147,7 @@ fn run() -> Result<()> {
         styling.set_theme(theme);
     }
 
-    loop {
+    let panicked = loop {
         let children = [Some(&wallpaper), widgets.as_ref(), shell_bars.as_ref()];
         let handles: Vec<HANDLE> = children
             .iter()
@@ -180,7 +180,7 @@ fn run() -> Result<()> {
             match owners[index] {
                 name if name == wallpaper.name => {
                     if wallpaper.on_exit()? == Outcome::Stopped {
-                        break;
+                        break false;
                     }
                 }
                 name if widgets.as_ref().is_some_and(|w| w.name == name) => {
@@ -218,9 +218,9 @@ fn run() -> Result<()> {
         match pumped.signal {
             Some(Signal::Panic) => {
                 log::warn!("panic hotkey: stopping everything");
-                break;
+                break true;
             }
-            Some(Signal::Quit) => break,
+            Some(Signal::Quit) => break false,
             Some(Signal::Restart) => {
                 log::info!("restarting the wallpaper");
                 wallpaper.restart_after(MANUAL_RESTART_DELAY);
@@ -239,7 +239,7 @@ fn run() -> Result<()> {
                 styling.palette_changed();
             }
         }
-    }
+    };
 
     // The bars first: they put the native taskbar back as they exit. If they had to be killed,
     // or crashed earlier, the journal does it.
@@ -256,6 +256,11 @@ fn run() -> Result<()> {
     }
     if let Ok(host) = DesktopHost::find() {
         host.restore();
+    }
+    // The stock desktop includes the user's own Windows wallpaper (a quit keeps the theme's
+    // still, which is what Windows shows until mypaper starts again).
+    if panicked && let Err(e) = mypaper_desktop::desktop_wallpaper::restore() {
+        log::error!("putting the Windows wallpaper back: {e:#}");
     }
     // SAFETY: unregisters the hotkey this thread registered.
     let _ = unsafe { UnregisterHotKey(None, PANIC_HOTKEY) };

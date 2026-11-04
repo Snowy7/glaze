@@ -158,7 +158,15 @@ fn run_command(command: &str) -> Result<State> {
             &user,
             &std::env::current_exe().context("path of mypaper-core.exe")?,
         ),
-        "off" => disable(&names),
+        "off" => {
+            let state = disable(&names)?;
+            // mypaper won't start at sign-in any more, so Windows shouldn't show its still:
+            // the user's own wallpaper comes back (docs/performance.md, "Static snapshot").
+            if let Err(e) = mypaper_desktop::desktop_wallpaper::restore() {
+                eprintln!("could not put your wallpaper back: {e:#}");
+            }
+            Ok(state)
+        }
         "status" => Ok(status(&names)),
         other => bail!("unknown --autostart command {other:?}; use on, off or status"),
     }

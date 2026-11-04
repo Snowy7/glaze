@@ -62,7 +62,9 @@ impl Opening {
 }
 
 /// Integrated GPU on laptops: a wallpaper should never wake the dGPU.
-fn low_power(surface: Option<&wgpu::Surface<'_>>) -> wgpu::RequestAdapterOptions<'_, '_> {
+fn low_power<'a, 'w>(
+    surface: Option<&'a wgpu::Surface<'w>>,
+) -> wgpu::RequestAdapterOptions<'a, 'w> {
     wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::LowPower,
         compatible_surface: surface,

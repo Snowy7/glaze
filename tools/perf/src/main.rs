@@ -26,6 +26,10 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use windows::Win32::Foundation::{HANDLE_FLAG_INHERIT, HANDLE_FLAGS, SetHandleInformation};
+use windows::Win32::System::Console::{
+    GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 
 use crate::budget::{Budget, Measured};
@@ -101,9 +105,19 @@ fn real_main() -> Result<bool> {
         pause_settle: Duration::from_secs(3),
         hold: Duration::from_secs(args.hold),
     };
+    // Fresh every time: a leftover folder could pass for content (see `stage_dir`).
+    if let Err(e) = std::fs::remove_dir_all(&stage)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        bail!(
+            "clearing {}: {e} (is a test process still running?)",
+            stage.display()
+        );
+    }
     for scenario in &args.scenarios {
         stage_exes(&args.build, &stage_dir(&stage, scenario), scenario)?;
     }
+    keep_std_handles_private();
 
     let mut outcomes = Vec::new();
     let mut failures = Vec::new();
@@ -248,6 +262,23 @@ fn parse_args() -> Result<Option<Args>> {
     args.content = std::path::absolute(&args.content)?;
     args.build = std::path::absolute(&args.build)?;
     Ok(Some(args))
+}
+
+/// Makes the harness's own stdin, stdout and stderr non-inheritable. Children are spawned with
+/// handle inheritance on (for their own null std handles), so the user's restarted mypaper,
+/// which outlives the harness, would otherwise keep the harness's output pipe open, and a shell
+/// reading that pipe would wait for mypaper to exit.
+fn keep_std_handles_private() {
+    for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: our own standard handles; clearing the inherit flag changes nothing else.
+        unsafe {
+            if let Ok(handle) = GetStdHandle(which)
+                && !handle.is_invalid()
+            {
+                let _ = SetHandleInformation(handle, HANDLE_FLAG_INHERIT.0, HANDLE_FLAGS(0));
+            }
+        }
+    }
 }
 
 /// A scenario's folder under the stage. Prefixed: the executables look for `widgets\`,
