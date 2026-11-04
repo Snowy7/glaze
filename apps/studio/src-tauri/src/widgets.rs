@@ -11,6 +11,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_SZ, RegGetValueW};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowExW, HWND_MESSAGE, PostMessageW, RegisterWindowMessageW,
 };
@@ -55,6 +56,11 @@ pub struct WidgetInfo {
     pub preset: String,
     pub origin: Origin,
     pub dir: String,
+    /// The page to load, relative to `dir` (`entry`, default `index.html`).
+    pub entry: String,
+    /// The whole manifest as written, for Studio's live preview (the widget's handshake and its
+    /// settings form). Null when it doesn't load.
+    pub manifest: Value,
     /// The manifest doesn't load; the other fields are placeholders.
     pub error: Option<String>,
 }
@@ -74,6 +80,12 @@ struct Manifest {
     permissions: Vec<String>,
     #[serde(default = "desktop")]
     preset: String,
+    #[serde(default = "index_html")]
+    entry: String,
+}
+
+fn index_html() -> String {
+    "index.html".to_owned()
 }
 
 fn desktop() -> String {
@@ -100,11 +112,14 @@ fn read_widget(dir: &Path, origin: Origin) -> WidgetInfo {
     let parsed = std::fs::read_to_string(&path)
         .with_context(|| format!("reading {}", path.display()))
         .and_then(|text| {
-            serde_json::from_str::<Manifest>(&text)
-                .with_context(|| format!("in {}", path.display()))
+            let raw: Value =
+                serde_json::from_str(&text).with_context(|| format!("in {}", path.display()))?;
+            let manifest =
+                Manifest::deserialize(&raw).with_context(|| format!("in {}", path.display()))?;
+            Ok((manifest, raw))
         });
     match parsed {
-        Ok(m) => WidgetInfo {
+        Ok((m, raw)) => WidgetInfo {
             size: WidgetSize {
                 default: m.size.default,
                 min: m.size.min.unwrap_or([1, 1]),
@@ -120,6 +135,8 @@ fn read_widget(dir: &Path, origin: Origin) -> WidgetInfo {
             preset: m.preset,
             origin,
             dir: dir.display().to_string(),
+            entry: m.entry,
+            manifest: raw,
             error: None,
         },
         Err(e) => WidgetInfo {
@@ -138,6 +155,8 @@ fn read_widget(dir: &Path, origin: Origin) -> WidgetInfo {
             preset: desktop(),
             origin,
             dir: dir.display().to_string(),
+            entry: index_html(),
+            manifest: Value::Null,
             error: Some(format!("{e:#}")),
         },
     }
@@ -200,6 +219,38 @@ pub struct Instance {
     pub size: Option<[i64; 2]>,
     #[serde(default)]
     pub appearance: Look,
+    /// The widget's own options (its manifest's `settings`); unset keys take their defaults.
+    #[serde(default)]
+    pub settings: Map<String, Value>,
+}
+
+/// `widgets.json` → `grid` (docs/widgets.md, "Layout"): `cell` 0 means the desktop icon spacing.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Grid {
+    #[serde(default)]
+    pub cell: f64,
+    #[serde(default = "default_gap")]
+    pub gap: f64,
+    #[serde(default = "default_margin")]
+    pub margin: f64,
+}
+
+fn default_gap() -> f64 {
+    8.0
+}
+
+fn default_margin() -> f64 {
+    16.0
+}
+
+impl Default for Grid {
+    fn default() -> Self {
+        Self {
+            cell: 0.0,
+            gap: default_gap(),
+            margin: default_margin(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -208,6 +259,9 @@ pub struct Layout {
     /// The user layer (`widgets.json` → `appearance`).
     pub appearance: Look,
     pub instances: Vec<Instance>,
+    pub grid: Grid,
+    /// What `cell: 0` stands for: the desktop icon spacing in DIPs, `[horizontal, vertical]`.
+    pub icon_cell: [f64; 2],
     /// Whether the topmost overlay layer is shown (`widgets.json` → `overlay`, default on).
     pub overlay: bool,
     /// False: there is no `widgets.json` yet.
@@ -239,12 +293,18 @@ pub fn read_layout(text: Option<&str>) -> Result<Layout> {
         return Ok(Layout {
             appearance: Look::default(),
             instances: Vec::new(),
+            grid: Grid::default(),
+            icon_cell: icon_cell(),
             overlay: true,
             exists: false,
         });
     };
     let mut doc = parse_object(text)?;
     let overlay = doc.get("overlay").and_then(Value::as_bool).unwrap_or(true);
+    let grid = match doc.remove("grid") {
+        Some(value) => serde_json::from_value(value).context("reading the grid")?,
+        None => Grid::default(),
+    };
     let appearance = match doc.remove("appearance") {
         Some(value) => serde_json::from_value(value).context("reading the appearance section")?,
         None => Look::default(),
@@ -260,9 +320,56 @@ pub fn read_layout(text: Option<&str>) -> Result<Layout> {
     Ok(Layout {
         appearance,
         instances,
+        grid,
+        icon_cell: icon_cell(),
         overlay,
         exists: true,
     })
+}
+
+/// The desktop icon grid in DIPs, as the widget host reads it for `cell: 0`:
+/// `HKCU\Control Panel\Desktop\WindowMetrics` `IconSpacing` / `IconVerticalSpacing`.
+/// Missing values are 96.
+fn icon_cell() -> [f64; 2] {
+    let read = |name: windows::core::PCWSTR| -> Option<f64> {
+        let mut buffer = [0u16; 32];
+        let mut size = u32::try_from(std::mem::size_of_val(&buffer)).ok()?;
+        // SAFETY: the buffer and its byte size are passed together; RRF_RT_REG_SZ null-terminates.
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                w!("Control Panel\\Desktop\\WindowMetrics"),
+                name,
+                RRF_RT_REG_SZ,
+                None,
+                Some(buffer.as_mut_ptr().cast()),
+                Some(&mut size),
+            )
+        };
+        if status.is_err() {
+            return None;
+        }
+        let end = buffer.iter().position(|&c| c == 0)?;
+        spacing_dips(
+            String::from_utf16_lossy(&buffer[..end])
+                .trim()
+                .parse()
+                .ok()?,
+        )
+    };
+    [
+        read(w!("IconSpacing")).unwrap_or(96.0),
+        read(w!("IconVerticalSpacing")).unwrap_or(96.0),
+    ]
+}
+
+/// A `WindowMetrics` spacing value in DIPs: negative values are twips, positive ones DIPs.
+fn spacing_dips(value: i32) -> Option<f64> {
+    match value {
+        0 => None,
+        v if v < 0 => Some(f64::from(-v) / 15.0),
+        v => Some(f64::from(v)),
+    }
 }
 
 /// The document with the overlay layer on or off.
@@ -326,6 +433,99 @@ pub fn with_instance_look_cleared(text: &str, id: &str) -> Result<String> {
     render(doc)
 }
 
+/// What `put_instance` writes for one placed widget: only the fields it names change. A new id
+/// adds the widget (then `widget` is required).
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InstancePatch {
+    pub instance: String,
+    pub widget: Option<String>,
+    /// `null` clears it (the primary monitor); absent leaves it.
+    #[serde(default, deserialize_with = "some_option")]
+    pub monitor: Option<Option<String>>,
+    pub cell: Option<[i64; 2]>,
+    pub size: Option<[i64; 2]>,
+    /// Replaces the instance's settings; empty removes them.
+    pub settings: Option<Map<String, Value>>,
+    /// Replaces the instance's own look; empty removes it.
+    pub appearance: Option<Look>,
+}
+
+/// A present field, `null` included, is `Some`: tells "clear it" from "leave it".
+fn some_option<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D::Error> {
+    Option::<String>::deserialize(d).map(Some)
+}
+
+/// Instance ids are `[a-z0-9-]` (docs/widgets.md, "Layout").
+fn valid_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// The document with one instance added or changed (only the patch's fields).
+pub fn with_instance(text: Option<&str>, patch: &InstancePatch) -> Result<String> {
+    if !valid_id(&patch.instance) {
+        bail!(
+            "{:?} isn't a widget instance id (a-z, 0-9 and -)",
+            patch.instance
+        );
+    }
+    if let Some(look) = &patch.appearance {
+        look.validate()?;
+    }
+    let mut doc = match text {
+        Some(text) => parse_object(text)?,
+        None => skeleton(),
+    };
+    if !matches!(doc.get("instances"), Some(Value::Array(_))) {
+        doc.insert("instances".into(), Value::Array(Vec::new()));
+    }
+    let items = instances_mut(&mut doc)?;
+    let index = match items.iter().position(|item| has_id(item, &patch.instance)) {
+        Some(index) => index,
+        None => {
+            let widget = patch
+                .widget
+                .as_deref()
+                .with_context(|| format!("no placed widget named {}", patch.instance))?;
+            items.push(json!({ "instance": patch.instance, "widget": widget }));
+            items.len() - 1
+        }
+    };
+    let Some(Value::Object(item)) = items.get_mut(index) else {
+        bail!("instance {} isn't an object", patch.instance);
+    };
+    if let Some(monitor) = &patch.monitor {
+        match monitor {
+            Some(device) => item.insert("monitor".into(), Value::String(device.clone())),
+            None => item.shift_remove("monitor"),
+        };
+    }
+    if let Some(cell) = patch.cell {
+        item.insert("cell".into(), json!(cell));
+    }
+    if let Some(size) = patch.size {
+        item.insert("size".into(), json!(size));
+    }
+    if let Some(settings) = &patch.settings {
+        if settings.is_empty() {
+            item.shift_remove("settings");
+        } else {
+            item.insert("settings".into(), Value::Object(settings.clone()));
+        }
+    }
+    if let Some(look) = &patch.appearance {
+        if look.is_empty() {
+            item.shift_remove("appearance");
+        } else {
+            item.insert("appearance".into(), Value::Object(look.to_map()?));
+        }
+    }
+    render(doc)
+}
+
 pub fn layout_path() -> Result<PathBuf> {
     Ok(mypaper_config::dir()?.join(LAYOUT_FILE))
 }
@@ -354,6 +554,10 @@ pub fn set_appearance(look: &Look) -> Result<Layout> {
 
 pub fn remove_instance(id: &str) -> Result<Layout> {
     update(|text| without_instance(text.context("there is no widgets.json yet")?, id))
+}
+
+pub fn put_instance(patch: &InstancePatch) -> Result<Layout> {
+    update(|text| with_instance(text, patch))
 }
 
 pub fn clear_instance_look(id: &str) -> Result<Layout> {
@@ -519,6 +723,118 @@ mod tests {
         assert!(with_instance_look_cleared(LAYOUT, "nope-9").is_err());
     }
 
+    #[test]
+    fn the_grid_and_instance_settings_are_read() {
+        let layout = read_layout(Some(LAYOUT)).unwrap();
+        assert_eq!(
+            layout.grid,
+            Grid {
+                cell: 96.0,
+                gap: 6.0,
+                margin: 20.0
+            }
+        );
+        assert_eq!(layout.instances[0].settings["format24"], true);
+        assert!(layout.instances[1].settings.is_empty());
+        assert_eq!(read_layout(Some("{}")).unwrap().grid, Grid::default());
+        assert_eq!(
+            (spacing_dips(-1125), spacing_dips(80), spacing_dips(0)),
+            (Some(75.0), Some(80.0), None)
+        );
+    }
+
+    fn patch(text: &str) -> InstancePatch {
+        serde_json::from_str(text).unwrap()
+    }
+
+    #[test]
+    fn putting_an_instance_changes_only_what_it_names() {
+        let moved = json(
+            &with_instance(
+                Some(LAYOUT),
+                &patch(r#"{ "instance": "clock-1", "cell": [4, 2], "size": [3, 2] }"#),
+            )
+            .unwrap(),
+        );
+        let mut expected = json(LAYOUT);
+        expected["instances"][0]["cell"] = json("[4, 2]");
+        expected["instances"][0]["size"] = json("[3, 2]");
+        assert_eq!(moved, expected, "settings, look and unknown fields stay");
+
+        let set = json(
+            &with_instance(
+                Some(LAYOUT),
+                &patch(r#"{ "instance": "clock-1", "settings": { "variant": "flip" }, "appearance": {} }"#),
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            set["instances"][0]["settings"],
+            json(r#"{ "variant": "flip" }"#)
+        );
+        assert!(
+            set["instances"][0].get("appearance").is_none(),
+            "an empty look is removed"
+        );
+
+        let cleared = json(
+            &with_instance(
+                Some(LAYOUT),
+                &patch(r#"{ "instance": "clock-1", "monitor": null, "settings": {} }"#),
+            )
+            .unwrap(),
+        );
+        assert!(
+            cleared["instances"][0].get("monitor").is_none()
+                && cleared["instances"][0].get("settings").is_none()
+        );
+
+        let added = json(
+            &with_instance(
+                None,
+                &patch(r#"{ "instance": "notes-2", "widget": "notes", "monitor": "\\\\.\\DISPLAY2", "cell": [0, 3], "size": [2, 2] }"#),
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            added["instances"],
+            json(
+                r#"[{ "instance": "notes-2", "widget": "notes", "monitor": "\\\\.\\DISPLAY2", "cell": [0, 3], "size": [2, 2] }]"#
+            )
+        );
+        assert_eq!(
+            added["grid"],
+            json(r#"{ "cell": 0, "gap": 8, "margin": 16 }"#)
+        );
+
+        assert!(
+            with_instance(
+                Some(LAYOUT),
+                &patch(r#"{ "instance": "nope-1", "cell": [0, 0] }"#)
+            )
+            .is_err(),
+            "a new instance needs its widget"
+        );
+        assert!(
+            with_instance(
+                Some(LAYOUT),
+                &patch(r#"{ "instance": "Bad Id", "widget": "clock" }"#)
+            )
+            .is_err()
+        );
+        assert!(
+            with_instance(
+                Some(LAYOUT),
+                &patch(r#"{ "instance": "clock-1", "appearance": { "scale": 9 } }"#)
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<InstancePatch>(r#"{ "instance": "a", "pinned": true }"#)
+                .is_err()
+        );
+    }
+
     fn write_widget(root: &Path, folder: &str, manifest: &str) {
         let dir = root.join(folder);
         std::fs::create_dir_all(&dir).unwrap();
@@ -556,8 +872,12 @@ mod tests {
         let notes = &widgets[2];
         assert!(!notes.resizable && notes.size.max.is_none() && notes.origin == Origin::Bundled);
         assert!(
-            widgets[0].error.is_some(),
+            widgets[0].error.is_some() && widgets[0].manifest.is_null(),
             "a broken manifest is listed with its error"
+        );
+        assert_eq!(
+            (clock.entry.as_str(), clock.manifest["name"].as_str()),
+            ("index.html", Some("My Clock"))
         );
 
         let bundled_clock = list_from(Some(&bundled), None);
