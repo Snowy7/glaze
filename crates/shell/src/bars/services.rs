@@ -509,6 +509,15 @@ impl Services {
 pub fn take_due(timer: &mut Option<Instant>, now: Instant) -> bool {
     timer.take_if(|at| *at <= now).is_some()
 }
+
+/// Millisecond wait for a deadline; a future deadline must never become a nonblocking poll.
+pub fn wait_ms(duration: Duration) -> u32 {
+    duration
+        .as_nanos()
+        .div_ceil(1_000_000)
+        .min(u128::from(u32::MAX - 1)) as u32
+}
+
 pub fn next_tick(seconds: bool) -> Duration {
     let ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)

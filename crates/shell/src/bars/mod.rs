@@ -199,9 +199,7 @@ impl Bars {
         .flatten()
         .min()
         .map_or(u32::MAX, |at| {
-            at.saturating_duration_since(Instant::now())
-                .as_millis()
-                .min(u128::from(u32::MAX - 1)) as u32
+            services::wait_ms(at.saturating_duration_since(Instant::now()))
         })
     }
     pub fn config_changed(&mut self) {

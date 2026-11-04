@@ -7,6 +7,15 @@ use mypaper_bars::{
 use mypaper_ui::{Image, Op, Rgba, render};
 
 #[test]
+fn future_deadlines_never_turn_into_busy_polling() {
+    assert_eq!(services::wait_ms(Duration::ZERO), 0);
+    assert_eq!(services::wait_ms(Duration::from_nanos(1)), 1);
+    assert_eq!(services::wait_ms(Duration::from_micros(1000)), 1);
+    assert_eq!(services::wait_ms(Duration::from_micros(1001)), 2);
+    assert_eq!(services::wait_ms(Duration::MAX), u32::MAX - 1);
+}
+
+#[test]
 fn liquid_material_uses_the_resolved_style_controls() {
     let config = BarsConfig::parse(r##"{"look":{"style":"liquid","glass":{"clarity":0.91,"tint":0.17,"blur":8,"refraction":0.3,"highlight":0.4}},"appearance":{"tint":"#123456"}}"##).unwrap();
     let tokens = look::Tokens::resolve(
