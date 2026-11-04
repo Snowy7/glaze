@@ -9,6 +9,7 @@ export {
   appearanceVars,
   applyAppearance,
   normalizeAppearance,
+  withToneDefaults,
 } from "./appearance";
 export { MypaperError, isMypaperError } from "./errors";
 export { createMypaper, type RuntimeOptions, type Transport } from "./runtime";

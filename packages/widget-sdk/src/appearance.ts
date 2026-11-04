@@ -19,8 +19,20 @@ export const DEFAULT_APPEARANCE: Appearance = {
   shadow: true,
 };
 
-/** What the default (near-black) tint becomes with dark text. */
-const LIGHT_TINT = "#f2f2f2";
+/**
+ * Tone-aware defaults, as the host applies them (docs/widgets.md, "Appearance"): with dark text,
+ * the default near-black tint becomes light and the default white accent becomes ink, where they
+ * would otherwise vanish. The real host does this for *unset* fields and sends final values, so
+ * widgets never call this; mock hosts (the dev harness) do, to match it.
+ */
+export function withToneDefaults(a: Appearance): Appearance {
+  if (a.text !== "dark") return a;
+  return {
+    ...a,
+    tint: a.tint.toLowerCase() === DEFAULT_APPEARANCE.tint ? "#f2f2f2" : a.tint,
+    accent: a.accent.toLowerCase() === DEFAULT_APPEARANCE.accent ? "#0a0a0c" : a.accent,
+  };
+}
 
 /** Attributes set on <html>. */
 export interface AppearanceAttributes {
@@ -90,27 +102,24 @@ export function appearanceAttributes(a: Appearance): AppearanceAttributes {
  * The CSS variables, by name.
  *
  * - `--surface` is the tint at `opacity`; a `solid` surface is always opaque (use `glass` for a
- *   translucent one). The default tint (`#101010`) becomes `#f2f2f2` with dark text.
+ *   translucent one). Values are used as sent: tone-aware defaults are the host's job
+ *   ([`withToneDefaults`]).
  * - `--t0`..`--t3` and `--fill-1`..`--fill-3` are the ink (white or near-black, by `text`) at fixed
  *   alphas, so contrast steps stay the same in both tones.
  * - `--ink` and `--halo` are space-separated channel triples (`rgb(var(--ink) / .3)`): the ink
  *   itself, and its opposite, used for the soft shadow under text on a bare wallpaper.
- * - `--accent` is the accent. The default (white) follows the ink in dark text, where white would vanish.
- *   `--on-accent` is the ink that reads on top of it.
+ * - `--accent` is the accent; `--on-accent` is the ink that reads on top of it.
  */
 export function appearanceVars(a: Appearance): Record<string, string> {
   const dark = a.text === "dark";
   const ink = dark ? "10 10 12" : "255 255 255";
   const halo = dark ? "255 255 255" : "0 0 0";
-  // The default tint is near-black: with dark text it would be dark on dark, so it flips with the ink.
-  const tint = dark && a.tint.toLowerCase() === DEFAULT_APPEARANCE.tint ? LIGHT_TINT : a.tint;
-  const [tr, tg, tb] = rgb(tint, DEFAULT_APPEARANCE.tint);
+  const [tr, tg, tb] = rgb(a.tint, DEFAULT_APPEARANCE.tint);
   const alpha = a.surface === "solid" ? 1 : a.opacity;
 
   const accentRgb = rgb(a.accent, DEFAULT_APPEARANCE.accent);
-  const neutralAccent = a.accent.toLowerCase() === DEFAULT_APPEARANCE.accent && dark;
-  const accent = neutralAccent ? "#0a0a0c" : `rgb(${accentRgb.join(" ")})`;
-  const onAccent = neutralAccent ? "#ffffff" : luminance(accentRgb) > 0.4 ? "#0a0a0c" : "#ffffff";
+  const accent = `rgb(${accentRgb.join(" ")})`;
+  const onAccent = luminance(accentRgb) > 0.4 ? "#0a0a0c" : "#ffffff";
 
   const step = (alphas: readonly number[], prefix: string) =>
     Object.fromEntries(alphas.map((al, i) => [`${prefix}${i}`, `rgb(${ink} / ${al})`]));

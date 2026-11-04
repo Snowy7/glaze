@@ -5,6 +5,7 @@ import {
   appearanceRule,
   appearanceVars,
   normalizeAppearance,
+  withToneDefaults,
   type Appearance,
 } from "../src";
 
@@ -37,8 +38,8 @@ describe("variables", () => {
     expect(appearanceVars(look({ surface: "solid", opacity: 0.2 }))["--surface"]).toBe("rgb(16 16 16 / 1)");
   });
 
-  it("flips the default near-black tint to a light one with dark text, but keeps a chosen tint", () => {
-    expect(appearanceVars(look({ text: "dark", opacity: 0.5 }))["--surface"]).toBe("rgb(242 242 242 / 0.5)");
+  it("flips the default near-black tint (host side) with dark text, but keeps a chosen tint", () => {
+    expect(appearanceVars(withToneDefaults(look({ text: "dark", opacity: 0.5 })))["--surface"]).toBe("rgb(242 242 242 / 0.5)");
     expect(appearanceVars(look({ text: "dark", tint: "#203040", opacity: 0.5 }))["--surface"]).toBe("rgb(32 48 64 / 0.5)");
   });
 
@@ -75,9 +76,14 @@ describe("variables", () => {
     expect(appearanceVars(look({ accent: "#1030c0" }))["--on-accent"]).toBe("#ffffff");
   });
 
-  it("turns the default white accent into ink on dark text, where white would vanish", () => {
-    expect(appearanceVars(look({ text: "dark" }))["--accent"]).toBe("#0a0a0c");
-    expect(appearanceVars(look({ text: "dark", accent: "#2266dd" }))["--accent"]).toBe("rgb(34 102 221)");
+  it("uses tint and accent exactly as sent; tone-aware defaults are the host's job", () => {
+    // An explicit near-black tint with dark text stays near-black (no double flip).
+    expect(appearanceVars(look({ text: "dark", surface: "solid" }))["--surface"]).toBe("rgb(16 16 16 / 1)");
+    const hosted = withToneDefaults(look({ text: "dark" }));
+    expect(hosted.tint).toBe("#f2f2f2");
+    expect(appearanceVars(hosted)["--accent"]).toBe("rgb(10 10 12)");
+    expect(withToneDefaults(look({ text: "dark", accent: "#2266dd" })).accent).toBe("#2266dd");
+    expect(withToneDefaults(look()).tint).toBe(DEFAULT_APPEARANCE.tint);
   });
 
   it("adds the system fallback to the font and strips characters that break out of a declaration", () => {

@@ -2,7 +2,7 @@
 // (docs/widgets.md), enforces the manifest's permissions, and pushes events. DOM-free, so it's
 // unit-tested. Data comes from a `Backend` (fake data in the harness).
 
-import { MypaperError, WIRE_VERSION } from "../src";
+import { MypaperError, WIRE_VERSION, withToneDefaults } from "../src";
 import type {
   AppearanceState,
   MediaAction,
@@ -89,7 +89,8 @@ export class BridgeHost {
       size: this.state.size,
       visible: this.visible,
       editing: this.editing,
-      appearance: this.state.look.appearance,
+      // Like the real host, send final values: tone-aware defaults applied.
+      appearance: withToneDefaults(this.state.look.appearance),
       themeCss: this.state.look.themeCss,
     }),
     "storage.get": ({ key }) => this.storage.get(key) ?? null,
@@ -220,7 +221,8 @@ export class BridgeHost {
 
   setAppearance(look: AppearanceState): void {
     this.state.look = look;
-    this.send({ mypaper: WIRE_VERSION, event: "appearance", data: look });
+    const sent = { ...look, appearance: withToneDefaults(look.appearance) };
+    this.send({ mypaper: WIRE_VERSION, event: "appearance", data: sent });
   }
 
   setSize(size: SizeInfo): void {
