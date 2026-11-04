@@ -57,7 +57,29 @@ export type ThemeEntry = {
   active: boolean;
   /** What to write to `config.theme` to select this theme. */
   applyAs: string;
+  /** Out of the gallery (a theme from an earlier version); listed only while it's the active one. */
+  hidden: boolean;
+  /** A bundled theme's origin and license (themes/catalog.json). */
+  credit: Credit | null;
 };
+
+/** Where a bundled theme comes from: shown on its card and in its editor. */
+export type Credit = {
+  category: string | null;
+  author: string | null;
+  /** An SPDX-style id, such as `CC-BY-NC-SA-3.0`. */
+  license: string | null;
+  licenseUrl: string | null;
+  source: string | null;
+  /** Non-commercial use only. */
+  noncommercial: boolean;
+};
+
+/** `CC-BY-NC-SA-3.0` -> `CC BY-NC-SA 3.0`, `MIT` -> `MIT`: how licenses are usually written. */
+export function licenseName(id: string): string {
+  const cc = /^CC-(BY(?:-[A-Z]{2})*)-([\d.]+)$/.exec(id);
+  return cc ? `CC ${cc[1]} ${cc[2]}` : id;
+}
 
 export type ThemeList = { themes: ThemeEntry[]; roots: string[] };
 

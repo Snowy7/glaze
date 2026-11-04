@@ -46,6 +46,63 @@ pub struct ThemeEntry {
     pub active: bool,
     /// What to write to `config.theme` to select this theme.
     pub apply_as: String,
+    /// Kept out of the gallery (`theme.json` or the catalog says so); listed only while active.
+    pub hidden: bool,
+    /// A bundled theme's catalog record: where it comes from and its license.
+    pub credit: Option<Credit>,
+}
+
+/// What the gallery says about a bundled theme's origin (from `themes/catalog.json`).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Credit {
+    pub category: Option<String>,
+    pub author: Option<String>,
+    /// An SPDX-style id, such as `CC-BY-NC-SA-3.0`.
+    pub license: Option<String>,
+    pub license_url: Option<String>,
+    pub source: Option<String>,
+    /// Non-commercial use only (the CC BY-NC-SA items).
+    pub noncommercial: bool,
+}
+
+const CATALOG: &str = "catalog.json";
+
+#[derive(Debug, Default, Deserialize)]
+struct Catalog {
+    #[serde(default)]
+    themes: Vec<CatalogTheme>,
+}
+
+/// One `themes/catalog.json` record, as written (snake case); only the fields the gallery shows.
+#[derive(Debug, Deserialize)]
+struct CatalogTheme {
+    id: String,
+    category: Option<String>,
+    author: Option<String>,
+    license: Option<String>,
+    license_url: Option<String>,
+    source: Option<String>,
+    #[serde(default)]
+    noncommercial: bool,
+    #[serde(default)]
+    hidden: bool,
+}
+
+/// The catalog record of a bundled theme: `themes/catalog.json` beside it, or beside its
+/// `examples/` folder.
+fn catalog_record(dir: &Path) -> Option<CatalogTheme> {
+    let folder = dir.file_name()?.to_str()?;
+    let mut root = dir.parent()?;
+    if root
+        .file_name()
+        .is_some_and(|n| n == mypaper_theme::EXAMPLES_DIR)
+    {
+        root = root.parent()?;
+    }
+    let text = std::fs::read_to_string(root.join(CATALOG)).ok()?;
+    let catalog: Catalog = serde_json::from_str(&text).ok()?;
+    catalog.themes.into_iter().find(|t| t.id == folder)
 }
 
 #[derive(Debug, Serialize)]
@@ -71,20 +128,28 @@ pub fn list(active: Option<&str>) -> ThemeList {
     let roots = mypaper_theme::theme_roots();
     let user = mypaper_config::user_themes_dir().ok();
     let active_dir = active.and_then(resolve).map(|dir| canonical(&dir));
+    list_in(&roots, user.as_deref(), active_dir.as_deref())
+}
 
+/// `list` over given roots. Each root's `examples/` folder is listed too; hidden themes are left
+/// out unless one is the active theme (a selection from before they were hidden).
+fn list_in(roots: &[PathBuf], user: Option<&Path>, active_dir: Option<&Path>) -> ThemeList {
     let mut themes = Vec::new();
-    for root in &roots {
-        let origin = if user.as_deref() == Some(root.as_path()) {
+    for root in roots {
+        let origin = if user == Some(root.as_path()) {
             Origin::User
         } else {
             Origin::Bundled
         };
+        let dirs = theme_dirs(root)
+            .into_iter()
+            .chain(theme_dirs(&root.join(mypaper_theme::EXAMPLES_DIR)));
         themes.extend(
-            theme_dirs(root)
-                .into_iter()
-                .map(|dir| entry(&dir, origin, active_dir.as_deref())),
+            dirs.map(|dir| entry(&dir, origin, active_dir))
+                .filter(|t| !t.hidden || t.active),
         );
     }
+    let active_dir = active_dir.map(Path::to_path_buf);
     if let Some(dir) = &active_dir
         && !themes.iter().any(|t| canonical(Path::new(&t.dir)) == *dir)
     {
@@ -130,7 +195,20 @@ pub fn entry(dir: &Path, origin: Origin, active_dir: Option<&Path>) -> ThemeEntr
         && resolve(&folder).is_some_and(|d| canonical(&d) == canonical_dir);
     let loaded_ok = loaded.as_ref().ok();
     let preview = preview(dir, loaded_ok);
+    let record = (origin == Origin::Bundled)
+        .then(|| catalog_record(dir))
+        .flatten();
     ThemeEntry {
+        hidden: loaded_ok.is_some_and(|t| t.theme.hidden)
+            || record.as_ref().is_some_and(|r| r.hidden),
+        credit: record.map(|r| Credit {
+            category: r.category,
+            author: r.author,
+            license: r.license,
+            license_url: r.license_url,
+            source: r.source,
+            noncommercial: r.noncommercial,
+        }),
         id: canonical_dir.display().to_string(),
         name,
         dir: dir.display().to_string(),
@@ -429,6 +507,72 @@ pub fn import_skin_css(
 mod tests {
     use super::*;
     use crate::source::tests::temp_dir;
+
+    fn write_theme(dir: &Path, manifest: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join(MANIFEST), manifest).unwrap();
+        std::fs::write(dir.join("a.wgsl"), "").unwrap();
+    }
+
+    #[test]
+    fn examples_are_listed_hidden_ones_only_while_active_and_credits_come_from_the_catalog() {
+        let root = temp_dir("themes-catalog").join("themes");
+        let shader = r#""wallpaper": { "kind": "shader", "source": "a.wgsl" }"#;
+        write_theme(
+            &root.join("rain"),
+            &format!(r#"{{ "name": "Rain", {shader} }}"#),
+        );
+        write_theme(
+            &root.join("examples").join("old"),
+            &format!(r#"{{ "name": "Old", "hidden": true, {shader} }}"#),
+        );
+        write_theme(
+            &root.join("examples").join("shown"),
+            &format!(r#"{{ "name": "Shown", {shader} }}"#),
+        );
+        std::fs::write(
+            root.join(CATALOG),
+            r#"{ "version": 1, "themes": [{ "id": "rain", "name": "Rain", "category": "City & rain", "author": "Dani John",
+                 "license": "CC-BY-NC-SA-3.0", "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+                 "source": "https://github.com/rocksdanister/rain", "noncommercial": true, "assets": [] }] }"#,
+        )
+        .unwrap();
+
+        let names = |list: &ThemeList| {
+            list.themes
+                .iter()
+                .map(|t| t.name.clone())
+                .collect::<Vec<_>>()
+        };
+        let listed = list_in(std::slice::from_ref(&root), None, None);
+        assert_eq!(
+            names(&listed),
+            ["Rain", "Shown"],
+            "the hidden example is left out"
+        );
+        let rain = &listed.themes[0];
+        assert_eq!(
+            rain.credit,
+            Some(Credit {
+                category: Some("City & rain".into()),
+                author: Some("Dani John".into()),
+                license: Some("CC-BY-NC-SA-3.0".into()),
+                license_url: Some("https://creativecommons.org/licenses/by-nc-sa/3.0/".into()),
+                source: Some("https://github.com/rocksdanister/rain".into()),
+                noncommercial: true,
+            })
+        );
+        assert!(listed.themes[1].credit.is_none(), "not in the catalog");
+
+        let old = canonical(&root.join("examples").join("old"));
+        let with_old = list_in(std::slice::from_ref(&root), None, Some(&old));
+        let entry = with_old
+            .themes
+            .iter()
+            .find(|t| t.name == "Old")
+            .expect("the active hidden theme is listed");
+        assert!(entry.active && entry.hidden && entry.origin == Origin::Bundled);
+    }
 
     fn image_theme(source: &Path, name: &str) -> NewTheme {
         NewTheme {

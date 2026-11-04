@@ -33,9 +33,11 @@ const SHOTS = {
   "desktop-wallpaper": [`nav("Desktop")`, settle, `document.querySelector('aside[aria-label=Inspector] section button')?.click(); await sleep(500)`],
   "desktop-bar": [`nav("Desktop")`, settle, `clickLabel("Top bar")`],
   themes: [`nav("Themes")`],
+  "themes-legacy": [`nav("Themes")`],
+  "desktop-credit": [`nav("Desktop")`, settle, `document.querySelector('aside[aria-label=Inspector] section button')?.click(); await sleep(500)`],
   "theme-editor": [`nav("Themes")`, `clickLabel("Edit Northern lights")`, settle],
   "theme-editor-widgets": [`nav("Themes")`, `clickLabel("Edit Northern lights")`, settle, `[...document.querySelectorAll("aside label")].find((l) => l.textContent.trim() === "Widgets").click(); await sleep(500)`],
-  "theme-readonly": [`nav("Themes")`, `clickLabel("Copy and edit Earth orbit")`, settle],
+  "theme-readonly": [`nav("Themes")`, `clickLabel("Copy and edit Star Nest")`, settle],
   new: [`nav("Themes")`, `clickText("New theme")`],
   "new-details": [`nav("Themes")`, `clickText("New theme")`, `clickText("A picture or video")`, `await sleep(600)`],
   widgets: [`nav("Widgets")`, settle],
@@ -243,7 +245,7 @@ async function main() {
 
     for (const [name, steps] of Object.entries(SHOTS)) {
       if (only && !only.includes(name)) continue;
-      const fixtures = buildFixtures(repo, { empty: name === "empty" });
+      const fixtures = buildFixtures(repo, { empty: name === "empty", ...(name === "themes-legacy" && { active: "webdemo" }) });
       for (const [width, height] of sizes) {
         const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" });
         const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });

@@ -5,35 +5,39 @@ import path from "node:path";
 const read = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1"));
 
-export function buildFixtures(repo, { empty = false } = {}) {
+/** `active`: the theme id `config.theme` names (a hidden example stays listed while it's active). */
+export function buildFixtures(repo, { empty = false, active = "rain-city" } = {}) {
   const themesDir = path.join(repo, "themes");
+  const catalog = read(path.join(themesDir, "catalog.json"));
   const themes = [];
-  for (const id of fs.readdirSync(themesDir)) {
-    const dir = path.join(themesDir, id);
-    if (!fs.statSync(dir).isDirectory()) continue;
-    const manifest = path.join(dir, "theme.json");
-    const preview = fs.existsSync(path.join(dir, "preview.jpg")) ? path.join(dir, "preview.jpg") : null;
-    let doc = null;
-    let error = null;
-    try {
-      doc = read(manifest);
-    } catch {
-      error = `in ${manifest}: the file is missing`;
-    }
+  // Like Studio's lister: the curated themes and the examples, hidden ones only while active.
+  const dirs = [themesDir, path.join(themesDir, "examples")].flatMap((root) =>
+    fs.readdirSync(root).map((id) => path.join(root, id)).filter((dir) => fs.existsSync(path.join(dir, "theme.json"))),
+  );
+  for (const dir of dirs) {
+    const id = path.basename(dir);
+    const doc = read(path.join(dir, "theme.json"));
+    const record = catalog.themes.find((t) => t.id === id);
+    if ((doc.hidden || record?.hidden) && id !== active) continue;
+    const preview = ["preview.jpg", "preview.png"].map((file) => path.join(dir, file)).find((file) => fs.existsSync(file)) ?? null;
     themes.push({
       id: `bundled:${id}`,
-      name: doc?.name ?? id,
+      name: doc.name ?? id,
       dir,
       origin: "bundled",
-      kind: doc?.wallpaper?.kind ?? null,
-      error,
+      kind: doc.wallpaper?.kind ?? null,
+      error: null,
       preview,
       previewPending: false,
-      styled: !!doc?.windows,
-      widgetsSkin: !!doc?.widgets,
-      barsSkin: !!doc?.bars,
-      active: id === "photo",
+      styled: !!doc.windows,
+      widgetsSkin: !!doc.widgets,
+      barsSkin: !!doc.bars,
+      active: id === active,
       applyAs: id,
+      hidden: !!doc.hidden,
+      credit: record
+        ? { category: record.category ?? null, author: record.author ?? null, license: record.license ?? null, licenseUrl: record.license_url ?? null, source: record.source ?? null, noncommercial: !!record.noncommercial }
+        : null,
     });
   }
   // Two of the user's own: one with a preview, one without.
@@ -44,13 +48,15 @@ export function buildFixtures(repo, { empty = false } = {}) {
     origin: "user",
     kind: "image",
     error: null,
-    preview: path.join(themesDir, "aurora", "preview.jpg"),
+    preview: path.join(themesDir, "examples", "aurora", "preview.jpg"),
     previewPending: false,
     styled: true,
     widgetsSkin: true,
     barsSkin: false,
     active: false,
     applyAs: "northern",
+    hidden: false,
+    credit: null,
   });
   themes.push({
     id: "user:desk",
@@ -66,6 +72,8 @@ export function buildFixtures(repo, { empty = false } = {}) {
     barsSkin: false,
     active: false,
     applyAs: "desk",
+    hidden: false,
+    credit: null,
   });
 
   const widgetsDir = path.join(repo, "widgets");
@@ -97,7 +105,7 @@ export function buildFixtures(repo, { empty = false } = {}) {
   const menuDefault = ["view", "sort", "refresh", "separator", "new", "paste", "separator", "wallpaper", "widgets", "separator", "display", "personalize", "terminal", "more"];
   return {
     config: {
-      theme: "photo",
+      theme: active,
       paused: false,
       pause_on_battery: true,
       pause_on_fullscreen: true,
@@ -128,6 +136,6 @@ export function buildFixtures(repo, { empty = false } = {}) {
     },
     catalog: read(path.join(here, "catalog.json")),
     /** What the native file picker "returns". */
-    pickedFile: path.join(themesDir, "photo", "iss-aurora.jpg"),
+    pickedFile: path.join(themesDir, "examples", "photo", "iss-aurora.jpg"),
   };
 }

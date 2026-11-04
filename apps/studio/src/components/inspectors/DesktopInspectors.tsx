@@ -1,7 +1,7 @@
 import { AppWindow, Blocks, Dock, Image as ImageIcon, LayoutGrid, MousePointerClick, Pause, PanelTop, Pencil, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { api, errorText, type ThemeEntry } from "../../lib/api";
+import { api, errorText, licenseName, type Credit, type ThemeEntry } from "../../lib/api";
 import type { Resolved } from "../../lib/barsDoc";
 import { DOCK_DESIGNS, TOP_DESIGNS } from "../../lib/barsNames";
 import type { Desktop } from "../../lib/desktop";
@@ -95,7 +95,8 @@ export function WallpaperInspector({ theme, onBack }: { theme: ThemeEntry; onBac
         </InspectorSection>
       )}
       {(theme.kind === "web" || theme.kind === "scene") && <InteractiveSetting theme={theme} />}
-      {theme.kind !== "web" && theme.kind !== "scene" && !onBack && (
+      {theme.credit && <CreditSection credit={theme.credit} />}
+      {theme.kind !== "web" && theme.kind !== "scene" && !onBack && !theme.credit && (
         <InspectorSection>
           <p className="text-[12px] leading-snug text-ink-3">{theme.kind ? `${KINDS[theme.kind].hint}.` : ""} The picture and its options come from the theme's source.</p>
         </InspectorSection>
@@ -106,6 +107,39 @@ export function WallpaperInspector({ theme, onBack }: { theme: ThemeEntry; onBac
         </InspectorSection>
       )}
     </>
+  );
+}
+
+/** Who made a bundled wallpaper, its license, and where it's from (themes/CREDITS.md has the rest). */
+function CreditSection({ credit }: { credit: Credit }) {
+  const rows: [label: string, value: string | null][] = [
+    ["Category", credit.category],
+    ["By", credit.author],
+    ["License", credit.license ? licenseName(credit.license) : null],
+  ];
+  return (
+    <InspectorSection title="Credit">
+      <dl className="flex flex-col gap-2">
+        {rows.map(
+          ([label, value]) =>
+            value && (
+              <div key={label} className="flex gap-3 text-[12px]">
+                <dt className="w-16 shrink-0 text-ink-3">{label}</dt>
+                <dd className="selectable min-w-0 flex-1 text-ink-2">{value}</dd>
+              </div>
+            ),
+        )}
+        {credit.source && (
+          <div className="flex gap-3 text-[12px]">
+            <dt className="w-16 shrink-0 text-ink-3">Source</dt>
+            <dd className="selectable min-w-0 flex-1 truncate font-mono text-[11px] text-ink-2" title={credit.source}>
+              {credit.source.replace(/^https?:\/\//, "")}
+            </dd>
+          </div>
+        )}
+      </dl>
+      {credit.noncommercial && <p className="text-[12px] leading-snug text-ink-3">Non-commercial · ShareAlike: free for personal use; don't sell it, and share changes under the same license.</p>}
+    </InspectorSection>
   );
 }
 

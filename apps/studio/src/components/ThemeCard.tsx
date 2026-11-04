@@ -1,7 +1,7 @@
 import { Pencil, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
-import { fileUrl, type Kind, type ThemeEntry } from "../lib/api";
+import { fileUrl, licenseName, type Kind, type ThemeEntry } from "../lib/api";
 import { KINDS, placeholderBackground } from "../lib/kinds";
 import { useStudio } from "../lib/studio";
 import { Badge, IconButton } from "./ui";
@@ -20,7 +20,13 @@ export function ThemeCard({ theme, index, onEdit }: Props) {
   const { applyTheme, busy, pendingPreviews } = useStudio();
   const applying = busy.has(`apply:${theme.id}`);
   const broken = theme.error !== null;
-  const meta = [ORIGIN_LABEL[theme.origin], ...looks(theme).map((look) => look.label)];
+  const credit = theme.credit;
+  // A bundled theme says who made it and under what license; others say where they're from.
+  const meta = theme.hidden
+    ? ["From an earlier version"]
+    : credit?.author
+      ? [credit.author, ...(credit.license ? [licenseName(credit.license)] : [])]
+      : [ORIGIN_LABEL[theme.origin], ...looks(theme).map((look) => look.label)];
 
   return (
     <article
@@ -47,6 +53,11 @@ export function ThemeCard({ theme, index, onEdit }: Props) {
             </Badge>
           )}
         </span>
+        {credit?.noncommercial && (
+          <span className="absolute bottom-2 left-2" title="Free for personal use. Don't sell it, and share changes under the same license.">
+            <Badge tone="overlay">Non-commercial · ShareAlike</Badge>
+          </span>
+        )}
         {!theme.active && !broken && (
           <span className="absolute inset-0 grid place-items-center bg-black/35 opacity-0 transition-opacity duration-150 group-hover:opacity-100" aria-hidden>
             <span className="flex h-8 items-center gap-1.5 rounded-lg bg-white px-3.5 text-[13px] font-semibold text-black shadow-pop">{applying ? "Applying…" : "Use this theme"}</span>
@@ -56,8 +67,11 @@ export function ThemeCard({ theme, index, onEdit }: Props) {
 
       <div className="flex items-center gap-1.5 pt-2.5 pr-0.5 pl-1">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[14px] font-semibold tracking-tight text-ink">{theme.name}</h3>
-          <p className="truncate text-[12px] text-ink-3" title={theme.dir}>
+          <h3 className="truncate text-[14px] font-semibold tracking-tight text-ink" title={theme.name}>
+            {/* The badge on the picture says it, so the title doesn't repeat it. */}
+            {credit?.noncommercial ? theme.name.replace(/\s*\(non-commercial\)$/i, "") : theme.name}
+          </h3>
+          <p className="truncate text-[12px] text-ink-3" title={credit?.source ?? theme.dir}>
             {meta.join(" · ")}
           </p>
         </div>
