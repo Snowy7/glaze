@@ -11,6 +11,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
+use mypaper_desktop::webview_env;
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::{
     CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
@@ -46,6 +47,8 @@ pub enum WebEvent {
         bar: u32,
         kind: COREWEBVIEW2_PROCESS_FAILED_KIND,
     },
+    /// The page answered [`Web::probe_paint`]: what it was sent is on screen.
+    Painted { bar: u32 },
 }
 
 pub type Events = Rc<RefCell<VecDeque<WebEvent>>>;
@@ -190,9 +193,12 @@ impl Web {
                     if let Some(args) = args {
                         let source = out_string(|p| args.Source(p))?;
                         let json = out_string(|p| args.WebMessageAsJson(p))?;
-                        events_for_messages
-                            .borrow_mut()
-                            .push_back(WebEvent::Message { bar, source, json });
+                        let event = if json == webview_env::PAINTED {
+                            WebEvent::Painted { bar }
+                        } else {
+                            WebEvent::Message { bar, source, json }
+                        };
+                        events_for_messages.borrow_mut().push_back(event);
                     }
                     Ok(())
                 })),
@@ -257,6 +263,13 @@ impl Web {
         if let Err(e) = unsafe { self.webview.PostWebMessageAsJson(&HSTRING::from(json)) } {
             log::warn!("couldn't message a bar: {e}");
         }
+    }
+
+    /// Asks the page to answer ([`WebEvent::Painted`]) once what it was just sent is on screen.
+    pub fn probe_paint(&self) {
+        let script = HSTRING::from(webview_env::PAINT_PROBE);
+        // SAFETY: COM call on a live WebView; no completion handler is needed.
+        let _ = unsafe { self.webview.ExecuteScript(&script, None) };
     }
 
     pub fn reload(&self) {

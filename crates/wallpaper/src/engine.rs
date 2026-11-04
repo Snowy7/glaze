@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use mypaper_config::Config;
 use mypaper_desktop::{
-    EXIT_RESTART, Rect, WindowEvents, covered_monitors, fullscreen_app_in_front, monitors,
+    EXIT_RESTART, Rect, WindowEvents, covered_monitors, fullscreen_app_in_front, monitors, startup,
 };
 use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::{HWND, POINT};
@@ -75,6 +75,7 @@ impl Engine {
         monitors: Option<Vec<Rect>>,
     ) -> Result<Self> {
         let (gpu, surfaces) = Gpu::new(&windows)?;
+        startup::ready("wallpaper", "device_ms");
         let screens: Vec<Screen> = surfaces
             .into_iter()
             .zip(windows)
@@ -82,6 +83,7 @@ impl Engine {
             .collect::<Result<_>>()?;
         let hwnds: Vec<HWND> = screens.iter().map(|s| s.window.0).collect();
         let source = load_or_broken(&gpu, &theme, &hwnds);
+        startup::ready("wallpaper", "source_ms");
         Ok(Self {
             theme,
             gpu,
@@ -280,6 +282,9 @@ impl Engine {
                 // The source owns what is on screen: nothing to acquire or present.
                 screen.dirty = false;
                 self.source.layout(index, screen.window.0, screen.size());
+                if self.palette_due {
+                    startup::ready("wallpaper", "first_frame_ms");
+                }
                 continue;
             }
             let Some(texture) = screen.acquire(&self.gpu) else {
@@ -312,6 +317,7 @@ impl Engine {
 
         // First frame of a newly loaded theme: publish its palette, once.
         if drew && std::mem::take(&mut self.palette_due) {
+            startup::ready("wallpaper", "first_frame_ms");
             let size = self.screens.first().map_or((1, 1), Screen::size);
             palette::publish(
                 &self.gpu,
