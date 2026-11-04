@@ -1,8 +1,9 @@
 # Native UI: `crates/ui` and `mypaper-shell`
 
-The native rebuild (`plans/council/native-plan.md`) draws every shell surface (menus now; the top
-bar, dock and flyouts next; widgets in N4) with one small UI layer, `crates/ui` (`mypaper-ui`), hosted by
-one process, `mypaper-shell`. This page is how both work, and what they measured.
+The native rebuild (`plans/council/native-plan.md`) draws every shell surface (menus, the top
+bar, dock, flyouts and widgets) with one small UI layer, `crates/ui` (`mypaper-ui`), hosted by
+one process, `mypaper-shell`. This page is how both work, and what they measured. The flyouts
+themselves are in [bars.md](bars.md#flyouts-n3).
 
 ## Rules it follows
 
@@ -119,6 +120,50 @@ keyboard, pointer and IME messages enter RichEdit synchronously; app callbacks r
 selection, bidirectional shaping and undo are covered by the component test. The live fixture
 also enters and persists Arabic/CJK through Unicode keyboard events; that check does not exercise
 a language-specific IME candidate/composition UI.
+
+A layered window never shows the system caret, so the field records where RichEdit puts it:
+`TextField::caret() -> Option<Rect>` (surface pixels, while it shows). Views draw it as a fill;
+it does not blink, so a settled field draws nothing. A single-line field hands Up, Down, Tab,
+Page Up and Page Down to the app as `Event::Key` (they move the selection of what the field
+filters, as in the launcher); Escape and Enter work as before.
+
+### Glass under a surface (N3)
+
+`mypaper_ui::glass` puts the engine's Liquid Glass under a surface. The UI layer only says where;
+the shell installs the thread's `Backdrop` (`crates/shell/src/overlay_client.rs`), which sends
+the engine one request per change (docs/engine-notes.md, "Glass overlays"):
+
+```rust
+pub struct GlassMaterial { clarity: f32, blur: f32, refraction: f32, highlight: f32, tint: Rgba }
+pub struct Glass { body: Rect /* surface px */, radius: f32, material: GlassMaterial }
+pub trait Backdrop {
+    fn available(&self) -> bool;
+    fn open(&self, client: HWND, shape: Shape, radius: f32, material: &GlassMaterial) -> bool;
+    fn place(&self, client: HWND, shape: Shape, radius: f32);
+    fn material(&self, client: HWND, material: &GlassMaterial);
+    fn close(&self, client: HWND);
+}
+glass::install(Rc<dyn Backdrop>); glass::available() -> bool;
+glass::set_style(Option<GlassMaterial>); glass::style() -> Option<GlassMaterial>;
+Surface::set_glass(Option<Glass>); Surface::has_glass() -> bool;
+```
+
+- A surface with glass opens it right after `show` (the content is on screen first; the request
+  may wait on the engine's loop), sends `place` **before** each move (`present` with a new
+  origin, `move_to`), reshapes it on `set_glass`, and closes it on `hide` and drop. The engine
+  moves its window inside the request, so both land in one composition frame.
+- The surface still fills its body at least at `Rgba::HIT`: clicks land on it, never on the
+  glass. Without a backdrop, or with the engine gone, `available()` is false and views draw the
+  style's own fill.
+- `set_style` holds the active style's popup material (`None` for solid and mono). A `Menu`
+  uses `Tokens::glass` when set, else that style, and only while `available()`; with glass its
+  body fill is `Rgba::HIT` under the same hairline and content. `Tokens::glass` defaults to
+  `None`, so golden images keep the drawn tint.
+
+`Text::fit(text, style, width) -> Arc<str>` cuts a label with an ellipsis at the last character
+that fits (one hit test on its cached layout). `Text::lines(text, style, width, max)` wraps at
+word boundaries into at most `max` lines (the last one cut when more would follow), keeping line
+breaks. Both are used by the flyouts for SSIDs, app names and notification bodies.
 
 ## Input
 

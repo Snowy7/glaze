@@ -88,6 +88,21 @@ pub struct Network {
     profile: String,
 }
 
+impl Network {
+    /// A network as the flyout lists it, without a saved profile's name (previews and tests;
+    /// the real ones come from [`WifiLane::read`]).
+    pub fn new(ssid: &str, signal: u32, security: Security, connected: bool, known: bool) -> Self {
+        Self {
+            ssid: ssid.to_owned(),
+            signal,
+            security,
+            connected,
+            known,
+            profile: String::new(),
+        }
+    }
+}
+
 /// What the flyout shows, or why it can't.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WifiState {

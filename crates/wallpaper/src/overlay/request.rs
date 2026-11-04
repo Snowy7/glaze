@@ -1,7 +1,7 @@
 //! What the shell asks of the engine's glass overlays, and how it travels: plain Rust types, sent
 //! as one fixed-size `WM_COPYDATA` to the engine's message-only window (`OVERLAY_CLASS`). This
-//! file has no GPU or engine dependencies, so the shell can share it as is (the orchestrator moves
-//! it into the shared IPC crate).
+//! file has no GPU or engine dependencies: the shell compiles this same file into its overlay
+//! client (`crates/shell/src/overlay_client.rs`, by `#[path]`), so both ends share one wire.
 //!
 //! Every overlay belongs to one client window (a shell popup or widget surface), which the shell
 //! fills at alpha ≥ 1/255 over its whole shape so clicks land on it; the engine draws the glass in
@@ -82,7 +82,7 @@ pub enum Request {
     },
     /// Changes the material.
     Material { client: HWND, material: Material },
-    /// Destroys the overlay.
+    /// Destroys the overlay. The capture stays warm for a few seconds, for the next popup.
     Close { client: HWND },
 }
 

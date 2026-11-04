@@ -60,9 +60,11 @@ use super::geometry;
 
 /// `GENERIC_ALL` for shared handles.
 const SHARE_ALL: u32 = 0x1000_0000;
-/// The shortest time between two captured frames: 1/60 s, in 100 ns units.
+/// The shortest time between two captured frames: 1/30 s, in 100 ns units. At 60 updates a
+/// second a video behind a popup cost ~3.4% of a core (N0.2), over the 3% gate; 30 halves it,
+/// and the glass of a still popup over a video needs no more (its window still moves at once).
 const MIN_INTERVAL: windows::Foundation::TimeSpan = windows::Foundation::TimeSpan {
-    Duration: 10_000_000 / 60,
+    Duration: 10_000_000 / 30,
 };
 
 /// The D3D11 device frames are captured with, and its fence shared with wgpu's queue.
@@ -474,7 +476,7 @@ impl Session {
         let session = pool.CreateCaptureSession(&item)?;
         session.SetIsCursorCaptureEnabled(false)?;
         session.SetDirtyRegionMode(GraphicsCaptureDirtyRegionMode::ReportOnly)?;
-        // At most 60 updates a second, however fast what is behind changes (the monitors here run
+        // At most 30 updates a second, however fast what is behind changes (the monitors here run
         // at 239 Hz).
         session.SetMinUpdateInterval(MIN_INTERVAL)?;
         if let Err(e) = session.SetIsBorderRequired(false) {

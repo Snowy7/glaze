@@ -15,7 +15,8 @@ use crate::window::Window;
 pub struct Gpu {
     // Kept alive for as long as the surfaces made from it.
     _instance: wgpu::Instance,
-    adapter: wgpu::Adapter,
+    /// Also the glass overlays' (their capture device opens on the same adapter).
+    pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     /// Format of every screen's swapchain (non-sRGB: values are written as-is).
