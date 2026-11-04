@@ -1154,6 +1154,8 @@ dependencies = [
  "log",
  "mypaper-config",
  "notify",
+ "serde",
+ "serde_json",
  "webview2-com",
  "windows",
 ]

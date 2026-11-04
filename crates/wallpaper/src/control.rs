@@ -24,6 +24,8 @@ enum Action {
     SwitchTheme(String),
     /// Paused / pause-on-battery / pause-on-fullscreen changed.
     UpdateHold,
+    /// `static_snapshot` was switched; off puts the user's wallpaper back right away.
+    SetSnapshot(bool),
 }
 
 /// The actions that take the engine from `old` to `new`.
@@ -36,6 +38,9 @@ fn actions(old: &Config, new: &Config) -> Vec<Action> {
         != (new.paused, new.pause_on_battery, new.pause_on_fullscreen)
     {
         actions.push(Action::UpdateHold);
+    }
+    if old.static_snapshot != new.static_snapshot {
+        actions.push(Action::SetSnapshot(new.static_snapshot));
     }
     actions
 }
@@ -88,6 +93,7 @@ impl Live {
             match action {
                 Action::SwitchTheme(name) => self.switch_theme(engine, &name),
                 Action::UpdateHold => engine.apply_config(&new),
+                Action::SetSnapshot(on) => engine.set_static_snapshot(on),
             }
         }
         self.config = new;
@@ -166,6 +172,15 @@ mod tests {
         ] {
             assert_eq!(actions(&Config::default(), &new), [Action::UpdateHold]);
         }
+    }
+
+    #[test]
+    fn switching_the_static_snapshot_is_its_own_action() {
+        let new = config(|c| c.static_snapshot = false);
+        assert_eq!(
+            actions(&Config::default(), &new),
+            [Action::SetSnapshot(false)]
+        );
     }
 
     #[test]

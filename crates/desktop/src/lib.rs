@@ -4,6 +4,7 @@
 mod config_watch;
 mod control;
 mod cover;
+pub mod desktop_wallpaper;
 mod fullscreen;
 pub mod hold;
 mod host;
