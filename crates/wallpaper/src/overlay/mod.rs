@@ -23,11 +23,15 @@
 //! client moves itself, so both land in the same composition frame; the glass inside follows at
 //! the next captured frame.
 //!
-//! **Memory.** Nothing exists until the first overlay opens; the capture device, sessions,
-//! pipelines and DirectComposition device go when the last one closes.
+//! **Memory and warmth.** Nothing exists until the first overlay opens (or a `Warm` hint
+//! arrives). WGC's first frame takes ~260 ms after a session starts, so the capture device,
+//! sessions, pipelines and DirectComposition device stay [`WARM`] after the last close, and a
+//! `Warm` hint (the shell sends one on pointer-down) starts a monitor's session before its popup
+//! opens. A warm session with no overlay drops every frame on WGC's thread.
 //!
 //! Driving it: create [`Overlays`] on the engine's thread, pump that thread's messages (requests
-//! and frame wakes arrive as window messages), and call [`Overlays::tick`] after each pump.
+//! and frame wakes arrive as window messages), call [`Overlays::tick`] after each pump, and wake
+//! by [`Overlays::deadline`] (when the warm capture goes cold).
 
 mod abi;
 mod capture;
@@ -76,6 +80,8 @@ const WM_PRUNE: u32 = WM_APP + 0x4F1;
 /// Registered message posted to a client whose window must exclude itself from capture
 /// (`WDA_EXCLUDEFROMCAPTURE`), when this Windows has no per-session exclusion list.
 pub const EXCLUDE_YOURSELF: windows::core::PCWSTR = w!("mypaper.glass.exclude-yourself");
+/// How long the capture stays running after the last overlay closes, or after a `Warm` hint.
+pub const WARM: Duration = Duration::from_secs(3);
 
 /// The engine's GPU, which draws every overlay (plan, Rule 1).
 #[derive(Clone)]
@@ -147,9 +153,11 @@ pub struct Overlays {
     stats: Stats,
     /// Whether to time the GPU work (waits for the GPU after every update).
     timing: bool,
+    /// Until when sessions without an overlay (and, with none open, `live`) are kept.
+    warm_until: Option<Instant>,
 }
 
-/// What exists only while an overlay is open.
+/// What exists only while an overlay is open, or the capture is warm.
 struct Live {
     capture: CaptureDevice,
     dcomp: IDCompositionDesktopDevice,
@@ -200,7 +208,13 @@ impl Overlays {
             closed_counts: Counts::default(),
             stats: Stats::default(),
             timing: false,
+            warm_until: None,
         })
+    }
+
+    /// When the warm capture goes cold: the loop must call [`tick`](Self::tick) by then.
+    pub fn deadline(&self) -> Option<Instant> {
+        self.warm_until
     }
 
     /// Times the GPU work of every update (measuring only: it waits for the GPU).
@@ -269,7 +283,45 @@ impl Overlays {
                 }
             }
         }
+        if self.warm_until.is_some_and(|at| at <= Instant::now()) {
+            self.warm_until = None;
+            self.cool();
+        }
         handled
+    }
+
+    /// Ends what only the warmth kept: sessions with no overlay, and with none open, the rest.
+    fn cool(&mut self) {
+        self.drop_idle_sessions();
+        if self.open.is_empty() {
+            self.hooks.clear();
+            // The capture device, DirectComposition and the pipelines go with the warmth.
+            self.live = None;
+            log::debug!("glass overlays: capture cold");
+        }
+    }
+
+    /// Keeps the capture running for [`WARM`] from now.
+    fn keep_warm(&mut self) {
+        let until = Instant::now() + WARM;
+        self.warm_until = Some(self.warm_until.map_or(until, |at| at.max(until)));
+    }
+
+    /// Starts capturing the monitor under `rect`, for a popup about to open there.
+    fn warm(&mut self, rect: Rect) -> Result<()> {
+        self.keep_warm();
+        let (monitor, bounds) = monitor_of(rect);
+        if self.live.is_none() {
+            let capture = CaptureDevice::new(&self.gpu.adapter, &self.gpu.device)?;
+            self.start_session(&capture, monitor, bounds)?;
+            self.live = Some(Live::new(&self.gpu, capture, self.timing)?);
+        } else if !self.sessions.iter().any(|s| s.monitor == monitor) {
+            let live = self.live.take().context("no overlays")?;
+            let started = self.start_session(&live.capture, monitor, bounds);
+            self.live = Some(live);
+            started?;
+        }
+        Ok(())
     }
 
     /// Handles one request now (the window queues them for [`tick`](Self::tick)).
@@ -309,6 +361,7 @@ impl Overlays {
                 self.close(client);
                 Ok(())
             }
+            Request::Warm { rect, .. } => self.warm(rect),
         }
     }
 
@@ -453,22 +506,21 @@ impl Overlays {
         };
         drop(self.open.remove(o));
         self.exclusion_changed = true;
-        self.drop_idle_sessions();
+        // The next popup usually follows within seconds (a submenu, the next flyout): keep the
+        // capture running, so its glass is there in a frame instead of ~260 ms.
+        self.keep_warm();
         if let Err(e) = self.sync_capture(None) {
             log::warn!("glass overlays: {e:#}");
         }
-        if self.open.is_empty() {
-            self.hooks.clear();
-            // The capture device, DirectComposition and the pipelines go with the last overlay.
-            self.live = None;
-        }
     }
 
+    /// Ends the sessions no overlay uses, unless the capture is being kept warm.
     fn drop_idle_sessions(&mut self) {
+        let warm = self.warm_until.is_some_and(|at| at > Instant::now());
         let open = &self.open;
         let closed = &mut self.closed_counts;
         self.sessions.retain(|s| {
-            let used = open.iter().any(|o| o.monitor == s.monitor);
+            let used = warm || open.iter().any(|o| o.monitor == s.monitor);
             if !used {
                 *closed = closed.plus(s.counts());
             }

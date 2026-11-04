@@ -153,6 +153,13 @@ impl Engine {
         })
     }
 
+    /// The device the glass overlays draw with: the engine's own (plan Rule 1).
+    pub fn overlay_gpu(&self) -> crate::overlay::Gpu {
+        let gpu = &self.gpu;
+        let (adapter, device, queue) = (gpu.adapter.clone(), gpu.device.clone(), gpu.queue.clone());
+        crate::overlay::Gpu { adapter, device, queue }
+    }
+
     /// Named plate event plus the current writer's exit handle, both owned by GlassPass.
     pub fn glass_handles(&self) -> Vec<windows::Win32::Foundation::HANDLE> {
         self.glass.wait_handles()
