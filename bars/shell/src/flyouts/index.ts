@@ -29,12 +29,14 @@ const notifications = lazy(() => import("./notifications"));
 /**
  * Opens a flyout from `anchor`. If it can't (its chunk or its content failed), the host logs that
  * and opens the matching native Windows panel instead, so the click still does something.
+ * `keyboard` is for a flyout a key opened: it takes the keyboard (Escape closes it, and the app in
+ * front gets the foreground back), as the launcher does.
  */
 const opener =
-  (name: FlyoutName, load: () => Promise<{ open(anchor: HTMLElement): Promise<void> }>) =>
-  (anchor: HTMLElement): void => {
+  (name: FlyoutName, load: () => Promise<{ open(anchor: HTMLElement, keyboard?: boolean): Promise<void> }>) =>
+  (anchor: HTMLElement, keyboard?: boolean): void => {
     load()
-      .then((m) => m.open(anchor))
+      .then((m) => (keyboard ? m.open(anchor, true) : m.open(anchor)))
       .catch((error: unknown) => {
         console.error(`[bars] the ${name} flyout failed to open`, error);
         fire("flyoutFailed", { flyout: name, error: String(error).slice(0, 200) });
@@ -66,7 +68,23 @@ export function toggleLauncher(from?: HTMLElement): void {
   );
 }
 
-// The Windows key: the host made this bar the foreground window.
+/**
+ * Where a flyout a key opened (Win+N, Win+A) comes from: its module if this bar has one, else the
+ * bar's last module (the right end of a top bar, where Windows puts them), else the bar itself.
+ */
+function keyAnchor(module: string): HTMLElement {
+  return (
+    document.querySelector<HTMLElement>(`[data-module="${module}"]`) ??
+    [...document.querySelectorAll<HTMLElement>("[data-module]")].at(-1) ??
+    document.querySelector<HTMLElement>(".pill") ??
+    document.body
+  );
+}
+
+// The Windows key, Win+N and Win+A: the host made this bar the foreground window. Pressed again,
+// the same shortcut closes the flyout.
 on("open", ({ flyout }) => {
-  if (flyout === "launcher") toggleLauncher();
+  if (flyout === "launcher") return toggleLauncher();
+  if (flyoutOpen(flyout)) return closeFlyout();
+  (flyout === "notifications" ? openNotifications : openQuick)(keyAnchor(flyout), true);
 });

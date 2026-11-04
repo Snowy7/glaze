@@ -23,40 +23,43 @@ type Props = {
   layers: readonly Appearance[];
   /** The top bar's modules; a sample set when absent. */
   layout?: BarLayout;
+  /** A taller stage with larger samples, for a preview pane beside the fields. */
+  tall?: boolean;
 };
 
 /**
  * A sample widget card, or a sample top bar and dock, painted with the same CSS
  * variables and data attributes the real pages get (docs/widgets.md, "Appearance").
  */
-export function AppearancePreview({ target, base, layers, layout = SAMPLE_LAYOUT }: Props) {
+export function AppearancePreview({ target, base, layers, layout = SAMPLE_LAYOUT, tall = false }: Props) {
   const [wallpaper, setWallpaper] = useState<"dark" | "light">("dark");
   const look = resolve(base, ...layers);
   return (
-    <div className="relative overflow-hidden rounded-xl ring-1 ring-line" aria-label="Preview">
-      <div className="ap-stage relative h-44" data-wallpaper={wallpaper} aria-hidden>
-        {target === "widgets" ? <WidgetSample look={look} /> : <BarsSample look={look} layers={layers} base={base} layout={layout} />}
+    <div className="@container relative overflow-hidden rounded-xl shadow-card ring-1 ring-line-strong" aria-label="Preview">
+      <div className={`ap-stage relative ${tall ? "aspect-[16/10] min-h-56" : "h-44"}`} data-wallpaper={wallpaper} aria-hidden>
+        {target === "widgets" ? <WidgetSample look={look} tall={tall} /> : <BarsSample look={look} layers={layers} base={base} layout={layout} />}
       </div>
-      <div className="absolute right-2 bottom-2">
+      <div className="absolute right-2 bottom-2 rounded-lg bg-black/50 backdrop-blur-md">
         <Segmented
           label="Sample wallpaper"
           hideLabel
+          size="sm"
           value={wallpaper}
           onChange={setWallpaper}
           options={[
             { value: "dark", label: "Dark" },
             { value: "light", label: "Light" },
           ]}
-          className="text-[11px] [&_label]:px-2 [&_label]:py-0.5"
         />
       </div>
     </div>
   );
 }
 
-function WidgetSample({ look }: { look: Resolved }) {
+function WidgetSample({ look, tall }: { look: Resolved; tall: boolean }) {
   return (
-    <div className="ap-root absolute inset-0 flex items-center gap-4 px-8" {...appearanceData(look)} style={appearanceVars(look)}>
+    <div className={`ap-root absolute inset-0 flex items-center gap-4 ${tall ? "justify-center" : "px-8"}`} {...appearanceData(look)} style={appearanceVars(look)}>
+      <div className={`flex items-center gap-4 ${tall ? "scale-[1.3] @[44rem]:scale-[1.55]" : ""}`}>
       <div className="ap-surface w-52 p-4" style={{ fontSize: "calc(13px * var(--scale))" }}>
         <div className="text-[3.1em] leading-none font-light tracking-tight tabular-nums">10:42</div>
         <div className="mt-1.5 text-[1em]" style={{ color: "var(--t1)" }}>
@@ -78,6 +81,7 @@ function WidgetSample({ look }: { look: Resolved }) {
         <div className="mt-2 grid size-7 place-items-center rounded-full" style={{ background: "var(--fill-3)" }}>
           <Music className="size-3.5" style={{ color: "var(--accent)" }} />
         </div>
+      </div>
       </div>
     </div>
   );

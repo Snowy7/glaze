@@ -147,8 +147,8 @@ These apply only to Windows' own windows, never to games or other apps. See
 
 ### Desktop extras
 
-- **Desktop right-click menu (opt-in):** our own themed menu on the bare desktop, opening in under
-  10 ms. Right-clicking an icon, or pressing Shift, still gives the native menu.
+- **Desktop right-click menu (on by default):** our own themed menu on the bare desktop, opening in
+  under 10 ms (Windows' own takes 0.2 to 0.3 s). Right-clicking an icon, or pressing Shift, still gives the native menu.
 - **Cursor themes:** two built-in sets, dark and light.
 - **Desktop tray menu:** desktop icon size and visibility.
 - **Classic Windows 11 context menu (opt-in):** a reversible toggle.
