@@ -165,6 +165,23 @@ impl Layout {
 
     /// Writes atomically, so watchers never see a half-written file.
     pub fn save(&self, path: &Path) -> Result<()> {
+        self.validate()?;
+        // An external editor may have changed the file since the host loaded it. Check at the
+        // write boundary too, so even an edit arriving before the watcher cannot destroy it.
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                if let Err(error) = std::str::from_utf8(&bytes)
+                    .map_err(anyhow::Error::from)
+                    .and_then(Self::parse)
+                {
+                    let backup = crate::files::backup(path, &bytes)?;
+                    bail!("refusing to overwrite invalid {}: {error:#}; backup: {}", path.display(), backup.display());
+                }
+                crate::files::write_atomic(&path.with_extension("json.previous"), &bytes)?;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).context("checking existing layout before saving"),
+        }
         crate::files::write_atomic(
             path,
             (serde_json::to_string_pretty(self)? + "\n").as_bytes(),
@@ -257,6 +274,9 @@ impl Layout {
             .with_context(|| format!("no instance {instance:?}"))?
             .clone();
         copy.instance = self.new_id(&copy.widget);
+        for value in copy.settings.values_mut() {
+            pick::rebase_value(value, instance, &copy.instance);
+        }
         copy.cell = cell;
         let id = copy.instance.clone();
         self.instances.push(copy);
@@ -484,6 +504,52 @@ pub fn show_on<'a>(monitor: &str, devices: &'a [String], primary: usize) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saving_after_external_corruption_preserves_the_exact_file_and_backup() {
+        let dir = crate::files::temp_dir("invalid-layout-save");
+        let path = dir.join("widgets.json");
+        let mut layout = Layout::default();
+        layout.save(&path).unwrap();
+        for bytes in [b"{ broken".as_slice(), b"{\"version\":99}", b"\xff\xfe"] {
+            std::fs::write(&path, bytes).unwrap();
+            layout.overlay = !layout.overlay;
+            assert!(layout.save(&path).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), bytes);
+            assert!(std::fs::read_dir(&dir).unwrap().flatten().any(|entry|
+                entry.path() != path && std::fs::read(entry.path()).is_ok_and(|saved| saved == bytes)));
+        }
+        // Correcting the file releases the write gate, without losing recovery copies.
+        std::fs::write(&path, b"{\"instances\":[]}").unwrap();
+        layout.save(&path).unwrap();
+        assert_eq!(Layout::load(&path).unwrap(), layout);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn duplicate_rebases_owned_pictures_and_survives_removing_the_source() {
+        let dir = crate::files::temp_dir("duplicate-photo");
+        let source = dir.join("a photo.png");
+        std::fs::write(&source, b"picture bytes").unwrap();
+        let mut layout = Layout::default();
+        let id = layout.add("photo", "m", [0, 0], [2, 2]);
+        let picked = pick::import(&dir, "photo", &id, &source).unwrap();
+        layout.set_settings(&id, serde_json::json!({"image1": picked.url,
+            "nested": [{"url": picked.url}], "external": "https://example.com/photo.jpg"})
+            .as_object().unwrap().clone()).unwrap();
+        let copy = layout.duplicate(&id, [2, 0]).unwrap();
+        pick::copy_instance(&dir, &id, &copy);
+        layout.remove(&id).unwrap();
+        pick::remove_instance(&dir, &id);
+        let settings = &layout.get(&copy).unwrap().settings;
+        for value in [&settings["image1"], &settings["nested"][0]["url"]] {
+            let url = pick::parse_data_url(value.as_str().unwrap()).unwrap();
+            assert_eq!(url.instance, copy);
+            assert_eq!(std::fs::read(dir.join(&url.instance).join("files").join(&url.name)).unwrap(), b"picture bytes");
+        }
+        assert_eq!(settings["external"], "https://example.com/photo.jpg");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     const LAYOUT: &str = r#"{
         "version": 1,

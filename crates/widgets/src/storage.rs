@@ -23,6 +23,31 @@ pub struct Storage {
 }
 
 impl Storage {
+    /// A duplicate owns a complete snapshot, including any picked-file URLs in stored data.
+    pub fn duplicate(&mut self, from: &str, to: &str) -> Result<()> {
+        ensure!(crate::manifest::valid_id(from) && crate::manifest::valid_id(to), "invalid storage id");
+        let mut value = Value::Object(self.data(from)?.clone());
+        crate::pick::rebase_value(&mut value, from, to);
+        let bytes = serde_json::to_vec(&value)?;
+        ensure!(bytes.len() <= MAX_BYTES, "storage is limited to 1 MB");
+        let path = self.path(to);
+        ensure!(!path.exists(), "duplicate storage already exists");
+        crate::files::write_atomic(&path, &bytes)?;
+        self.cache.remove(to);
+        Ok(())
+    }
+
+    /// Removal follows a successful layout save; a failed save keeps all instance data.
+    pub fn remove(&mut self, instance: &str) -> Result<()> {
+        ensure!(crate::manifest::valid_id(instance), "invalid storage id");
+        match std::fs::remove_file(self.path(instance)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+        self.cache.remove(instance);
+        Ok(())
+    }
     pub fn new(dir: PathBuf) -> Self {
         Self {
             dir,

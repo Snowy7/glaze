@@ -200,6 +200,21 @@ pub fn rebase(url: &str, instance: &str) -> Option<String> {
     Some(data_url(&widget, instance, &name))
 }
 
+/// Rebase only URLs owned by the duplicated instance, including nested settings/storage.
+pub fn rebase_value(value: &mut serde_json::Value, from: &str, to: &str) {
+    use serde_json::Value;
+    match value {
+        Value::String(url) => {
+            if let Some(parts) = parse_data_url(url).filter(|p| p.instance == from) {
+                *url = data_url(&parts.widget, to, &parts.name);
+            }
+        }
+        Value::Array(values) => values.iter_mut().for_each(|v| rebase_value(v, from, to)),
+        Value::Object(values) => values.values_mut().for_each(|v| rebase_value(v, from, to)),
+        _ => {}
+    }
+}
+
 /// `%APPDATA%\mypaper\widget-data\<instance>\files`.
 fn files_dir(root: &Path, instance: &str) -> PathBuf {
     root.join(instance).join("files")
@@ -316,6 +331,25 @@ pub fn copy_instance(root: &Path, from: &str, to: &str) {
             log::warn!("couldn't copy {:?}: {e}", entry.file_name());
         }
     }
+}
+
+/// Native duplication must report a failed copy rather than saving a broken photo instance.
+pub fn copy_instance_checked(root: &Path, from: &str, to: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(valid_id(from) && valid_id(to) && from != to, "invalid duplicate ids");
+    let (source, target) = (files_dir(root, from), files_dir(root, to));
+    let entries = match std::fs::read_dir(source) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+    std::fs::create_dir_all(&target)?;
+    for entry in entries {
+        let entry = entry?;
+        if entry.file_type()?.is_file() {
+            std::fs::copy(entry.path(), target.join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
 
 // --- The dialog -----------------------------------------------------------------
