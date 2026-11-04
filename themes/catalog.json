@@ -1,0 +1,2030 @@
+{
+  "version": 1,
+  "verified_date": "2026-11-04",
+  "notice": "Eight NC selections block commercial distribution of the complete bundle. Preserve ShareAlike and all notices.",
+  "new_binary_bytes": 23947981,
+  "curated_binary_bytes": 23945606,
+  "curated_bytes": 28053809,
+  "themes": [
+    {
+      "id": "charge-city",
+      "name": "Charge — Rainy Rooftops",
+      "kind": "video",
+      "category": "City & rain",
+      "author": "Blender Foundation; director Hjalti Hjálmarsson",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://studio.blender.org/films/charge/",
+      "noncommercial": false,
+      "description": "A quiet, muted excerpt prepared as a repeating desktop loop.",
+      "assets": [
+        {
+          "path": "charge-city/loop.mp4",
+          "title": "Charge — Rainy Rooftops",
+          "author": "Blender Foundation; director Hjalti Hjálmarsson",
+          "license": "CC-BY-4.0",
+          "source": "https://studio.blender.org/films/charge/",
+          "changes": "Source 25.5–28.75 s; frame-aligned, rotated 0.75 s smootherstep (quintic) tail-to-head crossfade; native 24 fps; H.264/yuv420p CRF 18, 6 Mb/s VBV, audio removed, width capped at 1920.",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "upstream_sha256": "908bb9704ade1e7d6359d3977d48a2c712daf3ac55dd1242adb75096701b6095",
+          "bytes": 685927,
+          "sha256": "336d290438a03f2cae3a2adec813f2c439257833f00aeaec42dddcce45674702"
+        },
+        {
+          "path": "charge-city/preview.jpg",
+          "title": "Charge — Rainy Rooftops",
+          "author": "Blender Foundation; director Hjalti Hjálmarsson",
+          "license": "CC-BY-4.0",
+          "source": "https://studio.blender.org/films/charge/",
+          "changes": "640×360 JPEG preview, center crop of the wallpaper.",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "bytes": 17640,
+          "sha256": "b02e5a4bed07c9bfde3f18c71917bb060d3bf9e1249c80acf22d6b1417bc9e22"
+        },
+        {
+          "path": "charge-city/theme.json",
+          "title": "Charge — Rainy Rooftops",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 145,
+          "sha256": "57959a96e6cdeed328391c5ec2cb46d3ce535ba7b45f56a9e5f724426574cdf3"
+        }
+      ],
+      "loop": {
+        "source_start_seconds": 25.5,
+        "source_duration_seconds": 3.25,
+        "crossfade_seconds": 0.75,
+        "fps": 24,
+        "method": "Rotated tail-to-head smootherstep (quintic) crossfade, frame-aligned with exact discrete endpoint weights; no reversal.",
+        "measured": {
+          "id": "charge-city",
+          "frames": 60,
+          "duration": 2.5,
+          "width": 1920,
+          "height": 804,
+          "fps": "24/1",
+          "codec": "h264",
+          "pixel_format": "yuv420p",
+          "audio_tracks": 0,
+          "boundary_ssim_640x360": 0.9866329297744052,
+          "boundary_psnr_db_640x360": 46.88479163000458,
+          "adjacent_ssim_before_640x360": 0.9878865611607842,
+          "adjacent_ssim_after_640x360": 0.9910821454476628,
+          "boundary_MAD_255_160x90": 0.32701388001441956,
+          "adjacent_MAD_255_160x90": 0.278981477022171,
+          "boundary_to_adjacent_MAD_ratio": 1.1721705810182923,
+          "largest_internal_MAD_255_160x90": 0.5459491014480591,
+          "median_internal_MAD_255_160x90": 0.1972685158252716,
+          "largest_internal_step_frame": 58,
+          "motion_before_at_after_boundary_160x90": [
+            {
+              "mean_flow_yx": [
+                0.05802663043141365,
+                0.0959799736738205
+              ],
+              "mean_flow_speed": 0.20883497595787048,
+              "registration_yx": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "mean_flow_yx": [
+                0.025752326473593712,
+                -0.011928065679967403
+              ],
+              "mean_flow_speed": 0.0786515548825264,
+              "registration_yx": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "mean_flow_yx": [
+                0.05757885426282883,
+                -0.04057943820953369
+              ],
+              "mean_flow_speed": 0.11933275312185287,
+              "registration_yx": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "boundary_registration_error_px_160x90": 0.0,
+          "overlap_motion_samples_160x90": [
+            {
+              "frame": 42,
+              "mean_flow_yx": [
+                -0.08934106677770615,
+                0.04101797193288803
+              ],
+              "mean_flow_speed": 0.19197098910808563
+            },
+            {
+              "frame": 46,
+              "mean_flow_yx": [
+                -0.012274817563593388,
+                0.018467562273144722
+              ],
+              "mean_flow_speed": 0.06654124706983566
+            },
+            {
+              "frame": 51,
+              "mean_flow_yx": [
+                -0.050873398780822754,
+                0.0389026515185833
+              ],
+              "mean_flow_speed": 0.12217077612876892
+            },
+            {
+              "frame": 56,
+              "mean_flow_yx": [
+                0.0037284211721271276,
+                -0.01699047163128853
+              ],
+              "mean_flow_speed": 0.06973271816968918
+            },
+            {
+              "frame": 58,
+              "mean_flow_yx": [
+                0.05802663043141365,
+                0.0959799736738205
+              ],
+              "mean_flow_speed": 0.20883497595787048
+            }
+          ],
+          "configured_fps": 24
+        }
+      },
+      "bytes": 703712
+    },
+    {
+      "id": "cozy-fireplace",
+      "name": "Charge — Cozy Fireplace",
+      "kind": "video",
+      "category": "Cozy",
+      "author": "Blender Foundation / Blender Studio",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://video.blender.org/w/a5e0b25f-219b-4069-a247-fa2b29cb39be",
+      "noncommercial": false,
+      "description": "A quiet, muted excerpt prepared as a repeating desktop loop.",
+      "assets": [
+        {
+          "path": "cozy-fireplace/loop.mp4",
+          "title": "Charge — Cozy Fireplace",
+          "author": "Blender Foundation / Blender Studio",
+          "license": "CC-BY-4.0",
+          "source": "https://video.blender.org/w/a5e0b25f-219b-4069-a247-fa2b29cb39be",
+          "changes": "Source 30–55 s; frame-aligned, rotated 2 s smootherstep (quintic) tail-to-head crossfade; native 24 fps; H.264/yuv420p CRF 18, 6 Mb/s VBV, audio removed, width capped at 1920.",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "upstream_sha256": "73af70ae38073ad3ac9cdfbf89ac8742ceacf7556f44c8cceb2db0ca29df8bd7",
+          "bytes": 6999081,
+          "sha256": "518cf69c6daaf8ec1e54c57cbb308d77cc8d83a09e5a13b86fdbbd119b269991"
+        },
+        {
+          "path": "cozy-fireplace/preview.jpg",
+          "title": "Charge — Cozy Fireplace",
+          "author": "Blender Foundation / Blender Studio",
+          "license": "CC-BY-4.0",
+          "source": "https://video.blender.org/w/a5e0b25f-219b-4069-a247-fa2b29cb39be",
+          "changes": "640×360 JPEG preview, center crop of the wallpaper.",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "bytes": 26917,
+          "sha256": "c1d88c933549fc0725b1254dbc4da36758b7480807026c467a88e04f6c6768a3"
+        },
+        {
+          "path": "cozy-fireplace/theme.json",
+          "title": "Charge — Cozy Fireplace",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 145,
+          "sha256": "14df56ec531145ccd7cf5180d6c010ef72ccbedc7d3217699df053e2d363a387"
+        }
+      ],
+      "loop": {
+        "source_start_seconds": 30,
+        "source_duration_seconds": 25,
+        "crossfade_seconds": 2,
+        "fps": 24,
+        "method": "Rotated tail-to-head smootherstep (quintic) crossfade, frame-aligned with exact discrete endpoint weights; no reversal.",
+        "measured": {
+          "id": "cozy-fireplace",
+          "frames": 552,
+          "duration": 23.0,
+          "width": 1920,
+          "height": 1080,
+          "fps": "24/1",
+          "codec": "h264",
+          "pixel_format": "yuv420p",
+          "audio_tracks": 0,
+          "boundary_ssim_640x360": 0.9783693120456181,
+          "boundary_psnr_db_640x360": 42.07034125111461,
+          "adjacent_ssim_before_640x360": 0.9783120618328748,
+          "adjacent_ssim_after_640x360": 0.9892948095080186,
+          "boundary_MAD_255_160x90": 0.889212965965271,
+          "adjacent_MAD_255_160x90": 0.5318672060966492,
+          "boundary_to_adjacent_MAD_ratio": 1.6718702634275333,
+          "largest_internal_MAD_255_160x90": 1.7931019067764282,
+          "median_internal_MAD_255_160x90": 0.47513890266418457,
+          "largest_internal_step_frame": 177,
+          "motion_before_at_after_boundary_160x90": [
+            {
+              "mean_flow_yx": [
+                -0.07362867891788483,
+                0.026038330048322678
+              ],
+              "mean_flow_speed": 0.19515377283096313,
+              "registration_yx": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "mean_flow_yx": [
+                -0.030437124893069267,
+                0.00017882681277114898
+              ],
+              "mean_flow_speed": 0.12245584279298782,
+              "registration_yx": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "mean_flow_yx": [
+                0.030141321942210197,
+                -0.005251711700111628
+              ],
+              "mean_flow_speed": 0.10707331448793411,
+              "registration_yx": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "boundary_registration_error_px_160x90": 0.0,
+          "overlap_motion_samples_160x90": [
+            {
+              "frame": 504,
+              "mean_flow_yx": [
+                0.061315007507801056,
+                -0.00300388946197927
+              ],
+              "mean_flow_speed": 0.1919005960226059
+            },
+            {
+              "frame": 516,
+              "mean_flow_yx": [
+                0.0009133374551311135,
+                0.014325234107673168
+              ],
+              "mean_flow_speed": 0.06977849453687668
+            },
+            {
+              "frame": 528,
+              "mean_flow_yx": [
+                -0.033140312880277634,
+                -0.0009572180570103228
+              ],
+              "mean_flow_speed": 0.11633016169071198
+            },
+            {
+              "frame": 540,
+              "mean_flow_yx": [
+                0.010047225281596184,
+                0.0041309744119644165
+              ],
+              "mean_flow_speed": 0.08775200694799423
+            },
+            {
+              "frame": 550,
+              "mean_flow_yx": [
+                -0.07362867891788483,
+                0.026038330048322678
+              ],
+              "mean_flow_speed": 0.19515377283096313
+            }
+          ],
+          "configured_fps": 24
+        }
+      },
+      "bytes": 7026143
+    },
+    {
+      "id": "fluids",
+      "name": "Fluids",
+      "kind": "web",
+      "category": "Abstract",
+      "author": "Pavel Dobryakov",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "https://github.com/PavelDoGreat/WebGL-Fluid-Simulation",
+      "noncommercial": false,
+      "description": "The widely used WebGL fluid simulation: luminous ink, with gentle automatic splats.",
+      "assets": [
+        {
+          "path": "fluids/LDR_LLL1_0.png",
+          "title": "Fluids",
+          "author": "Pavel Dobryakov",
+          "license": "MIT",
+          "source": "https://github.com/PavelDoGreat/WebGL-Fluid-Simulation",
+          "changes": "Unmodified.",
+          "license_url": "https://opensource.org/license/mit/",
+          "upstream_sha256": "140c55bd97c21b9b22008d7054b492333fec67fbfc1a1b266e5b0209b647eed4",
+          "bytes": 7115,
+          "sha256": "140c55bd97c21b9b22008d7054b492333fec67fbfc1a1b266e5b0209b647eed4"
+        },
+        {
+          "path": "fluids/index.html",
+          "title": "Fluids",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "Local wallpaper host, canvas and visible credit; no remote dependencies.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 770,
+          "sha256": "c98c07e85eae3e1c696428f3326ad805e08315a803c821230dcb2e9599eb2e6f"
+        },
+        {
+          "path": "fluids/preview.jpg",
+          "title": "Fluids",
+          "author": "Pavel Dobryakov",
+          "license": "MIT",
+          "license_url": "https://opensource.org/license/mit/",
+          "source": "https://github.com/PavelDoGreat/WebGL-Fluid-Simulation",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 24651,
+          "sha256": "6da9d8b54a1bda1dcf6cf4b394ce35cec12d7c721ee096b06df00ff114beff2a"
+        },
+        {
+          "path": "fluids/script.js",
+          "title": "Fluids",
+          "author": "Pavel Dobryakov",
+          "license": "MIT",
+          "source": "https://github.com/PavelDoGreat/WebGL-Fluid-Simulation",
+          "changes": "Removed mobile promotion handlers and GUI startup; dye resolution 512; 30 fps pacing with matching dt cap; original splat routine gets two splats every 2.2 seconds. Removed all Google Analytics calls (including the startup dependency on a global ga function); the local page never loads analytics.",
+          "license_url": "https://opensource.org/license/mit/",
+          "upstream_sha256": "291d86de38ea23b8fb63d1879afeea77e9a4556900bbd67e13bc1d5ea007ce4e",
+          "bytes": 50850,
+          "sha256": "99ea35515624e5df61f4f7a71a370524d6a0ac0cb98377fceb604f5df5d59461"
+        },
+        {
+          "path": "fluids/theme.json",
+          "title": "Fluids",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 113,
+          "sha256": "2c8890e38893bc591be55740bb6f5d13e76d78c6779e4d6007905926495bec03"
+        }
+      ],
+      "bytes": 83499
+    },
+    {
+      "id": "milky-way",
+      "name": "Milky Way over Paranal",
+      "kind": "video",
+      "category": "Space",
+      "author": "ESO/C. Malin (christophmalin.com)",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://www.eso.org/public/videos/uhd-cm-vlt2014-3/",
+      "noncommercial": false,
+      "description": "A quiet, muted excerpt prepared as a repeating desktop loop.",
+      "assets": [
+        {
+          "path": "milky-way/loop.mp4",
+          "title": "Milky Way over Paranal",
+          "author": "ESO/C. Malin (christophmalin.com)",
+          "license": "CC-BY-4.0",
+          "source": "https://www.eso.org/public/videos/uhd-cm-vlt2014-3/",
+          "changes": "Source 0–18 s; frame-aligned, rotated 2 s smootherstep (quintic) tail-to-head crossfade; native 25 fps; H.264/yuv420p CRF 18, 6 Mb/s VBV, audio removed, width capped at 1920. Full ESO credit burned in; contain preserves it.",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "upstream_sha256": "ca2b998aded22bea953872f8236e6626a631af44f30be4691ac6396132ece5ba",
+          "bytes": 11472291,
+          "sha256": "9df649e56035081a12e1965b0e756584fa41a417476ebebc9c4b983ba6af4b3b"
+        },
+        {
+          "path": "milky-way/preview.jpg",
+          "title": "Milky Way over Paranal",
+          "author": "ESO/C. Malin (christophmalin.com)",
+          "license": "CC-BY-4.0",
+          "source": "https://www.eso.org/public/videos/uhd-cm-vlt2014-3/",
+          "changes": "640×360 JPEG preview, center crop of the wallpaper.",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "bytes": 51678,
+          "sha256": "2ce3421aea2c7b83fc19a64a7556fc5b353ba200d07026799662a70e88660b56"
+        },
+        {
+          "path": "milky-way/theme.json",
+          "title": "Milky Way over Paranal",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 144,
+          "sha256": "f015d84acd06c895c610d4fc0e29b7849a83ca079c51dda8a345c3d33dca9ea3"
+        }
+      ],
+      "loop": {
+        "source_start_seconds": 0,
+        "source_duration_seconds": 18,
+        "crossfade_seconds": 2,
+        "fps": 25,
+        "method": "Rotated tail-to-head smootherstep (quintic) crossfade, frame-aligned with exact discrete endpoint weights; no reversal.",
+        "measured": {
+          "id": "milky-way",
+          "frames": 400,
+          "duration": 16.0,
+          "width": 1920,
+          "height": 1080,
+          "fps": "25/1",
+          "codec": "h264",
+          "pixel_format": "yuv420p",
+          "audio_tracks": 0,
+          "boundary_ssim_640x360": 0.7217816580295303,
+          "boundary_psnr_db_640x360": 30.3357935963148,
+          "adjacent_ssim_before_640x360": 0.7262341110893832,
+          "adjacent_ssim_after_640x360": 0.7239570163617134,
+          "boundary_MAD_255_160x90": 1.1678704023361206,
+          "adjacent_MAD_255_160x90": 1.076334834098816,
+          "boundary_to_adjacent_MAD_ratio": 1.0850437664353256,
+          "largest_internal_MAD_255_160x90": 1.4776852130889893,
+          "median_internal_MAD_255_160x90": 0.9870370626449585,
+          "largest_internal_step_frame": 370,
+          "motion_before_at_after_boundary_160x90": [
+            {
+              "mean_flow_yx": [
+                -0.14803288877010345,
+                -0.19927801191806793
+              ],
+              "mean_flow_speed": 0.2836207449436188,
+              "registration_yx": [
+                0.10000000149011612,
+                0.10000000149011612
+              ]
+            },
+            {
+              "mean_flow_yx": [
+                -0.10550758242607117,
+                -0.13358114659786224
+              ],
+              "mean_flow_speed": 0.21023325622081757,
+              "registration_yx": [
+                0.10000000149011612,
+                0.10000000149011612
+              ]
+            },
+            {
+              "mean_flow_yx": [
+                -0.2124321460723877,
+                -0.17293645441532135
+              ],
+              "mean_flow_speed": 0.30399182438850403,
+              "registration_yx": [
+                0.10000000149011612,
+                0.10000000149011612
+              ]
+            }
+          ],
+          "boundary_registration_error_px_160x90": 0.0,
+          "overlap_motion_samples_160x90": [
+            {
+              "frame": 350,
+              "mean_flow_yx": [
+                -0.21324403584003448,
+                -0.14920832216739655
+              ],
+              "mean_flow_speed": 0.28372934460639954
+            },
+            {
+              "frame": 362,
+              "mean_flow_yx": [
+                -0.24576182663440704,
+                0.11329574882984161
+              ],
+              "mean_flow_speed": 0.498355895280838
+            },
+            {
+              "frame": 375,
+              "mean_flow_yx": [
+                -0.07620047777891159,
+                -0.11744693666696548
+              ],
+              "mean_flow_speed": 0.3240698575973511
+            },
+            {
+              "frame": 388,
+              "mean_flow_yx": [
+                -0.11644637584686279,
+                -0.1179109513759613
+              ],
+              "mean_flow_speed": 0.24385707080364227
+            },
+            {
+              "frame": 398,
+              "mean_flow_yx": [
+                -0.14803288877010345,
+                -0.19927801191806793
+              ],
+              "mean_flow_speed": 0.2836207449436188
+            }
+          ],
+          "configured_fps": 25
+        }
+      },
+      "bytes": 11524113
+    },
+    {
+      "id": "rain-city",
+      "name": "Rainy Hong Kong (non-commercial)",
+      "kind": "web",
+      "category": "City & rain",
+      "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+      "license": "CC-BY-NC-SA-3.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "source": "https://github.com/rocksdanister/rain",
+      "noncommercial": true,
+      "description": "Lively’s rainy window / Heartfelt, with a separately licensed Hong Kong night panorama.",
+      "assets": [
+        {
+          "path": "rain-city/index.html",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "Local host and full visible credit; upstream icon, Pexels image, loading art and controls omitted.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 990,
+          "sha256": "fe2e9b2cb25829d5142d1cc91460636649676e96edf661537b52a65e42251214"
+        },
+        {
+          "path": "rain-city/js/dat.gui.min.js",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "Data Arts Team, Google Creative Lab",
+          "license": "Apache-2.0",
+          "source": "https://github.com/dataarts/dat.gui",
+          "changes": "Unmodified.",
+          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+          "upstream_sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944",
+          "bytes": 50323,
+          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
+        },
+        {
+          "path": "rain-city/js/script.js",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Local background path/dimensions changed; fixed 0.65 render scale at device ratio 1. Original animation and 30 fps timer retained. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "ac15b78aeb3abfee2a1bf61bdca9c5885fc72f9018a9f501b597d73da8a7886c",
+          "bytes": 11021,
+          "sha256": "3b3bbd69f44e0d801772927927796a2d59e3a1ffebd24a74e999c0f266ea0d1a"
+        },
+        {
+          "path": "rain-city/js/three.min.js",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "Three.js authors",
+          "license": "MIT",
+          "source": "https://github.com/mrdoob/three.js/tree/r150",
+          "changes": "Unmodified.",
+          "license_url": "https://opensource.org/license/mit/",
+          "upstream_sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff",
+          "bytes": 613502,
+          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
+        },
+        {
+          "path": "rain-city/media/city.jpg",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "David Iliff (Diliff)",
+          "license": "CC-BY-3.0",
+          "source": "https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg",
+          "changes": "Downscaled to 2560 px wide, JPEG quality 90; replaces the upstream Pexels mountain image.",
+          "license_url": "https://creativecommons.org/licenses/by/3.0/",
+          "upstream_sha256": "589358eb1752270abededef0a4338a7fc4c1242eb74465380c443c69b645f90e",
+          "bytes": 885858,
+          "sha256": "c1b56787489c5724fcb6dcb94b220915db2b383524f2af84e093e1c1297f41d3"
+        },
+        {
+          "path": "rain-city/preview.jpg",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 38980,
+          "sha256": "73aa46834513aa9ada8a0f6956c8698ed385e2ae27c064695b90e9e41c6f74ae"
+        },
+        {
+          "path": "rain-city/shaders/rain.frag",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Unmodified. Line endings normalized to LF.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "51f472c1ea4b7a35a79416baa0c50087f777f99d29705c8f8a7f84087a2f9a9d",
+          "bytes": 5681,
+          "sha256": "51f472c1ea4b7a35a79416baa0c50087f777f99d29705c8f8a7f84087a2f9a9d"
+        },
+        {
+          "path": "rain-city/theme.json",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 114,
+          "sha256": "2db79ed814b139542514fc74b57ab852d9e42b3e5ac574ce709feb7da51d995c"
+        }
+      ],
+      "bytes": 1606469
+    },
+    {
+      "id": "rain-city-amber",
+      "name": "Amber Downpour (non-commercial)",
+      "kind": "web",
+      "category": "City & rain",
+      "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+      "license": "CC-BY-NC-SA-3.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "source": "https://github.com/rocksdanister/rain",
+      "noncommercial": true,
+      "description": "A weather/palette variant of the credited Lively Rain / Heartfelt effect over the same licensed night city.",
+      "assets": [
+        {
+          "path": "rain-city-amber/index.html",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "Local host and full visible credit; upstream icon, Pexels image, loading art and controls omitted.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 989,
+          "sha256": "f380b34f6ca0659ef09423cd07801b06393b155cb5832f2f5fabf9c73394085c"
+        },
+        {
+          "path": "rain-city-amber/js/dat.gui.min.js",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "Data Arts Team, Google Creative Lab",
+          "license": "Apache-2.0",
+          "source": "https://github.com/dataarts/dat.gui",
+          "changes": "Unmodified.",
+          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+          "upstream_sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944",
+          "bytes": 50323,
+          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
+        },
+        {
+          "path": "rain-city-amber/js/script.js",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Local background path/dimensions changed; fixed 0.65 render scale at device ratio 1. Original animation and 30 fps timer retained. Variant: intensity 0.72, speed 0.32, brightness 0.85, blur 0.65; no clock reset. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "ac15b78aeb3abfee2a1bf61bdca9c5885fc72f9018a9f501b597d73da8a7886c",
+          "bytes": 11024,
+          "sha256": "bfdc63d4e743711ecd5cf3255beca6681d11192be41cc89680ec3be2a4629c14"
+        },
+        {
+          "path": "rain-city-amber/js/three.min.js",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "Three.js authors",
+          "license": "MIT",
+          "source": "https://github.com/mrdoob/three.js/tree/r150",
+          "changes": "Unmodified.",
+          "license_url": "https://opensource.org/license/mit/",
+          "upstream_sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff",
+          "bytes": 613502,
+          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
+        },
+        {
+          "path": "rain-city-amber/media/city.jpg",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "David Iliff (Diliff)",
+          "license": "CC-BY-3.0",
+          "source": "https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg",
+          "changes": "Downscaled to 2560 px wide, JPEG quality 90; replaces the upstream Pexels mountain image.",
+          "license_url": "https://creativecommons.org/licenses/by/3.0/",
+          "upstream_sha256": "589358eb1752270abededef0a4338a7fc4c1242eb74465380c443c69b645f90e",
+          "bytes": 885858,
+          "sha256": "c1b56787489c5724fcb6dcb94b220915db2b383524f2af84e093e1c1297f41d3"
+        },
+        {
+          "path": "rain-city-amber/preview.jpg",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 43993,
+          "sha256": "0ff7c49ee2f3a5310cf1e5589c2504612b68e0ed1dd058976cf1049ea0336207"
+        },
+        {
+          "path": "rain-city-amber/shaders/rain.frag",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Original rain algorithm retained; post-processing tint changed to vec3(1.12, .82, .60). Line endings normalized to LF.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "51f472c1ea4b7a35a79416baa0c50087f777f99d29705c8f8a7f84087a2f9a9d",
+          "bytes": 5684,
+          "sha256": "75fc21dbc3eb82e8ea3fc6c44e09e962ba530a9bc2150dc36d0424b7a4cfc262"
+        },
+        {
+          "path": "rain-city-amber/theme.json",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 113,
+          "sha256": "5fc92d57ae01b68838e1536fb970ac50da7ebdd525a8a97392bc3c1da435a8dd"
+        }
+      ],
+      "bytes": 1611486
+    },
+    {
+      "id": "rain-city-midnight",
+      "name": "Midnight Drizzle (non-commercial)",
+      "kind": "web",
+      "category": "City & rain",
+      "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+      "license": "CC-BY-NC-SA-3.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "source": "https://github.com/rocksdanister/rain",
+      "noncommercial": true,
+      "description": "A weather/palette variant of the credited Lively Rain / Heartfelt effect over the same licensed night city.",
+      "assets": [
+        {
+          "path": "rain-city-midnight/index.html",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "Local host and full visible credit; upstream icon, Pexels image, loading art and controls omitted.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 991,
+          "sha256": "e22f6a35e8c93cd825f4d217173d4d246b8503dbe6ee89cd0b6b6dd5d737b514"
+        },
+        {
+          "path": "rain-city-midnight/js/dat.gui.min.js",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "Data Arts Team, Google Creative Lab",
+          "license": "Apache-2.0",
+          "source": "https://github.com/dataarts/dat.gui",
+          "changes": "Unmodified.",
+          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+          "upstream_sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944",
+          "bytes": 50323,
+          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
+        },
+        {
+          "path": "rain-city-midnight/js/script.js",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Local background path/dimensions changed; fixed 0.65 render scale at device ratio 1. Original animation and 30 fps timer retained. Variant: intensity 0.26, speed 0.18, brightness 0.65, blur 0.35; no clock reset. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "ac15b78aeb3abfee2a1bf61bdca9c5885fc72f9018a9f501b597d73da8a7886c",
+          "bytes": 11024,
+          "sha256": "b7add33b10b430bdb8820c45feb0b07639766bef26760793e79e5cb7a8c63dd2"
+        },
+        {
+          "path": "rain-city-midnight/js/three.min.js",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "Three.js authors",
+          "license": "MIT",
+          "source": "https://github.com/mrdoob/three.js/tree/r150",
+          "changes": "Unmodified.",
+          "license_url": "https://opensource.org/license/mit/",
+          "upstream_sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff",
+          "bytes": 613502,
+          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
+        },
+        {
+          "path": "rain-city-midnight/media/city.jpg",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "David Iliff (Diliff)",
+          "license": "CC-BY-3.0",
+          "source": "https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg",
+          "changes": "Downscaled to 2560 px wide, JPEG quality 90; replaces the upstream Pexels mountain image.",
+          "license_url": "https://creativecommons.org/licenses/by/3.0/",
+          "upstream_sha256": "589358eb1752270abededef0a4338a7fc4c1242eb74465380c443c69b645f90e",
+          "bytes": 885858,
+          "sha256": "c1b56787489c5724fcb6dcb94b220915db2b383524f2af84e093e1c1297f41d3"
+        },
+        {
+          "path": "rain-city-midnight/preview.jpg",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 33210,
+          "sha256": "393745e4b28676e7d39e964ec5d04de98ad85470a16dfefda62561f8c77b44f0"
+        },
+        {
+          "path": "rain-city-midnight/shaders/rain.frag",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Original rain algorithm retained; post-processing tint changed to vec3(.65, .85, 1.25). Line endings normalized to LF.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "51f472c1ea4b7a35a79416baa0c50087f777f99d29705c8f8a7f84087a2f9a9d",
+          "bytes": 5684,
+          "sha256": "4107819db67ec5c78447b288c9c07967073bb77d633d98665f41ed0b576e761b"
+        },
+        {
+          "path": "rain-city-midnight/theme.json",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 115,
+          "sha256": "92f4508d3bf85e77ad81040b61cf882a8ecb0df588813b24a43669ffd7598751"
+        }
+      ],
+      "bytes": 1600707
+    },
+    {
+      "id": "seascape",
+      "name": "Seascape (non-commercial)",
+      "kind": "shader",
+      "category": "Nature",
+      "author": "Alexander Alekseev (TDM)",
+      "license": "CC-BY-NC-SA-3.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "source": "https://github.com/tdmaav/shadertoy/blob/master/Seascape.shader",
+      "noncommercial": true,
+      "description": "A faithful port of an existing licensed GLSL effect.",
+      "assets": [
+        {
+          "path": "seascape/preview.jpg",
+          "title": "Seascape (non-commercial)",
+          "author": "Alexander Alekseev (TDM)",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/tdmaav/shadertoy/blob/master/Seascape.shader",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 75897,
+          "sha256": "10339a5d7e20415ddb86a9fc6db545ab1891e2df91accbffec651afb46f30555"
+        },
+        {
+          "path": "seascape/seascape.wgsl",
+          "title": "Seascape (non-commercial)",
+          "author": "Alexander Alekseev (TDM)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/tdmaav/shadertoy/blob/master/Seascape.shader",
+          "changes": "WGSL port, paper uniforms and Y-coordinate conversion; see the file header for adaptation details.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "54ef0258a8ee8ab8777d0d5bf5dfc77db04d382a1ea2ba4427046d78b97def46",
+          "bytes": 5309,
+          "sha256": "d15f6bdaa4060961f047298d1553072b8deedc2428b5732008c2a6dfaa738b12"
+        },
+        {
+          "path": "seascape/theme.json",
+          "title": "Seascape (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 149,
+          "sha256": "49efa2a3f5e8538ee433a522c789829ba2e3020e244739bc54d353705d917ee8"
+        },
+        {
+          "path": "seascape/upstream.glsl",
+          "title": "Seascape (non-commercial)",
+          "author": "Alexander Alekseev (TDM)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/tdmaav/shadertoy/blob/master/Seascape.shader",
+          "changes": "Unmodified.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "54ef0258a8ee8ab8777d0d5bf5dfc77db04d382a1ea2ba4427046d78b97def46",
+          "bytes": 5740,
+          "sha256": "54ef0258a8ee8ab8777d0d5bf5dfc77db04d382a1ea2ba4427046d78b97def46"
+        }
+      ],
+      "bytes": 87095
+    },
+    {
+      "id": "seascape-midnight",
+      "name": "Seascape — Midnight (non-commercial)",
+      "kind": "shader",
+      "category": "Nature",
+      "author": "Alexander Alekseev (TDM)",
+      "license": "CC-BY-NC-SA-3.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "source": "https://github.com/tdmaav/shadertoy/blob/master/Seascape.shader",
+      "noncommercial": true,
+      "description": "TDM’s Seascape with a restrained midnight colour grade; the wave, lighting and camera algorithms are unchanged.",
+      "assets": [
+        {
+          "path": "seascape-midnight/preview.jpg",
+          "title": "Seascape — Midnight (non-commercial)",
+          "author": "Alexander Alekseev (TDM)",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/tdmaav/shadertoy/blob/master/Seascape.shader",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 30200,
+          "sha256": "dfb49871459161a6528e2456490cdc1719785fb230c698ca5fd987ba92b33f6a"
+        },
+        {
+          "path": "seascape-midnight/seascape.wgsl",
+          "title": "Seascape — Midnight (non-commercial)",
+          "author": "Alexander Alekseev (TDM)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/tdmaav/shadertoy/blob/master/Seascape.shader",
+          "changes": "WGSL port, paper uniforms and Y-coordinate conversion; see the file header for adaptation details. Fixed default iMouse; midnight output grade (0.07, 0.16, 0.30). No wave/camera algorithm changes.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "54ef0258a8ee8ab8777d0d5bf5dfc77db04d382a1ea2ba4427046d78b97def46",
+          "bytes": 5407,
+          "sha256": "87bef2585e88ef4fa8bf430f75447d025003b8dea233eb00d5f4a6346f4eba8c"
+        },
+        {
+          "path": "seascape-midnight/theme.json",
+          "title": "Seascape — Midnight (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 162,
+          "sha256": "ac42ab2fadb456ddec6443d547d17eebc918e2e0d45597d938dcbfbffcc35ef7"
+        },
+        {
+          "path": "seascape-midnight/upstream.glsl",
+          "title": "Seascape — Midnight (non-commercial)",
+          "author": "Alexander Alekseev (TDM)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/tdmaav/shadertoy/blob/master/Seascape.shader",
+          "changes": "Unmodified.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "54ef0258a8ee8ab8777d0d5bf5dfc77db04d382a1ea2ba4427046d78b97def46",
+          "bytes": 5740,
+          "sha256": "54ef0258a8ee8ab8777d0d5bf5dfc77db04d382a1ea2ba4427046d78b97def46"
+        }
+      ],
+      "bytes": 41509
+    },
+    {
+      "id": "snow-city",
+      "name": "Snow over Hong Kong (non-commercial)",
+      "kind": "web",
+      "category": "City & rain",
+      "author": "Andrew Baldwin; Lively adaptation by Dani John",
+      "license": "CC-BY-NC-SA-3.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "noncommercial": true,
+      "source": "https://github.com/rocksdanister/snow",
+      "description": "The existing Lively snow effect over a separately licensed atmospheric background.",
+      "assets": [
+        {
+          "path": "snow-city/index.html",
+          "title": "Snow over Hong Kong (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "license_url": "https://opensource.org/license/mit/",
+          "source": "../LICENSE",
+          "changes": "Local wallpaper host and visible credit; controls and upstream stock media omitted.",
+          "bytes": 899,
+          "sha256": "645c89e1a4aa0ebd1c8e2a0a30671e3dcf78d0633754a294a2d245bef796e4b8"
+        },
+        {
+          "path": "snow-city/js/dat.gui.min.js",
+          "title": "Snow over Hong Kong (non-commercial)",
+          "author": "Data Arts Team, Google Creative Lab",
+          "license": "Apache-2.0",
+          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+          "source": "https://github.com/dataarts/dat.gui",
+          "changes": "Unmodified.",
+          "bytes": 50323,
+          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
+        },
+        {
+          "path": "snow-city/js/script.js",
+          "title": "Snow over Hong Kong (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/snow",
+          "changes": "Local texture replaced; original snow algorithm, light-snow parameters and 30 fps pacing retained; render scale 0.65; six-hour clock reset removed. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
+          "bytes": 7947,
+          "sha256": "d848e2f1566b07a8d6eab2381d985ec24a30accc9f62fbd807f658b1a7e175e3"
+        },
+        {
+          "path": "snow-city/js/three.min.js",
+          "title": "Snow over Hong Kong (non-commercial)",
+          "author": "Three.js authors",
+          "license": "MIT",
+          "license_url": "https://opensource.org/license/mit/",
+          "source": "https://github.com/mrdoob/three.js/tree/r150",
+          "changes": "Unmodified.",
+          "bytes": 613502,
+          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
+        },
+        {
+          "path": "snow-city/media/image.jpg",
+          "title": "Snow over Hong Kong (non-commercial)",
+          "author": "David Iliff (Diliff)",
+          "license": "CC-BY-3.0",
+          "license_url": "https://creativecommons.org/licenses/by/3.0/",
+          "source": "https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg",
+          "changes": "Licensed city backdrop downscaled to 2560 px wide and JPEG-encoded; replaces the upstream Pexels image.",
+          "bytes": 854319,
+          "sha256": "23c94ff2bb085562aba72d9e63b77050d15f8f0eac38d883bfaa9648bbd1163d"
+        },
+        {
+          "path": "snow-city/preview.jpg",
+          "title": "Snow over Hong Kong (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/snow",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 60048,
+          "sha256": "1f0c1f43e360f3b2e660fa584fcafa84d12f982c3b46539abd4672d2fe4ec788"
+        },
+        {
+          "path": "snow-city/shaders/snow.frag",
+          "title": "Snow over Hong Kong (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/snow",
+          "changes": "Unmodified. Line endings normalized to LF.",
+          "bytes": 2698,
+          "sha256": "c67edafd868de70d1020c97c5bef416bba11a7ccec36905775e89b67bf957c4d"
+        },
+        {
+          "path": "snow-city/theme.json",
+          "title": "Snow over Hong Kong (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "license_url": "https://opensource.org/license/mit/",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest.",
+          "bytes": 118,
+          "sha256": "86610a6348aa2451c813ecc3e4fd7a5e15222eeeef5b6177b8e022e3218e9672"
+        }
+      ],
+      "bytes": 1589854
+    },
+    {
+      "id": "snow-forest",
+      "name": "Snow in the Misty Forest (non-commercial)",
+      "kind": "web",
+      "category": "Nature",
+      "author": "Andrew Baldwin; Lively adaptation by Dani John",
+      "license": "CC-BY-NC-SA-3.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "noncommercial": true,
+      "source": "https://github.com/rocksdanister/snow",
+      "description": "The existing Lively snow effect over a separately licensed atmospheric background.",
+      "assets": [
+        {
+          "path": "snow-forest/index.html",
+          "title": "Snow in the Misty Forest (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "license_url": "https://opensource.org/license/mit/",
+          "source": "../LICENSE",
+          "changes": "Local wallpaper host and visible credit; controls and upstream stock media omitted.",
+          "bytes": 927,
+          "sha256": "1492c51a925d6c11a715e8b4cb4e075b89c44e5f78593457e9a5d163af29bb2d"
+        },
+        {
+          "path": "snow-forest/js/dat.gui.min.js",
+          "title": "Snow in the Misty Forest (non-commercial)",
+          "author": "Data Arts Team, Google Creative Lab",
+          "license": "Apache-2.0",
+          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+          "source": "https://github.com/dataarts/dat.gui",
+          "changes": "Unmodified.",
+          "bytes": 50323,
+          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
+        },
+        {
+          "path": "snow-forest/js/script.js",
+          "title": "Snow in the Misty Forest (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/snow",
+          "changes": "Local texture replaced; original snow algorithm, light-snow parameters and 30 fps pacing retained; render scale 0.65; six-hour clock reset removed. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
+          "bytes": 7947,
+          "sha256": "d848e2f1566b07a8d6eab2381d985ec24a30accc9f62fbd807f658b1a7e175e3"
+        },
+        {
+          "path": "snow-forest/js/three.min.js",
+          "title": "Snow in the Misty Forest (non-commercial)",
+          "author": "Three.js authors",
+          "license": "MIT",
+          "license_url": "https://opensource.org/license/mit/",
+          "source": "https://github.com/mrdoob/three.js/tree/r150",
+          "changes": "Unmodified.",
+          "bytes": 613502,
+          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
+        },
+        {
+          "path": "snow-forest/media/image.jpg",
+          "title": "Snow in the Misty Forest (non-commercial)",
+          "author": "Blender Foundation; director Andy Goralczyk",
+          "license": "CC-BY-4.0",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "source": "https://studio.blender.org/films/spring/",
+          "changes": "Licensed backdrop downscaled/encoded to JPEG; forest frame at 105 s. Replaces the upstream Pexels image.",
+          "bytes": 50699,
+          "sha256": "d8f385984fa06fb6fb70d305d946044861d59c8779c759930e1f36e91668da73"
+        },
+        {
+          "path": "snow-forest/preview.jpg",
+          "title": "Snow in the Misty Forest (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/snow",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 34045,
+          "sha256": "b29a656d506858d6ad97d8869f8aa7f40a4f349d55223cc367d660e8e1a56118"
+        },
+        {
+          "path": "snow-forest/shaders/snow.frag",
+          "title": "Snow in the Misty Forest (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/snow",
+          "changes": "Unmodified. Line endings normalized to LF.",
+          "bytes": 2698,
+          "sha256": "c67edafd868de70d1020c97c5bef416bba11a7ccec36905775e89b67bf957c4d"
+        },
+        {
+          "path": "snow-forest/theme.json",
+          "title": "Snow in the Misty Forest (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "license_url": "https://opensource.org/license/mit/",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest.",
+          "bytes": 123,
+          "sha256": "4263042986573ac755bb7cdf20f75a8b1f9853885fc3816e471e2ba287d0c8b9"
+        }
+      ],
+      "bytes": 760264
+    },
+    {
+      "id": "snowfall",
+      "name": "Snowfall (non-commercial)",
+      "kind": "shader",
+      "category": "Nature",
+      "author": "Andrew Baldwin; Lively adaptation by Dani John",
+      "license": "CC-BY-NC-SA-3.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+      "source": "https://github.com/rocksdanister/snow/blob/main/shaders/snow.frag",
+      "noncommercial": true,
+      "description": "A faithful port of an existing licensed GLSL effect.",
+      "assets": [
+        {
+          "path": "snowfall/preview.jpg",
+          "title": "Snowfall (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/snow/blob/main/shaders/snow.frag",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 34070,
+          "sha256": "fe6024f95ca6300b7af8af4e0d21c03bfbae690dc8efdb2e191dfea624d6cb5c"
+        },
+        {
+          "path": "snowfall/snowfall.wgsl",
+          "title": "Snowfall (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/snow/blob/main/shaders/snow.frag",
+          "changes": "WGSL port, paper uniforms and Y-coordinate conversion; see the file header for adaptation details.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "c67edafd868de70d1020c97c5bef416bba11a7ccec36905775e89b67bf957c4d",
+          "bytes": 1680,
+          "sha256": "d63972f0e0b3c7e5d716980f0d175ebb14a5e06611d487962146395af6c73ee8"
+        },
+        {
+          "path": "snowfall/theme.json",
+          "title": "Snowfall (non-commercial)",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 150,
+          "sha256": "0dd4c69f83dd431882ca02ffdbf53c58c837b1eb33310efba86f747b846527bc"
+        },
+        {
+          "path": "snowfall/upstream.glsl",
+          "title": "Snowfall (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/snow/blob/main/shaders/snow.frag",
+          "changes": "Unmodified.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "upstream_sha256": "c67edafd868de70d1020c97c5bef416bba11a7ccec36905775e89b67bf957c4d",
+          "bytes": 2698,
+          "sha256": "c67edafd868de70d1020c97c5bef416bba11a7ccec36905775e89b67bf957c4d"
+        }
+      ],
+      "bytes": 38598
+    },
+    {
+      "id": "spring-forest",
+      "name": "Spring — Misty Forest",
+      "kind": "video",
+      "category": "Nature",
+      "author": "Blender Foundation; director Andy Goralczyk",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://studio.blender.org/films/spring/",
+      "noncommercial": false,
+      "description": "A quiet, muted excerpt prepared as a repeating desktop loop.",
+      "assets": [
+        {
+          "path": "spring-forest/loop.mp4",
+          "title": "Spring — Misty Forest",
+          "author": "Blender Foundation; director Andy Goralczyk",
+          "license": "CC-BY-4.0",
+          "source": "https://studio.blender.org/films/spring/",
+          "changes": "Source 103.5–107.375 s; frame-aligned, rotated 1 s smootherstep (quintic) tail-to-head crossfade; native 24 fps; H.264/yuv420p CRF 18, 6 Mb/s VBV, audio removed, width capped at 1920.",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "upstream_sha256": "9d11691b30a9fd192205224e9b0b59f918f33043ae600a791c9c6c1909d42309",
+          "bytes": 662242,
+          "sha256": "60c03aa72e7c1eb45be5a4d37687ee6ed0e5ff3fbbad3381ae6eb6f7abcff09b"
+        },
+        {
+          "path": "spring-forest/preview.jpg",
+          "title": "Spring — Misty Forest",
+          "author": "Blender Foundation; director Andy Goralczyk",
+          "license": "CC-BY-4.0",
+          "source": "https://studio.blender.org/films/spring/",
+          "changes": "640×360 JPEG preview, center crop of the wallpaper.",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "bytes": 27428,
+          "sha256": "f833355e7495814ce7872c720e9d91b69443e8a660abb66e6f0834a527a10483"
+        },
+        {
+          "path": "spring-forest/theme.json",
+          "title": "Spring — Misty Forest",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 143,
+          "sha256": "f8e1981d49ee7cfb5d15e4d62be596de901eda1bcf43b29167bdf6fcd0bf66bb"
+        }
+      ],
+      "loop": {
+        "source_start_seconds": 103.5,
+        "source_duration_seconds": 3.875,
+        "crossfade_seconds": 1,
+        "fps": 24,
+        "method": "Rotated tail-to-head smootherstep (quintic) crossfade, frame-aligned with exact discrete endpoint weights; no reversal.",
+        "measured": {
+          "id": "spring-forest",
+          "frames": 69,
+          "duration": 2.875,
+          "width": 1920,
+          "height": 804,
+          "fps": "24/1",
+          "codec": "h264",
+          "pixel_format": "yuv420p",
+          "audio_tracks": 0,
+          "boundary_ssim_640x360": 0.9900675707838501,
+          "boundary_psnr_db_640x360": 47.6265450417533,
+          "adjacent_ssim_before_640x360": 0.9941554162885599,
+          "adjacent_ssim_after_640x360": 0.9992299843131217,
+          "boundary_MAD_255_160x90": 0.3374074101448059,
+          "adjacent_MAD_255_160x90": 0.2151080220937729,
+          "boundary_to_adjacent_MAD_ratio": 1.56854870804269,
+          "largest_internal_MAD_255_160x90": 0.524189829826355,
+          "median_internal_MAD_255_160x90": 0.11571758985519409,
+          "largest_internal_step_frame": 64,
+          "motion_before_at_after_boundary_160x90": [
+            {
+              "mean_flow_yx": [
+                0.03220876306295395,
+                0.017683271318674088
+              ],
+              "mean_flow_speed": 0.06522379070520401,
+              "registration_yx": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "mean_flow_yx": [
+                -0.0014114630175754428,
+                -0.0064129093661904335
+              ],
+              "mean_flow_speed": 0.04298647493124008,
+              "registration_yx": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "mean_flow_yx": [
+                -0.0038972378242760897,
+                -0.003578989999368787
+              ],
+              "mean_flow_speed": 0.012953896075487137,
+              "registration_yx": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "boundary_registration_error_px_160x90": 0.0,
+          "overlap_motion_samples_160x90": [
+            {
+              "frame": 45,
+              "mean_flow_yx": [
+                0.016999350860714912,
+                0.04152371361851692
+              ],
+              "mean_flow_speed": 0.08426834642887115
+            },
+            {
+              "frame": 51,
+              "mean_flow_yx": [
+                0.005040773190557957,
+                0.009170109406113625
+              ],
+              "mean_flow_speed": 0.02588907815515995
+            },
+            {
+              "frame": 57,
+              "mean_flow_yx": [
+                0.020175758749246597,
+                0.018629828467965126
+              ],
+              "mean_flow_speed": 0.03985946998000145
+            },
+            {
+              "frame": 63,
+              "mean_flow_yx": [
+                -0.006327950861304998,
+                0.006523767951875925
+              ],
+              "mean_flow_speed": 0.0729205384850502
+            },
+            {
+              "frame": 67,
+              "mean_flow_yx": [
+                0.03220876306295395,
+                0.017683271318674088
+              ],
+              "mean_flow_speed": 0.06522379070520401
+            }
+          ],
+          "configured_fps": 24
+        }
+      },
+      "license_evidence": "Film end card at ~458 seconds explicitly states CC BY 4.0; overrides the inconsistent ShareAlike label on PeerTube metadata.",
+      "bytes": 689813
+    },
+    {
+      "id": "star-nest",
+      "name": "Star Nest",
+      "kind": "shader",
+      "category": "Space",
+      "author": "Pablo Román Andrioli (Kali)",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "https://defold.com/tutorials/shadertoy/#the-star-nest-shader",
+      "noncommercial": false,
+      "description": "The classic fractal star field, faithfully ported from the explicitly MIT-licensed source.",
+      "assets": [
+        {
+          "path": "star-nest/preview.jpg",
+          "title": "Star Nest",
+          "author": "Pablo Román Andrioli (Kali)",
+          "license": "MIT",
+          "license_url": "https://opensource.org/license/mit/",
+          "source": "https://defold.com/tutorials/shadertoy/#the-star-nest-shader",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 33261,
+          "sha256": "4db12284c5c24aad033fd8b85b8de8a59e47127ad23dc06bdf90f21e0e341cee"
+        },
+        {
+          "path": "star-nest/star-nest.wgsl",
+          "title": "Star Nest",
+          "author": "Pablo Román Andrioli (Kali)",
+          "license": "MIT",
+          "source": "https://defold.com/tutorials/shadertoy/#the-star-nest-shader",
+          "changes": "WGSL/paper port of the licensed Defold variant; aspect correction restored; see header.",
+          "license_url": "https://opensource.org/license/mit/",
+          "upstream_sha256": "dc75e40aca4abd2c6d0796dbe8df71ca52dc076412e3cce2e5e17f65eee6da0a",
+          "bytes": 2087,
+          "sha256": "810980bb76cd52f7558f760125504ebf390ad3cff78ddf692bbaf194ad8f9491"
+        },
+        {
+          "path": "star-nest/theme.json",
+          "title": "Star Nest",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 134,
+          "sha256": "86565f7e578ce10ee2d382446eec18d442d1fe112ab78843dd3e0818ddec7cd2"
+        },
+        {
+          "path": "star-nest/upstream.glsl",
+          "title": "Star Nest",
+          "author": "Pablo Román Andrioli (Kali)",
+          "license": "MIT",
+          "source": "https://defold.com/tutorials/shadertoy/#the-star-nest-shader",
+          "changes": "Unmodified.",
+          "license_url": "https://opensource.org/license/mit/",
+          "upstream_sha256": "dc75e40aca4abd2c6d0796dbe8df71ca52dc076412e3cce2e5e17f65eee6da0a",
+          "bytes": 1899,
+          "sha256": "d392b9595100e1be53effef02218796ab6f034a1ca2290a091d5c89fb8ac1cdb"
+        }
+      ],
+      "bytes": 37381
+    },
+    {
+      "id": "vanta-waves",
+      "name": "Waves",
+      "kind": "web",
+      "category": "Nature",
+      "author": "Teng Bao and Vanta contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "https://github.com/tengbao/vanta",
+      "noncommercial": false,
+      "description": "An established Vanta.js effect, served entirely from local assets.",
+      "assets": [
+        {
+          "path": "vanta-waves/index.html",
+          "title": "Waves",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "Local host; 30 fps pacing; Waves ocean preset / Birds twilight preset. Upstream effect code unchanged.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 1295,
+          "sha256": "cb0e565692b82aac8ffddcc3117259313819a2d7feb3a5315c3462a8d3d1be9a"
+        },
+        {
+          "path": "vanta-waves/preview.jpg",
+          "title": "Waves",
+          "author": "Teng Bao and Vanta contributors",
+          "license": "MIT",
+          "license_url": "https://opensource.org/license/mit/",
+          "source": "https://github.com/tengbao/vanta",
+          "changes": "640×360 JPEG from an actual DX12 render / local WebView2 desktop capture; taskbar excluded.",
+          "bytes": 24340,
+          "sha256": "a9aea7cdea689f000061e1c5d4fde76b9a4efddc31e6deab601e8b4fd3cfe43f"
+        },
+        {
+          "path": "vanta-waves/theme.json",
+          "title": "Waves",
+          "author": "mypaper contributors",
+          "license": "MIT",
+          "source": "../LICENSE",
+          "changes": "mypaper manifest; no external code or media.",
+          "license_url": "https://opensource.org/license/mit/",
+          "bytes": 112,
+          "sha256": "3391e6101dad5d5ecf8d425795a02cf1cf776a9f9cd91e18b8ab901ec585738c"
+        },
+        {
+          "path": "vanta-waves/three.r134.min.js",
+          "title": "Waves",
+          "author": "Three.js authors",
+          "license": "MIT",
+          "source": "https://github.com/mrdoob/three.js/tree/r134",
+          "changes": "Unmodified.",
+          "license_url": "https://opensource.org/license/mit/",
+          "upstream_sha256": "4891edffd52cdf84a28bcf3b1e05e06d14b9defd568c9521031b3022b98bfc6c",
+          "bytes": 615600,
+          "sha256": "4891edffd52cdf84a28bcf3b1e05e06d14b9defd568c9521031b3022b98bfc6c"
+        },
+        {
+          "path": "vanta-waves/vanta.min.js",
+          "title": "Waves",
+          "author": "Teng Bao and Vanta contributors",
+          "license": "MIT",
+          "source": "https://github.com/tengbao/vanta",
+          "changes": "Unmodified.",
+          "license_url": "https://opensource.org/license/mit/",
+          "upstream_sha256": "60a30382a898ae570dd0e88ac903fac9273fd188ae8c8d1984200b9ebd89237d",
+          "bytes": 11819,
+          "sha256": "60a30382a898ae570dd0e88ac903fac9273fd188ae8c8d1984200b9ebd89237d"
+        }
+      ],
+      "bytes": 653166
+    }
+  ],
+  "legacy_assets": [
+    {
+      "path": "examples/app-example/preview.jpg",
+      "title": "app-example",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 14585,
+      "sha256": "aa6542941a57b38046fe9b5257897a0415b6f8f697afe74bfe78e6f2c1de2cdf"
+    },
+    {
+      "path": "examples/app-example/README.md",
+      "title": "app-example",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 3095,
+      "sha256": "d316adfa460936d7243a74a6831fac56616535a23d88eb206d8d041869931dbb"
+    },
+    {
+      "path": "examples/aurora/aurora.wgsl",
+      "title": "aurora",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 2969,
+      "sha256": "cc1c30aecff2b8b52b400e0a5ec2d8bdcb02b2bb730a1649ca0dd0f4f937ad80"
+    },
+    {
+      "path": "examples/aurora/preview.jpg",
+      "title": "aurora",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 17268,
+      "sha256": "32c5afabb0f8d4145175e6e20c94374a9d50566f88034c40e444e8429333e3ee"
+    },
+    {
+      "path": "examples/aurora/theme.json",
+      "title": "aurora",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved.",
+      "bytes": 128,
+      "sha256": "f0f4beff1be4894803a18ce851605da7a4205bbb3873dded07b0ff6b0a166e7a"
+    },
+    {
+      "path": "examples/earth-orbit/earth-orbit.mp4",
+      "title": "\"4K Earth Views Extended Cut for Earth Day 2021\" (`jsc2021m000138_4K_Earth_Views_Extended_Cut_for_Earth_Day_ 2021_210422-4KMP4`, 22 Apr 2021; footage recorded on the ISS in 2019-2020). 28 s taken from about 560 s into the 1080p `~large.mp4` rendition, with the audio dropped.",
+      "author": "NASA (JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/jsc2021m000138_4K_Earth_Views_Extended_Cut_for_Earth_Day_%202021_210422-4KMP4",
+      "changes": "Existing 2560px-or-smaller JPEG / 1080p muted video preserved; moved under examples/.",
+      "bytes": 22890593,
+      "sha256": "fbea97240bbb821a6da1a0fc80e2abe7bf171d76902edfff64d1e71092ea65a7"
+    },
+    {
+      "path": "examples/earth-orbit/preview.jpg",
+      "title": "\"4K Earth Views Extended Cut for Earth Day 2021\" (`jsc2021m000138_4K_Earth_Views_Extended_Cut_for_Earth_Day_ 2021_210422-4KMP4`, 22 Apr 2021; footage recorded on the ISS in 2019-2020). 28 s taken from about 560 s into the 1080p `~large.mp4` rendition, with the audio dropped.",
+      "author": "NASA (JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/jsc2021m000138_4K_Earth_Views_Extended_Cut_for_Earth_Day_%202021_210422-4KMP4",
+      "changes": "Existing 640×360 preview derived from the credited NASA media; moved under examples/.",
+      "bytes": 31673,
+      "sha256": "8ba365e39a29b898f5ad79cc3dfa6f2959a063ea51ce15a384125ec2bbc64905"
+    },
+    {
+      "path": "examples/earth-orbit/README.md",
+      "title": "earth-orbit",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 789,
+      "sha256": "8be5761f0490b26a9e3173a575be73b13aca5f71bdc441739fb4ac85df29af97"
+    },
+    {
+      "path": "examples/earth-orbit/theme.json",
+      "title": "earth-orbit",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved.",
+      "bytes": 141,
+      "sha256": "bc6d2e7e6cdc997aebf02fe972a12ee729852b3b4d874504aa36648a30eef2a8"
+    },
+    {
+      "path": "examples/gallery/images/01-aurora-over-earth.jpg",
+      "title": "\"The aurora australis streams above the Indian Ocean\" (`iss066e146457`, 18 Feb 2022)",
+      "author": "NASA (ISS Expedition 66, JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/iss066e146457",
+      "changes": "Existing 2560px-or-smaller JPEG / 1080p muted video preserved; moved under examples/.",
+      "bytes": 1164732,
+      "sha256": "1a3e7840698068bc8930927d91992626af3e7cd9863433eb8319ac54010fdf74"
+    },
+    {
+      "path": "examples/gallery/images/02-aurora-glow.jpg",
+      "title": "\"The Earth's glow mingles with the aurora australis\" (`iss062e148363`, 13 Apr 2020)",
+      "author": "NASA (ISS Expedition 62, JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/iss062e148363",
+      "changes": "Existing 2560px-or-smaller JPEG / 1080p muted video preserved; moved under examples/.",
+      "bytes": 663647,
+      "sha256": "e228f7ea0a12b53c7abad9209899a4bae653f3b4c7c4824b1fc30e8c624bf13d"
+    },
+    {
+      "path": "examples/gallery/images/03-rio-at-night.jpg",
+      "title": "\"Rio de Janeiro ... pictured during an orbital night pass\" (`iss067e176807`, 4 Jul 2022)",
+      "author": "NASA (ISS Expedition 67, JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/iss067e176807",
+      "changes": "Existing 2560px-or-smaller JPEG / 1080p muted video preserved; moved under examples/.",
+      "bytes": 1160277,
+      "sha256": "23d608b54c9878d959f4b52515a8ed44a15c4d6dd9cf683a7a36c29bcdde0817"
+    },
+    {
+      "path": "examples/gallery/images/04-istanbul-at-night.jpg",
+      "title": "\"A nighttime view of Istanbul, Turkey\" (`iss032e017547`, 9 Aug 2012)",
+      "author": "NASA (ISS Expedition 32, JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/iss032e017547",
+      "changes": "Existing 2560px-or-smaller JPEG / 1080p muted video preserved; moved under examples/.",
+      "bytes": 738711,
+      "sha256": "24226332b38cb984945528e81013018da27673543ebf3307bc76c516df5644cf"
+    },
+    {
+      "path": "examples/gallery/images/05-orbital-sunrise.jpg",
+      "title": "\"The sun peeking over the limb of the Earth\" (`iss028e007274`, 11 Jun 2011)",
+      "author": "NASA (ISS Expedition 28, JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/iss028e007274",
+      "changes": "Existing 2560px-or-smaller JPEG / 1080p muted video preserved; moved under examples/.",
+      "bytes": 378358,
+      "sha256": "7c9cec392083a98e1d9f14c06effd3490cccba64bb47e190c0031620e723178c"
+    },
+    {
+      "path": "examples/gallery/images/06-andromeda-galaxy.jpg",
+      "title": "\"The Infrared Face of the Andromeda Galaxy\" (`PIA26276`, Spitzer Space Telescope)",
+      "author": "NASA/JPL-Caltech",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/PIA26276",
+      "changes": "Existing 2560px-or-smaller JPEG / 1080p muted video preserved; moved under examples/.",
+      "bytes": 607349,
+      "sha256": "aa7af42139db07bf3044133f12a3027353a54990b52a56331cb1d37dd7fc35af"
+    },
+    {
+      "path": "examples/gallery/images/07-tarantula-nebula.jpg",
+      "title": "\"Tarantula Nebula Spitzer 2-Color Image\" (`PIA23646`, Spitzer Space Telescope)",
+      "author": "NASA/JPL-Caltech",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/PIA23646",
+      "changes": "Existing 2560px-or-smaller JPEG / 1080p muted video preserved; moved under examples/.",
+      "bytes": 1100827,
+      "sha256": "8ec4babf9eb320256e6a59cb89e79ffa4102be82d8cfbe55d37461bb18b977ca"
+    },
+    {
+      "path": "examples/gallery/preview.jpg",
+      "title": "\"The aurora australis streams above the Indian Ocean\" (`iss066e146457`, 18 Feb 2022)",
+      "author": "NASA (ISS Expedition 66, JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/iss066e146457",
+      "changes": "Existing 640×360 preview derived from the credited NASA media; moved under examples/. Collage uses the seven individually credited gallery images below.",
+      "bytes": 65701,
+      "sha256": "687949ba7c83e28c5fd440ec6db6472d1c2b424d171440af22bd9bfb3cf8d0e6"
+    },
+    {
+      "path": "examples/gallery/theme.json",
+      "title": "gallery",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved.",
+      "bytes": 194,
+      "sha256": "00bc133029022d88986423f990441867ca29e495ca84dcc87dc2b7a50be5941f"
+    },
+    {
+      "path": "examples/interactive/index.html",
+      "title": "interactive",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 3496,
+      "sha256": "e2d35528e5682d43a95aee8f1c5141cde92067d86727694abb7c8bfddc3ce2ce"
+    },
+    {
+      "path": "examples/interactive/preview.jpg",
+      "title": "interactive",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "New 640×360 preview from the existing interactive example running in WebView2; taskbar cropped out.",
+      "bytes": 2375,
+      "sha256": "a35ed5031bff5cf6a1268bcf1c8f35067690cedac758b7c197df4b2b3cc603ef"
+    },
+    {
+      "path": "examples/interactive/theme.json",
+      "title": "interactive",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved.",
+      "bytes": 136,
+      "sha256": "94657ba7ddc7119770ae65d9653d44a6c75a5a535c12fd5700c07f90dc33923c"
+    },
+    {
+      "path": "examples/islands/islands.glb",
+      "title": "islands",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 326712,
+      "sha256": "ab40fcf2af83910f9cbffcfb175bccac1ba458b5533e582025599e3d4fc7d273"
+    },
+    {
+      "path": "examples/islands/preview.jpg",
+      "title": "islands",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 17001,
+      "sha256": "c836c2b1bd9d5dc6be4bff47e2cfcedb403f6e42aadd5e722a47c41601a2228b"
+    },
+    {
+      "path": "examples/islands/theme.json",
+      "title": "islands",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved.",
+      "bytes": 229,
+      "sha256": "f5cbd4785e4e7751f9dd8eb6a73194f685e63c78af33885f14f0c50f8b4437b3"
+    },
+    {
+      "path": "examples/midnight/bars.css",
+      "title": "midnight",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 1028,
+      "sha256": "9b5cd71732d51d75f13755b4b8a4a374290916092b8392d9bb725a535e20ba93"
+    },
+    {
+      "path": "examples/midnight/midnight.wgsl",
+      "title": "midnight",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 7740,
+      "sha256": "74bb98c4fce9a01168c1dfa5c6560a66cb7468367088c4366a7232037aca3a51"
+    },
+    {
+      "path": "examples/midnight/preview.jpg",
+      "title": "midnight",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 17327,
+      "sha256": "ae18af4f62e74c8c27f54d530a250b466d4487ee515c4a417cfc4afeb30acb64"
+    },
+    {
+      "path": "examples/midnight/theme.json",
+      "title": "midnight",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved.",
+      "bytes": 784,
+      "sha256": "91cda515a2cf7bd57eefe7a23c399f6677c8074def045c199564bf432ea2d06e"
+    },
+    {
+      "path": "examples/midnight/widgets.css",
+      "title": "midnight",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 1482,
+      "sha256": "311dca472175127e115005e4a8455e865ab218c6d15d650a9929f0a768cee631"
+    },
+    {
+      "path": "examples/photo/iss-aurora.jpg",
+      "title": "\"The aurora australis streams across the Earth's atmosphere as the International Space Station orbited 270 miles above the southern Indian Ocean\" (`iss065e214221`, 2 Aug 2021)",
+      "author": "NASA (ISS Expedition 65, JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/iss065e214221",
+      "changes": "Existing 2560px-or-smaller JPEG / 1080p muted video preserved; moved under examples/.",
+      "bytes": 892567,
+      "sha256": "ee10d75f9649bdf55d6ae23d7ef5ce48c0d783acdec6c3850211457da09a6651"
+    },
+    {
+      "path": "examples/photo/preview.jpg",
+      "title": "\"The aurora australis streams across the Earth's atmosphere as the International Space Station orbited 270 miles above the southern Indian Ocean\" (`iss065e214221`, 2 Aug 2021)",
+      "author": "NASA (ISS Expedition 65, JSC)",
+      "license": "NASA-PD",
+      "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "source": "https://images.nasa.gov/details/iss065e214221",
+      "changes": "Existing 640×360 preview derived from the credited NASA media; moved under examples/.",
+      "bytes": 50785,
+      "sha256": "b5a3021bcb3f209014d04c81920e847736cdcfd863e4ec558cd4d93fba526c28"
+    },
+    {
+      "path": "examples/photo/theme.json",
+      "title": "photo",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved.",
+      "bytes": 134,
+      "sha256": "f8cea036fa1a3bbebc5399442b14f3a08a6a6a915a8d33aed37782767e0322d2"
+    },
+    {
+      "path": "examples/webdemo/index.html",
+      "title": "webdemo",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 3911,
+      "sha256": "ec020a72f5d81ef7f9141ee5fc21c8490585a6a8e73912d1e21c6e4786438e41"
+    },
+    {
+      "path": "examples/webdemo/preview.jpg",
+      "title": "webdemo",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "bytes": 12503,
+      "sha256": "16762b67c8bdcfa3ee5605d0e6ee1a8dc3460532bb176878178a52547a797913"
+    },
+    {
+      "path": "examples/webdemo/theme.json",
+      "title": "webdemo",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved.",
+      "bytes": 108,
+      "sha256": "a56937d09d2c80e107b87eb893cd69c109102e83abe46d3d8b72485abf955d23"
+    }
+  ],
+  "shared_assets": [
+    {
+      "path": "licenses/fluids-MIT.txt",
+      "title": "WebGL Fluid Simulation",
+      "author": "Pavel Dobryakov",
+      "license": "MIT",
+      "license_url": "https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/blob/master/LICENSE",
+      "source": "https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/blob/master/LICENSE",
+      "changes": "Full upstream license/copyright notice preserved.",
+      "bytes": 1072,
+      "sha256": "1be448ae1212de2bee77b4cf851ab0acea0a7f7f32d21cd73095dd94dc173f66"
+    },
+    {
+      "path": "licenses/vanta-MIT.txt",
+      "title": "Vanta.js",
+      "author": "Teng Bao",
+      "license": "MIT",
+      "license_url": "https://github.com/tengbao/vanta/blob/master/LICENSE.md",
+      "source": "https://github.com/tengbao/vanta/blob/master/LICENSE.md",
+      "changes": "Full upstream license/copyright notice preserved.",
+      "bytes": 1048,
+      "sha256": "65df69dccc2a06fcf307e81da62c0f64b4abc03fe64a23944427a69642edadcb"
+    },
+    {
+      "path": "licenses/three-r134-MIT.txt",
+      "title": "Three.js r134",
+      "author": "Three.js authors",
+      "license": "MIT",
+      "license_url": "https://github.com/mrdoob/three.js/blob/r134/LICENSE",
+      "source": "https://github.com/mrdoob/three.js/blob/r134/LICENSE",
+      "changes": "Full upstream license/copyright notice preserved.",
+      "bytes": 1081,
+      "sha256": "7dddf7c5b8fd10ee654db8857d75d104b5557889aa5a91fc4ca545ea7c07062f"
+    },
+    {
+      "path": "licenses/three-r150-MIT.txt",
+      "title": "Three.js r150",
+      "author": "Three.js authors",
+      "license": "MIT",
+      "license_url": "https://github.com/mrdoob/three.js/blob/r150/LICENSE",
+      "source": "https://github.com/mrdoob/three.js/blob/r150/LICENSE",
+      "changes": "Full upstream license/copyright notice preserved.",
+      "bytes": 1081,
+      "sha256": "852e0e8699169bf9f6fdc6bda3e682d078dcbc738b5d33e74df594721bff271d"
+    },
+    {
+      "path": "licenses/dat-gui-Apache-2.0.txt",
+      "title": "dat.gui",
+      "author": "Data Arts Team, Google Creative Lab",
+      "license": "Apache-2.0",
+      "license_url": "https://github.com/dataarts/dat.gui/blob/master/LICENSE",
+      "source": "https://github.com/dataarts/dat.gui/blob/master/LICENSE",
+      "changes": "Full upstream license/copyright notice preserved.",
+      "bytes": 11343,
+      "sha256": "47754d3064047c300714af25258efa782e144fdf1e835bfd1edbeb7f8f4ef9e4"
+    },
+    {
+      "path": "licenses/star-nest-MIT.txt",
+      "title": "Star Nest",
+      "author": "Pablo Román Andrioli (Kali)",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "https://defold.com/tutorials/shadertoy/#the-star-nest-shader",
+      "changes": "Full MIT permission notice supplied with the author credit preserved by the licensed source.",
+      "bytes": 1076,
+      "sha256": "3d90df68c2311763360de34a1e5664d27c4de0563ca4ebb123ef60690d8ff44d"
+    },
+    {
+      "path": ".gitattributes",
+      "title": "Stable content hashes",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Canonical LF for attributed text; media marked binary.",
+      "bytes": 370,
+      "sha256": "1f5e6e0edf8b7e9295616526c6ffa3f924d80beb0221f1bad34563c9220288a3"
+    },
+    {
+      "path": "verify-loops.py",
+      "title": "Decoded loop measurements",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Read-only FFmpeg, SSIM/PSNR, per-pixel, registration and optical-flow measurement tool.",
+      "bytes": 6020,
+      "sha256": "d9273bccbe0e902a786decb082601787b91c78b0ec5358a4dd1b1fd47c1f8f55"
+    }
+  ]
+}

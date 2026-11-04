@@ -1,0 +1,43 @@
+{
+  "name": "Midnight",
+  "wallpaper": {
+    "kind": "shader",
+    "source": "midnight.wgsl",
+    "fps": 30,
+    "scale": 0.6
+  },
+  "windows": {
+    "accent": "auto",
+    "border": "auto",
+    "corners": "round",
+    "backdrop": "mica",
+    "dark_mode": true
+  },
+  "widgets": {
+    "appearance": {
+      "surface": "glass",
+      "tint": "#0a1633",
+      "opacity": 0.52,
+      "blur": 28,
+      "radius": 22,
+      "border": true,
+      "text": "light",
+      "accent": "auto",
+      "shadow": false
+    },
+    "css": "widgets.css"
+  },
+  "bars": {
+    "appearance": {
+      "surface": "glass",
+      "tint": "#070f24",
+      "opacity": 0.6,
+      "blur": 30,
+      "border": true,
+      "text": "light",
+      "accent": "auto"
+    },
+    "css": "bars.css"
+  },
+  "hidden": true
+}

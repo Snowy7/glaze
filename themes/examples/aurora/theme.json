@@ -1,0 +1,9 @@
+{
+  "name": "Aurora",
+  "wallpaper": {
+    "kind": "shader",
+    "source": "aurora.wgsl",
+    "fps": 60
+  },
+  "hidden": true
+}

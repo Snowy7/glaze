@@ -843,6 +843,51 @@ mod tests {
         assert_ne!(edited, name(&theme, 0, (1920, 1080)));
     }
 
+    /// A dev tool rather than a check: draws a theme through the engine's own source, the way a
+    /// screen would show it at `seconds` on the engine clock, and writes a JPEG. For theme
+    /// previews and tuning scenes without touching the desktop. Any kind wgpu can read back works
+    /// (shader, image, slideshow, video, scene); video is drawn until its first frame is decoded.
+    ///
+    /// ```text
+    /// set MYPAPER_STILL=themes\examples\islands;out.jpg;12;2560x1440
+    /// cargo test -p mypaper-wallpaper --release still_of_a_theme -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "dev tool: MYPAPER_STILL=<theme>;<out.jpg>[;<seconds>[;<W>x<H>]]"]
+    fn still_of_a_theme() {
+        let spec = std::env::var("MYPAPER_STILL").expect("set MYPAPER_STILL");
+        let parts: Vec<&str> = spec.split(';').collect();
+        // Relative paths are from the repo root (tests run in the crate folder).
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let (theme_dir, out) = (root.join(parts[0]), root.join(parts[1]));
+        let (theme_dir, out) = (theme_dir.as_path(), out.as_path());
+        let seconds: f32 = parts.get(2).map_or(0.0, |s| s.parse().unwrap());
+        let (width, height) = parts.get(3).map_or((2560, 1440), |s| {
+            let (w, h) = s.split_once('x').unwrap();
+            (w.parse().unwrap(), h.parse().unwrap())
+        });
+
+        let gpu = Gpu::headless().expect("a DX12 GPU");
+        let _apartment = Apartment::enter().unwrap();
+        let theme = mypaper_theme::LoadedTheme::load(theme_dir).unwrap();
+        let mut source = crate::sources::load(&gpu, &theme, &[]).unwrap();
+        let mut target = target(width, height);
+        target.mouse = [width as f32 * 0.5, height as f32 * 0.5];
+        let clock = Duration::from_secs_f32(seconds);
+        let started = Instant::now();
+        let (readback, pixels) = loop {
+            source.update(&gpu, clock);
+            let readback = read(&gpu, source.as_mut(), 0, &target, clock, 1).unwrap();
+            let pixels = readback.with_pixels(<[u8]>::to_vec).unwrap();
+            if !readback.is_black(&pixels) || started.elapsed() > Duration::from_secs(10) {
+                break (readback, pixels);
+            }
+            thread::sleep(Duration::from_millis(50));
+        };
+        write_jpeg(&wic_factory().unwrap(), &readback, &pixels, out).unwrap();
+        eprintln!("wrote {}", out.display());
+    }
+
     /// The real thing, on the real Windows wallpaper: runs the engine's snapshot code on a
     /// shipped theme (stills in a scratch folder, the journal in the same one), checks that
     /// Windows shows them, turns the feature off and checks that the originals are back. Prints
@@ -906,7 +951,7 @@ mod tests {
         let _guard = Originals(before.clone(), position);
 
         let base = temp_dir("real");
-        let theme_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes/aurora");
+        let theme_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes/examples/aurora");
         let theme = mypaper_theme::LoadedTheme::load(&theme_dir).unwrap();
         let mut source = crate::sources::load(&gpu, &theme, &[]).unwrap();
         let screens = mypaper_desktop::monitors();

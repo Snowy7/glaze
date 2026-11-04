@@ -230,4 +230,24 @@ mod tests {
         // vec2f, vec2f, f32, u32, vec2f padding: 32 bytes, a 16-byte multiple.
         assert_eq!(size_of::<super::Uniforms>(), 32);
     }
+
+    #[test]
+    fn bundled_shader_ports_compile_with_the_engine_prelude() {
+        let gpu =
+            crate::gpu::Gpu::headless().expect("DX12 is required to validate wallpaper ports");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes");
+        let mut compiled = 0;
+        for entry in std::fs::read_dir(&root).unwrap().flatten() {
+            if !entry.path().join(mypaper_theme::MANIFEST).is_file() {
+                continue;
+            }
+            let theme = mypaper_theme::LoadedTheme::load(entry.path()).unwrap();
+            if let mypaper_theme::Wallpaper::Shader(config) = &theme.theme.wallpaper {
+                super::ShaderSource::new(&gpu, &theme, config)
+                    .unwrap_or_else(|error| panic!("{}: {error:#}", theme.dir.display()));
+                compiled += 1;
+            }
+        }
+        assert!(compiled >= 3, "expected the curated shader ports");
+    }
 }

@@ -1,0 +1,9 @@
+{
+  "name": "Photo",
+  "wallpaper": {
+    "kind": "image",
+    "source": "iss-aurora.jpg",
+    "fit": "cover"
+  },
+  "hidden": true
+}
