@@ -1,21 +1,63 @@
 // A form generated from a widget manifest's `settings`. Each change is reported on its own
-// (`onChange(key, value)`); the host answers with a fresh `state`, so the form never re-renders.
-// A `list` setting reports its whole array on every edit.
+// (`onChange(key, value)`). The form keeps its own copy of what it shows and does not re-render
+// when the host answers; only `update(values)` refreshes the rows that change on the host's side
+// (a picked file). A `list` setting reports its whole array on every edit.
+//
+// Sliders and colors preview while they move (`onPreview`: the widget sees the value, nothing is
+// saved) and save once on release. Inside a `list` they save throttled instead.
 
 import { h } from "./dom";
 import type { ListField, ScalarSetting, SettingDef } from "./protocol";
+import {
+  COMMON_FONTS,
+  decodeColor,
+  encodeColor,
+  fileName,
+  fontFamilyCss,
+  formatReadout,
+  isFontName,
+  isHexColor,
+  optionIcon,
+  optionLabel,
+  optionText,
+  optionValue,
+  sections,
+  selectStyle,
+} from "./settings-model";
+
+export interface SettingsFormHooks {
+  /** Saves a setting. */
+  onChange(key: string, value: unknown): void;
+  /** Shows a value in the widget without saving it. */
+  onPreview(key: string, value: unknown): void;
+  /** A `file`/`image` setting: the host shows the dialog, copies the file and sets the setting. */
+  onPickFile(key: string, extensions: readonly string[] | undefined): void;
+}
 
 export interface SettingsForm {
   el: HTMLElement;
-  /** Sends any change still waiting on a debounce or throttle (call when closing the form). */
+  /** Sends any change still waiting on a debounce or throttle, and saves previewed values (call when closing the form). */
   flush(): void;
+  /** Call with the host's settings after each `state`: refreshes the file rows. */
+  update(values: Record<string, unknown>): void;
 }
 
 type Scalar = string | number | boolean;
 type FieldDef = ScalarSetting | ListField;
 type Row = Record<string, Scalar>;
 
-const HEX = /^#[0-9a-f]{6}$/i;
+/** One rendered input, and how to show a value the host changed. */
+interface Control {
+  el: HTMLElement;
+  show?: (value: unknown) => void;
+}
+
+/** How a field talks to the form. `preview` and `pick` exist only for top-level settings. */
+interface FieldIo {
+  emit(value: Scalar): void;
+  preview?: (value: Scalar) => void;
+  pick?: (extensions: readonly string[] | undefined) => void;
+}
 
 interface Limiter<T> {
   push(value: T): void;
@@ -57,7 +99,13 @@ function rateLimited<T>(fn: (value: T) => void, ms: number, mode: "debounce" | "
 
 type MakeLimiter = <T>(fn: (value: T) => void, ms: number, mode: "debounce" | "throttle") => Limiter<T>;
 
-const pretty = (n: number) => String(Math.round(n * 1000) / 1000);
+/** What a drag or color pick does: preview if the form can, else save throttled; `settle` is the release. */
+function moving<T extends Scalar>(io: FieldIo, limit: MakeLimiter): { move(value: T): void; settle(value: T): void } {
+  const { emit, preview } = io;
+  if (preview) return { move: preview, settle: emit };
+  const send = limit<T>(emit, 100, "throttle");
+  return { move: send.push, settle: send.flush };
+}
 
 // Value readers: a saved value of the right type, else the default, else the type's zero.
 const readBool = (value: unknown, def: unknown) => (typeof value === "boolean" ? value : def === true);
@@ -71,19 +119,240 @@ function fieldDefault(field: ListField): Scalar {
     case "boolean":
       return readBool(undefined, field.default);
     case "number":
+    case "slider":
       return readNumber(undefined, field.default, field.min);
     case "string":
+    case "font":
       return readString(undefined, field.default);
     case "select":
-      return typeof field.default === "string" ? field.default : (field.options[0] ?? "");
+      return typeof field.default === "string" ? field.default : optionValue(field.options[0] ?? "");
     case "color":
-      return typeof field.default === "string" && HEX.test(field.default) ? field.default : "#ffffff";
+      return decodeColor(field.default, field.alpha === true) ? readString(undefined, field.default) : "#ffffff";
   }
 }
 
-/** One labelled input for a scalar setting (or a list field). `emit` gets each new value. */
-function renderField(def: FieldDef, value: unknown, emit: (value: Scalar) => void, limit: MakeLimiter): HTMLElement {
+/** A slider with a readout; `number` settings with both bounds use it too. */
+function rangeControl(
+  title: string,
+  range: { min: number; max: number; step?: number | undefined; unit?: string | undefined },
+  initial: number,
+  io: FieldIo,
+  limit: MakeLimiter,
+): Control {
+  const { min, max, step, unit } = range;
+  const out = moving<number>(io, limit);
+  const input = h("input");
+  input.type = "range";
+  input.min = String(min);
+  input.max = String(max);
+  input.step = String(step ?? "any");
+  input.value = String(initial);
+  input.setAttribute("aria-label", title);
+  const readout = h("output", "readout");
+  const paint = () => {
+    input.style.setProperty("--p", `${((input.valueAsNumber - min) / (max - min || 1)) * 100}%`);
+    readout.value = formatReadout(input.valueAsNumber, unit);
+    input.setAttribute("aria-valuetext", readout.value);
+  };
+  paint();
+  input.addEventListener("input", () => {
+    paint();
+    out.move(input.valueAsNumber);
+  });
+  input.addEventListener("change", () => out.settle(input.valueAsNumber));
+  return { el: h("div", "field", h("div", "row", h("span", "t", title), readout), input) };
+}
+
+/** A swatch and a hex field; with `alpha`, an opacity slider too. */
+function colorControl(title: string, def: Extract<FieldDef, { type: "color" }>, value: unknown, io: FieldIo, limit: MakeLimiter): Control {
+  const withAlpha = def.alpha === true;
+  const start = decodeColor(value, withAlpha) ?? decodeColor(def.default, withAlpha) ?? { rgb: "#ffffff", alpha: 1 };
+  let rgb = start.rgb;
+  let alpha = start.alpha;
+  const out = moving<string>(io, limit);
+  const encoded = () => encodeColor({ rgb, alpha }, withAlpha);
+
+  const swatch = h("input", "swatch");
+  swatch.type = "color";
+  swatch.value = rgb;
+  swatch.setAttribute("aria-label", title);
+  const hex = h("input", "hex");
+  hex.type = "text";
+  hex.value = rgb;
+  hex.maxLength = 7;
+  hex.spellcheck = false;
+  hex.setAttribute("aria-label", `${title} (hex)`);
+
+  swatch.addEventListener("input", () => {
+    rgb = swatch.value;
+    hex.value = rgb;
+    out.move(encoded());
+  });
+  swatch.addEventListener("change", () => out.settle(encoded()));
+  hex.addEventListener("input", () => {
+    if (!isHexColor(hex.value)) return;
+    rgb = hex.value.toLowerCase();
+    swatch.value = rgb;
+    out.move(encoded());
+  });
+  hex.addEventListener("change", () => {
+    if (isHexColor(hex.value)) out.settle(encoded());
+    else hex.value = rgb; // not a color: snap back
+  });
+
+  const picker = h("div", "row gap", swatch, hex);
+  if (!withAlpha) return { el: h("div", "field", h("span", "t", title), picker) };
+
+  const opacity = h("input");
+  opacity.type = "range";
+  opacity.min = "0";
+  opacity.max = "100";
+  opacity.step = "1";
+  opacity.value = String(Math.round(alpha * 100));
+  opacity.setAttribute("aria-label", `${title} (opacity)`);
+  const readout = h("output", "readout");
+  const paint = () => {
+    opacity.style.setProperty("--p", `${opacity.valueAsNumber}%`);
+    readout.value = `${opacity.valueAsNumber}%`;
+    opacity.setAttribute("aria-valuetext", readout.value);
+  };
+  paint();
+  opacity.addEventListener("input", () => {
+    alpha = opacity.valueAsNumber / 100;
+    paint();
+    out.move(encoded());
+  });
+  opacity.addEventListener("change", () => out.settle(encoded()));
+  return { el: h("div", "field", h("span", "t", title), h("div", "stack", picker, h("div", "row gap alpha", opacity, readout))) };
+}
+
+/** A `select`: text segments, an icon bar, or a dropdown, by `selectStyle`. */
+function selectControl(title: string, def: Extract<FieldDef, { type: "select" }>, value: unknown, emit: (value: string) => void): Control {
+  const options = def.options;
+  const values = options.map(optionValue);
+  let current = typeof value === "string" && values.includes(value) ? value : fieldDefault(def);
+  const style = selectStyle(options);
+
+  if (style === "dropdown") {
+    const select = h("select");
+    select.setAttribute("aria-label", title);
+    for (const option of options) select.append(new Option(optionText(option), optionValue(option), false, optionValue(option) === current));
+    select.addEventListener("change", () => emit(select.value));
+    return { el: h("div", "field", h("span", "t", title), select) };
+  }
+
+  const group = h("div", style === "icons" ? `seg icons${options.length >= 4 ? " dense" : ""}` : "seg");
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-label", title);
+  const buttons = options.map((option) => {
+    const label = optionLabel(option);
+    const button = h("button", "");
+    button.type = "button";
+    button.setAttribute("role", "radio");
+    if (style === "icons") {
+      button.append(h("span", "ico", optionIcon(option) ?? ""), h("span", "lbl", label));
+      button.title = label; // the label is hidden when the bar is dense
+      button.setAttribute("aria-label", label);
+    } else {
+      button.textContent = label;
+    }
+    button.addEventListener("click", () => {
+      current = optionValue(option);
+      mark();
+      emit(current);
+    });
+    return { value: optionValue(option), button };
+  });
+  const mark = () => {
+    for (const { value: v, button } of buttons) button.setAttribute("aria-checked", String(v === current));
+  };
+  mark();
+  group.append(...buttons.map((b) => b.button));
+  return { el: h("div", "field", h("span", "t", title), group) };
+}
+
+/** A text box for a font-family name, with the common fonts as chips, each in its own face. */
+function fontControl(title: string, value: string, emit: (value: string) => void, limit: MakeLimiter): Control {
+  const send = limit<string>(emit, 300, "debounce");
+  let valid = value;
+  const input = h("input");
+  input.type = "text";
+  input.value = value;
+  input.spellcheck = false;
+  input.setAttribute("aria-label", title);
+  input.addEventListener("input", () => {
+    const ok = isFontName(input.value);
+    input.setAttribute("aria-invalid", String(!ok));
+    if (!ok) return;
+    valid = input.value;
+    send.push(valid);
+  });
+  input.addEventListener("change", () => {
+    if (isFontName(input.value)) send.flush();
+    else {
+      input.value = valid; // not a font name: snap back
+      input.setAttribute("aria-invalid", "false");
+    }
+  });
+  const chips = COMMON_FONTS.map((font) => {
+    const chip = h("button", "chip", font);
+    chip.type = "button";
+    chip.style.fontFamily = fontFamilyCss(font);
+    chip.addEventListener("click", () => {
+      input.value = valid = font;
+      input.setAttribute("aria-invalid", "false");
+      send.push(font);
+      send.flush();
+    });
+    return chip;
+  });
+  return { el: h("div", "field", h("span", "t", title), h("div", "stack", input, h("div", "chips", ...chips))) };
+}
+
+/** A `file`/`image` row: the file's name (and a thumbnail), Choose and Clear. */
+function fileControl(title: string, def: Extract<FieldDef, { type: "file" | "image" }>, value: string, io: FieldIo): Control {
+  let url = value;
+  const name = h("span", "file-name");
+  const choose = h("button", "btn", "Choose…");
+  choose.type = "button";
+  choose.disabled = io.pick === undefined;
+  choose.setAttribute("aria-label", `Choose ${title}`);
+  choose.addEventListener("click", () => io.pick?.(def.extensions));
+  const clear = h("button", "btn", "Clear");
+  clear.type = "button";
+  clear.setAttribute("aria-label", `Clear ${title}`);
+  clear.addEventListener("click", () => {
+    show("");
+    io.emit("");
+  });
+
+  const thumb = def.type === "image" ? h("img", "thumb") : undefined;
+  if (thumb) {
+    thumb.alt = "";
+    thumb.addEventListener("error", () => (thumb.hidden = true));
+  }
+
+  function show(next: unknown) {
+    url = readString(next, "");
+    name.textContent = url === "" ? "None" : fileName(url);
+    name.title = url;
+    name.classList.toggle("none", url === "");
+    clear.disabled = url === "";
+    if (thumb) {
+      thumb.hidden = url === "";
+      if (url !== "") thumb.src = url;
+    }
+  }
+  show(url);
+
+  const row = h("div", "file", ...(thumb ? [thumb] : []), name, choose, clear);
+  return { el: h("div", "field", h("span", "t", title), row), show };
+}
+
+/** One labelled input for a scalar setting (or a list field). */
+function renderField(def: FieldDef, value: unknown, io: FieldIo, limit: MakeLimiter): Control {
   const title = def.label || def.key;
+  const { emit } = io;
 
   switch (def.type) {
     case "boolean": {
@@ -98,34 +367,21 @@ function renderField(def: FieldDef, value: unknown, emit: (value: Scalar) => voi
         toggle.setAttribute("aria-checked", String(on));
         emit(on);
       });
-      return h("div", "field inline", h("span", "t", title), toggle);
+      return { el: h("div", "field inline", h("span", "t", title), toggle) };
     }
 
     case "number": {
       const initial = readNumber(value, def.default, def.min);
+      if (def.min !== undefined && def.max !== undefined) {
+        // Saved throttled while dragging (no live preview; that is what `slider` is for).
+        return rangeControl(title, { min: def.min, max: def.max, step: def.step, unit: undefined }, initial, { emit }, limit);
+      }
       const send = limit<number>(emit, 100, "throttle");
       const input = h("input");
       input.setAttribute("aria-label", title);
       input.step = String(def.step ?? "any");
       if (def.min !== undefined) input.min = String(def.min);
       if (def.max !== undefined) input.max = String(def.max);
-
-      if (def.min !== undefined && def.max !== undefined) {
-        const { min, max } = def;
-        const readout = h("output", "readout", pretty(initial));
-        input.type = "range";
-        input.value = String(initial);
-        const paint = () => input.style.setProperty("--p", `${((input.valueAsNumber - min) / (max - min || 1)) * 100}%`);
-        paint();
-        input.addEventListener("input", () => {
-          paint();
-          readout.value = pretty(input.valueAsNumber);
-          send.push(input.valueAsNumber);
-        });
-        input.addEventListener("change", send.flush);
-        return h("div", "field", h("div", "row", h("span", "t", title), readout), input);
-      }
-
       input.type = "number";
       input.value = String(initial);
       input.addEventListener("input", () => {
@@ -134,8 +390,11 @@ function renderField(def: FieldDef, value: unknown, emit: (value: Scalar) => voi
         if (Number.isFinite(n) && inRange) send.push(n);
       });
       input.addEventListener("change", send.flush);
-      return h("div", "field", h("span", "t", title), input);
+      return { el: h("div", "field", h("span", "t", title), input) };
     }
+
+    case "slider":
+      return rangeControl(title, def, readNumber(value, def.default, def.min), io, limit);
 
     case "string": {
       const send = limit<string>(emit, 300, "debounce");
@@ -146,69 +405,21 @@ function renderField(def: FieldDef, value: unknown, emit: (value: Scalar) => voi
       input.spellcheck = false;
       input.addEventListener("input", () => send.push(input.value));
       input.addEventListener("change", send.flush);
-      return h("div", "field", h("span", "t", title), input);
+      return { el: h("div", "field", h("span", "t", title), input) };
     }
 
-    case "select": {
-      const options = def.options;
-      let current = typeof value === "string" && options.includes(value) ? value : fieldDefault(def);
-      if (options.length <= 3) {
-        const group = h("div", "seg");
-        group.setAttribute("role", "radiogroup");
-        group.setAttribute("aria-label", title);
-        const buttons = options.map((option) => {
-          const button = h("button", "", option);
-          button.type = "button";
-          button.setAttribute("role", "radio");
-          button.addEventListener("click", () => {
-            current = option;
-            mark();
-            emit(option);
-          });
-          return { option, button };
-        });
-        const mark = () => {
-          for (const { option, button } of buttons) button.setAttribute("aria-checked", String(option === current));
-        };
-        mark();
-        group.append(...buttons.map((b) => b.button));
-        return h("div", "field", h("span", "t", title), group);
-      }
-      const select = h("select");
-      select.setAttribute("aria-label", title);
-      for (const option of options) select.append(new Option(option, option, false, option === current));
-      select.addEventListener("change", () => emit(select.value));
-      return h("div", "field", h("span", "t", title), select);
-    }
+    case "select":
+      return selectControl(title, def, value, emit);
 
-    case "color": {
-      const send = limit<string>(emit, 100, "throttle");
-      const swatch = h("input", "swatch");
-      swatch.type = "color";
-      swatch.value = typeof value === "string" && HEX.test(value) ? value : String(fieldDefault(def));
-      swatch.setAttribute("aria-label", title);
-      const hex = h("input", "hex");
-      hex.type = "text";
-      hex.value = swatch.value;
-      hex.maxLength = 7;
-      hex.spellcheck = false;
-      hex.setAttribute("aria-label", `${title} (hex)`);
-      swatch.addEventListener("input", () => {
-        hex.value = swatch.value;
-        send.push(swatch.value);
-      });
-      swatch.addEventListener("change", send.flush);
-      hex.addEventListener("input", () => {
-        if (!HEX.test(hex.value)) return;
-        swatch.value = hex.value.toLowerCase();
-        send.push(swatch.value);
-      });
-      hex.addEventListener("change", () => {
-        hex.value = swatch.value; // snap back if the text wasn't a valid color
-        send.flush();
-      });
-      return h("div", "field", h("span", "t", title), h("div", "row gap", swatch, hex));
-    }
+    case "color":
+      return colorControl(title, def, value, io, limit);
+
+    case "font":
+      return fontControl(title, readString(value, def.default), emit, limit);
+
+    case "file":
+    case "image":
+      return fileControl(title, def, readString(value, def.default), io);
   }
 }
 
@@ -227,11 +438,14 @@ function validValue(field: ListField, value: unknown): Scalar | undefined {
     case "boolean":
       return typeof value === "boolean" ? value : undefined;
     case "number":
+    case "slider":
       return typeof value === "number" ? value : undefined;
     case "select":
-      return typeof value === "string" && field.options.includes(value) ? value : undefined;
+      return typeof value === "string" && field.options.some((o) => optionValue(o) === value) ? value : undefined;
     case "color":
-      return typeof value === "string" && HEX.test(value) ? value : undefined;
+      return typeof value === "string" && decodeColor(value, field.alpha === true) ? value : undefined;
+    case "font":
+      return typeof value === "string" && isFontName(value) ? value : undefined;
     case "string":
       return typeof value === "string" ? value : undefined;
   }
@@ -263,16 +477,19 @@ function renderList(
           commit();
           paint();
         });
-        const fields = def.fields.map((field) =>
-          renderField(
-            field,
-            row[field.key],
-            (value) => {
-              row[field.key] = value; // the row object, not its index: it may have moved since
-              commit();
-            },
-            limit,
-          ),
+        const fields = def.fields.map(
+          (field) =>
+            renderField(
+              field,
+              row[field.key],
+              {
+                emit: (value) => {
+                  row[field.key] = value; // the row object, not its index: it may have moved since
+                  commit();
+                },
+              },
+              limit,
+            ).el,
         );
         return h("div", "list-row", h("div", "row", h("span", "t", `${index + 1}`), remove), ...fields);
       }),
@@ -294,13 +511,18 @@ function renderList(
   return h("div", "field", h("div", "row", h("span", "t", title), count), body, add);
 }
 
+let groupIds = 0;
+
 export function buildSettingsForm(
   specs: readonly SettingDef[],
   values: Record<string, unknown>,
-  onChange: (key: string, value: unknown) => void,
+  hooks: SettingsFormHooks,
 ): SettingsForm {
   const el = h("div", "form");
   const limiters: Limiter<never>[] = [];
+  /** Keys previewed but not saved yet, with the value shown. */
+  const unsaved = new Map<string, Scalar>();
+  const shows = new Map<string, (value: unknown) => void>();
 
   const limit: MakeLimiter = (fn, ms, mode) => {
     const limiter = rateLimited(fn, ms, mode);
@@ -308,13 +530,55 @@ export function buildSettingsForm(
     return limiter;
   };
 
-  for (const spec of specs) {
-    el.append(
-      spec.type === "list"
-        ? renderList(spec, values[spec.key], onChange, limit)
-        : renderField(spec, values[spec.key], (value) => onChange(spec.key, value), limit),
+  function control(spec: SettingDef): HTMLElement {
+    if (spec.type === "list") return renderList(spec, values[spec.key], hooks.onChange, limit);
+    const control = renderField(
+      spec,
+      values[spec.key],
+      {
+        emit: (value) => {
+          unsaved.delete(spec.key);
+          hooks.onChange(spec.key, value);
+        },
+        preview: (value) => {
+          unsaved.set(spec.key, value);
+          hooks.onPreview(spec.key, value);
+        },
+        pick: (extensions) => hooks.onPickFile(spec.key, extensions),
+      },
+      limit,
     );
+    if (control.show) shows.set(spec.key, control.show);
+    return control.el;
   }
 
-  return { el, flush: () => limiters.forEach((l) => l.flush()) };
+  for (const section of sections(specs)) {
+    const nodes = section.settings.map(control);
+    if (section.group === undefined) {
+      el.append(...nodes);
+      continue;
+    }
+    const heading = h("div", "group-title", section.group);
+    heading.id = `group-${++groupIds}`;
+    heading.setAttribute("role", "heading");
+    heading.setAttribute("aria-level", "3");
+    const group = h("div", "group", heading, ...nodes);
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-labelledby", heading.id);
+    el.append(group);
+  }
+
+  return {
+    el,
+    flush() {
+      limiters.forEach((l) => l.flush());
+      for (const [key, value] of [...unsaved]) {
+        unsaved.delete(key);
+        hooks.onChange(key, value);
+      }
+    },
+    update(next) {
+      for (const [key, show] of shows) show(next[key]);
+    },
+  };
 }

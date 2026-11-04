@@ -30,7 +30,7 @@ const META = {
   cpu: { label: "CPU", bar: true },
   ram: { label: "RAM", bar: true },
   gpu: { label: "GPU", bar: false },
-  disk: { label: "Disk", bar: false },
+  disk: { label: "Disk", bar: false }, // renders as the drive's letter once there is a sample
   network: { label: "Network", bar: false },
   battery: { label: "Battery", bar: false },
 };
@@ -47,7 +47,9 @@ function createRow(id) {
   const meta = META[id];
   const el = document.createElement("div");
   el.className = "row";
+  el.toggleAttribute("data-gauge", meta.bar);
   el.innerHTML = `
+    <span class="ico tile"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-${id}"></use></svg></span>
     <span class="key caps"></span>
     <span class="val num"><b></b><small></small></span>
     ${meta.bar ? '<div class="track bar"><i></i></div>' : '<div class="rule"></div>'}`;
@@ -103,7 +105,7 @@ function render() {
   const disk = primaryDisk(s.disks ?? []);
   if (disk) {
     const label = rows.get("disk")?.key;
-    if (label) setText(label, `Disk ${disk.name}`);
+    if (label) setText(label, disk.name); // the glyph says "disk"; the letter leaves room for the figures
     setRow("disk", size(disk.used), `/ ${size(disk.total)}`);
   }
   if (s.network) {

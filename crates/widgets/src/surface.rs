@@ -11,14 +11,14 @@ use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
-use mypaper_desktop::{DesktopHost, EXIT_RESTART, Monitor};
+use mypaper_desktop::{DesktopHost, EXIT_RESTART, Monitor, startup, webview_env};
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::{
-    AddScriptToExecuteOnDocumentCreatedCompletedHandler, CoreWebView2EnvironmentOptions,
-    CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
-    NavigationStartingEventHandler, NewWindowRequestedEventHandler,
-    PermissionRequestedEventHandler, ProcessFailedEventHandler, TrySuspendCompletedHandler,
-    WebMessageReceivedEventHandler, WebResourceRequestedEventHandler, take_pwstr,
+    AddScriptToExecuteOnDocumentCreatedCompletedHandler,
+    CreateCoreWebView2ControllerCompletedHandler, NavigationStartingEventHandler,
+    NewWindowRequestedEventHandler, PermissionRequestedEventHandler, ProcessFailedEventHandler,
+    TrySuspendCompletedHandler, WebMessageReceivedEventHandler, WebResourceRequestedEventHandler,
+    take_pwstr,
 };
 use windows::Win32::Foundation::{E_POINTER, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -35,6 +35,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{BOOL, HSTRING, Interface, PCWSTR, PWSTR, w};
 
 use crate::net::{self, Origin, Party, Verdict, WidgetNet};
+use crate::overlay::{self, Layer};
+use crate::pick;
 
 pub const SHELL_URL: &str = "https://shell.mypaper/index.html";
 const SHELL_PREFIX: &str = "https://shell.mypaper/";
@@ -119,31 +121,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     }
 }
 
-/// Starts creating the shared WebView2 environment; the result arrives as
-/// [`WebEvent::Environment`].
+/// Starts creating the WebView2 environment, shared with the bars (one browser process,
+/// docs/performance.md); the result arrives as [`WebEvent::Environment`].
 pub fn create_environment(generation: u64, events: &Events) -> Result<()> {
-    let data_dir = crate::files::local("webview2-widgets")?;
-    std::fs::create_dir_all(&data_dir)?;
     let events = events.clone();
-    let handler =
-        CreateCoreWebView2EnvironmentCompletedHandler::create(Box::new(move |result, env| {
-            let result = result.and_then(|()| env.ok_or_else(|| E_POINTER.into()));
-            events
-                .borrow_mut()
-                .push_back(WebEvent::Environment { generation, result });
-            Ok(())
-        }));
-    let options: ICoreWebView2EnvironmentOptions = CoreWebView2EnvironmentOptions::default().into();
-    // SAFETY: valid strings and COM objects that outlive the call.
-    unsafe {
-        CreateCoreWebView2EnvironmentWithOptions(
-            PCWSTR::null(),
-            &HSTRING::from(crate::files::plain(&data_dir)),
-            &options,
-            &handler,
-        )
-    }
-    .context("starting WebView2 (is the WebView2 Runtime installed?)")
+    webview_env::create_environment(&webview_env::shared_data_dir()?, move |result| {
+        events
+            .borrow_mut()
+            .push_back(WebEvent::Environment { generation, result });
+    })
 }
 
 /// Reads a COM-allocated string out-parameter.
@@ -225,7 +211,17 @@ fn widget_file(
     let policy = policy.borrow();
     let found = policy.get(widget).and_then(|net| {
         let path = net::widget_path(url)?;
-        let body = std::fs::read(net.dir.join(&path)).ok()?;
+        // `__data/<instance>/<name>` is a file the user picked for one of this widget's
+        // instances (see `pick.rs`); everything else is in the widget's folder.
+        let file = match path.strip_prefix("__data/") {
+            Some(rest) => pick::served_file(
+                &net.data_dir,
+                |i| net.instances.iter().any(|x| x == i),
+                rest,
+            )?,
+            None => net.dir.join(&path),
+        };
+        let body = std::fs::read(file).ok()?;
         Some((net, path, body))
     });
     let Some((net, path, body)) = found else {
@@ -253,6 +249,8 @@ struct Web {
 pub struct Surface {
     pub id: u32,
     pub monitor: Monitor,
+    /// The desktop layer's window, or the topmost overlay one.
+    pub layer: Layer,
     hwnd: HWND,
     web: Option<Web>,
     /// Asked the environment for a controller and waiting for it.
@@ -284,9 +282,27 @@ impl Surface {
                 None,
             )?
         };
-        let surface = Self {
+        let surface = Self::with_window(id, hwnd, monitor, Layer::Desktop);
+        surface.set_region(&[]);
+        host.place_above_icons(hwnd, surface.monitor.rect)?;
+        Ok(surface)
+    }
+
+    /// Creates the (still empty and click-through) topmost window of the overlay layer over
+    /// `monitor` (see `overlay.rs`).
+    pub fn new_overlay(id: u32, monitor: Monitor) -> Result<Self> {
+        let hwnd = overlay::create_window(CLASS, &monitor)?;
+        let surface = Self::with_window(id, hwnd, monitor, Layer::Overlay);
+        surface.set_region(&[]);
+        overlay::place(hwnd, surface.monitor.rect)?;
+        Ok(surface)
+    }
+
+    fn with_window(id: u32, hwnd: HWND, monitor: Monitor, layer: Layer) -> Self {
+        Self {
             id,
             monitor,
+            layer,
             hwnd,
             web: None,
             creating: false,
@@ -294,10 +310,7 @@ impl Surface {
             hidden: false,
             script: None,
             navigated: false,
-        };
-        surface.set_region(&[]);
-        host.place_above_icons(hwnd, surface.monitor.rect)?;
-        Ok(surface)
+        }
     }
 
     pub fn hwnd(&self) -> HWND {
@@ -415,6 +428,10 @@ impl Surface {
                     if let Some(args) = args {
                         let source = out_string(|p| args.Source(p))?;
                         let json = out_string(|p| args.WebMessageAsJson(p))?;
+                        if json == webview_env::PAINTED {
+                            startup::ready("widgets", "first_paint_ms");
+                            return Ok(());
+                        }
                         events.borrow_mut().push_back(WebEvent::Message {
                             surface,
                             source,
@@ -580,6 +597,16 @@ impl Surface {
         }
     }
 
+    /// Asks the shell to answer once what it was just sent is on screen (the first-paint
+    /// marker, docs/performance.md).
+    pub fn probe_paint(&self) {
+        if let Some(web) = &self.web {
+            let script = HSTRING::from(webview_env::PAINT_PROBE);
+            // SAFETY: COM call on a live WebView; no completion handler is needed.
+            let _ = unsafe { web.webview.ExecuteScript(&script, None) };
+        }
+    }
+
     /// Makes only `rects` (window pixels: left, top, right, bottom) hit-testable
     /// and visible; everything else clicks through to the desktop.
     pub fn set_region(&self, rects: &[[i32; 4]]) {
@@ -642,7 +669,10 @@ impl Surface {
     /// Follows a monitor that moved, resized or changed scale.
     pub fn set_monitor(&mut self, host: &DesktopHost, monitor: Monitor) -> Result<()> {
         self.monitor = monitor;
-        host.place_above_icons(self.hwnd, self.monitor.rect)?;
+        match self.layer {
+            Layer::Desktop => host.place_above_icons(self.hwnd, self.monitor.rect)?,
+            Layer::Overlay => overlay::place(self.hwnd, self.monitor.rect)?,
+        }
         if self.hidden {
             // place_above_icons shows the window; keep it hidden.
             // SAFETY: our window.

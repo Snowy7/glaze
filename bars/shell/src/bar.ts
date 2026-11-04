@@ -1,4 +1,5 @@
 import type { Rect } from "./geometry";
+import type { IconPack } from "./protocol";
 
 /** A rendered bar (top or dock), as `main` drives it. */
 export interface Bar {
@@ -11,4 +12,6 @@ export interface Bar {
 export interface BarContext {
   /** Call when `rects()` may have changed. */
   invalidateRegion(): void;
+  /** The icon pack in use (the bar is rebuilt when it changes). */
+  iconPack: IconPack | null;
 }

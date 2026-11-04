@@ -12,7 +12,10 @@ export type Permission =
   | "media"
   | "launch"
   | "theme"
+  | "audio"
+  | "user"
   | "clipboard.write"
+  | `storage.shared:${string}`
   | `network:${string}`;
 
 interface SettingBase<K extends string, V> {
@@ -20,19 +23,33 @@ interface SettingBase<K extends string, V> {
   type: K;
   label: string;
   default: V;
+  /** A section heading in the form. */
+  group?: string;
 }
 
-export type ScalarSetting =
+/** A `select` option: a plain value, or an object with a label and an icon glyph. */
+export type SelectOption = string | { value: string; label?: string; icon?: string };
+
+/** Settings that can also be a column of a `list`. */
+export type ListableSetting =
   | SettingBase<"boolean", boolean>
   | SettingBase<"string", string>
-  | SettingBase<"color", string> // "#rrggbb"
-  | (SettingBase<"select", string> & { options: readonly string[] })
-  | (SettingBase<"number", number> & { min?: number; max?: number; step?: number });
+  | (SettingBase<"color", string> & { alpha?: boolean }) // "#rrggbb", or "#rrggbbaa" with `alpha`
+  | (SettingBase<"select", string> & { options: readonly SelectOption[] })
+  | (SettingBase<"number", number> & { min?: number; max?: number; step?: number })
+  | (SettingBase<"slider", number> & { min: number; max: number; step?: number; unit?: string })
+  | SettingBase<"font", string>;
+
+export type ScalarSetting =
+  | ListableSetting
+  // "" or the served URL of a file the host copied into the widget's data folder.
+  | (SettingBase<"file", string> & { extensions?: readonly string[] })
+  | (SettingBase<"image", string> & { extensions?: readonly string[] });
 
 type OmitEach<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
-/** A column of a `list` setting: any scalar setting, with an optional default. */
-export type ListField = OmitEach<ScalarSetting, "default"> & {
+/** A column of a `list` setting: any listable setting, with an optional default and no group. */
+export type ListField = OmitEach<ListableSetting, "default" | "group"> & {
   default?: string | number | boolean;
 };
 
@@ -44,6 +61,12 @@ export interface ListSetting extends SettingBase<"list", Record<string, string |
 
 export type SettingDef = ScalarSetting | ListSetting;
 
+/** Where a widget lives: the desktop layer, an always-on-top overlay, or a bar's popup. */
+export type Preset = "desktop" | "overlay" | "popup";
+
+/** How many instances the user may add: one in total, any number, or one per monitor. */
+export type InstanceRule = "single" | "multiple" | "per-monitor";
+
 export interface WidgetManifest {
   $schema?: string;
   id: string;
@@ -54,6 +77,8 @@ export interface WidgetManifest {
   entry?: string; // default "index.html"
   size: { default: Vec2; min?: Vec2; max?: Vec2 };
   resizable?: boolean; // default true
+  preset?: Preset; // default "desktop"
+  instances?: InstanceRule; // default "multiple"
   permissions?: readonly Permission[];
   plugins?: readonly string[];
   settings?: readonly SettingDef[];
@@ -63,6 +88,7 @@ export interface WidgetManifest {
 
 export type SurfaceKind = "none" | "glass" | "solid";
 export type TextTone = "light" | "dark";
+export type WidgetStyle = "minimal" | "depth" | "neon" | "paper" | "aero";
 
 /** Every field of an appearance, set. `accent` is `#rrggbb`, or `auto` in an unresolved layer. */
 export interface AppearanceValues {
@@ -77,6 +103,7 @@ export interface AppearanceValues {
   font: string; // a CSS font-family list
   scale: number; // 0.5..2
   shadow: boolean;
+  style: WidgetStyle; // the design language
 }
 
 /** One layer: only the fields it sets. */
@@ -111,6 +138,11 @@ export interface ShellState {
   appearance: { base: AppearanceValues; user: Layer; accent: string };
   /** The theme's widget style sheet, as text. */
   themeCss: string | null;
+  /** Which window this page lives in; `instances` holds only what that layer shows. Absent from
+   *  older hosts: `desktop`. */
+  layer?: "desktop" | "overlay";
+  /** Widget id -> instances on ALL monitors (the palette's `instances` rule). Absent from older hosts. */
+  counts?: Record<string, number>;
   editing: boolean;
   visible: boolean;
   error?: string;
@@ -142,6 +174,8 @@ export type ShellToHost =
   | { type: "duplicate"; instance: string; cell: Vec2 }
   | { type: "remove"; instance: string }
   | { type: "settings"; instance: string; values: Record<string, unknown> }
+  /** A `file`/`image` setting: the host shows the dialog, copies the file, sets the setting. */
+  | { type: "pickFile"; instance: string; key: string; extensions?: readonly string[] }
   /** Edits the user's appearance layer, or an instance's own when `instance` is set. */
   | { type: "appearance"; instance?: string; values: LayerPatch }
   | { type: "edit"; on: boolean };
@@ -174,6 +208,7 @@ export type SubscribeParams =
   | { sub: string; topic: "system"; intervalMs: number }
   | { sub: string; topic: "media" }
   | { sub: string; topic: "theme" }
+  | { sub: string; topic: "audio"; bins?: number }
   | { sub: string; topic: "plugin"; plugin: string; event: string };
 
 /** Request methods the widget can send; the shell answers `hello` itself and forwards the rest. */
@@ -187,6 +222,9 @@ export type WireMethod =
   | "launch"
   | "theme.current"
   | "plugin"
+  | "user.info"
+  | "pickFile"
+  | "appIcon"
   | "subscribe"
   | "unsubscribe";
 

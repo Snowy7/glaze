@@ -42,6 +42,9 @@ export interface Frames {
   render(): void;
   /** Tells widgets whose look (from the host state or `looks`) changed. */
   applyLooks(): void;
+  /** Tells one widget settings that are not saved (the settings form's live preview). The next
+   *  host `state` carries what was saved, and the widget hears it if that differs. */
+  previewSettings(instance: string, settings: Record<string, unknown>): void;
   onHost(message: Exclude<HostToShell, { type: "state" }>): void;
 }
 
@@ -145,6 +148,13 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
       slot.appearanceKey = key;
       postEvent(slot, "appearance", look);
     }
+  }
+
+  function previewSettings(instance: string, settings: Record<string, unknown>) {
+    const slot = slots.get(instance);
+    if (!slot) return;
+    slot.settingsKey = JSON.stringify(settings);
+    postEvent(slot, "settings", settings);
   }
 
   function render() {
@@ -273,5 +283,5 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
     }
   }
 
-  return { slots, overrides, live, looks, sync, render, applyLooks, onHost };
+  return { slots, overrides, live, looks, sync, render, applyLooks, previewSettings, onHost };
 }

@@ -2,7 +2,7 @@
 //! [`Done`] (see `flyouts/mod.rs`). `app.rs` owns one and handles the requests that touch the
 //! bars themselves (`room`, `keyboard`, `watch`, `setLayout`, pins); everything else is here.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -52,6 +52,9 @@ pub struct Flyouts {
     build_at: Option<Instant>,
     /// `apps` requests waiting for the first index.
     waiting: Vec<(u32, u64)>,
+    /// Each bar's page load (counted on its `hello`): deferred replies carry it.
+    pages: HashMap<u32, u64>,
+    loads: u64,
     history: History,
     history_path: Option<PathBuf>,
     /// The signed-in user, for the launcher's footer.
@@ -90,6 +93,8 @@ impl Flyouts {
             building: false,
             build_at: Some(Instant::now() + INDEX_DELAY),
             waiting: Vec::new(),
+            pages: HashMap::new(),
+            loads: 0,
             start_menu: None,
             dirty: BTreeSet::new(),
             dirty_at: None,
@@ -186,11 +191,24 @@ impl Flyouts {
         (value, replies)
     }
 
+    /// A bar's page (re)loaded: what was still due to the old one is dropped.
+    pub fn page_loaded(&mut self, bar: u32) {
+        self.loads += 1;
+        self.pages.insert(bar, self.loads);
+        self.waiting.retain(|&(b, _)| b != bar);
+    }
+
+    /// Whether `page` is still `bar`'s page load (a reply to it may be delivered).
+    pub fn current_page(&self, bar: u32, page: u64) -> bool {
+        self.pages.get(&bar).copied().unwrap_or(0) == page
+    }
+
     /// Handles a request. `None`: the answer comes later, as [`Done::Reply`].
     pub fn call(&mut self, bar: u32, id: u64, request: Request) -> Option<Result<Value, BarError>> {
         let waker = self.waker.clone();
+        let page = self.pages.get(&bar).copied().unwrap_or(0);
         let later = move |result: Result<Value, String>| {
-            reply(&waker, bar, id, result.map_err(BarError::unavailable));
+            reply(&waker, bar, page, id, result.map_err(BarError::unavailable));
         };
         let icons = self.icons.clone();
         match request {
@@ -205,7 +223,7 @@ impl Flyouts {
                 self.build_at = Some(Instant::now());
                 None
             }
-            Request::Run { id: app, path } => {
+            Request::LauncherRun { id: app, path } => {
                 self.history.record(&app, &path, index::epoch_ms());
                 if let Some(file) = &self.history_path {
                     self.history.save(file);

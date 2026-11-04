@@ -14,6 +14,7 @@ const FORECAST_URL: &str = "https://api.open-meteo.com/v1/forecast";
 const CURRENT_FIELDS: &str = "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m";
 const DAILY_FIELDS: &str =
     "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max";
+const HOURLY_FIELDS: &str = "temperature_2m,weather_code,precipitation_probability,is_day";
 
 pub struct OpenMeteo {
     agent: ureq::Agent,
@@ -67,6 +68,7 @@ impl Source for OpenMeteo {
             .query("longitude", place.lon.to_string())
             .query("current", CURRENT_FIELDS)
             .query("daily", DAILY_FIELDS)
+            .query("hourly", HOURLY_FIELDS)
             .query("timezone", "auto")
             .query("forecast_days", crate::weather::MAX_DAYS.to_string())
             .query("temperature_unit", temperature)

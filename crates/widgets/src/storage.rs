@@ -7,8 +7,15 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 use serde_json::{Map, Value};
 
-/// The most one instance may store.
+/// The most one instance (or one shared namespace) may store.
 const MAX_BYTES: usize = 1 << 20;
+
+/// The storage id of a shared namespace (`widget-data\_shared\<ns>.json`). It can't collide
+/// with an instance id, which never starts with `_`; and instance removal, which deletes by
+/// instance id, never touches it.
+pub fn shared(namespace: &str) -> String {
+    format!("_shared/{namespace}")
+}
 
 pub struct Storage {
     dir: PathBuf,
@@ -23,7 +30,8 @@ impl Storage {
         }
     }
 
-    /// `instance` must be a valid id (the layout guarantees it), so it's a safe file name.
+    /// `instance` is a valid id (the layout guarantees it) or a [`shared`] id built from a valid
+    /// namespace, so it's a safe file name.
     fn path(&self, instance: &str) -> PathBuf {
         self.dir.join(format!("{instance}.json"))
     }
@@ -64,7 +72,7 @@ impl Storage {
         let bytes = serde_json::to_vec(&next)?;
         ensure!(
             bytes.len() <= MAX_BYTES,
-            "storage is limited to 1 MB per instance"
+            "storage is limited to 1 MB per instance or shared namespace"
         );
         crate::files::write_atomic(&path, &bytes)?;
         *data = next;
@@ -99,6 +107,31 @@ mod tests {
             Storage::new(dir.clone()).get("notes-1", "text").unwrap(),
             Value::Null
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn instances_share_a_namespace_but_not_their_own_storage() {
+        let dir = crate::files::temp_dir("storage-shared");
+        let mut storage = Storage::new(dir.clone());
+        let pins = shared("pins");
+        storage.set(&pins, "list", Some(json!([1, 2]))).unwrap();
+        // Any instance reads what another wrote, even after a restart.
+        assert_eq!(storage.get(&pins, "list").unwrap(), json!([1, 2]));
+        assert_eq!(
+            Storage::new(dir.clone()).get(&pins, "list").unwrap(),
+            json!([1, 2])
+        );
+        // Namespaces are separate from each other and from instance storage.
+        assert_eq!(storage.get(&shared("other"), "list").unwrap(), Value::Null);
+        assert_eq!(storage.get("pins", "list").unwrap(), Value::Null);
+        assert!(dir.join("_shared").join("pins.json").is_file());
+        // A missing value deletes, as in instance storage.
+        storage.set(&pins, "list", None).unwrap();
+        assert_eq!(storage.get(&pins, "list").unwrap(), Value::Null);
+
+        let big = Value::String("x".repeat(MAX_BYTES));
+        assert!(storage.set(&pins, "big", Some(big)).is_err(), "1 MB cap");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

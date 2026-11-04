@@ -31,7 +31,7 @@ export interface CalendarConfig {
 export interface LauncherApp {
   id: string;
   name: string;
-  /** What `run` opens: `shell:AppsFolder\<id>`. */
+  /** What `launcherRun` opens: `shell:AppsFolder\<id>`. */
   path: string;
   icon?: string;
   /** More words a search matches (a shortcut's target exe). */
@@ -172,11 +172,12 @@ export interface FlyoutMethods {
   unwatch: { params: { topic: WatchTopic }; result: null };
   /** The window must reach `extent` DIPs past the bar's band; 0 goes back to the default room. */
   room: { params: { extent: number }; result: null };
-  /** Take the keyboard (the bar becomes the foreground window) or give it back. */
-  keyboard: { params: { on: boolean }; result: null };
+  /** Take the keyboard (the bar becomes the foreground window) or let it go. `handBack`: no
+   * press closed the flyout, so the app that was in front gets the foreground back. */
+  keyboard: { params: { on: boolean; handBack?: boolean }; result: null };
   apps: { params: undefined; result: AppsResult };
   /** Opens an app, settings page or file from the launcher and remembers it. */
-  run: { params: { id: string; path: string }; result: { recent: Recent[] } };
+  launcherRun: { params: { id: string; path: string }; result: { recent: Recent[] } };
   recentFiles: { params: undefined; result: RecentFile[] };
   clipboard: { params: undefined; result: ClipboardHistory };
   clipboardPaste: { params: { index: number }; result: null };

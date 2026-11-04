@@ -1,6 +1,7 @@
-// Dock layouts, by `config.dock.style`. A new style is a factory here plus a band size in the host
-// (`DockStyle::band` in crates/bars); typed by `DockStyle`, so adding one to protocol.ts fails the
-// build until it has a layout.
+// Dock layouts, by `config.dock.style`. A new style is a factory here (the host sizes its band
+// from size, padding and margin); typed by `DockStyle`, so adding one to protocol.ts fails the
+// build until it has a layout. Both built-in styles share dock.ts: `taskbar` is the floating
+// pill stretched along its edge, with modules and task buttons.
 
 import type { Bar, BarContext } from "../bar";
 import type { BarsConfig, DockStyle } from "../protocol";
@@ -10,4 +11,5 @@ export type DockFactory = (root: HTMLElement, config: BarsConfig, ctx: BarContex
 
 export const dockStyles: Record<DockStyle, DockFactory> = {
   floating: createDock,
+  taskbar: createDock,
 };

@@ -123,7 +123,7 @@ export function flyoutMock(message: Request, emit: Emit): unknown {
       return null;
     case "apps":
       return apps;
-    case "run":
+    case "launcherRun":
       return { recent: apps.recent };
     case "recentFiles":
       return files;

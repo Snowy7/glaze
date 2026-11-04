@@ -17,6 +17,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   font: '"Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI"',
   scale: 1,
   shadow: true,
+  style: "minimal",
 };
 
 /**
@@ -39,7 +40,12 @@ export interface AppearanceAttributes {
   "data-surface": Appearance["surface"];
   "data-text": Appearance["text"];
   "data-shadow": "on" | "off";
+  "data-style": Appearance["style"];
+  "data-border": "on" | "off";
 }
+
+/** Every `style`, in the order the Appearance panel lists them. */
+export const WIDGET_STYLES = ["minimal", "depth", "neon", "paper", "aero"] as const satisfies readonly Appearance["style"][];
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -61,6 +67,57 @@ function luminance([r, g, b]: [number, number, number]): number {
     return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   };
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+type Rgb = [number, number, number];
+
+/** sRGB channels (0..255) to hue (degrees), saturation and lightness (0..1). */
+function toHsl([r, g, b]: Rgb): [h: number, s: number, l: number] {
+  const [rf, gf, bf] = [r / 255, g / 255, b / 255] as const;
+  const max = Math.max(rf, gf, bf);
+  const min = Math.min(rf, gf, bf);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (d === 0) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = max === rf ? ((gf - bf) / d) % 6 : max === gf ? (bf - rf) / d + 2 : (rf - gf) / d + 4;
+  return [(h * 60 + 360) % 360, s, l];
+}
+
+function fromHsl(h: number, s: number, l: number): Rgb {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [r, g, b].map((v) => Math.round((v + m) * 255)) as Rgb;
+}
+
+/** Each style's signature colors, used for glows and gradients when the accent has no color of its own. */
+const SIGNATURE: Record<Appearance["style"], readonly [Rgb, Rgb]> = {
+  minimal: [[255, 255, 255], [255, 255, 255]],
+  depth: [[110, 168, 255], [181, 140, 255]],
+  neon: [[0, 229, 255], [255, 43, 214]],
+  paper: [[217, 130, 91], [233, 184, 114]],
+  aero: [[92, 200, 255], [122, 255, 200]],
+};
+
+/**
+ * The two colors a style's glow, rim and flowing gradient are made of. A chromatic accent gives
+ * both (the accent and the same color turned 48 degrees); a white, grey or ink accent, which has no
+ * hue to turn, falls back to the style's signature pair. `minimal` always follows the accent.
+ */
+export function sparkColors(accent: Rgb, style: Appearance["style"], text: Appearance["text"] = "light"): [Rgb, Rgb] {
+  const [h, s, l] = toHsl(accent);
+  if (s >= 0.18 && l > 0.12 && l < 0.92) return [accent, fromHsl((h + 48) % 360, Math.max(s, 0.55), Math.min(Math.max(l, 0.5), 0.7))];
+  const [a, b] = SIGNATURE[style];
+  if (text !== "dark") return [a, b];
+  // Dark text sits on light surfaces and wallpapers: the bright signature colors lose contrast
+  // there, so they are taken down to a mid lightness (same hue, a little more saturated).
+  const deepen = (color: Rgb): Rgb => {
+    const [ch, cs, cl] = toHsl(color);
+    return fromHsl(ch, Math.min(1, cs * 1.05), Math.min(cl, 0.42));
+  };
+  return [deepen(a), deepen(b)];
 }
 
 /** Keeps a font list from breaking out of its declaration. */
@@ -86,15 +143,18 @@ export function normalizeAppearance(input: Partial<Record<keyof Appearance, unkn
     font: typeof input.font === "string" && input.font.trim() ? input.font : d.font,
     scale: num(input.scale, d.scale, 0.5, 2),
     shadow: typeof input.shadow === "boolean" ? input.shadow : d.shadow,
+    style: pick(input.style, WIDGET_STYLES, d.style),
   };
 }
 
-/** `data-surface`, `data-text` and `data-shadow`. */
+/** `data-surface`, `data-text`, `data-shadow`, `data-style` and `data-border`. */
 export function appearanceAttributes(a: Appearance): AppearanceAttributes {
   return {
     "data-surface": a.surface,
     "data-text": a.text,
     "data-shadow": a.shadow ? "on" : "off",
+    "data-style": a.style,
+    "data-border": a.border ? "on" : "off",
   };
 }
 
@@ -108,7 +168,11 @@ export function appearanceAttributes(a: Appearance): AppearanceAttributes {
  *   alphas, so contrast steps stay the same in both tones.
  * - `--ink` and `--halo` are space-separated channel triples (`rgb(var(--ink) / .3)`): the ink
  *   itself, and its opposite, used for the soft shadow under text on a bare wallpaper.
- * - `--accent` is the accent; `--on-accent` is the ink that reads on top of it.
+ * - `--accent` is the accent; `--on-accent` is the ink that reads on top of it. `--accent-rgb` is its
+ *   channel triple.
+ * - `--spark` / `--accent-2` (and `-rgb` triples) are the pair the styles make glows and gradients
+ *   of: the accent and its neighbour in hue, or the style's signature pair for a colorless accent
+ *   ([`sparkColors`]).
  */
 export function appearanceVars(a: Appearance): Record<string, string> {
   const dark = a.text === "dark";
@@ -120,6 +184,7 @@ export function appearanceVars(a: Appearance): Record<string, string> {
   const accentRgb = rgb(a.accent, DEFAULT_APPEARANCE.accent);
   const accent = `rgb(${accentRgb.join(" ")})`;
   const onAccent = luminance(accentRgb) > 0.4 ? "#0a0a0c" : "#ffffff";
+  const [spark, spark2] = sparkColors(accentRgb, a.style, a.text);
 
   const step = (alphas: readonly number[], prefix: string) =>
     Object.fromEntries(alphas.map((al, i) => [`${prefix}${i}`, `rgb(${ink} / ${al})`]));
@@ -136,6 +201,12 @@ export function appearanceVars(a: Appearance): Record<string, string> {
     "--ink": ink,
     "--halo": halo,
     "--accent": accent,
+    "--accent-rgb": accentRgb.join(" "),
+    "--spark": `rgb(${spark.join(" ")})`,
+    "--spark-rgb": spark.join(" "),
+    "--on-spark": luminance(spark) > 0.3 ? "#0a0a0c" : "#ffffff",
+    "--accent-2": `rgb(${spark2.join(" ")})`,
+    "--accent-2-rgb": spark2.join(" "),
     "--on-accent": onAccent,
     "--font": fontStack(a.font),
     "--scale": String(a.scale),

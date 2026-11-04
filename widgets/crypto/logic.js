@@ -27,6 +27,30 @@ const KNOWN = {
 /** @param {string} id */
 export const symbolOf = (id) => KNOWN[id]?.[0] ?? id.toUpperCase();
 
+// A one-character mark for a few coins that have a well-known sign; the others get their ticker's
+// first letter.
+/** @type {Record<string, string>} */
+const GLYPHS = {
+  bitcoin: "₿",
+  ethereum: "Ξ",
+  solana: "◎",
+  ripple: "✕",
+  dogecoin: "Ð",
+  cardano: "₳",
+  litecoin: "Ł",
+  tether: "₮",
+  monero: "ɱ",
+  polkadot: "●",
+  binancecoin: "◆",
+  "avalanche-2": "▲",
+};
+
+/**
+ * The mark shown in a coin's badge.
+ * @param {string} id
+ */
+export const glyphOf = (id) => GLYPHS[id] ?? Array.from(symbolOf(id))[0] ?? "?";
+
 /** @param {string} id */
 export function nameOf(id) {
   const known = KNOWN[id];

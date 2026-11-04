@@ -3,10 +3,15 @@
 
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
+use std::thread::JoinHandle;
+use std::time::Duration;
 
 use windows::Win32::Foundation::{LPARAM, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
+use windows::Win32::UI::WindowsAndMessaging::{
+    MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW, WM_APP, WM_QUIT,
+};
 
+use crate::custom::Output;
 use crate::icons::{Described, Source};
 use crate::media::MediaInfo;
 use crate::tray::TrayItem;
@@ -33,6 +38,10 @@ pub enum Msg {
     Tray(Vec<TrayItem>),
     /// A flyout provider finished something (docs/bars.md, "Flyouts").
     Flyout(crate::flyouts::Done),
+    /// The wallpaper engine wrote a new snapshot (wallpaper glass).
+    Backdrop,
+    /// A custom module's command finished.
+    Custom(String, Output),
     /// A file watcher failed and stopped (logged).
     WatchError(PathBuf, String),
 }
@@ -54,4 +63,24 @@ impl Waker {
             let _ = unsafe { PostThreadMessageW(self.thread, WM_WAKE, WPARAM(0), LPARAM(0)) };
         }
     }
+}
+
+/// Gives the calling thread its message queue, so posts to it land from now on. A worker with a
+/// message loop calls it before it tells its starter it's ready.
+pub fn make_queue() {
+    let mut msg = MSG::default();
+    // SAFETY: a peek that removes nothing; Windows creates the queue on this first call.
+    let _ = unsafe { PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE) };
+}
+
+/// Asks a worker's message loop to quit and waits for the thread. The post is retried while it
+/// fails (a thread without a queue yet) and the thread still runs, so the quit is never lost.
+pub fn quit_thread(thread: u32, handle: JoinHandle<()>) {
+    // SAFETY: posting to a thread we started.
+    while unsafe { PostThreadMessageW(thread, WM_QUIT, WPARAM(0), LPARAM(0)) }.is_err()
+        && !handle.is_finished()
+    {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let _ = handle.join();
 }

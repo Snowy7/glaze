@@ -17,14 +17,19 @@
 //! 5. sends clicks back to an icon's owner as its callback message (`tray_data::click_messages`),
 //!    after `AllowSetForegroundWindow`, so its menu or window comes to the front.
 //!
-//! It runs only while a tray module is on screen and the native taskbar is replaced
-//! (`taskbar.mode: hide`, or `tray.host`). Stopping destroys the window and broadcasts
-//! `TaskbarCreated` again, so apps re-register with Explorer. When Explorer's process ends the
-//! host steps aside at once (a second `Shell_TrayWnd` during Explorer's start keeps it from
-//! initializing its taskbar: Zebar #301), and comes back a few seconds after Explorer's own
-//! `TaskbarCreated`.
+//! It runs while some bar is configured with a tray module and the native taskbar is replaced
+//! (`taskbar.mode: hide`, or `tray.host`), whether or not that bar is on screen right now (a
+//! fullscreen game hiding the bars mustn't make every app re-add its icons). Stopping destroys
+//! the window and broadcasts `TaskbarCreated` again, so apps re-register with Explorer. When
+//! Explorer's process ends, or its tray window goes, the host steps aside at once (a second
+//! `Shell_TrayWnd` during Explorer's start keeps it from initializing its taskbar: Zebar #301)
+//! and comes back a few seconds after Explorer's tray is there again: on Explorer's own
+//! `TaskbarCreated`, or the next periodic look for it.
+//!
+//! Only `explorer.exe`'s tray is ever forwarded to, and nested forwards are capped, so two hosts
+//! (ours and another shell's) can't bounce a message between them.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -63,26 +68,26 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::Shell::{SHAllocShared, SHFreeShared, SHLockShared, SHUnlockShared};
 use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, CS_DBLCLKS, CopyIcon, CreateWindowExW, DefWindowProcW, DestroyIcon,
-    DestroyWindow, DispatchMessageW, EVENT_OBJECT_DESTROY, EVENT_OBJECT_LOCATIONCHANGE,
-    EVENT_OBJECT_REORDER, EVENT_SYSTEM_FOREGROUND, FindWindowW, GWL_STYLE, GetIconInfo,
+    AllowSetForegroundWindow, CHILDID_SELF, CS_DBLCLKS, CopyIcon, CreateWindowExW, DefWindowProcW,
+    DestroyIcon, DestroyWindow, DispatchMessageW, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
+    EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_FOREGROUND, FindWindowW, GWL_STYLE, GetIconInfo,
     GetWindowLongPtrW, GetWindowThreadProcessId, HICON, HWND_BROADCAST, HWND_TOPMOST, ICONINFO,
     ISMEX_NOTIFY, ISMEX_SEND, InSendMessageEx, IsWindow, MSG, MWMO_INPUTAVAILABLE,
-    MsgWaitForMultipleObjectsEx, PM_REMOVE, PeekMessageW, PostMessageW, PostThreadMessageW,
-    QS_ALLINPUT, RegisterClassExW, RegisterWindowMessageW, ReplyMessage, SC_TASKLIST,
-    SMTO_ABORTIFHUNG, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SendMessageTimeoutW,
-    SendNotifyMessageW, SetWindowLongPtrW, SetWindowPos, TranslateMessage, UnregisterClassW,
-    WINEVENT_OUTOFCONTEXT, WM_APP, WM_COMMAND, WM_COPYDATA, WM_QUIT, WM_SYSCOMMAND, WM_USER,
-    WM_WINDOWPOSCHANGED, WNDCLASSEXW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
+    MsgWaitForMultipleObjectsEx, OBJID_WINDOW, PM_REMOVE, PeekMessageW, PostMessageW,
+    PostThreadMessageW, QS_ALLINPUT, RegisterClassExW, RegisterWindowMessageW, ReplyMessage,
+    SC_TASKLIST, SMTO_ABORTIFHUNG, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_SHOWWINDOW, SendMessageTimeoutW, SendNotifyMessageW, SetWindowLongPtrW, SetWindowPos,
+    TranslateMessage, UnregisterClassW, WINDOWPOS, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CLOSE,
+    WM_COMMAND, WM_COPYDATA, WM_NCDESTROY, WM_QUIT, WM_SYSCOMMAND, WM_USER, WM_WINDOWPOSCHANGED,
+    WM_WINDOWPOSCHANGING, WNDCLASSEXW, WNDPROC, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
 };
 use windows::core::{HSTRING, PCWSTR, PWSTR, w};
 
 use crate::tray::{reg_dword, reg_string, resolve_known_folder};
 use crate::tray_data::{
     self, ABM_GETTASKBARPOS, ABM_QUERYPOS, ABM_SETPOS, APPBARDATA_SIZE, COPYDATA_APPBAR,
-    COPYDATA_ICON_RECT, COPYDATA_NOTIFY, Click, ICON_OFFSET, Icons, NIF_ICON, Owner, Setting,
-    TrayItem,
+    COPYDATA_ICON_RECT, COPYDATA_NOTIFY, Click, ICON_OFFSET, Icons, Owner, Setting, TrayItem,
 };
 use crate::wake::{Msg, Waker};
 
@@ -92,15 +97,25 @@ const NOTIFY_CLASS: PCWSTR = w!("TrayNotifyWnd");
 const WM_HOST_COMMAND: u32 = WM_APP + 40;
 /// How long a forward to Explorer may take (a hung Explorer must not hang the apps, or us).
 const FORWARD_TIMEOUT_MS: u32 = 2_000;
+/// The same while the host stops: what's still queued gets a short chance.
+const SHUTDOWN_TIMEOUT_MS: u32 = 200;
+/// Forwards nested inside forwards (Explorer's answer can make an app call us again). A deeper
+/// chain is a window bouncing messages back to us; it gets 0.
+const MAX_DEPTH: u32 = 4;
 /// Icon changes come in bursts (every app re-adding after `TaskbarCreated`): one report each.
 const REPORT_SETTLE: Duration = Duration::from_millis(80);
-/// Explorer rewrites `NotifyIconSettings` as icons change; re-read it at most this often.
+/// Animated icons change many times a second: at most one report this often.
+const REPORT_GAP: Duration = Duration::from_secs(1);
+/// Explorer rewrites `NotifyIconSettings` as icons change: re-read it once the writes settle,
+/// and at most this often.
 const SETTINGS_SETTLE: Duration = Duration::from_secs(2);
+const SETTINGS_GAP: Duration = Duration::from_secs(5);
 /// After Explorer (re)starts, let it build its taskbar before a second `Shell_TrayWnd` appears.
 const EXPLORER_SETTLE: Duration = Duration::from_secs(4);
-/// A belt-and-braces Z-order check while hosting (Explorer can raise its tray without an event
-/// we hear). One `FindWindow` call.
-const ZORDER_CHECK: Duration = Duration::from_secs(3);
+/// A periodic check (one `FindWindow`): while hosting, that ours is still the first tray
+/// (Explorer can raise its own without an event we hear); while not, whether Explorer's tray is
+/// back (its `TaskbarCreated` can be missed).
+const CHECK_EVERY: Duration = Duration::from_secs(3);
 
 /// When the host last broadcast `TaskbarCreated` (`GetTickCount64`), so the bars don't take their
 /// own broadcast for an Explorer restart.
@@ -143,6 +158,11 @@ enum Command {
     },
     Place(Option<Band>),
     ExplorerRestarted,
+    /// An exe's description, read off the host's thread (`describe`).
+    Named {
+        exe: String,
+        name: String,
+    },
 }
 
 struct Worker {
@@ -176,14 +196,16 @@ impl TrayHost {
             (true, None) => {
                 let (tx, rx) = mpsc::channel();
                 let (ready_tx, ready_rx) = mpsc::channel();
-                let (waker, band) = (self.waker.clone(), self.band);
+                let (waker, band, own) = (self.waker.clone(), self.band, tx.clone());
                 let spawned =
                     std::thread::Builder::new()
                         .name("tray-host".into())
                         .spawn(move || {
+                            // Before saying it's ready: a quit posted from now on is kept.
+                            crate::wake::make_queue();
                             // SAFETY: no preconditions.
                             let _ = ready_tx.send(unsafe { GetCurrentThreadId() });
-                            run(&rx, waker, band);
+                            run(&rx, own, waker, band);
                         });
                 match spawned {
                     Ok(handle) => match ready_rx.recv() {
@@ -201,9 +223,7 @@ impl TrayHost {
                 }
             }
             (false, Some(worker)) => {
-                // SAFETY: posting to a thread we started; it exits its loop on WM_QUIT.
-                let _ = unsafe { PostThreadMessageW(worker.thread, WM_QUIT, WPARAM(0), LPARAM(0)) };
-                let _ = worker.handle.join();
+                crate::wake::quit_thread(worker.thread, worker.handle);
                 log::info!("tray: stopped hosting; apps re-register with Explorer");
             }
             (_, worker) => self.worker = worker,
@@ -259,6 +279,9 @@ struct Explorer {
 
 struct State {
     waker: Waker,
+    /// The host's own channel and thread, for helpers that report back (`describe`).
+    commands: Sender<Command>,
+    thread: u32,
     /// Our `Shell_TrayWnd`, while hosting.
     window: Option<HWND>,
     explorer: Option<Explorer>,
@@ -272,13 +295,23 @@ struct State {
     anchors: HashMap<String, [i32; 4]>,
     sent: Option<Vec<TrayItem>>,
     report_at: Option<Instant>,
+    reported: Option<Instant>,
     wic: Option<IWICImagingFactory>,
-    /// Explorer's tray window was destroyed: the loop steps aside.
-    gone: bool,
-    /// Icon messages still to pass on to Explorer, with the icon copy each carries (destroyed
-    /// once Explorer has it). Forwarded from the loop, one at a time, so a burst (every app
+    /// Explorer's tray window, or ours, was destroyed: the loop steps aside.
+    step_aside: bool,
+    /// Icon messages still to pass on to Explorer, with the icon copies each carries (destroyed
+    /// once Explorer has them). Forwarded from the loop, one at a time, so a burst (every app
     /// re-adding at once) never nests inside itself or delays app-bar calls.
-    forwards: std::collections::VecDeque<(WPARAM, Vec<u8>, Option<HICON>)>,
+    forwards: std::collections::VecDeque<(WPARAM, Vec<u8>, Vec<HICON>)>,
+}
+
+impl State {
+    /// Reports the icons once a burst settles, and at most every [`REPORT_GAP`].
+    fn report_soon(&mut self, settle: Duration) {
+        let at = Instant::now() + settle;
+        let at = self.reported.map_or(at, |last| at.max(last + REPORT_GAP));
+        self.report_at.get_or_insert(at);
+    }
 }
 
 thread_local! {
@@ -335,15 +368,16 @@ fn register_classes() -> bool {
         let Ok(instance) = GetModuleHandleW(None) else {
             return false;
         };
-        let class = |name: PCWSTR| WNDCLASSEXW {
+        let class = |name: PCWSTR, proc: WNDPROC| WNDCLASSEXW {
             cbSize: size_of::<WNDCLASSEXW>() as u32,
             style: CS_DBLCLKS,
-            lpfnWndProc: Some(tray_proc),
+            lpfnWndProc: proc,
             hInstance: instance.into(),
             lpszClassName: name,
             ..Default::default()
         };
-        RegisterClassExW(&class(TRAY_CLASS)) != 0 && RegisterClassExW(&class(NOTIFY_CLASS)) != 0
+        RegisterClassExW(&class(TRAY_CLASS, Some(tray_proc))) != 0
+            && RegisterClassExW(&class(NOTIFY_CLASS, Some(notify_proc))) != 0
     }
 }
 
@@ -426,7 +460,7 @@ fn ensure_on_top() {
     }
 }
 
-fn run(commands: &Receiver<Command>, waker: Waker, band: Option<Band>) {
+fn run(commands: &Receiver<Command>, own: Sender<Command>, waker: Waker, band: Option<Band>) {
     // SAFETY: COM for WIC on this thread; balanced below.
     let com = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_ok();
     // SAFETY: plain COM creation.
@@ -440,6 +474,9 @@ fn run(commands: &Receiver<Command>, waker: Waker, band: Option<Band>) {
     STATE.with(|cell| {
         *cell.borrow_mut() = Some(State {
             waker,
+            commands: own,
+            // SAFETY: no preconditions.
+            thread: unsafe { GetCurrentThreadId() },
             window: None,
             explorer: None,
             band,
@@ -450,42 +487,50 @@ fn run(commands: &Receiver<Command>, waker: Waker, band: Option<Band>) {
             anchors: HashMap::new(),
             sent: None,
             report_at: None,
+            reported: None,
             wic,
-            gone: false,
+            step_aside: false,
             forwards: std::collections::VecDeque::new(),
         })
     });
     let settings = SettingsWatch::open();
     reread_settings();
+    let mut settings_read = Instant::now();
 
     let mut session = Session::default();
     let mut join_at = registered.then(Instant::now);
     let mut settings_at: Option<Instant> = None;
-    let mut zorder_at: Option<Instant> = None;
+    let mut check_at = registered.then(|| Instant::now() + CHECK_EVERY);
     'run: loop {
         let now = Instant::now();
         if join_at.is_some_and(|at| at <= now) {
             join_at = None;
             match session.join() {
-                Join::Hosting => zorder_at = Some(now + ZORDER_CHECK),
+                Join::Hosting => {}
                 Join::Later(wait) => join_at = Some(now + wait),
-                Join::NoExplorer => {} // until Explorer's TaskbarCreated
+                Join::NoExplorer => {} // until Explorer's tray is back
             }
         }
         if settings_at.is_some_and(|at| at <= now) {
             settings_at = None;
+            settings_read = now;
             reread_settings();
         }
-        if zorder_at.is_some_and(|at| at <= now) {
-            ensure_on_top();
-            zorder_at = session.hosting().then(|| now + ZORDER_CHECK);
+        if check_at.is_some_and(|at| at <= now) {
+            check_at = Some(now + CHECK_EVERY);
+            if session.hosting() {
+                ensure_on_top();
+            } else if join_at.is_none() && find_explorer().is_some() {
+                // Explorer's tray is back without a TaskbarCreated reaching us: let it settle.
+                join_at = Some(now + EXPLORER_SETTLE);
+            }
         }
         report_if_due(now);
 
         let deadline = [
             join_at,
             settings_at,
-            zorder_at,
+            check_at,
             with_state(|s| s.report_at).flatten(),
         ]
         .into_iter()
@@ -512,7 +557,9 @@ fn run(commands: &Receiver<Command>, waker: Waker, band: Option<Band>) {
                 session.leave();
             }
             Some(_) => {
-                settings_at.get_or_insert(Instant::now() + SETTINGS_SETTLE);
+                settings_at.get_or_insert(
+                    (Instant::now() + SETTINGS_SETTLE).max(settings_read + SETTINGS_GAP),
+                );
                 if let Some(watch) = &settings {
                     watch.arm();
                 }
@@ -544,6 +591,12 @@ fn run(commands: &Receiver<Command>, waker: Waker, band: Option<Band>) {
                                         join_at = Some(Instant::now() + EXPLORER_SETTLE);
                                     }
                                 }
+                                Command::Named { exe, name } => {
+                                    with_state(|s| {
+                                        s.names.insert(exe, name);
+                                        s.report_soon(REPORT_SETTLE);
+                                    });
+                                }
                             }
                         }
                     }
@@ -554,14 +607,13 @@ fn run(commands: &Receiver<Command>, waker: Waker, band: Option<Band>) {
                 }
             }
         }
-        forward_queued();
-        if with_state(|s| std::mem::take(&mut s.gone)).unwrap_or(false) {
+        forward_queued(FORWARD_TIMEOUT_MS);
+        if with_state(|s| std::mem::take(&mut s.step_aside)).unwrap_or(false) {
             session.leave();
-            zorder_at = None;
         }
     }
 
-    forward_queued();
+    forward_queued(SHUTDOWN_TIMEOUT_MS);
     session.leave();
     drop(settings);
     STATE.with(|cell| cell.borrow_mut().take());
@@ -615,10 +667,10 @@ impl Session {
         };
         // SAFETY: a wait-only handle we close in `leave`.
         self.process = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, explorer.pid) }.ok();
-        // Explorer's own windows: its tray raised, shown, moved or destroyed.
+        // Explorer's own windows: its tray raised, destroyed, shown, hidden or moved.
         self.hooks = [
             (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
-            (EVENT_OBJECT_DESTROY, EVENT_OBJECT_REORDER),
+            (EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE),
             (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
         ]
         .into_iter()
@@ -646,7 +698,9 @@ impl Session {
         Join::Hosting
     }
 
-    /// Stops being the tray: our window goes, and apps register with Explorer again.
+    /// Stops being the tray: our window goes, and apps register with Explorer again. Not while
+    /// Explorer's tray is gone: nobody would take their icons, and Explorer broadcasts its own
+    /// `TaskbarCreated` when it's back.
     fn leave(&mut self) {
         for hook in self.hooks.drain(..) {
             // SAFETY: a hook from SetWinEventHook.
@@ -664,7 +718,9 @@ impl Session {
         if let Some(window) = window {
             // SAFETY: our own window, on its thread.
             let _ = unsafe { DestroyWindow(window) };
-            broadcast_taskbar_created();
+            if find_explorer().is_some() {
+                broadcast_taskbar_created();
+            }
         }
     }
 }
@@ -679,24 +735,29 @@ unsafe extern "system" fn on_explorer_event(
     _: HWINEVENTHOOK,
     event: u32,
     window: HWND,
-    _: i32,
-    _: i32,
+    object: i32,
+    child: i32,
     _: u32,
     _: u32,
 ) {
+    // The window itself (not its caret, scroll bars or child elements).
+    if object != OBJID_WINDOW.0 || child != CHILDID_SELF as i32 {
+        return;
+    }
     let explorer = with_state(|s| s.explorer.map(|e| e.tray)).flatten();
     if explorer != Some(window) {
         return;
     }
-    if event == EVENT_OBJECT_DESTROY {
+    // SAFETY: a read-only query; a destroyed handle reads as gone.
+    if event == EVENT_OBJECT_DESTROY && !unsafe { IsWindow(Some(window)) }.as_bool() {
         // Explorer's taskbar went away inside a living process (it rebuilds it): step aside now,
         // so it starts over without a second Shell_TrayWnd around.
         log::info!("tray: Explorer's tray window was destroyed; stepping aside");
         with_state(|s| {
             s.explorer = None;
-            s.gone = true;
+            s.step_aside = true;
         });
-    } else {
+    } else if event != EVENT_OBJECT_DESTROY {
         ensure_on_top();
     }
 }
@@ -760,7 +821,13 @@ unsafe extern "system" fn tray_proc(
             }
             return result;
         }
-        // Never shown, whatever shows it.
+        // Never shown, whatever shows it: the show is taken out on its way in, and the style
+        // cleared if one got through anyway.
+        WM_WINDOWPOSCHANGING if lparam.0 != 0 => {
+            // SAFETY: WM_WINDOWPOSCHANGING's lParam is a WINDOWPOS the sender lets us change.
+            let pos = unsafe { &mut *(lparam.0 as *mut WINDOWPOS) };
+            pos.flags &= !SWP_SHOWWINDOW;
+        }
         WM_WINDOWPOSCHANGED => {
             // SAFETY: our own window's style.
             unsafe {
@@ -777,7 +844,34 @@ unsafe extern "system" fn tray_proc(
         }
         // Registered messages (≥ 0xC000) are broadcasts like TaskbarCreated: Explorer has its own.
         WM_USER..0xC000 => return forward(msg, wparam, lparam),
+        // Explorer's tray ignores it too; only the host closes its window.
+        WM_CLOSE => return LRESULT(0),
+        // Destroyed by someone else (`leave` takes the window out of the state first).
+        WM_NCDESTROY => {
+            with_state(|s| {
+                if s.window == Some(window) {
+                    log::info!("tray: our Shell_TrayWnd was destroyed; stepping aside");
+                    s.window = None;
+                    s.step_aside = true;
+                }
+            });
+        }
         _ => {}
+    }
+    // SAFETY: default handling of a message we were called with.
+    unsafe { DefWindowProcW(window, msg, wparam, lparam) }
+}
+
+/// `TrayNotifyWnd`, the child apps look up for the tray's rectangle: nothing of its own to do,
+/// and it can't be closed either.
+unsafe extern "system" fn notify_proc(
+    window: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    if msg == WM_CLOSE {
+        return LRESULT(0);
     }
     // SAFETY: default handling of a message we were called with.
     unsafe { DefWindowProcW(window, msg, wparam, lparam) }
@@ -785,6 +879,24 @@ unsafe extern "system" fn tray_proc(
 
 fn explorer() -> Option<Explorer> {
     with_state(|s| s.explorer).flatten()
+}
+
+thread_local! {
+    /// Synchronous forwards in progress on the host's thread (see [`MAX_DEPTH`]).
+    static DEPTH: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Runs a synchronous forward, or answers `refused` when too many are nested already.
+fn nested<T>(refused: T, send: impl FnOnce() -> T) -> T {
+    let depth = DEPTH.get();
+    if depth >= MAX_DEPTH {
+        log::warn!("tray: forwards nested {depth} deep; refusing (a loop between trays?)");
+        return refused;
+    }
+    DEPTH.set(depth + 1);
+    let result = send();
+    DEPTH.set(depth);
+    result
 }
 
 /// Passes a message on to Explorer's tray the way it came: sent (with its result), or posted.
@@ -799,17 +911,19 @@ fn forward(msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
             let _ = SendNotifyMessageW(explorer.tray, msg, wparam, lparam);
             LRESULT(0)
         } else if how & ISMEX_SEND != 0 {
-            let mut result = 0usize;
-            SendMessageTimeoutW(
-                explorer.tray,
-                msg,
-                wparam,
-                lparam,
-                SMTO_ABORTIFHUNG,
-                FORWARD_TIMEOUT_MS,
-                Some(&mut result),
-            );
-            LRESULT(result as isize)
+            nested(LRESULT(0), || {
+                let mut result = 0usize;
+                SendMessageTimeoutW(
+                    explorer.tray,
+                    msg,
+                    wparam,
+                    lparam,
+                    SMTO_ABORTIFHUNG,
+                    FORWARD_TIMEOUT_MS,
+                    Some(&mut result),
+                );
+                LRESULT(result as isize)
+            })
         } else {
             let _ = PostMessageW(Some(explorer.tray), msg, wparam, lparam);
             LRESULT(0)
@@ -817,34 +931,44 @@ fn forward(msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     }
 }
 
-/// Sends `bytes` to Explorer's tray as a `WM_COPYDATA` of kind `kind`, and returns its answer.
+/// Sends `bytes` to Explorer's tray as a `WM_COPYDATA` of kind `kind`, and returns its answer
+/// (0 when it didn't answer).
 fn forward_copydata(wparam: WPARAM, kind: usize, bytes: &[u8]) -> LRESULT {
-    let Some(explorer) = explorer() else {
-        return LRESULT(0);
-    };
-    copydata_to(explorer.tray, wparam, kind, bytes)
+    explorer()
+        .and_then(|explorer| copydata_to(explorer.tray, wparam, kind, bytes, FORWARD_TIMEOUT_MS))
+        .unwrap_or(LRESULT(0))
 }
 
-fn copydata_to(target: HWND, wparam: WPARAM, kind: usize, bytes: &[u8]) -> LRESULT {
+/// `None` when the send failed or timed out: the receiver may still read what it was given
+/// later, so whatever the message points at must stay alive.
+fn copydata_to(
+    target: HWND,
+    wparam: WPARAM,
+    kind: usize,
+    bytes: &[u8],
+    timeout_ms: u32,
+) -> Option<LRESULT> {
     let data = COPYDATASTRUCT {
         dwData: kind,
         cbData: bytes.len() as u32,
         lpData: bytes.as_ptr() as *mut c_void,
     };
-    let mut result = 0usize;
-    // SAFETY: `data` and `bytes` outlive the synchronous call; the system copies them across.
-    unsafe {
-        SendMessageTimeoutW(
-            target,
-            WM_COPYDATA,
-            wparam,
-            LPARAM(&raw const data as isize),
-            SMTO_ABORTIFHUNG,
-            FORWARD_TIMEOUT_MS,
-            Some(&mut result),
-        );
-    }
-    LRESULT(result as isize)
+    nested(None, || {
+        let mut result = 0usize;
+        // SAFETY: `data` and `bytes` outlive the synchronous call; the system copies them across.
+        let sent = unsafe {
+            SendMessageTimeoutW(
+                target,
+                WM_COPYDATA,
+                wparam,
+                LPARAM(&raw const data as isize),
+                SMTO_ABORTIFHUNG,
+                timeout_ms,
+                Some(&mut result),
+            )
+        };
+        (sent.0 != 0).then_some(LRESULT(result as isize))
+    })
 }
 
 /// `Shell_NotifyIcon`: keep the icon, answer the app at once, then tell Explorer the same.
@@ -852,50 +976,67 @@ fn on_notify(wparam: WPARAM, mut bytes: Vec<u8>) -> LRESULT {
     let Some(notify) = tray_data::parse_notify(&bytes) else {
         return forward_copydata(wparam, COPYDATA_NOTIFY, &bytes);
     };
-    // Apps often destroy their icon right after the call returns: copy it first. Explorer gets
-    // the copy too (it copies it again while we wait), then we draw it and let it go.
-    let copy = (notify.flags & NIF_ICON != 0 && notify.icon != 0)
-        // SAFETY: icons are session-wide USER objects; a stale handle just fails.
-        .then(|| unsafe { CopyIcon(HICON(notify.icon as usize as *mut c_void)) }.ok())
-        .flatten();
-    if let Some(copy) = copy {
-        bytes[ICON_OFFSET..ICON_OFFSET + 4]
-            .copy_from_slice(&(copy.0 as usize as u32).to_le_bytes());
-    }
+    // Apps often destroy their icons right after the call returns: copy them first. Explorer
+    // gets the copies (it copies them again while we wait), then we draw the icon and let go.
+    let copies: Vec<(usize, HICON)> = notify
+        .handles()
+        .into_iter()
+        .filter_map(|(at, handle)| {
+            // SAFETY: icons are session-wide USER objects; a stale handle just fails.
+            let copy = unsafe { CopyIcon(HICON(handle as usize as *mut c_void)) }.ok()?;
+            bytes[at..at + 4].copy_from_slice(&(copy.0 as usize as u32).to_le_bytes());
+            Some((at, copy))
+        })
+        .collect();
+    let icon = copies
+        .iter()
+        .find(|&&(at, _)| at == ICON_OFFSET)
+        .map(|&(_, copy)| copy);
     let applied = with_state(|s| {
         let applied = s.icons.apply(&notify, None, || owner_of(notify.hwnd));
         if applied.changed {
-            s.report_at.get_or_insert(Instant::now() + REPORT_SETTLE);
+            s.report_soon(REPORT_SETTLE);
         }
         applied
     });
     let accepted = applied.is_some_and(|a| a.accepted);
     // SAFETY: answers the app's SendMessage; it doesn't wait for Explorer or for the drawing.
     let _ = unsafe { ReplyMessage(LRESULT(isize::from(accepted))) };
-    if let Some(copy) = copy {
+    if let Some(icon) = icon {
         let image = with_state(|s| s.wic.clone())
             .flatten()
-            .and_then(|wic| icon_data_url(copy, &wic));
+            .and_then(|wic| icon_data_url(icon, &wic));
         with_state(|s| {
             if s.icons.set_image(&notify, image) {
-                s.report_at.get_or_insert(Instant::now() + REPORT_SETTLE);
+                s.report_soon(REPORT_SETTLE);
             }
         });
     }
-    let queued = with_state(|s| s.forwards.push_back((wparam, bytes, copy))).is_some();
-    if !queued && let Some(copy) = copy {
-        // SAFETY: our copy, nobody else has it.
-        let _ = unsafe { DestroyIcon(copy) };
+    let copies: Vec<HICON> = copies.into_iter().map(|(_, copy)| copy).collect();
+    let queued = with_state(|s| s.forwards.push_back((wparam, bytes, copies.clone()))).is_some();
+    if !queued {
+        for copy in copies {
+            // SAFETY: our copy, nobody else has it.
+            let _ = unsafe { DestroyIcon(copy) };
+        }
     }
     LRESULT(isize::from(accepted))
 }
 
-/// Passes the queued icon messages on to Explorer (see `State::forwards`).
-fn forward_queued() {
-    while let Some((wparam, bytes, copy)) = with_state(|s| s.forwards.pop_front()).flatten() {
-        forward_copydata(wparam, COPYDATA_NOTIFY, &bytes);
-        if let Some(copy) = copy {
-            // SAFETY: our copy; Explorer took its own during the forward.
+/// Passes the queued icon messages on to Explorer (see `State::forwards`), each allowed
+/// `timeout_ms`.
+fn forward_queued(timeout_ms: u32) {
+    while let Some((wparam, bytes, copies)) = with_state(|s| s.forwards.pop_front()).flatten() {
+        let delivered = explorer().is_none_or(|explorer| {
+            copydata_to(explorer.tray, wparam, COPYDATA_NOTIFY, &bytes, timeout_ms).is_some()
+        });
+        if !delivered {
+            // Explorer may still take the message later and copy the icons then: they stay.
+            log::debug!("tray: Explorer didn't take an icon message; keeping its icons");
+            continue;
+        }
+        for copy in copies {
+            // SAFETY: our copy; Explorer took its own during the forward (or there's none).
             let _ = unsafe { DestroyIcon(copy) };
         }
     }
@@ -988,7 +1129,18 @@ fn rehomed_appbar(
             return LRESULT(0);
         }
         tray_data::retarget_appbar(bytes, ours.0 as usize as u64, explorer.pid);
-        let result = copydata_to(explorer.tray, wparam, COPYDATA_APPBAR, bytes);
+        let Some(result) = copydata_to(
+            explorer.tray,
+            wparam,
+            COPYDATA_APPBAR,
+            bytes,
+            FORWARD_TIMEOUT_MS,
+        ) else {
+            // Explorer may still open the block once it gets to the message: it stays (a leak of
+            // one small block beats Explorer reading freed memory).
+            let _ = SHUnlockShared(theirs);
+            return LRESULT(0);
+        };
         let answer = SHLockShared(ours, explorer.pid);
         if !answer.is_null() {
             std::ptr::copy_nonoverlapping(
@@ -1071,7 +1223,7 @@ fn alive(owner: u32, pid: u32) -> bool {
 fn prune() {
     with_state(|s| {
         if s.icons.prune(|i| alive(i.hwnd, i.pid)) {
-            s.report_at.get_or_insert(Instant::now());
+            s.report_soon(Duration::ZERO);
         }
     });
 }
@@ -1084,16 +1236,24 @@ fn report_if_due(now: Instant) {
     prune();
     with_state(|s| {
         s.report_at = None;
-        let names = &mut s.names;
+        s.reported = Some(now);
+        // An exe not described yet shows its file name until `describe` reports back.
+        let mut unnamed = Vec::new();
+        let names = &s.names;
         let items = tray_data::items(&s.icons.list, &s.settings, &s.order, |icon| {
-            names
-                .entry(icon.exe.clone())
-                .or_insert_with(|| {
-                    crate::icons::version_description(&icon.exe)
-                        .unwrap_or_else(|| crate::apps::file_stem(&icon.exe))
-                })
-                .clone()
+            names.get(&icon.exe).cloned().unwrap_or_else(|| {
+                unnamed.push(icon.exe.clone());
+                crate::apps::file_stem(&icon.exe)
+            })
         });
+        unnamed.sort();
+        unnamed.dedup();
+        for exe in &unnamed {
+            s.names.insert(exe.clone(), crate::apps::file_stem(exe));
+        }
+        if !unnamed.is_empty() {
+            describe(unnamed, s.commands.clone(), s.thread);
+        }
         if s.sent.as_ref() != Some(&items) {
             log::debug!(
                 "tray: {} icons ({} pinned): {:?}",
@@ -1105,6 +1265,27 @@ fn report_if_due(now: Instant) {
             s.sent = Some(items);
         }
     });
+}
+
+/// Reads the exes' version descriptions (file reads) on a helper thread, so the host's thread
+/// never blocks on a slow disk while apps wait on it; each comes back as `Command::Named`.
+fn describe(exes: Vec<String>, commands: Sender<Command>, thread: u32) {
+    let spawned = std::thread::Builder::new()
+        .name("tray-names".into())
+        .spawn(move || {
+            for exe in exes {
+                if let Some(name) = crate::icons::version_description(&exe)
+                    && commands.send(Command::Named { exe, name }).is_err()
+                {
+                    return;
+                }
+            }
+            // SAFETY: posting to the host's thread; if it's gone, nobody reads the message.
+            let _ = unsafe { PostThreadMessageW(thread, WM_HOST_COMMAND, WPARAM(0), LPARAM(0)) };
+        });
+    if let Err(e) = spawned {
+        log::debug!("tray: not reading app names: {e}");
+    }
 }
 
 // --- NotifyIconSettings -------------------------------------------------------------------------
@@ -1163,7 +1344,7 @@ fn reread_settings() {
         if s.settings != settings || s.order != order {
             s.settings = settings;
             s.order = order;
-            s.report_at.get_or_insert(Instant::now());
+            s.report_soon(Duration::ZERO);
         }
     });
 }

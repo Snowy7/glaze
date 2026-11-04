@@ -8,67 +8,182 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- Line icons, one <symbol> per condition (the plugin's `icon` names). -->
+    <!-- Shared artwork: gradients (colors are tokens in style.css) and the small two-tone icons,
+         one <symbol> per plugin `icon` name. The big animated scene is #art below. -->
     <svg width="0" height="0" style="position: absolute" aria-hidden="true">
       <defs>
-        <symbol id="cloud" viewBox="0 0 24 24">
-          <path d="M7.5 15.5h9a3.25 3.25 0 0 0 .4-6.47 4.75 4.75 0 0 0-9.2 1.2A3.75 3.75 0 0 0 7.5 15.5z" />
+        <linearGradient id="g-cloud" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style="stop-color: var(--cl-1)" /><stop offset="1" style="stop-color: var(--cl-2)" />
+        </linearGradient>
+        <linearGradient id="g-cloud-grey" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style="stop-color: var(--clg-1)" /><stop offset="1" style="stop-color: var(--clg-2)" />
+        </linearGradient>
+        <linearGradient id="g-cloud-dark" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style="stop-color: var(--cld-1)" /><stop offset="1" style="stop-color: var(--cld-2)" />
+        </linearGradient>
+        <radialGradient id="g-sun" cx="0.38" cy="0.35" r="0.75">
+          <stop offset="0" style="stop-color: var(--sun-1)" /><stop offset="1" style="stop-color: var(--sun-2)" />
+        </radialGradient>
+        <radialGradient id="g-sun-glow">
+          <stop offset="0" style="stop-color: var(--sun-glow); stop-opacity: 0.6" />
+          <stop offset="1" style="stop-color: var(--sun-glow); stop-opacity: 0" />
+        </radialGradient>
+        <radialGradient id="g-moon" cx="0.35" cy="0.3" r="0.8">
+          <stop offset="0" style="stop-color: var(--moon-1)" /><stop offset="1" style="stop-color: var(--moon-2)" />
+        </radialGradient>
+        <radialGradient id="g-moon-glow">
+          <stop offset="0" style="stop-color: var(--moon-glow); stop-opacity: 0.4" />
+          <stop offset="1" style="stop-color: var(--moon-glow); stop-opacity: 0" />
+        </radialGradient>
+        <linearGradient id="g-rain" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style="stop-color: var(--rain); stop-opacity: 0" /><stop offset="1" style="stop-color: var(--rain)" />
+        </linearGradient>
+        <linearGradient id="g-bolt" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style="stop-color: var(--bolt-1)" /><stop offset="1" style="stop-color: var(--bolt-2)" />
+        </linearGradient>
+        <radialGradient id="g-flash">
+          <stop offset="0" style="stop-color: var(--bolt-1); stop-opacity: 0.55" />
+          <stop offset="1" style="stop-color: var(--bolt-1); stop-opacity: 0" />
+        </radialGradient>
+        <linearGradient id="g-fog" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" style="stop-color: var(--cl-1); stop-opacity: 0" />
+          <stop offset="0.5" style="stop-color: var(--cl-1); stop-opacity: 0.85" />
+          <stop offset="1" style="stop-color: var(--cl-1); stop-opacity: 0" />
+        </linearGradient>
+        <mask id="m-moon">
+          <rect x="-40" y="-40" width="80" height="80" fill="#fff" />
+          <circle cx="14" cy="-10" r="22" fill="#000" />
+        </mask>
+
+        <!-- The cloud outline, 20 x 14 units (x 2..22, y 5..19). -->
+        <path id="p-cloud" d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+        <path id="p-moon" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+        <g id="p-rays-i"><path d="M16 3v3M16 26v3M3 16h3M26 16h3M6.8 6.8l2.1 2.1M23.1 23.1l2.1 2.1M6.8 25.2l2.1-2.1M23.1 8.9l2.1-2.1" /></g>
+
+        <symbol id="i-clear-day" viewBox="0 0 32 32">
+          <use href="#p-rays-i" class="rays-i" />
+          <circle cx="16" cy="16" r="6.6" fill="url(#g-sun)" />
         </symbol>
-        <symbol id="sun" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+        <symbol id="i-clear-night" viewBox="0 0 32 32">
+          <use href="#p-moon" transform="translate(0.4 0.4) scale(1.3)" fill="url(#g-moon)" />
         </symbol>
-        <symbol id="moon" viewBox="0 0 24 24">
-          <path d="M20 14.2A8.2 8.2 0 0 1 9.8 4 8.2 8.2 0 1 0 20 14.2z" />
+        <symbol id="i-partly-cloudy-day" viewBox="0 0 32 32">
+          <g transform="translate(-1 -1) scale(0.78)"><use href="#p-rays-i" class="rays-i" /><circle cx="16" cy="16" r="6.6" fill="url(#g-sun)" /></g>
+          <use href="#p-cloud" transform="translate(4.4 5.6) scale(1.2)" class="cl" />
         </symbol>
-        <symbol id="clear-day" viewBox="0 0 24 24"><use href="#sun" /></symbol>
-        <symbol id="clear-night" viewBox="0 0 24 24"><use href="#moon" /></symbol>
-        <symbol id="partly-cloudy-day" viewBox="0 0 24 24">
-          <circle cx="8" cy="8" r="2.8" />
-          <path d="M8 2.6v1.2M2.6 8h1.2M4.2 4.2l.9.9M11.8 4.2l-.9.9M4.2 11.8l.9-.9" />
-          <g transform="translate(3.4 4.6) scale(.82)"><use href="#cloud" /></g>
+        <symbol id="i-partly-cloudy-night" viewBox="0 0 32 32">
+          <use href="#p-moon" transform="translate(-0.2 -1.4) scale(1.02)" fill="url(#g-moon)" />
+          <use href="#p-cloud" transform="translate(4.4 5.6) scale(1.2)" class="cl" />
         </symbol>
-        <symbol id="partly-cloudy-night" viewBox="0 0 24 24">
-          <path d="M11 6.3A4.4 4.4 0 0 1 6.2 2.1 4.4 4.4 0 1 0 11 6.3z" />
-          <g transform="translate(3.4 4.6) scale(.82)"><use href="#cloud" /></g>
+        <symbol id="i-cloudy" viewBox="0 0 32 32">
+          <use href="#p-cloud" transform="translate(11 -0.4) scale(0.9)" class="cl grey" />
+          <use href="#p-cloud" transform="translate(-0.2 3.6) scale(1.3)" class="cl" />
         </symbol>
-        <symbol id="cloudy" viewBox="0 0 24 24"><g transform="translate(0 2)"><use href="#cloud" /></g></symbol>
-        <symbol id="fog" viewBox="0 0 24 24">
-          <path d="M5 8h14M3 12h14M7 16h14M5 20h10" />
+        <symbol id="i-fog" viewBox="0 0 32 32">
+          <use href="#p-cloud" transform="translate(1.6 -3.4) scale(1.2)" class="cl grey" />
+          <path d="M6 22.5h20M9 27h14" class="bar-i" />
         </symbol>
-        <symbol id="drizzle" viewBox="0 0 24 24">
-          <use href="#cloud" />
-          <path d="M8 19v.01M12 19v.01M16 19v.01M10 22v.01M14 22v.01" stroke-width="2.2" />
+        <symbol id="i-drizzle" viewBox="0 0 32 32">
+          <use href="#p-cloud" transform="translate(1.6 -3.2) scale(1.2)" class="cl grey" />
+          <path d="M10 24.5v.01M16 24.5v.01M22 24.5v.01M13 28.5v.01M19 28.5v.01" class="drop-i" />
         </symbol>
-        <symbol id="rain" viewBox="0 0 24 24">
-          <use href="#cloud" />
-          <path d="M8.5 18l-1 3M12.5 18l-1 3M16.5 18l-1 3" />
+        <symbol id="i-rain" viewBox="0 0 32 32">
+          <use href="#p-cloud" transform="translate(1.6 -3.2) scale(1.2)" class="cl grey" />
+          <path d="M10.5 23.5l-1.6 4.4M16.5 23.5l-1.6 4.4M22.5 23.5l-1.6 4.4" class="rain-i" />
         </symbol>
-        <symbol id="snow" viewBox="0 0 24 24">
-          <use href="#cloud" />
-          <path d="M8 18.5v.01M12 18.5v.01M16 18.5v.01M10 21.5v.01M14 21.5v.01" stroke-width="2.6" />
+        <symbol id="i-snow" viewBox="0 0 32 32">
+          <use href="#p-cloud" transform="translate(1.6 -3.2) scale(1.2)" class="cl grey" />
+          <path d="M10 24.5v.01M16 24.5v.01M22 24.5v.01M13 28.5v.01M19 28.5v.01" class="snow-i" />
         </symbol>
-        <symbol id="thunderstorm" viewBox="0 0 24 24">
-          <use href="#cloud" />
-          <path d="M12.8 15.8l-2.6 3.4h3.2l-1.6 3" />
+        <symbol id="i-thunderstorm" viewBox="0 0 32 32">
+          <use href="#p-cloud" transform="translate(1.6 -3.6) scale(1.2)" class="cl dark" />
+          <path d="M17.5 17.5 12 25h4.4l-1.6 5.6 6.2-8.4h-4.4z" fill="url(#g-bolt)" />
         </symbol>
       </defs>
     </svg>
 
-    <main class="card" id="card" data-layout="tiny" data-state="loading">
-      <section class="now">
-        <svg class="icon" id="icon" aria-hidden="true"><use id="icon-use" href="#cloudy" /></svg>
-        <div class="temp num" id="temp">--</div>
+    <!-- main.js sets data-variant (card | compact | forecast), data-layout (mini | strip | stack |
+         tall | side, from the size) and data-state (loading | ready | error). -->
+    <main class="card" id="card" data-variant="card" data-layout="mini" data-state="loading" data-motion="on">
+      <section class="now" id="now">
+        <div class="vis">
+          <!-- The scene: layers are shown per condition (main.js); CSS animates what is shown. -->
+          <svg class="art" id="art" viewBox="14 6 138 134" aria-hidden="true" data-scene="partly-day" data-tone="light" data-intensity="normal">
+            <g data-layer="stars">
+              <path class="star" style="--i: 0" transform="translate(26 34)" d="M-3 0H3M0-3V3" />
+              <path class="star" style="--i: 3" transform="translate(126 26)" d="M-2.4 0H2.4M0-2.4V2.4" />
+              <path class="star" style="--i: 5" transform="translate(132 96)" d="M-3 0H3M0-3V3" />
+              <path class="star" style="--i: 1" transform="translate(30 104)" d="M-2.4 0H2.4M0-2.4V2.4" />
+              <path class="star" style="--i: 4" transform="translate(104 12)" d="M-2 0H2M0-2V2" />
+              <path class="star" style="--i: 2" transform="translate(14 70)" d="M-2 0H2M0-2V2" />
+            </g>
+            <g data-layer="moon">
+              <circle class="glow" r="64" fill="url(#g-moon-glow)" />
+              <circle r="27" fill="url(#g-moon)" mask="url(#m-moon)" />
+            </g>
+            <g data-layer="sun">
+              <circle class="glow" r="68" fill="url(#g-sun-glow)" />
+              <g class="rays">
+                <path d="M0-37v-12M18.5-32l6-10.4M32-18.5l10.4-6M37 0h12M32 18.5l10.4 6M18.5 32l6 10.4M0 37v12M-18.5 32l-6 10.4M-32 18.5l-10.4 6M-37 0h-12M-32-18.5l-10.4-6M-18.5-32l-6-10.4" />
+              </g>
+              <circle r="27" fill="url(#g-sun)" />
+            </g>
+            <g data-layer="cloud-b"><g class="drift slow"><use href="#p-cloud" class="cloud back" transform="translate(62 -6) scale(4)" /></g></g>
+            <g data-layer="cloud-a"><g class="drift"><use href="#p-cloud" class="cloud front" transform="translate(23.6 -4) scale(5.2)" /></g></g>
+            <g data-layer="fog">
+              <rect class="fog-bar" style="--i: 0" x="22" y="80" width="116" height="10" rx="5" fill="url(#g-fog)" />
+              <rect class="fog-bar" style="--i: 1" x="34" y="96" width="104" height="10" rx="5" fill="url(#g-fog)" />
+              <rect class="fog-bar" style="--i: 2" x="18" y="112" width="112" height="10" rx="5" fill="url(#g-fog)" />
+            </g>
+            <g data-layer="rain">
+              <circle class="flash" cx="80" cy="64" r="60" fill="url(#g-flash)" />
+              <g transform="translate(44 94) rotate(10)"><rect class="drop" style="--i: 0" width="3" height="16" rx="1.5" fill="url(#g-rain)" /></g>
+              <g transform="translate(58 96) rotate(10)"><rect class="drop" style="--i: 3" width="3" height="16" rx="1.5" fill="url(#g-rain)" /></g>
+              <g transform="translate(72 94) rotate(10)"><rect class="drop" style="--i: 6" width="3" height="16" rx="1.5" fill="url(#g-rain)" /></g>
+              <g transform="translate(86 97) rotate(10)"><rect class="drop" style="--i: 1" width="3" height="16" rx="1.5" fill="url(#g-rain)" /></g>
+              <g transform="translate(100 94) rotate(10)"><rect class="drop" style="--i: 4" width="3" height="16" rx="1.5" fill="url(#g-rain)" /></g>
+              <g transform="translate(114 96) rotate(10)"><rect class="drop more" style="--i: 7" width="3" height="16" rx="1.5" fill="url(#g-rain)" /></g>
+              <g transform="translate(51 98) rotate(10)"><rect class="drop more" style="--i: 2" width="3" height="16" rx="1.5" fill="url(#g-rain)" /></g>
+              <g transform="translate(79 99) rotate(10)"><rect class="drop more" style="--i: 5" width="3" height="16" rx="1.5" fill="url(#g-rain)" /></g>
+              <g transform="translate(107 99) rotate(10)"><rect class="drop more" style="--i: 8" width="3" height="16" rx="1.5" fill="url(#g-rain)" /></g>
+            </g>
+            <g data-layer="snow">
+              <circle class="flake" style="--i: 0" cx="46" cy="96" r="3.6" />
+              <circle class="flake" style="--i: 4" cx="62" cy="98" r="2.9" />
+              <circle class="flake" style="--i: 2" cx="78" cy="95" r="3.8" />
+              <circle class="flake" style="--i: 6" cx="94" cy="98" r="3" />
+              <circle class="flake" style="--i: 1" cx="110" cy="96" r="3.6" />
+              <circle class="flake more" style="--i: 5" cx="54" cy="100" r="2.6" />
+              <circle class="flake more" style="--i: 3" cx="86" cy="100" r="2.9" />
+              <circle class="flake more" style="--i: 7" cx="118" cy="99" r="2.6" />
+              <circle class="flake more" style="--i: 8" cx="70" cy="101" r="3.1" />
+            </g>
+            <g data-layer="bolt"><path class="bolt" d="M88 86 68 116h13l-7 22 28-35H88l9-17z" fill="url(#g-bolt)" /></g>
+          </svg>
+          <svg class="mini-ico" aria-hidden="true"><use id="mini-use" href="#i-cloudy" /></svg>
+        </div>
         <div class="meta">
+          <div class="temp hero num" id="temp">--</div>
           <div class="cond ellipsis" id="cond">Loading</div>
-          <div class="place ellipsis" id="place"></div>
-          <div class="range num ellipsis" id="range"></div>
+          <div class="sub">
+            <span class="place caps ellipsis" id="place"></span>
+            <span class="hilo num" id="hilo"></span>
+          </div>
         </div>
       </section>
+      <section class="hours" id="hours"></section>
       <section class="days" id="days"></section>
-      <div class="status" id="status" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#cloudy" /></svg>
-        <div id="status-text"></div>
+
+      <div class="skeleton" aria-hidden="true">
+        <i class="sk sk-art"></i>
+        <i class="sk sk-temp"></i>
+        <i class="sk sk-line"></i>
+        <i class="sk sk-row"></i>
+      </div>
+      <div class="status" id="status" role="status">
+        <svg class="status-ico" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-cloudy" /></svg>
+        <div class="status-title" id="status-title"></div>
+        <div class="status-hint" id="status-hint"></div>
       </div>
     </main>
     <script src="mypaper.js"></script>

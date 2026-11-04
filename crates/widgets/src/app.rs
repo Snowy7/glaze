@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, HoldReasons, Holds, Reason};
 use mypaper_desktop::{
@@ -20,7 +20,7 @@ use mypaper_desktop::{
 };
 use mypaper_theme::Color;
 use notify::Watcher;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED,
     COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
@@ -42,19 +42,24 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
+use crate::appicon::Icons;
+use crate::audio::{Audio, Wasapi};
 use crate::bridge::{ErrorCode, FromShell, Method, Out, Reply, Target, Topic, WidgetError};
 use crate::display::{DisplayWatcher, WM_DISPLAY};
 use crate::layout::{self, Grid, Layout, Placed, RectF};
 use crate::look;
-use crate::manifest::WidgetManifest;
+use crate::manifest::{Preset, WidgetManifest};
 use crate::media::Media;
 use crate::net::WidgetNet;
+use crate::overlay::{self, Layer};
+use crate::pick;
 use crate::plugins::Plugins;
 use crate::registry::{self, Registry};
 use crate::stats::{Delivery, Stats};
-use crate::storage::Storage;
+use crate::storage::{self, Storage};
 use crate::surface::{self, Events, NetPolicy, Setup, Surface, WebEvent};
 use crate::theme::{self, ThemeInfo};
+use crate::userinfo;
 use crate::wake::{Msg, WM_WAKE, Waker};
 
 /// The class of the host's message-only window (how `--edit` finds it).
@@ -65,6 +70,10 @@ pub const EDIT_MESSAGE: PCWSTR = w!("mypaper.widgets.edit");
 const EDIT_HOTKEY: i32 = 1;
 /// Ctrl+Alt+Shift+W.
 const EDIT_KEY: u32 = b'W' as u32;
+const OVERLAY_HOTKEY: i32 = 2;
+
+/// One window of one monitor: the desktop layer's or the overlay's.
+type LayerKey = (String, Layer);
 
 const RECHECK: Duration = Duration::from_millis(100);
 const SETTLE_CONFIG: Duration = Duration::from_millis(100);
@@ -176,7 +185,9 @@ pub struct App {
     host: DesktopHost,
     control: ControlWindow,
     edit_message: u32,
+    overlay_message: u32,
     hotkey: bool,
+    overlay_hotkey: bool,
     events: Events,
     rx: Receiver<Msg>,
     waker: Waker,
@@ -198,10 +209,10 @@ pub struct App {
     reasons: HoldReasons,
     covered: HashMap<String, bool>,
     editing: bool,
-    /// Monitors (by device) whose layer was hidden long enough to be released.
-    parked: BTreeSet<String>,
-    /// Since when each monitor's layer has been hidden.
-    hidden_since: HashMap<String, Instant>,
+    /// Layers (by monitor device) that were hidden long enough to be released.
+    parked: BTreeSet<LayerKey>,
+    /// Since when each layer has been hidden.
+    hidden_since: HashMap<LayerKey, Instant>,
     /// How long a layer stays hidden before it is parked ([`PARK_AFTER`], or
     /// `MYPAPER_WIDGETS_PARK_SECS` for tests).
     park_after: Duration,
@@ -210,8 +221,14 @@ pub struct App {
     /// capturing them in tests).
     ignore_covered: bool,
     storage: Storage,
+    /// `%APPDATA%\mypaper\widget-data`: storage files, and the files widgets picked.
+    data_dir: PathBuf,
+    /// A file dialog is open (one at a time).
+    picking: bool,
     stats: Stats,
     media: Media,
+    audio: Audio<Wasapi>,
+    icons: Icons,
     plugins: Plugins,
     theme: ThemeInfo,
     /// The active theme's folder, and the widget skin read from it.
@@ -242,7 +259,12 @@ impl App {
         log::info!("desktop host: {host:?}");
         let control = ControlWindow::new(HOST_CLASS)?;
         // SAFETY: a static name.
-        let edit_message = unsafe { RegisterWindowMessageW(EDIT_MESSAGE) };
+        let (edit_message, overlay_message) = unsafe {
+            (
+                RegisterWindowMessageW(EDIT_MESSAGE),
+                RegisterWindowMessageW(overlay::OVERLAY_MESSAGE),
+            )
+        };
         surface::register_class()?;
         // SAFETY: thread hotkey; WM_HOTKEY arrives in our queue.
         let hotkey = unsafe {
@@ -254,6 +276,17 @@ impl App {
             )
         }
         .inspect_err(|e| log::warn!("edit hotkey Ctrl+Alt+Shift+W unavailable: {e}"))
+        .is_ok();
+        // SAFETY: as above.
+        let overlay_hotkey = unsafe {
+            RegisterHotKey(
+                None,
+                OVERLAY_HOTKEY,
+                MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT,
+                overlay::OVERLAY_KEY,
+            )
+        }
+        .inspect_err(|e| log::warn!("overlay hotkey Ctrl+Alt+Shift+O unavailable: {e}"))
         .is_ok();
 
         let (tx, rx) = mpsc::channel();
@@ -299,11 +332,14 @@ impl App {
         let display_watch = DisplayWatcher::new()
             .inspect_err(|e| log::warn!("work-area changes won't be noticed: {e:#}"))
             .ok();
+        let data_dir = crate::files::user("widget-data")?;
         let mut app = Self {
             host,
             control,
             edit_message,
+            overlay_message,
             hotkey,
+            overlay_hotkey,
             events: Events::default(),
             rx,
             env: Env::None,
@@ -332,9 +368,13 @@ impl App {
                 .ok()
                 .and_then(|secs| secs.parse().ok())
                 .map_or(PARK_AFTER, Duration::from_secs),
-            storage: Storage::new(crate::files::user("widget-data")?),
+            storage: Storage::new(data_dir.clone()),
+            data_dir,
+            picking: false,
             stats: Stats::default(),
             media: Media::new(waker.clone()),
+            audio: Audio::new(Wasapi::new(waker.clone())),
+            icons: Icons::new(waker.clone()),
             plugins: Plugins::new(waker.clone()),
             theme: theme::current(),
             theme_dir,
@@ -406,6 +446,9 @@ impl App {
                     WM_HOTKEY if msg.wParam.0 == EDIT_HOTKEY as usize => {
                         self.set_editing(!self.editing)
                     }
+                    WM_HOTKEY if msg.wParam.0 == OVERLAY_HOTKEY as usize => {
+                        self.set_overlay(!self.layout.overlay)
+                    }
                     WM_FACT => {
                         if let Some(fact) = Fact::from_wparam(msg.wParam.0) {
                             self.holds.set(fact, msg.lParam.0 != 0);
@@ -424,6 +467,16 @@ impl App {
                             1 => self.set_editing(true),
                             2 => self.set_editing(!self.editing),
                             other => log::warn!("{EDIT_MESSAGE:?}: unknown wParam {other}"),
+                        }
+                    }
+                    m if m == self.overlay_message && msg.hwnd == self.control.hwnd() => {
+                        match overlay::requested(self.layout.overlay, msg.wParam.0) {
+                            Some(on) => self.set_overlay(on),
+                            None => log::warn!(
+                                "{:?}: unknown wParam {}",
+                                overlay::OVERLAY_MESSAGE,
+                                msg.wParam.0
+                            ),
                         }
                     }
                     _ => {
@@ -464,7 +517,12 @@ impl App {
                 let out = self.media.on_result(token, result);
                 self.deliver(out);
             }
-            Msg::Launched(target, reply) => self.reply(target, reply),
+            Msg::Answered(target, reply) => self.reply(target, reply),
+            Msg::Audio { generation, frame } => {
+                let out = self.audio.on_frame(generation, &frame);
+                self.deliver(out);
+            }
+            Msg::Picked(done) => self.on_picked(done),
             Msg::WatchError(path, error) => {
                 log::warn!("stopped watching {}: {error}", path.display())
             }
@@ -537,10 +595,12 @@ impl App {
         self.held() && !self.nothing_visible()
     }
 
-    /// Whether the layer on `device` is hidden (see [`layer_state`]).
-    fn hides(&self, device: &str) -> bool {
+    /// Whether `layer` on `device` is hidden (see [`layer_state`]). The overlay is never
+    /// shown over a covered monitor, edit mode or not (it doesn't exist in edit mode anyway).
+    fn hides(&self, device: &str, layer: Layer) -> bool {
         let covered = self.covered.get(device).copied().unwrap_or(false);
-        layer_state(self.reasons, covered, self.editing) == LayerState::Hidden
+        let editing = self.editing && layer == Layer::Desktop;
+        layer_state(self.reasons, covered, editing) == LayerState::Hidden
     }
 
     // --- Hold -------------------------------------------------------------
@@ -562,6 +622,7 @@ impl App {
         self.plugins.set_held(held);
         self.stats.set_held(held, Instant::now());
         self.media.set_held(held);
+        self.audio.set_held(held);
         if held && self.editing {
             log::info!("leaving edit mode");
             self.editing = false;
@@ -639,11 +700,15 @@ impl App {
                 .map(|(monitor, covered)| (monitor.device.clone(), covered))
                 .collect();
         }
-        for surface in &self.surfaces {
+        for surface in self.surfaces.iter().filter(|s| s.layer == Layer::Desktop) {
             self.host.keep_above_icons(surface.hwnd());
         }
         self.sync_hold();
-        if self.parked.iter().any(|device| !self.hides(device)) {
+        if self
+            .parked
+            .iter()
+            .any(|(device, layer)| !self.hides(device, *layer))
+        {
             self.reconcile(); // a covered monitor was uncovered: rebuild its layer
         } else {
             self.apply_visibility();
@@ -653,15 +718,16 @@ impl App {
     /// Releases the layers (and so their WebViews) of monitors that have been hidden for
     /// [`PARK_AFTER`]. When that was every monitor with widgets, WebView2 itself goes.
     fn park_hidden(&mut self, now: Instant) {
-        let due: Vec<String> = self
+        let due: Vec<LayerKey> = self
             .hidden_since
             .iter()
-            .filter(|(device, since)| {
+            .filter(|(key, since)| {
+                let (device, layer) = *key;
                 now >= **since + self.park_after
-                    && !self.parked.contains(*device)
-                    && self.hides(device)
+                    && !self.parked.contains(*key)
+                    && self.hides(device, *layer)
             })
-            .map(|(device, _)| device.clone())
+            .map(|(key, _)| key.clone())
             .collect();
         if due.is_empty() {
             return self.arm_park();
@@ -669,7 +735,10 @@ impl App {
         log::info!(
             "hidden for {:?}: releasing the widget layer and WebView on {}",
             self.park_after,
-            due.join(", ")
+            due.iter()
+                .map(|(device, layer)| format!("{device} ({layer:?})"))
+                .collect::<Vec<_>>()
+                .join(", ")
         );
         self.parked.extend(due);
         self.reconcile();
@@ -691,12 +760,15 @@ impl App {
     fn apply_visibility(&mut self) {
         let now = Instant::now();
         for index in 0..self.surfaces.len() {
-            let device = self.surfaces[index].monitor.device.clone();
-            let hidden = self.hides(&device);
+            let key: LayerKey = (
+                self.surfaces[index].monitor.device.clone(),
+                self.surfaces[index].layer,
+            );
+            let hidden = self.hides(&key.0, key.1);
             if hidden {
-                self.hidden_since.entry(device).or_insert(now);
+                self.hidden_since.entry(key).or_insert(now);
             } else {
-                self.hidden_since.remove(&device);
+                self.hidden_since.remove(&key);
             }
             let surface = &self.surfaces[index];
             if hidden == surface.hidden {
@@ -712,23 +784,133 @@ impl App {
                 self.push_state(index);
                 // `system` subscribers get a sample as soon as they're visible again.
                 let now = Instant::now();
-                let device = self.surfaces[index].monitor.device.clone();
-                for instance in &self.layout.instances {
-                    if self.shown_on(instance).as_deref() == Some(device.as_str()) {
-                        self.stats.refresh(&instance.instance, now);
-                    }
+                let shown: Vec<String> = self
+                    .instances_on(index)
+                    .map(|instance| instance.instance.clone())
+                    .collect();
+                for instance in shown {
+                    self.stats.refresh(&instance, now);
                 }
             }
         }
         // Layers that no longer exist (parked, or gone) aren't timed.
-        let live: BTreeSet<&str> = self
+        let live: BTreeSet<LayerKey> = self
             .surfaces
             .iter()
-            .map(|s| s.monitor.device.as_str())
+            .map(|s| (s.monitor.device.clone(), s.layer))
             .collect();
-        self.hidden_since
-            .retain(|device, _| live.contains(device.as_str()));
+        self.hidden_since.retain(|key, _| live.contains(key));
         self.arm_park();
+        self.sync_audio();
+    }
+
+    /// Tells the audio capture which instances are on screen and running: those on a layer
+    /// that is shown, while the host isn't held. Capture runs only for those.
+    fn sync_audio(&mut self) {
+        let visible = if self.held() {
+            BTreeSet::new()
+        } else {
+            (0..self.surfaces.len())
+                .filter(|&index| !self.surfaces[index].hidden)
+                .flat_map(|index| self.instances_on(index))
+                .map(|instance| instance.instance.clone())
+                .collect()
+        };
+        self.audio.set_visible(visible);
+    }
+
+    /// Which layer shows `instance` right now (None: nowhere, or its widget isn't installed).
+    fn layer_of(&self, instance: &layout::Instance) -> Option<Layer> {
+        let preset = self.registry.get(&instance.widget)?.manifest.preset;
+        overlay::layer_for(preset, self.editing, self.layout.overlay)
+    }
+
+    /// The instances the surface at `index` shows.
+    fn instances_on(&self, index: usize) -> impl Iterator<Item = &layout::Instance> {
+        let surface = &self.surfaces[index];
+        self.layout.instances.iter().filter(move |instance| {
+            self.layer_of(instance) == Some(surface.layer)
+                && self.shown_on(instance).as_deref() == Some(surface.monitor.device.as_str())
+        })
+    }
+
+    /// Refuses adding (or duplicating) an instance of `manifest`'s widget onto `device`
+    /// when its `instances` rule is used up, or when it is a popup (the bars host's).
+    fn ensure_room(&self, layout: &Layout, manifest: &WidgetManifest, device: &str) -> Result<()> {
+        ensure!(
+            manifest.preset != Preset::Popup,
+            "{:?} is a popup widget; the bars host places it",
+            manifest.id
+        );
+        let (total, here) = layout.count_of(&manifest.id, |instance| {
+            self.shown_on(instance).as_deref() == Some(device)
+        });
+        ensure!(
+            manifest.instances.allows(total, here),
+            "{:?} is {:?}: it has {total} instance(s), {here} on {device}",
+            manifest.id,
+            manifest.instances
+        );
+        Ok(())
+    }
+
+    /// A `file`/`image` setting asked for the file dialog: shows it, and sets the setting to
+    /// the copy's URL when it closes (see [`on_picked`](Self::on_picked)).
+    fn pick_setting(&mut self, index: usize, instance: String, key: String) {
+        if self.layout_error.is_some() || self.picking || self.surface_of(&instance) != Some(index)
+        {
+            return self.push_all();
+        }
+        let setting = self.layout.get(&instance).and_then(|saved| {
+            let manifest = self.registry.manifest_on_disk(&saved.widget)?;
+            Some((
+                saved.widget.clone(),
+                manifest.setting(&key).filter(|s| s.is_file())?.extensions(),
+            ))
+        });
+        let Some((widget, extensions)) = setting else {
+            log::warn!("{instance}: {key:?} isn't a file or image setting");
+            return self.push_all();
+        };
+        let request = pick::Request {
+            origin: pick::Origin::Setting {
+                instance: instance.clone(),
+                key,
+            },
+            widget,
+            instance,
+            extensions,
+            title: None,
+            root: self.data_dir.clone(),
+        };
+        match pick::spawn(request, self.waker.clone()) {
+            Ok(()) => self.picking = true,
+            Err(e) => log::warn!("couldn't open the file dialog: {e}"),
+        }
+    }
+
+    /// The file dialog closed: answers the widget's call, or stores the picked file's URL in
+    /// the setting that asked.
+    fn on_picked(&mut self, done: pick::Done) {
+        self.picking = false;
+        let pick::Done { origin, result } = done;
+        match origin {
+            pick::Origin::Call(target) => {
+                let reply = result.map(|picked| picked.map_or(Value::Null, |p| json!(p)));
+                self.reply(target, reply);
+            }
+            pick::Origin::Setting { instance, key } => match result {
+                Ok(Some(picked)) => {
+                    // A settings edit like any other: validated, saved, answered with a state.
+                    let values = Map::from_iter([(key, Value::String(picked.url))]);
+                    if let Some(index) = self.surface_of(&instance) {
+                        self.edit(index, FromShell::Settings { instance, values });
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => log::warn!("{instance}: picking a file failed: {}", e.message),
+            },
+        }
     }
 
     // --- Edit mode and surfaces ---------------------------------------------
@@ -758,11 +940,33 @@ impl App {
         layout::show_on(&instance.monitor, &devices, primary).map(str::to_owned)
     }
 
+    /// The surface that shows `instance` (its monitor's window on the layer that has it).
     fn surface_of(&self, instance: &str) -> Option<usize> {
-        let device = self.shown_on(self.layout.get(instance)?)?;
+        let instance = self.layout.get(instance)?;
+        let (device, layer) = (self.shown_on(instance)?, self.layer_of(instance)?);
         self.surfaces
             .iter()
-            .position(|s| s.monitor.device == device)
+            .position(|s| s.monitor.device == device && s.layer == layer)
+    }
+
+    /// Switches the overlay layer on or off, and remembers it in `widgets.json`.
+    fn set_overlay(&mut self, on: bool) {
+        if self.layout.overlay == on {
+            return;
+        }
+        self.layout.overlay = on;
+        log::info!("overlay widgets {}", if on { "on" } else { "off" });
+        match &self.layout_error {
+            None => {
+                if let Err(e) = self.layout.save(&self.layout_path) {
+                    log::warn!("couldn't save the overlay setting: {e:#}");
+                }
+            }
+            Some(error) => {
+                log::warn!("not saving the overlay setting while widgets.json is broken: {error}")
+            }
+        }
+        self.reconcile();
     }
 
     /// Makes the surfaces match what should be on screen: one per monitor
@@ -772,42 +976,53 @@ impl App {
             self.surfaces.clear();
             self.env = Env::None;
             self.sync_hooks();
+            self.sync_audio();
             return;
         }
         if self.window_events.is_none() {
             // Unwatched while no layer was up: the monitors may have changed.
             self.monitors = monitor_infos();
         }
-        // A parked monitor stays parked while it is still hidden, and not otherwise. Monitors
+        // The network filter serves picked files only for instances that exist.
+        self.update_policy();
+        // A parked layer stays parked while it is still hidden, and not otherwise. Monitors
         // that went away are forgotten.
-        let hidden: BTreeSet<String> = self
+        let hidden: BTreeSet<LayerKey> = self
             .monitors
             .iter()
-            .filter(|m| self.hides(&m.device))
-            .map(|m| m.device.clone())
+            .flat_map(|m| [Layer::Desktop, Layer::Overlay].map(|layer| (m.device.clone(), layer)))
+            .filter(|(device, layer)| self.hides(device, *layer))
             .collect();
-        self.parked.retain(|device| hidden.contains(device));
-        let wanted: Vec<Monitor> = self
-            .monitors
-            .iter()
-            .filter(|monitor| {
-                !self.parked.contains(&monitor.device)
-                    && (self.editing
-                        || self.layout.instances.iter().any(|instance| {
-                            self.registry.get(&instance.widget).is_some()
-                                && self.shown_on(instance).as_deref()
-                                    == Some(monitor.device.as_str())
-                        }))
-            })
-            .cloned()
-            .collect();
-        self.surfaces
-            .retain(|s| wanted.iter().any(|m| m.device == s.monitor.device));
-        for monitor in wanted {
+        self.parked.retain(|key| hidden.contains(key));
+        let mut wanted: Vec<(Monitor, Layer)> = Vec::new();
+        for monitor in &self.monitors {
+            for layer in [Layer::Desktop, Layer::Overlay] {
+                let has_instances = self.layout.instances.iter().any(|instance| {
+                    self.layer_of(instance) == Some(layer)
+                        && self.shown_on(instance).as_deref() == Some(monitor.device.as_str())
+                });
+                if !self.parked.contains(&(monitor.device.clone(), layer))
+                    && overlay::layer_wanted(
+                        layer,
+                        self.editing,
+                        self.layout.overlay,
+                        has_instances,
+                    )
+                {
+                    wanted.push((monitor.clone(), layer));
+                }
+            }
+        }
+        self.surfaces.retain(|s| {
+            wanted
+                .iter()
+                .any(|(m, layer)| m.device == s.monitor.device && *layer == s.layer)
+        });
+        for (monitor, layer) in wanted {
             match self
                 .surfaces
                 .iter_mut()
-                .find(|s| s.monitor.device == monitor.device)
+                .find(|s| s.monitor.device == monitor.device && s.layer == layer)
             {
                 Some(surface) if surface.monitor != monitor => {
                     if let Err(e) = surface.set_monitor(&self.host, monitor) {
@@ -817,7 +1032,11 @@ impl App {
                 Some(_) => {}
                 None => {
                     self.next_surface += 1;
-                    match Surface::new(self.next_surface, &self.host, monitor) {
+                    let created = match layer {
+                        Layer::Desktop => Surface::new(self.next_surface, &self.host, monitor),
+                        Layer::Overlay => Surface::new_overlay(self.next_surface, monitor),
+                    };
+                    match created {
                         Ok(surface) => self.surfaces.push(surface),
                         Err(e) => log::error!("creating the widget layer: {e:#}"),
                     }
@@ -1033,15 +1252,18 @@ impl App {
         look::accent(self.theme.palette.as_ref().map(|p| p.accent.as_str()))
     }
 
-    /// The instances shown on `monitor`, placed on its grid, each with its look merged from
-    /// the layers (defaults < theme < user < instance).
-    fn placed_on(&self, monitor: &Monitor, grid: &Grid) -> Vec<Placed> {
+    /// The instances `layer` shows on `monitor`, placed on its grid, each with its look merged
+    /// from the layers (defaults < theme < user < instance).
+    fn placed_on(&self, monitor: &Monitor, grid: &Grid, layer: Layer) -> Vec<Placed> {
         let base = look::base(&self.skin);
         let accent = self.auto_accent();
         self.layout
             .instances
             .iter()
-            .filter(|instance| self.shown_on(instance).as_deref() == Some(monitor.device.as_str()))
+            .filter(|instance| {
+                self.layer_of(instance) == Some(layer)
+                    && self.shown_on(instance).as_deref() == Some(monitor.device.as_str())
+            })
             .filter_map(|instance| {
                 let installed = self.registry.get(&instance.widget)?;
                 let look =
@@ -1057,8 +1279,8 @@ impl App {
         let monitor = &surface.monitor;
         let scale = f64::from(monitor.dpi) / 96.0;
         let grid = self.grid_for(monitor);
-        let placed = self.placed_on(monitor, &grid);
-        if self.editing {
+        let placed = self.placed_on(monitor, &grid, surface.layer);
+        if self.editing && surface.layer == Layer::Desktop {
             surface.set_region(&[surface.full_region()]);
         } else {
             let rects: Vec<[i32; 4]> = placed
@@ -1070,11 +1292,13 @@ impl App {
         if !surface.ready {
             return;
         }
+        // The palette: popups are the bars host's, never offered here.
         let widgets: Vec<&WidgetManifest> = self
             .registry
             .widgets
             .values()
             .map(|w| &w.manifest)
+            .filter(|manifest| manifest.preset != Preset::Popup)
             .collect();
         let to_dip = |px: i32| f64::from(px) / scale;
         let state = json!({
@@ -1094,6 +1318,8 @@ impl App {
             "grid": grid,
             "instances": placed,
             "widgets": widgets,
+            "layer": surface.layer,
+            "counts": self.layout.counts(),
             // The look: the layers below an instance's own (for the Appearance panel), the
             // color `auto` stands for, and the theme's style sheet.
             "appearance": {
@@ -1130,6 +1356,7 @@ impl App {
             FromShell::Ready => {
                 self.surfaces[index].ready = true;
                 self.push_state(index);
+                self.surfaces[index].probe_paint();
             }
             FromShell::Hello { instance } => self.forget(&instance),
             FromShell::Call {
@@ -1144,6 +1371,7 @@ impl App {
                 }
             }
             FromShell::Edit { on } => self.set_editing(on),
+            FromShell::PickFile { instance, key, .. } => self.pick_setting(index, instance, key),
             edit => self.edit(index, edit),
         }
     }
@@ -1163,7 +1391,7 @@ impl App {
         let Some(saved) = self.layout.get(instance).cloned() else {
             return fail(ErrorCode::NotFound, format!("no instance {instance:?}"));
         };
-        if self.shown_on(&saved).as_deref() != Some(self.surfaces[index].monitor.device.as_str()) {
+        if self.surface_of(instance) != Some(index) {
             return fail(
                 ErrorCode::PermissionDenied,
                 format!("{instance:?} isn't on this monitor"),
@@ -1188,13 +1416,54 @@ impl App {
         let internal = |e: anyhow::Error| WidgetError::new(ErrorCode::Internal, format!("{e:#}"));
         let done = Some(Ok(Value::Null));
         match method {
-            Method::StorageGet { key } => Some(self.storage.get(instance, &key).map_err(internal)),
-            Method::StorageSet { key, value } => Some(
-                self.storage
-                    .set(instance, &key, value)
-                    .map(|()| Value::Null)
-                    .map_err(internal),
-            ),
+            Method::StorageGet { key, shared } => {
+                let scope = shared
+                    .as_deref()
+                    .map_or_else(|| instance.to_owned(), storage::shared);
+                Some(self.storage.get(&scope, &key).map_err(internal))
+            }
+            Method::StorageSet { key, value, shared } => {
+                let scope = shared
+                    .as_deref()
+                    .map_or_else(|| instance.to_owned(), storage::shared);
+                Some(
+                    self.storage
+                        .set(&scope, &key, value)
+                        .map(|()| Value::Null)
+                        .map_err(internal),
+                )
+            }
+            Method::UserInfo => match userinfo::cached() {
+                Some(info) => Some(Ok(json!(info))),
+                None => {
+                    userinfo::read_for(target.clone(), self.waker.clone());
+                    None
+                }
+            },
+            Method::AppIcon { target: path, size } => self.icons.get(target.clone(), &path, size),
+            Method::PickFile { extensions, title } => {
+                if self.picking {
+                    return fail(ErrorCode::Internal, "a file dialog is already open".into());
+                }
+                let request = pick::Request {
+                    origin: pick::Origin::Call(target.clone()),
+                    widget: saved.widget.clone(),
+                    instance: instance.to_owned(),
+                    extensions,
+                    title,
+                    root: self.data_dir.clone(),
+                };
+                match pick::spawn(request, self.waker.clone()) {
+                    Ok(()) => {
+                        self.picking = true;
+                        None
+                    }
+                    Err(e) => fail(
+                        ErrorCode::Internal,
+                        format!("couldn't open the file dialog: {e}"),
+                    ),
+                }
+            }
             Method::SystemStats => {
                 self.stats.request(target.clone(), now);
                 None
@@ -1231,6 +1500,7 @@ impl App {
                         self.stats.subscribe(instance, &sub, interval, now);
                     }
                     Topic::Media => self.media.subscribe(instance, &sub),
+                    Topic::Audio { bins } => self.audio.subscribe(instance, &sub, bins),
                     Topic::Theme => {
                         self.theme_subs.insert((instance.to_owned(), sub));
                     }
@@ -1253,6 +1523,7 @@ impl App {
     fn unsubscribe(&mut self, instance: &str, sub: &str) {
         self.stats.unsubscribe(instance, sub);
         self.media.unsubscribe(instance, sub);
+        self.audio.unsubscribe(instance, sub);
         self.plugins.unsubscribe(instance, sub);
         self.theme_subs
             .remove(&(instance.to_owned(), sub.to_owned()));
@@ -1262,6 +1533,7 @@ impl App {
     fn forget(&mut self, instance: &str) {
         self.stats.forget(instance);
         self.media.forget(instance);
+        self.audio.forget(instance);
         self.plugins.forget(instance);
         self.theme_subs.retain(|(i, _)| i != instance);
     }
@@ -1326,6 +1598,7 @@ impl App {
         let grid = self.grid_for(&monitor);
         let mut next = self.layout.clone();
         let mut removed = None;
+        let mut duplicated = None;
         let applied = (|| -> Result<()> {
             let manifest_of = |widget: &str| -> Result<WidgetManifest> {
                 Ok(self
@@ -1351,7 +1624,9 @@ impl App {
                     next.apply(&clamped)
                 }
                 FromShell::Add { widget, cell, size } => {
-                    let (cell, size) = grid.clamp(cell, manifest_of(&widget)?.clamp_size(size));
+                    let manifest = manifest_of(&widget)?;
+                    self.ensure_room(&next, &manifest, &monitor.device)?;
+                    let (cell, size) = grid.clamp(cell, manifest.clamp_size(size));
                     let id = next.add(&widget, &monitor.device, cell, size);
                     log::info!("added {id}");
                     Ok(())
@@ -1360,10 +1635,24 @@ impl App {
                     let saved = next
                         .get(&instance)
                         .with_context(|| format!("no instance {instance:?}"))?;
-                    let (cell, _) =
-                        grid.clamp(cell, manifest_of(&saved.widget)?.clamp_size(saved.size));
+                    let manifest = manifest_of(&saved.widget)?;
+                    let device = self.shown_on(saved).unwrap_or_default();
+                    self.ensure_room(&next, &manifest, &device)?;
+                    let (cell, _) = grid.clamp(cell, manifest.clamp_size(saved.size));
                     let id = next.duplicate(&instance, cell)?;
+                    // The copy keeps its own pictures: its file settings point at its own folder.
+                    let rebased: Map<String, Value> = manifest
+                        .settings
+                        .iter()
+                        .filter(|setting| setting.is_file())
+                        .filter_map(|setting| {
+                            let saved = next.get(&id)?.settings.get(setting.key())?.as_str()?;
+                            Some((setting.key().to_owned(), pick::rebase(saved, &id)?.into()))
+                        })
+                        .collect();
+                    next.set_settings(&id, rebased)?;
                     log::info!("duplicated {instance} as {id}");
+                    duplicated = Some((instance, id));
                     Ok(())
                 }
                 FromShell::Remove { instance } => {
@@ -1389,7 +1678,8 @@ impl App {
                 FromShell::Ready
                 | FromShell::Hello { .. }
                 | FromShell::Call { .. }
-                | FromShell::Edit { .. } => Ok(()),
+                | FromShell::Edit { .. }
+                | FromShell::PickFile { .. } => Ok(()),
             }
         })();
         if let Err(e) = applied.and_then(|()| next.save(&self.layout_path)) {
@@ -1399,6 +1689,10 @@ impl App {
         self.layout = next;
         if let Some(instance) = removed {
             self.forget(&instance);
+            pick::remove_instance(&self.data_dir, &instance);
+        }
+        if let Some((from, to)) = duplicated {
+            pick::copy_instance(&self.data_dir, &from, &to);
         }
         // The new state carries the settings; the shell pushes them to the widget.
         self.reconcile();
@@ -1413,6 +1707,16 @@ impl App {
                     return; // our own save coming back
                 }
                 log::info!("widgets.json changed");
+                // Instances that vanished from the file (Studio removes them there) take their
+                // picked files with them.
+                for gone in self
+                    .layout
+                    .instances
+                    .iter()
+                    .filter(|old| layout.get(&old.instance).is_none())
+                {
+                    pick::remove_instance(&self.data_dir, &gone.instance);
+                }
                 self.layout = layout;
                 self.reconcile();
             }
@@ -1435,6 +1739,14 @@ impl App {
                 let net = WidgetNet {
                     dir: installed.dir.clone(),
                     origins: installed.manifest.network_origins().cloned().collect(),
+                    data_dir: self.data_dir.clone(),
+                    instances: self
+                        .layout
+                        .instances
+                        .iter()
+                        .filter(|instance| &instance.widget == id)
+                        .map(|instance| instance.instance.clone())
+                        .collect(),
                 };
                 (id.clone(), net)
             })
@@ -1573,9 +1885,14 @@ impl Drop for App {
         self.plugins.shutdown();
         self.surfaces.clear();
         self.env = Env::None;
-        if self.hotkey {
-            // SAFETY: the hotkey we registered on this thread.
-            let _ = unsafe { UnregisterHotKey(None, EDIT_HOTKEY) };
+        for (registered, id) in [
+            (self.hotkey, EDIT_HOTKEY),
+            (self.overlay_hotkey, OVERLAY_HOTKEY),
+        ] {
+            if registered {
+                // SAFETY: a hotkey we registered on this thread.
+                let _ = unsafe { UnregisterHotKey(None, id) };
+            }
         }
     }
 }
@@ -1606,7 +1923,7 @@ fn launch(target: Target, what: String, waker: Waker) {
                     format!("couldn't open {what:?}"),
                 ))
             };
-            waker.send(Msg::Launched(target, reply));
+            waker.send(Msg::Answered(target, reply));
         });
     if let Err(e) = spawned {
         log::warn!("launch: {e}");

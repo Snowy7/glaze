@@ -4,6 +4,7 @@
 import { DEFAULT_APPEARANCE } from "./appearance";
 import { MypaperError } from "./errors";
 import {
+  AUDIO_BINS,
   WIRE_VERSION,
   type AppearanceState,
   type HelloResult,
@@ -66,6 +67,12 @@ function emitter<T>(): Emitter<T> {
 }
 
 type OmitEach<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+/** The bin count a spectrum subscription asks for: a whole number within the host's range. */
+export function audioBins(requested: number | undefined): number {
+  if (requested === undefined || !Number.isFinite(requested)) return AUDIO_BINS.default;
+  return Math.min(AUDIO_BINS.max, Math.max(AUDIO_BINS.min, Math.round(requested)));
+}
 
 /** Validates the envelope only. Payload shapes are the shell's contract. */
 function parseWire(data: unknown): Incoming | undefined {
@@ -253,6 +260,15 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
       async set(key, value) {
         await call("storage.set", { key, value });
       },
+      shared: (shared: string) => ({
+        async get<T>(key: string) {
+          const value = await call("storage.get", { key, shared });
+          return value === null ? undefined : (value as T);
+        },
+        async set(key: string, value: unknown) {
+          await call("storage.set", { key, value, shared });
+        },
+      }),
     },
 
     system: {
@@ -286,5 +302,14 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
       return (await call("plugin", { plugin: id, method, params })) as T;
     },
     onPlugin: (id, event, cb) => subscribe({ topic: "plugin", plugin: id, event }, cb),
+
+    audio: {
+      spectrum(cb: Cb<number[]>, opts: { bins?: number } = {}) {
+        return subscribe({ topic: "audio", bins: audioBins(opts.bins) }, cb);
+      },
+    },
+    user: { info: () => call("user.info", undefined) },
+    pickFile: (opts = {}) => call("pickFile", opts),
+    appIcon: (target, size) => call("appIcon", size === undefined ? { target } : { target, size }),
   };
 }

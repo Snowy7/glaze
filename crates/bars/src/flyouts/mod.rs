@@ -40,7 +40,7 @@ pub const METHODS: &[&str] = &[
     "room",
     "keyboard",
     "apps",
-    "run",
+    "launcherRun",
     "recentFiles",
     "clipboard",
     "clipboardPaste",
@@ -77,14 +77,18 @@ pub enum Request {
     Room {
         extent: f64,
     },
-    /// Take the keyboard (the bar becomes the foreground window), or give it back.
+    /// Take the keyboard (the bar becomes the foreground window), or let it go. `handBack`:
+    /// the flyout closed by keyboard or by launching something (no press just before), so the
+    /// app that was in front gets the foreground back.
     Keyboard {
         on: bool,
+        #[serde(default, rename = "handBack")]
+        hand_back: bool,
     },
     /// The app index and the launch history.
     Apps,
     /// Opens an app, a settings page or a file from the launcher, and remembers it.
-    Run {
+    LauncherRun {
         id: String,
         path: String,
     },
@@ -166,8 +170,8 @@ impl Request {
             Self::Room { extent } if !extent.is_finite() || *extent < 0.0 => Err(
                 BarError::invalid("room.extent must be a positive number of DIPs"),
             ),
-            Self::Run { path, .. } if path.trim().is_empty() => {
-                Err(BarError::invalid("run: a path is required"))
+            Self::LauncherRun { path, .. } if path.trim().is_empty() => {
+                Err(BarError::invalid("launcherRun: a path is required"))
             }
             Self::WifiConnect { ssid, .. } if ssid.is_empty() || ssid.len() > 32 => {
                 Err(BarError::invalid("wifiConnect.ssid must be 1 to 32 bytes"))
@@ -179,16 +183,18 @@ impl Request {
 
 /// What a lane finished, for the main loop.
 pub enum Done {
-    /// The answer to request `id` from bar `bar`.
+    /// The answer to request `id` from bar `bar`'s page load `page` (a page that reloaded since
+    /// numbers its requests afresh: the answer is dropped).
     Reply {
         bar: u32,
+        page: u64,
         id: u64,
         result: Result<Value, BarError>,
     },
     /// A flyout topic's new value, for the bars watching it.
     Event { topic: Watched, data: Value },
-    /// A lone Windows key press: open the launcher.
-    WinKey,
+    /// A lone Windows key press, when it happened: open the launcher.
+    WinKey(Instant),
     /// The app index was (re)built.
     Index(Vec<index::App>),
     /// A provider noticed a change (a session came, a scan finished): refresh what's watched.
@@ -291,9 +297,15 @@ pub fn on_lane<S: 'static>(
     }
 }
 
-/// Drops `slot`'s lane when it's been idle long enough and nothing it feeds is watched.
-pub fn release_idle<S: 'static>(slot: &mut Option<Lane<S>>, now: Instant, watched: bool) {
-    if !watched && slot.as_ref().is_some_and(|lane| lane.idle(now)) {
+/// Drops `slot`'s lane when it's been idle long enough. A `kept` one (something it feeds is
+/// watched, or it's busy) counts as used now, so it goes [`IDLE`] after the last watch ends, and
+/// its release time (the loop's deadline) never lies in the past.
+pub fn release_idle<S: 'static>(slot: &mut Option<Lane<S>>, now: Instant, kept: bool) {
+    if kept {
+        if let Some(lane) = slot {
+            lane.used = now;
+        }
+    } else if slot.as_ref().is_some_and(|lane| lane.idle(now)) {
         *slot = None;
     }
 }
@@ -342,9 +354,14 @@ impl Watches {
     }
 }
 
-/// Sends a lane's result to the main loop.
-pub fn reply(waker: &Waker, bar: u32, id: u64, result: Result<Value, BarError>) {
-    waker.send(Msg::Flyout(Done::Reply { bar, id, result }));
+/// Sends a lane's result to the main loop, for the page load that asked.
+pub fn reply(waker: &Waker, bar: u32, page: u64, id: u64, result: Result<Value, BarError>) {
+    waker.send(Msg::Flyout(Done::Reply {
+        bar,
+        page,
+        id,
+        result,
+    }));
 }
 
 #[cfg(test)]
@@ -361,6 +378,24 @@ mod tests {
             })
         );
         assert_eq!(parse("apps", Value::Null), Ok(Request::Apps));
+        // `handBack` is optional (taking the keyboard has none).
+        assert_eq!(
+            parse("keyboard", serde_json::json!({ "on": true })),
+            Ok(Request::Keyboard {
+                on: true,
+                hand_back: false
+            })
+        );
+        assert_eq!(
+            parse(
+                "keyboard",
+                serde_json::json!({ "on": false, "handBack": true })
+            ),
+            Ok(Request::Keyboard {
+                on: false,
+                hand_back: true
+            })
+        );
         assert_eq!(
             parse("wifiConnect", serde_json::json!({ "ssid": "Home" })),
             Ok(Request::WifiConnect {
@@ -382,7 +417,7 @@ mod tests {
             ("setSession", serde_json::json!({ "id": "x", "level": 2 })),
             ("setBrightness", serde_json::json!({ "level": 101 })),
             ("room", serde_json::json!({ "extent": -1 })),
-            ("run", serde_json::json!({ "id": "x", "path": " " })),
+            ("launcherRun", serde_json::json!({ "id": "x", "path": " " })),
             ("wifiConnect", serde_json::json!({ "ssid": "" })),
             ("setPowerMode", serde_json::json!({ "mode": "turbo" })),
         ] {
@@ -411,5 +446,23 @@ mod tests {
         assert_eq!(Watched::parse("stats"), Some(Watched::Core(Topic::Stats)));
         assert_eq!(Watched::parse("nope"), None);
         assert_eq!(Watched::NotificationList.event(), "notificationList");
+    }
+
+    #[test]
+    fn a_watched_lane_stays_without_a_past_deadline() {
+        let mut slot = Lane::spawn("test-lane", || ());
+        let start = Instant::now();
+        let later = start + IDLE * 2;
+        // Watched past its idle time: kept, and its release moves on (no deadline in the past
+        // for the loop to spin on).
+        release_idle(&mut slot, later, true);
+        let lane = slot.as_ref().expect("kept while watched");
+        assert_eq!(lane.used, later);
+        assert!(lane.used + IDLE > later);
+        // Unwatched: it goes once it's been idle IDLE since the last watch, not before.
+        release_idle(&mut slot, later + IDLE / 2, false);
+        assert!(slot.is_some());
+        release_idle(&mut slot, later + IDLE, false);
+        assert!(slot.is_none());
     }
 }

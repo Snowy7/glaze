@@ -157,6 +157,16 @@ pub fn switch_desktop(direction: Direction) {
     keys(&[VK_LWIN, VK_CONTROL, arrow]);
 }
 
+/// Opens Windows Search (Win+S), on the user's click.
+pub fn search() {
+    keys(&[VK_LWIN, VIRTUAL_KEY(u16::from(b'S'))]);
+}
+
+/// Minimizes every window, or brings them back (Win+D), on the user's click.
+pub fn show_desktop() {
+    keys(&[VK_LWIN, VIRTUAL_KEY(u16::from(b'D'))]);
+}
+
 /// Presses `chord` (in order) and releases it (in reverse).
 fn keys(chord: &[VIRTUAL_KEY]) {
     let key = |vk: VIRTUAL_KEY, up: bool| {

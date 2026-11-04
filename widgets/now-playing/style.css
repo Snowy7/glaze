@@ -1,320 +1,655 @@
-/* Layouts, by widget size (the container is the page itself):
-   A  one row (1 cell high): A1 narrow (2 wide): text, progress, controls; A2 (3 wide): art | text, progress,
-      controls; A3 (4 wide): art | text and progress | controls on the right.
-   B  taller, narrow (2x2, 3x2): art and text on top, then progress with times, then controls.
-   C  taller, wide (4x2): big art on the left; text, progress and controls stacked on the right.
-   Progress is a `.track`, controls are bare buttons: nothing here needs a surface. */
+/* Now playing. `data-variant` on <html> (card | blur | strip) and the size of the card pick the
+   layout; main.js only feeds data. Three layouts, by the card's own box (.np is a size container):
+     col      the default: cover on top, then text, scrubber, controls (portrait and square boxes)
+     row      cover left, a text column right (landscape boxes at least ~130px high)
+     compact  less than 130px high, and always for the strip: cover | text and a hairline scrubber
+              | controls (the transport shrinks to a play button, then moves onto the cover)
+   Colors: only the kit's variables. The cover and what sits directly on it are artwork. */
 
-.card {
+.np {
+  container-type: size;
+  --art-r: calc(var(--radius) * 0.8);
+  --play: 44px;
+  --skip: 34px;
+  --art-l: 68%;
+  --glow-col: transparent;
+}
+html[data-text="dark"] .np {
+  --art-l: 40%;
+}
+
+/* The accent from the cover, local to this widget (main.js sets --art-h and --art-s). */
+.np[data-tinted]:not([data-tint="off"]) {
+  --hi: hsl(var(--art-h) var(--art-s) var(--art-l));
+  --hi-2: hsl(calc(var(--art-h) + 36) var(--art-s) calc(var(--art-l) + 8%));
+  --glow: color-mix(in srgb, var(--hi) 75%, transparent);
+  --glow-col: var(--hi);
+}
+html:not([data-style="minimal"]) .np {
+  --glow-col: var(--hi);
+}
+
+.body {
+  position: relative;
+  height: 100%;
   display: grid;
-  align-items: center;
-  gap: 6px 12px;
-  --art: calc(100cqh - 2 * var(--pad));
-  --play: 34px;
+  min-width: 0;
 }
 
-/* The blurred cover behind everything. Only meaningful on a surface: on a bare wallpaper it would
-   just muddy the photo. */
-.backdrop {
-  position: absolute;
-  inset: -40px;
-  z-index: -1;
-  background-size: cover;
-  background-position: center;
-  /* Grayscale on purpose: the UI stays monochrome, only the cover itself carries color. */
-  filter: blur(28px) grayscale(1) brightness(0.95);
-  opacity: 0;
-  transition: opacity 0.4s;
-}
-html[data-surface="none"] .backdrop {
-  display: none;
-}
-.card[data-state="has-art"][data-backdrop="on"] .backdrop {
-  opacity: 0.32;
-}
+/* ---------------------------------------------------------------- the cover */
 
-/* ---- art */
-.art {
+.cover {
   grid-area: art;
+  position: relative;
   width: var(--art);
   height: var(--art);
-  display: none;
+  place-self: center;
+  /* Paused: the cover steps back a little. */
+  transform: scale(0.93);
+  transition: transform 0.5s cubic-bezier(0.3, 1.3, 0.5, 1);
+}
+.np[data-playing] .cover {
+  transform: none;
+}
+
+.art {
+  position: absolute;
+  inset: 0;
+  display: grid;
   place-items: center;
-  border-radius: min(calc(var(--radius) * 0.6), 18cqmin);
-  background: var(--fill-1);
-  box-shadow: inset 0 0 0 1px var(--fill-2);
   overflow: hidden;
-}
-html[data-surface="none"] .art {
+  border-radius: min(var(--art-r), 22%);
   background: var(--chip);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  box-shadow:
+    0 4px 12px rgb(0 0 0 / 0.3),
+    0 14px 30px -12px color-mix(in srgb, var(--glow-col) calc(var(--glow-amt, 0.55) * 90%), transparent);
 }
-.card[data-state="has-art"] .art {
-  /* The cover is artwork: one soft shadow lifts it off any wallpaper. */
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.32); /* art */
+/* Playing: a slow breath, transform only. */
+.np[data-playing] .art {
+  animation: breathe 6s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    transform: scale(1.025);
+  }
 }
 .art img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+/* A fine light edge over any cover, and a per-style finish. */
+.art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12); /* art */
+}
+html[data-style="depth"] .art::after {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), inset 0 -1px 0 rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(255 255 255 / 0.1); /* art */
+}
+html[data-style="neon"] .art::after {
+  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.7), inset 0 0 14px -4px rgb(var(--spark-rgb) / 0.6);
+}
+html[data-style="aero"] .art::after {
+  background: linear-gradient(172deg, rgb(255 255 255 / 0.34), rgb(255 255 255 / 0.06) 44%, transparent 44.6%); /* art */
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), inset 0 0 0 1px rgb(255 255 255 / 0.16); /* art */
+}
+
+/* The idle cover: a frosted tile with the style's highlight in it. */
+html[data-surface="none"] .art {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.np:not([data-state="has-art"]) .art {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--hi) 42%, transparent), color-mix(in srgb, var(--hi-2) 20%, transparent)),
+    var(--chip);
+}
 .note {
-  width: 42%;
+  width: 40%;
   fill: none;
-  stroke: var(--t2);
-  stroke-width: 1.5;
+  stroke: var(--t0);
+  stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
+  opacity: 0.85;
 }
-.card[data-state="has-art"] .note {
+.np[data-state="has-art"] .note {
   display: none;
 }
 
-/* ---- text */
+/* The play button on the cover (smallest layouts): over artwork, so a fixed dark scrim. */
+.over {
+  display: none;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 30px;
+  height: 30px;
+  color: #fff; /* art */
+  background: rgb(0 0 0 / 0.38); /* art */
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25); /* art */
+}
+.over:hover {
+  background: rgb(0 0 0 / 0.55); /* art */
+  color: #fff; /* art */
+}
+
+/* ---------------------------------------------------------------- text */
+
 .info {
   grid-area: info;
   min-width: 0;
+  display: grid;
+  gap: 0.18em;
 }
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--t2);
+}
+.eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 13px;
+  height: 10px;
+  flex: none;
+}
+.eq i {
+  flex: 1;
+  height: 100%;
+  border-radius: 1px;
+  background: linear-gradient(0deg, var(--hi), var(--hi-2));
+  transform-origin: bottom;
+  transform: scaleY(0.3);
+}
+.np[data-playing] .eq i {
+  animation: eq 0.9s ease-in-out infinite alternate;
+}
+.np[data-playing] .eq i:nth-child(2) {
+  animation-duration: 0.65s;
+  animation-delay: -0.3s;
+}
+.np[data-playing] .eq i:nth-child(3) {
+  animation-duration: 1.1s;
+  animation-delay: -0.6s;
+}
+.np[data-playing] .eq i:nth-child(4) {
+  animation-duration: 0.8s;
+  animation-delay: -0.15s;
+}
+@keyframes eq {
+  from {
+    transform: scaleY(0.25);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+.np[data-state="empty"] .eq {
+  display: none;
+}
+
 .title,
 .artist {
+  min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 .title {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-size: var(--title, 18px);
+  font-weight: 650;
+  letter-spacing: -0.022em;
+  line-height: 1.12;
   color: var(--t0);
 }
 .artist {
-  margin-top: 1px;
-  font-size: 12px;
+  font-size: var(--artist, 13px);
+  font-weight: 450;
   color: var(--t1);
 }
-.card[data-state="empty"] .title {
+.np[data-state="empty"] .title {
   color: var(--t1);
 }
-.card[data-state="empty"] .artist {
+.np[data-state="empty"] .artist {
   color: var(--t2);
 }
 
-/* ---- progress */
-.progress {
-  grid-area: progress;
+/* ---------------------------------------------------------------- the scrubber (display only) */
+
+.scrub {
+  grid-area: scrub;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-}
-.bar {
-  height: 3px;
-}
-.bar i {
-  transform-origin: left;
-  transform: scaleX(var(--p, 0));
+  gap: 10px;
+  min-width: 0;
 }
 .time {
-  display: none;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 500;
   color: var(--t2);
+  min-width: 2.6em;
 }
-.card[data-state="empty"] .progress {
+.time:last-child {
+  text-align: right;
+}
+.bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 16px; /* the hit area, once there is something to hit */
+}
+.bar .track {
+  flex: 1;
+  height: 4px;
+  transition: height 0.15s;
+}
+.scrub:hover .track {
+  height: 6px;
+}
+/* (The selector outweighs the kit's styled `.track > i` flow gradient: the bar uses the cover's pair.) */
+html:root .np .bar .track > i {
+  width: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 1s linear;
+  background: linear-gradient(90deg, var(--hi), var(--hi-2));
+  background-size: 100% 100%;
+  animation: none;
+  box-shadow: none;
+}
+html:root .np[data-jump] .bar .track > i,
+.np[data-jump] .thumb {
+  transition: none;
+}
+.thumb {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--t0);
+  box-shadow: 0 1px 4px rgb(var(--halo) / 0.45), 0 0 0 3px color-mix(in srgb, var(--hi) 35%, transparent);
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    left 1s linear,
+    opacity 0.15s,
+    transform 0.15s;
+}
+.scrub:hover .thumb {
+  opacity: 1;
+  transform: none;
+}
+.np[data-state="empty"] .scrub,
+.np[data-live] .scrub {
   visibility: hidden;
 }
 
-/* ---- controls */
+/* ---------------------------------------------------------------- controls */
+
 .controls {
   grid-area: controls;
   display: flex;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
+  gap: 4px;
 }
-.controls button {
-  width: 30px;
-  height: 30px;
-}
-.controls svg {
-  width: 16px;
-  height: 16px;
+.controls svg,
+.over svg {
   fill: currentColor;
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.controls .play {
+.skip {
+  width: var(--skip);
+  height: var(--skip);
+}
+.skip svg {
+  width: 18px;
+  height: 18px;
+}
+.play {
   width: var(--play);
   height: var(--play);
-  margin: 0 2px;
-  background: var(--accent);
-  color: var(--on-accent);
+  padding: 0;
+  margin: 0 4px;
 }
-.controls .play:hover {
-  background: var(--accent);
-  color: var(--on-accent);
-  filter: brightness(0.9);
-}
-/* The glyph sits on the accent disc, not on the wallpaper: no shadow. */
-.controls .play svg {
-  width: 15px;
-  height: 15px;
+/* The glyph sits on the highlight disc, not on the wallpaper: no shadow. */
+.play svg {
+  width: 44%;
+  height: 44%;
   filter: none !important;
 }
-.play .i-pause {
-  stroke-width: 3;
+.over svg {
+  width: 14px;
+  height: 14px;
+  filter: none !important;
 }
-.card:not([data-playing]) .i-pause,
-.card[data-playing] .i-play {
+.play .i-pause,
+.over .i-pause {
+  stroke-width: 3.2;
+}
+.np:not([data-playing]) .i-pause,
+.np[data-playing] .i-play {
   display: none;
 }
-.card[data-state="empty"] .controls {
-  opacity: 0.4;
+/* The tinted highlight, also for the play disc. */
+.np[data-tinted]:not([data-tint="off"]) .btn.primary {
+  background: linear-gradient(135deg, var(--hi), var(--hi-2));
+  color: var(--on-accent);
+}
+.np[data-state="empty"] .controls {
+  opacity: 0.45;
   pointer-events: none;
 }
 
-/* ---- A1: one row, narrow (2x1) */
-.card {
+/* ---------------------------------------------------------------- strip plate, backdrop */
+
+.plate,
+.wash {
+  display: none;
+}
+html[data-variant="strip"][data-surface="none"] .plate {
+  display: block;
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border-radius: inherit;
+}
+
+.wash {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
+  /* No cover yet: the style's highlights, as a soft wash. */
+  background:
+    radial-gradient(90% 120% at 10% 0%, color-mix(in srgb, var(--hi) 45%, transparent), transparent 70%),
+    radial-gradient(80% 110% at 100% 100%, color-mix(in srgb, var(--hi-2) 38%, transparent), transparent 70%);
+}
+html[data-variant="blur"] .wash {
+  display: block;
+}
+.wash img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* A 32px picture stretched 1.5x past the card and blurred once: static, so it costs nothing per frame. */
+  transform: scale(1.5);
+  filter: blur(8px) saturate(1.5);
+  opacity: 0;
+  transition: opacity 0.7s;
+}
+.np[data-state="has-art"] .wash img {
+  opacity: 1;
+}
+/* A scrim in the ink's opposite keeps the text readable on any cover, then the edge. */
+.wash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgb(var(--halo) / 0.18), rgb(var(--halo) / 0.52));
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--ink) / 0.14),
+    inset 0 1px 0 rgb(var(--ink) / 0.2);
+}
+html[data-variant="blur"][data-surface="none"]:not([data-style="minimal"]) .np {
+  inset: var(--bleed);
+  box-shadow: var(--elev-3);
+}
+
+/* ---------------------------------------------------------------- layout: col (default) */
+
+.body {
+  --art: clamp(64px, min(100cqw, calc(100cqh - var(--chrome, 138px))), 360px);
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 1fr auto auto;
-  grid-template-areas: "info" "progress" "controls";
-  gap: 5px 12px;
+  grid-template-rows: auto auto auto auto;
+  grid-template-areas: "art" "info" "scrub" "controls";
+  align-content: center;
+  justify-items: center;
+  row-gap: 10px;
+  text-align: center;
+}
+.info,
+.scrub,
+.controls {
+  width: 100%;
+}
+.info .eyebrow {
+  justify-content: center;
+}
+@container (max-height: 215px) {
+  .body {
+    --chrome: 108px;
+    row-gap: 6px;
+    --title: 16px;
+    --artist: 12px;
+    --play: 38px;
+    --skip: 30px;
+  }
+  .eyebrow {
+    display: none;
+  }
+  .time {
+    display: none;
+  }
+  .scrub {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container (min-height: 300px) {
+  .body {
+    --chrome: 200px;
+    --title: clamp(20px, 7cqmin, 28px);
+    --artist: clamp(14px, 4.4cqmin, 17px);
+    row-gap: 14px;
+  }
 }
 
-/* ---- A2: one row, 3 wide: art | text, progress, controls */
-@container (min-width: 250px) and (max-height: 129px) {
-  .card {
+/* ---------------------------------------------------------------- layout: row (wide, 2+ rows) */
+
+@container (min-aspect-ratio: 3/2) and (min-height: 130px) {
+  .body {
+    --art: min(100cqh, 44cqw);
+    --title: clamp(18px, 11.5cqh, 30px);
+    --artist: clamp(13px, 7cqh, 16px);
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: 1fr auto auto;
-    grid-template-areas: "art info" "art progress" "art controls";
+    grid-template-rows: 1fr auto auto auto 1fr;
+    grid-template-areas: "art ." "art info" "art scrub" "art controls" "art .";
+    justify-items: stretch;
+    column-gap: clamp(14px, 5cqw, 26px);
+    row-gap: clamp(6px, 4cqh, 12px);
+    text-align: left;
   }
-  .art {
-    display: grid;
+  .cover {
+    justify-self: start;
   }
-  .controls {
-    margin-left: -6px;
-  }
-}
-
-/* ---- A3: one row, 4 wide: art | text and progress | controls */
-@container (min-width: 380px) and (max-height: 129px) {
-  .card {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: 1fr auto;
-    grid-template-areas: "art info controls" "art progress controls";
-  }
-  .controls {
-    margin-left: 0;
-  }
-}
-
-/* ---- short (a 1-cell widget at a large scale): text and progress, controls beside them; prev/next
-   only when there is room for them */
-@container (max-height: 80px) {
-  .card {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: 1fr auto;
-    grid-template-areas: "info controls" "progress progress";
-    gap: 4px 8px;
-  }
-  .art {
-    display: none;
-  }
-  .controls {
-    margin-left: 0;
-  }
-  .controls :is(#prev, #next) {
-    display: none;
-  }
-}
-@container (max-height: 80px) and (min-width: 250px) {
-  .card {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: 1fr auto;
-    grid-template-areas: "art info controls" "art progress controls";
-    gap: 4px 12px;
-  }
-  .art {
-    display: grid;
-  }
-}
-@container (max-height: 80px) and (min-width: 380px) {
-  .controls :is(#prev, #next) {
-    display: inline-grid;
-  }
-}
-
-/* ---- B and C: two rows high */
-@container (min-height: 130px) {
-  .art {
-    display: grid;
-  }
-  .progress {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+  .info .eyebrow {
+    justify-content: flex-start;
+    display: flex;
   }
   .time {
     display: block;
   }
+  .scrub {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
   .title {
-    font-size: 15px;
-  }
-  .artist {
-    font-size: 12.5px;
-  }
-}
-
-/* B */
-@container (min-height: 130px) and (max-width: 329px) {
-  .card {
-    --art: clamp(56px, min(calc(100cqh - 2 * var(--pad) - 82px), 36cqw), 120px);
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto auto 1fr;
-    grid-template-areas: "art info" "progress progress" "controls controls";
-    align-content: center;
-    gap: 10px 12px;
-  }
-  .info {
-    align-self: center;
-  }
-  .controls {
-    justify-content: center;
-    gap: 10px;
-  }
-  .title,
-  .artist {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-  }
-  .artist {
-    -webkit-line-clamp: 1;
-  }
-}
-
-/* C */
-@container (min-height: 130px) and (min-width: 330px) {
-  .card {
-    --art: min(calc(100cqh - 2 * var(--pad)), 44cqw);
-    --play: 40px;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: 1fr auto auto auto 1fr;
-    grid-template-areas: "art ." "art info" "art progress" "art controls" "art .";
-    gap: 10px clamp(14px, 4cqw, 22px);
-  }
-  .info {
-    align-self: end;
-  }
-  .title {
-    font-size: 17px;
-  }
-  .artist {
-    font-size: 13px;
   }
   .controls {
     justify-content: flex-start;
-    gap: 6px;
+    margin-left: -4px;
   }
+}
+@container (min-aspect-ratio: 3/2) and (min-height: 130px) and (max-height: 215px) {
+  .body {
+    --play: 40px;
+    --skip: 32px;
+  }
+  .eyebrow {
+    display: flex;
+  }
+}
+
+/* ---------------------------------------------------------------- layout: compact (< 130px, and the strip) */
+
+@container (max-height: 129px) {
+  .body {
+    --art: 100cqh;
+    --title: clamp(14px, 24cqh, 18px);
+    --artist: clamp(11.5px, 17cqh, 13px);
+    --play: clamp(32px, 52cqh, 40px);
+    --skip: 30px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: 1fr auto;
+    grid-template-areas: "art info controls" "art scrub controls";
+    justify-items: stretch;
+    align-content: stretch;
+    align-items: center;
+    column-gap: clamp(10px, 4cqw, 16px);
+    row-gap: 6px;
+    text-align: left;
+  }
+  .cover {
+    justify-self: start;
+  }
+  .info {
+    align-self: end;
+    width: auto;
+  }
+  .info .eyebrow {
+    display: none;
+  }
+  .scrub {
+    align-self: start;
+    grid-template-columns: minmax(0, 1fr);
+    width: auto;
+  }
+  .time {
+    display: none;
+  }
+  .bar {
+    height: 10px;
+  }
+  .bar .track {
+    height: 3px;
+  }
+  .controls {
+    width: auto;
+  }
+  .title {
+    -webkit-line-clamp: 1;
+  }
+}
+/* 3 cells wide and a row high: a play button, no skips. */
+@container (max-height: 129px) and (max-width: 339px) {
+  .controls .skip {
+    display: none;
+  }
+  .play {
+    margin: 0;
+  }
+}
+/* Narrower still: the button moves onto the cover. */
+@container (max-height: 129px) and (max-width: 249px) {
+  .body {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "art info" "art scrub";
+  }
+  .controls {
+    display: none;
+  }
+  .over {
+    display: grid;
+  }
+}
+
+/* ---------------------------------------------------------------- the backdrop look */
+
+/* No cover thumbnail in the wide and short layouts: the backdrop is the cover. Big type instead. */
+@container (min-aspect-ratio: 3/2) and (min-height: 130px) {
+  html[data-variant="blur"] .body {
+    --title: clamp(22px, 17cqh, 40px);
+    --artist: clamp(14px, 8.5cqh, 18px);
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 1fr auto auto;
+    grid-template-areas: "info controls" "scrub scrub";
+    align-items: end;
+    row-gap: clamp(8px, 6cqh, 16px);
+  }
+  html[data-variant="blur"] .cover {
+    display: none;
+  }
+  html[data-variant="blur"] .info {
+    align-self: end;
+  }
+  html[data-variant="blur"] .controls {
+    margin: 0;
+    align-self: end;
+  }
+}
+@container (max-height: 129px) {
+  html[data-variant="blur"] .cover {
+    display: none;
+  }
+  html[data-variant="blur"] .body {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "info controls" "scrub scrub";
+    --title: clamp(16px, 28cqh, 22px);
+    --artist: clamp(12px, 18cqh, 14px);
+  }
+  html[data-variant="blur"] .over {
+    display: none;
+  }
+  html[data-variant="blur"] .controls {
+    display: flex;
+  }
+}
+@container (max-height: 129px) and (max-width: 249px) {
+  html[data-variant="blur"] .controls {
+    display: flex;
+  }
+  html[data-variant="blur"] .controls .skip {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- the strip */
+
+/* A slim bar centered in whatever box it is given. */
+/* (The selector outweighs the kit's `inset: var(--bleed)` on styled cards.) */
+:root[data-variant="strip"][data-surface] .np.card {
+  inset: 0;
+  top: 50%;
+  bottom: auto;
+  height: min(100cqh, 84px);
+  translate: 0 -50%;
+}
+:root[data-variant="strip"][data-surface="none"] .np.card {
+  padding: 8px 14px 8px 8px;
 }

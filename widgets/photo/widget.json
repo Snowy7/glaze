@@ -2,9 +2,9 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "photo",
   "name": "Photo",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "mypaper",
-  "description": "A photo frame that cycles through the images in its folder.",
+  "description": "A photo frame that cycles through the images in its folder, with an optional slow zoom.",
   "entry": "index.html",
   "size": { "default": [2, 2], "min": [1, 1], "max": [4, 4] },
   "resizable": true,
@@ -26,7 +26,27 @@
       ]
     },
     { "key": "intervalSeconds", "type": "number", "label": "Change every (seconds)", "min": 5, "max": 600, "step": 5, "default": 30 },
-    { "key": "fit", "type": "select", "label": "Fit", "options": ["cover", "contain"], "default": "cover" },
+    {
+      "key": "motion",
+      "type": "select",
+      "label": "Motion",
+      "group": "Look",
+      "options": [
+        { "value": "still", "label": "Still", "icon": "▢" },
+        { "value": "kenburns", "label": "Slow zoom", "icon": "⤢" }
+      ],
+      "default": "still"
+    },
+    {
+      "key": "fit",
+      "type": "select",
+      "label": "Fit",
+      "options": [
+        { "value": "cover", "label": "Fill", "icon": "▣" },
+        { "value": "contain", "label": "Whole picture", "icon": "▢" }
+      ],
+      "default": "cover"
+    },
     { "key": "shuffle", "type": "boolean", "label": "Shuffle", "default": false },
     { "key": "rounded", "type": "boolean", "label": "Rounded corners", "default": true },
     { "key": "showCaption", "type": "boolean", "label": "Show file name", "default": false }

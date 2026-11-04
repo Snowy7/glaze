@@ -1,83 +1,517 @@
-/* Layout adapts to the widget's size with container units, so any size between min and max works. */
+/* One set of parts, three layouts (main.js sets data-variant: desk | flip | minimal).
+   Everything inside the card is in em of --fs, the size the time has: the widget's box divided by
+   how many em wide (--k) and tall (--v) the variant's content is, so any size from 2x1 up fills
+   nicely. main.js shrinks it further (--fit) when a wide custom font would overflow, and --zoom is
+   the user's "Time size". Container queries switch the arrangement (wide = a row, short = one-line
+   date), never the sizes. */
 
 .card {
-  /* Inner box, and how many em wide the time string is (see the modifier classes). */
   --w: calc(100cqw - 2 * var(--pad));
   --h: calc(100cqh - 2 * var(--pad));
-  --k: 2.6;
-  --hf: 0.68;
-  --fs: min(calc(var(--w) / var(--k)), calc(var(--h) * var(--hf)));
+  --fit: 1;
+  --zoom: 1;
+  --k: 2.55; /* how many em wide the content is */
+  --v: 1.78; /* and how many em tall */
+  --fs: calc(min(var(--w) / var(--k), var(--h) / var(--v)) * var(--zoom) * var(--fit));
 
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: calc(var(--fs) * 0.06);
+  font-size: var(--fs);
+  font-family: var(--w-font, var(--font));
 }
-.card.has-sec { --k: 3.45; }
-.card.has-ampm { --k: 3.15; }
-.card.has-sec.has-ampm { --k: 3.95; }
-.card.no-date { --hf: 0.8; }
 
+.stage {
+  display: flex;
+  min-width: 0;
+}
 .time {
   display: flex;
-  align-items: baseline;
-  gap: 0.12em;
-  font-size: var(--fs);
-  font-weight: 300;
-  line-height: 1;
-  letter-spacing: -0.035em;
+  flex: none;
+  align-items: flex-start;
+  line-height: 0.9;
   white-space: nowrap;
+}
+.hm {
+  display: inline-block;
 }
 .colon {
-  color: var(--t3);
   margin: 0 0.02em;
+  opacity: 0.5;
 }
-.sec,
+/* Seconds and AM/PM as small superscripts beside the digits. */
+.sup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.06em;
+  margin: 0.1em 0 0 0.1em;
+  font-size: 0.22em;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+}
+.sec {
+  color: var(--t0);
+}
 .ampm {
-  font-size: 0.38em;
-  font-weight: 500;
-  letter-spacing: 0;
   color: var(--t2);
 }
-.sec { font-size: 0.42em; }
-.ampm { text-transform: uppercase; letter-spacing: 0.06em; }
+
+.bar {
+  display: none;
+  width: 0.42em;
+  height: max(2px, 0.036em);
+  margin: 0.08em 0 0.09em;
+  border-radius: 999px;
+}
 
 .date {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 0.5em;
-  font-size: clamp(11px, calc(var(--fs) * 0.21), 24px);
-  font-weight: 500;
+  display: grid;
+  gap: 0.02em;
+  min-width: 0;
   white-space: nowrap;
+}
+.card.no-date .date,
+.card.no-date .bar {
+  display: none;
+}
+.date .s {
+  display: none;
+}
+@container (max-width: 180px) {
+  .date .l {
+    display: none;
+  }
+  .date .s {
+    display: inline;
+  }
+}
+
+.flip {
+  display: none;
+}
+
+/* ================================================================ desk
+   Editorial: the time as big as the box allows, left aligned, then a short accent bar and the day
+   as a typographic block. */
+
+.card[data-variant="desk"] {
+  --k: 2.55;
+  --v: 1.78;
+}
+.card[data-variant="desk"]:is(.has-sec, .has-ampm) {
+  --k: 2.9;
+}
+.card[data-variant="desk"].no-date {
+  --v: 0.9;
+}
+.card[data-variant="desk"] .time {
+  font-weight: 300;
+  letter-spacing: -0.045em;
+}
+.card[data-variant="desk"] .bar {
+  display: block;
+}
+.card[data-variant="desk"] .wd {
+  font-size: 0.27em;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--t0);
+}
+.card[data-variant="desk"] .dt {
+  font-size: 0.2em;
+  font-weight: 450;
+  line-height: 1.25;
   color: var(--t1);
 }
-.weekday { color: var(--t0); font-weight: 600; }
-.day { color: var(--t2); }
-.card.no-date .date { display: none; }
 
-.s { display: none; }
-@container (max-width: 230px) {
-  .date .l { display: none; }
-  .date .s { display: inline; }
+/* ================================================================ minimal
+   Thin and centered: the time, one quiet line for the date. */
+
+.card[data-variant="minimal"] {
+  --k: 2.5;
+  --v: 1.34;
+  align-items: center;
+  text-align: center;
+}
+.card[data-variant="minimal"]:is(.has-sec, .has-ampm) {
+  --k: 2.9;
+}
+.card[data-variant="minimal"].no-date {
+  --v: 0.9;
+}
+.card[data-variant="minimal"] .stage {
+  justify-content: center;
+}
+.card[data-variant="minimal"] .time {
+  font-weight: 200;
+  letter-spacing: -0.04em;
+}
+.card[data-variant="minimal"] .sup {
+  font-weight: 600;
+}
+.card[data-variant="minimal"] .date {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.5em;
+  margin-top: 0.12em;
+  font-size: 0.2em;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.card[data-variant="minimal"] .wd {
+  color: var(--t0);
+  font-weight: 650;
+}
+.card[data-variant="minimal"] .dt {
+  color: var(--t1);
+}
+.card[data-variant="minimal"] .dt::before {
+  content: "·";
+  margin-right: 0.5em;
+  color: var(--t3);
 }
 
-/* Wide and short (3x1, 4x1): time on the left, the date stacked on the right. */
+/* ================================================================ flip
+   Split-flap cards: one per pair of digits, an opaque body from the ink and its opposite (so a
+   flipping leaf hides what is under it, whatever the surface), lit per style by the kit's tokens. */
+
+.card[data-variant="flip"] {
+  --k: 3.1;
+  --v: 1.7;
+  align-items: center;
+}
+.card[data-variant="flip"].has-sec {
+  --k: 3.95;
+}
+.card[data-variant="flip"].no-date {
+  --v: 1.3;
+}
+.card[data-variant="flip"] .stage {
+  justify-content: center;
+}
+.card[data-variant="flip"] .time {
+  display: none;
+}
+.card[data-variant="flip"] .flip {
+  --flip-bg: color-mix(in srgb, rgb(var(--ink)) 11%, rgb(var(--halo)));
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  gap: 0.1em;
+  text-shadow: none;
+}
+.card[data-variant="flip"] .date {
+  display: flex;
+  justify-content: center;
+  gap: 0.7em;
+  margin-top: 0.7em;
+  font-size: 0.155em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+@container (max-width: 330px) {
+  .card[data-variant="flip"] .date .l {
+    display: none;
+  }
+  .card[data-variant="flip"] .date .s {
+    display: inline;
+  }
+}
+.card[data-variant="flip"] .wd {
+  color: var(--t0);
+}
+.card[data-variant="flip"] .dt {
+  color: var(--t1);
+}
+
+.fc {
+  position: relative;
+  width: 1.42em;
+  height: 1.28em;
+  border-radius: 0.16em;
+  perspective: 5em;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--t0);
+  box-shadow: var(--elev-2);
+}
+.fc.s {
+  display: none;
+  width: 1.42em;
+  margin-left: 0.1em;
+  font-size: 0.5em;
+}
+.has-sec .fc.s {
+  display: block;
+}
+
+.half,
+.leaf {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  overflow: hidden;
+}
+.half.top,
+.leaf.top {
+  top: 0;
+  border-radius: 0.16em 0.16em 0 0;
+  background: linear-gradient(180deg, rgb(var(--lit) / 0.08), transparent 70%), var(--grain), var(--flip-bg);
+}
+.half.bottom,
+.leaf.bottom {
+  bottom: 0;
+  border-radius: 0 0 0.16em 0.16em;
+  background: linear-gradient(0deg, rgb(var(--shade) / 0.2), transparent 80%), var(--grain), var(--flip-bg);
+}
+/* A digit pair is centered on the whole card; each half shows its part of it. */
+.half span,
+.leaf span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  height: 200%;
+}
+.top span {
+  top: 0;
+}
+.bottom span {
+  bottom: 0;
+}
+
+/* The hinge, and the card's light (bevel, sheen) laid over both halves. */
+.fc::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--sheen);
+  box-shadow: var(--bevel);
+  opacity: 0.75;
+}
+.fc::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.014em);
+  z-index: 5;
+  height: max(1px, 0.028em);
+  pointer-events: none;
+  background: rgb(var(--shade) / 0.62);
+  box-shadow: 0 max(1px, 0.014em) 0 rgb(var(--lit) / 0.1);
+}
+html[data-style="neon"] .fc {
+  text-shadow: 0 0 0.22em rgb(var(--spark-rgb) / 0.75);
+}
+html[data-style="neon"] .fc::before {
+  opacity: 1;
+  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.6), var(--bevel);
+}
+
+/* AM/PM, tucked into the hours card's corner. */
+.period {
+  position: absolute;
+  top: 0.1em;
+  left: 0.15em;
+  z-index: 6;
+  display: none;
+  font-size: max(8px, 0.15em);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--t2);
+}
+.has-ampm .period {
+  display: block;
+}
+
+/* The flip: the old top half falls, then the new bottom half lands. Only while `flipping`. */
+.leaf {
+  display: none;
+  backface-visibility: hidden;
+  z-index: 3;
+}
+.leaf::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--shade));
+  opacity: 0;
+}
+.flipping .leaf {
+  display: block;
+}
+.leaf.top {
+  transform-origin: 50% 100%;
+}
+.leaf.bottom {
+  transform-origin: 50% 0;
+}
+.flipping .leaf.top {
+  animation: fc-top 0.5s ease-in both;
+}
+.flipping .leaf.bottom {
+  animation: fc-bottom 0.5s ease-out both;
+}
+.flipping .leaf.top::after {
+  animation: fc-shade-in 0.5s ease-in both;
+}
+.flipping .leaf.bottom::after {
+  animation: fc-shade-out 0.5s ease-out both;
+}
+@keyframes fc-top {
+  to {
+    transform: rotateX(-90deg);
+  }
+}
+@keyframes fc-bottom {
+  from {
+    transform: rotateX(90deg);
+  }
+  to {
+    transform: rotateX(0);
+  }
+}
+@keyframes fc-shade-in {
+  to {
+    opacity: 0.55;
+  }
+}
+@keyframes fc-shade-out {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* ================================================================ arrangements */
+
+/* Minimal's date is one line: the day in short form unless there is plenty of room. */
+@container (max-width: 400px) {
+  .card[data-variant="minimal"] .dt .l {
+    display: none;
+  }
+  .card[data-variant="minimal"] .dt .s {
+    display: inline;
+  }
+}
+/* Short (2x1, 3x1): no room for a stacked date block. */
+@container (max-height: 124px) and (max-width: 260px) {
+  .card[data-variant="desk"] .dt .l {
+    display: none;
+  }
+  .card[data-variant="desk"] .dt .s {
+    display: inline;
+  }
+}
+@container (max-height: 124px) {
+  .card[data-variant="desk"] {
+    --v: 1.28;
+  }
+  .card[data-variant="desk"] .bar {
+    display: none;
+  }
+  .card[data-variant="desk"] .date {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+    margin-top: 0.06em;
+  }
+  .card[data-variant="desk"] .wd {
+    font-size: 0.22em;
+  }
+  .card[data-variant="desk"] .dt {
+    font-size: 0.2em;
+  }
+  .card[data-variant="minimal"] {
+    --v: 1.28;
+  }
+  .card[data-variant="flip"] .date {
+    display: none;
+  }
+}
+
+/* Wide (3:1 and more): the time on the left, the date beside it. */
 @container (min-aspect-ratio: 3/1) {
   .card {
-    --hf: 0.8;
-    --k: 4.2;
     flex-direction: row;
     align-items: center;
-    justify-content: space-between;
-    gap: 1em;
+    justify-content: center;
+    gap: 0.3em;
   }
-  .card.has-sec { --k: 5.1; }
-  .card.has-ampm { --k: 4.8; }
-  .card.has-sec.has-ampm { --k: 5.6; }
-  .date {
+  .stage {
+    flex: 0 1 auto;
+  }
+  .card[data-variant="desk"] {
+    --k: 4.3;
+    --v: 1;
+    justify-content: flex-start;
+  }
+  .card[data-variant="desk"]:is(.has-sec, .has-ampm) {
+    --k: 4.65;
+  }
+  .card[data-variant="desk"] .date {
+    display: grid;
+    gap: 0.04em;
+    align-self: center;
+    padding-left: 0.34em;
+    border-left: 1px solid var(--fill-3);
+    margin: 0 0 0 0.1em;
+  }
+  .card[data-variant="desk"] .wd {
+    font-size: 0.26em;
+  }
+  .card[data-variant="desk"] .dt {
+    font-size: 0.19em;
+  }
+
+  .card[data-variant="minimal"] {
+    --k: 3.9;
+    --v: 1;
+  }
+  .card[data-variant="minimal"]:is(.has-sec, .has-ampm) {
+    --k: 4.3;
+  }
+  .card[data-variant="minimal"] .date {
     flex-direction: column;
     align-items: flex-end;
-    gap: 0.15em;
-    font-size: clamp(12px, calc(var(--fs) * 0.28), 26px);
+    gap: 0.1em;
+    margin: 0;
+    font-size: 0.24em;
+    text-align: right;
+  }
+  .card[data-variant="minimal"] .dt::before {
+    display: none;
+  }
+
+  .card[data-variant="flip"] {
+    --k: 4.9;
+    --v: 1.3;
+  }
+  .card[data-variant="flip"].has-sec {
+    --k: 5.7;
+  }
+  .card[data-variant="flip"] .date {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    margin: 0 0 0 0.8em;
+    font-size: 0.19em;
+  }
+  .card[data-variant="flip"].no-date .date {
+    display: none;
   }
 }

@@ -89,7 +89,7 @@ const launcher = defineFlyout<Props>("launcher", ({ layout, size }, ctx) => {
   // --- Running things ------------------------------------------------------------------------
 
   const run = (entry: Entry) => {
-    request("run", { id: entry.id, path: entry.path })
+    request("launcherRun", { id: entry.id, path: entry.path })
       .then(({ recent }) => {
         if (cache) cache = { ...cache, recent };
       })

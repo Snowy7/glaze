@@ -17,11 +17,19 @@
   flex: none;
   width: clamp(18px, 10cqmin, 30px);
   height: auto;
-  fill: none;
-  stroke: var(--t3);
-  stroke-width: 1.4;
-  stroke-linejoin: round;
-  stroke-linecap: round;
+  fill: url(#mark-grad);
+  stroke: none;
+}
+/* The glyph is the one colored thing: the highlight pair (softened in the minimal look). */
+.g0 {
+  stop-color: var(--hi);
+}
+.g1 {
+  stop-color: var(--hi-2);
+}
+html[data-style="minimal"] .mark,
+html:not([data-style]) .mark {
+  opacity: 0.45;
 }
 
 .quote {
@@ -65,14 +73,21 @@
   align-items: center;
   gap: 0.7em;
   margin: 0;
-  color: var(--t2);
+  color: var(--t1);
   font-size: clamp(9.5px, 3cqmin, 11.5px);
 }
 .dash {
   flex: none;
-  width: 1.8em;
+  width: 2em;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--t3);
+}
+/* The kit's .flow paints the highlight gradient; the minimal look keeps the quiet hairline. */
+html[data-style="minimal"] .dash,
+html:not([data-style]) .dash {
   height: 1px;
-  background: var(--t3);
+  background-image: none;
 }
 .by[hidden] {
   display: none;

@@ -2,20 +2,23 @@
 //! hook (`WH_KEYBOARD_LL`) in our own process: Windows calls it on our thread, nothing is loaded
 //! into anyone else's. It's only installed while `launcher.winKey` is on and the native taskbar is
 //! hidden, on a thread of its own (a hook that answers late is dropped by Windows), and it decides
-//! with a few comparisons per key.
+//! with a few comparisons and atomic loads per key.
 //!
 //! Only a lone press and release replaces Start. Every key passes through untouched (Win+E,
 //! Win+Shift+S and the rest work as ever), except the release of a lone press: that one is
-//! swallowed and replayed as the unassigned key `vkE8`, then the release. Explorer sees a Windows
-//! key combination, so Start stays closed (AutoHotkey's "menu mask key"), and the launcher opens.
-//! With a fullscreen app in front, or no launcher to open, the release goes through and Start
-//! opens as usual.
+//! replayed as the unassigned key `vkE8`, then the release, and swallowed only once the replay is
+//! in. Explorer sees a Windows key combination, so Start stays closed (AutoHotkey's "menu mask
+//! key"), and the launcher opens. The release goes through and Start opens as usual when a
+//! fullscreen app is in front, no launcher can open, the main loop is hung, or the replay failed
+//! (so the key never stays down).
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::ffi::c_void;
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
 use std::thread::JoinHandle;
+use std::time::Instant;
 
-use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -23,9 +26,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     KEYEVENTF_KEYUP, SendInput, VIRTUAL_KEY, VK_LWIN, VK_RWIN,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, HC_ACTION, KBDLLHOOKSTRUCT, MSG,
-    PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN,
-    WM_QUIT, WM_SYSKEYDOWN,
+    CallNextHookEx, DispatchMessageW, GetMessageW, HC_ACTION, IsHungAppWindow, KBDLLHOOKSTRUCT,
+    LLKHF_EXTENDED, MSG, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN,
+    WM_SYSKEYDOWN,
 };
 
 use crate::flyouts::Done;
@@ -53,6 +56,8 @@ pub struct Machine {
     held: Option<u16>,
     /// Something else was pressed while it was held.
     combo: bool,
+    /// The epoch this state belongs to (see [`Machine::sync`]).
+    epoch: u32,
 }
 
 fn is_win(vk: u16) -> bool {
@@ -89,14 +94,27 @@ impl Machine {
         }
     }
 
-    pub fn reset(&mut self) {
-        *self = Self::default();
+    /// Forgets what was seen in an earlier epoch: a press that went down before the session
+    /// locked may never come up here, and would make the next lone press look like a repeat.
+    pub fn sync(&mut self, epoch: u32) {
+        if epoch != self.epoch {
+            *self = Self {
+                epoch,
+                ..Self::default()
+            };
+        }
     }
 }
 
-/// Whether a lone press opens the launcher right now (the main loop keeps it current: false
-/// while no bar can show it).
+// What the hook reads per key, kept current by the main loop (the hook must never wait on it).
+/// A lone press opens the launcher right now: false while no bar can show it.
 static ENABLED: AtomicBool = AtomicBool::new(false);
+/// A fullscreen app is in front: Start keeps the key.
+static FULLSCREEN: AtomicBool = AtomicBool::new(false);
+/// Bumped when the session locks or unlocks, and while the hook is disabled.
+static EPOCH: AtomicU32 = AtomicU32::new(0);
+/// A window of the main loop: while it's hung, Start keeps the key (no launcher would open).
+static MAIN: AtomicIsize = AtomicIsize::new(0);
 
 thread_local! {
     static HOOK: RefCell<(Machine, Option<Waker>)> = RefCell::new((Machine::default(), None));
@@ -109,7 +127,9 @@ pub struct WinKey {
 }
 
 impl WinKey {
-    pub fn start(waker: Waker) -> Option<Self> {
+    /// Installs the hook. `main` is a window of the main loop, watched for hangs.
+    pub fn start(waker: Waker, main: HWND) -> Option<Self> {
+        MAIN.store(main.0 as isize, Ordering::Relaxed);
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let handle = std::thread::Builder::new()
             .name("winkey".into())
@@ -120,6 +140,8 @@ impl WinKey {
                     let module = GetModuleHandleW(None).ok();
                     SetWindowsHookExW(WH_KEYBOARD_LL, Some(on_key), module.map(Into::into), 0)
                 };
+                // Before saying it's ready: a quit posted from now on is kept.
+                crate::wake::make_queue();
                 // SAFETY: no preconditions.
                 let _ = ready_tx.send((unsafe { GetCurrentThreadId() }, hook.is_ok()));
                 let Ok(hook) = hook else { return };
@@ -147,19 +169,37 @@ impl WinKey {
     }
 
     pub fn set_enabled(on: bool) {
-        ENABLED.store(on, Ordering::Relaxed);
+        if ENABLED.swap(on, Ordering::Relaxed) && !on {
+            Self::reset();
+        }
+    }
+
+    pub fn set_fullscreen(on: bool) {
+        FULLSCREEN.store(on, Ordering::Relaxed);
+    }
+
+    /// The hook starts over with the next key (the session locked or unlocked).
+    pub fn reset() {
+        EPOCH.fetch_add(1, Ordering::Relaxed);
     }
 }
 
 impl Drop for WinKey {
     fn drop(&mut self) {
-        // SAFETY: posting to the thread we started; it unhooks and exits.
-        let _ = unsafe { PostThreadMessageW(self.thread, WM_QUIT, WPARAM(0), LPARAM(0)) };
         if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+            // The thread unhooks and exits on WM_QUIT.
+            crate::wake::quit_thread(self.thread, handle);
         }
         log::info!("launcher: Windows key hook removed");
     }
+}
+
+/// Whether the launcher can take this press: no fullscreen app in front, and a main loop that
+/// answers (it opens the launcher).
+fn launcher_can_open() -> bool {
+    let main = HWND(MAIN.load(Ordering::Relaxed) as *mut c_void);
+    // SAFETY: a read-only query; a stale handle reads as not hung.
+    !FULLSCREEN.load(Ordering::Relaxed) && !unsafe { IsHungAppWindow(main) }.as_bool()
 }
 
 unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -168,24 +208,22 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
         let key = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
         let ours = key.dwExtraInfo == OURS;
-        let vk = key.vkCode as u16;
         let action = HOOK.with(|hook| {
             let Ok(mut hook) = hook.try_borrow_mut() else {
                 return Action::Pass;
             };
+            hook.0.sync(EPOCH.load(Ordering::Relaxed));
             if !ENABLED.load(Ordering::Relaxed) {
-                hook.0.reset();
                 return Action::Pass;
             }
-            hook.0.on_key(vk, down, ours)
+            hook.0.on_key(key.vkCode as u16, down, ours)
         });
-        if action == Action::Open && !mypaper_desktop::fullscreen_app_in_front() {
-            replay_masked(VIRTUAL_KEY(vk));
+        if action == Action::Open && launcher_can_open() && replay_masked(key) {
             HOOK.with(|hook| {
                 if let Ok(hook) = hook.try_borrow()
                     && let Some(waker) = &hook.1
                 {
-                    waker.send(Msg::Flyout(Done::WinKey));
+                    waker.send(Msg::Flyout(Done::WinKey(Instant::now())));
                 }
             });
             return LRESULT(1); // swallowed; the replay carries the release
@@ -195,26 +233,38 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
-/// The mask key's press and release, then the Windows key's release.
-fn replay_masked(win: VIRTUAL_KEY) {
-    let key = |vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS| INPUT {
+/// The mask key's press and release, then the Windows key's release as it came (its scan code
+/// and extended flag). Whether all three went in: if not, the real release must pass.
+fn replay_masked(release: &KBDLLHOOKSTRUCT) -> bool {
+    let key = |vk: VIRTUAL_KEY, scan: u16, flags: KEYBD_EVENT_FLAGS| INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
             ki: KEYBDINPUT {
                 wVk: vk,
+                wScan: scan,
                 dwFlags: flags,
                 dwExtraInfo: OURS,
                 ..Default::default()
             },
         },
     };
+    let extended = if release.flags.0 & LLKHF_EXTENDED.0 != 0 {
+        KEYEVENTF_EXTENDEDKEY
+    } else {
+        KEYBD_EVENT_FLAGS(0)
+    };
     let inputs = [
-        key(MASK, KEYBD_EVENT_FLAGS(0)),
-        key(MASK, KEYEVENTF_KEYUP),
-        key(win, KEYEVENTF_KEYUP | KEYEVENTF_EXTENDEDKEY),
+        key(MASK, 0, KEYBD_EVENT_FLAGS(0)),
+        key(MASK, 0, KEYEVENTF_KEYUP),
+        key(
+            VIRTUAL_KEY(release.vkCode as u16),
+            release.scanCode as u16,
+            KEYEVENTF_KEYUP | extended,
+        ),
     ];
     // SAFETY: a valid input array and its element size.
-    unsafe { SendInput(&inputs, size_of::<INPUT>() as i32) };
+    let sent = unsafe { SendInput(&inputs, size_of::<INPUT>() as i32) };
+    sent as usize == inputs.len()
 }
 
 #[cfg(test)]
@@ -286,6 +336,25 @@ mod tests {
             run(&[(LWIN, true, false), (E, true, true), (LWIN, false, false)])[2],
             Action::Open
         );
+    }
+
+    #[test]
+    fn a_new_epoch_forgets_a_press_that_never_came_up() {
+        let mut machine = Machine::default();
+        // Win went down, then the session locked (its release went to the secure desktop).
+        assert_eq!(machine.on_key(LWIN, true, false), Action::Pass);
+        machine.sync(1);
+        assert_eq!(machine.on_key(E, true, false), Action::Pass);
+        assert_eq!(machine.on_key(LWIN, true, false), Action::Pass);
+        assert_eq!(
+            machine.on_key(LWIN, false, false),
+            Action::Open,
+            "E came before this press, so it isn't a combination"
+        );
+        // The same epoch again changes nothing.
+        machine.on_key(LWIN, true, false);
+        machine.sync(1);
+        assert_eq!(machine.on_key(LWIN, false, false), Action::Open);
     }
 
     #[test]

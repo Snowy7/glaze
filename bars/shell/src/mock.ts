@@ -1,21 +1,25 @@
 // Dev-only host: lets the page run in a plain browser (and for screenshots) with realistic data.
 // Loaded by `connect()` only when `window.chrome.webview` is absent.
 //
-//   ?bar=top|dock   ?pos=bottom|left|right   ?size=48   ?h=28   ?autohide=1
-//   ?text=light|dark   ?surface=none|glass|solid   ?wall=dark|light
+//   ?bar=top|dock   ?preset=monochrome|macos|windows11|islands|neon-glass|floating
+//   ?pos=bottom|top|left|right   ?size=48   ?h=28   ?autohide=1   ?scheme=light|dark
+//   ?text=light|dark   ?surface=none|glass|solid   ?wall=dark|light|vivid   ?reduce=1   ?perf=1
 
 import { flyoutMock, flyoutStart } from "./flyouts/mock";
 import { LAUNCHER_LAYOUTS } from "./flyouts/protocol";
 import type { Transport } from "./host";
+import { mockConfig, PRESETS } from "./mock-config";
 import type {
   Appearance,
   BarKind,
-  BarsConfig,
   DockItem,
   DockPosition,
   EventMap,
   EventName,
   Hello,
+  IconPack,
+  LookPayload,
+  Preset,
   Request,
 } from "./protocol";
 
@@ -52,12 +56,18 @@ const ICONS = {
   calc: tile("#888", "#555", `<rect x="18" y="14" width="28" height="36" rx="4" ${S(3)}/><path d="M24 24h16M24 34h4M32 34h4M24 42h4M32 42h4" ${S(3)}/>`),
 };
 
-const win = (hwnd: number, title: string, active = false, minimized = false) => ({ hwnd, title, active, minimized });
+const win = (hwnd: number, title: string, active = false, minimized = false, attention = false) => ({
+  hwnd,
+  title,
+  active,
+  minimized,
+  attention,
+});
 
 const initialApps = (): DockItem[] => [
   { key: "files", name: "Files", path: "explorer.exe", icon: ICONS.files, pinned: true, windows: [win(101, "Documents")] },
   { key: "browser", name: "Browser", path: "browser.exe", icon: ICONS.browser, pinned: true, windows: [win(201, "mypaper — bars", true), win(202, "Docs: Windows 11 shell")] },
-  { key: "terminal", name: "Terminal", path: "wt.exe", icon: ICONS.terminal, pinned: true, windows: [win(301, "pwsh")] },
+  { key: "terminal", name: "Terminal", path: "wt.exe", icon: ICONS.terminal, pinned: true, windows: [win(301, "pwsh", false, false, true)] },
   { key: "notes", name: "Notes", path: "notes.exe", icon: ICONS.notes, pinned: true, windows: [] },
   { key: "music", name: "Music", path: "music.exe", icon: ICONS.music, pinned: true, windows: [] },
   { key: "mail", name: "Mail", path: "mail.exe", icon: ICONS.mail, pinned: true, windows: [] },
@@ -72,72 +82,94 @@ const TRACKS = [
   { title: "Teardrop", artist: "Massive Attack", app: "Music" },
 ];
 
+/** A stand-in wallpaper, as CSS and as the snapshot the engine would publish (an SVG). */
+function wallpaper(kind: string, w: number, h: number): { css: string; snapshot: string } {
+  const blobs =
+    kind === "light"
+      ? [["18%", "30%", "#ffffff"], ["85%", "80%", "#d8dde6"], ["50%", "100%", "#c9d4ea"]]
+      : kind === "vivid"
+        ? [["15%", "20%", "#ff5fa2"], ["80%", "25%", "#6b5cff"], ["40%", "95%", "#00c2c7"], ["95%", "95%", "#ffb347"]]
+        : [["18%", "30%", "#4a5160"], ["85%", "80%", "#3b3346"], ["45%", "100%", "#2b3a4a"]];
+  const base = kind === "light" ? "#eceef2" : kind === "vivid" ? "#1b1530" : "#17181c";
+  const gradients = blobs
+    .map(([x, y, c], i) => `<radialGradient id="g${i}" cx="${x}" cy="${y}" r="45%"><stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>`)
+    .join("");
+  const rects = blobs.map((_, i) => `<rect width="100%" height="100%" fill="url(#g${i})"/>`).join("");
+  // Some detail, so glass visibly blurs what's behind it.
+  const stripes = Array.from({ length: 24 }, (_, i) => `<rect x="${(i * w) / 24}" y="0" width="${w / 60}" height="${h}" fill="#fff" opacity=".07"/>`).join("");
+  const picture = (blur: number) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><defs>${gradients}<filter id="b" x="0" y="0" width="1" height="1"><feGaussianBlur stdDeviation="${blur}" edgeMode="duplicate"/></filter></defs><g filter="${blur ? "url(#b)" : "none"}"><rect width="100%" height="100%" fill="${base}"/>${rects}${stripes}</g></svg>`;
+  const url = (svg: string) => `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  const css = `html{background:url("${url(picture(0))}") 0 0 / 100% 100% no-repeat,${base}}`;
+  return { css, snapshot: url(picture(28)) };
+}
+
+const isPreset = (name: string | null): name is Preset => !!name && name in PRESETS;
+
 export function createMockTransport(): Transport {
   const q = new URLSearchParams(location.search);
   const bar: BarKind = q.get("bar") === "dock" ? "dock" : "top";
   const pos = q.get("pos");
-  const position: DockPosition = pos === "left" || pos === "right" ? pos : "bottom";
+  const position: DockPosition | undefined = pos === "left" || pos === "right" || pos === "top" || pos === "bottom" ? pos : undefined;
   const dark = q.get("text") === "dark";
   const surfaceParam = q.get("surface");
   const surface: Appearance["surface"] = surfaceParam === "none" || surfaceParam === "solid" ? surfaceParam : "glass";
-  const wallDark = (q.get("wall") ?? (dark ? "light" : "dark")) !== "light";
+  const wall = q.get("wall") ?? (dark ? "light" : "dark");
   const autohide = q.has("autohide");
+  const presetName = q.get("preset");
+  const preset: Preset = isPreset(presetName) ? presetName : "monochrome";
 
   const appearance: Appearance = {
     surface,
-    tint: dark ? "#f2f2f2" : "#101010",
-    opacity: surface === "solid" ? 0.96 : 0.55,
-    blur: 24,
+    tint: dark ? "#f2f2f2" : "#0e0e0e",
+    opacity: surface === "solid" ? 0.96 : 0.6,
+    blur: 30,
     radius: bar === "dock" ? 16 : 0,
     border: true,
     text: dark ? "dark" : "light",
     accent: "#ffffff",
-    font: "Segoe UI Variable",
+    font: '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif',
     scale: 1,
-    shadow: true,
+    shadow: false,
   };
-  const config: BarsConfig = {
-    version: 1,
-    taskbar: { mode: "autohide" },
-    top: {
-      enabled: true,
-      monitors: "all",
-      height: Number(q.get("h")) || 28,
-      left: ["start", "workspaces", "app"],
-      center: ["media"],
-      right: ["tray", "stats", "language", "network", "volume", "battery", "quick", "notifications", "clock", "power"],
-      clock: { seconds: false, format: "ddd d MMM  HH:mm" },
-    },
+  const scheme = q.get("scheme");
+  const config = mockConfig(preset, {
     dock: {
       enabled: true,
-      monitors: "all",
-      style: "floating",
-      position,
-      size: Number(q.get("size")) || 48,
-      autohide,
-      magnify: true,
-      running: true,
-      pinned: [],
+      ...(position ? { position } : {}),
+      ...(q.has("size") ? { size: Number(q.get("size")) } : {}),
+      ...(autohide ? { autohide } : {}),
+    },
+    top: {
+      ...(q.has("h") ? { height: Number(q.get("h")) } : {}),
+      // `?flyouts`: every module with a flyout, for previewing them.
+      ...(q.has("flyouts")
+        ? { right: ["tray", "stats", "language", "network", "volume", "battery", "quick", "notifications", "clock", "power"] }
+        : {}),
     },
     launcher: {
-      winKey: true,
       layout: LAUNCHER_LAYOUTS.find((l) => l === q.get("launcher")) ?? "win11",
       pinned: ["Terminal", "Firefox", "Visual Studio Code", "File Explorer", "Spotify", "Settings", "Photos", "Calculator"].map((name) => ({
         path: `shell:AppsFolder\\${name.replace(/\s/g, "")}`,
         name,
       })),
-      files: true,
     },
-    tray: { host: false },
     calendar: { zones: [{ zone: "America/New_York" }, { zone: "Asia/Tokyo", label: "Tokyo office" }] },
-    audio: { switchOutput: false },
+    ...(scheme === "light" || scheme === "dark" ? { look: { scheme } } : {}),
+  });
+  const look: LookPayload = {
+    appearance,
+    themeCss: null,
+    system: { accent: ["#0078d4", "#0091f8", "#4cc2ff", "#99ebff", "#0067c0", "#003e92", "#001a68"], scheme: dark ? "light" : "dark" },
+    vars: {},
+    iconPack: null,
+    assets: {},
   };
 
   // A stand-in wallpaper, so glass and shadows read the way they will on the desktop.
+  const art = wallpaper(wall, innerWidth, innerHeight);
   const style = document.createElement("style");
-  style.textContent = wallDark
-    ? `html{background:radial-gradient(900px 520px at 18% 30%,#4a5160,transparent),radial-gradient(800px 500px at 85% 80%,#3b3346,transparent),#17181c}`
-    : `html{background:radial-gradient(900px 520px at 18% 30%,#ffffff,transparent),radial-gradient(800px 500px at 85% 80%,#d8dde6,transparent),#eceef2}`;
+  style.textContent = art.css;
   document.head.append(style);
 
   let listener: ((event: { data: unknown }) => void) | undefined;
@@ -185,12 +217,48 @@ export function createMockTransport(): Transport {
     setInterval(() => emit("clock", { now: Date.now() }), 1000);
   }
 
+  // ?poke=<selector>: the pointer arrives over that element (magnify, labels, previews), for
+  // screenshots without a mouse.
+  const poke = q.get("poke");
+  if (poke) {
+    setTimeout(() => {
+      const target = document.querySelector(poke);
+      if (!(target instanceof HTMLElement)) return;
+      const r = target.getBoundingClientRect();
+      const at = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: false };
+      for (const el of [target.closest(".pill"), target.closest(".items"), target]) {
+        el?.dispatchEvent(new PointerEvent("pointerenter", at));
+      }
+      target.closest(".items")?.dispatchEvent(new PointerEvent("pointermove", { ...at, bubbles: true }));
+    }, 400);
+  }
+
+  // ?dump=<selector>: after 2 s, the matching elements' boxes go into body[data-dump] (read it
+  // with a headless browser's --dump-dom).
+  const dump = q.get("dump");
+  if (dump) {
+    setTimeout(() => {
+      const boxes = [...document.querySelectorAll(dump)].map((el) => {
+        const r = el.getBoundingClientRect();
+        return [el.className, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+      });
+      document.body.dataset.dump = JSON.stringify(boxes);
+    }, 2000);
+  }
+
   // The pointer touching the screen edge reveals an auto-hide dock (the real host does this).
   if (bar === "dock" && autohide) {
     let atEdge = false;
+    const edge = config.dock.position;
     window.addEventListener("pointermove", (e) => {
       const hit =
-        position === "bottom" ? e.clientY >= innerHeight - 2 : position === "left" ? e.clientX <= 1 : e.clientX >= innerWidth - 2;
+        edge === "bottom"
+          ? e.clientY >= innerHeight - 2
+          : edge === "top"
+            ? e.clientY <= 1
+            : edge === "left"
+              ? e.clientX <= 1
+              : e.clientX >= innerWidth - 2;
       if (hit && !atEdge) emit("reveal", null);
       atEdge = hit;
     });
@@ -201,12 +269,26 @@ export function createMockTransport(): Transport {
     if (flyout !== undefined) return reply(message.id, flyout);
     switch (message.method) {
       case "hello": {
+        // The bundled packs ship with the page (public/icons), as the host serves them.
+        if (config.icons && !look.iconPack) {
+          const base = `icons/${config.icons}/`;
+          fetch(`${base}icons.json`)
+            .then((r) => r.json() as Promise<Omit<IconPack, "base">>)
+            .then((pack) => {
+              look.iconPack = { ...pack, base };
+              request(message);
+            })
+            .catch(() => console.warn("[mock host] no icon pack", config.icons));
+          return;
+        }
         const result: Hello = {
           bar,
           monitor: { device: "\\\\.\\DISPLAY1", primary: true, width: innerWidth, height: innerHeight },
           config,
-          appearance,
-          themeCss: null,
+          look,
+          mode: { reduceMotion: q.has("reduce"), performance: q.has("perf") },
+          // The mock's window is the whole monitor.
+          backdrop: { url: art.snapshot, width: innerWidth, height: innerHeight, x: 0, y: 0 },
           dpi: 96,
         };
         reply(message.id, result);
@@ -259,6 +341,13 @@ export function createMockTransport(): Transport {
           emitApps();
         }
         break;
+      }
+      case "previewOpen": {
+        reply(
+          message.id,
+          message.params.hwnds.map((hwnd, i) => ({ hwnd, width: i % 2 ? 1280 : 1920, height: i % 2 ? 1024 : 1080 })),
+        );
+        return;
       }
       case "close": {
         const { hwnd } = message.params;

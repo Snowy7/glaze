@@ -33,6 +33,7 @@ pub const NIF_MESSAGE: u32 = 0x01;
 pub const NIF_ICON: u32 = 0x02;
 pub const NIF_TIP: u32 = 0x04;
 pub const NIF_STATE: u32 = 0x08;
+pub const NIF_INFO: u32 = 0x10;
 pub const NIF_GUID: u32 = 0x20;
 
 pub const NIS_HIDDEN: u32 = 0x1;
@@ -48,6 +49,7 @@ const NID_STATE: usize = 280;
 const NID_STATE_MASK: usize = 284;
 const NID_VERSION: usize = 800;
 const NID_GUID: usize = 936;
+const NID_BALLOON: usize = 952;
 
 /// The `hIcon` field's offset in a whole `SHELLTRAYDATA` (the host swaps in its own copy).
 pub const ICON_OFFSET: usize = 8 + NID_ICON;
@@ -93,6 +95,24 @@ pub struct Notify {
     pub version: u32,
     /// `guidItem`, when `NIF_GUID` is set.
     pub guid: Option<u128>,
+    /// A 32-bit `hBalloonIcon` (the balloon's own picture).
+    pub balloon: u32,
+}
+
+impl Notify {
+    /// The icon handles the call hands over, with their offsets in the whole `SHELLTRAYDATA`:
+    /// `hIcon` (with `NIF_ICON`) and `hBalloonIcon` (with `NIF_INFO`). Apps may destroy them
+    /// as soon as the call returns, so the host passes copies on.
+    pub fn handles(&self) -> Vec<(usize, u32)> {
+        [
+            (NIF_ICON, NID_ICON, self.icon),
+            (NIF_INFO, NID_BALLOON, self.balloon),
+        ]
+        .into_iter()
+        .filter(|&(flag, _, handle)| self.flags & flag != 0 && handle != 0)
+        .map(|(_, at, handle)| (8 + at, handle))
+        .collect()
+    }
 }
 
 /// Parses a `SHELLTRAYDATA`. Older or shorter senders are accepted: fields past the end of the
@@ -119,6 +139,7 @@ pub fn parse_notify(bytes: &[u8]) -> Option<Notify> {
         state_mask: u32_at(nid, NID_STATE_MASK),
         version: u32_at(nid, NID_VERSION),
         guid: guid.filter(|&g| g != 0),
+        balloon: u32_at(nid, NID_BALLOON),
     })
 }
 
@@ -652,6 +673,33 @@ mod tests {
     }
 
     #[test]
+    fn hands_over_the_icon_and_the_balloon_icon() {
+        let fields = [
+            (NID_FLAGS, NIF_ICON | NIF_INFO),
+            (NID_ICON, 0x0002_0DEF),
+            (NID_BALLOON, 0x0003_0123),
+        ];
+        let notify =
+            parse_notify(&shelltraydata(NIM_MODIFY, &fields, "", SHELLTRAYDATA_SIZE)).unwrap();
+        assert_eq!(
+            notify.handles(),
+            [(8 + NID_ICON, 0x0002_0DEF), (8 + NID_BALLOON, 0x0003_0123)]
+        );
+        // Each needs its flag; a struct too old to carry a balloon icon has none.
+        let tip_only = [(NID_FLAGS, NIF_TIP), (NID_ICON, 1), (NID_BALLOON, 2)];
+        let notify = parse_notify(&shelltraydata(
+            NIM_MODIFY,
+            &tip_only,
+            "",
+            SHELLTRAYDATA_SIZE,
+        ))
+        .unwrap();
+        assert_eq!(notify.handles(), []);
+        let notify = parse_notify(&shelltraydata(NIM_MODIFY, &fields, "", 8 + 936)).unwrap();
+        assert_eq!(notify.handles(), [(8 + NID_ICON, 0x0002_0DEF)]);
+    }
+
+    #[test]
     fn refuses_what_isnt_a_tray_message() {
         let mut bytes = shelltraydata(NIM_ADD, &[], "", SHELLTRAYDATA_SIZE);
         bytes[0] ^= 1;
@@ -682,6 +730,7 @@ mod tests {
             state_mask: 0,
             version: 0,
             guid: None,
+            balloon: 0,
         }
     }
 

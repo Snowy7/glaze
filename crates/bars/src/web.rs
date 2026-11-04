@@ -1,6 +1,7 @@
 //! WebView2 for the bars: one shared environment, one controller per bar window, showing the
-//! page from `https://bars.mypaper/` (`bars/shell/dist`) with icons from
-//! `https://icons.bars.mypaper/` (the icon cache).
+//! page from `https://bars.mypaper/` (`bars/shell/dist`) with images from their own virtual
+//! hosts: `icons.` (the app icon cache), `packs.` (icon packs), `backdrop.` (wallpaper
+//! snapshots) and `assets.bars.mypaper` (images `bars.json` names).
 //!
 //! WebView2 calls back on the main thread, from inside `DispatchMessage`; the callbacks only queue
 //! a [`WebEvent`] for the main loop.
@@ -10,18 +11,16 @@ use std::collections::VecDeque;
 use std::path::Path;
 use std::rc::Rc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
+use mypaper_desktop::webview_env;
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::{
-    CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
-    NavigationStartingEventHandler, NewWindowRequestedEventHandler,
-    PermissionRequestedEventHandler, ProcessFailedEventHandler, TrySuspendCompletedHandler,
-    WebMessageReceivedEventHandler, take_pwstr,
+    CreateCoreWebView2ControllerCompletedHandler, NavigationStartingEventHandler,
+    NewWindowRequestedEventHandler, PermissionRequestedEventHandler, ProcessFailedEventHandler,
+    TrySuspendCompletedHandler, WebMessageReceivedEventHandler, take_pwstr,
 };
 use windows::Win32::Foundation::{E_POINTER, HWND, RECT};
-use windows::core::{HSTRING, Interface, PCWSTR, PWSTR};
-
-use crate::icons::ICON_HOST;
+use windows::core::{HSTRING, Interface, PWSTR};
 
 pub const PAGE_HOST: &str = "bars.mypaper";
 pub const PAGE_URL: &str = "https://bars.mypaper/index.html";
@@ -46,33 +45,21 @@ pub enum WebEvent {
         bar: u32,
         kind: COREWEBVIEW2_PROCESS_FAILED_KIND,
     },
+    /// The page answered [`Web::probe_paint`]: what it was sent is on screen.
+    Painted { bar: u32 },
 }
 
 pub type Events = Rc<RefCell<VecDeque<WebEvent>>>;
 
-/// Starts creating the shared environment; the result arrives as [`WebEvent::Environment`].
+/// Starts creating the environment, shared by every bar and with the widget host (one browser
+/// process, docs/performance.md); the result arrives as [`WebEvent::Environment`].
 pub fn create_environment(generation: u64, events: &Events) -> Result<()> {
-    let data_dir = mypaper_bars::files::local("webview2-bars")?;
-    std::fs::create_dir_all(&data_dir)?;
     let events = events.clone();
-    let handler =
-        CreateCoreWebView2EnvironmentCompletedHandler::create(Box::new(move |result, env| {
-            let result = result.and_then(|()| env.ok_or_else(|| E_POINTER.into()));
-            events
-                .borrow_mut()
-                .push_back(WebEvent::Environment { generation, result });
-            Ok(())
-        }));
-    // SAFETY: valid strings and a COM handler that outlives the call.
-    unsafe {
-        CreateCoreWebView2EnvironmentWithOptions(
-            PCWSTR::null(),
-            &HSTRING::from(plain(&data_dir)),
-            None,
-            &handler,
-        )
-    }
-    .context("starting WebView2 (is the WebView2 Runtime installed?)")
+    webview_env::create_environment(&webview_env::shared_data_dir()?, move |result| {
+        events
+            .borrow_mut()
+            .push_back(WebEvent::Environment { generation, result });
+    })
 }
 
 /// Asks `env` for a WebView in `hwnd`; it arrives as [`WebEvent::Controller`].
@@ -111,10 +98,12 @@ pub struct Web {
     webview: ICoreWebView2,
 }
 
-/// Where the page and the icons come from.
+/// Where the page and its images come from. Each image folder is its own virtual host
+/// (`https://<host>/`), loaded cross-origin by the page.
 pub struct Folders<'a> {
     pub page: &'a Path,
-    pub icons: &'a Path,
+    /// `(host, folder)`: the app icon cache, icon packs, wallpaper snapshots, copied images.
+    pub images: &'a [(&'a str, &'a Path)],
 }
 
 impl Web {
@@ -175,13 +164,15 @@ impl Web {
                 &HSTRING::from(plain(folders.page)),
                 COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY,
             )?;
-            // Icons are plain images loaded cross-origin by the page.
-            std::fs::create_dir_all(folders.icons)?;
-            webview3.SetVirtualHostNameToFolderMapping(
-                &HSTRING::from(ICON_HOST),
-                &HSTRING::from(plain(folders.icons)),
-                COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW,
-            )?;
+            // Icons and other images are plain files loaded cross-origin by the page.
+            for (host, folder) in folders.images {
+                std::fs::create_dir_all(folder)?;
+                webview3.SetVirtualHostNameToFolderMapping(
+                    &HSTRING::from(*host),
+                    &HSTRING::from(plain(folder)),
+                    COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW,
+                )?;
+            }
 
             let mut token = 0i64;
             let events_for_messages = events.clone();
@@ -190,9 +181,12 @@ impl Web {
                     if let Some(args) = args {
                         let source = out_string(|p| args.Source(p))?;
                         let json = out_string(|p| args.WebMessageAsJson(p))?;
-                        events_for_messages
-                            .borrow_mut()
-                            .push_back(WebEvent::Message { bar, source, json });
+                        let event = if json == webview_env::PAINTED {
+                            WebEvent::Painted { bar }
+                        } else {
+                            WebEvent::Message { bar, source, json }
+                        };
+                        events_for_messages.borrow_mut().push_back(event);
                     }
                     Ok(())
                 })),
@@ -266,6 +260,13 @@ impl Web {
             self.controller
                 .MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)
         };
+    }
+
+    /// Asks the page to answer ([`WebEvent::Painted`]) once what it was just sent is on screen.
+    pub fn probe_paint(&self) {
+        let script = HSTRING::from(webview_env::PAINT_PROBE);
+        // SAFETY: COM call on a live WebView; no completion handler is needed.
+        let _ = unsafe { self.webview.ExecuteScript(&script, None) };
     }
 
     pub fn reload(&self) {

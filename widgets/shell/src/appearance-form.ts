@@ -3,7 +3,7 @@
 // once on release (`onCommit`); everything else saves as soon as it changes. The form never
 // re-renders when the host answers: it keeps its own copy of the layer.
 
-import { FONT_PRESETS, HEX, RANGES } from "./appearance";
+import { FONT_PRESETS, HEX, RANGES, STYLES } from "./appearance";
 import { h } from "./dom";
 import type { AppearanceValues, Layer, LayerPatch, SurfaceKind, TextTone } from "./protocol";
 
@@ -97,7 +97,7 @@ export function buildAppearanceForm(options: AppearanceFormOptions): AppearanceF
 
   // ---- control builders ----
 
-  function segmented<K extends "surface" | "text">(key: K, options: readonly AppearanceValues[K][]): Control {
+  function segmented<K extends "style" | "surface" | "text">(key: K, options: readonly AppearanceValues[K][]): Control {
     const group = h("div", "seg");
     group.setAttribute("role", "radiogroup");
     const buttons = options.map((option) => {
@@ -253,6 +253,7 @@ export function buildAppearanceForm(options: AppearanceFormOptions): AppearanceF
 
   // ---- the form, in the order of the spec ----
 
+  row("style", "Style", segmented("style", STYLES));
   row("surface", "Surface", segmented("surface", SURFACES));
   row("tint", "Tint", colorPicker("tint", false));
   const opacity = slider("opacity", pretty);

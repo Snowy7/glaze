@@ -125,6 +125,20 @@ pub struct Appearance {
     pub scale: Option<f32>,
     /// A soft text shadow, for legibility without a surface.
     pub shadow: Option<bool>,
+    /// The widget design language (depth, glow, gloss). Widgets only; bars ignore it.
+    pub style: Option<WidgetStyle>,
+}
+
+/// The design language of a widget (the kit's `data-style`): how its surface, borders and
+/// highlights are lit. `Minimal` is the flat look every widget started with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WidgetStyle {
+    Minimal,
+    Depth,
+    Neon,
+    Paper,
+    Aero,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -157,6 +171,7 @@ impl Appearance {
             font: self.font.clone().or_else(|| base.font.clone()),
             scale: self.scale.or(base.scale),
             shadow: self.shadow.or(base.shadow),
+            style: self.style.or(base.style),
         }
     }
 
@@ -256,6 +271,10 @@ pub struct WindowsStyle {
     pub backdrop: Option<Backdrop>,
     /// Force dark (`true`) or light (`false`) mode for apps and the system.
     pub dark_mode: Option<bool>,
+    /// A mouse cursor set: the name of a built-in or user set (`mypaper-dark`,
+    /// `mypaper-light`, a folder under `%APPDATA%\mypaper\cursors`), or a
+    /// folder of `.cur`/`.ani` files (absolute, or relative to the theme).
+    pub cursors: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -302,6 +321,10 @@ pub enum Wallpaper {
 pub struct WebWallpaper {
     /// An `http(s)://` URL, or a path to a local `.html` file.
     pub url: String,
+    /// Forward the mouse (move, buttons, wheel) to the page while the cursor
+    /// is over the bare desktop. Off by default: no input is read at all.
+    #[serde(default)]
+    pub interactive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -400,6 +423,10 @@ pub struct SceneWallpaper {
     /// Background / clear color, as linear RGB 0..1.
     #[serde(default = "default_background")]
     pub background: [f32; 3],
+    /// Drag with the left button over the bare desktop to orbit the camera.
+    /// Off by default: no input is read at all.
+    #[serde(default)]
+    pub interactive: bool,
 }
 
 fn default_fps() -> u32 {
@@ -480,6 +507,9 @@ impl LoadedTheme {
                 }
             }
             Wallpaper::App(a) => check_path(&a.command)?,
+        }
+        if theme.windows.as_ref().and_then(|w| w.cursors.as_deref()) == Some("") {
+            bail!("windows.cursors must name a cursor set or folder");
         }
         for skin in [&theme.widgets, &theme.bars].into_iter().flatten() {
             if let Some(appearance) = &skin.appearance {
@@ -628,6 +658,47 @@ mod tests {
     }
 
     #[test]
+    fn widget_style_is_lowercase_layers_and_rejects_unknown_variants() {
+        let appearance = |json: &str| serde_json::from_str::<Appearance>(json);
+        for (name, style) in [
+            ("minimal", WidgetStyle::Minimal),
+            ("depth", WidgetStyle::Depth),
+            ("neon", WidgetStyle::Neon),
+            ("paper", WidgetStyle::Paper),
+            ("aero", WidgetStyle::Aero),
+        ] {
+            let parsed = appearance(&format!(r#"{{ "style": "{name}" }}"#)).unwrap();
+            assert_eq!(parsed.style, Some(style));
+            assert_eq!(serde_json::to_value(&parsed).unwrap()["style"], name);
+        }
+        assert!(
+            appearance(r#"{ "style": "Neon" }"#).is_err(),
+            "case matters"
+        );
+        assert!(appearance(r#"{ "style": "glossy" }"#).is_err());
+
+        let theme = Appearance {
+            style: Some(WidgetStyle::Depth),
+            ..Default::default()
+        };
+        let none = Appearance::default();
+        assert_eq!(
+            none.over(&theme).style,
+            Some(WidgetStyle::Depth),
+            "unset keeps the layer below"
+        );
+        let user = Appearance {
+            style: Some(WidgetStyle::Aero),
+            ..Default::default()
+        };
+        assert_eq!(
+            user.over(&theme).style,
+            Some(WidgetStyle::Aero),
+            "the upper layer wins"
+        );
+    }
+
+    #[test]
     fn parses_web_app_and_windows_styling() {
         assert!(wallpaper(r#"{ "kind": "web", "url": "https://example.com" }"#).is_ok());
         assert!(wallpaper(r#"{ "kind": "web", "url": "../page.html" }"#).is_err());
@@ -644,6 +715,53 @@ mod tests {
         assert_eq!(style.corners, Some(Corners::Small));
         assert_eq!(style.dark_mode, None);
         assert!(parse(&json.replace("#ff8800", "orange")).is_err());
+    }
+
+    #[test]
+    fn interactive_is_opt_in_for_web_and_scene_only() {
+        let interactive = |json: &str| match wallpaper(json).unwrap() {
+            Wallpaper::Web(w) => w.interactive,
+            Wallpaper::Scene(s) => s.interactive,
+            other => panic!("unexpected {other:?}"),
+        };
+        assert!(!interactive(
+            r#"{ "kind": "web", "url": "https://example.com" }"#
+        ));
+        assert!(interactive(
+            r#"{ "kind": "web", "url": "a.html", "interactive": true }"#
+        ));
+        assert!(!interactive(r#"{ "kind": "scene", "source": "a.glb" }"#));
+        assert!(interactive(
+            r#"{ "kind": "scene", "source": "a.glb", "interactive": true }"#
+        ));
+        // Kinds that cannot use input reject the field, like any other typo.
+        assert!(
+            wallpaper(r#"{ "kind": "shader", "source": "a.wgsl", "interactive": true }"#).is_err()
+        );
+        assert!(wallpaper(r#"{ "kind": "web", "url": "a.html", "interactive": "yes" }"#).is_err());
+    }
+
+    #[test]
+    fn windows_cursors_names_a_set_or_folder() {
+        let cursors = |value: &str| {
+            let json = format!(
+                r#"{{ "name": "A", "wallpaper": {{ "kind": "image", "source": "x.jpg" }},
+                    "windows": {{ "cursors": {value} }} }}"#
+            );
+            parse(&json).map(|t| t.theme.windows.unwrap().cursors)
+        };
+        assert_eq!(
+            cursors(r#""mypaper-dark""#).unwrap().as_deref(),
+            Some("mypaper-dark")
+        );
+        assert_eq!(
+            cursors(r#""cursors\\mine""#).unwrap().as_deref(),
+            Some(r"cursors\mine")
+        );
+        assert!(cursors(r#""""#).is_err());
+        assert!(cursors("3").is_err());
+        let unset = r#"{ "name": "A", "wallpaper": { "kind": "image", "source": "x.jpg" }, "windows": {} }"#;
+        assert_eq!(parse(unset).unwrap().theme.windows.unwrap().cursors, None);
     }
 
     #[test]

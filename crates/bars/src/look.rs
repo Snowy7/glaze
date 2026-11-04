@@ -2,12 +2,16 @@
 //! theme's `bars` skin, under `bars.json` → `appearance`, resolved into plain values for the page,
 //! plus the theme's CSS. `accent: auto` takes the wallpaper palette's accent.
 
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
+use mypaper_bars::icon_pack::{self, IconPack};
+use mypaper_bars::vars::VarDecl;
 use mypaper_theme::{Appearance, Color, LoadedTheme, Paint, Surface, TextTone};
 use serde::{Deserialize, Serialize};
 
 use crate::bridge::BarKind;
+use crate::web::PAGE_HOST;
 
 /// Every appearance field, resolved.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -44,6 +48,7 @@ pub fn defaults(kind: BarKind) -> Appearance {
         font: Some(r#""Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif"#.into()),
         scale: Some(1.0),
         shadow: Some(false),
+        style: None,
     }
 }
 
@@ -84,6 +89,8 @@ pub struct ThemeSkin {
     pub dir: Option<PathBuf>,
     pub appearance: Option<Appearance>,
     pub css: Option<String>,
+    /// The variables its CSS declares (`@mypaper-vars`).
+    pub vars: BTreeMap<String, VarDecl>,
 }
 
 impl ThemeSkin {
@@ -102,10 +109,20 @@ impl ThemeSkin {
                         .inspect_err(|e| log::warn!("theme bars css {}: {e}", path.display()))
                         .ok()
                 });
+                let vars = css
+                    .as_deref()
+                    .map(mypaper_bars::vars::declared)
+                    .transpose()
+                    .unwrap_or_else(|e| {
+                        log::warn!("theme bars css variables: {e:#}");
+                        None
+                    })
+                    .unwrap_or_default();
                 Self {
                     dir: Some(loaded.dir),
                     appearance: skin.appearance,
                     css,
+                    vars,
                 }
             }
             Err(e) => {
@@ -114,6 +131,48 @@ impl ThemeSkin {
             }
         }
     }
+}
+
+/// The virtual host `%APPDATA%\mypaper\icons\` (user icon packs) is mapped to.
+pub const PACKS_HOST: &str = "packs.bars.mypaper";
+
+/// An icon pack as the page gets it: the pack plus where its files are served.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Pack {
+    #[serde(flatten)]
+    pub pack: IconPack,
+    /// Ends with `/`.
+    pub base: String,
+}
+
+/// `%APPDATA%\mypaper\icons\`.
+pub fn packs_dir() -> Option<PathBuf> {
+    mypaper_config::dir().ok().map(|dir| dir.join("icons"))
+}
+
+/// Loads pack `name`: the user's folder first, then the ones bundled with the page.
+pub fn load_pack(name: &str, page: Option<&Path>) -> Option<Pack> {
+    let user = packs_dir();
+    let bundled = page.map(|page| page.join("icons"));
+    let (dir, host) = [(user, PACKS_HOST), (bundled, PAGE_HOST)]
+        .into_iter()
+        .find_map(|(root, host)| {
+            let dir = icon_pack::find(name, &[root?])?;
+            Some((dir, host))
+        })
+        .or_else(|| {
+            log::warn!("icon pack {name:?} not found");
+            None
+        })?;
+    let base = if host == PAGE_HOST {
+        format!("https://{host}/icons/{name}/")
+    } else {
+        format!("https://{host}/{name}/")
+    };
+    IconPack::load(&dir)
+        .inspect_err(|e| log::warn!("icon pack {name:?}: {e:#}"))
+        .ok()
+        .map(|pack| Pack { pack, base })
 }
 
 /// The wallpaper palette's accent (`%LOCALAPPDATA%\mypaper\palette.json`), if there is one.

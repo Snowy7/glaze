@@ -4,11 +4,23 @@
 //! directly; app.rs only calls in.
 
 use super::*;
+use crate::bridge::bar_modules;
+use mypaper_bars::{Module, ModuleRef};
+
+/// A Windows key press the main loop gets to later than this (it was busy) is dropped: a
+/// launcher popping up seconds after the press would take the keyboard from whatever the user
+/// went on to do.
+const STALE_PRESS: Duration = Duration::from_millis(500);
+
+/// Whether a bar shows a built-in module.
+fn has_module(bar: &Bar, module: Module) -> bool {
+    bar_modules(bar.kind, &bar.config).any(|m| *m == ModuleRef::Builtin(module))
+}
 
 impl App {
     /// Whether a bar shows a topic: one of its modules, or a flyout open on it.
     pub(super) fn shows(&self, bar: &Bar, topic: Topic) -> bool {
-        bar_topics(bar.kind, &self.config.top).contains(&topic)
+        bar_topics(bar.kind, &bar.config).contains(&topic)
             || self.flyouts.watches.watching(bar.id, Watched::Core(topic))
     }
 
@@ -52,8 +64,8 @@ impl App {
                 self.bars[index].set_room(extent);
                 done
             }
-            Request::Keyboard { on } => {
-                self.take_keyboard(index, on);
+            Request::Keyboard { on, hand_back } => {
+                self.take_keyboard(index, on, hand_back);
                 done
             }
             // The shell's HSHELL_LANGUAGE (or the next foreground change) updates the module.
@@ -95,7 +107,15 @@ impl App {
             }
         };
         match done {
-            Done::Reply { bar, id, result } => {
+            Done::Reply {
+                bar,
+                page,
+                id,
+                result,
+            } => {
+                if !self.flyouts.current_page(bar, page) {
+                    return; // the page reloaded: `id` may be one of its new requests
+                }
                 let message = match result {
                     Ok(result) => json!({ "id": id, "result": result }),
                     Err(error) => {
@@ -118,7 +138,7 @@ impl App {
                     post_to(&self.bars, bar, &message);
                 }
             }
-            Done::WinKey => self.open_launcher(),
+            Done::WinKey(at) => self.open_launcher(at),
             Done::Index(apps) => {
                 let (value, replies) = self.flyouts.index_built(apps);
                 for (bar, id, result) in replies {
@@ -148,7 +168,11 @@ impl App {
             && self.wanted_taskbar().mode == TaskbarMode::Hide
             && !self.bars.is_empty();
         match (wanted, self.winkey.is_some()) {
-            (true, false) => self.winkey = WinKey::start(self.waker.clone()),
+            (true, false) => {
+                // From now on `refresh_fullscreen` keeps it current.
+                WinKey::set_fullscreen(mypaper_desktop::fullscreen_app_monitor().is_some());
+                self.winkey = WinKey::start(self.waker.clone(), self.broadcast);
+            }
             (false, true) => self.winkey = None,
             _ => {}
         }
@@ -157,10 +181,16 @@ impl App {
         );
     }
 
-    /// A lone Windows key press: the launcher opens on the monitor the user works on (the app in
-    /// front's), on its top bar if it has one, and takes the keyboard. With no bar to show it,
-    /// the native Start menu opens instead.
-    pub(super) fn open_launcher(&mut self) {
+    /// A lone Windows key press (at `at`): the launcher opens on the monitor the user works on
+    /// (the app in front's), on a bar with the start module if there's one, and takes the
+    /// keyboard. With no bar to show it, the native Start menu opens instead.
+    pub(super) fn open_launcher(&mut self, at: Instant) {
+        if at.elapsed() > STALE_PRESS {
+            return log::info!(
+                "launcher: a Windows key press {:?} old; not opening",
+                at.elapsed()
+            );
+        }
         let mut rect = windows::Win32::Foundation::RECT::default();
         let center = self.foreground.and_then(|window| {
             // SAFETY: a read-only query; `rect` outlives it.
@@ -173,11 +203,6 @@ impl App {
             .ok()
             .map(|()| ((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2))
         });
-        let start = self
-            .config
-            .top
-            .modules()
-            .any(|m| m == mypaper_bars::Module::Start);
         let index = self
             .bars
             .iter()
@@ -185,19 +210,22 @@ impl App {
             .filter(|(_, b)| b.ready && !b.hidden)
             .max_by_key(|(_, b)| {
                 let here = center.is_some_and(|(x, y)| b.monitor.rect.contains_point(x, y));
-                (here, b.kind == BarKind::Top && start, b.monitor.primary)
+                let start = has_module(b, Module::Start);
+                (here, start, b.kind == BarKind::Top, b.monitor.primary)
             })
             .map(|(index, _)| index);
         let Some(index) = index else {
             return system::start_menu();
         };
-        self.take_keyboard(index, true);
+        self.take_keyboard(index, true, false);
         self.post_event(index, "open", &json!({ "flyout": "launcher" }));
     }
 
     /// Makes the bar the foreground window with the keyboard in its page (a flyout that types),
-    /// or gives the foreground back to the app.
-    pub(super) fn take_keyboard(&mut self, index: usize, on: bool) {
+    /// or lets it go: with `hand_back` (the page saw no press close it) the app that was in
+    /// front gets the foreground back. A press closed it otherwise: that click keeps the bar, or
+    /// whatever it hit, in front.
+    pub(super) fn take_keyboard(&mut self, index: usize, on: bool, hand_back: bool) {
         let bar = &self.bars[index];
         if on {
             self.keyboard = Some(bar.id);
@@ -223,9 +251,8 @@ impl App {
                 GetWindowThreadProcessId(GetForegroundWindow(), Some(&mut pid));
                 pid == std::process::id()
             };
-            // A press (on another module) closed it: that click keeps the bar in front. Escape,
-            // or opening an app, hands it back (an app that took it is left alone).
-            if ours && !mouse_button_down() {
+            // An app that took the foreground (one just launched) is left alone.
+            if hand_back && ours {
                 self.hand_back(None);
             }
         }
@@ -253,40 +280,35 @@ impl App {
 
     // --- The tray -----------------------------------------------------------------------------------
 
-    /// The tray host runs while a tray module is on screen and the native taskbar is replaced
-    /// (`taskbar.mode: hide`, or `tray.host`); otherwise UI Automation reads Explorer's.
+    /// The tray host runs while some bar is configured with a tray module and the native
+    /// taskbar is replaced (`taskbar.mode: hide`, or `tray.host`). Configuration, not what's on
+    /// screen right now: each start and stop makes every app re-add its icons. Otherwise UI
+    /// Automation reads Explorer's tray, while a tray module is on screen.
     pub(super) fn sync_tray(&mut self) {
-        let shown = self.active.contains(&Topic::Tray);
+        let configured = self.bars.iter().any(|b| has_module(b, Module::Tray));
         let replaced = self.wanted_taskbar().mode == TaskbarMode::Hide || self.config.tray.host;
-        let host = shown && replaced;
+        let host = configured && replaced;
         if host != self.tray_host.active() {
             // The other source reports its own list.
             self.tray_items.clear();
         }
-        self.tray.set_active(shown && !host);
+        self.tray
+            .set_active(self.active.contains(&Topic::Tray) && !host);
         self.tray_host.set_active(host);
         self.place_tray();
     }
 
-    /// Tells the host where the tray is: the band of the first top bar showing it (the primary
-    /// monitor's if it has one). Apps put their popups there.
+    /// Tells the host where the tray is: the band of a bar showing it (the primary monitor's,
+    /// and one on screen, first). Apps put their popups there.
     pub(super) fn place_tray(&mut self) {
-        let shows = self
-            .config
-            .top
-            .modules()
-            .any(|m| m == mypaper_bars::Module::Tray);
         let band = self
             .bars
             .iter()
-            .filter(|b| shows && b.kind == BarKind::Top && !b.hidden)
-            .max_by_key(|b| b.monitor.primary)
-            .map(|bar| {
-                let height = (bar.geometry.thickness * bar.scale()).round() as i32;
-                tray_host::Band {
-                    rect: [bar.rect.x, bar.rect.y, bar.rect.width, height],
-                    edge: 1, // ABE_TOP
-                }
+            .filter(|b| has_module(b, Module::Tray))
+            .max_by_key(|b| (!b.hidden, b.monitor.primary))
+            .map(|bar| tray_host::Band {
+                rect: [bar.band.x, bar.band.y, bar.band.width, bar.band.height],
+                edge: bar.geometry.edge.abe(),
             });
         self.tray_host.place(band);
     }
@@ -319,15 +341,4 @@ impl App {
         self.tray_host
             .click(id, click, (cursor.x, cursor.y), anchor);
     }
-}
-
-/// Is a mouse button held right now (physically or by injected input)?
-fn mouse_button_down() -> bool {
-    use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
-    };
-    [VK_LBUTTON, VK_RBUTTON, VK_MBUTTON]
-        .into_iter()
-        // SAFETY: no preconditions.
-        .any(|vk| unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16 & 0x8000 != 0)
 }

@@ -11,16 +11,18 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use mypaper_config::Config;
 use mypaper_desktop::{
-    EXIT_RESTART, Rect, WindowEvents, covered_monitors, fullscreen_app_in_front, monitors,
+    EXIT_RESTART, Rect, WindowEvents, covered_monitors, fullscreen_app_in_front, monitors, startup,
 };
 use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
-use crate::gpu::{Gpu, Screen};
+use crate::backdrop::{Backdrop, Draw};
+use crate::gpu::{Gpu, Opening, Screen};
 use crate::hold::{Fact, HoldReasons, Holds};
 use crate::palette;
+use crate::snapshot::{Snapshot, Target};
 use crate::sources::{self, Frame, Redraw, Source, Visibility};
 use crate::window::Window;
 
@@ -66,22 +68,45 @@ pub struct Engine {
     reasons: HoldReasons,
     /// The loaded theme's palette has not been written yet (once per load).
     palette_due: bool,
+    /// Publishes each screen's blurred frame for the bars (see `backdrop`).
+    backdrop: Backdrop,
+    /// Sets a still of the theme as the Windows wallpaper (desktop mode, `static_snapshot`).
+    snapshot: Snapshot,
 }
 
 impl Engine {
+    /// Takes the device `gpu` is opening (see [`Opening`]) and shows `theme` in `windows`.
     pub fn new(
         theme: LoadedTheme,
+        gpu: Opening,
         windows: Vec<Window>,
         monitors: Option<Vec<Rect>>,
     ) -> Result<Self> {
-        let (gpu, surfaces) = Gpu::new(&windows)?;
-        let screens: Vec<Screen> = surfaces
+        let (gpu, surfaces) = Gpu::new(gpu, &windows)?;
+        startup::ready("wallpaper", "device_ms");
+        let mut screens: Vec<Screen> = surfaces
             .into_iter()
             .zip(windows)
             .map(|(surface, window)| Screen::new(&gpu, surface, window))
             .collect::<Result<_>>()?;
+        // Only what can be seen is drawn, from the first frame on: a screen a window already
+        // covers starts paused, and makes its swapchain (the costliest part of a first frame,
+        // 50-150 ms here) only once it's uncovered.
+        if let Some(known) = &monitors {
+            for (screen, covered) in screens.iter_mut().zip(covered_monitors(known)) {
+                if covered {
+                    let (w, h) = screen.size();
+                    log::info!("pausing {w}x{h} screen");
+                    screen.paused = true;
+                }
+            }
+        }
         let hwnds: Vec<HWND> = screens.iter().map(|s| s.window.0).collect();
-        let source = load_or_broken(&gpu, &theme, &hwnds);
+        let (source, loaded) = load_or_broken(&gpu, &theme, &hwnds);
+        startup::ready("wallpaper", "source_ms");
+        let mut snapshot = Snapshot::new();
+        snapshot.theme_loaded(loaded);
+        let backdrop = Backdrop::new(monitors.as_deref(), |i| source.native(i));
         Ok(Self {
             theme,
             gpu,
@@ -100,7 +125,18 @@ impl Engine {
             holds: Holds::default(),
             reasons: HoldReasons::default(),
             palette_due: true,
+            backdrop,
+            snapshot,
         })
+    }
+
+    /// Follows `static_snapshot`: on, the theme's first frame becomes the Windows wallpaper;
+    /// off, the user's own wallpaper is put back. Does nothing in the dev window, which must
+    /// not touch the real desktop.
+    pub fn set_static_snapshot(&mut self, on: bool) {
+        if self.monitors.is_some() && self.snapshot.set_enabled(on) {
+            self.mark_dirty();
+        }
     }
 
     pub fn schedule_reload(&mut self) {
@@ -272,6 +308,8 @@ impl Engine {
         // SAFETY: `cursor` outlives the call.
         let _ = unsafe { GetCursorPos(&mut cursor) };
         let mut drew = false;
+        let animated = !matches!(self.source.redraw(self.clock), Redraw::OnChange);
+        let mut native = false;
         for (index, screen) in self.screens.iter_mut().enumerate() {
             if screen.paused || !(due || screen.dirty) {
                 continue;
@@ -279,7 +317,11 @@ impl Engine {
             if self.source.native(index) {
                 // The source owns what is on screen: nothing to acquire or present.
                 screen.dirty = false;
+                native = true;
                 self.source.layout(index, screen.window.0, screen.size());
+                if self.palette_due {
+                    startup::ready("wallpaper", "first_frame_ms");
+                }
                 continue;
             }
             let Some(texture) = screen.acquire(&self.gpu) else {
@@ -304,20 +346,58 @@ impl Engine {
                     encoder: &mut encoder,
                 },
             );
+            let publish = self.backdrop.encode(
+                &self.gpu,
+                Draw {
+                    screen: index,
+                    size: screen.size(),
+                    texture: &texture.texture,
+                    copy_src: screen.copy_src,
+                    held: self.held,
+                    animated,
+                },
+                &mut encoder,
+            );
             self.gpu.queue.submit([encoder.finish()]);
             self.gpu.queue.present(texture);
+            if publish {
+                self.backdrop.finish(&self.gpu, index);
+            }
             self.source.presented(index);
             drew = true;
         }
 
         // First frame of a newly loaded theme: publish its palette, once.
         if drew && std::mem::take(&mut self.palette_due) {
+            startup::ready("wallpaper", "first_frame_ms");
             let size = self.screens.first().map_or((1, 1), Screen::size);
             palette::publish(
                 &self.gpu,
                 self.source.as_mut(),
                 &self.theme.dir,
                 size,
+                self.clock,
+                self.frame,
+            );
+        }
+
+        // Once per theme load, too: the same frame, full size, for the Windows wallpaper (a
+        // native source has none to give, which the snapshot answers by restoring the original).
+        if (drew || native) && self.snapshot.due() {
+            let monitors = self.monitors.iter().flatten();
+            let targets: Vec<Target> = monitors
+                .zip(&self.screens)
+                .map(|(rect, screen)| Target {
+                    rect: *rect,
+                    size: screen.size(),
+                    mouse: [(cursor.x - rect.x) as f32, (cursor.y - rect.y) as f32],
+                })
+                .collect();
+            self.snapshot.capture(
+                &self.gpu,
+                self.source.as_mut(),
+                &self.theme.dir,
+                &targets,
                 self.clock,
                 self.frame,
             );
@@ -343,6 +423,8 @@ impl Engine {
         self.source = source;
         self.theme = theme;
         self.palette_due = true;
+        self.backdrop.reset(|i| self.source.native(i));
+        self.snapshot.theme_loaded(true);
         self.next_frame = Instant::now();
         // A new source starts with every screen visible.
         self.shown.fill(Visibility::Live);
@@ -359,17 +441,17 @@ impl Engine {
 }
 
 /// A theme that fails at startup shows the red "broken" screen and keeps
-/// watching for a fix, instead of exiting.
-fn load_or_broken(gpu: &Gpu, theme: &LoadedTheme, screens: &[HWND]) -> Box<dyn Source> {
+/// watching for a fix, instead of exiting. Also says whether the theme loaded.
+fn load_or_broken(gpu: &Gpu, theme: &LoadedTheme, screens: &[HWND]) -> (Box<dyn Source>, bool) {
     let started = Instant::now();
     match sources::load(gpu, theme, screens) {
         Ok(source) => {
             log::info!("{} ready in {:.1?}", theme.theme.name, started.elapsed());
-            source
+            (source, true)
         }
         Err(e) => {
             log::error!("{e:#}");
-            Box::new(sources::Broken)
+            (Box::new(sources::Broken), false)
         }
     }
 }

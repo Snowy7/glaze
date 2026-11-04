@@ -230,8 +230,10 @@ Methods, both taking `{ lat, lon }` **or** `{ city }` (coordinates win), plus op
 - `current` returns
   `{ location: { name, country?, lat, lon }, units: { temperature, speed, precipitation }, time, temperature, apparent, humidity, wind, wind_direction, precipitation, code, condition, icon, is_day }`.
 - `forecast` also takes `days` (1 to 7, default 5) and returns
-  `{ location, units, days: [{ date, code, condition, icon, min, max, precipitation_probability? }] }`,
-  starting with today.
+  `{ location, units, days: [{ date, code, condition, icon, min, max, precipitation_probability? }], hourly: [{ time, temperature, code, condition, icon, precipitation_probability?, is_day }] }`.
+  `days` starts with today. `hourly` is always the next 24 hours (not cut by `days`), starting with
+  the current hour: `time` is local to the place (`"2026-11-03T22:00"`), and `icon` is the night
+  variant when `is_day` is false (the daily icons are always the daytime ones).
 
 `city` may be `"Paris, Texas"`: the part after the comma picks between matches by country, country
 code or region. `icon` is one of `clear-day`, `clear-night`, `partly-cloudy-day`,

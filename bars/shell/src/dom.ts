@@ -18,6 +18,14 @@ export function button(className: string, ...children: (Node | string)[]): HTMLB
   return el;
 }
 
+/**
+ * A bar surface (the top bar, an island, the dock's pill): its look comes from the `--s-*`
+ * variables (style/look.ts). The `.bg` layer holds the fill, and wallpaper glass, under the tint.
+ */
+export function surface(className: string, ...children: (Node | string)[]): HTMLDivElement {
+  return h("div", `surface ${className}`, h("div", "bg"), ...children);
+}
+
 /** A glyph box holding trusted inline SVG from icons.ts. */
 export function glyph(markup = "", className = ""): HTMLSpanElement {
   const el = h("span", className ? `glyph ${className}` : "glyph");

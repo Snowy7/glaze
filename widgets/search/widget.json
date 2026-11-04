@@ -2,7 +2,7 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "search",
   "name": "Search",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "mypaper",
   "description": "A search box that opens your default browser, with the engine of your choice.",
   "entry": "index.html",

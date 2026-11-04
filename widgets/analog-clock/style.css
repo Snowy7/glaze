@@ -1,17 +1,37 @@
-/* The face is an SVG in a 100x100 box that fills the card and stays square and centered. Stroke
-   widths are in screen px (non-scaling) built from --u, which grows slowly with the widget. */
+/* The face is an SVG in a 100x100 box over a disc (a kit `.tile`, so each style gives the dial its
+   own body: raised, glowing, pressed or glassy). Both stay square and centered. Stroke widths are in
+   screen px (non-scaling) built from --u, which grows slowly with the widget. */
 
 .card {
   display: grid;
-  place-items: center;
   padding: clamp(8px, 5cqmin, 14px);
 }
 html[data-surface="none"] .card {
   padding: clamp(2px, 2cqmin, 6px);
 }
 
+.dial-box {
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+  display: grid;
+  place-items: center;
+}
+.dial {
+  position: relative;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+}
+.face {
+  position: absolute;
+  inset: 1%;
+  border-radius: 50%;
+}
+
 .clock {
   --u: clamp(0.8px, 0.55cqmin, 2.4px);
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   overflow: visible;
@@ -21,14 +41,19 @@ html[data-surface="none"] .card {
 .clock :is(line, circle) {
   vector-effect: non-scaling-stroke;
 }
+.g0 {
+  stop-color: var(--hi-2);
+}
+.g1 {
+  stop-color: var(--hi);
+}
 
 .ring {
   stroke: var(--t3);
   stroke-width: calc(var(--u) * 0.9);
 }
-/* A surface gets a faint dial; a bare wallpaper keeps just the ring. */
-html:not([data-surface="none"]) .ring {
-  fill: var(--fill-1);
+html[data-style]:not([data-style="minimal"]) .ring {
+  stroke: var(--fill-3);
 }
 
 .tick.minor {
@@ -38,6 +63,11 @@ html:not([data-surface="none"]) .ring {
 .tick.major {
   stroke: var(--t1);
   stroke-width: calc(var(--u) * 1.3);
+}
+/* 12 o'clock is the one marker in the highlight. */
+.tick.twelve {
+  stroke: var(--hi);
+  stroke-width: calc(var(--u) * 1.8);
 }
 
 /* SVG text takes the page's text shadow too; the svg's drop-shadow already covers legibility. */
@@ -55,11 +85,21 @@ html:not([data-surface="none"]) .ring {
   font-variant-numeric: tabular-nums;
 }
 .date {
-  font-size: 5px;
+  font-size: 4.6px;
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  fill: var(--t2);
+  fill: var(--t1);
+}
+/* A little window for the date, in the styled looks. */
+.date-bg {
+  fill: none;
+  stroke: none;
+}
+html[data-style]:not([data-style="minimal"]) .date-bg {
+  fill: rgb(var(--shade) / 0.22);
+  stroke: var(--fill-2);
+  stroke-width: 0.4px;
 }
 
 .hand {
@@ -74,7 +114,7 @@ html:not([data-surface="none"]) .ring {
   stroke-width: calc(var(--u) * 2);
 }
 .sec {
-  stroke: var(--accent);
+  stroke: url(#sec-grad);
   stroke-width: calc(var(--u) * 0.9);
   /* A ticking hand settles with a tiny overshoot; `.snap` and the smooth sweep have none. */
   transition: transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1);
@@ -88,20 +128,38 @@ html:not([data-surface="none"]) .ring {
   stroke: none;
 }
 .hub-sec {
-  fill: var(--accent);
+  fill: var(--hi);
   stroke: none;
+}
+
+/* The hands stand off the dial: a soft shadow in depth and aero, a glow in neon. */
+html[data-style="depth"] .hands,
+html[data-style="aero"] .hands {
+  filter: drop-shadow(0 1px 1.2px rgb(var(--shade) / 0.5)) drop-shadow(0 2px 3px rgb(var(--shade) / 0.25));
+}
+html[data-style="paper"] .hands {
+  filter: drop-shadow(0 1px 0 rgb(var(--shade) / 0.35));
+}
+html[data-style="neon"] .hands :is(.hour, .minute) {
+  stroke: var(--t0);
+  filter: drop-shadow(0 0 2px rgb(var(--spark-rgb) / 0.9));
+}
+html[data-style="neon"] .tick.major {
+  stroke: var(--hi-2);
 }
 
 /* Small faces: only the hour ticks, no numerals or date. */
 @container (max-width: 135px), (max-height: 135px) {
   .tick.minor,
   #numerals,
-  .date {
+  .date,
+  .date-bg {
     display: none;
   }
 }
 @container (max-width: 175px), (max-height: 175px) {
-  .date {
+  .date,
+  .date-bg {
     display: none;
   }
 }

@@ -20,7 +20,8 @@ pub enum Edge {
 }
 
 impl Edge {
-    fn abe(self) -> u32 {
+    /// The `ABE_*` value.
+    pub fn abe(self) -> u32 {
         match self {
             Self::Top => ABE_TOP,
             Self::Bottom => ABE_BOTTOM,

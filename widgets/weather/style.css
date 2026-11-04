@@ -1,299 +1,715 @@
-/* main.js sets data-layout from the pixel size:
-   tiny   (2x1)        current conditions only
-   side   (3x1, 4x1)   current on the left, forecast columns on the right
-   stack  (2x2)        current on top, forecast rows below
-   full   (3x2, 4x2)   current on top, forecast columns below
-   Groups are separated by spacing and hairlines, never boxes: there may be no surface at all. */
+/* main.js sets, on .card:
+   data-variant  card | compact | forecast (the user's choice)
+   data-layout   from the size: mini (one short row) | strip (one wide row) | stack | tall | side
+   data-days     rows | cols (how the days are laid out)
+   data-state    loading | ready | error       data-motion  on | off
+   The grid areas below say what each layout holds; counts of hours and days come from main.js,
+   which measures their boxes. Groups are separated by spacing, never by boxes where there may be no
+   surface; the hourly slots are .tile, which the style paints even on a bare wallpaper. */
 
-/* Icons are line art on a 24-unit grid. Each one sets --isz (its size in px, unitless) and the
-   stroke follows, so the line stays a thin ~1.7px at every size. */
-svg.icon,
-.day svg,
-.status svg {
-  --isz: 24;
-  width: calc(var(--isz) * 1px);
-  height: calc(var(--isz) * 1px);
-  fill: none;
-  stroke: currentColor;
-  stroke-width: calc(41 / var(--isz));
-  stroke-linecap: round;
-  stroke-linejoin: round;
+:root {
+  /* Artwork colors (the only free colors here). The glows borrow a little of the style's highlight. */
+  --sun-1: #fff3b0; /* art */
+  --sun-2: #ffad33; /* art */
+  --sun-glow: color-mix(in srgb, var(--hi) 20%, #ffb340); /* art */
+  --moon-1: #fffbe8; /* art */
+  --moon-2: #d6d0b4; /* art */
+  --moon-glow: color-mix(in srgb, var(--hi) 30%, #cfd8ff); /* art */
+  --cl-1: #ffffff; /* art */
+  --cl-2: #c8d4ec; /* art */
+  --clg-1: #eef1f8; /* art */
+  --clg-2: #8e9bb8; /* art */
+  --cld-1: #a8b2cc; /* art */
+  --cld-2: #4a5470; /* art */
+  --rain: #8ec9ff; /* art */
+  --bolt-1: #fff6b3; /* art */
+  --bolt-2: #ffc53a; /* art */
 }
 
 .card {
+  --gap: clamp(8px, 3cqmin, 14px);
+  --art: 80px;
+  --temp: 40px;
   display: grid;
-  gap: 10px 14px;
+  gap: var(--gap);
+}
+.card > * {
+  min-width: 0;
+  min-height: 0;
 }
 
+/* ---------------------------------------------------------------- the icons (small, two-tone) */
+
+/* The artwork's edge: a rim of light in light text, a slate line in dark text. */
+/* (A pale cloud on a light photo needs one; the kit's own shadow is pale there.) */
+html {
+  --art-line: rgb(var(--ink) / 0.22); /* art */
+  --art-edge: transparent; /* art */
+}
+html[data-text="dark"] {
+  --art-line: rgb(52 72 118 / 0.5); /* art */
+  --art-edge: rgb(52 72 118 / 0.45); /* art */
+}
+html[data-text] .card svg:is(.ico, .mini-ico, .status-ico) {
+  filter: drop-shadow(0 0 0.6px var(--art-edge)) drop-shadow(0 1px 2px var(--art-edge));
+}
+
+.ico,
+.mini-ico,
+.status-ico {
+  display: block;
+  flex: none;
+}
+.ico {
+  width: 24px;
+  height: 24px;
+}
+.cl {
+  fill: url(#g-cloud);
+}
+.cl.grey {
+  fill: url(#g-cloud-grey);
+}
+.cl.dark {
+  fill: url(#g-cloud-dark);
+}
+.rays-i,
+.rain-i,
+.bar-i {
+  fill: none;
+  stroke-linecap: round;
+}
+.rays-i {
+  stroke: var(--sun-2);
+  stroke-width: 2.4;
+}
+.rain-i {
+  stroke: var(--rain);
+  stroke-width: 2.4;
+}
+.bar-i {
+  stroke: var(--cl-2);
+  stroke-width: 2.4;
+}
+.drop-i {
+  stroke: var(--rain);
+  stroke-width: 2.8;
+  stroke-linecap: round;
+}
+.snow-i {
+  stroke: var(--cl-1);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+}
+
+/* ---------------------------------------------------------------- now */
+
 .now {
+  grid-area: now;
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
+  gap: var(--gap);
+}
+.vis {
+  position: relative;
+  width: var(--art);
+  height: var(--art);
+}
+.art,
+.mini-ico {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.mini-ico {
+  display: none;
+}
+/* The scene is animated artwork: no shared drop shadow on it (it would be re-rendered every frame). */
+.card .art {
+  filter: none !important;
+}
+.card:is([data-variant="compact"], [data-variant="forecast"]) .art {
+  display: none;
+}
+.card:is([data-variant="compact"], [data-variant="forecast"]) .mini-ico {
+  display: block;
+}
+
+.meta {
+  display: grid;
+  align-content: center;
+  gap: 0.12em;
   min-width: 0;
 }
-.icon {
-  color: var(--t0);
-}
 .temp {
+  font-size: var(--temp);
   font-weight: 300;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  color: var(--t0);
+  letter-spacing: -0.045em;
+  line-height: 0.95;
 }
 .cond {
+  font-size: clamp(12px, calc(var(--temp) * 0.3), 16px);
   font-weight: 600;
   color: var(--t0);
 }
+/* The place and today's range: side by side when short, stacked when there is height. */
+.sub {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7em;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.card:is([data-layout="tall"], [data-layout="side"]) .sub {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15em;
+}
 .place {
+  flex: 0 1 auto;
   color: var(--t2);
 }
-.range {
+.hilo {
+  flex: none;
+  font-size: clamp(11px, calc(var(--temp) * 0.26), 14px);
   color: var(--t1);
 }
 
-.days {
+/* ---------------------------------------------------------------- the hourly strip */
+
+.hours {
+  grid-area: hours;
   display: none;
-  min-width: 0;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+  align-self: end;
+}
+.slot {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  padding: 5px 2px 4px;
+  text-align: center;
+}
+.slot .t {
+  letter-spacing: 0.06em;
+}
+.slot .v {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t0);
+}
+.slot .p {
+  min-height: 1.1em;
+  font-size: 9.5px;
+  line-height: 1.1;
+  color: var(--t2);
+}
+/* No slot has a chance of rain to show: don't reserve the line. */
+.hours[data-no-p] .p {
+  display: none;
+}
+/* The current hour. */
+.slot.cur {
+  outline: 1.5px solid color-mix(in srgb, var(--hi) 65%, transparent);
+  outline-offset: -1px;
+}
+.slot.cur .t {
+  color: var(--t0);
+}
+/* Flat styles paint no body on a bare wallpaper: the current hour gets a faint one. */
+html[data-style="minimal"] .slot.cur,
+html:not([data-style]) .slot.cur {
+  background: var(--fill-2);
+}
+
+/* ---------------------------------------------------------------- the days */
+
+.days {
+  grid-area: days;
+  display: none;
+  min-height: 0;
+  overflow: hidden;
 }
 .day {
   display: grid;
   align-items: center;
-  justify-items: center;
-  min-width: 0;
-  color: var(--t1);
 }
-.day .name {
-  color: var(--t2);
+.day .d {
+  grid-area: d;
   font-weight: 600;
+  color: var(--t0);
+}
+.day .ico {
+  grid-area: ico;
+}
+.day .pp {
+  grid-area: pp;
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  color: var(--t2);
 }
 .day .hi {
+  grid-area: hi;
+  font-weight: 600;
   color: var(--t0);
-  font-weight: 500;
 }
 .day .lo {
+  grid-area: lo;
   color: var(--t2);
 }
-.day svg {
-  color: var(--t0);
+.day .track {
+  grid-area: track;
+  height: 4px;
 }
-
-/* Loading and errors live in the layout, in place of the content, so they read on any surface. */
-.status {
-  display: none;
-  place-items: center;
-  align-content: center;
-  gap: 8px;
-  min-width: 0;
-  text-align: center;
-  color: var(--t1);
-  text-wrap: balance;
-}
-.status svg {
-  --isz: 28;
-  color: var(--t2);
-}
-.card[data-state="error"] {
-  place-items: center;
-}
-.card[data-state="error"] > :is(.now, .days) {
-  display: none;
-}
-.card[data-state="error"] > .status {
-  display: grid;
-}
-.card[data-state="loading"] .temp,
-.card[data-state="loading"] .icon {
-  opacity: 0.35;
-}
-
-/* ---- tiny: 2x1 */
-.card[data-layout="tiny"] .now {
-  grid-template-columns: auto auto minmax(0, 1fr);
-  grid-template-areas: "icon temp ." "meta meta meta";
-  gap: 4px 10px;
+.day .track > i {
+  display: block;
   height: 100%;
+}
+
+/* Rows: day, icon, chance of rain, low, range, high. */
+.card[data-days="rows"] .days {
+  grid-auto-rows: 1fr;
+  align-content: stretch;
+}
+.card[data-days="rows"] .day {
+  grid-template-columns: minmax(0, 3em) 24px 2em minmax(18px, 1fr) 2em;
+  grid-template-areas: "d ico lo track hi" "pp ico lo track hi";
   align-content: center;
+  gap: 0 6px;
+  font-size: 13px;
+  border-top: 1px solid var(--fill-2);
 }
-[data-layout="tiny"] .icon {
-  --isz: 38;
-  grid-area: icon;
+.card[data-days="rows"] .day:first-child {
+  border-top: 0;
 }
-[data-layout="tiny"] .temp {
-  grid-area: temp;
-  font-size: 38px;
+.card[data-days="rows"] .day .lo {
+  text-align: right;
 }
-[data-layout="tiny"] .meta {
-  grid-area: meta;
-  display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  gap: 0 8px;
-  align-items: baseline;
-  font-size: 12px;
+.card[data-days="rows"] .day .hi {
+  text-align: left;
 }
-[data-layout="tiny"] .range {
+.card[data-days="rows"] .day .pp:empty {
   display: none;
 }
 
-/* ---- side: 3x1, 4x1 */
-.card[data-layout="side"] {
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  align-items: center;
-  gap: 10px 16px;
-}
-[data-layout="side"] .now {
-  grid-template-columns: auto auto;
-  grid-template-areas: "icon temp" "meta meta";
-  gap: 4px 10px;
-  justify-content: start;
-}
-[data-layout="side"] .icon {
-  --isz: 34;
-  grid-area: icon;
-}
-[data-layout="side"] .temp {
-  grid-area: temp;
-  font-size: 34px;
-}
-[data-layout="side"] .meta {
-  grid-area: meta;
-  font-size: 12px;
-}
-[data-layout="side"] .range {
-  display: none;
-}
-[data-layout="side"] .days {
-  display: grid;
+/* Columns: day, icon, high, low. */
+.card[data-days="cols"] .days {
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-  gap: 4px;
-  padding-left: 14px;
+  gap: 6px;
+}
+.card[data-days="cols"] .day {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "d" "ico" "hi" "lo";
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  padding: 8px 2px;
+}
+.card[data-days="cols"] .day .d {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t2);
+}
+.card[data-days="cols"] .day .pp,
+.card[data-days="cols"] .day .track {
+  display: none;
+}
+.card[data-days="cols"] .day .hi {
+  font-size: 14px;
+}
+.card[data-days="cols"] .day .lo {
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- layouts: what goes where */
+
+.card[data-layout="mini"] {
+  grid-template: "now" minmax(0, 1fr) / minmax(0, 1fr);
+  --art: min(calc(100cqh - 2 * var(--pad)), 40cqw);
+  --temp: clamp(30px, 40cqh, 46px);
+}
+.card[data-layout="strip"] {
+  grid-template: "now hours" minmax(0, 1fr) / auto minmax(0, 1fr);
+  --art: min(calc(100cqh - 2 * var(--pad)), 30cqw);
+  --temp: clamp(32px, 42cqh, 50px);
+}
+.card[data-layout="stack"] {
+  grid-template: "now" minmax(0, 1fr) "hours" auto / minmax(0, 1fr);
+  --art: min(34cqw, 44cqh, 120px);
+  --temp: clamp(36px, min(23cqh, 17cqw), 52px);
+}
+.card[data-layout="tall"] {
+  grid-template: "now" auto "hours" auto "days" minmax(0, 1fr) / minmax(0, 1fr);
+  --art: min(34cqw, 34cqh, 130px);
+  --temp: clamp(42px, min(21cqh, 19cqw), 68px);
+}
+.card[data-layout="side"] {
+  grid-template: "now days" minmax(0, 1fr) "hours days" auto / minmax(0, 1.35fr) minmax(0, 1fr);
+  --art: min(22cqw, 46cqh, 120px);
+  --temp: clamp(42px, min(24cqh, 11cqw), 64px);
+  column-gap: calc(var(--gap) * 1.6);
+}
+.card[data-layout="side"] .days {
+  align-self: stretch;
+  padding-left: calc(var(--gap) * 1.2);
   border-left: 1px solid var(--fill-2);
 }
-[data-layout="side"] .day {
-  gap: 5px;
-  align-content: center;
+
+/* What each layout shows. */
+.card[data-layout="mini"] .sub,
+.card[data-layout="strip"] .place {
+  display: none;
 }
-[data-layout="side"] .day .lo {
+.card:not([data-variant="forecast"]):not([data-layout="mini"]) .hours {
+  display: grid;
+}
+.card[data-variant="card"]:is([data-layout="tall"], [data-layout="side"]) .days {
+  display: grid;
+}
+.card[data-variant="forecast"] .days {
+  display: grid;
+}
+.card[data-variant="forecast"][data-layout="mini"] .now {
+  display: none;
+}
+.card[data-no-hours] .hours {
   display: none;
 }
 
-/* ---- very short (a 1-cell widget at a large scale): drop the icon, temperature beside the text */
-@container (max-height: 72px) {
-  .card[data-layout="tiny"] .now,
-  .card[data-layout="side"] .now {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: "temp meta";
-    gap: 0 10px;
-    height: 100%;
-    align-content: center;
-    align-items: center;
-  }
-  .card .icon {
-    display: none;
-  }
-  .card .temp {
-    font-size: 32px;
-  }
-  .card .meta {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1px;
-    font-size: 11px;
-  }
+/* Compact: the icon and the number, bigger and quieter. */
+.card[data-variant="compact"] {
+  --art: calc(var(--temp) * 1.15);
 }
-@container (max-height: 90px) {
-  .status svg {
-    display: none;
-  }
-}
-
-/* ---- stack: 2x2 */
-.card[data-layout="stack"] {
-  grid-template-rows: auto 1fr;
-  gap: 8px;
-}
-[data-layout="stack"] .now {
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: "icon temp" "meta meta";
-  gap: 6px 10px;
-  justify-content: start;
-}
-[data-layout="stack"] .icon {
-  --isz: 44;
-  grid-area: icon;
-}
-[data-layout="stack"] .temp {
-  grid-area: temp;
-  font-size: 44px;
-}
-[data-layout="stack"] .meta {
-  grid-area: meta;
-  font-size: 12px;
-}
-[data-layout="stack"] .days {
-  display: grid;
-  align-content: end;
-  gap: 2px;
-  padding-top: 8px;
-  border-top: 1px solid var(--fill-2);
-}
-[data-layout="stack"] .day {
-  grid-template-columns: 44px 22px minmax(0, 1fr);
-  justify-items: start;
-  gap: 8px;
-  font-size: 12px;
-}
-[data-layout="stack"] .day svg {
-  --isz: 18;
-}
-[data-layout="stack"] .day .temps {
-  justify-self: end;
-  display: flex;
-  gap: 8px;
-}
-
-/* ---- full: 3x2, 4x2 */
-.card[data-layout="full"] {
-  grid-template-rows: 1fr auto;
-  gap: 12px;
-}
-[data-layout="full"] .now {
-  grid-template-columns: auto auto minmax(0, 1fr);
-  grid-template-areas: "icon temp meta";
-  gap: 6px 14px;
-  justify-content: start;
-}
-[data-layout="full"] .icon {
-  --isz: 56;
-  grid-area: icon;
-}
-[data-layout="full"] .temp {
-  grid-area: temp;
-  font-size: 56px;
-}
-[data-layout="full"] .meta {
-  grid-area: meta;
-  font-size: 13px;
+.card[data-variant="compact"] .vis {
   align-self: center;
 }
-[data-layout="full"] .cond {
-  font-size: 15px;
+
+/* Forecast: a slim head over the days (rows or columns). */
+.card[data-variant="forecast"] {
+  --art: 38px;
+  --temp: 34px;
 }
-[data-layout="full"] .days {
+.card[data-variant="forecast"][data-layout="tall"] {
+  grid-template: "now" auto "days" minmax(0, 1fr) / minmax(0, 1fr);
+}
+.card[data-variant="forecast"][data-layout="strip"] {
+  grid-template: "now" auto "days" minmax(0, 1fr) / minmax(0, 1fr);
+}
+.card[data-variant="forecast"][data-layout="mini"] {
+  grid-template: "days" minmax(0, 1fr) / minmax(0, 1fr);
+}
+.card[data-variant="forecast"] .meta {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "temp cond" "temp place";
+  column-gap: 0.45em;
+  align-items: center;
+}
+.card[data-variant="forecast"] .temp {
+  grid-area: temp;
+}
+.card[data-variant="forecast"] .cond {
+  grid-area: cond;
+  align-self: end;
+}
+.card[data-variant="forecast"] .sub {
+  grid-area: place;
+  align-self: start;
+}
+.card[data-variant="forecast"] .hilo {
+  display: none;
+}
+.card[data-variant="forecast"][data-layout="tall"] .day {
+  font-size: 14px;
+}
+
+/* ---------------------------------------------------------------- loading and errors */
+
+.skeleton,
+.status {
+  display: none;
+  grid-area: 1 / 1 / -1 / -1;
+}
+.card:not([data-state="ready"]) :is(.now, .hours, .days) {
+  visibility: hidden;
+}
+.card[data-state="loading"] .skeleton {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 4px;
-  padding-top: 10px;
-  border-top: 1px solid var(--fill-2);
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: center;
+  gap: 10px var(--gap);
 }
-[data-layout="full"] .day {
+.sk {
+  display: block;
+  border-radius: 999px;
+  background: var(--fill-3);
+  animation: sk 1.4s ease-in-out infinite alternate;
+}
+html[data-surface="none"] .sk {
+  box-shadow: 0 0 0 0.5px rgb(var(--halo) / 0.25);
+}
+.sk-art {
+  grid-row: 1 / span 2;
+  width: var(--art);
+  height: var(--art);
+}
+.sk-temp {
+  align-self: end;
+  width: 55%;
+  height: calc(var(--temp) * 0.6);
+}
+.sk-line {
+  align-self: start;
+  width: 80%;
+  height: 10px;
+}
+.sk-row {
+  grid-column: 1 / -1;
+  height: 46px;
+  border-radius: 12px;
+}
+.card[data-layout="mini"] .sk-row,
+.card[data-layout="strip"] .sk-row,
+.card[data-variant="forecast"][data-layout="mini"] .sk-art {
+  display: none;
+}
+@keyframes sk {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
+.card[data-state="error"] .status {
+  display: grid;
+  place-content: center;
+  justify-items: center;
   gap: 5px;
-  font-size: 12px;
+  text-align: center;
 }
-[data-layout="full"] .day .temps {
-  display: flex;
-  gap: 6px;
+.status-ico {
+  width: 44px;
+  height: 44px;
+  opacity: 0.85;
+}
+.status-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t0);
+}
+.status-hint {
+  max-width: 28ch;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--t2);
+}
+@container (max-height: 130px) {
+  .status-ico {
+    width: 28px;
+    height: 28px;
+  }
+  .status-hint {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- the scene */
+
+/* Layers are shown by main.js (hidden attribute); everything below animates transform or opacity. */
+.art [data-layer="sun"],
+.art [data-layer="moon"] {
+  transform: translate(80px, 70px);
+}
+.art:is([data-scene="partly-day"], [data-scene="partly-night"]) :is([data-layer="sun"], [data-layer="moon"]) {
+  transform: translate(50px, 50px) scale(0.8);
+}
+.art:is([data-scene="partly-day"], [data-scene="partly-night"]) [data-layer="cloud-a"] {
+  transform: translate(8px, 32px);
+}
+.art[data-scene="cloudy"] [data-layer="cloud-a"] {
+  transform: translate(-6px, 24px);
+}
+/* A hairline of the ink keeps a white cloud readable on a light photo (a dark one in dark text). */
+.cloud {
+  fill: url(#g-cloud);
+  stroke: var(--art-line);
+  stroke-width: 0.22px;
+}
+.cloud.back {
+  fill: url(#g-cloud-grey);
+  opacity: 0.92;
+}
+.art[data-tone="grey"] .cloud.front {
+  fill: url(#g-cloud-grey);
+}
+.art[data-tone="grey"] .cloud.back {
+  fill: url(#g-cloud-dark);
+}
+.art[data-tone="dark"] .cloud.front {
+  fill: url(#g-cloud-dark);
+}
+.art[data-tone="dark"] .cloud.back {
+  fill: url(#g-cloud-dark);
+  opacity: 0.6;
+}
+
+.rays path {
+  fill: none;
+  stroke: var(--sun-2);
+  stroke-width: 4.4;
+  stroke-linecap: round;
+  opacity: 0.92;
+}
+.rays {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spin 120s steps(960) infinite;
+}
+.glow {
+  animation: breathe 6s ease-in-out infinite alternate;
+}
+.drift {
+  animation: drift 16s ease-in-out infinite alternate;
+}
+.drift.slow {
+  animation-duration: 22s;
+  animation-direction: alternate-reverse;
+}
+.star {
+  fill: none;
+  stroke: var(--cl-1);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  animation: twinkle 3.4s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -0.6s);
+}
+.fog-bar {
+  animation: fog 9s ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -3s);
+}
+.drop {
+  animation: fall 0.9s linear infinite;
+  animation-delay: calc(var(--i) * -0.11s);
+}
+.flake {
+  fill: var(--cl-1);
+  animation: snow 4.6s linear infinite;
+  animation-delay: calc(var(--i) * -0.5s);
+}
+.bolt,
+.flash {
+  opacity: 0;
+  animation: bolt 5s linear infinite;
+}
+.art[data-intensity="light"] :is(.drop, .flake).more {
+  display: none;
+}
+.art[data-intensity="light"] .drop {
+  animation-duration: 1.3s;
+}
+.art[data-intensity="light"] .flake {
+  animation-duration: 6s;
+}
+.art[data-intensity="heavy"] .drop {
+  animation-duration: 0.65s;
+}
+.card[data-motion="off"] .art * {
+  animation: none !important;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes breathe {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes drift {
+  from {
+    transform: translateX(-6px);
+  }
+  to {
+    transform: translateX(7px);
+  }
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes fog {
+  from {
+    transform: translateX(-10px);
+  }
+  to {
+    transform: translateX(10px);
+  }
+}
+@keyframes fall {
+  0% {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+}
+@keyframes snow {
+  0% {
+    transform: translate(0, -4px);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(5px, 14px);
+  }
+  100% {
+    transform: translate(-3px, 32px);
+    opacity: 0;
+  }
+}
+@keyframes bolt {
+  0%,
+  86%,
+  100% {
+    opacity: 0;
+  }
+  88% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 0.15;
+  }
+  92% {
+    opacity: 1;
+  }
+  96% {
+    opacity: 0;
+  }
 }

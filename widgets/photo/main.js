@@ -18,6 +18,7 @@ const defaults = {
   shuffle: false,
   rounded: true,
   showCaption: false,
+  motion: "still",
 };
 let settings = defaults;
 /** @type {string[]} */
@@ -140,6 +141,9 @@ trackSettings(defaults, (next) => {
   settings = next;
   frame.dataset.fit = next.fit === "contain" ? "contain" : "cover";
   frame.dataset.rounded = String(next.rounded);
+  frame.dataset.motion = next.motion === "kenburns" ? "kenburns" : "still";
+  // One slow zoom spans a picture's whole stay (and the crossfade into the next).
+  frame.style.setProperty("--kb", `${clamp(next.intervalSeconds, 5, 600) + FADE_MS / 1000 + 1}s`);
   caption.hidden = !next.showCaption || shown < 0;
 
   files = readImages(next.images);

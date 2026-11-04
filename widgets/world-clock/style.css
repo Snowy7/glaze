@@ -1,5 +1,7 @@
 /* main.js decides how many columns and rows fit (--cols, --rows) and how tall a row is (--rh); the
-   text sizes follow --rh. Rows are grouped by hairlines, not boxes, so a bare wallpaper stays clean. */
+   text sizes follow --rh. In the minimal look rows are grouped by hairlines, not boxes, so a bare
+   wallpaper stays clean; the styled looks give every row the kit's tile body. A day/night badge
+   carries the highlight: lit for daytime cities. */
 
 .card {
   display: flex;
@@ -37,20 +39,55 @@ html[data-surface="none"] .card {
 .row.first {
   box-shadow: none;
 }
+/* Minimal: no body, the hairlines group the rows (a `.tile` would box each one). */
+html[data-style="minimal"] .row.tile,
+html:not([data-style]) .row.tile {
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+/* Styled: a tile per row, with air between them instead of hairlines. */
+html[data-style]:not([data-style="minimal"]) .row {
+  margin-block: 2px;
+  padding: 0 0.6em 0 0.45em;
+}
+
 /* Sizes below are fractions of the row's height (--rh), within sane limits. */
+.badge {
+  display: grid;
+  place-items: center;
+  width: calc(var(--rh) * 0.42);
+  height: calc(var(--rh) * 0.42);
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 50%;
+  background: var(--fill-2);
+}
+.row.day .badge {
+  background: var(--fill-3);
+}
+html[data-style]:not([data-style="minimal"]) .row.day .badge {
+  background: linear-gradient(135deg, var(--hi), var(--hi-2));
+  box-shadow: var(--bevel), 0 0 var(--glow-size) -4px var(--glow);
+}
 .glyph {
-  width: calc(var(--rh) * 0.34);
-  height: calc(var(--rh) * 0.34);
-  min-width: 14px;
-  min-height: 14px;
+  width: 62%;
+  height: 62%;
   fill: none;
-  stroke: var(--t1);
+  stroke: var(--t2);
   stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.row:not(.day) .glyph {
-  stroke: var(--t2);
+.row.day .glyph {
+  stroke: var(--t0);
+}
+html[data-style]:not([data-style="minimal"]) .row.day .glyph {
+  stroke: var(--on-spark);
+}
+/* The badge is its own graphic: no wallpaper shadow or neon halo on the glyph inside it. */
+.badge .glyph {
+  filter: none !important;
 }
 
 .who {
@@ -76,7 +113,7 @@ html[data-surface="none"] .card {
   display: flex;
   align-items: baseline;
   gap: 0.25em;
-  font-size: clamp(16px, min(calc(var(--rh) * 0.5), 13cqw), 38px);
+  font-size: clamp(15px, min(calc(var(--rh) * 0.46), 11cqw), 36px);
   font-weight: 300;
   letter-spacing: -0.025em;
   line-height: 1;
@@ -89,14 +126,24 @@ html[data-surface="none"] .card {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--t2);
+  /* Inside the hero's gradient text it must keep its own color. */
+  -webkit-text-fill-color: currentColor;
 }
 
-.row.unknown :is(.name, .time, .glyph) {
+.row.unknown :is(.name, .time, .sub) {
   color: var(--t3);
+}
+.row.unknown .badge {
+  background: var(--fill-1);
+}
+.row.unknown .glyph {
   stroke: var(--t3);
 }
-.row.unknown .sub {
-  color: var(--t3);
+.row.unknown .time {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  filter: none;
+  text-shadow: none;
 }
 
 /* A narrow widget (2 cells) has less room for the offset text: let the name win. */

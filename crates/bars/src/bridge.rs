@@ -3,8 +3,8 @@
 
 use std::collections::BTreeSet;
 
-use mypaper_bars::Module;
-use mypaper_bars::config::TopConfig;
+use mypaper_bars::config::{Extra, Trigger};
+use mypaper_bars::{BarsConfig, Module, ModuleRef};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -92,6 +92,41 @@ pub enum Method {
     /// A flyout's request (`crate::flyouts::Request`, the methods in `flyouts::METHODS`).
     #[serde(skip)]
     Flyout(crate::flyouts::Request),
+    /// Runs the `exec` or `open` action `bars.json` binds to a module's input.
+    Run {
+        module: ModuleRef,
+        trigger: Trigger,
+    },
+    /// Windows Search (Win+S).
+    Search,
+    /// Minimizes every window, or brings them back (Win+D).
+    ShowDesktop,
+    Trash {
+        action: TrashAction,
+    },
+    /// Registers thumbnails of these windows into the bar; the result is their sizes.
+    PreviewOpen {
+        hwnds: Vec<isize>,
+    },
+    /// Shows each registered thumbnail at a rect (DIPs); unlisted ones hide.
+    PreviewPlace {
+        windows: Vec<PreviewWindow>,
+    },
+    PreviewClose,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewWindow {
+    pub hwnd: isize,
+    pub rect: [f64; 4],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TrashAction {
+    Open,
+    Empty,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -183,6 +218,9 @@ impl Method {
             Self::Region { rects } if rects.len() > 64 => {
                 return Err(BarError::invalid("at most 64 region rects"));
             }
+            Self::PreviewOpen { hwnds } if hwnds.len() > 16 => {
+                return Err(BarError::invalid("at most 16 previews"));
+            }
             _ => {}
         }
         Ok(())
@@ -244,6 +282,10 @@ pub enum Topic {
     Language,
     /// How many notifications there are.
     Notifications,
+    /// Custom modules' outputs.
+    Custom,
+    /// Whether the Recycle Bin is full (the dock's trash item).
+    Trash,
 }
 
 impl Topic {
@@ -261,6 +303,8 @@ impl Topic {
             Self::Stats => "stats",
             Self::Language => "language",
             Self::Notifications => "notifications",
+            Self::Custom => "custom",
+            Self::Trash => "trash",
         }
     }
 
@@ -268,12 +312,15 @@ impl Topic {
     /// idle while a fullscreen app is in front on another monitor.
     pub fn periodic(self) -> bool {
         // Notifications are re-counted on a timer: change events need package identity.
-        matches!(self, Self::Stats | Self::Notifications)
+        matches!(self, Self::Stats | Self::Custom | Self::Notifications)
     }
 }
 
-/// The topic a top-bar module shows, if any.
-pub fn module_topic(module: Module) -> Option<Topic> {
+/// The topic a module shows, if any.
+pub fn module_topic(module: &ModuleRef) -> Option<Topic> {
+    let ModuleRef::Builtin(module) = module else {
+        return matches!(module, ModuleRef::Custom(_)).then_some(Topic::Custom);
+    };
     match module {
         Module::Workspaces => Some(Topic::Workspaces),
         Module::App => Some(Topic::Foreground),
@@ -286,16 +333,30 @@ pub fn module_topic(module: Module) -> Option<Topic> {
         Module::Stats => Some(Topic::Stats),
         Module::Language => Some(Topic::Language),
         Module::Notifications => Some(Topic::Notifications),
-        Module::Start | Module::Quick | Module::Power => None,
+        Module::Start | Module::Search | Module::Quick | Module::Power => None,
     }
 }
 
-/// What a bar shows: the dock its apps, the top bar its modules' topics.
-pub fn bar_topics(kind: BarKind, top: &TopConfig) -> BTreeSet<Topic> {
-    match kind {
-        BarKind::Dock => BTreeSet::from([Topic::Apps]),
-        BarKind::Top => top.modules().filter_map(module_topic).collect(),
+/// The modules a bar of `config` draws: the top bar's zones, or a `taskbar` dock's sides.
+pub fn bar_modules(kind: BarKind, config: &BarsConfig) -> impl Iterator<Item = &ModuleRef> + '_ {
+    let (top, dock) = match kind {
+        BarKind::Top => (Some(config.top.modules()), None),
+        BarKind::Dock => (None, Some(config.dock.modules())),
+    };
+    top.into_iter().flatten().chain(dock.into_iter().flatten())
+}
+
+/// What a bar shows: the dock its apps (and a taskbar's modules, the trash), the top bar its
+/// modules' topics.
+pub fn bar_topics(kind: BarKind, config: &BarsConfig) -> BTreeSet<Topic> {
+    let mut topics: BTreeSet<Topic> = bar_modules(kind, config).filter_map(module_topic).collect();
+    if kind == BarKind::Dock {
+        topics.insert(Topic::Apps);
+        if config.dock.extras.contains(&Extra::Trash) {
+            topics.insert(Topic::Trash);
+        }
     }
+    topics
 }
 
 #[cfg(test)]
@@ -385,9 +446,44 @@ mod tests {
     }
 
     #[test]
+    fn new_requests_parse() {
+        assert_eq!(
+            parse(
+                r#"{ "id": 1, "method": "run", "params": { "module": "custom:temp", "trigger": "wheelUp" } }"#
+            ),
+            Ok(Method::Run {
+                module: ModuleRef::Custom("temp".into()),
+                trigger: Trigger::WheelUp
+            })
+        );
+        assert_eq!(
+            parse(
+                r#"{ "id": 2, "method": "previewPlace", "params": { "windows": [ { "hwnd": 7, "rect": [1, 2, 3, 4] } ] } }"#
+            ),
+            Ok(Method::PreviewPlace {
+                windows: vec![PreviewWindow {
+                    hwnd: 7,
+                    rect: [1.0, 2.0, 3.0, 4.0]
+                }]
+            })
+        );
+        assert_eq!(
+            parse(r#"{ "id": 3, "method": "trash", "params": { "action": "empty" } }"#),
+            Ok(Method::Trash {
+                action: TrashAction::Empty
+            })
+        );
+        assert_eq!(
+            parse(r#"{ "id": 4, "method": "showDesktop" }"#),
+            Ok(Method::ShowDesktop)
+        );
+        assert!(parse(r#"{ "id": 5, "method": "run", "params": { "module": "rm -rf", "trigger": "left" } }"#).is_err());
+    }
+
+    #[test]
     fn modules_route_to_their_topics() {
-        let top = TopConfig::default();
-        let topics = bar_topics(BarKind::Top, &top);
+        let config = BarsConfig::default();
+        let topics = bar_topics(BarKind::Top, &config);
         assert_eq!(
             topics,
             BTreeSet::from([
@@ -402,20 +498,28 @@ mod tests {
             ]),
             "start, quick and power need no data; stats isn't in the default layout"
         );
-        let minimal = TopConfig {
-            left: vec![Module::Start],
-            center: vec![Module::Clock],
-            right: vec![Module::Stats, Module::Power],
-            ..TopConfig::default()
-        };
+        let minimal = BarsConfig::parse(
+            r#"{ "top": { "left": ["start"], "center": ["clock"], "right": ["stats", "|", "custom:x", "power"] },
+                 "modules": { "custom:x": { "command": "x.exe" } } }"#,
+        )
+        .unwrap();
         assert_eq!(
             bar_topics(BarKind::Top, &minimal),
-            BTreeSet::from([Topic::Clock, Topic::Stats])
+            BTreeSet::from([Topic::Clock, Topic::Stats, Topic::Custom])
         );
         assert_eq!(
             bar_topics(BarKind::Dock, &minimal),
-            BTreeSet::from([Topic::Apps])
+            BTreeSet::from([Topic::Apps]),
+            "a floating dock draws no modules"
         );
-        assert!(Topic::Stats.periodic() && !Topic::Clock.periodic());
+        let taskbar = BarsConfig::parse(
+            r#"{ "dock": { "style": "taskbar", "left": ["start"], "right": ["clock"], "extras": ["trash"] } }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            bar_topics(BarKind::Dock, &taskbar),
+            BTreeSet::from([Topic::Apps, Topic::Clock, Topic::Trash])
+        );
+        assert!(Topic::Stats.periodic() && Topic::Custom.periodic() && !Topic::Clock.periodic());
     }
 }

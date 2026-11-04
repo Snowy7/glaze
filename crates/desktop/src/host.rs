@@ -1,11 +1,14 @@
+use std::time::Duration;
+
 use anyhow::{Result, anyhow};
 use windows::Win32::Foundation::{HWND, LPARAM, MAX_PATH, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowExW, FindWindowW, GW_HWNDPREV, GetShellWindow, GetWindow, HWND_TOP,
-    SMTO_NORMAL, SPI_GETDESKWALLPAPER, SPI_SETDESKWALLPAPER, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SendMessageTimeoutW,
-    SetWindowPos, SystemParametersInfoW,
+    EnumWindows, FindWindowExW, FindWindowW, GW_CHILD, GW_HWNDNEXT, GW_HWNDPREV, GWL_EXSTYLE,
+    GetClassNameW, GetShellWindow, GetWindow, GetWindowLongPtrW, HWND_TOP, SMTO_NORMAL,
+    SPI_GETDESKWALLPAPER, SPI_SETDESKWALLPAPER, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_SHOWWINDOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SendMessageTimeoutW, SetWindowPos,
+    SystemParametersInfoW, WS_EX_NOREDIRECTIONBITMAP,
 };
 use windows::core::{BOOL, PCWSTR, w};
 
@@ -14,6 +17,11 @@ use crate::Rect;
 /// Undocumented Progman message that makes Explorer create the WorkerW
 /// window wallpapers live in. Every live-wallpaper app relies on it.
 const SPAWN_WORKERW: u32 = 0x052C;
+
+/// Explorer may still be building the desktop when we start (autostart at
+/// logon, right after an Explorer restart): look again for this long before giving up.
+const DESKTOP_WAIT: Duration = Duration::from_millis(1500);
+const DESKTOP_POLL: Duration = Duration::from_millis(100);
 
 /// Where wallpaper windows go so they render *behind the desktop icons*.
 #[derive(Debug, Clone, Copy)]
@@ -26,8 +34,113 @@ pub enum DesktopHost {
     Legacy { workerw: HWND, icons: HWND },
 }
 
+/// What a window in Progman's z-order is, for [`order_is_valid`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Layer {
+    /// The icon view (`SHELLDLL_DefView`).
+    Icons,
+    /// The static wallpaper (`WorkerW`).
+    StaticWallpaper,
+    /// The wallpaper window being checked.
+    Ours,
+    Other,
+}
+
+/// Is our window where a wallpaper must be in Progman's children (listed top
+/// to bottom): below the icon view and above every static-wallpaper window?
+/// A wallpaper above the icons would cover them; below the `WorkerW` it would
+/// be hidden behind the static picture.
+fn order_is_valid(top_to_bottom: &[Layer]) -> bool {
+    let Some(ours) = top_to_bottom.iter().position(|l| *l == Layer::Ours) else {
+        return false;
+    };
+    let below_icons = top_to_bottom
+        .iter()
+        .position(|l| *l == Layer::Icons)
+        .is_none_or(|icons| icons < ours);
+    let above_static = top_to_bottom
+        .iter()
+        .enumerate()
+        .all(|(i, l)| *l != Layer::StaticWallpaper || i > ours);
+    below_icons && above_static
+}
+
 impl DesktopHost {
+    /// Finds the desktop. A running Explorer may be a moment late to have built
+    /// one (logon, right after it restarted), so this looks again for a short
+    /// while; with no shell at all it fails at once.
     pub fn find() -> Result<Self> {
+        let deadline = std::time::Instant::now() + DESKTOP_WAIT;
+        loop {
+            match Self::find_once() {
+                Ok(host) => return Ok(host),
+                Err(e) if !shell_running() || std::time::Instant::now() >= deadline => {
+                    return Err(e);
+                }
+                Err(_) => std::thread::sleep(DESKTOP_POLL),
+            }
+        }
+    }
+
+    /// Is this the 24H2+ "raised desktop"? Explorer then composes the desktop
+    /// itself (Progman has `WS_EX_NOREDIRECTIONBITMAP`) and the icon view,
+    /// `SHELLDLL_DefView`, is a layered child of Progman with the static
+    /// wallpaper's `WorkerW` below it. Wallpaper windows go between the two,
+    /// which is what [`Layered`](Self::Layered) placement does; this says
+    /// which variant of it the machine runs (for logs and bug reports).
+    pub fn raised(&self) -> bool {
+        match *self {
+            Self::Layered { progman, .. } => {
+                // SAFETY: read-only query of a window handle.
+                let ex = unsafe { GetWindowLongPtrW(progman, GWL_EXSTYLE) } as u32;
+                ex & WS_EX_NOREDIRECTIONBITMAP.0 != 0
+            }
+            Self::Legacy { .. } => false,
+        }
+    }
+
+    /// Is `child` still where a wallpaper belongs (see [`order_is_valid`])?
+    /// Always true for the legacy layout, which has its own `WorkerW` to itself.
+    pub fn attached_correctly(&self, child: HWND) -> bool {
+        let Self::Layered { progman, .. } = *self else {
+            return true;
+        };
+        let mut order = Vec::new();
+        // SAFETY: read-only walk over the children of a window handle.
+        unsafe {
+            let mut sibling = GetWindow(progman, GW_CHILD);
+            while let Ok(window) = sibling {
+                let mut class = [0u16; 32];
+                let len = GetClassNameW(window, &mut class).max(0) as usize;
+                let class = String::from_utf16_lossy(&class[..len]);
+                order.push(match class.as_str() {
+                    _ if window == child => Layer::Ours,
+                    "SHELLDLL_DefView" => Layer::Icons,
+                    "WorkerW" => Layer::StaticWallpaper,
+                    _ => Layer::Other,
+                });
+                sibling = GetWindow(window, GW_HWNDNEXT);
+            }
+        }
+        order_is_valid(&order)
+    }
+
+    /// Re-inserts `child` just below the icon view if Explorer moved it out of
+    /// place (raised layout only). Cheap; call it when window events fire.
+    pub fn keep_behind_icons(&self, child: HWND) {
+        let Self::Layered { defview, .. } = *self else {
+            return;
+        };
+        if self.attached_correctly(child) {
+            return;
+        }
+        log::warn!("the wallpaper window left its place behind the icons; putting it back");
+        let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+        // SAFETY: a z-order-only move of our own window.
+        let _ = unsafe { SetWindowPos(child, Some(defview), 0, 0, 0, 0, flags) };
+    }
+
+    fn find_once() -> Result<Self> {
         // SAFETY: plain Win32 calls with valid arguments.
         unsafe {
             let mut progman = GetShellWindow();
@@ -150,6 +263,8 @@ impl DesktopHost {
                 SWP_NOACTIVATE | SWP_SHOWWINDOW,
             )?;
         }
+        // Placed; if the layout is not what we expect, fix it now and say so.
+        self.keep_behind_icons(child);
         Ok(())
     }
 
@@ -171,6 +286,12 @@ impl DesktopHost {
     }
 }
 
+/// Is there a shell window (Progman) at all?
+fn shell_running() -> bool {
+    // SAFETY: plain lookups.
+    unsafe { !GetShellWindow().is_invalid() || FindWindowW(w!("Progman"), PCWSTR::null()).is_ok() }
+}
+
 /// Legacy layout: the WorkerW we want is the top-level sibling right after
 /// the window that hosts `SHELLDLL_DefView`. Finds both, as `(icons, workerw)`.
 unsafe extern "system" fn find_legacy_workerw(hwnd: HWND, out: LPARAM) -> BOOL {
@@ -184,4 +305,49 @@ unsafe extern "system" fn find_legacy_workerw(hwnd: HWND, out: LPARAM) -> BOOL {
         }
     }
     true.into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Layer::{Icons, Other, Ours, StaticWallpaper};
+    use super::*;
+
+    #[test]
+    fn a_wallpaper_belongs_between_the_icons_and_the_static_wallpaper() {
+        // The layout seen on a 24H2 raised desktop: widgets, icons, ours, static wallpaper.
+        assert!(order_is_valid(&[Other, Icons, Ours, StaticWallpaper]));
+        assert!(order_is_valid(&[
+            Icons,
+            Ours,
+            Other,
+            Other,
+            StaticWallpaper
+        ]));
+        // One window per monitor: only the one being checked matters.
+        assert!(order_is_valid(&[Icons, Other, Ours, StaticWallpaper]));
+        // No static wallpaper, or no icon view (yet): nothing to be on the wrong side of.
+        assert!(order_is_valid(&[Icons, Ours]));
+        assert!(order_is_valid(&[Ours, StaticWallpaper]));
+    }
+
+    #[test]
+    fn covering_the_icons_or_hiding_behind_the_static_wallpaper_is_caught() {
+        assert!(
+            !order_is_valid(&[Ours, Icons, StaticWallpaper]),
+            "over the icons"
+        );
+        assert!(
+            !order_is_valid(&[Icons, StaticWallpaper, Ours]),
+            "behind the picture"
+        );
+        assert!(
+            !order_is_valid(&[StaticWallpaper, Icons, Ours]),
+            "behind everything"
+        );
+        assert!(
+            !order_is_valid(&[Icons, StaticWallpaper]),
+            "not a child at all"
+        );
+        assert!(!order_is_valid(&[]));
+    }
 }

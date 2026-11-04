@@ -1,0 +1,2176 @@
+{
+  "when": "2026-11-04 04:03",
+  "label": "baseline",
+  "machine": "16 logical CPUs, screens 2560x1440 + 2560x1440",
+  "build": "C:\\mypaper-targets\\perf\\baseline",
+  "plan": "4 starts per scenario (1 cold, then warm), CPU windows of 10 s after 5 s settling",
+  "scenarios": [
+    {
+      "scenario": "shader",
+      "about": "aurora shader at 60 fps, wallpaper only",
+      "components": [
+        "core",
+        "total",
+        "wallpaper"
+      ],
+      "metrics": {
+        "core.cpu_held_core_pct": 0.0,
+        "core.cpu_held_pct": 0.0,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 1.98828125,
+        "core.private_mb": 1.98828125,
+        "core.spawn_ms.cold": 286.94,
+        "core.spawn_ms.warm": 90.614,
+        "core.spawn_own_ms.cold": 286.9,
+        "core.spawn_own_ms.warm": 90.6,
+        "core.working_set_held_mb": 11.921875,
+        "core.working_set_mb": 11.91015625,
+        "screens.visible": 1.0,
+        "total.cpu_held_core_pct": 0.15610396318140415,
+        "total.cpu_held_pct": 0.00975649769883776,
+        "total.cpu_steady_core_pct": 2.183698944432374,
+        "total.cpu_steady_pct": 0.13648118402702336,
+        "total.private_held_mb": 290.6796875,
+        "total.private_mb": 290.6796875,
+        "total.working_set_held_mb": 30.265625,
+        "total.working_set_mb": 30.015625,
+        "wallpaper.cpu_held_core_pct": 0.15610396318140415,
+        "wallpaper.cpu_held_pct": 0.00975649769883776,
+        "wallpaper.cpu_steady_core_pct": 2.183698944432374,
+        "wallpaper.cpu_steady_pct": 0.13648118402702336,
+        "wallpaper.device_ms.cold": 1052.796,
+        "wallpaper.device_ms.warm": 675.928,
+        "wallpaper.device_own_ms.cold": 805.1,
+        "wallpaper.device_own_ms.warm": 617.3,
+        "wallpaper.first_frame_ms.cold": 1454.232,
+        "wallpaper.first_frame_ms.warm": 1145.961,
+        "wallpaper.first_frame_own_ms.cold": 1206.5,
+        "wallpaper.first_frame_own_ms.warm": 1095.7,
+        "wallpaper.private_held_mb": 288.69140625,
+        "wallpaper.private_mb": 288.69140625,
+        "wallpaper.source_ms.cold": 1178.507,
+        "wallpaper.source_ms.warm": 809.353,
+        "wallpaper.source_own_ms.cold": 930.8,
+        "wallpaper.source_own_ms.warm": 750.8,
+        "wallpaper.working_set_held_mb": 18.34375,
+        "wallpaper.working_set_mb": 18.10546875
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "core.spawn": [
+              286.94,
+              286.9
+            ],
+            "wallpaper.device": [
+              1052.796,
+              805.1
+            ],
+            "wallpaper.first_frame": [
+              1454.232,
+              1206.5
+            ],
+            "wallpaper.source": [
+              1178.507,
+              930.8
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              78.999,
+              79.0
+            ],
+            "wallpaper.device": [
+              654.24,
+              604.0
+            ],
+            "wallpaper.first_frame": [
+              1145.961,
+              1095.7
+            ],
+            "wallpaper.source": [
+              771.178,
+              720.9
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              127.208,
+              127.2
+            ],
+            "wallpaper.device": [
+              791.412,
+              697.8
+            ],
+            "wallpaper.first_frame": [
+              1189.546,
+              1096.0
+            ],
+            "wallpaper.source": [
+              901.395,
+              807.8
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              90.614,
+              90.6
+            ],
+            "wallpaper.device": [
+              675.928,
+              617.3
+            ],
+            "wallpaper.first_frame": [
+              1111.762,
+              1053.2
+            ],
+            "wallpaper.source": [
+              809.353,
+              750.8
+            ]
+          },
+          "taskbar_hidden_ms": null
+        }
+      ],
+      "processes": [
+        {
+          "pid": 23484,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.98828125,
+          "working_set_mb": 11.91015625
+        },
+        {
+          "pid": 28220,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 288.69140625,
+          "working_set_mb": 18.10546875
+        }
+      ],
+      "notes": [
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)"
+      ]
+    },
+    {
+      "scenario": "image",
+      "about": "photo, wallpaper only",
+      "components": [
+        "core",
+        "total",
+        "wallpaper"
+      ],
+      "metrics": {
+        "core.cpu_held_core_pct": 0.0,
+        "core.cpu_held_pct": 0.0,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 1.97265625,
+        "core.private_mb": 1.97265625,
+        "core.spawn_ms.cold": 351.959,
+        "core.spawn_ms.warm": 68.348,
+        "core.spawn_own_ms.cold": 352.0,
+        "core.spawn_own_ms.warm": 68.3,
+        "core.working_set_held_mb": 11.90234375,
+        "core.working_set_mb": 11.890625,
+        "screens.visible": 1.0,
+        "total.cpu_held_core_pct": 0.1559548523228819,
+        "total.cpu_held_pct": 0.009747178270180118,
+        "total.cpu_steady_core_pct": 0.15599497785026062,
+        "total.cpu_steady_pct": 0.009749686115641289,
+        "total.private_held_mb": 310.8828125,
+        "total.private_mb": 307.5703125,
+        "total.working_set_held_mb": 52.23046875,
+        "total.working_set_mb": 27.3125,
+        "wallpaper.cpu_held_core_pct": 0.1559548523228819,
+        "wallpaper.cpu_held_pct": 0.009747178270180118,
+        "wallpaper.cpu_steady_core_pct": 0.15599497785026062,
+        "wallpaper.cpu_steady_pct": 0.009749686115641289,
+        "wallpaper.device_ms.cold": 877.479,
+        "wallpaper.device_ms.warm": 557.622,
+        "wallpaper.device_own_ms.cold": 550.5,
+        "wallpaper.device_own_ms.warm": 512.1,
+        "wallpaper.first_frame_ms.cold": 1129.737,
+        "wallpaper.first_frame_ms.warm": 800.844,
+        "wallpaper.first_frame_own_ms.cold": 802.7,
+        "wallpaper.first_frame_own_ms.warm": 751.1,
+        "wallpaper.private_held_mb": 308.91015625,
+        "wallpaper.private_mb": 305.59765625,
+        "wallpaper.source_ms.cold": 905.043,
+        "wallpaper.source_ms.warm": 585.092,
+        "wallpaper.source_own_ms.cold": 578.0,
+        "wallpaper.source_own_ms.warm": 539.3,
+        "wallpaper.working_set_held_mb": 40.328125,
+        "wallpaper.working_set_mb": 15.421875
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "core.spawn": [
+              351.959,
+              352.0
+            ],
+            "wallpaper.device": [
+              877.479,
+              550.5
+            ],
+            "wallpaper.first_frame": [
+              1129.737,
+              802.7
+            ],
+            "wallpaper.source": [
+              905.043,
+              578.0
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              73.496,
+              73.5
+            ],
+            "wallpaper.device": [
+              561.786,
+              512.1
+            ],
+            "wallpaper.first_frame": [
+              800.844,
+              751.1
+            ],
+            "wallpaper.source": [
+              588.992,
+              539.3
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              68.348,
+              68.3
+            ],
+            "wallpaper.device": [
+              557.622,
+              513.2
+            ],
+            "wallpaper.first_frame": [
+              807.229,
+              762.8
+            ],
+            "wallpaper.source": [
+              585.092,
+              540.6
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              64.91,
+              64.9
+            ],
+            "wallpaper.device": [
+              544.724,
+              503.5
+            ],
+            "wallpaper.first_frame": [
+              778.775,
+              737.6
+            ],
+            "wallpaper.source": [
+              575.856,
+              534.7
+            ]
+          },
+          "taskbar_hidden_ms": null
+        }
+      ],
+      "processes": [
+        {
+          "pid": 57568,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.97265625,
+          "working_set_mb": 11.890625
+        },
+        {
+          "pid": 43808,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 305.59765625,
+          "working_set_mb": 15.421875
+        }
+      ],
+      "notes": [
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)"
+      ]
+    },
+    {
+      "scenario": "slideshow",
+      "about": "gallery slideshow, wallpaper only",
+      "components": [
+        "core",
+        "total",
+        "wallpaper"
+      ],
+      "metrics": {
+        "core.cpu_held_core_pct": 0.0,
+        "core.cpu_held_pct": 0.0,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 1.96875,
+        "core.private_mb": 1.94921875,
+        "core.spawn_ms.cold": 310.551,
+        "core.spawn_ms.warm": 81.444,
+        "core.spawn_own_ms.cold": 310.6,
+        "core.spawn_own_ms.warm": 81.4,
+        "core.working_set_held_mb": 11.8984375,
+        "core.working_set_mb": 11.87109375,
+        "screens.visible": 1.0,
+        "total.cpu_held_core_pct": 0.15598892134234932,
+        "total.cpu_held_pct": 0.009749307583896832,
+        "total.cpu_steady_core_pct": 0.0,
+        "total.cpu_steady_pct": 0.0,
+        "total.private_held_mb": 357.91796875,
+        "total.private_mb": 355.79296875,
+        "total.working_set_held_mb": 49.71484375,
+        "total.working_set_mb": 26.06640625,
+        "wallpaper.cpu_held_core_pct": 0.15598892134234932,
+        "wallpaper.cpu_held_pct": 0.009749307583896832,
+        "wallpaper.cpu_steady_core_pct": 0.0,
+        "wallpaper.cpu_steady_pct": 0.0,
+        "wallpaper.device_ms.cold": 997.37,
+        "wallpaper.device_ms.warm": 766.761,
+        "wallpaper.device_own_ms.cold": 722.5,
+        "wallpaper.device_own_ms.warm": 712.6,
+        "wallpaper.first_frame_ms.cold": 1395.344,
+        "wallpaper.first_frame_ms.warm": 1141.336,
+        "wallpaper.first_frame_own_ms.cold": 1120.5,
+        "wallpaper.first_frame_own_ms.warm": 1087.2,
+        "wallpaper.private_held_mb": 355.94921875,
+        "wallpaper.private_mb": 353.84375,
+        "wallpaper.source_ms.cold": 1036.926,
+        "wallpaper.source_ms.warm": 803.942,
+        "wallpaper.source_own_ms.cold": 762.0,
+        "wallpaper.source_own_ms.warm": 749.8,
+        "wallpaper.working_set_held_mb": 37.81640625,
+        "wallpaper.working_set_mb": 14.1953125
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "core.spawn": [
+              310.551,
+              310.6
+            ],
+            "wallpaper.device": [
+              997.37,
+              722.5
+            ],
+            "wallpaper.first_frame": [
+              1395.344,
+              1120.5
+            ],
+            "wallpaper.source": [
+              1036.926,
+              762.0
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              91.835,
+              91.8
+            ],
+            "wallpaper.device": [
+              973.038,
+              914.7
+            ],
+            "wallpaper.first_frame": [
+              1263.463,
+              1205.1
+            ],
+            "wallpaper.source": [
+              1001.177,
+              942.8
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              73.241,
+              73.2
+            ],
+            "wallpaper.device": [
+              655.78,
+              611.0
+            ],
+            "wallpaper.first_frame": [
+              938.218,
+              893.4
+            ],
+            "wallpaper.source": [
+              678.443,
+              633.6
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              81.444,
+              81.4
+            ],
+            "wallpaper.device": [
+              766.761,
+              712.6
+            ],
+            "wallpaper.first_frame": [
+              1141.336,
+              1087.2
+            ],
+            "wallpaper.source": [
+              803.942,
+              749.8
+            ]
+          },
+          "taskbar_hidden_ms": null
+        }
+      ],
+      "processes": [
+        {
+          "pid": 49456,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.94921875,
+          "working_set_mb": 11.87109375
+        },
+        {
+          "pid": 53096,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 353.84375,
+          "working_set_mb": 14.1953125
+        }
+      ],
+      "notes": [
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)"
+      ]
+    },
+    {
+      "scenario": "video",
+      "about": "earth-orbit video, wallpaper only",
+      "components": [
+        "core",
+        "total",
+        "wallpaper"
+      ],
+      "metrics": {
+        "core.cpu_held_core_pct": 0.0,
+        "core.cpu_held_pct": 0.0,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 1.9765625,
+        "core.private_mb": 1.9765625,
+        "core.spawn_ms.cold": 273.825,
+        "core.spawn_ms.warm": 69.723,
+        "core.spawn_own_ms.cold": 273.8,
+        "core.spawn_own_ms.warm": 69.7,
+        "core.working_set_held_mb": 11.9140625,
+        "core.working_set_mb": 11.90234375,
+        "screens.visible": 1.0,
+        "total.cpu_held_core_pct": 0.0,
+        "total.cpu_held_pct": 0.0,
+        "total.cpu_steady_core_pct": 5.302834047127238,
+        "total.cpu_steady_pct": 0.33142712794545237,
+        "total.private_held_mb": 409.296875,
+        "total.private_mb": 406.29296875,
+        "total.working_set_held_mb": 69.69921875,
+        "total.working_set_mb": 65.24609375,
+        "wallpaper.cpu_held_core_pct": 0.0,
+        "wallpaper.cpu_held_pct": 0.0,
+        "wallpaper.cpu_steady_core_pct": 5.302834047127238,
+        "wallpaper.cpu_steady_pct": 0.33142712794545237,
+        "wallpaper.device_ms.cold": 932.339,
+        "wallpaper.device_ms.warm": 567.906,
+        "wallpaper.device_own_ms.cold": 687.4,
+        "wallpaper.device_own_ms.warm": 521.7,
+        "wallpaper.first_frame_ms.cold": 1481.347,
+        "wallpaper.first_frame_ms.warm": 952.83,
+        "wallpaper.first_frame_own_ms.cold": 1236.4,
+        "wallpaper.first_frame_own_ms.warm": 906.6,
+        "wallpaper.private_held_mb": 407.3203125,
+        "wallpaper.private_mb": 404.31640625,
+        "wallpaper.source_ms.cold": 1178.806,
+        "wallpaper.source_ms.warm": 734.337,
+        "wallpaper.source_own_ms.cold": 933.9,
+        "wallpaper.source_own_ms.warm": 688.1,
+        "wallpaper.working_set_held_mb": 57.78515625,
+        "wallpaper.working_set_mb": 53.34375
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "core.spawn": [
+              273.825,
+              273.8
+            ],
+            "wallpaper.device": [
+              932.339,
+              687.4
+            ],
+            "wallpaper.first_frame": [
+              1481.347,
+              1236.4
+            ],
+            "wallpaper.source": [
+              1178.806,
+              933.9
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              68.626,
+              68.6
+            ],
+            "wallpaper.device": [
+              545.466,
+              500.5
+            ],
+            "wallpaper.first_frame": [
+              924.631,
+              879.7
+            ],
+            "wallpaper.source": [
+              678.751,
+              633.8
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              69.723,
+              69.7
+            ],
+            "wallpaper.device": [
+              567.906,
+              521.7
+            ],
+            "wallpaper.first_frame": [
+              952.83,
+              906.6
+            ],
+            "wallpaper.source": [
+              734.337,
+              688.1
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              83.556,
+              83.6
+            ],
+            "wallpaper.device": [
+              633.54,
+              580.0
+            ],
+            "wallpaper.first_frame": [
+              1053.429,
+              999.9
+            ],
+            "wallpaper.source": [
+              808.585,
+              755.1
+            ]
+          },
+          "taskbar_hidden_ms": null
+        }
+      ],
+      "processes": [
+        {
+          "pid": 2576,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.9765625,
+          "working_set_mb": 11.90234375
+        },
+        {
+          "pid": 45108,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 404.31640625,
+          "working_set_mb": 53.34375
+        }
+      ],
+      "notes": [
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)"
+      ]
+    },
+    {
+      "scenario": "scene",
+      "about": "islands 3D scene at 30 fps, wallpaper only",
+      "components": [
+        "core",
+        "total",
+        "wallpaper"
+      ],
+      "metrics": {
+        "core.cpu_held_core_pct": 0.0,
+        "core.cpu_held_pct": 0.0,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 2.00390625,
+        "core.private_mb": 1.984375,
+        "core.spawn_ms.cold": 331.458,
+        "core.spawn_ms.warm": 75.513,
+        "core.spawn_own_ms.cold": 331.5,
+        "core.spawn_own_ms.warm": 75.5,
+        "core.working_set_held_mb": 11.93359375,
+        "core.working_set_mb": 11.91796875,
+        "screens.visible": 1.0,
+        "total.cpu_held_core_pct": 0.15598960654978644,
+        "total.cpu_held_pct": 0.009749350409361653,
+        "total.cpu_steady_core_pct": 2.963178158318225,
+        "total.cpu_steady_pct": 0.18519863489488905,
+        "total.private_held_mb": 412.3203125,
+        "total.private_mb": 412.28125,
+        "total.working_set_held_mb": 30.3671875,
+        "total.working_set_mb": 30.04296875,
+        "wallpaper.cpu_held_core_pct": 0.15598960654978644,
+        "wallpaper.cpu_held_pct": 0.009749350409361653,
+        "wallpaper.cpu_steady_core_pct": 2.963178158318225,
+        "wallpaper.cpu_steady_pct": 0.18519863489488905,
+        "wallpaper.device_ms.cold": 910.121,
+        "wallpaper.device_ms.warm": 653.845,
+        "wallpaper.device_own_ms.cold": 607.9,
+        "wallpaper.device_own_ms.warm": 606.4,
+        "wallpaper.first_frame_ms.cold": 1245.012,
+        "wallpaper.first_frame_ms.warm": 950.128,
+        "wallpaper.first_frame_own_ms.cold": 942.8,
+        "wallpaper.first_frame_own_ms.warm": 902.7,
+        "wallpaper.private_held_mb": 410.31640625,
+        "wallpaper.private_mb": 410.296875,
+        "wallpaper.source_ms.cold": 941.019,
+        "wallpaper.source_ms.warm": 682.99,
+        "wallpaper.source_own_ms.cold": 638.8,
+        "wallpaper.source_own_ms.warm": 635.6,
+        "wallpaper.working_set_held_mb": 18.43359375,
+        "wallpaper.working_set_mb": 18.125
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "core.spawn": [
+              331.458,
+              331.5
+            ],
+            "wallpaper.device": [
+              910.121,
+              607.9
+            ],
+            "wallpaper.first_frame": [
+              1245.012,
+              942.8
+            ],
+            "wallpaper.source": [
+              941.019,
+              638.8
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              82.459,
+              82.5
+            ],
+            "wallpaper.device": [
+              744.328,
+              691.8
+            ],
+            "wallpaper.first_frame": [
+              1028.439,
+              975.9
+            ],
+            "wallpaper.source": [
+              773.587,
+              721.1
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              75.513,
+              75.5
+            ],
+            "wallpaper.device": [
+              653.845,
+              606.4
+            ],
+            "wallpaper.first_frame": [
+              950.128,
+              902.7
+            ],
+            "wallpaper.source": [
+              682.99,
+              635.6
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              69.38,
+              69.4
+            ],
+            "wallpaper.device": [
+              616.679,
+              574.4
+            ],
+            "wallpaper.first_frame": [
+              876.466,
+              834.2
+            ],
+            "wallpaper.source": [
+              645.743,
+              603.4
+            ]
+          },
+          "taskbar_hidden_ms": null
+        }
+      ],
+      "processes": [
+        {
+          "pid": 58588,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.984375,
+          "working_set_mb": 11.91796875
+        },
+        {
+          "pid": 32188,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 410.296875,
+          "working_set_mb": 18.125
+        }
+      ],
+      "notes": [
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)"
+      ]
+    },
+    {
+      "scenario": "web",
+      "about": "webdemo web page, wallpaper only",
+      "components": [
+        "core",
+        "total",
+        "wallpaper"
+      ],
+      "metrics": {
+        "core.cpu_held_core_pct": 0.0,
+        "core.cpu_held_pct": 0.0,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 1.98828125,
+        "core.private_mb": 1.984375,
+        "core.spawn_ms.cold": 263.451,
+        "core.spawn_ms.warm": 64.084,
+        "core.spawn_own_ms.cold": 263.5,
+        "core.spawn_own_ms.warm": 64.1,
+        "core.working_set_held_mb": 11.921875,
+        "core.working_set_mb": 11.8984375,
+        "screens.visible": 1.0,
+        "total.cpu_held_core_pct": 0.15598688288581705,
+        "total.cpu_held_pct": 0.009749180180363566,
+        "total.cpu_steady_core_pct": 8.577752320367468,
+        "total.cpu_steady_pct": 0.5361095200229667,
+        "total.private_held_mb": 443.9609375,
+        "total.private_mb": 352.8359375,
+        "total.working_set_held_mb": 444.65625,
+        "total.working_set_mb": 404.3125,
+        "wallpaper.cpu_held_core_pct": 0.15598688288581705,
+        "wallpaper.cpu_held_pct": 0.009749180180363566,
+        "wallpaper.cpu_steady_core_pct": 8.577752320367468,
+        "wallpaper.cpu_steady_pct": 0.5361095200229667,
+        "wallpaper.device_ms.cold": 835.024,
+        "wallpaper.device_ms.warm": 540.529,
+        "wallpaper.device_own_ms.cold": 599.3,
+        "wallpaper.device_own_ms.warm": 500.0,
+        "wallpaper.first_frame_ms.cold": 850.359,
+        "wallpaper.first_frame_ms.warm": 555.398,
+        "wallpaper.first_frame_own_ms.cold": 614.6,
+        "wallpaper.first_frame_own_ms.warm": 514.9,
+        "wallpaper.private_held_mb": 441.97265625,
+        "wallpaper.private_mb": 350.8515625,
+        "wallpaper.source_ms.cold": 849.204,
+        "wallpaper.source_ms.warm": 554.319,
+        "wallpaper.source_own_ms.cold": 613.5,
+        "wallpaper.source_own_ms.warm": 513.8,
+        "wallpaper.working_set_held_mb": 432.734375,
+        "wallpaper.working_set_mb": 392.4140625
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "core.spawn": [
+              263.451,
+              263.5
+            ],
+            "wallpaper.device": [
+              835.024,
+              599.3
+            ],
+            "wallpaper.first_frame": [
+              850.359,
+              614.6
+            ],
+            "wallpaper.source": [
+              849.204,
+              613.5
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              68.813,
+              68.8
+            ],
+            "wallpaper.device": [
+              553.677,
+              512.1
+            ],
+            "wallpaper.first_frame": [
+              569.331,
+              527.7
+            ],
+            "wallpaper.source": [
+              568.231,
+              526.6
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              64.084,
+              64.1
+            ],
+            "wallpaper.device": [
+              520.999,
+              480.0
+            ],
+            "wallpaper.first_frame": [
+              533.859,
+              492.8
+            ],
+            "wallpaper.source": [
+              532.936,
+              491.9
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              63.856,
+              63.9
+            ],
+            "wallpaper.device": [
+              540.529,
+              500.0
+            ],
+            "wallpaper.first_frame": [
+              555.398,
+              514.9
+            ],
+            "wallpaper.source": [
+              554.319,
+              513.8
+            ]
+          },
+          "taskbar_hidden_ms": null
+        }
+      ],
+      "processes": [
+        {
+          "pid": 50396,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.984375,
+          "working_set_mb": 11.8984375
+        },
+        {
+          "pid": 58432,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 145.23828125,
+          "working_set_mb": 4.98046875
+        },
+        {
+          "pid": 45404,
+          "name": "msedgewebview2.exe",
+          "group": "wallpaper.webview",
+          "private_mb": 43.21484375,
+          "working_set_mb": 128.74609375
+        },
+        {
+          "pid": 25692,
+          "name": "msedgewebview2.exe",
+          "group": "wallpaper.webview",
+          "private_mb": 2.453125,
+          "working_set_mb": 10.515625
+        },
+        {
+          "pid": 55540,
+          "name": "msedgewebview2.exe",
+          "group": "wallpaper.webview",
+          "private_mb": 89.94140625,
+          "working_set_mb": 76.66015625
+        },
+        {
+          "pid": 42556,
+          "name": "msedgewebview2.exe",
+          "group": "wallpaper.webview",
+          "private_mb": 11.9765625,
+          "working_set_mb": 39.5
+        },
+        {
+          "pid": 23736,
+          "name": "msedgewebview2.exe",
+          "group": "wallpaper.webview",
+          "private_mb": 7.4296875,
+          "working_set_mb": 19.69921875
+        },
+        {
+          "pid": 54172,
+          "name": "msedgewebview2.exe",
+          "group": "wallpaper.webview",
+          "private_mb": 21.1328125,
+          "working_set_mb": 49.82421875
+        },
+        {
+          "pid": 51736,
+          "name": "msedgewebview2.exe",
+          "group": "wallpaper.webview",
+          "private_mb": 29.46484375,
+          "working_set_mb": 62.48828125
+        }
+      ],
+      "notes": [
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)"
+      ]
+    },
+    {
+      "scenario": "widgets",
+      "about": "photo + 3 widgets (clock, system monitor, now playing)",
+      "components": [
+        "core",
+        "total",
+        "wallpaper",
+        "widgets"
+      ],
+      "metrics": {
+        "core.cpu_held_core_pct": 0.1559765948659233,
+        "core.cpu_held_pct": 0.009748537179120206,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 1.88671875,
+        "core.private_mb": 1.88671875,
+        "core.spawn_ms.cold": 360.941,
+        "core.spawn_ms.warm": 85.416,
+        "core.spawn_own_ms.cold": 360.9,
+        "core.spawn_own_ms.warm": 85.4,
+        "core.working_set_held_mb": 11.8515625,
+        "core.working_set_mb": 11.83984375,
+        "screens.visible": 1.0,
+        "total.cpu_held_core_pct": 0.6239063794636932,
+        "total.cpu_held_pct": 0.038994148716480825,
+        "total.cpu_steady_core_pct": 0.15599781081907366,
+        "total.cpu_steady_pct": 0.009749863176192104,
+        "total.private_held_mb": 309.74609375,
+        "total.private_mb": 306.375,
+        "total.working_set_held_mb": 64.89453125,
+        "total.working_set_mb": 40.0546875,
+        "wallpaper.cpu_held_core_pct": 0.3119531897318466,
+        "wallpaper.cpu_held_pct": 0.019497074358240413,
+        "wallpaper.cpu_steady_core_pct": 0.15599781081907366,
+        "wallpaper.cpu_steady_pct": 0.009749863176192104,
+        "wallpaper.device_ms.cold": 879.078,
+        "wallpaper.device_ms.warm": 602.712,
+        "wallpaper.device_own_ms.cold": 642.1,
+        "wallpaper.device_own_ms.warm": 559.5,
+        "wallpaper.first_frame_ms.cold": 1135.863,
+        "wallpaper.first_frame_ms.warm": 854.592,
+        "wallpaper.first_frame_own_ms.cold": 898.9,
+        "wallpaper.first_frame_own_ms.warm": 811.4,
+        "wallpaper.private_held_mb": 305.80859375,
+        "wallpaper.private_mb": 302.4375,
+        "wallpaper.source_ms.cold": 910.157,
+        "wallpaper.source_ms.warm": 632.05,
+        "wallpaper.source_own_ms.cold": 673.1,
+        "wallpaper.source_own_ms.warm": 588.8,
+        "wallpaper.working_set_held_mb": 41.38671875,
+        "wallpaper.working_set_mb": 16.58203125,
+        "widgets.cpu_held_core_pct": 0.1559765948659233,
+        "widgets.cpu_held_pct": 0.009748537179120206,
+        "widgets.cpu_steady_core_pct": 0.0,
+        "widgets.cpu_steady_pct": 0.0,
+        "widgets.private_held_mb": 2.05078125,
+        "widgets.private_mb": 2.05078125,
+        "widgets.working_set_held_mb": 11.65625,
+        "widgets.working_set_mb": 11.6328125
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "core.spawn": [
+              360.941,
+              360.9
+            ],
+            "wallpaper.device": [
+              879.078,
+              642.1
+            ],
+            "wallpaper.first_frame": [
+              1135.863,
+              898.9
+            ],
+            "wallpaper.source": [
+              910.157,
+              673.1
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              85.416,
+              85.4
+            ],
+            "wallpaper.device": [
+              602.712,
+              559.5
+            ],
+            "wallpaper.first_frame": [
+              854.592,
+              811.4
+            ],
+            "wallpaper.source": [
+              632.05,
+              588.8
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              134.149,
+              134.2
+            ],
+            "wallpaper.device": [
+              1041.38,
+              961.9
+            ],
+            "wallpaper.first_frame": [
+              1378.432,
+              1298.9
+            ],
+            "wallpaper.source": [
+              1075.597,
+              996.1
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "core.spawn": [
+              79.466,
+              79.5
+            ],
+            "wallpaper.device": [
+              583.166,
+              540.1
+            ],
+            "wallpaper.first_frame": [
+              811.99,
+              768.9
+            ],
+            "wallpaper.source": [
+              609.96,
+              566.9
+            ]
+          },
+          "taskbar_hidden_ms": null
+        }
+      ],
+      "processes": [
+        {
+          "pid": 16388,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.88671875,
+          "working_set_mb": 11.83984375
+        },
+        {
+          "pid": 58988,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 302.4375,
+          "working_set_mb": 16.58203125
+        },
+        {
+          "pid": 20412,
+          "name": "mypaper-widgets.exe",
+          "group": "widgets",
+          "private_mb": 2.05078125,
+          "working_set_mb": 11.6328125
+        }
+      ],
+      "notes": [
+        "run 0: no READY component=widgets first_paint_ms within 20s",
+        "run 1: no READY component=widgets first_paint_ms within 20s",
+        "run 2: no READY component=widgets first_paint_ms within 20s",
+        "run 3: no READY component=widgets first_paint_ms within 20s",
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)"
+      ]
+    },
+    {
+      "scenario": "bars",
+      "about": "photo + top bar and dock, taskbar kept",
+      "components": [
+        "bars",
+        "core",
+        "total",
+        "wallpaper"
+      ],
+      "metrics": {
+        "bars.cpu_held_core_pct": 0.15593889722187543,
+        "bars.cpu_held_pct": 0.009746181076367214,
+        "bars.cpu_steady_core_pct": 0.1559748774733735,
+        "bars.cpu_steady_pct": 0.009748429842085843,
+        "bars.first_paint_ms.cold": 1869.377,
+        "bars.first_paint_ms.warm": 1551.532,
+        "bars.first_paint_own_ms.cold": 1536.8,
+        "bars.first_paint_own_ms.warm": 1476.0,
+        "bars.private_held_mb": 251.90234375,
+        "bars.private_mb": 251.828125,
+        "bars.working_set_held_mb": 511.03125,
+        "bars.working_set_mb": 510.390625,
+        "core.cpu_held_core_pct": 0.0,
+        "core.cpu_held_pct": 0.0,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 1.9921875,
+        "core.private_mb": 1.97265625,
+        "core.spawn_ms.cold": 347.689,
+        "core.spawn_ms.warm": 90.335,
+        "core.spawn_own_ms.cold": 347.7,
+        "core.spawn_own_ms.warm": 90.3,
+        "core.working_set_held_mb": 11.93359375,
+        "core.working_set_mb": 11.9140625,
+        "screens.visible": 1.0,
+        "total.cpu_held_core_pct": 0.15593889722187543,
+        "total.cpu_held_pct": 0.009746181076367214,
+        "total.cpu_steady_core_pct": 0.311949754946747,
+        "total.cpu_steady_pct": 0.019496859684171686,
+        "total.private_held_mb": 559.69921875,
+        "total.private_mb": 556.21875,
+        "total.working_set_held_mb": 563.07421875,
+        "total.working_set_mb": 537.36328125,
+        "wallpaper.cpu_held_core_pct": 0.0,
+        "wallpaper.cpu_held_pct": 0.0,
+        "wallpaper.cpu_steady_core_pct": 0.1559748774733735,
+        "wallpaper.cpu_steady_pct": 0.009748429842085843,
+        "wallpaper.device_ms.cold": 973.952,
+        "wallpaper.device_ms.warm": 795.814,
+        "wallpaper.device_own_ms.cold": 737.4,
+        "wallpaper.device_own_ms.warm": 749.1,
+        "wallpaper.first_frame_ms.cold": 1300.548,
+        "wallpaper.first_frame_ms.warm": 1141.754,
+        "wallpaper.first_frame_own_ms.cold": 1064.0,
+        "wallpaper.first_frame_own_ms.warm": 1095.1,
+        "wallpaper.private_held_mb": 305.8046875,
+        "wallpaper.private_mb": 302.41796875,
+        "wallpaper.source_ms.cold": 1007.478,
+        "wallpaper.source_ms.warm": 832.03,
+        "wallpaper.source_own_ms.cold": 770.9,
+        "wallpaper.source_own_ms.warm": 785.3,
+        "wallpaper.working_set_held_mb": 40.109375,
+        "wallpaper.working_set_mb": 15.05859375
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "bars.first_paint": [
+              1869.377,
+              1536.8
+            ],
+            "core.spawn": [
+              347.689,
+              347.7
+            ],
+            "wallpaper.device": [
+              973.952,
+              737.4
+            ],
+            "wallpaper.first_frame": [
+              1300.548,
+              1064.0
+            ],
+            "wallpaper.source": [
+              1007.478,
+              770.9
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "bars.first_paint": [
+              1551.532,
+              1476.0
+            ],
+            "core.spawn": [
+              90.007,
+              90.0
+            ],
+            "wallpaper.device": [
+              764.284,
+              717.5
+            ],
+            "wallpaper.first_frame": [
+              1072.591,
+              1025.8
+            ],
+            "wallpaper.source": [
+              799.772,
+              753.0
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "bars.first_paint": [
+              1831.645,
+              1739.8
+            ],
+            "core.spawn": [
+              110.369,
+              110.4
+            ],
+            "wallpaper.device": [
+              1322.809,
+              1264.8
+            ],
+            "wallpaper.first_frame": [
+              1892.573,
+              1834.6
+            ],
+            "wallpaper.source": [
+              1359.388,
+              1301.4
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "bars.first_paint": [
+              1402.896,
+              1327.3
+            ],
+            "core.spawn": [
+              90.335,
+              90.3
+            ],
+            "wallpaper.device": [
+              795.814,
+              749.1
+            ],
+            "wallpaper.first_frame": [
+              1141.754,
+              1095.1
+            ],
+            "wallpaper.source": [
+              832.03,
+              785.3
+            ]
+          },
+          "taskbar_hidden_ms": null
+        }
+      ],
+      "processes": [
+        {
+          "pid": 56724,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.97265625,
+          "working_set_mb": 11.9140625
+        },
+        {
+          "pid": 59004,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 302.41796875,
+          "working_set_mb": 15.05859375
+        },
+        {
+          "pid": 42256,
+          "name": "mypaper-bars.exe",
+          "group": "bars",
+          "private_mb": 6.56640625,
+          "working_set_mb": 38.47265625
+        },
+        {
+          "pid": 39504,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 51.10546875,
+          "working_set_mb": 143.8828125
+        },
+        {
+          "pid": 39276,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 2.453125,
+          "working_set_mb": 10.51953125
+        },
+        {
+          "pid": 36968,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 96.88671875,
+          "working_set_mb": 78.62890625
+        },
+        {
+          "pid": 57756,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 12.0625,
+          "working_set_mb": 39.625
+        },
+        {
+          "pid": 37420,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 7.4765625,
+          "working_set_mb": 19.75
+        },
+        {
+          "pid": 56380,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 25.734375,
+          "working_set_mb": 60.984375
+        },
+        {
+          "pid": 39520,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 23.3984375,
+          "working_set_mb": 57.1015625
+        },
+        {
+          "pid": 55360,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 26.14453125,
+          "working_set_mb": 61.42578125
+        }
+      ],
+      "notes": [
+        "run 0: some child processes outlived core by 5 s",
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)"
+      ]
+    },
+    {
+      "scenario": "bars-hide",
+      "about": "photo + top bar and dock, taskbar hidden",
+      "components": [
+        "bars",
+        "core",
+        "taskbar",
+        "total",
+        "wallpaper"
+      ],
+      "metrics": {
+        "bars.cpu_held_core_pct": 0.0,
+        "bars.cpu_held_pct": 0.0,
+        "bars.cpu_steady_core_pct": 0.31187801543625515,
+        "bars.cpu_steady_pct": 0.019492375964765947,
+        "bars.first_paint_ms.cold": 1680.853,
+        "bars.first_paint_ms.warm": 1288.737,
+        "bars.first_paint_own_ms.cold": 1294.7,
+        "bars.first_paint_own_ms.warm": 1215.6,
+        "bars.private_held_mb": 290.77734375,
+        "bars.private_mb": 290.74609375,
+        "bars.working_set_held_mb": 522.4453125,
+        "bars.working_set_mb": 521.828125,
+        "core.cpu_held_core_pct": 0.15596135919331375,
+        "core.cpu_held_pct": 0.00974758494958211,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 1.99609375,
+        "core.private_mb": 1.99609375,
+        "core.spawn_ms.cold": 403.121,
+        "core.spawn_ms.warm": 94.975,
+        "core.spawn_own_ms.cold": 403.1,
+        "core.spawn_own_ms.warm": 95.0,
+        "core.working_set_held_mb": 11.9140625,
+        "core.working_set_mb": 11.90234375,
+        "screens.visible": 1.0,
+        "taskbar.hidden_ms.cold": 455.101,
+        "taskbar.hidden_ms.warm": 129.399,
+        "total.cpu_held_core_pct": 0.15596135919331375,
+        "total.cpu_held_pct": 0.00974758494958211,
+        "total.cpu_steady_core_pct": 0.7796950385906379,
+        "total.cpu_steady_pct": 0.04873093991191487,
+        "total.private_held_mb": 596.375,
+        "total.private_mb": 593.2109375,
+        "total.working_set_held_mb": 574.4609375,
+        "total.working_set_mb": 548.80859375,
+        "wallpaper.cpu_held_core_pct": 0.0,
+        "wallpaper.cpu_held_pct": 0.0,
+        "wallpaper.cpu_steady_core_pct": 0.4678170231543827,
+        "wallpaper.cpu_steady_pct": 0.02923856394714892,
+        "wallpaper.device_ms.cold": 1086.524,
+        "wallpaper.device_ms.warm": 768.713,
+        "wallpaper.device_own_ms.cold": 809.4,
+        "wallpaper.device_own_ms.warm": 719.2,
+        "wallpaper.first_frame_ms.cold": 1447.811,
+        "wallpaper.first_frame_ms.warm": 1354.088,
+        "wallpaper.first_frame_own_ms.cold": 1170.7,
+        "wallpaper.first_frame_own_ms.warm": 1304.6,
+        "wallpaper.private_held_mb": 303.6015625,
+        "wallpaper.private_mb": 300.46875,
+        "wallpaper.source_ms.cold": 1116.915,
+        "wallpaper.source_ms.warm": 821.812,
+        "wallpaper.source_own_ms.cold": 839.8,
+        "wallpaper.source_own_ms.warm": 772.3,
+        "wallpaper.working_set_held_mb": 40.1015625,
+        "wallpaper.working_set_mb": 15.078125
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "bars.first_paint": [
+              1680.853,
+              1294.7
+            ],
+            "core.spawn": [
+              403.121,
+              403.1
+            ],
+            "wallpaper.device": [
+              1086.524,
+              809.4
+            ],
+            "wallpaper.first_frame": [
+              1447.811,
+              1170.7
+            ],
+            "wallpaper.source": [
+              1116.915,
+              839.8
+            ]
+          },
+          "taskbar_hidden_ms": 455.101
+        },
+        {
+          "cold": false,
+          "markers": {
+            "bars.first_paint": [
+              1288.737,
+              1215.6
+            ],
+            "core.spawn": [
+              85.245,
+              85.2
+            ],
+            "wallpaper.device": [
+              768.713,
+              719.2
+            ],
+            "wallpaper.first_frame": [
+              1354.088,
+              1304.6
+            ],
+            "wallpaper.source": [
+              821.812,
+              772.3
+            ]
+          },
+          "taskbar_hidden_ms": 117.064
+        },
+        {
+          "cold": false,
+          "markers": {
+            "bars.first_paint": [
+              1501.898,
+              1390.8
+            ],
+            "core.spawn": [
+              126.865,
+              126.9
+            ],
+            "wallpaper.device": [
+              1077.829,
+              997.3
+            ],
+            "wallpaper.first_frame": [
+              1485.194,
+              1404.7
+            ],
+            "wallpaper.source": [
+              1115.322,
+              1034.8
+            ]
+          },
+          "taskbar_hidden_ms": 183.989
+        },
+        {
+          "cold": false,
+          "markers": {
+            "bars.first_paint": [
+              1220.726,
+              1138.2
+            ],
+            "core.spawn": [
+              94.975,
+              95.0
+            ],
+            "wallpaper.device": [
+              688.878,
+              631.9
+            ],
+            "wallpaper.first_frame": [
+              1021.021,
+              964.0
+            ],
+            "wallpaper.source": [
+              719.235,
+              662.2
+            ]
+          },
+          "taskbar_hidden_ms": 129.399
+        }
+      ],
+      "processes": [
+        {
+          "pid": 8352,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.99609375,
+          "working_set_mb": 11.90234375
+        },
+        {
+          "pid": 56044,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 300.46875,
+          "working_set_mb": 15.078125
+        },
+        {
+          "pid": 51120,
+          "name": "mypaper-bars.exe",
+          "group": "bars",
+          "private_mb": 6.8671875,
+          "working_set_mb": 38.64453125
+        },
+        {
+          "pid": 55644,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 51.59765625,
+          "working_set_mb": 146.76953125
+        },
+        {
+          "pid": 54020,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 2.45703125,
+          "working_set_mb": 10.515625
+        },
+        {
+          "pid": 48504,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 126.765625,
+          "working_set_mb": 78.6875
+        },
+        {
+          "pid": 27244,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 11.96484375,
+          "working_set_mb": 39.609375
+        },
+        {
+          "pid": 45308,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 7.4765625,
+          "working_set_mb": 19.74609375
+        },
+        {
+          "pid": 57128,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 28.52734375,
+          "working_set_mb": 63.7265625
+        },
+        {
+          "pid": 49432,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 26.42578125,
+          "working_set_mb": 60.125
+        },
+        {
+          "pid": 16388,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 28.6640625,
+          "working_set_mb": 64.00390625
+        }
+      ],
+      "notes": [
+        "run 0: some child processes outlived core by 5 s",
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)"
+      ]
+    },
+    {
+      "scenario": "full",
+      "about": "aurora + widgets + top bar and dock",
+      "components": [
+        "bars",
+        "core",
+        "total",
+        "wallpaper",
+        "widgets"
+      ],
+      "metrics": {
+        "bars.cpu_held_core_pct": 49.5917843847126,
+        "bars.cpu_held_pct": 3.0994865240445373,
+        "bars.cpu_steady_core_pct": 115.69878448291564,
+        "bars.cpu_steady_pct": 7.231174030182228,
+        "bars.first_paint_ms.cold": 1664.892,
+        "bars.first_paint_ms.warm": 1354.774,
+        "bars.first_paint_own_ms.cold": 1222.4,
+        "bars.first_paint_own_ms.warm": 1258.0,
+        "bars.private_held_mb": 1195.24609375,
+        "bars.private_mb": 1163.609375,
+        "bars.working_set_held_mb": 1418.5078125,
+        "bars.working_set_mb": 1386.671875,
+        "core.cpu_held_core_pct": 0.3118980149981924,
+        "core.cpu_held_pct": 0.019493625937387026,
+        "core.cpu_steady_core_pct": 0.0,
+        "core.cpu_steady_pct": 0.0,
+        "core.private_held_mb": 1.890625,
+        "core.private_mb": 1.87109375,
+        "core.spawn_ms.cold": 455.355,
+        "core.spawn_ms.warm": 100.469,
+        "core.spawn_own_ms.cold": 455.4,
+        "core.spawn_own_ms.warm": 100.5,
+        "core.working_set_held_mb": 11.86328125,
+        "core.working_set_mb": 11.84765625,
+        "screens.visible": 1.0,
+        "total.cpu_held_core_pct": 50.21558041470898,
+        "total.cpu_held_pct": 3.1384737759193113,
+        "total.cpu_steady_core_pct": 118.66142182142694,
+        "total.cpu_steady_pct": 7.416338863839184,
+        "total.private_held_mb": 1488.0,
+        "total.private_mb": 1456.34375,
+        "total.working_set_held_mb": 1461.68359375,
+        "total.working_set_mb": 1429.578125,
+        "wallpaper.cpu_held_core_pct": 0.1559490074990962,
+        "wallpaper.cpu_held_pct": 0.009746812968693513,
+        "wallpaper.cpu_steady_core_pct": 2.9626373385113167,
+        "wallpaper.cpu_steady_pct": 0.1851648336569573,
+        "wallpaper.device_ms.cold": 931.928,
+        "wallpaper.device_ms.warm": 701.505,
+        "wallpaper.device_own_ms.cold": 678.6,
+        "wallpaper.device_own_ms.warm": 646.9,
+        "wallpaper.first_frame_ms.cold": 1313.05,
+        "wallpaper.first_frame_ms.warm": 1105.13,
+        "wallpaper.first_frame_own_ms.cold": 1059.7,
+        "wallpaper.first_frame_own_ms.warm": 1057.4,
+        "wallpaper.private_held_mb": 288.82421875,
+        "wallpaper.private_mb": 288.82421875,
+        "wallpaper.source_ms.cold": 1035.351,
+        "wallpaper.source_ms.warm": 808.187,
+        "wallpaper.source_own_ms.cold": 782.0,
+        "wallpaper.source_own_ms.warm": 753.6,
+        "wallpaper.working_set_held_mb": 19.67578125,
+        "wallpaper.working_set_mb": 19.4453125,
+        "widgets.cpu_held_core_pct": 0.1559490074990962,
+        "widgets.cpu_held_pct": 0.009746812968693513,
+        "widgets.cpu_steady_core_pct": 0.0,
+        "widgets.cpu_steady_pct": 0.0,
+        "widgets.private_held_mb": 2.0390625,
+        "widgets.private_mb": 2.0390625,
+        "widgets.working_set_held_mb": 11.63671875,
+        "widgets.working_set_mb": 11.61328125
+      },
+      "starts": [
+        {
+          "cold": true,
+          "markers": {
+            "bars.first_paint": [
+              1664.892,
+              1222.4
+            ],
+            "core.spawn": [
+              455.355,
+              455.4
+            ],
+            "wallpaper.device": [
+              931.928,
+              678.6
+            ],
+            "wallpaper.first_frame": [
+              1313.05,
+              1059.7
+            ],
+            "wallpaper.source": [
+              1035.351,
+              782.0
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "bars.first_paint": [
+              1354.774,
+              1258.0
+            ],
+            "core.spawn": [
+              109.807,
+              109.8
+            ],
+            "wallpaper.device": [
+              701.505,
+              646.9
+            ],
+            "wallpaper.first_frame": [
+              1105.13,
+              1050.6
+            ],
+            "wallpaper.source": [
+              808.187,
+              753.6
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "bars.first_paint": [
+              1331.334,
+              1242.5
+            ],
+            "core.spawn": [
+              100.469,
+              100.5
+            ],
+            "wallpaper.device": [
+              722.284,
+              674.8
+            ],
+            "wallpaper.first_frame": [
+              1104.917,
+              1057.4
+            ],
+            "wallpaper.source": [
+              825.116,
+              777.6
+            ]
+          },
+          "taskbar_hidden_ms": null
+        },
+        {
+          "cold": false,
+          "markers": {
+            "bars.first_paint": [
+              1355.173,
+              1268.7
+            ],
+            "core.spawn": [
+              98.775,
+              98.8
+            ],
+            "wallpaper.device": [
+              675.798,
+              627.3
+            ],
+            "wallpaper.first_frame": [
+              1108.518,
+              1060.0
+            ],
+            "wallpaper.source": [
+              781.538,
+              733.0
+            ]
+          },
+          "taskbar_hidden_ms": null
+        }
+      ],
+      "processes": [
+        {
+          "pid": 35652,
+          "name": "mypaper-core.exe",
+          "group": "core",
+          "private_mb": 1.87109375,
+          "working_set_mb": 11.84765625
+        },
+        {
+          "pid": 43740,
+          "name": "mypaper-wallpaper.exe",
+          "group": "wallpaper",
+          "private_mb": 288.82421875,
+          "working_set_mb": 19.4453125
+        },
+        {
+          "pid": 11620,
+          "name": "mypaper-widgets.exe",
+          "group": "widgets",
+          "private_mb": 2.0390625,
+          "working_set_mb": 11.61328125
+        },
+        {
+          "pid": 57432,
+          "name": "mypaper-bars.exe",
+          "group": "bars",
+          "private_mb": 6.67578125,
+          "working_set_mb": 38.42578125
+        },
+        {
+          "pid": 46088,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 39.9140625,
+          "working_set_mb": 123.28515625
+        },
+        {
+          "pid": 54940,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 3.31640625,
+          "working_set_mb": 19.12109375
+        },
+        {
+          "pid": 45728,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 102.23828125,
+          "working_set_mb": 79.3046875
+        },
+        {
+          "pid": 46340,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 11.11328125,
+          "working_set_mb": 33.94140625
+        },
+        {
+          "pid": 51624,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 7.46875,
+          "working_set_mb": 19.765625
+        },
+        {
+          "pid": 36148,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 28.78125,
+          "working_set_mb": 66.2578125
+        },
+        {
+          "pid": 50548,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 24.45703125,
+          "working_set_mb": 60.375
+        },
+        {
+          "pid": 54676,
+          "name": "msedgewebview2.exe",
+          "group": "bars.webview",
+          "private_mb": 27.171875,
+          "working_set_mb": 63.26171875
+        },
+        {
+          "pid": 31228,
+          "name": "Spotify.exe",
+          "group": "bars.webview",
+          "private_mb": 223.65234375,
+          "working_set_mb": 234.71484375
+        },
+        {
+          "pid": 35048,
+          "name": "Spotify.exe",
+          "group": "bars.webview",
+          "private_mb": 2.4140625,
+          "working_set_mb": 8.52734375
+        },
+        {
+          "pid": 34484,
+          "name": "Spotify.exe",
+          "group": "bars.webview",
+          "private_mb": 204.0234375,
+          "working_set_mb": 119.28515625
+        },
+        {
+          "pid": 42000,
+          "name": "Spotify.exe",
+          "group": "bars.webview",
+          "private_mb": 28.8125,
+          "working_set_mb": 46.75
+        },
+        {
+          "pid": 44248,
+          "name": "Spotify.exe",
+          "group": "bars.webview",
+          "private_mb": 19.80859375,
+          "working_set_mb": 24.41015625
+        },
+        {
+          "pid": 34216,
+          "name": "Spotify.exe",
+          "group": "bars.webview",
+          "private_mb": 64.18359375,
+          "working_set_mb": 80.05859375
+        },
+        {
+          "pid": 9348,
+          "name": "Spotify.exe",
+          "group": "bars.webview",
+          "private_mb": 292.078125,
+          "working_set_mb": 332.51171875
+        },
+        {
+          "pid": 47084,
+          "name": "Spotify.exe",
+          "group": "bars.webview",
+          "private_mb": 77.5,
+          "working_set_mb": 36.67578125
+        }
+      ],
+      "notes": [
+        "run 0: no READY component=widgets first_paint_ms within 20s",
+        "run 1: no READY component=widgets first_paint_ms within 20s",
+        "run 2: no READY component=widgets first_paint_ms within 20s",
+        "run 3: no READY component=widgets first_paint_ms within 20s",
+        "1 of 2 screens were covered by windows during the steady sample (the wallpaper and widgets pause there)",
+        "run 3: some child processes outlived core by 5 s"
+      ]
+    }
+  ],
+  "failures": [],
+  "violations": [
+    {
+      "scenario": "shader",
+      "metric": "wallpaper.first_frame_ms.cold",
+      "limit": 1000.0,
+      "actual": 1454.232
+    },
+    {
+      "scenario": "shader",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 1145.961
+    },
+    {
+      "scenario": "image",
+      "metric": "wallpaper.first_frame_ms.cold",
+      "limit": 1000.0,
+      "actual": 1129.737
+    },
+    {
+      "scenario": "image",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 800.844
+    },
+    {
+      "scenario": "slideshow",
+      "metric": "wallpaper.first_frame_ms.cold",
+      "limit": 1000.0,
+      "actual": 1395.344
+    },
+    {
+      "scenario": "slideshow",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 1141.336
+    },
+    {
+      "scenario": "video",
+      "metric": "wallpaper.first_frame_ms.cold",
+      "limit": 1000.0,
+      "actual": 1481.347
+    },
+    {
+      "scenario": "video",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 952.83
+    },
+    {
+      "scenario": "scene",
+      "metric": "wallpaper.first_frame_ms.cold",
+      "limit": 1000.0,
+      "actual": 1245.012
+    },
+    {
+      "scenario": "scene",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 950.128
+    },
+    {
+      "scenario": "web",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 555.398
+    },
+    {
+      "scenario": "widgets",
+      "metric": "wallpaper.first_frame_ms.cold",
+      "limit": 1000.0,
+      "actual": 1135.863
+    },
+    {
+      "scenario": "widgets",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 854.592
+    },
+    {
+      "scenario": "bars",
+      "metric": "wallpaper.first_frame_ms.cold",
+      "limit": 1000.0,
+      "actual": 1300.548
+    },
+    {
+      "scenario": "bars",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 1141.754
+    },
+    {
+      "scenario": "bars-hide",
+      "metric": "wallpaper.first_frame_ms.cold",
+      "limit": 1000.0,
+      "actual": 1447.811
+    },
+    {
+      "scenario": "bars-hide",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 1354.088
+    },
+    {
+      "scenario": "full",
+      "metric": "core.spawn_ms.warm",
+      "limit": 100.0,
+      "actual": 100.469
+    },
+    {
+      "scenario": "full",
+      "metric": "total.cpu_held_pct",
+      "limit": 0.1,
+      "actual": 3.1384737759193113
+    },
+    {
+      "scenario": "full",
+      "metric": "wallpaper.first_frame_ms.cold",
+      "limit": 1000.0,
+      "actual": 1313.05
+    },
+    {
+      "scenario": "full",
+      "metric": "wallpaper.first_frame_ms.warm",
+      "limit": 500.0,
+      "actual": 1105.13
+    }
+  ],
+  "checked": 40
+}

@@ -2,17 +2,20 @@
 // (docs/widgets.md), enforces the manifest's permissions, and pushes events. DOM-free, so it's
 // unit-tested. Data comes from a `Backend` (fake data in the harness).
 
-import { MypaperError, WIRE_VERSION, withToneDefaults } from "../src";
+import { audioBins, MypaperError, WIRE_VERSION, withToneDefaults } from "../src";
 import type {
   AppearanceState,
   MediaAction,
   MediaState,
   Permission,
+  PickedFile,
+  PickFileOptions,
   Settings,
   SizeInfo,
   SubscribeParams,
   SystemStats,
   ThemeInfo,
+  UserInfo,
   WidgetManifest,
   WireEvent,
   WireMethods,
@@ -28,12 +31,25 @@ export interface Backend {
   theme(): ThemeInfo;
   launch(target: string): void;
   plugin(id: string, method: string, params: unknown): Promise<unknown>;
+  /** `bins` floats in 0..1 for the audio topic. */
+  spectrum(bins: number): number[];
+  user(): UserInfo;
+  appIcon(target: string, size: number): string | null;
+  /** Shows the file dialog; `null` when cancelled. */
+  pickFile(opts: PickFileOptions): Promise<PickedFile | null>;
+  /** A shared storage namespace: common to every widget (every BridgeHost) on the page. */
+  shared(namespace: string): Map<string, unknown>;
 }
 
 export type HostOutput = WireResponse | WireEvent;
 
 /** The host's floor for `system.subscribe`. */
 const MIN_INTERVAL_MS = 1000;
+
+/** One audio frame every ~33 ms. */
+const AUDIO_INTERVAL_MS = 1000 / 30;
+
+const NAMESPACE = /^[a-z0-9-]+$/;
 
 type Handlers = { [M in keyof WireMethods]: (params: WireMethods[M][0]) => Promise<WireMethods[M][1]> | WireMethods[M][1] };
 
@@ -93,9 +109,12 @@ export class BridgeHost {
       appearance: withToneDefaults(this.state.look.appearance),
       themeCss: this.state.look.themeCss,
     }),
-    "storage.get": ({ key }) => this.storage.get(key) ?? null,
-    "storage.set": ({ key, value }) => {
-      this.storage.set(key, value);
+    "storage.get": ({ key, shared }) => this.store(shared).get(key) ?? null,
+    "storage.set": ({ key, value, shared }) => {
+      const store = this.store(shared);
+      // Like the real host, a missing value deletes the key.
+      if (value === undefined) store.delete(key);
+      else store.set(key, value);
       return null;
     },
     "system.stats": () => (this.need("system.stats"), this.backend.stats()),
@@ -112,6 +131,14 @@ export class BridgeHost {
       return null;
     },
     "theme.current": () => (this.need("theme"), this.backend.theme()),
+    "user.info": () => (this.need("user"), this.backend.user()),
+    // The dialog is the consent: no permission.
+    pickFile: (opts) => this.backend.pickFile(opts ?? {}),
+    appIcon: ({ target, size }) => {
+      this.need("launch");
+      if (typeof target !== "string" || !target) throw new MypaperError("InvalidParams", "appIcon: empty target");
+      return this.backend.appIcon(target, size ?? 64);
+    },
     plugin: ({ plugin, method, params }) => {
       this.needPlugin(plugin);
       return this.backend.plugin(plugin, method, params);
@@ -140,10 +167,28 @@ export class BridgeHost {
   }
 
   private checkSubscribe(p: SubscribeParams): void {
-    if (p.topic === "system") this.need("system.stats");
-    else if (p.topic === "media") this.need("media");
-    else if (p.topic === "theme") this.need("theme");
-    else this.needPlugin(p.plugin);
+    switch (p.topic) {
+      case "system":
+        return this.need("system.stats");
+      case "media":
+        return this.need("media");
+      case "theme":
+        return this.need("theme");
+      case "audio":
+        return this.need("audio");
+      case "plugin":
+        return this.needPlugin(p.plugin);
+    }
+  }
+
+  /** This instance's storage, or a shared namespace (which needs `storage.shared:<namespace>`). */
+  private store(shared: string | undefined): Map<string, unknown> {
+    if (shared === undefined) return this.storage;
+    if (typeof shared !== "string" || !NAMESPACE.test(shared)) {
+      throw new MypaperError("InvalidParams", `storage: bad shared namespace ${JSON.stringify(shared)}`);
+    }
+    this.need(`storage.shared:${shared}`);
+    return this.backend.shared(shared);
   }
 
   // ---------------------------------------------------------- subscriptions
@@ -161,13 +206,17 @@ export class BridgeHost {
     this.subs.delete(id);
   }
 
-  /** Only `system` is polled; the other topics are pushed by `notify*`. */
+  /** `system` and `audio` are polled; the other topics are pushed by `notify*`. */
   private arm(sub: Subscription): void {
     const p = sub.params;
-    if (p.topic !== "system") return;
-    const push = () => this.pushSub(p.sub, this.backend.stats());
-    push();
-    sub.timer = setInterval(push, Math.max(MIN_INTERVAL_MS, p.intervalMs) / this.speed);
+    if (p.topic === "system") {
+      const push = () => this.pushSub(p.sub, this.backend.stats());
+      push();
+      sub.timer = setInterval(push, Math.max(MIN_INTERVAL_MS, p.intervalMs) / this.speed);
+    } else if (p.topic === "audio") {
+      const bins = audioBins(p.bins);
+      sub.timer = setInterval(() => this.pushSub(p.sub, this.backend.spectrum(bins)), AUDIO_INTERVAL_MS);
+    }
   }
 
   private pushSub(sub: string, value: unknown): void {

@@ -1,0 +1,42 @@
+{
+  "icons": "mono",
+  "top": { "enabled": false, "clock": { "format": "HH:mm\nd/M/yyyy" } },
+  "dock": {
+    "enabled": true,
+    "monitors": "all",
+    "style": "taskbar",
+    "position": "bottom",
+    "size": 24,
+    "padding": 12,
+    "margin": 0,
+    "spacing": 4,
+    "magnify": false,
+    "indicator": "pill",
+    "counter": false,
+    "align": "center",
+    "left": ["start", "search"],
+    "right": ["tray", "network", "volume", "battery", "clock"],
+    "extras": ["desktop"],
+    "preview": { "delay": 400 }
+  },
+  "look": {
+    "scheme": "auto",
+    "background": { "type": "wallpaper" },
+    "tint": 0.78,
+    "saturation": 1.25,
+    "noise": 0.02,
+    "border": { "rest": { "width": 1, "color": "#ffffff12" } },
+    "items": {
+      "radius": 5,
+      "hover": { "background": "#ffffff14" },
+      "active": { "background": "#ffffff0f" }
+    },
+    "indicator": { "running": "#ffffff8c", "active": "system-accent-light-2", "attention": "#ffb900" }
+  },
+  "animation": {
+    "duration": 167,
+    "curve": [0.1, 0.9, 0.2, 1],
+    "bar": { "style": "slide" },
+    "open": { "style": "slide", "duration": 200 }
+  }
+}

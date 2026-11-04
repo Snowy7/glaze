@@ -10,19 +10,23 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{CloseHandle, ERROR_FILE_NOT_FOUND, HWND, LPARAM, WPARAM};
 use windows::Win32::System::Registry::{
     HKEY_CURRENT_USER, REG_DWORD, RRF_RT_REG_DWORD, RegDeleteKeyValueW, RegGetValueW,
     RegSetKeyValueW,
+};
+use windows::Win32::System::Threading::{
+    OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::Shell::{
     ABM_GETSTATE, ABM_SETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, FindWindowExW, GetClassNameW, GetWindowThreadProcessId, IsWindowVisible,
-    SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA, SendMessageTimeoutW, ShowWindow, WM_SETTINGCHANGE,
+    SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA, SendMessageTimeoutW, ShowWindow, ShowWindowAsync,
+    WM_SETTINGCHANGE,
 };
-use windows::core::{BOOL, PCWSTR, w};
+use windows::core::{BOOL, PCWSTR, PWSTR, w};
 
 use crate::config::{Alignment, TaskbarMode};
 
@@ -325,15 +329,15 @@ pub fn hide_visible() -> (usize, bool) {
         // SAFETY: read-only query, then a hide, on taskbar windows found just now.
         .filter(|&hwnd| unsafe { IsWindowVisible(hwnd) }.as_bool())
         .inspect(|&hwnd| {
-            // SAFETY: as above.
-            let _ = unsafe { ShowWindow(hwnd, SW_HIDE) };
+            // SAFETY: as above. Async: a busy Explorer mustn't hold up the bars' loop.
+            let _ = unsafe { ShowWindowAsync(hwnd, SW_HIDE) };
         })
         .count();
     (shown, NativeShell.appbar_state() & ABS_AUTOHIDE != 0)
 }
 
-/// Explorer's `Shell_TrayWnd`: the first one that isn't ours (the bars' tray host makes one too,
-/// kept above Explorer's so apps find it).
+/// Explorer's `Shell_TrayWnd`: the first one `explorer.exe` owns (the bars' tray host makes one
+/// too, kept above Explorer's so apps find it, and so may another shell).
 pub fn explorer_tray() -> Option<HWND> {
     let mut after = None;
     // SAFETY: lookups by class name and a read-only query; a stale handle just ends the loop.
@@ -342,7 +346,7 @@ pub fn explorer_tray() -> Option<HWND> {
             let tray = FindWindowExW(None, after, w!("Shell_TrayWnd"), PCWSTR::null()).ok()?;
             let mut pid = 0;
             GetWindowThreadProcessId(tray, Some(&mut pid));
-            if pid != std::process::id() {
+            if pid != std::process::id() && is_explorer(pid) {
                 return Some(tray);
             }
             after = Some(tray);
@@ -350,7 +354,8 @@ pub fn explorer_tray() -> Option<HWND> {
     }
 }
 
-/// Explorer's `Shell_TrayWnd` and every `Shell_SecondaryTrayWnd` (never the tray host's).
+/// Explorer's `Shell_TrayWnd` and every `Shell_SecondaryTrayWnd` (never the tray host's, or
+/// another shell's).
 pub fn taskbar_windows() -> Vec<HWND> {
     let mut found: Vec<HWND> = Vec::new();
     // SAFETY: the callback only runs during this call, while `found` is alive.
@@ -372,16 +377,55 @@ unsafe extern "system" fn push_taskbar(hwnd: HWND, out: LPARAM) -> BOOL {
     let mut pid = 0;
     // SAFETY: a read-only query on a window handle from EnumWindows.
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
-    if pid != std::process::id() && is_taskbar_class(&String::from_utf16_lossy(&class[..len])) {
+    if pid != std::process::id()
+        && is_taskbar_class(&String::from_utf16_lossy(&class[..len]))
+        && is_explorer(pid)
+    {
         // SAFETY: `out` is the Vec passed by `taskbar_windows`.
         unsafe { (*(out.0 as *mut Vec<HWND>)).push(hwnd) };
     }
     true.into()
 }
 
+/// Whether process `pid` runs `explorer.exe`.
+fn is_explorer(pid: u32) -> bool {
+    // SAFETY: a query handle we close; the buffer outlives the call.
+    unsafe {
+        let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+            return false;
+        };
+        let mut buffer = [0u16; 1024];
+        let mut len = buffer.len() as u32;
+        let read = QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            PWSTR(buffer.as_mut_ptr()),
+            &mut len,
+        );
+        let _ = CloseHandle(process);
+        read.is_ok() && is_explorer_path(&String::from_utf16_lossy(&buffer[..len as usize]))
+    }
+}
+
+/// `C:\Windows\explorer.exe`, whatever the folder or case.
+fn is_explorer_path(path: &str) -> bool {
+    path.rsplit(['\\', '/'])
+        .next()
+        .is_some_and(|name| name.eq_ignore_ascii_case("explorer.exe"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn knows_explorer_by_its_image() {
+        assert!(is_explorer_path(r"C:\Windows\explorer.exe"));
+        assert!(is_explorer_path(r"C:\WINDOWS\EXPLORER.EXE"));
+        assert!(!is_explorer_path(r"C:\Program Files\RetroBar\RetroBar.exe"));
+        assert!(!is_explorer_path(r"C:\Tools\myexplorer.exe"));
+        assert!(!is_explorer_path(""));
+    }
 
     /// A taskbar in memory.
     #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,0 +1,427 @@
+/* main.js builds .root.v-weeks | .v-month | .v-streak. Heat squares are <i class="hm" data-l="0..4">. */
+.card {
+  padding: var(--pad);
+}
+.root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---------------------------------------------------------------- the heat square */
+
+.hm {
+  --c: rgb(var(--ink) / 0.14);
+  --on: var(--on-accent);
+  --edge: 0 0 0 0 transparent;
+  display: block;
+  border-radius: 28%;
+  background: var(--c);
+  box-shadow: var(--edge);
+  color: var(--t1);
+}
+html[data-style]:not([data-style="minimal"]) .hm {
+  --on: var(--on-spark);
+}
+/* Level 1 to 4 climb from the highlight toward the second highlight (the same color in minimal). */
+.hm[data-l="1"] {
+  --c: color-mix(in srgb, var(--hi) 42%, transparent);
+}
+.hm[data-l="2"] {
+  --c: color-mix(in srgb, color-mix(in srgb, var(--hi), var(--hi-2) 30%) 66%, transparent);
+}
+.hm[data-l="3"] {
+  --c: color-mix(in srgb, color-mix(in srgb, var(--hi), var(--hi-2) 65%) 86%, transparent);
+  color: var(--on);
+}
+.hm[data-l="4"] {
+  --c: var(--hi-2);
+  color: var(--on);
+}
+.hm[data-future] {
+  opacity: 0.3;
+}
+/* On a bare wallpaper an empty square needs a hairline to show on both light and dark photos. */
+html[data-surface="none"] .hm[data-l="0"] {
+  --edge: 0 0 0 0.5px rgb(var(--halo) / 0.28);
+}
+html[data-style="depth"] .hm:not([data-l="0"]),
+html[data-style="aero"] .hm:not([data-l="0"]) {
+  --edge: var(--bevel);
+}
+html[data-style="depth"] .hm[data-l="0"],
+html[data-style="paper"] .hm {
+  --edge: inset 0 1px 1.5px rgb(var(--shade) / 0.35);
+}
+html[data-style="neon"] .hm[data-l="3"],
+html[data-style="neon"] .hm[data-l="4"] {
+  --edge: 0 0 6px -1px var(--glow);
+}
+html[data-style="neon"] .hm[data-l="0"] {
+  --edge: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.2);
+}
+html[data-style="aero"] .hm:is([data-l="3"], [data-l="4"]) {
+  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.4), transparent 55%);
+}
+/* Neon and aero glow on the brightest squares. */
+html[data-style="aero"] .hm[data-l="4"] {
+  --edge: var(--bevel), 0 0 6px -1px var(--glow);
+}
+
+/* The tooltip: one element, moved by main.js. */
+.tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  pointer-events: none;
+  gap: 0.7em;
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 0.4em 0.9em;
+  color: var(--t0);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+html[data-surface="glass"] .tip,
+html[data-surface="solid"] .tip {
+  background: var(--surface);
+  box-shadow: var(--elev-2);
+}
+.tip b {
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- weeks */
+
+.v-weeks .head {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lead {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.55em;
+}
+.lead .caps {
+  align-self: center;
+  margin-right: 0.2em;
+}
+.total {
+  font-size: clamp(20px, 15cqh, 40px);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.sub {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.legend {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  padding-bottom: 2px;
+}
+.legend span {
+  padding: 0 3px;
+}
+.legend .hm {
+  width: 10px;
+  height: 10px;
+}
+@container (max-width: 340px) {
+  .legend span,
+  .sub .span {
+    display: none;
+  }
+}
+@container (max-height: 120px) {
+  .v-weeks .head .caps,
+  .v-weeks .legend {
+    display: none;
+  }
+  .total {
+    font-size: 18px;
+  }
+}
+
+/* The plot measures itself: its size drives the number of weeks (main.js). */
+.plot {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.plot-in {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+}
+.body {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--lw) auto;
+}
+.months {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--weeks), var(--cell));
+  column-gap: var(--gap);
+  height: 14px;
+  align-items: start;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--t2);
+}
+.months span {
+  white-space: nowrap;
+}
+.days {
+  grid-column: 1;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: repeat(7, var(--cell));
+  row-gap: var(--gap);
+  align-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--t2);
+}
+.cells {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, var(--cell));
+  grid-auto-columns: var(--cell);
+  gap: var(--gap);
+}
+/* Nothing recorded yet: ghost squares and a hint. */
+.body[data-empty] .cells {
+  opacity: 0.45;
+}
+.hint {
+  position: absolute;
+  inset: auto 0 0 0;
+  margin: auto;
+  top: 14px;
+  width: max-content;
+  max-width: 92%;
+  height: max-content;
+  text-align: center;
+  padding: 0.5em 1em;
+  font-size: 11px;
+  color: var(--t0);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+@container (max-height: 110px) {
+  .hint {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- month */
+
+.v-month {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+}
+.v-month .head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.v-month .lead {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1em;
+}
+.v-month .lead .caps {
+  align-self: auto;
+  margin: 0;
+}
+.month {
+  font-size: clamp(18px, 13cqh, 40px);
+  font-weight: 300;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  font-size: 11px;
+  color: var(--t2);
+}
+.stat b {
+  font-size: 1.5em;
+  font-weight: 600;
+  color: var(--t0);
+}
+.box {
+  container-type: size;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+}
+.mgrid {
+  --u: min(100cqw / 7, 100cqh / var(--rows));
+  width: calc(var(--u) * 7);
+  height: calc(var(--u) * var(--rows));
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: max(2px, calc(var(--u) * 0.1));
+}
+.mgrid .wd {
+  display: grid;
+  place-items: center;
+  font-size: clamp(8px, calc(var(--u) * 0.32), 11px);
+}
+.mgrid .hm {
+  display: grid;
+  place-items: center;
+  font-size: clamp(8px, calc(var(--u) * 0.4), 15px);
+  font-weight: 600;
+}
+.mgrid .hm[data-today] {
+  outline: max(1.5px, calc(var(--u) * 0.06)) solid var(--t0);
+  outline-offset: 1px;
+}
+html[data-style="neon"] .mgrid .hm[data-today] {
+  outline-color: var(--spark);
+}
+.mgrid .hm[data-future] {
+  opacity: 0.5;
+}
+/* A wide card puts the month name on the left. */
+@container (min-aspect-ratio: 3/2) {
+  .v-month {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .v-month .head {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .month {
+    font-size: clamp(18px, min(24cqh, 8cqw), 56px);
+  }
+}
+@container (max-height: 100px) {
+  .v-month .head .caps,
+  .v-month .stat span {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- streak */
+
+.v-streak {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 4px 16px;
+}
+.v-streak .main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.2em;
+}
+.v-streak .row {
+  display: flex;
+  align-items: center;
+  gap: 0.12em;
+  min-width: 0;
+}
+.count {
+  font-size: clamp(34px, 48cqh, 96px);
+  font-weight: 200;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+}
+.unit {
+  align-self: flex-end;
+  margin: 0 0 0.3em 0.45em;
+  font-size: clamp(11px, 12cqh, 16px);
+}
+.flame {
+  flex: none;
+  height: clamp(26px, 36cqh, 70px);
+  width: auto;
+  aspect-ratio: 1;
+  margin-right: 0.1em;
+  stroke: var(--hi);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: color-mix(in srgb, var(--hi-2) 38%, transparent);
+}
+html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .flame {
+  filter: drop-shadow(0 0 5px var(--glow));
+}
+.main[data-on="false"] .flame {
+  stroke: var(--t2);
+  fill: none;
+  filter: none;
+}
+.v-streak .side {
+  align-self: center;
+  display: grid;
+  gap: 8px;
+  text-align: right;
+}
+.v-streak .side .stat {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+}
+.v-streak .side .stat b {
+  font-size: clamp(16px, 20cqh, 30px);
+  font-weight: 300;
+  line-height: 1;
+}
+.strip {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(28, minmax(0, 1fr));
+  gap: max(1.5px, 0.6cqw);
+  height: clamp(7px, 9cqh, 16px);
+}
+.strip .hm {
+  height: 100%;
+  border-radius: 35%;
+}
+@container (max-height: 130px) {
+  .v-streak .main .caps,
+  .v-streak .side .stat:nth-child(2) {
+    display: none;
+  }
+}
+@container (max-width: 190px) {
+  .v-streak .side {
+    display: none;
+  }
+}

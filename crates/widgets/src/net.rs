@@ -19,6 +19,10 @@ pub struct WidgetNet {
     pub dir: PathBuf,
     /// Its `network:<origin>` permissions.
     pub origins: Vec<Origin>,
+    /// `widget-data`, where files picked for its instances live (served as `/__data/…`).
+    pub data_dir: PathBuf,
+    /// The ids of its instances: only their picked files are served.
+    pub instances: Vec<String>,
 }
 
 /// The Content-Security-Policy on everything a widget host serves: its own
@@ -82,6 +86,7 @@ pub fn content_type(path: &str) -> &'static str {
         Some("jpg" | "jpeg") => "image/jpeg",
         Some("gif") => "image/gif",
         Some("webp") => "image/webp",
+        Some("bmp") => "image/bmp",
         Some("avif") => "image/avif",
         Some("ico") => "image/x-icon",
         Some("woff") => "font/woff",

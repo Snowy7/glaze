@@ -23,6 +23,7 @@ const BUNDLED_WIDGETS = [
   "analog-clock", "battery", "calendar", "clock", "countdown", "crypto", "disk", "launcher", "network", "notes",
   "now-playing", "photo", "quote", "rss", "search", "system-info", "system-monitor", "timer", "todo", "weather",
   "world-clock",
+  "visualizer", "heatmap", "quick-toggles", "app-shortcuts", "greeting", "photo-frame", "media-pill",
 ];
 
 const widgets = folders("widgets", "widget.json");
@@ -59,6 +60,24 @@ describe("bundled manifests", () => {
   it.each(plugins)("plugin %s matches the schema", (id) => {
     const manifest = read(join(root, "plugins", id, "plugin.json"));
     expect(validatePlugin(manifest), JSON.stringify(validatePlugin.errors)).toBe(true);
+  });
+
+  it("the schema accepts the v2 fields and rejects broken ones", () => {
+    const base = read(join(root, "widgets", "clock", "widget.json")) as Record<string, unknown>;
+    const settings = [
+      { key: "a", type: "slider", label: "A", min: 0, max: 1, step: 0.1, unit: "px", default: 0.5, group: "G" },
+      { key: "b", type: "color", label: "B", alpha: true, default: "#ffffff80" },
+      { key: "c", type: "image", label: "C", extensions: ["png"], default: "" },
+      { key: "d", type: "font", label: "D", default: "Segoe UI" },
+      { key: "e", type: "select", label: "E", options: ["x", { value: "y", label: "Y", icon: "★" }], default: "x" },
+    ];
+    const v2 = { ...base, preset: "overlay", instances: "single", permissions: ["audio", "user", "storage.shared:activity"], settings };
+    expect(validateWidget(v2), JSON.stringify(validateWidget.errors)).toBe(true);
+    expect(validateWidget({ ...v2, preset: "floating" })).toBe(false);
+    expect(validateWidget({ ...v2, instances: "two" })).toBe(false);
+    expect(validateWidget({ ...v2, permissions: ["storage.shared:Bad Name"] })).toBe(false);
+    expect(validateWidget({ ...v2, settings: [{ key: "a", type: "slider", label: "A", default: 1 }] })).toBe(false);
+    expect(validateWidget({ ...v2, settings: [{ key: "c", type: "image", label: "C", extensions: ["p.ng"], default: "" }] })).toBe(false);
   });
 
   it("the schema rejects broken manifests", () => {

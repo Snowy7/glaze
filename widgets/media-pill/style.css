@@ -1,0 +1,343 @@
+/* The capsule. #card is the kit's .card turned into a pill: with a glass or solid surface the kit
+   paints it as usual (the #card rules below only change its shape, and beat the kit's by id);
+   with surface none the kit paints nothing, so .cap (a .tile) gives it a body there.
+   html[data-variant] is pill | notch | mini (main.js); #card[data-idle] / [data-playing] / [data-nobar]
+   are its states. */
+
+html #card {
+  --ph: clamp(40px, 62cqh, 64px); /* the capsule's height */
+  --art: calc(var(--ph) - 14px);
+  /* Not the kit's full-box card: a centred capsule with room around it for shadows and glows. */
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: calc(100% - 2 * max(var(--bleed), 8px));
+  height: var(--ph);
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  padding: 0 calc(var(--ph) * 0.24) 0 calc((var(--ph) - var(--art)) / 2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--t0);
+}
+/* Idle, and the mini shape, shrink to their contents. */
+html #card[data-idle],
+html[data-variant="mini"] #card {
+  width: max-content;
+  max-width: calc(100% - 2 * max(var(--bleed), 8px));
+}
+html[data-surface="none"] #card {
+  text-shadow: none;
+  box-shadow: 0 8px 20px -10px rgb(var(--halo) / 0.55);
+}
+/* The capsule has a body of its own: no per-glyph shadows on top. */
+html #card svg {
+  filter: none;
+}
+
+/* Surface none: the capsule's body. Styled looks come from the kit's .tile; a flat one gets a wash. */
+.cap {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+html[data-surface="none"] .cap {
+  display: block;
+}
+html:is(:not([data-style]), [data-style="minimal"])[data-surface="none"] .cap {
+  background: var(--chip);
+  box-shadow: inset 0 0 0 1px var(--fill-2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
+}
+
+/* ---------------------------------------------------------------- the parts */
+
+.art {
+  flex: none;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--art);
+  height: var(--art);
+  border-radius: calc(var(--art) * 0.3);
+  overflow: hidden;
+  background: var(--fill-2);
+  color: var(--t2);
+  box-shadow: inset 0 0 0 1px var(--fill-1);
+}
+.art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.note {
+  width: 54%;
+  height: 54%;
+}
+.art:has(img:not([hidden])) .note {
+  display: none;
+}
+
+.meta {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  line-height: 1.2;
+}
+.title {
+  overflow: hidden;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: clamp(12px, 22cqh, 15px);
+  letter-spacing: -0.005em;
+  color: var(--t0);
+}
+.artist {
+  font-size: clamp(10.5px, 17cqh, 12px);
+  color: var(--t2);
+}
+/* Text that does not fit scrolls there and back (transform only), with its ends faded out. */
+.mq {
+  display: inline-block;
+}
+.mq.run {
+  animation: mq var(--dur, 8s) ease-in-out infinite alternate;
+  will-change: transform;
+}
+.title:has(.run) {
+  -webkit-mask-image: linear-gradient(90deg, transparent, rgb(var(--ink)) 7%, rgb(var(--ink)) 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, rgb(var(--ink)) 7%, rgb(var(--ink)) 93%, transparent);
+}
+@keyframes mq {
+  0%,
+  14% {
+    transform: translateX(0);
+  }
+  86%,
+  100% {
+    transform: translateX(calc(var(--dist, 0px) * -1));
+  }
+}
+
+.ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.ctl button {
+  width: calc(var(--ph) * 0.5);
+  height: calc(var(--ph) * 0.5);
+  border-radius: 50%;
+  color: var(--t1);
+}
+.ctl button svg {
+  width: 52%;
+  height: 52%;
+  display: block;
+}
+.ctl .play {
+  width: calc(var(--ph) * 0.64);
+  height: calc(var(--ph) * 0.64);
+  margin: 0 2px;
+  --on: var(--on-accent);
+  color: var(--on);
+  background: linear-gradient(145deg, var(--hi), var(--hi-2));
+}
+html[data-style]:not([data-style="minimal"]) .ctl .play {
+  --on: var(--on-spark);
+  box-shadow: var(--bevel), 0 0 var(--glow-size) -3px var(--glow);
+}
+.ctl .play:hover {
+  color: var(--on);
+  background: linear-gradient(145deg, var(--hi), var(--hi-2));
+  filter: brightness(1.1);
+}
+.ctl .play svg {
+  width: 48%;
+  height: 48%;
+}
+.i-pause {
+  display: none !important;
+}
+#card[data-playing] .i-play {
+  display: none !important;
+}
+#card[data-playing] .i-pause {
+  display: block !important;
+}
+
+/* The hairline along the bottom edge, clipped by the capsule. */
+.hair {
+  position: absolute;
+  left: calc(var(--ph) * 0.42);
+  right: calc(var(--ph) * 0.42);
+  bottom: 3px;
+  height: 2px;
+}
+.hair > i {
+  width: 100%;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  transition: transform 1s linear;
+}
+#card[data-nobar] .hair,
+#card[data-idle] .hair {
+  display: none;
+}
+
+.eq {
+  display: none;
+}
+
+/* Nothing playing: calm, quiet, small. */
+#card[data-idle] .ctl,
+#card[data-idle] .eq {
+  display: none;
+}
+#card[data-idle] {
+  padding-right: calc(var(--ph) * 0.42);
+}
+#card[data-idle] .title {
+  font-weight: 500;
+  color: var(--t2);
+}
+#card[data-idle] .art {
+  background: transparent;
+  box-shadow: none;
+  color: var(--t3);
+}
+
+/* A narrow capsule keeps the play button and loses the skip buttons (and the notch's bars). */
+@container (max-width: 260px) {
+  .prev,
+  .next,
+  html[data-variant="notch"] .eq {
+    display: none;
+  }
+  html[data-variant="notch"] #card {
+    width: calc(100% - 2 * max(var(--bleed), 8px));
+  }
+}
+
+/* ---------------------------------------------------------------- mini: artwork and play */
+
+html[data-variant="mini"] .meta,
+html[data-variant="mini"] .prev,
+html[data-variant="mini"] .next,
+html[data-variant="mini"] .hair,
+html[data-variant="mini"] .eq {
+  display: none;
+}
+html[data-variant="mini"] #card {
+  gap: 8px;
+  padding-right: calc((var(--ph) - var(--art)) / 2);
+}
+html[data-variant="mini"] #card[data-idle] {
+  padding-right: calc((var(--ph) - var(--art)) / 2);
+}
+html[data-variant="mini"] #card[data-idle] .art {
+  background: var(--fill-2);
+  color: var(--t2);
+}
+
+/* ---------------------------------------------------------------- notch: a dark island that grows on hover */
+
+html[data-variant="notch"] #card {
+  /* Always dark inside, whatever the text tone: its own little night. */
+  --t0: rgb(var(--lit));
+  --t1: rgb(var(--lit) / 0.84);
+  --t2: rgb(var(--lit) / 0.6);
+  --t3: rgb(var(--lit) / 0.38);
+  --fill-1: rgb(var(--lit) / 0.08);
+  --fill-2: rgb(var(--lit) / 0.14);
+  --fill-3: rgb(var(--lit) / 0.24);
+  --ink: var(--lit);
+  --halo: var(--shade);
+  --chip: rgb(var(--lit) / 0.1);
+  width: calc(88% - 2 * max(var(--bleed), 8px));
+  background: rgb(var(--shade) / 0.94);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 0;
+  text-shadow: none;
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--lit) / 0.08),
+    inset 0 1px 0 rgb(var(--lit) / 0.1),
+    0 10px 24px -10px rgb(var(--shade) / 0.75);
+  transition:
+    width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+html[data-variant="notch"] #card:hover {
+  width: calc(100% - 2 * max(var(--bleed), 8px));
+  height: calc(var(--ph) + 6px);
+}
+html[data-variant="notch"] #card[data-idle] {
+  width: max-content;
+}
+html[data-variant="notch"] #card::before,
+html[data-variant="notch"] #card::after,
+html[data-variant="notch"] .cap {
+  display: none;
+}
+html[data-variant="notch"] .eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 16px;
+  margin-right: 2px;
+}
+html[data-variant="notch"] #card:not([data-playing]) .eq i,
+html[data-variant="notch"] #card[data-idle] .eq {
+  animation-play-state: paused;
+}
+html[data-variant="notch"] #card[data-idle] .eq {
+  display: none;
+}
+.eq i {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(0deg, var(--hi), var(--hi-2));
+  transform-origin: 50% 100%;
+  transform: scaleY(0.35);
+  animation: eq 1.05s ease-in-out infinite;
+}
+.eq i:nth-child(2) {
+  animation-delay: -0.42s;
+}
+.eq i:nth-child(3) {
+  animation-delay: -0.75s;
+}
+@keyframes eq {
+  50% {
+    transform: scaleY(1);
+  }
+}
+html[data-style="neon"][data-variant="notch"] #card {
+  box-shadow:
+    inset 0 0 0 1px var(--spark),
+    inset 0 0 16px -6px var(--spark),
+    0 0 16px -3px var(--glow);
+}
+html[data-style="aero"][data-variant="notch"] #card {
+  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.2), rgb(var(--lit) / 0.04) 50%, transparent 51%);
+}
+html[data-style="paper"][data-variant="notch"] #card {
+  background-image: var(--grain);
+}
+html[data-style="depth"][data-variant="notch"] #card {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--lit) / 0.1),
+    inset 0 1px 0 rgb(var(--lit) / 0.22),
+    0 12px 26px -10px rgb(var(--shade) / 0.8);
+}

@@ -6,15 +6,20 @@ import { closeFlyout, flyoutOpen, type Flyout } from "../flyout";
 import { rectOf, viewport } from "../dom";
 import { placePopover, type Align, type Point, type Rect, type Size } from "../geometry";
 import { fire, request } from "../host";
-import { dockBand, type BarsConfig, type Hello } from "../protocol";
+import { dockBand, topBand, type BarsConfig, type Hello } from "../protocol";
 
 let hello: Hello | undefined;
 let config: BarsConfig | undefined;
+/** When the last pointer press on the page was (`performance.now()`). */
+let lastPress = Number.NEGATIVE_INFINITY;
+/** A flyout closing this soon after a press was closed by it. */
+const PRESS_CLOSE_MS = 500;
 
 /** main.ts hands over the bar's hello, and each config as it's built. */
 export function initSurfaces(h: Hello): void {
   hello = h;
   config = h.config;
+  document.addEventListener("pointerdown", () => (lastPress = performance.now()), { capture: true, passive: true });
 }
 
 export function setSurfaceConfig(next: BarsConfig): void {
@@ -31,7 +36,7 @@ const isTop = (): boolean => hello?.bar !== "dock";
 /** The bar's band, across (DIPs). */
 function band(): number {
   const c = barsConfig();
-  return isTop() ? c.top.height : dockBand(c.dock.size);
+  return isTop() ? topBand(c.top) : dockBand(c.dock);
 }
 
 /** Along the axis flyouts grow: true for the top bar and a bottom dock. */
@@ -117,7 +122,9 @@ export async function show<P>(flyout: Flyout<P>, props: P, options: ShowOptions)
     origin,
     onClose: () => {
       if (shown?.id === flyout.id) shown = undefined;
-      if (options.keyboard) fire("keyboard", { on: false });
+      // Closed by a press (another module, a tile): the press decides what's in front. Closed by
+      // a key: the app the user came from gets the foreground back.
+      if (options.keyboard) fire("keyboard", { on: false, handBack: performance.now() - lastPress > PRESS_CLOSE_MS });
       releaseRoom();
     },
   });
