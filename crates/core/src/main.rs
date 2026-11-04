@@ -1,7 +1,5 @@
-//! mypaper-core: the supervisor. Starts the wallpaper engine, the widget
-//! host, the shell bars and the native shell (`mypaper-shell`, which hosts the
-//! desktop right-click menu for now), restarts them when they crash or the
-//! desktop changes, and owns the panic hotkey.
+//! mypaper-core supervises the wallpaper engine and native shell, restores the taskbar after
+//! shell exit, and owns the tray, styling journal and panic hotkey.
 //!
 //! ```text
 //! mypaper-core [THEME]
@@ -71,8 +69,8 @@ fn main() -> ExitCode {
 
 /// Startup order (docs/performance.md, "Startup"): the children start first, so they work
 /// while core sets up its own tray and styling. Before the spawn, core only checks it's the one
-/// instance, takes the panic hotkey, waits for Explorer if it isn't up yet, and hides the native
-/// taskbar when the bars will (so it never shows once core runs).
+/// instance, takes the panic hotkey and waits for Explorer if it is not up yet. The shell is
+/// spawned immediately afterward and owns the early taskbar hide.
 fn run() -> Result<()> {
     startup::ready("core", "main_ms");
     // SAFETY: named mutex we hold for the lifetime of the process.
@@ -99,18 +97,12 @@ fn run() -> Result<()> {
             wallpaper_exe.display()
         );
     }
-    let bars_exe = exe.with_file_name("mypaper-bars.exe");
     bars::wait_for_shell();
-
-    // The native taskbar: hidden right away when the bars hide it. Otherwise a run that crashed
-    // may have left it hidden: put it back before the bars start (they apply their mode again).
-    let hidden_early = bars_exe.exists() && bars::hide_taskbar_early();
-    if bars::stop_leftover() && hidden_early {
-        bars::hide_taskbar_early(); // the leftover showed it again as it exited
-    }
-    if !hidden_early {
-        bars::replay_journal();
-    }
+    bars::stop_leftover()?;
+    // The shell owns startup replay and the early hide. Core never writes the journal
+    // while it is alive. Start it before the wallpaper and all of core's optional work.
+    let mut shell = start_optional("shell", exe.with_file_name("mypaper-shell.exe"));
+    startup::ready("core", "shell_spawn_ms");
 
     // The wallpaper is essential: when it stops for good, so does mypaper. It reads the config
     // itself and exits with EXIT_CONFIG on a bad one, which stops core too. Only an explicit
@@ -122,13 +114,6 @@ fn run() -> Result<()> {
     };
     let mut wallpaper = Supervised::new("wallpaper", wallpaper_exe, wallpaper_args);
     wallpaper.start()?;
-    // The widget host, the shell bars (docs/bars.md) and the native shell (docs/ui.md) are
-    // optional: if one is missing or gives up, mypaper keeps running without it. When the bars
-    // stop for good, the taskbar journal is replayed so the native taskbar is never left hidden.
-    // The native shell also exits by itself when core does.
-    let mut widgets = start_optional("widget host", exe.with_file_name("mypaper-widgets.exe"));
-    let mut shell_bars = start_optional("shell bars", bars_exe);
-    let mut shell = start_optional("shell", exe.with_file_name("mypaper-shell.exe"));
     startup::ready("core", "spawn_ms");
     log::info!("running; panic hotkey: Ctrl+Alt+Shift+Backspace");
 
@@ -157,12 +142,7 @@ fn run() -> Result<()> {
     let mut extras = DesktopExtras::new(&config);
 
     let panicked = loop {
-        let children = [
-            Some(&wallpaper),
-            widgets.as_ref(),
-            shell_bars.as_ref(),
-            shell.as_ref(),
-        ];
+        let children = [Some(&wallpaper), shell.as_ref()];
         let handles: Vec<HANDLE> = children
             .iter()
             .flatten()
@@ -197,49 +177,24 @@ fn run() -> Result<()> {
                         break false;
                     }
                 }
-                name if widgets.as_ref().is_some_and(|w| w.name == name) => {
-                    if let Some(host) = &mut widgets
-                        && host.on_exit()? == Outcome::Stopped
-                    {
-                        widgets = None;
-                    }
-                }
                 name if shell.as_ref().is_some_and(|s| s.name == name) => {
+                    // The wait above proved the shell exited: it cannot race this replay.
+                    bars::replay_journal();
                     if let Some(child) = &mut shell
                         && child.on_exit()? == Outcome::Stopped
                     {
                         shell = None;
                     }
                 }
-                _ => {
-                    if let Some(child) = &mut shell_bars
-                        && child.on_exit()? == Outcome::Stopped
-                    {
-                        shell_bars = None;
-                        bars::replay_journal();
-                    }
-                }
+                _ => {}
             }
         }
         wallpaper.restart_if_due()?;
-        if let Some(host) = &mut widgets
-            && let Err(e) = host.restart_if_due()
-        {
-            log::warn!("{e:#}; continuing without widgets");
-            widgets = None;
-        }
         if let Some(child) = &mut shell
             && let Err(e) = child.restart_if_due()
         {
             log::warn!("{e:#}; continuing without the shell");
             shell = None;
-        }
-        if let Some(child) = &mut shell_bars
-            && let Err(e) = child.restart_if_due()
-        {
-            log::warn!("{e:#}; continuing without the shell bars");
-            shell_bars = None;
-            bars::replay_journal();
         }
         let pumped = pump();
         match pumped.signal {
@@ -271,18 +226,11 @@ fn run() -> Result<()> {
         }
     };
 
-    // The bars first: they put the native taskbar back as they exit. If they had to be killed,
-    // or crashed earlier, the journal does it.
-    if let Some(child) = &mut shell_bars {
+    // Stop and reap first; only then may core replay the shell's taskbar journal.
+    if let Some(child) = &mut shell {
         child.stop_gracefully(bars::ask_to_close, bars::GRACE);
     }
     bars::replay_journal();
-    if let Some(host) = &mut widgets {
-        host.stop();
-    }
-    if let Some(child) = &mut shell {
-        child.stop();
-    }
     wallpaper.stop();
     if let Some(styling) = &mut styling {
         styling.stop();

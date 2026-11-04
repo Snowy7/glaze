@@ -1,12 +1,8 @@
-//! The shell bars child (docs/bars.md, "Core and tray"): hiding the native taskbar before the
-//! bars start, asking them to stop so they restore it themselves, and replaying the taskbar
-//! journal when they couldn't (killed, crashed).
+//! Native-shell lifetime and taskbar recovery. Core never touches the journal while the shell
+//! is alive; start-time replay and the early hide belong to the shell.
 
 use std::time::{Duration, Instant};
 
-use mypaper_bars::taskbar::{NativeShell, Shell, Taskbar, Wanted};
-use mypaper_bars::{BarsConfig, TaskbarMode};
-use mypaper_desktop::startup;
 use windows::Win32::Foundation::{CloseHandle, LPARAM, WPARAM};
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -15,7 +11,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{PCWSTR, w};
 
 /// The class of the bars' message-only window.
-const HOST_CLASS: PCWSTR = w!("mypaper.bars.host");
+const HOST_CLASS: PCWSTR = w!("mypaper.shell.inbox");
 /// How long the bars get to restore the taskbar and exit before they're killed.
 pub const GRACE: Duration = Duration::from_secs(3);
 /// How long core waits for Explorer's desktop at logon before starting without it.
@@ -42,57 +38,6 @@ pub fn wait_for_shell() {
     );
 }
 
-/// The native taskbar as core touches it before the bars run: only its windows are hidden.
-/// Auto-hide and alignment make Explorer lay the desktop out again, which held up the
-/// wallpaper's attach to the desktop by most of a second (docs/performance.md), so they are left
-/// to the bars, which apply the whole mode right after. Their originals are still journaled
-/// here: [`Taskbar::apply`] records before it changes, and the bars keep those records.
-struct HideOnly(NativeShell);
-
-impl Shell for HideOnly {
-    fn appbar_state(&self) -> u32 {
-        self.0.appbar_state()
-    }
-    fn set_appbar_state(&mut self, _state: u32) -> anyhow::Result<()> {
-        Ok(())
-    }
-    fn set_hidden(&mut self, hidden: bool) -> anyhow::Result<()> {
-        self.0.set_hidden(hidden)
-    }
-    fn alignment(&self) -> anyhow::Result<Option<u32>> {
-        self.0.alignment()
-    }
-    fn set_alignment(&mut self, _value: Option<u32>) -> anyhow::Result<()> {
-        Ok(())
-    }
-}
-
-/// When `bars.json` hides the native taskbar, hides it now, before any child starts, so it
-/// never shows while the bars load (they apply the whole mode right after; the journal keeps the
-/// originals either way). Returns whether `bars.json` says hide.
-pub fn hide_taskbar_early() -> bool {
-    let config = mypaper_bars::config::path().and_then(|path| BarsConfig::load(&path));
-    let taskbar = match config {
-        Ok(config) if config.taskbar.mode == TaskbarMode::Hide => config.taskbar,
-        Ok(_) => return false,
-        Err(e) => {
-            log::warn!("bars.json: {e:#}");
-            return false;
-        }
-    };
-    let wanted = Wanted {
-        mode: taskbar.mode,
-        alignment: taskbar.alignment,
-    };
-    let journal = mypaper_bars::files::local(mypaper_bars::taskbar::JOURNAL);
-    match journal.and_then(|path| Taskbar::new(HideOnly(NativeShell), path).apply(wanted)) {
-        Ok(()) => startup::ready("core", "taskbar_hidden_ms"),
-        // No taskbar yet (Explorer is still starting): the bars hide it when it comes.
-        Err(e) => log::warn!("hiding the taskbar early: {e:#}"),
-    }
-    true
-}
-
 /// Posts `WM_CLOSE` to a running bars host. Returns whether there was one.
 pub fn ask_to_close() -> bool {
     // SAFETY: a lookup and a post; nothing is created or activated.
@@ -107,22 +52,26 @@ pub fn ask_to_close() -> bool {
 /// A bars process left by an earlier run (it outlived a crashed core) would keep ours from
 /// starting and fight over the taskbar: ask it to exit, and wait for it. Returns whether there
 /// was one.
-pub fn stop_leftover() -> bool {
+pub fn stop_leftover() -> anyhow::Result<bool> {
     // SAFETY: a lookup, a post and a wait on a handle we open and close here.
     unsafe {
         let Ok(host) = FindWindowExW(Some(HWND_MESSAGE), None, HOST_CLASS, PCWSTR::null()) else {
-            return false;
+            return Ok(false);
         };
         log::warn!("stopping the shell bars left by an earlier run");
         let mut pid = 0;
         GetWindowThreadProcessId(host, Some(&mut pid));
-        let process = OpenProcess(PROCESS_SYNCHRONIZE, false, pid);
+        let process = OpenProcess(PROCESS_SYNCHRONIZE, false, pid)?;
         let _ = PostMessageW(Some(host), WM_CLOSE, WPARAM(0), LPARAM(0));
-        if let Ok(process) = process {
-            WaitForSingleObject(process, GRACE.as_millis() as u32);
+        {
+            let exited = WaitForSingleObject(process, GRACE.as_millis() as u32);
             let _ = CloseHandle(process);
+            anyhow::ensure!(
+                exited == windows::Win32::Foundation::WAIT_OBJECT_0,
+                "the previous shell has not exited; refusing to race its taskbar journal"
+            );
         }
-        true
+        Ok(true)
     }
 }
 
