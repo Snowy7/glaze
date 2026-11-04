@@ -13,12 +13,23 @@ const pad2 = (n) => String(n).padStart(2, "0");
  * @returns {{ h: string, m: string, s: string, period: "" | "AM" | "PM" }}
  */
 export function timeParts(date, { format24, padHours }) {
-  const hours = date.getHours();
+  return clockParts(date.getHours(), date.getMinutes(), date.getSeconds(), { format24, padHours });
+}
+
+/**
+ * `timeParts` for a wall clock that isn't the local one (a city on the World face).
+ * @param {number} hours 0 to 23
+ * @param {number} minutes
+ * @param {number} seconds
+ * @param {{ format24: boolean, padHours: boolean }} opts
+ * @returns {{ h: string, m: string, s: string, period: "" | "AM" | "PM" }}
+ */
+export function clockParts(hours, minutes, seconds, { format24, padHours }) {
   const h = format24 ? hours : hours % 12 || 12;
   return {
     h: format24 || padHours ? pad2(h) : String(h),
-    m: pad2(date.getMinutes()),
-    s: pad2(date.getSeconds()),
+    m: pad2(minutes),
+    s: pad2(seconds),
     period: format24 ? "" : hours < 12 ? "AM" : "PM",
   };
 }

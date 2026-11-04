@@ -1,214 +1,196 @@
-/* The picture is the card. With no surface it fills the widget (rounded, with a hairline ring);
-   with glass or solid it sits inset in the surface, so it reads as a print on the material.
-   main.js sets data-fit, data-motion (still or kenburns), data-rounded, data-multi (more than one
-   image) and data-empty, and --kb (how long one slow zoom lasts). */
-
+/* html[data-variant] is matte | bleed | polaroid, html[data-fit] cover | contain (main.js).
+   .frame holds the picture window (.view, with two .slide layers) and the polaroid caption.
+   Each slide's Ken Burns is the `kb` animation fed by --x0 --y0 --s0 --x1 --y1 --s1 --dur. */
 .card {
-  --inset: clamp(4px, 3.2cqmin, 8px);
-  padding: var(--inset);
+  padding: 0;
 }
-html[data-surface="none"] .card {
-  --inset: 0px;
-}
-/* A styled look with no surface: the picture floats, so keep a margin for its shadow or glow. */
-html[data-style]:not([data-style="minimal"])[data-surface="none"] .card {
-  --inset: var(--bleed);
-}
-
 .frame {
-  --card-radius: min(var(--radius), 20cqmin);
+  position: absolute;
+  inset: 0;
+}
+/* In flow, not absolute: it has to sit inside the mount's padding. */
+.view {
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
   isolation: isolate;
-  /* Concentric with the card's own corner. */
-  border-radius: max(0px, calc(var(--card-radius) - var(--inset)));
+  /* Something behind a picture that does not fill the window (fit: contain). */
+  background: rgb(var(--halo) / 0.45);
 }
-.frame[data-rounded="false"] {
-  border-radius: 0;
-}
-/* Without a surface the picture is the whole widget, so square corners are the card's too. */
-html[data-surface="none"] .card:has(.frame[data-rounded="false"]) {
-  border-radius: 0;
-}
-.frame[data-multi] {
-  cursor: pointer;
-}
-/* Letterbox bars read as a mat, not as a hole. */
-.frame[data-fit="contain"] {
-  background: var(--chip);
-}
-/* The styles lift a bare picture off the wallpaper (a glow in neon). */
-html[data-style]:not([data-style="minimal"])[data-surface="none"] .frame {
-  box-shadow: var(--elev-2), 0 0 var(--glow-size) -3px var(--glow);
-}
-
-/* Two stacked images: the incoming one (`top`) fades in over the outgoing one (`under`), which
-   only disappears once it is fully covered. Resting layers are invisible. */
-.layer {
+.slide {
+  --fade: 1.2s; /* keep in sync with FADE_S in main.js */
   position: absolute;
   inset: 0;
+  opacity: 0;
+  transition: opacity var(--fade) ease-in-out;
+}
+.slide.in {
+  opacity: 1;
+}
+.slide img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0;
-  z-index: 0;
-  -webkit-user-drag: none;
+  pointer-events: none;
 }
-.frame[data-fit="contain"] .layer {
+html[data-fit="contain"] .slide img {
   object-fit: contain;
 }
-.layer.under {
-  opacity: 1;
-  z-index: 1;
+/* The move: transform only, on a layer that is promoted just while it runs. */
+.slide.kb img {
+  animation: kb var(--dur, 20s) linear both;
+  will-change: transform;
 }
-.layer.top {
-  --fade: 600ms; /* main.js FADE_MS */
-  z-index: 2;
-  transition: opacity var(--fade) ease;
+.slide.kb.loop img {
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
 }
-.layer.top.show {
-  opacity: 1;
-}
-
-/* Slow zoom (cover only: a letterboxed picture would show its edges): one of the two layers
-   drifts in, the other out, so consecutive pictures don't move alike. A layer's animation starts
-   when it becomes `top` and keeps running while it is `under`; resting layers have none. */
-.frame[data-motion="kenburns"][data-fit="cover"] .layer:is(.top, .under) {
-  animation: drift-in var(--kb, 32s) ease-in-out forwards;
-}
-.frame[data-motion="kenburns"][data-fit="cover"] #b:is(.top, .under) {
-  animation-name: drift-out;
-}
-@keyframes drift-in {
+@keyframes kb {
   from {
-    transform: scale(1.02);
+    transform: translate3d(var(--x0, 0%), var(--y0, 0%), 0) scale(var(--s0, 1));
   }
   to {
-    transform: scale(1.13) translate(-1.6%, -1.2%);
+    transform: translate3d(var(--x1, 0%), var(--y1, 0%), 0) scale(var(--s1, 1));
   }
 }
-@keyframes drift-out {
-  from {
-    transform: scale(1.13) translate(1.4%, 1%);
-  }
-  to {
-    transform: scale(1.02);
-  }
-}
-
-/* The hairline ring, above the picture. */
-.frame::after {
+/* A layer above the pictures: the inner edge of the window. */
+.view::after {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 4;
+  z-index: 2;
+  pointer-events: none;
   border-radius: inherit;
-  pointer-events: none;
-  box-shadow:
-    inset 0 0 0 1px var(--line),
-    inset 0 0 0 1px rgb(var(--halo) / 0.1);
 }
-html[data-style="neon"] .frame::after {
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--spark-rgb) / 0.7),
-    inset 0 0 12px -4px rgb(var(--spark-rgb) / 0.6);
-}
-html:is([data-style="depth"], [data-style="aero"]) .frame::after {
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--lit) / 0.28),
-    inset 0 1px 0 rgb(var(--lit) / 0.35);
-}
-
 .caption {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  z-index: 3;
-  max-width: calc(100% - 16px);
-  padding: 0.3em 0.85em;
-  border-radius: 999px;
-  /* A real wash: the picture is the backdrop, whatever the surface. */
-  background: rgb(var(--halo) / 0.42);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  color: var(--t0);
-  text-shadow: none;
-  pointer-events: none;
+  display: none;
 }
 
-/* No images, or none that load: a soft wash of the highlight pair, a glyph, two lines. */
-.frame[data-empty] {
-  background:
-    radial-gradient(120% 90% at 8% 0%, color-mix(in srgb, var(--hi) 42%, transparent), transparent 62%),
-    radial-gradient(110% 90% at 100% 100%, color-mix(in srgb, var(--hi-2) 36%, transparent), transparent 64%),
-    var(--chip);
+/* ---------------------------------------------------------------- matte: a mount around the print */
+
+html[data-variant="matte"] .frame,
+html[data-variant="polaroid"] .frame {
+  /* A print on paper: the mount is the ink color, a touch warmed by the highlight. */
+  background: color-mix(in srgb, color-mix(in srgb, var(--t0) 90%, rgb(var(--halo))), var(--hi) 5%);
+  border-radius: clamp(2px, calc(var(--radius) * 0.22), 8px);
+  box-shadow:
+    var(--elev-3),
+    0 10px 26px -10px rgb(var(--halo) / 0.6),
+    0 2px 4px rgb(var(--halo) / 0.28),
+    0 0 0 1px rgb(var(--halo) / 0.14);
 }
-.hint {
+html[data-variant="matte"] .frame {
+  inset: max(8px, calc(var(--pad) + 2px));
+  padding: clamp(6px, 6.5cqmin, 20px);
+}
+html[data-variant="matte"] .view {
+  border-radius: 2px;
+  /* The bevelled edge of the cut mount. */
+  box-shadow: 0 0 0 1.5px rgb(var(--lit) / 0.5);
+}
+html[data-variant="matte"] .view::after {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--halo) / 0.34),
+    inset 0 2px 6px rgb(var(--halo) / 0.5),
+    inset 0 -1px 0 rgb(var(--lit) / 0.1);
+}
+
+/* ---------------------------------------------------------------- polaroid: a tilted print with a caption */
+
+/* A print is white paper whatever the text tone: its colors are artwork, not the kit's. */
+html[data-variant="polaroid"] .frame {
+  --paper: #f6f3ec; /* art */
+  --paper-ink: #34302b; /* art */
+  background: var(--paper);
+  inset: max(12px, 6cqmin);
+  padding: clamp(6px, 4.4cqmin, 16px) clamp(6px, 4.4cqmin, 16px) clamp(24px, 17cqmin, 54px);
+  transform: rotate(-2.4deg);
+}
+html[data-variant="polaroid"] .view {
+  border-radius: 1px;
+}
+html[data-variant="polaroid"] .view::after {
+  box-shadow: inset 0 0 0 1px rgb(var(--halo) / 0.22), inset 0 1px 5px rgb(var(--halo) / 0.3);
+}
+html[data-variant="polaroid"] .caption {
   position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px;
-  text-align: center;
-}
-.hint-icon {
+  left: 8%;
+  right: 8%;
+  bottom: 0;
+  height: clamp(24px, 17cqmin, 54px);
   display: grid;
   place-items: center;
-  width: clamp(30px, 30cqmin, 52px);
-  aspect-ratio: 1;
-  margin-bottom: 4px;
-  border-radius: 32%;
+  font-family: "Segoe Print", "Bradley Hand", "Segoe UI Variable Text", var(--font);
+  font-size: clamp(11px, 5.4cqmin, 19px);
+  letter-spacing: 0.01em;
+  color: var(--paper-ink);
+  text-shadow: none;
 }
-html .hint-icon.tile {
-  background-color: color-mix(in srgb, var(--hi) 24%, transparent);
+
+/* ---------------------------------------------------------------- bleed: the picture is the widget */
+
+html[data-variant="bleed"] .view::after {
+  background: radial-gradient(120% 100% at 50% 45%, transparent 52%, rgb(var(--halo) / 0.4));
+  box-shadow: inset 0 0 0 1px rgb(var(--lit) / 0.16);
 }
-.hint-icon svg {
-  width: 58%;
-  height: 58%;
-  fill: none;
-  stroke: var(--t0);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+html[data-variant="bleed"] .card {
+  box-shadow: none;
 }
-.hint-icon circle {
-  fill: var(--t0);
-  stroke: none;
+
+/* ---------------------------------------------------------------- what each style adds to the frame */
+
+html[data-style="depth"][data-variant="matte"] .frame,
+html[data-style="depth"][data-variant="polaroid"] .frame {
+  box-shadow:
+    var(--bevel),
+    var(--elev-3),
+    0 12px 28px -10px rgb(var(--halo) / 0.6),
+    0 0 0 1px rgb(var(--halo) / 0.14);
 }
-.hint-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--t0);
+html[data-style="neon"][data-variant="matte"] .frame,
+html[data-style="neon"][data-variant="polaroid"] .frame {
+  background: rgb(var(--shade) / 0.62);
+  box-shadow:
+    inset 0 0 0 1.5px var(--spark),
+    inset 0 0 18px -6px var(--spark),
+    0 0 14px -2px var(--glow);
 }
-.hint-sub {
-  max-width: 100%;
+html[data-style="neon"][data-variant="polaroid"] .caption {
   color: var(--t1);
-  letter-spacing: 0.04em;
-  text-transform: none;
-  font-weight: 500;
-  font-size: 11px;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
 }
-@container (max-width: 120px) {
-  .hint-sub {
-    font-size: 9.5px;
-  }
+html[data-style="neon"] .view::after {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--accent-2-rgb) / 0.7),
+    inset 0 0 12px -4px var(--accent-2);
 }
-/* Too small for the glyph and the words: words only; a 1x1 has room for the title alone. */
-@container (max-height: 110px) {
-  .hint-icon {
-    display: none;
-  }
+html[data-style="paper"][data-variant="matte"] .frame {
+  background: var(--grain), color-mix(in srgb, var(--t0) 90%, rgb(255 226 190) 10%); /* art */
 }
-@container (max-height: 110px) and (max-width: 140px) {
-  .hint-sub {
-    display: none;
-  }
+html[data-style="paper"][data-variant="polaroid"] .frame {
+  background: var(--grain), #f1ebdf; /* art */
+}
+html[data-style="paper"][data-variant="matte"] .frame,
+html[data-style="paper"][data-variant="polaroid"] .frame {
+  box-shadow:
+    var(--elev-3),
+    0 6px 16px -8px rgb(var(--halo) / 0.55),
+    0 0 0 1px rgb(var(--halo) / 0.12);
+}
+html[data-style="aero"][data-variant="polaroid"] .frame {
+  background: var(--sheen), var(--paper);
+}
+html[data-style="aero"][data-variant="matte"] .frame,
+html[data-style="aero"][data-variant="polaroid"] .frame {
+  box-shadow:
+    var(--bevel),
+    var(--elev-3),
+    0 0 0 1px rgb(var(--lit) / 0.4);
+}
+html[data-style="aero"][data-variant="bleed"] .view::after {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--lit) / 0.5),
+    inset 0 1px 0 rgb(var(--lit) / 0.7);
 }

@@ -285,6 +285,79 @@ button:focus-visible {
   display: none;
 }
 
+/* A widget's eyebrow: what it shows ("London", "CPU", "Up next"), small and quiet, sentence case.
+   An <svg> inside is an icon at text size. */
+.label {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--t2);
+}
+.label svg {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+}
+
+/* Empty, loading and error states: an icon, a line that says what is going on, a hint of what to
+   do. `data-kind="loading"` breathes the icon. Keep the words short. */
+.state {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 3px;
+  height: 100%;
+  padding: 6px;
+  text-align: center;
+}
+.state-icon {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 5px;
+  color: var(--t2);
+}
+.state-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.state-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t1);
+}
+.state-hint {
+  max-width: 26ch;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--t2);
+}
+.state[data-kind="loading"] .state-icon {
+  animation: kit-breathe 1.6s ease-in-out infinite;
+}
+@keyframes kit-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* New content arriving (a track, a forecast, a page of items): a short fade and lift. */
+.enter {
+  animation: kit-enter 0.28s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes kit-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
 /* ================================================================ design system v2: styles
    `data-style` on <html> (minimal | depth | neon | paper | aero) picks how the surface and the kit's
    building blocks are lit. `minimal` is everything above, untouched; a missing attribute (an older

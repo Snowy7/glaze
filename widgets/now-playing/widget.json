@@ -2,28 +2,103 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "now-playing",
   "name": "Now playing",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "author": "mypaper",
-  "description": "What's playing: big artwork, a progress scrubber and transport controls, tinted by the cover.",
+  "description": "What's playing in any app: artwork, progress and controls, or the sound's spectrum.",
   "entry": "index.html",
-  "size": { "default": [4, 2], "min": [2, 1], "max": [4, 4] },
+  "size": {
+    "default": [4, 2],
+    "min": [2, 1],
+    "max": [4, 4]
+  },
   "resizable": true,
-  "permissions": ["media"],
+  "permissions": [
+    "media",
+    "audio"
+  ],
   "plugins": [],
   "settings": [
     {
       "key": "variant",
       "type": "select",
       "label": "Look",
-      "group": "Layout",
       "default": "card",
       "options": [
-        { "value": "card", "label": "Card", "icon": "▣" },
-        { "value": "blur", "label": "Backdrop", "icon": "◍" },
-        { "value": "strip", "label": "Strip", "icon": "▬" }
+        {
+          "value": "card",
+          "label": "Card",
+          "icon": "▣"
+        },
+        {
+          "value": "blur",
+          "label": "Backdrop",
+          "icon": "◍"
+        },
+        {
+          "value": "strip",
+          "label": "Strip",
+          "icon": "▬"
+        },
+        {
+          "value": "viz",
+          "label": "Visualizer",
+          "icon": "▁▃▅"
+        }
       ]
     },
-    { "key": "tint", "type": "boolean", "label": "Tint from the artwork", "group": "Color", "default": true },
-    { "key": "glow", "type": "slider", "label": "Artwork glow", "group": "Color", "min": 0, "max": 100, "step": 5, "unit": "%", "default": 55 }
-  ]
+    {
+      "key": "tint",
+      "type": "boolean",
+      "label": "Colors from the artwork",
+      "group": "Color",
+      "default": true
+    },
+    {
+      "key": "glow",
+      "type": "slider",
+      "label": "Artwork glow",
+      "group": "Color",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "default": 55
+    },
+    {
+      "key": "viz",
+      "type": "select",
+      "label": "Spectrum",
+      "group": "Visualizer",
+      "default": "bars",
+      "options": [
+        {
+          "value": "bars",
+          "label": "Bars"
+        },
+        {
+          "value": "mirror",
+          "label": "Mirrored"
+        },
+        {
+          "value": "wave",
+          "label": "Wave"
+        }
+      ]
+    },
+    {
+      "key": "sensitivity",
+      "type": "slider",
+      "label": "Sensitivity",
+      "group": "Visualizer",
+      "min": 0.5,
+      "max": 2.5,
+      "step": 0.1,
+      "default": 1.2
+    }
+  ],
+  "replaces": {
+    "visualizer": {
+      "variant": "viz"
+    }
+  }
 }

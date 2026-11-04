@@ -20,11 +20,16 @@ function folders(dir: string, manifest: string): string[] {
 
 /** Every widget the repo ships (a missing folder is a mistake, so it is listed here). */
 const BUNDLED_WIDGETS = [
-  "analog-clock", "battery", "calendar", "clock", "countdown", "crypto", "disk", "launcher", "network", "notes",
-  "now-playing", "photo", "quote", "rss", "search", "system-info", "system-monitor", "timer", "todo", "weather",
-  "world-clock",
-  "visualizer", "heatmap", "quick-toggles", "app-shortcuts", "greeting", "photo-frame", "media-pill",
+  "calendar", "clock", "countdown", "crypto", "heatmap", "launcher", "media-pill", "notes", "now-playing", "photo",
+  "quick-toggles", "quote", "rss", "system-monitor", "timer", "todo", "weather",
 ];
+
+/** Widgets merged into others: a layout that names one must keep working (docs/widgets.md, "Replaced widgets"). */
+const REPLACED = {
+  "analog-clock": "clock", "world-clock": "clock", greeting: "clock",
+  "system-info": "system-monitor", disk: "system-monitor", network: "system-monitor", battery: "system-monitor",
+  "app-shortcuts": "launcher", search: "launcher", visualizer: "now-playing", "photo-frame": "photo",
+};
 
 const widgets = folders("widgets", "widget.json");
 const plugins = folders("plugins", "plugin.json");
@@ -55,6 +60,16 @@ describe("bundled manifests", () => {
     }
     // every plugin a widget uses exists in plugins/
     for (const p of manifest.plugins ?? []) expect(plugins).toContain(p);
+  });
+
+  it("maps every replaced id to exactly one bundled widget, never an installed one", () => {
+    const claims = new Map<string, string[]>();
+    for (const id of widgets) {
+      const manifest = read(join(root, "widgets", id, "widget.json")) as { replaces?: Record<string, unknown> };
+      for (const old of Object.keys(manifest.replaces ?? {})) claims.set(old, [...(claims.get(old) ?? []), id]);
+    }
+    expect(Object.fromEntries([...claims].map(([old, by]) => [old, by.join(",")]))).toEqual(REPLACED);
+    for (const old of claims.keys()) expect(widgets).not.toContain(old);
   });
 
   it.each(plugins)("plugin %s matches the schema", (id) => {
