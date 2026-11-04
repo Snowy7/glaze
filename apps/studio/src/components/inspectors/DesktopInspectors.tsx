@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { api, errorText, type ThemeEntry } from "../../lib/api";
 import type { Resolved } from "../../lib/barsDoc";
+import { DOCK_DESIGNS, TOP_DESIGNS } from "../../lib/barsNames";
 import type { Desktop } from "../../lib/desktop";
 import { displayName } from "../../lib/desktopGrid";
 import { useHistory } from "../../lib/history";
@@ -11,15 +12,6 @@ import { useNav, type Target } from "../../lib/nav";
 import { useStudio } from "../../lib/studio";
 import { ThemePreview } from "../ThemeCard";
 import { Button, InspectorHeader, InspectorSection, NavRow, Prop, Switch } from "../ui";
-
-const PRESET_NAMES: Record<Resolved["preset"], string> = {
-  monochrome: "Monochrome",
-  macos: "macOS",
-  windows11: "Windows 11",
-  islands: "Islands",
-  "neon-glass": "Neon glass",
-  floating: "Floating",
-};
 
 /** Nothing selected on the Desktop page: what's on the desktop, each a step from its editor. */
 export function DesktopOverview({ desktop, onSelect }: { desktop: Desktop; onSelect: (target: Target) => void }) {
@@ -55,8 +47,8 @@ export function DesktopOverview({ desktop, onSelect }: { desktop: Desktop; onSel
       <InspectorSection title="On this desktop">
         <div className="flex flex-col">
           <NavRow icon={Blocks} title="Widgets" detail={desktop.items.length === 0 ? "None yet" : `${desktop.items.length} on this display`} onClick={() => go({ page: "widgets" })} />
-          <NavRow icon={PanelTop} title="Top bar" detail={bars ? (bars.top.enabled ? PRESET_NAMES[bars.preset] : "Off") : "Loading"} onClick={() => onSelect({ kind: "bar", bar: "top" })} />
-          <NavRow icon={Dock} title="Dock" detail={bars ? (bars.dock.enabled ? (bars.dock.style === "taskbar" ? "Taskbar" : "Floating") : "Off") : "Loading"} onClick={() => onSelect({ kind: "bar", bar: "dock" })} />
+          <NavRow icon={PanelTop} title="Top bar" detail={bars ? (bars.top.enabled ? TOP_DESIGNS[bars.top.design].name : "Off") : "Loading"} onClick={() => onSelect({ kind: "bar", bar: "top" })} />
+          <NavRow icon={Dock} title="Bottom bar" detail={bars ? (bars.dock.enabled ? DOCK_DESIGNS[bars.dock.design].name : "Off") : "Loading"} onClick={() => onSelect({ kind: "bar", bar: "dock" })} />
           <NavRow icon={AppWindow} title="Windows" detail="Accent, corners, pointer" onClick={() => go({ page: "windows" })} />
           <NavRow icon={MousePointerClick} title="Right-click menu" detail={config?.desktop_menu.enabled ? "mypaper's menu" : "Windows' menu"} onClick={() => go({ page: "windows", select: "menu" })} />
         </div>
@@ -164,19 +156,19 @@ export function BarSummary({ bar, config, onBack }: { bar: "top" | "dock"; confi
   const facts: [string, string][] = config
     ? bar === "top"
       ? [
-          ["Preset", PRESET_NAMES[config.preset]],
+          ["Design", TOP_DESIGNS[config.top.design].name],
           ["Shape", { strip: "Strip", floating: "Floating", islands: "Islands" }[config.top.layout]],
           ["Edge", config.top.position === "top" ? "Top" : "Bottom"],
         ]
       : [
-          ["Preset", PRESET_NAMES[config.preset]],
+          ["Design", DOCK_DESIGNS[config.dock.design].name],
           ["Style", config.dock.style === "taskbar" ? "Taskbar" : "Floating"],
           ["Edge", config.dock.position[0]?.toUpperCase() + config.dock.position.slice(1)],
         ]
     : [];
   return (
     <>
-      <InspectorHeader icon={bar === "top" ? PanelTop : Dock} title={bar === "top" ? "Top bar" : "Dock"} detail={on ? "Shown" : "Off"} back={{ label: "Your desktop", onClick: onBack }} />
+      <InspectorHeader icon={bar === "top" ? PanelTop : Dock} title={bar === "top" ? "Top bar" : "Bottom bar"} detail={on ? "Shown" : "Off"} back={{ label: "Your desktop", onClick: onBack }} />
       <InspectorSection>
         <dl className="divide-y divide-line rounded-lg bg-canvas ring-1 ring-line-strong ring-inset">
           {facts.map(([label, value]) => (
@@ -187,7 +179,7 @@ export function BarSummary({ bar, config, onBack }: { bar: "top" | "dock"; confi
           ))}
         </dl>
         <Button variant="primary" className="w-full" onClick={() => go({ page: "bars" })}>
-          Edit {bar === "top" ? "the top bar" : "the dock"}
+          Edit {bar === "top" ? "the top bar" : "the bottom bar"}
         </Button>
       </InspectorSection>
     </>

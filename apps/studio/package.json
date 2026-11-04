@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && vite build",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "tauri": "tauri",
     "release": "tauri build --no-bundle",
     "release:capture": "tauri build --no-bundle --features dev-capture"
@@ -21,6 +21,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "4.3.4",
     "@tauri-apps/cli": "2.12.4",
+    "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.2.1",
