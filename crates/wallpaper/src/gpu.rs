@@ -2,7 +2,9 @@
 //! What gets drawn lives in `sources`; this module only owns the device,
 //! the swapchains and the shared fit/blit pipeline.
 
+use std::cell::Cell;
 use std::num::NonZeroIsize;
+use std::rc::Rc;
 
 use anyhow::{Context, Result, anyhow, bail};
 use mypaper_config::GpuPreference;
@@ -235,8 +237,9 @@ pub struct Screen {
     pub paused: bool,
     /// Needs a frame even if the source is static (new, resized, resumed, reloaded).
     pub dirty: bool,
-    /// Unmodified last wallpaper, at its source's render scale. Never contains glass.
-    pub kept: Option<KeptFrame>,
+    /// Unmodified last wallpaper, at its source's render scale. Never contains glass. Shared
+    /// by every screen of the same render size when the source draws one frame for all.
+    pub kept: Option<Rc<KeptFrame>>,
     pub glass_dirty: bool,
 }
 
@@ -244,6 +247,8 @@ pub struct KeptFrame {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub quad: crate::sources::blit::BlitQuad,
+    /// The engine frame whose wallpaper it holds, so screens that share it draw it once.
+    pub drawn: Cell<Option<u32>>,
 }
 
 impl KeptFrame {
@@ -261,7 +266,12 @@ impl KeptFrame {
             texture,
             view,
             quad,
+            drawn: Cell::new(None),
         }
+    }
+
+    pub fn size(&self) -> (u32, u32) {
+        (self.texture.width(), self.texture.height())
     }
 
     /// A full-scale frame copies directly when supported; a scaled frame uses the upscale blit.
@@ -283,7 +293,7 @@ impl KeptFrame {
         } else {
             self.quad.set(
                 &gpu.queue,
-                (self.texture.width(), self.texture.height()),
+                self.size(),
                 (target.width(), target.height()),
                 mypaper_theme::Fit::Stretch,
                 1.0,

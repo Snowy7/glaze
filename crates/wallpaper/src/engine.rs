@@ -6,6 +6,7 @@
 //! drives animation stops while everything is hidden.
 
 use std::path::Path;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -387,6 +388,7 @@ impl Engine {
         let mut drew = false;
         let animated = !matches!(self.redraw(), Redraw::OnChange);
         let mut native = false;
+        self.assign_kept_frames();
         for (index, screen) in self.screens.iter_mut().enumerate() {
             if screen.paused || !(due || screen.dirty || screen.glass_dirty) {
                 continue;
@@ -410,7 +412,10 @@ impl Engine {
             // snapshot after that wait, so a display-rate plate does not inherit its delay.
             self.glass.reload();
             self.glass.take_dirty(index);
-            let wallpaper_due = due || screen.dirty || screen.kept.is_none();
+            let kept = screen.kept.clone().expect("kept frame assigned");
+            let wallpaper_due = due || screen.dirty || kept.drawn.get().is_none();
+            // A kept frame shared with a screen drawn earlier in this frame already holds it.
+            let draw_wallpaper = wallpaper_due && kept.drawn.get() != Some(self.frame);
             screen.dirty = false;
             screen.glass_dirty = false;
             let mut mouse = cursor;
@@ -419,15 +424,7 @@ impl Engine {
 
             let view = texture.texture.create_view(&Default::default());
             let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
-            let size = self.source.render_size(screen.size());
-            if screen
-                .kept
-                .as_ref()
-                .is_none_or(|k| (k.texture.width(), k.texture.height()) != size)
-            {
-                screen.kept = Some(KeptFrame::new(&self.gpu, size));
-            }
-            let kept = screen.kept.as_ref().expect("kept frame allocated");
+            let size = kept.size();
             let timing_slot = self.timing.as_mut().and_then(|timing| {
                 timing.begin(
                     &self.gpu,
@@ -436,13 +433,15 @@ impl Engine {
                         screen: index,
                         frame: self.frame,
                         wallpaper: wallpaper_due,
+                        pass: draw_wallpaper,
                         sequence: self.glass.sequence,
                         published_qpc: self.glass.published_qpc,
                         ..Default::default()
                     },
                 )
             });
-            if wallpaper_due {
+            if draw_wallpaper {
+                kept.drawn.set(Some(self.frame));
                 self.source.render(
                     &self.gpu,
                     Frame {
@@ -469,7 +468,7 @@ impl Engine {
                     Draw {
                         screen: index,
                         size: screen.size(),
-                        kept,
+                        kept: &kept,
                         held: self.held,
                         animated,
                     },
@@ -537,6 +536,31 @@ impl Engine {
                 self.clock,
                 self.frame,
             );
+        }
+    }
+
+    /// Gives every visible swapchain screen a kept frame at the source's render size. When the
+    /// source draws one frame for every screen, screens of one size share a single kept frame:
+    /// one wallpaper pass and one texture instead of one per screen.
+    fn assign_kept_frames(&mut self) {
+        let shared = self.source.shared();
+        for index in 0..self.screens.len() {
+            let screen = &self.screens[index];
+            let size = self.source.render_size(screen.size());
+            if screen.paused
+                || self.source.native(index)
+                || screen.kept.as_ref().is_some_and(|k| k.size() == size)
+            {
+                continue;
+            }
+            let sibling = self
+                .screens
+                .iter()
+                .filter_map(|s| s.kept.as_ref())
+                .find(|k| shared && k.size() == size)
+                .cloned();
+            self.screens[index].kept =
+                Some(sibling.unwrap_or_else(|| Rc::new(KeptFrame::new(&self.gpu, size))));
         }
     }
 

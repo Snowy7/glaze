@@ -34,6 +34,9 @@ pub struct ShaderSource {
     screens: Vec<Option<ScreenState>>,
     images: Vec<(u32, wgpu::TextureView)>,
     sampler: wgpu::Sampler,
+    /// The theme's code never names the cursor (`paper.mouse`), so every screen of one size
+    /// draws the same frame: time and resolution are all it reads.
+    shared: bool,
 }
 
 struct ScreenState {
@@ -135,6 +138,7 @@ impl ShaderSource {
             screens: Vec::new(),
             images,
             sampler,
+            shared: !code.contains("mouse"),
         })
     }
 
@@ -216,6 +220,10 @@ impl Source for ShaderSource {
 
     fn redraw(&self, _clock: Duration) -> Redraw {
         Redraw::Every(self.interval)
+    }
+
+    fn shared(&self) -> bool {
+        self.shared
     }
 }
 

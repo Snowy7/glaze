@@ -2,6 +2,9 @@
 Usage: py -3 tools/perf/summarize-gpu.py timing.run0.jsonl [more.jsonl ...]
 Skip warmup with --warmup-seconds (default 6). Outputs per-screen median/p95/max,
 combined plates per engine frame, and geometry-only publish-to-submit delivery.
+Screens that share one kept frame run the wallpaper pass once per engine frame
+(`wallpaper_pass`); `engine_frame_ms` is the GPU time of a whole engine frame on all screens
+and `per_screen_frame_ms` that divided by the screen count.
 """
 import argparse
 import json
@@ -34,7 +37,7 @@ def summarize(paths, warmup, window=None):
     result = {"frames": len(rows), "screens": {}}
     for screen in sorted({r["screen"] for r in rows}):
         group = [r for r in rows if r["screen"] == screen]
-        result["screens"][screen] = {key: stats([r[key] for r in group if key != "wallpaper_ms" or r["wallpaper_drawn"]])
+        result["screens"][screen] = {key: stats([r[key] for r in group if key != "wallpaper_ms" or ran(r)])
                                       for key in ["wallpaper_ms", "restore_ms", "glass_ms"]}
         result["screens"][screen]["frame_ms"] = stats([
             r["wallpaper_ms"]+r["restore_ms"]+r["glass_ms"] for r in group])
@@ -48,9 +51,19 @@ def summarize(paths, warmup, window=None):
     screens = {r["screen"] for r in rows}
     complete = [group for group in frames.values() if {r["screen"] for r in group} == screens]
     result["all_screens_glass_ms"] = stats([sum(r["glass_ms"] for r in group) for group in complete])
+    drawn = [group for group in complete if any(r["wallpaper_drawn"] for r in group)]
+    total = [sum(r["wallpaper_ms"]+r["restore_ms"]+r["glass_ms"] for r in group) for group in drawn]
+    result["engine_frame_ms"] = stats(total)
+    result["per_screen_frame_ms"] = stats([t/len(screens) for t in total])
     result["incomplete_frames"] = len(frames)-len(complete)
     result["wallpaper_submissions"] = sum(r["wallpaper_drawn"] for r in rows)
+    result["wallpaper_passes"] = sum(ran(r) for r in rows)
     return result
+
+
+def ran(row):
+    """Whether this submission ran the wallpaper pass (older traces: whenever it was drawn)."""
+    return row.get("wallpaper_pass", row["wallpaper_drawn"])
 
 
 if __name__ == "__main__":
