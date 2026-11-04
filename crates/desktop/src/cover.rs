@@ -77,7 +77,13 @@ unsafe extern "system" fn on_event(
         // cannot be classified anymore, so keep its wake (a maximized app may have closed).
         // SAFETY: read-only hierarchy queries; a stale HWND simply has no desktop parent.
         let top = unsafe { GetAncestor(hwnd, GA_PARENT) == GetDesktopWindow() };
-        if top || event == EVENT_OBJECT_DESTROY || event == EVENT_SYSTEM_FOREGROUND {
+        // Use the same overlay exclusion as opaque_frame: wallpaper/glass/HUD windows cannot
+        // cover widgets, so their location updates must not repeatedly scan/restack the desktop.
+        // SAFETY: read-only style query; a stale handle returns zero and its destroy wake is kept.
+        let overlay = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 }
+            & (WS_EX_TOOLWINDOW.0 | WS_EX_TRANSPARENT.0 | WS_EX_NOACTIVATE.0)
+            != 0;
+        if (top && !overlay) || event == EVENT_OBJECT_DESTROY || event == EVENT_SYSTEM_FOREGROUND {
             CHANGED.store(true, Ordering::Relaxed);
         }
     }
@@ -239,6 +245,32 @@ mod tests {
                 0,
             );
             assert!(CHANGED.swap(false, Ordering::Relaxed));
+            let overlay = CreateWindowExW(
+                WS_EX_NOACTIVATE,
+                w!("STATIC"),
+                w!("coverage overlay"),
+                WS_POPUP,
+                0,
+                0,
+                1,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            on_event(
+                Default::default(),
+                EVENT_OBJECT_LOCATIONCHANGE,
+                overlay,
+                OBJID_WINDOW.0,
+                CHILDID_SELF as i32,
+                0,
+                0,
+            );
+            assert!(!CHANGED.load(Ordering::Relaxed));
+            DestroyWindow(overlay).unwrap();
             DestroyWindow(child).unwrap();
             DestroyWindow(root).unwrap();
             on_event(
