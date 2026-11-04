@@ -674,11 +674,12 @@ impl<C: Clone> Menu<C> {
         let list = view(&p.items, &p.layout, p.hover, &self.tokens);
         let at = (p.origin.0 - edge, p.origin.1 - edge);
         let size = ((w + 2 * edge) as u32, (h + 2 * edge) as u32);
-        p.surface.set_glass(self.tokens.glass.map(|material| crate::glass::Glass {
-            body: Rect::new(edge as f32, edge as f32, w as f32, h as f32),
-            radius: (self.tokens.radius * p.layout.scale).max(0.0),
-            material,
-        }));
+        p.surface
+            .set_glass(self.tokens.glass.map(|material| crate::glass::Glass {
+                body: Rect::new(edge as f32, edge as f32, w as f32, h as f32),
+                radius: (self.tokens.radius * p.layout.scale).max(0.0),
+                material,
+            }));
         p.surface.present(ui, at, size, list)?;
         Ok(())
     }

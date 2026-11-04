@@ -157,7 +157,11 @@ impl Engine {
     pub fn overlay_gpu(&self) -> crate::overlay::Gpu {
         let gpu = &self.gpu;
         let (adapter, device, queue) = (gpu.adapter.clone(), gpu.device.clone(), gpu.queue.clone());
-        crate::overlay::Gpu { adapter, device, queue }
+        crate::overlay::Gpu {
+            adapter,
+            device,
+            queue,
+        }
     }
 
     /// Named plate event plus the current writer's exit handle, both owned by GlassPass.

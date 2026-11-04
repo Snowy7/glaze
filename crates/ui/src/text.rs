@@ -136,7 +136,13 @@ impl Text {
 
     /// `text` wrapped at word boundaries into lines `width` device pixels wide, at most `max`
     /// of them (the last cut with an ellipsis when more would follow). Line breaks are kept.
-    pub fn lines(&mut self, text: &str, style: &TextStyle, width: f32, max: usize) -> Vec<Arc<str>> {
+    pub fn lines(
+        &mut self,
+        text: &str,
+        style: &TextStyle,
+        width: f32,
+        max: usize,
+    ) -> Vec<Arc<str>> {
         let wide: Vec<u16> = text.encode_utf16().collect();
         let Some(format) = self.format(style) else {
             return vec![text.into()];
@@ -154,7 +160,10 @@ impl Text {
             let mut count = 0;
             let _ = layout.GetLineMetrics(None, &mut count);
             let mut metrics = vec![DWRITE_LINE_METRICS::default(); count as usize];
-            if layout.GetLineMetrics(Some(&mut metrics), &mut count).is_err() {
+            if layout
+                .GetLineMetrics(Some(&mut metrics), &mut count)
+                .is_err()
+            {
                 return vec![text.into()];
             }
             metrics.iter().map(|m| m.length as usize).collect()
@@ -294,7 +303,11 @@ mod tests {
         for line in &lines {
             assert!(text.measure(line, &style).0 <= 161.0, "{line}");
         }
-        assert_eq!(text.lines("one\ntwo", &style, 400.0, 3).len(), 2, "breaks kept");
+        assert_eq!(
+            text.lines("one\ntwo", &style, 400.0, 3).len(),
+            2,
+            "breaks kept"
+        );
     }
 
     #[test]
