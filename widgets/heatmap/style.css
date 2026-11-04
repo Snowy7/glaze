@@ -21,7 +21,7 @@
   box-shadow: var(--edge);
   color: var(--t1);
 }
-html[data-style]:not([data-style="minimal"]) .hm {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .hm {
   --on: var(--on-spark);
 }
 /* Level 1 to 4 climb from the highlight toward the second highlight (the same color in minimal). */
@@ -121,7 +121,7 @@ html[data-surface="solid"] .tip {
 }
 .total {
   font-size: clamp(20px, 15cqh, 40px);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1;
   letter-spacing: -0.02em;
 }
@@ -247,7 +247,7 @@ html[data-surface="solid"] .tip {
 }
 .month {
   font-size: clamp(18px, 13cqh, 40px);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1.05;
   letter-spacing: -0.02em;
 }
@@ -345,7 +345,7 @@ html[data-style="neon"] .mgrid .hm[data-today] {
 }
 .count {
   font-size: clamp(34px, 48cqh, 96px);
-  font-weight: 200;
+  font-weight: 500;
   line-height: 0.95;
   letter-spacing: -0.03em;
 }
@@ -366,7 +366,7 @@ html[data-style="neon"] .mgrid .hm[data-today] {
   stroke-linejoin: round;
   fill: color-mix(in srgb, var(--hi-2) 38%, transparent);
 }
-html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .flame {
+html:is([data-style="depth"], [data-style="neon"], [data-style="aero"]) .flame {
   filter: drop-shadow(0 0 5px var(--glow));
 }
 .main[data-on="false"] .flame {
@@ -387,7 +387,7 @@ html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .flame {
 }
 .v-streak .side .stat b {
   font-size: clamp(16px, 20cqh, 30px);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1;
 }
 .strip {

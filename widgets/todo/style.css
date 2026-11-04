@@ -151,7 +151,7 @@ html[data-style="neon"] .row:not([data-done]) .check:hover {
   color: var(--on-accent);
   box-shadow: none;
 }
-html[data-style]:not([data-style="minimal"]) .row[data-done] :is(.check, .check:hover) {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .row[data-done] :is(.check, .check:hover) {
   background: linear-gradient(135deg, var(--hi), var(--hi-2));
   color: var(--on-spark);
   box-shadow: var(--bevel), 0 0 var(--glow-size) -4px var(--glow);

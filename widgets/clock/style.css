@@ -101,30 +101,38 @@
 /* ---- Digital: editorial. The time as big as the box allows, a short accent bar, the day. */
 
 [data-face="desk"]:is(.has-sec, .has-ampm) .digital {
-  --k: 2.9;
+  --k: 3.3;
 }
 [data-face="desk"].no-date .digital {
   --v: 0.9;
 }
-[data-face="desk"] .time {
-  font-weight: 300;
-  letter-spacing: -0.045em;
+/* Medium digits that sit calmly in the box: never hairline-thin, never edge to edge. */
+[data-face="desk"] .digital {
+  --k: 2.95;
+  --v: 1.95;
 }
-[data-face="desk"] .bar {
+[data-face="desk"] .time {
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+/* The accent bar is the lit styles' ornament; the calm ones go without. */
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) [data-face="desk"] .bar {
   display: block;
 }
+[data-face="desk"] .date {
+  margin-top: 0.12em;
+}
 [data-face="desk"] .wd {
-  font-size: 0.27em;
-  font-weight: 650;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
-  color: var(--t0);
+  font-size: 0.24em;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--t1);
 }
 [data-face="desk"] .dt {
-  font-size: 0.2em;
-  font-weight: 450;
+  font-size: 0.19em;
+  font-weight: 500;
   line-height: 1.25;
-  color: var(--t1);
+  color: var(--t2);
 }
 /* Short (1 and 2 rows of 1 cell): the date on one line. */
 @container (max-height: 124px) {
@@ -301,6 +309,14 @@
 }
 .bottom span {
   bottom: 0;
+}
+
+/* The calm styles' cards are flat: one fill, the hinge, no light. */
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) :is(.half, .leaf) {
+  background: var(--flip-bg);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .fc {
+  box-shadow: none;
 }
 
 /* The hinge, and the card's light (bevel, sheen) laid over both halves. */
@@ -518,9 +534,15 @@ html[data-style="neon"] .fc::before {
   display: inline;
 }
 .numerals text {
-  font-size: 9px;
-  font-weight: 300;
+  font-size: 10px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+/* Mid-sized dials keep the quarters only. */
+@container (max-width: 190px) {
+  .numerals .hour-n {
+    display: none;
+  }
 }
 .dial-date,
 .dial-date-bg {
@@ -613,11 +635,13 @@ html[data-style="neon"] .tick.major {
 .dial-box > .dial {
   width: min(100cqw, 100cqh);
 }
-/* In minimal, on a bare wallpaper, the dial gets a soft frosted body so it reads on any photo. */
-html[data-style="minimal"] .analog .disc,
-html:not([data-style]) .analog .disc {
+/* The calm face: a flat disc a shade off the tile (on a bare wallpaper, a soft frosted body so it
+   reads on any photo); crisp ticks, no bevel. */
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .analog .disc {
+  background: var(--fill-1);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"])[data-surface="none"] .analog .disc {
   background: var(--chip);
-  box-shadow: inset 0 0 0 1px var(--fill-2);
 }
 html[data-style="minimal"][data-surface="none"] .analog .disc {
   -webkit-backdrop-filter: blur(10px);
@@ -721,8 +745,8 @@ html[data-style="minimal"][data-surface="none"] .analog .disc {
   letter-spacing: -0.035em;
   color: var(--t0);
 }
-/* In a styled look the name is the highlight pair as a gradient (with a soft glow). */
-html[data-style]:not([data-style="minimal"]) .name {
+/* In the lit looks the name is the highlight pair as a gradient (with a soft glow). */
+html:is([data-style="neon"], [data-style="paper"], [data-style="aero"]) .name {
   background: linear-gradient(100deg, var(--hi) 10%, var(--hi-2) 90%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -762,7 +786,7 @@ html[data-style="paper"] .name {
     display: none;
   }
   .lead {
-    font-weight: 300;
+    font-weight: 450;
     letter-spacing: -0.03em;
   }
   .words[data-named="true"] .lead::after {
@@ -796,8 +820,8 @@ html[data-style="paper"] .name {
   color: var(--t2);
 }
 .city-time {
-  font-weight: 300;
-  letter-spacing: -0.03em;
+  font-weight: 500;
+  letter-spacing: -0.02em;
   white-space: nowrap;
   color: var(--t0);
 }

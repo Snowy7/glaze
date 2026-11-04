@@ -3,11 +3,13 @@
    bundled widget (a widget is served from its own origin, so it can't import from outside).
 
    The look is not decided here. The drop-in (mypaper.js) sets, from the user's and theme's
-   appearance, attributes on <html> (data-surface, data-text, data-shadow, data-widget) and the
-   variables below in a <style> that comes after this file. The values in this :root are the spec's
-   defaults, for the moment before the host answers.
+   appearance, attributes on <html> (data-surface, data-text, data-shadow, data-style, data-widget)
+   and the variables below in a <style> that comes after this file. The values in this :root are
+   the spec's defaults, for the moment before the host answers.
 
-   Rules for widgets: never hard-code a background or a color. Use --t0..--t3 for text,
+   The default look is a calm desktop widget: a quiet translucent tile with one hairline edge, no
+   gradients, gloss or shadows, generous padding, neutral text in a few steps and one accent used
+   sparingly. Rules for widgets: never hard-code a background or a color. Use --t0..--t3 for text,
    --fill-* for fills, --accent sparingly. */
 
 :root {
@@ -17,22 +19,22 @@
   color-scheme: dark;
 
   /* Text steps and fills: the ink (white, or near-black with data-text="dark") at fixed alphas. */
-  --t0: rgb(255 255 255 / 1);
-  --t1: rgb(255 255 255 / 0.82);
-  --t2: rgb(255 255 255 / 0.6);
-  --t3: rgb(255 255 255 / 0.38);
-  --fill-1: rgb(255 255 255 / 0.08);
-  --fill-2: rgb(255 255 255 / 0.14);
-  --fill-3: rgb(255 255 255 / 0.24);
-  --line: rgb(255 255 255 / 0.14);
+  --t0: rgb(255 255 255 / 0.94);
+  --t1: rgb(255 255 255 / 0.78);
+  --t2: rgb(255 255 255 / 0.56);
+  --t3: rgb(255 255 255 / 0.36);
+  --fill-1: rgb(255 255 255 / 0.07);
+  --fill-2: rgb(255 255 255 / 0.12);
+  --fill-3: rgb(255 255 255 / 0.2);
+  --line: rgb(255 255 255 / 0.1);
 
   /* Channel triples for custom alphas: rgb(var(--ink) / 0.3). --halo is the opposite of the ink. */
   --ink: 255 255 255;
   --halo: 0 0 0;
 
-  --surface: rgb(16 16 16 / 0.55);
+  --surface: rgb(52 58 66 / 0.46);
   --blur: 24px;
-  --radius: 18px;
+  --radius: 22px;
   --accent: #fff;
   --on-accent: #0a0a0c;
   --scale: 1;
@@ -42,7 +44,9 @@
   /* A small pill or field: a dark (or, in dark text, light) wash on a bare wallpaper, a plain fill on a surface. */
   --chip: rgb(var(--halo) / 0.24);
   --accent-soft: color-mix(in srgb, var(--accent) 30%, transparent);
-  --pad: clamp(10px, 8cqmin, 20px);
+  /* The card's padding, and the step between groups inside it. */
+  --pad: clamp(12px, 9cqmin, 22px);
+  --gap: clamp(6px, 4.5cqmin, 14px);
 }
 
 /* With a surface, chips are just fills. */
@@ -53,7 +57,7 @@ html[data-surface="solid"] {
 
 /* Tighter outer padding when there is no card edge to keep clear of. */
 html[data-surface="none"] {
-  --pad: clamp(4px, 4cqmin, 12px);
+  --pad: clamp(6px, 5cqmin, 14px);
 }
 
 *,
@@ -96,34 +100,21 @@ body {
   position: absolute;
   inset: 0;
   padding: var(--pad);
-  border-radius: min(var(--radius), 20cqmin);
+  border-radius: min(var(--radius), 18cqmin);
   overflow: hidden;
+  isolation: isolate;
 }
 
+/* The tile: one flat translucent fill and a hairline edge (drawn inside, so it never moves the
+   content). No sheen, no inner highlight, no shadow. */
 html[data-surface="glass"] .card,
 html[data-surface="solid"] .card {
   background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--ink) / 0.08),
-    inset 0 0 0 1px rgb(var(--halo) / 0.06);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 html[data-surface="glass"] .card {
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.35);
-  backdrop-filter: blur(var(--blur)) saturate(1.35);
-}
-/* A soft sheen from the top-left corner, so a surface reads as material rather than a flat fill. */
-html[data-surface="glass"] .card::before,
-html[data-surface="solid"] .card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(140deg, rgb(var(--ink) / 0.07), transparent 45%);
-}
-.card {
-  isolation: isolate;
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.4);
+  backdrop-filter: blur(var(--blur)) saturate(1.4);
 }
 
 /* ---------------------------------------------------------------- legibility without a surface */
@@ -132,14 +123,14 @@ html[data-surface="solid"] .card::before {
    hard outline. Text inherits it; SVG gets the same as a drop-shadow. */
 html[data-shadow="on"][data-surface="none"] body {
   text-shadow:
-    0 0 1px rgb(var(--halo) / 0.3),
-    0 1px 2px rgb(var(--halo) / 0.3),
-    0 2px 10px rgb(var(--halo) / 0.28),
-    0 4px 28px rgb(var(--halo) / 0.2);
+    0 0 1px rgb(var(--halo) / 0.28),
+    0 1px 2px rgb(var(--halo) / 0.28),
+    0 2px 10px rgb(var(--halo) / 0.24),
+    0 4px 24px rgb(var(--halo) / 0.16);
 }
 html[data-shadow="on"][data-surface="none"] svg:not(.flat),
 html[data-shadow="on"][data-surface="none"] .gfx {
-  filter: drop-shadow(0 1px 1.5px rgb(var(--halo) / 0.35)) drop-shadow(0 2px 10px rgb(var(--halo) / 0.25));
+  filter: drop-shadow(0 1px 1.5px rgb(var(--halo) / 0.32)) drop-shadow(0 2px 10px rgb(var(--halo) / 0.22));
 }
 /* Chips and fields carry their own wash; no extra shadow on their text. */
 html[data-surface="none"] :is(.chip, .field) {
@@ -157,10 +148,11 @@ html[data-surface="none"] :is(.chip, .field) {
   font-variant-numeric: tabular-nums;
 }
 
+/* A small label in capitals ("NOVEMBER", "CPU"): bold, barely tracked, quiet. */
 .caps {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--t2);
 }
@@ -179,12 +171,11 @@ html[data-surface="none"] :is(.chip, .field) {
 /* A group inside the card: a quiet fill with a surface, nothing at all on a bare wallpaper
    (spacing and hairlines group things there). */
 .panel {
-  border-radius: calc(var(--radius) * 0.6);
+  border-radius: calc(var(--radius) * 0.55);
 }
 html[data-surface="glass"] .panel,
 html[data-surface="solid"] .panel {
   background: var(--fill-1);
-  border: 1px solid var(--line);
 }
 
 /* A pill: a label, a value, a button. */
@@ -211,13 +202,13 @@ html[data-surface="none"] .chip {
   padding: 0.55em 0.95em;
   border-radius: 999px;
   background: var(--chip);
-  box-shadow: inset 0 0 0 1px var(--fill-2);
   color: var(--t0);
   caret-color: var(--t0);
   user-select: text;
   cursor: text;
 }
 html[data-surface="none"] .field {
+  box-shadow: inset 0 0 0 1px var(--fill-2);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
@@ -225,9 +216,7 @@ html[data-surface="none"] .field {
   color: var(--t2);
 }
 .field:focus {
-  box-shadow:
-    inset 0 0 0 1px var(--t3),
-    0 0 0 3px var(--fill-2);
+  box-shadow: inset 0 0 0 1px var(--t3);
 }
 
 /* A progress track and its fill. On a bare wallpaper the track gets a faint outline so it shows on
@@ -240,8 +229,8 @@ html[data-surface="none"] .field {
 html[data-surface="none"] .track {
   background: rgb(var(--ink) / 0.22);
   box-shadow:
-    0 0 0 0.5px rgb(var(--halo) / 0.22),
-    0 1px 8px rgb(var(--halo) / 0.22);
+    0 0 0 0.5px rgb(var(--halo) / 0.2),
+    0 1px 6px rgb(var(--halo) / 0.18);
 }
 .track > i {
   display: block;
@@ -270,14 +259,14 @@ button {
     transform 0.12s;
 }
 button:hover {
-  background: var(--fill-2);
+  background: var(--fill-1);
   color: var(--t0);
 }
 button:active {
   transform: scale(0.94);
 }
 button:focus-visible {
-  outline: 2px solid var(--t1);
+  outline: 2px solid var(--t2);
   outline-offset: 1px;
 }
 
@@ -317,10 +306,10 @@ button:focus-visible {
   text-align: center;
 }
 .state-icon {
-  width: 22px;
-  height: 22px;
-  margin-bottom: 5px;
-  color: var(--t2);
+  width: 20px;
+  height: 20px;
+  margin-bottom: 6px;
+  color: var(--t3);
 }
 .state-icon svg {
   display: block;
@@ -358,18 +347,49 @@ button:focus-visible {
   }
 }
 
-/* ================================================================ design system v2: styles
-   `data-style` on <html> (minimal | depth | neon | paper | aero) picks how the surface and the kit's
-   building blocks are lit. `minimal` is everything above, untouched; a missing attribute (an older
-   host) is `minimal` too, so every rule below is keyed on a named, non-minimal style.
+/* A button with a body: `.btn`, and `.btn.primary` filled with the accent. Plain `button`s stay
+   as they are (a widget may restyle them); this is the kit's own. */
+.btn {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  padding: 0.4em 0.95em;
+  border-radius: 999px;
+  color: var(--t0);
+  background: var(--fill-2);
+  transition:
+    background-color 0.12s,
+    transform 0.12s,
+    box-shadow 0.12s;
+}
+.btn:hover {
+  background: var(--fill-3);
+}
+.btn:active {
+  transform: scale(0.96);
+}
+.btn.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* ================================================================ styles
+   `data-style` on <html> (minimal | depth | neon | paper | aero | liquid) picks how the surface and
+   the kit's building blocks are lit. `minimal` is everything above, untouched (the calm default);
+   a missing attribute (an older host) is `minimal` too, so every rule below is keyed on a named,
+   non-minimal style. `liquid` is calm as well: the glass is the wallpaper's (see the end).
 
    Tokens a style sets (all optional for widgets; the values here are the minimal ones):
-     --hi, --hi-2   the highlight pair: the accent, or in a styled look the "spark" colors (the accent
+     --hi, --hi-2   the highlight pair: the accent, or in a lit style the "spark" colors (the accent
                     if it has a hue, else the style's signature pair; see appearance.ts)
      --elev-1..3    box-shadow stacks for resting, raised and floating things
      --bevel        an inset highlight and shade pair, for anything with an edge
-     --sheen        the specular gradient laid over a surface   --rim  its edge gradient (1px ring)
-     --glow         the glow color (transparent: none)           --glow-size  its reach in px
+     --sheen        the light laid over a surface             --rim  its edge gradient (1px ring)
+     --glow         the glow color (transparent: none)        --glow-size  its reach in px
      --grain        a noise image, none unless the style has one
      --flow         the drifting accent gradient (the `.flow` class animates it, `.track > i` uses it)
      --bleed        how far the card is inset from the widget's box, so outer shadows and glows have
@@ -401,37 +421,35 @@ button:focus-visible {
   --flow: linear-gradient(90deg, var(--accent), var(--accent));
 }
 
+/* Depth: the calm tile, raised a little. A soft shadow, a faint top edge; no gradients on fills
+   or text. */
 html[data-style="depth"] {
   --bleed: 6px;
   --hi: var(--spark);
   --hi-2: var(--accent-2);
-  --elev-1: 0 1px 1px rgb(var(--shade) / 0.22), 0 2px 5px -1px rgb(var(--shade) / 0.26);
-  --elev-2: 0 1px 1px rgb(var(--shade) / 0.2), 0 3px 7px -1px rgb(var(--shade) / 0.28), 0 6px 12px -4px rgb(var(--shade) / 0.24);
-  --elev-3: 0 1px 1px rgb(var(--shade) / 0.18), 0 2px 4px rgb(var(--shade) / 0.18), 0 4px 8px -1px rgb(var(--shade) / 0.22), 0 7px 10px -4px rgb(var(--shade) / 0.2);
-  --bevel: inset 0 1px 0 rgb(var(--lit) / 0.22), inset 0 -1px 0 rgb(var(--shade) / 0.3), inset 1px 0 0 rgb(var(--lit) / 0.06);
-  --sheen:
-    linear-gradient(158deg, rgb(var(--lit) / 0.17), rgb(var(--lit) / 0.04) 34%, transparent 58%),
-    linear-gradient(0deg, rgb(var(--shade) / 0.24), transparent 40%);
-  --rim: linear-gradient(150deg, rgb(var(--lit) / 0.6), rgb(var(--lit) / 0.07) 36%, rgb(var(--lit) / 0.02) 64%, rgb(var(--lit) / 0.26));
-  --glow: rgb(var(--spark-rgb) / 0.32);
-  --glow-size: 10px;
-  --flow: linear-gradient(90deg, var(--spark), var(--accent-2), var(--spark));
+  --elev-1: 0 1px 2px rgb(var(--shade) / 0.2);
+  --elev-2: 0 1px 2px rgb(var(--shade) / 0.16), 0 3px 8px -2px rgb(var(--shade) / 0.24);
+  --elev-3: 0 1px 2px rgb(var(--shade) / 0.14), 0 3px 6px -1px rgb(var(--shade) / 0.22);
+  --bevel: inset 0 1px 0 rgb(var(--lit) / 0.08);
+  --sheen: none;
+  --rim: linear-gradient(180deg, rgb(var(--lit) / 0.2), rgb(var(--lit) / 0.06) 45%, rgb(var(--lit) / 0.04));
+  --glow: transparent;
+  --glow-size: 0px;
+  --flow: linear-gradient(90deg, var(--spark), var(--spark));
 }
 
 html[data-style="neon"] {
   --bleed: 6px;
   --hi: var(--spark);
   --hi-2: var(--accent-2);
-  --elev-1: 0 0 6px -1px rgb(var(--spark-rgb) / 0.35);
-  --elev-2: 0 0 10px -1px rgb(var(--spark-rgb) / 0.42), 0 0 2px rgb(var(--spark-rgb) / 0.5);
-  --elev-3: 0 0 12px -1px rgb(var(--spark-rgb) / 0.45), 0 0 3px rgb(var(--accent-2-rgb) / 0.5);
-  --bevel: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.1), inset 0 0 26px -8px rgb(var(--spark-rgb) / 0.34);
-  --sheen:
-    radial-gradient(110% 80% at 0% 0%, rgb(var(--spark-rgb) / 0.2), transparent 58%),
-    radial-gradient(90% 70% at 100% 100%, rgb(var(--accent-2-rgb) / 0.17), transparent 62%);
+  --elev-1: 0 0 6px -1px rgb(var(--spark-rgb) / 0.3);
+  --elev-2: 0 0 10px -1px rgb(var(--spark-rgb) / 0.36), 0 0 2px rgb(var(--spark-rgb) / 0.45);
+  --elev-3: 0 0 12px -2px rgb(var(--spark-rgb) / 0.38), 0 0 3px rgb(var(--accent-2-rgb) / 0.42);
+  --bevel: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.1), inset 0 0 22px -8px rgb(var(--spark-rgb) / 0.28);
+  --sheen: radial-gradient(110% 80% at 0% 0%, rgb(var(--spark-rgb) / 0.12), transparent 58%);
   --rim: linear-gradient(135deg, rgb(var(--spark-rgb)), rgb(var(--accent-2-rgb)) 58%, rgb(var(--spark-rgb) / 0.6));
-  --glow: rgb(var(--spark-rgb) / 0.75);
-  --glow-size: 14px;
+  --glow: rgb(var(--spark-rgb) / 0.6);
+  --glow-size: 12px;
   --flow: linear-gradient(90deg, var(--spark), var(--accent-2), var(--spark));
 }
 
@@ -439,49 +457,53 @@ html[data-style="paper"] {
   --bleed: 4px;
   --hi: var(--spark);
   --hi-2: var(--accent-2);
-  --elev-1: 0 1px 1.5px rgb(var(--shade) / 0.2);
-  --elev-2: 0 1px 2px rgb(var(--shade) / 0.2), 0 2px 5px -2px rgb(var(--shade) / 0.2);
-  --elev-3: 0 1px 2px rgb(var(--shade) / 0.18), 0 3px 6px -2px rgb(var(--shade) / 0.22);
-  --bevel: inset 0 1px 0 rgb(var(--lit) / 0.1), inset 0 -2px 3px -2px rgb(var(--shade) / 0.3);
-  --sheen: linear-gradient(180deg, rgb(255 226 190 / 0.1), rgb(255 226 190 / 0.05));
-  --rim: linear-gradient(180deg, rgb(var(--lit) / 0.16), rgb(var(--lit) / 0.05));
-  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .32 -.07'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  --elev-1: 0 1px 1.5px rgb(var(--shade) / 0.18);
+  --elev-2: 0 1px 2px rgb(var(--shade) / 0.18), 0 2px 5px -2px rgb(var(--shade) / 0.18);
+  --elev-3: 0 1px 2px rgb(var(--shade) / 0.16), 0 3px 6px -2px rgb(var(--shade) / 0.2);
+  --bevel: inset 0 1px 0 rgb(var(--lit) / 0.08);
+  --sheen: linear-gradient(180deg, rgb(255 226 190 / 0.07), rgb(255 226 190 / 0.04));
+  --rim: linear-gradient(180deg, rgb(var(--lit) / 0.14), rgb(var(--lit) / 0.05));
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .28 -.07'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   --glow: transparent;
   --flow: linear-gradient(90deg, var(--spark), var(--accent-2));
 }
 
+/* Aero asks for gloss: a specular sheen across the top and a bright rim. */
 html[data-style="aero"] {
   --bleed: 5px;
   --hi: var(--spark);
   --hi-2: var(--accent-2);
-  --elev-1: 0 1px 2px rgb(var(--shade) / 0.24), 0 2px 5px -2px rgb(var(--shade) / 0.24);
-  --elev-2: 0 1px 2px rgb(var(--shade) / 0.22), 0 3px 8px -2px rgb(var(--shade) / 0.3);
-  --elev-3: 0 1px 2px rgb(var(--shade) / 0.22), 0 3px 6px rgb(var(--shade) / 0.18), 0 5px 10px -3px rgb(var(--spark-rgb) / 0.3);
-  --bevel: inset 0 1px 0 rgb(var(--lit) / 0.5), inset 0 -1px 0 rgb(var(--shade) / 0.18), inset 0 0 14px -2px rgb(var(--lit) / 0.16);
+  --elev-1: 0 1px 2px rgb(var(--shade) / 0.22), 0 2px 5px -2px rgb(var(--shade) / 0.22);
+  --elev-2: 0 1px 2px rgb(var(--shade) / 0.2), 0 3px 8px -2px rgb(var(--shade) / 0.26);
+  --elev-3: 0 1px 2px rgb(var(--shade) / 0.2), 0 3px 6px rgb(var(--shade) / 0.16);
+  --bevel: inset 0 1px 0 rgb(var(--lit) / 0.42), inset 0 -1px 0 rgb(var(--shade) / 0.16);
   --sheen:
-    linear-gradient(172deg, rgb(var(--lit) / 0.3) 0%, rgb(var(--lit) / 0.09) 42%, transparent 42.6%),
-    radial-gradient(130% 90% at 8% 0%, rgb(var(--lit) / 0.24), transparent 55%),
-    linear-gradient(0deg, rgb(var(--spark-rgb) / 0.16), transparent 55%);
-  --rim: linear-gradient(145deg, rgb(var(--lit) / 0.85), rgb(var(--lit) / 0.2) 35%, rgb(var(--lit) / 0.06) 65%, rgb(var(--lit) / 0.5));
-  --glow: rgb(var(--spark-rgb) / 0.4);
-  --glow-size: 9px;
+    linear-gradient(172deg, rgb(var(--lit) / 0.22) 0%, rgb(var(--lit) / 0.07) 42%, transparent 42.6%),
+    linear-gradient(0deg, rgb(var(--spark-rgb) / 0.1), transparent 55%);
+  --rim: linear-gradient(145deg, rgb(var(--lit) / 0.75), rgb(var(--lit) / 0.18) 35%, rgb(var(--lit) / 0.06) 65%, rgb(var(--lit) / 0.4));
+  --glow: rgb(var(--spark-rgb) / 0.32);
+  --glow-size: 8px;
   --flow: linear-gradient(90deg, var(--spark), var(--accent-2), var(--spark));
 }
 
-/* ---- the card: bevel, light and rim, only when there is a surface ---- */
+/* ---- the card: light and rim, only when there is a surface ---- */
 
-html[data-style]:not([data-style="minimal"]):is([data-surface="glass"], [data-surface="solid"]) .card {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]):is([data-surface="glass"], [data-surface="solid"]) .card {
   inset: var(--bleed);
   /* The content keeps its place in the box: the inset eats into the padding, not the content. */
   padding: max(4px, calc(var(--pad) - var(--bleed)));
-  border-color: transparent;
   box-shadow: var(--bevel), var(--elev-3);
 }
-html[data-style]:not([data-style="minimal"]):is([data-surface="glass"], [data-surface="solid"]) .card::before {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]):is([data-surface="glass"], [data-surface="solid"]) .card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background: var(--sheen), var(--grain);
 }
 /* The 1px gradient rim: a ring made by masking the padding box out of the border box. */
-html[data-style]:not([data-style="minimal"])[data-border="on"]:is([data-surface="glass"], [data-surface="solid"]) .card::after {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"])[data-border="on"]:is([data-surface="glass"], [data-surface="solid"]) .card::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -498,100 +520,85 @@ html[data-style]:not([data-style="minimal"])[data-border="on"]:is([data-surface=
 }
 
 /* Material per style. */
-html[data-style="depth"][data-surface="glass"] .card {
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
-  backdrop-filter: blur(var(--blur)) saturate(1.5);
-}
 html[data-style="neon"]:is([data-surface="glass"], [data-surface="solid"]) .card {
   /* A deeper base so the glow reads; dark text has a light card, which stays as it is. */
-  background: linear-gradient(rgb(var(--shade) / 0.34), rgb(var(--shade) / 0.34)), var(--surface);
+  background: linear-gradient(rgb(var(--shade) / 0.3), rgb(var(--shade) / 0.3)), var(--surface);
 }
 html[data-style="neon"][data-text="dark"]:is([data-surface="glass"], [data-surface="solid"]) .card {
   background: var(--surface);
 }
 html[data-style="neon"][data-surface="glass"] .card {
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.6) brightness(0.9);
-  backdrop-filter: blur(var(--blur)) saturate(1.6) brightness(0.9);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5) brightness(0.9);
+  backdrop-filter: blur(var(--blur)) saturate(1.5) brightness(0.9);
 }
 html[data-style="paper"][data-surface="glass"] .card {
   -webkit-backdrop-filter: blur(calc(var(--blur) * 0.7)) saturate(0.85);
   backdrop-filter: blur(calc(var(--blur) * 0.7)) saturate(0.85);
 }
 html[data-style="aero"][data-surface="glass"] .card {
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.9) brightness(1.06);
-  backdrop-filter: blur(var(--blur)) saturate(1.9) brightness(1.06);
-}
-/* A bare gloss on a solid aero card would look like a plastic slab: keep it light. */
-html[data-style="aero"][data-surface="solid"] .card::before {
-  opacity: 0.8;
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.7) brightness(1.05);
+  backdrop-filter: blur(var(--blur)) saturate(1.7) brightness(1.05);
 }
 
 /* ---- building blocks ---- */
 
 /* A group: raised in `depth`, outlined in `neon`, pressed in `paper`, glossy in `aero`. */
 html[data-style="depth"]:is([data-surface="glass"], [data-surface="solid"]) .panel {
-  border-color: transparent;
-  background: linear-gradient(160deg, rgb(var(--lit) / 0.09), rgb(var(--lit) / 0.02) 60%), var(--fill-1);
+  background: var(--fill-1);
   box-shadow: var(--bevel), var(--elev-1);
 }
 html[data-style="neon"]:is([data-surface="glass"], [data-surface="solid"]) .panel {
-  border-color: rgb(var(--spark-rgb) / 0.28);
-  background: radial-gradient(120% 100% at 0% 0%, rgb(var(--spark-rgb) / 0.1), transparent 70%), rgb(var(--shade) / 0.18);
-  box-shadow: inset 0 0 14px -6px rgb(var(--spark-rgb) / 0.4);
+  background: rgb(var(--shade) / 0.18);
+  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.26), inset 0 0 14px -6px rgb(var(--spark-rgb) / 0.32);
 }
 html[data-style="paper"]:is([data-surface="glass"], [data-surface="solid"]) .panel {
-  border-color: rgb(var(--lit) / 0.05);
   background: rgb(var(--shade) / 0.12);
-  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.28), 0 1px 0 rgb(var(--lit) / 0.07);
+  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.24), 0 1px 0 rgb(var(--lit) / 0.06);
 }
 html[data-style="aero"]:is([data-surface="glass"], [data-surface="solid"]) .panel {
-  border-color: rgb(var(--lit) / 0.28);
-  background: linear-gradient(175deg, rgb(var(--lit) / 0.2) 0%, rgb(var(--lit) / 0.05) 46%, rgb(var(--lit) / 0.02) 47%), var(--fill-1);
-  box-shadow: var(--bevel);
+  background: linear-gradient(175deg, rgb(var(--lit) / 0.16) 0%, rgb(var(--lit) / 0.04) 46%, rgb(var(--lit) / 0.02) 47%), var(--fill-1);
+  box-shadow: var(--bevel), inset 0 0 0 1px rgb(var(--lit) / 0.2);
 }
 
 /* A tile: a panel that also paints on a bare wallpaper when the style has a material (hero widgets
-   use it for hourly slots, stat cells, buttons you want to see). In `minimal` it is a .panel. */
+   use it for hourly slots, stat cells, buttons you want to see). In `minimal` and `liquid` it is a
+   .panel. */
 .tile {
-  border-radius: calc(var(--radius) * 0.6);
+  border-radius: calc(var(--radius) * 0.55);
 }
-html[data-style="minimal"]:is([data-surface="glass"], [data-surface="solid"]) .tile,
-html:not([data-style]):is([data-surface="glass"], [data-surface="solid"]) .tile {
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]):is([data-surface="glass"], [data-surface="solid"]) .tile {
   background: var(--fill-1);
-  border: 1px solid var(--line);
 }
 html[data-style="depth"] .tile {
-  background: linear-gradient(160deg, rgb(var(--lit) / 0.14), rgb(var(--lit) / 0.03) 60%), rgb(var(--shade) / 0.16);
+  background: rgb(var(--lit) / 0.07);
   box-shadow: var(--bevel), var(--elev-1);
 }
 html[data-style="neon"] .tile {
-  background: radial-gradient(120% 100% at 0% 0%, rgb(var(--spark-rgb) / 0.14), transparent 70%), rgb(var(--shade) / 0.3);
-  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.32), inset 0 0 14px -6px rgb(var(--spark-rgb) / 0.5), 0 0 8px -3px rgb(var(--spark-rgb) / 0.4);
+  background: rgb(var(--shade) / 0.3);
+  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.3), inset 0 0 14px -6px rgb(var(--spark-rgb) / 0.4);
 }
 html[data-style="paper"] .tile {
-  background: rgb(var(--shade) / 0.2);
-  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.3), 0 1px 0 rgb(var(--lit) / 0.08);
+  background: rgb(var(--shade) / 0.18);
+  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.26), 0 1px 0 rgb(var(--lit) / 0.07);
 }
 html[data-style="aero"] .tile {
-  background: linear-gradient(175deg, rgb(var(--lit) / 0.26) 0%, rgb(var(--lit) / 0.07) 48%, rgb(var(--lit) / 0.03) 49%), rgb(var(--shade) / 0.1);
+  background: linear-gradient(175deg, rgb(var(--lit) / 0.2) 0%, rgb(var(--lit) / 0.06) 48%, rgb(var(--lit) / 0.03) 49%), rgb(var(--shade) / 0.1);
   box-shadow: var(--bevel), var(--elev-1);
-  -webkit-backdrop-filter: blur(10px) saturate(1.5);
-  backdrop-filter: blur(10px) saturate(1.5);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
 }
 
 /* Dark text means a light card: the tiles' dark washes would read as dirty grey, so they go light. */
-html[data-style="depth"][data-text="dark"] .tile {
-  background: linear-gradient(160deg, rgb(var(--lit) / 0.7), rgb(var(--lit) / 0.28) 60%), rgb(var(--shade) / 0.03);
-}
+html[data-style="depth"][data-text="dark"] .tile,
 html[data-style="depth"][data-text="dark"]:is([data-surface="glass"], [data-surface="solid"]) .panel {
-  background: linear-gradient(160deg, rgb(var(--lit) / 0.6), rgb(var(--lit) / 0.2) 60%), rgb(var(--shade) / 0.02);
+  background: rgb(var(--lit) / 0.45);
 }
 html[data-style="paper"][data-text="dark"] .tile,
 html[data-style="paper"][data-text="dark"]:is([data-surface="glass"], [data-surface="solid"]) .panel {
   background: rgb(var(--shade) / 0.05);
 }
 html[data-style="neon"][data-text="dark"] .tile {
-  background: radial-gradient(120% 100% at 0% 0%, rgb(var(--spark-rgb) / 0.16), transparent 70%), rgb(var(--lit) / 0.55);
+  background: rgb(var(--lit) / 0.55);
 }
 
 /* Pills and fields get the style's edge. */
@@ -599,54 +606,56 @@ html[data-style="depth"] :is(.chip, .field) {
   box-shadow: var(--bevel), var(--elev-1);
 }
 html[data-style="neon"] :is(.chip, .field) {
-  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.5), 0 0 8px -2px rgb(var(--spark-rgb) / 0.45);
+  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.45), 0 0 8px -2px rgb(var(--spark-rgb) / 0.4);
 }
 html[data-style="paper"] :is(.chip, .field) {
-  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.3), 0 1px 0 rgb(var(--lit) / 0.08);
+  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.26), 0 1px 0 rgb(var(--lit) / 0.07);
 }
 html[data-style="aero"] :is(.chip, .field) {
-  background: linear-gradient(180deg, rgb(var(--lit) / 0.3), rgb(var(--lit) / 0.08) 52%, rgb(var(--lit) / 0.04) 53%), var(--chip);
+  background: linear-gradient(180deg, rgb(var(--lit) / 0.24), rgb(var(--lit) / 0.06) 52%, rgb(var(--lit) / 0.03) 53%), var(--chip);
   box-shadow: var(--bevel), var(--elev-1);
 }
 html[data-style="neon"] .field:focus {
-  box-shadow: inset 0 0 0 1px var(--spark), 0 0 12px -1px rgb(var(--spark-rgb) / 0.7);
+  box-shadow: inset 0 0 0 1px var(--spark), 0 0 12px -1px rgb(var(--spark-rgb) / 0.6);
 }
 
-/* Progress: a trough, and a fill made of the highlight pair (drifting while visible). */
-html[data-style]:not([data-style="minimal"]) .track > i {
+/* Progress: a trough, and a fill of the highlight (a drifting pair in the lit styles). */
+html[data-style="depth"] .track > i,
+html[data-style="paper"] .track > i {
+  background: var(--hi);
+}
+html:is([data-style="neon"], [data-style="aero"]) .track > i {
   background: linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
   background-size: 200% 100%;
   box-shadow: 0 0 var(--glow-size) -3px var(--glow);
+  animation: kit-flow 12s steps(120) infinite;
 }
 html[data-style="depth"] .track {
-  background: rgb(var(--shade) / 0.3);
-  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.5), 0 1px 0 rgb(var(--lit) / 0.1);
+  background: rgb(var(--shade) / 0.24);
+  box-shadow: inset 0 1px 1px rgb(var(--shade) / 0.3);
 }
 html[data-style="neon"] .track {
   background: rgb(var(--shade) / 0.35);
-  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.3);
+  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.26);
 }
 html[data-style="paper"] .track {
-  background: rgb(var(--shade) / 0.28);
-  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.4), 0 1px 0 rgb(var(--lit) / 0.08);
+  background: rgb(var(--shade) / 0.24);
+  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.34), 0 1px 0 rgb(var(--lit) / 0.07);
 }
 html[data-style="aero"] .track {
   background: rgb(var(--shade) / 0.22);
-  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.35), 0 1px 0 rgb(var(--lit) / 0.35);
+  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.3), 0 1px 0 rgb(var(--lit) / 0.3);
 }
 html[data-style="aero"] .track > i {
-  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.5), transparent 55%), linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
-}
-html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .track > i {
-  animation: kit-flow 12s steps(120) infinite;
+  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.45), transparent 55%), linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
 }
 
-/* The drifting accent gradient, for anything: a bar, an underline, a pill. */
+/* The drifting accent gradient, for anything: a bar, an underline, a pill. Flat in the calm styles. */
 .flow {
   background-image: linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
   background-size: 200% 100%;
 }
-html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .flow {
+html:is([data-style="neon"], [data-style="aero"]) .flow {
   animation: kit-flow 12s steps(120) infinite;
 }
 @keyframes kit-flow {
@@ -655,121 +664,125 @@ html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .flow {
   }
 }
 
-/* A button with a body: `.btn`, and `.btn.primary` filled with the highlight. Plain `button`s stay
-   as they are (a widget may restyle them); this is the kit's own. */
-.btn {
-  all: unset;
-  box-sizing: border-box;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4em;
-  padding: 0.4em 0.95em;
-  border-radius: 999px;
-  color: var(--t0);
-  background: var(--fill-2);
-  transition:
-    background-color 0.12s,
-    transform 0.12s,
-    box-shadow 0.12s;
-}
-.btn:hover {
-  background: var(--fill-3);
-}
-.btn:active {
-  transform: scale(0.96);
-}
-.btn.primary {
-  background: var(--accent);
-  color: var(--on-accent);
-}
 html[data-style="depth"] .btn {
-  background: linear-gradient(180deg, rgb(var(--lit) / 0.2), rgb(var(--lit) / 0.05)), var(--fill-1);
+  background: var(--fill-2);
   box-shadow: var(--bevel), var(--elev-1);
 }
 html[data-style="depth"] .btn:active {
-  box-shadow: inset 0 1px 3px rgb(var(--shade) / 0.5);
+  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.4);
   transform: none;
 }
 html[data-style="neon"] .btn {
   background: rgb(var(--shade) / 0.3);
-  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.55), 0 0 8px -2px rgb(var(--spark-rgb) / 0.5);
+  box-shadow: inset 0 0 0 1px rgb(var(--spark-rgb) / 0.5), 0 0 8px -2px rgb(var(--spark-rgb) / 0.42);
 }
 html[data-style="neon"] .btn:hover {
-  box-shadow: inset 0 0 0 1px var(--spark), 0 0 14px -1px rgb(var(--spark-rgb) / 0.8);
+  box-shadow: inset 0 0 0 1px var(--spark), 0 0 12px -1px rgb(var(--spark-rgb) / 0.66);
 }
 html[data-style="paper"] .btn {
-  box-shadow: 0 1px 0 rgb(var(--lit) / 0.12) inset, 0 1px 2px rgb(var(--shade) / 0.3);
+  box-shadow: 0 1px 0 rgb(var(--lit) / 0.1) inset, 0 1px 2px rgb(var(--shade) / 0.26);
 }
 html[data-style="aero"] .btn {
-  background: linear-gradient(180deg, rgb(var(--lit) / 0.42), rgb(var(--lit) / 0.1) 50%, rgb(var(--lit) / 0.04) 51%), var(--chip);
+  background: linear-gradient(180deg, rgb(var(--lit) / 0.34), rgb(var(--lit) / 0.08) 50%, rgb(var(--lit) / 0.03) 51%), var(--chip);
   box-shadow: var(--bevel), var(--elev-1);
 }
-html[data-style]:not([data-style="minimal"]) .btn.primary {
+html:is([data-style="depth"], [data-style="paper"]) .btn.primary {
+  background: var(--hi);
+  color: var(--on-spark);
+}
+html:is([data-style="neon"], [data-style="aero"]) .btn.primary {
   background: linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
   background-size: 200% 100%;
   color: var(--on-spark);
   box-shadow: var(--bevel), 0 0 var(--glow-size) -3px var(--glow), var(--elev-1);
 }
 html[data-style="aero"] .btn.primary {
-  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.5), transparent 55%), linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
+  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.42), transparent 55%), linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
 }
 
-/* Big display text: the numbers and words a widget is about. */
+/* Big display text: the numbers and words a widget is about. Plain in the calm styles. */
 html[data-style="depth"] .hero {
-  background: linear-gradient(180deg, var(--t0) 45%, rgb(var(--ink) / 0.78));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: none;
-  filter: drop-shadow(0 2px 2px rgb(var(--shade) / 0.35)) drop-shadow(0 6px 10px rgb(var(--shade) / 0.25));
+  text-shadow: 0 1px 2px rgb(var(--shade) / 0.22);
 }
 html[data-style="neon"] .hero {
   color: var(--t0);
   text-shadow:
-    0 0 0.12em rgb(var(--spark-rgb) / 0.95),
-    0 0 0.4em rgb(var(--spark-rgb) / 0.65),
-    0 0 1em rgb(var(--accent-2-rgb) / 0.45);
+    0 0 0.1em rgb(var(--spark-rgb) / 0.85),
+    0 0 0.35em rgb(var(--spark-rgb) / 0.5),
+    0 0 0.9em rgb(var(--accent-2-rgb) / 0.32);
 }
 html[data-style="paper"] .hero {
   color: var(--t0);
-  text-shadow:
-    0 1px 0 rgb(var(--lit) / 0.14),
-    0 -1px 0 rgb(var(--shade) / 0.4);
+  text-shadow: 0 1px 0 rgb(var(--lit) / 0.1);
 }
 html[data-style="aero"] .hero {
-  background: linear-gradient(180deg, #fff 10%, rgb(var(--spark-rgb)) 130%);
+  background: linear-gradient(180deg, #fff 20%, rgb(var(--spark-rgb)) 150%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: none;
-  filter: drop-shadow(0 1px 1px rgb(var(--shade) / 0.4)) drop-shadow(0 0 12px rgb(var(--spark-rgb) / 0.45));
+  filter: drop-shadow(0 1px 1px rgb(var(--shade) / 0.35));
 }
 /* With dark text on a light wallpaper, gradient text must stay dark. */
 html[data-style="aero"][data-text="dark"] .hero {
-  background: linear-gradient(180deg, rgb(10 10 12) 10%, rgb(var(--spark-rgb)) 160%);
+  background: linear-gradient(180deg, rgb(10 10 12) 20%, rgb(var(--spark-rgb)) 180%);
   -webkit-background-clip: text;
   background-clip: text;
   filter: drop-shadow(0 1px 0 rgb(var(--lit) / 0.5));
 }
 
 /* Glow: on an element (a dot, a ring, a badge) or on text, in the style's glow color. */
-html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .glow:not(svg) {
+html:is([data-style="neon"], [data-style="aero"]) .glow:not(svg) {
   box-shadow: 0 0 var(--glow-size) var(--glow);
 }
-html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .glow-text {
+html:is([data-style="neon"], [data-style="aero"]) .glow-text {
   text-shadow: 0 0 0.5em var(--glow);
 }
-html[data-style]:not([data-style="minimal"]) svg .glow,
-html[data-style]:not([data-style="minimal"]) svg.glow {
+html:is([data-style="neon"], [data-style="aero"]) svg .glow,
+html:is([data-style="neon"], [data-style="aero"]) svg.glow {
   filter: drop-shadow(0 0 4px var(--glow));
 }
 
 /* Neon makes bare graphics glow too. */
 html[data-style="neon"][data-surface="none"] svg:not(.flat),
 html[data-style="neon"][data-surface="none"] .gfx {
-  filter: drop-shadow(0 0 1.5px rgb(var(--spark-rgb) / 0.55)) drop-shadow(0 0 7px rgb(var(--spark-rgb) / 0.4));
+  filter: drop-shadow(0 0 1.5px rgb(var(--spark-rgb) / 0.5)) drop-shadow(0 0 6px rgb(var(--spark-rgb) / 0.34));
+}
+
+/* ---- liquid: Apple-style Liquid Glass ----
+   With a glass surface, the wallpaper engine draws the glass under the card (a clear lens bent at
+   its rim, one thin specular edge; docs/widgets.md, "Liquid glass") and the page draws only the
+   content, transparently. The drop-in tells the shell where the card is (plate.ts). Where the
+   wallpaper can't draw it (`data-plate="off"`: the overlay layer, the harness, Studio's preview)
+   the kit draws a light stand-in: a whisper of the tint and the specular edge. */
+html[data-style="liquid"][data-surface="glass"] .card {
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-style="liquid"][data-surface="glass"]:not([data-plate="on"]) .card {
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--lit) / 0.1),
+    inset 1px 1.5px 0 -0.5px rgb(var(--lit) / 0.42),
+    inset -1px -1.5px 0 -0.5px rgb(var(--lit) / 0.16);
+  -webkit-backdrop-filter: blur(2px) saturate(1.2);
+  backdrop-filter: blur(2px) saturate(1.2);
+}
+/* The lens is clear, so text gets a soft shadow as on a bare wallpaper. */
+html[data-style="liquid"][data-surface="glass"][data-shadow="on"] body {
+  text-shadow:
+    0 0 1px rgb(var(--halo) / 0.22),
+    0 1px 3px rgb(var(--halo) / 0.26),
+    0 2px 12px rgb(var(--halo) / 0.18);
+}
+html[data-style="liquid"][data-surface="glass"][data-shadow="on"] svg:not(.flat),
+html[data-style="liquid"][data-surface="glass"][data-shadow="on"] .gfx {
+  filter: drop-shadow(0 1px 2px rgb(var(--halo) / 0.26));
+}
+html[data-style="liquid"][data-surface="glass"] :is(.chip, .field) {
+  text-shadow: none;
 }
 
 /* The host is held: nothing may keep animating. (Timers are stopped in JS by kit.js.) */

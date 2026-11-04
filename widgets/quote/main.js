@@ -60,7 +60,8 @@ function fit() {
   if (w === 0 || h === 0) return;
   text.removeAttribute("data-clamped");
   let lo = MIN_FONT_PX;
-  let hi = clamp(w / 7, 14, 46);
+  // Capped well below "fill the box": a short quote in a big widget stays a calm reading size.
+  let hi = clamp(Math.min(w / 14, h / 3), 13, 24);
   text.style.fontSize = `${hi}px`;
   if (fits()) return;
   for (let i = 0; i < 8; i++) {

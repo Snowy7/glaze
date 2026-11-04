@@ -9,7 +9,8 @@
   </head>
   <body>
     <!-- The .card is the capsule itself (style.css makes it one). With surface none the kit paints no
-         card, so .cap, a .tile, gives the capsule its body there. -->
+         card, so .cap, a .tile, gives the capsule its body there. The progress hairline sits under
+         the artist, inside the text column. -->
     <main class="card" id="card" data-idle>
       <span class="cap tile"></span>
       <div class="art" id="art">
@@ -23,6 +24,7 @@
       <div class="meta" id="meta">
         <div class="title" id="title"><span class="mq" id="mq"></span></div>
         <div class="artist ellipsis" id="artist"></div>
+        <div class="hair track" aria-hidden="true"><i id="bar"></i></div>
       </div>
       <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
       <div class="ctl">
@@ -48,7 +50,6 @@
           </svg>
         </button>
       </div>
-      <div class="hair track" aria-hidden="true"><i id="bar"></i></div>
     </main>
     <script src="mypaper.js"></script>
     <script type="module" src="main.js"></script>

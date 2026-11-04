@@ -38,9 +38,12 @@ const base = process.env["MYPAPER_HARNESS"] ?? "http://localhost:5173";
 const profile = join(dir, `profile-${name}-${process.pid}-${Date.now()}`);
 rmSync(out, { force: true });
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Kills the Edge process tree, and any process still using this profile (orphaned children). */
+/**
+ * Kills the Edge process tree, and any process still using this profile (orphaned children).
+ * @param {number | undefined} pid
+ */
 function killEdge(pid) {
   if (pid) spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
   const needle = profile.replaceAll("'", "''");
@@ -68,6 +71,7 @@ async function removeProfile() {
   console.error(`could not delete ${profile}`);
 }
 
+/** @type {import("node:child_process").ChildProcess | undefined} */
 let child;
 let ok = false;
 try {
@@ -87,7 +91,8 @@ try {
     ],
     { stdio: "ignore" },
   );
-  const exited = new Promise((resolve) => child.on("exit", resolve).on("error", resolve));
+  const started = child;
+  const exited = new Promise((resolve) => started.on("exit", resolve).on("error", resolve));
   // Done when the file is there (the new headless mode can exit before it is flushed, or linger
   // after it is written), or after a minute.
   const deadline = Date.now() + 60_000;

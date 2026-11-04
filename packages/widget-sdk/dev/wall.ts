@@ -3,6 +3,7 @@
 //   style=minimal|depth|neon|paper|aero  surface=none|glass|solid  bg=photo-dark|photo-light
 //   size=default|min|max|<cols>x<rows> (clamped per widget)  only=a,b,c  skip=a,b  cell=<px> gap=<px>
 //   text=auto|light|dark  scale=<n>  settings=<json by widget id>  media=playing|paused|none
+//   bgimg=<url> any image as the background (a theme's, or /@fs/C:/path/to/wallpaper.jpg)
 //   plus the data and appearance parameters of the gallery
 
 import { MypaperError } from "../src";
@@ -74,6 +75,8 @@ async function main() {
 
   const stage = document.createElement("div");
   stage.className = `stage bg-${bg}`;
+  const image = q.get("bgimg");
+  if (image) stage.style.background = `url(${JSON.stringify(image)}) center / cover`;
   const head = document.createElement("div");
   head.className = "head";
   head.textContent = `${look.appearance.style} / ${look.appearance.surface} / ${bg}`;
