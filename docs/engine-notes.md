@@ -208,3 +208,21 @@ README-ready text: replace the "Rust hot-patching (experimental, not working yet
 > `Engine::tick`, but the patched code crashes on its first call with dx 0.7.10; see
 > [`docs/engine-notes.md`](docs/engine-notes.md) for the four setup problems already solved
 > and the one that remains.
+
+## Liquid glass pass (`crates/wallpaper/src/glass_pass.rs`)
+
+UI processes publish glass plates (`mypaper_theme::glass`: `%LOCALAPPDATA%\mypaper\glass\<source>.json`
+plus the registered `mypaper.glass` message to the control window); the engine draws them into its
+own frame after the backdrop copy: the rim strips are copied out of the swapchain, then each plate
+is drawn as rings (a soft shadow outside, the rim band bent inward with a chromatic split and a
+specular rim; the clear centre is never rasterized). Plates spring between rects. The hooks are four
+lines in `engine.rs` (`advance`, `take_dirty`, `deadline`, `encode`) and one in `main.rs`'s pump;
+without plates nothing is allocated or drawn.
+
+Cost, measured with the ignored test `glass_cost` (`cargo test --release -p mypaper-wallpaper
+glass_cost -- --include-ignored --nocapture`; many passes per submit, so it is GPU time, on the
+low-power AMD iGPU at 2560x1440): about 0.35 ms with 1 plate, 0.5 ms with 4 and 1.1 ms with 24.
+Most of the small-count cost is fixed (the copy out of and the second pass into a full-size
+swapchain texture), so the 0.1 ms target is not met yet; the ideas that would get there are in
+the widgets agent's report (drawing the plates inside the source's own pass, or into a small
+per-plate target).
