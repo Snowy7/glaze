@@ -63,6 +63,7 @@ const ID_ICONS_MEDIUM: usize = 13;
 const ID_ICONS_SMALL: usize = 14;
 const ID_DESKTOP_MENU: usize = 15;
 const ID_CLASSIC_MENU: usize = 16;
+const ID_OVERLAY_WIDGETS: usize = 17;
 /// Theme `i` in the Themes submenu has id `ID_THEME + i`.
 const ID_THEME: usize = 100;
 
@@ -281,6 +282,7 @@ enum Command {
     OpenStudio,
     RestartWallpaper,
     EditWidgets,
+    ToggleOverlay,
     ToggleTopBar,
     ToggleDock,
     SetTaskbar(TaskbarMode),
@@ -302,6 +304,7 @@ fn decode(id: usize, themes: &[String]) -> Option<Command> {
         ID_RESTART => Some(Command::RestartWallpaper),
         ID_QUIT => Some(Command::Quit),
         ID_EDIT_WIDGETS => Some(Command::EditWidgets),
+        ID_OVERLAY_WIDGETS => Some(Command::ToggleOverlay),
         ID_TOP_BAR => Some(Command::ToggleTopBar),
         ID_DOCK => Some(Command::ToggleDock),
         ID_TASKBAR_KEEP => Some(Command::SetTaskbar(TaskbarMode::Keep)),
@@ -391,6 +394,7 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
             MF_GRAYED
         };
         append(menu, MF_STRING, ID_EDIT_WIDGETS, "Edit widgets");
+        append(menu, MF_STRING, ID_OVERLAY_WIDGETS, "Show overlay widgets");
         append(menu, MF_POPUP, bars_menu.0 as usize, "Bars");
         // Desktop: what Explorer's own View menu offers, and mypaper's menu switches. The state
         // comes from Explorer over COM (with a timeout); without it the marks are left off.
@@ -469,6 +473,7 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
             };
         }
         Some(Command::EditWidgets) => toggle_widget_edit_mode(),
+        Some(Command::ToggleOverlay) => toggle_overlay_widgets(),
         Some(Command::ToggleTopBar) => edit_bars("top", "enabled", !bars.top.enabled),
         Some(Command::ToggleDock) => edit_bars("dock", "enabled", !bars.dock.enabled),
         Some(Command::SetTaskbar(mode)) => edit_bars("taskbar", "mode", mode),
@@ -494,9 +499,20 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
 /// `mypaper.widgets.edit` message (wParam 2 = toggle) to its message-only
 /// window (see docs/widgets.md).
 pub(crate) fn toggle_widget_edit_mode() {
+    post_to_widget_host(w!("mypaper.widgets.edit"), "edit mode");
+}
+
+/// Shows or hides the overlay widgets (the `mypaper.widgets.overlay` message,
+/// wParam 2 = toggle; docs/widgets.md).
+fn toggle_overlay_widgets() {
+    post_to_widget_host(w!("mypaper.widgets.overlay"), "overlay widgets");
+}
+
+/// Posts a registered "toggle" message (wParam 2) to the widget host's message-only window.
+fn post_to_widget_host(name: PCWSTR, what: &str) {
     // SAFETY: plain lookups and a post; a missing host is just logged.
     unsafe {
-        let message = RegisterWindowMessageW(w!("mypaper.widgets.edit"));
+        let message = RegisterWindowMessageW(name);
         match FindWindowExW(
             Some(HWND_MESSAGE),
             None,
@@ -506,7 +522,7 @@ pub(crate) fn toggle_widget_edit_mode() {
             Ok(host) if message != 0 => {
                 let _ = PostMessageW(Some(host), message, WPARAM(2), LPARAM(0));
             }
-            _ => log::warn!("widget host is not running; cannot toggle edit mode"),
+            _ => log::warn!("widget host is not running; cannot toggle {what}"),
         }
     }
 }
@@ -665,6 +681,10 @@ mod tests {
         assert_eq!(decode(ID_PAUSE, &themes), Some(Command::TogglePause));
         assert_eq!(decode(ID_QUIT, &themes), Some(Command::Quit));
         assert_eq!(decode(ID_EDIT_WIDGETS, &themes), Some(Command::EditWidgets));
+        assert_eq!(
+            decode(ID_OVERLAY_WIDGETS, &themes),
+            Some(Command::ToggleOverlay)
+        );
         assert_eq!(decode(ID_DOCK, &themes), Some(Command::ToggleDock));
         assert_eq!(
             decode(ID_TASKBAR_HIDE, &themes),
