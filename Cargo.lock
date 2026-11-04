@@ -1248,6 +1248,9 @@ dependencies = [
  "webview2-com",
  "wgpu",
  "windows",
+ "windows-collections",
+ "windows-core",
+ "windows-future",
 ]
 
 [[package]]
