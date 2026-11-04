@@ -26,10 +26,12 @@ pub const PAINT_PROBE: &str = "requestAnimationFrame(() => requestAnimationFrame
 /// The probe's answer, as `WebMessageAsJson` reports it.
 pub const PAINTED: &str = "\"mypaper:painted\"";
 
-/// `%LOCALAPPDATA%\mypaper\<name>`: where a host keeps its WebView2 profile.
-pub fn data_dir(name: &str) -> Result<PathBuf> {
+/// `%LOCALAPPDATA%\mypaper\webview2-shell`: the profile the widget host and the bars share, so
+/// they share one browser process (and its GPU and utility processes). Their pages have
+/// different origins, so their storage stays apart.
+pub fn shared_data_dir() -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
-    Ok(PathBuf::from(local).join("mypaper").join(name))
+    Ok(PathBuf::from(local).join("mypaper").join("webview2-shell"))
 }
 
 /// Starts creating an environment on `data_dir` (created if missing) with the options every

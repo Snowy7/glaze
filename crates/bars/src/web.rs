@@ -10,17 +10,16 @@ use std::collections::VecDeque;
 use std::path::Path;
 use std::rc::Rc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use mypaper_desktop::webview_env;
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::{
-    CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
-    NavigationStartingEventHandler, NewWindowRequestedEventHandler,
-    PermissionRequestedEventHandler, ProcessFailedEventHandler, TrySuspendCompletedHandler,
-    WebMessageReceivedEventHandler, take_pwstr,
+    CreateCoreWebView2ControllerCompletedHandler, NavigationStartingEventHandler,
+    NewWindowRequestedEventHandler, PermissionRequestedEventHandler, ProcessFailedEventHandler,
+    TrySuspendCompletedHandler, WebMessageReceivedEventHandler, take_pwstr,
 };
 use windows::Win32::Foundation::{E_POINTER, HWND, RECT};
-use windows::core::{HSTRING, Interface, PCWSTR, PWSTR};
+use windows::core::{HSTRING, Interface, PWSTR};
 
 use crate::icons::ICON_HOST;
 
@@ -53,29 +52,15 @@ pub enum WebEvent {
 
 pub type Events = Rc<RefCell<VecDeque<WebEvent>>>;
 
-/// Starts creating the shared environment; the result arrives as [`WebEvent::Environment`].
+/// Starts creating the environment, shared by every bar and with the widget host (one browser
+/// process, docs/performance.md); the result arrives as [`WebEvent::Environment`].
 pub fn create_environment(generation: u64, events: &Events) -> Result<()> {
-    let data_dir = mypaper_bars::files::local("webview2-bars")?;
-    std::fs::create_dir_all(&data_dir)?;
     let events = events.clone();
-    let handler =
-        CreateCoreWebView2EnvironmentCompletedHandler::create(Box::new(move |result, env| {
-            let result = result.and_then(|()| env.ok_or_else(|| E_POINTER.into()));
-            events
-                .borrow_mut()
-                .push_back(WebEvent::Environment { generation, result });
-            Ok(())
-        }));
-    // SAFETY: valid strings and a COM handler that outlives the call.
-    unsafe {
-        CreateCoreWebView2EnvironmentWithOptions(
-            PCWSTR::null(),
-            &HSTRING::from(plain(&data_dir)),
-            None,
-            &handler,
-        )
-    }
-    .context("starting WebView2 (is the WebView2 Runtime installed?)")
+    webview_env::create_environment(&webview_env::shared_data_dir()?, move |result| {
+        events
+            .borrow_mut()
+            .push_back(WebEvent::Environment { generation, result });
+    })
 }
 
 /// Asks `env` for a WebView in `hwnd`; it arrives as [`WebEvent::Controller`].
