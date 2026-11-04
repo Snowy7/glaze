@@ -235,8 +235,6 @@ pub struct Screen {
     pub paused: bool,
     /// Needs a frame even if the source is static (new, resized, resumed, reloaded).
     pub dirty: bool,
-    /// The swapchain images can be copied from (the backdrop needs it).
-    pub copy_src: bool,
     /// Unmodified last wallpaper, at its source's render scale. Never contains glass.
     pub kept: Option<KeptFrame>,
     pub glass_dirty: bool,
@@ -314,11 +312,6 @@ impl Screen {
             config.present_mode = wgpu::PresentMode::Mailbox;
         }
         config.desired_maximum_frame_latency = 1;
-        // Lets the backdrop copy the finished frame out of the swapchain.
-        let copy_src = caps.usages.contains(wgpu::TextureUsages::COPY_SRC);
-        if copy_src {
-            config.usage |= wgpu::TextureUsages::COPY_SRC;
-        }
         if caps.usages.contains(wgpu::TextureUsages::COPY_DST) {
             config.usage |= wgpu::TextureUsages::COPY_DST;
         }
@@ -329,7 +322,6 @@ impl Screen {
             window,
             paused: false,
             dirty: true,
-            copy_src,
             kept: None,
             glass_dirty: false,
         })

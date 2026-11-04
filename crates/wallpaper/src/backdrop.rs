@@ -2,13 +2,15 @@
 //! wallpaper for the bars and widget shell to use as a frosted-glass backdrop.
 //!
 //! Only this process owns the wallpaper pixels. For a screen that is due, the
-//! engine copies the finished swapchain image, shrinks it on the GPU through a
-//! bilinear pyramid (1/2 .. 1/64) and back up to 1/8, reads that back (without
+//! engine shrinks its kept frame (the wallpaper as drawn, never with glass) on the
+//! GPU through a bilinear pyramid (1/2 .. 1/64) and back up to 1/8, reads that back (without
 //! waiting, for an animated source: a later frame collects it), and
 //! writes it to `%LOCALAPPDATA%\mypaper\backdrop\<NAME>.bmp` (`NAME` is the
 //! device name without `\\.\`, e.g. `DISPLAY1`; `dev` in `--windowed` mode).
 //! The file is an uncompressed top-down 24-bit BMP of `round(w/8) x round(h/8)`
-//! pixels with the swapchain's bytes as-is, written via `.bmp.tmp` + rename.
+//! pixels with the swapchain format's bytes as-is, written via `.bmp.tmp` + rename.
+//! Sampling the kept frame needs no full-screen copy: a full-scale source's kept frame
+//! is what the swapchain shows, and a scaled one is the render the swapchain upscales.
 //!
 //! A screen is published once on its first drawn frame after each theme load,
 //! and then, while the source is animated, every N seconds, but only while
@@ -28,28 +30,27 @@ use anyhow::{Context, Result, bail};
 use mypaper_desktop::{Rect, monitor_infos};
 use mypaper_theme::Fit;
 
-use crate::gpu::Gpu;
-use crate::sources;
+use crate::gpu::{Gpu, KeptFrame};
+use crate::sources::{self, blit::BlitQuad};
 
 /// The published image is the screen shrunk by this much.
 const OUTPUT_DIVISOR: u32 = 8;
-/// Pyramid texture `k` is the screen shrunk by `DIVISORS[k]`; 0 is the copy of the screen.
-const DIVISORS: [u32; 7] = [1, 2, 4, 8, 16, 32, 64];
+/// Pyramid texture `k` is the screen shrunk by `DIVISORS[k]`. The kept frame is drawn into 0.
+const DIVISORS: [u32; 6] = [2, 4, 8, 16, 32, 64];
 /// Which pyramid texture is published (`DIVISORS[RESULT] == OUTPUT_DIVISOR`).
-const RESULT: usize = 3;
+const RESULT: usize = 2;
 const _: () = assert!(DIVISORS[RESULT] == OUTPUT_DIVISOR);
-/// Blit passes as (sampled texture, target texture): halve down to 1/64, then
+/// Blit passes after the first as (sampled texture, target texture): halve down to 1/64, then
 /// bilinearly double back up to 1/8.
-const PASSES: [(usize, usize); 9] = [
+const PASSES: [(usize, usize); 8] = [
     (0, 1),
     (1, 2),
     (2, 3),
     (3, 4),
     (4, 5),
-    (5, 6),
-    (6, 5),
     (5, 4),
     (4, 3),
+    (3, 2),
 ];
 
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(10);
@@ -88,10 +89,8 @@ struct ScreenState {
 pub struct Draw<'a> {
     pub screen: usize,
     pub size: (u32, u32),
-    /// The swapchain image the source just drew.
-    pub texture: &'a wgpu::Texture,
-    /// Whether the swapchain can be copied from (`Screen::copy_src`).
-    pub copy_src: bool,
+    /// The wallpaper the source just drew, at its render scale.
+    pub kept: &'a KeptFrame,
     /// The engine is held: publish nothing.
     pub held: bool,
     /// The source redraws on its own (`Redraw::Every` / `Redraw::At`).
@@ -177,7 +176,7 @@ impl Backdrop {
         let Some(state) = self.screens.get_mut(draw.screen) else {
             return false;
         };
-        if draw.held || !draw.copy_src || state.failed || state.name.is_none() {
+        if draw.held || state.failed || state.name.is_none() {
             return false;
         }
         // An animated screen's last readback may still be in flight: pick it up first, and don't
@@ -205,7 +204,11 @@ impl Backdrop {
         let Some(pyramid) = &state.pyramid else {
             return false;
         };
-        pyramid.encode(gpu, draw.texture, encoder);
+        let kept = draw.kept;
+        let source = (kept.texture.width(), kept.texture.height());
+        kept.quad
+            .set(&gpu.queue, source, pyramid.size, Fit::Stretch, 1.0);
+        pyramid.blur(gpu, &kept.quad, encoder);
         state.animated = draw.animated;
         true
     }
@@ -402,12 +405,10 @@ impl Pyramid {
             .iter()
             .enumerate()
             .map(|(k, &size)| {
-                let usage = match k {
-                    0 => wgpu::TextureUsages::empty(),
-                    RESULT => {
-                        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
-                    }
-                    _ => wgpu::TextureUsages::RENDER_ATTACHMENT,
+                let usage = if k == RESULT {
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
+                } else {
+                    wgpu::TextureUsages::RENDER_ATTACHMENT
                 };
                 gpu.texture("backdrop", size, gpu.format, usage, None)
             })
@@ -448,26 +449,17 @@ impl Pyramid {
         })
     }
 
-    /// Records: swapchain image -> copy -> pyramid -> readback buffer.
-    fn encode(&self, gpu: &Gpu, swapchain: &wgpu::Texture, encoder: &mut wgpu::CommandEncoder) {
-        encoder.copy_texture_to_texture(
-            swapchain.as_image_copy(),
-            self.textures[0].as_image_copy(),
-            extent(self.size),
-        );
-        self.blur(gpu, encoder);
-    }
-
-    /// Records the pyramid passes on the copy in `textures[0]` and the copy of
-    /// the result into the readback buffer.
-    fn blur(&self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
-        for (from, to) in PASSES {
+    /// Records the pyramid passes from `source` (a stretch quad of the kept frame) and the
+    /// copy of the result into the readback buffer.
+    fn blur(&self, gpu: &Gpu, source: &BlitQuad, encoder: &mut wgpu::CommandEncoder) {
+        let rest = PASSES.map(|(from, to)| (&self.quads[from], to));
+        for (quad, to) in std::iter::once((source, 0)).chain(rest) {
             let mut pass = sources::begin(
                 encoder,
                 &self.views[to],
                 wgpu::LoadOp::Clear(wgpu::Color::BLACK),
             );
-            self.quads[from].draw(&gpu.blit, &mut pass);
+            quad.draw(&gpu.blit, &mut pass);
         }
         encoder.copy_texture_to_buffer(
             self.textures[RESULT].as_image_copy(),
@@ -798,18 +790,18 @@ mod tests {
         };
         let size = (2560, 1440);
         let pyramid = Pyramid::new(&gpu, size).unwrap();
-        // Bgra8Unorm in the headless device: blue, green, red, alpha.
+        // A 0.65-scale kept frame, as rain-city keeps. Bgra8Unorm: blue, green, red, alpha.
+        let kept = KeptFrame::new(&gpu, (1664, 936));
         let (b, g, r) = (50u8, 100u8, 200u8);
-        gpu.write_texture(
-            &pyramid.textures[0],
-            &[b, g, r, 255].repeat((size.0 * size.1) as usize),
-        );
+        gpu.write_texture(&kept.texture, &[b, g, r, 255].repeat(1664 * 936));
+        kept.quad
+            .set(&gpu.queue, (1664, 936), size, Fit::Stretch, 1.0);
 
         // The first run pays for the texture upload and cold pipelines; time the second.
         let run = || {
             let started = Instant::now();
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            pyramid.blur(&gpu, &mut encoder);
+            pyramid.blur(&gpu, &kept.quad, &mut encoder);
             gpu.queue.submit([encoder.finish()]);
             let (bmp, waited) = pyramid
                 .with_pixels(&gpu, |bytes| {

@@ -114,9 +114,7 @@ impl Engine {
         startup::ready("wallpaper", "source_ms");
         let mut snapshot = Snapshot::new();
         snapshot.theme_loaded(loaded);
-        let backdrop = Backdrop::new(monitors.as_deref(), |i| {
-            source.native(i) || !screens[i].copy_src
-        });
+        let backdrop = Backdrop::new(monitors.as_deref(), |i| source.native(i));
         let glass = GlassPass::new(monitors.as_deref())?;
         let timing = crate::timing::Timing::new(&gpu)?;
         let id = theme
@@ -471,8 +469,7 @@ impl Engine {
                     Draw {
                         screen: index,
                         size: screen.size(),
-                        texture: &texture.texture,
-                        copy_src: screen.copy_src,
+                        kept,
                         held: self.held,
                         animated,
                     },
@@ -583,8 +580,7 @@ impl Engine {
         self.theme = theme;
         self.refresh_renderer();
         self.palette_due = true;
-        self.backdrop
-            .reset(|i| self.source.native(i) || !self.screens[i].copy_src);
+        self.backdrop.reset(|i| self.source.native(i));
         self.snapshot.theme_loaded(true);
         self.next_frame = Instant::now();
         // A new source starts with every screen visible.
