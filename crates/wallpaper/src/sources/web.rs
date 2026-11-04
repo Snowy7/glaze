@@ -165,8 +165,6 @@ struct ScreenView {
     visibility: Visibility,
     view: Option<View>,
     still: Still,
-    backdrop_due: Duration,
-    backdrop_capturing: bool,
 }
 
 /// What a paused screen shows instead of the live page.
@@ -231,8 +229,6 @@ impl WebSource {
                     visibility: Visibility::Live,
                     view: None,
                     still: Still::None,
-                    backdrop_due: Duration::ZERO,
-                    backdrop_capturing: false,
                 })
                 .collect(),
         }));
@@ -286,47 +282,6 @@ impl WebSource {
 }
 
 impl Source for WebSource {
-    fn update(&mut self, _gpu: &Gpu, clock: Duration) {
-        let captures: Vec<_> = self
-            .state
-            .borrow()
-            .screens
-            .iter()
-            .enumerate()
-            .filter(|(_, screen)| {
-                screen.visibility == Visibility::Live
-                    && !screen.backdrop_capturing
-                    && clock >= screen.backdrop_due
-            })
-            .filter_map(|(index, screen)| {
-                screen
-                    .view
-                    .as_ref()
-                    .filter(|view| view.loaded)
-                    .map(|view| (index, view.clone()))
-            })
-            .collect();
-        if captures.is_empty() {
-            return;
-        }
-        let requested = mypaper_tweaks::palette::local_dir()
-            .ok()
-            .map(|dir| dir.join("backdrop"))
-            .is_some_and(|dir| {
-                dir.join("request.json").exists() || dir.join("widgets-request.json").exists()
-            });
-        for (index, _) in &captures {
-            let mut state = self.state.borrow_mut();
-            let screen = &mut state.screens[*index];
-            screen.backdrop_capturing = requested;
-            screen.backdrop_due = clock + Duration::from_secs(10);
-        }
-        if requested {
-            for (index, view) in captures {
-                capture_backdrop(&Rc::downgrade(&self.state), index, &view);
-            }
-        }
-    }
     /// Only reached for a paused screen showing its still (see [`Still`]).
     fn render(&mut self, gpu: &Gpu, frame: Frame<'_>) {
         let mut state = self.state.borrow_mut();
@@ -401,90 +356,6 @@ impl Source for WebSource {
     fn set_visibility(&mut self, screen: usize, hwnd: HWND, visibility: Visibility) {
         self.apply_visibility(screen, hwnd, visibility);
         self.sync_input();
-    }
-}
-
-/// Web wallpapers have no swapchain copy; CapturePreview sees only the wallpaper, never widgets.
-fn capture_backdrop(weak: &Weak<RefCell<State>>, screen: usize, view: &View) {
-    let captured = move |weak: &Weak<RefCell<State>>, result: Result<IStream>| {
-        let Some(state) = weak.upgrade() else { return };
-        let hwnd = {
-            let mut state = state.borrow_mut();
-            if state.closed {
-                return;
-            }
-            state.screens[screen].backdrop_capturing = false;
-            state.screens[screen].hwnd
-        };
-        let result = result.and_then(|stream| {
-            let image = Decoder::new()?.decode_stream(
-                &stream,
-                Budget {
-                    fit: Fit::Stretch,
-                    screen: (320, 180),
-                    max_dim: 320,
-                },
-            )?;
-            let mut rect = RECT::default();
-            // SAFETY: the wallpaper window is owned by this still-live source.
-            unsafe { GetWindowRect(hwnd, &mut rect) }?;
-            let monitor = mypaper_desktop::monitor_infos()
-                .into_iter()
-                .find(|m| m.rect == mypaper_desktop::Rect::from(rect))
-                .context("web backdrop monitor")?;
-            let dir = mypaper_tweaks::palette::local_dir()?.join("backdrop");
-            std::fs::create_dir_all(&dir)?;
-            let name = monitor.device.trim_start_matches(r"\\.\");
-            let path = dir.join(format!("{name}.bmp"));
-            let first = !path.exists();
-            let bytes = crate::backdrop::encode_bmp(
-                image.size.0,
-                image.size.1,
-                image.size.0 as usize * 4,
-                &image.bgra,
-                true,
-            );
-            let temp = path.with_extension("bmp.tmp");
-            std::fs::write(&temp, bytes)?;
-            std::fs::rename(temp, path)?;
-            log::log!(
-                if first {
-                    log::Level::Info
-                } else {
-                    log::Level::Debug
-                },
-                "web backdrop {name}: {}x{}",
-                image.size.0,
-                image.size.1
-            );
-            Ok(())
-        });
-        if let Err(e) = result {
-            log::warn!("web backdrop screen {screen}: {e:#}");
-        }
-    };
-    // SAFETY: an owned, growable stream and a callback on this WebView's UI thread.
-    let stream = match unsafe { CreateStreamOnHGlobal(HGLOBAL::default(), true) } {
-        Ok(stream) => stream,
-        Err(e) => return captured(weak, Err(e.into())),
-    };
-    let callback = {
-        let weak = weak.clone();
-        let stream = stream.clone();
-        CapturePreviewCompletedHandler::create(Box::new(move |result| {
-            captured(&weak, result.map(|()| stream).map_err(Into::into));
-            Ok(())
-        }))
-    };
-    // SAFETY: the view, stream and handler live through this asynchronous COM operation.
-    if let Err(e) = unsafe {
-        view.webview.CapturePreview(
-            COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
-            &stream,
-            &callback,
-        )
-    } {
-        captured(weak, Err(e.into()));
     }
 }
 

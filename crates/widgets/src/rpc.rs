@@ -164,6 +164,10 @@ impl<T> Pending<T> {
         self.waiting.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.waiting.is_empty()
+    }
+
     /// Removes every pending request (the plugin is gone).
     pub fn drain(&mut self) -> Vec<T> {
         self.waiting

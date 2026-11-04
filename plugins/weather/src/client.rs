@@ -22,18 +22,20 @@ const DAILY_FIELDS: &str =
 const HOURLY_FIELDS: &str = "temperature_2m,weather_code,precipitation_probability,is_day";
 
 pub struct OpenMeteo {
-    agent: ureq::Agent,
+    agent: crate::http::Http,
     locator: Locator<NativeLocation>,
     searches: Mutex<HashMap<String, (Instant, Vec<Candidate>)>>,
 }
 
+impl Default for OpenMeteo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OpenMeteo {
     pub fn new() -> Self {
-        let agent = ureq::Agent::config_builder()
-            .timeout_global(Some(Duration::from_secs(8)))
-            .user_agent("mypaper-weather/1.1")
-            .build()
-            .into();
+        let agent = crate::http::Http::new(Duration::from_secs(8));
         let locator = Locator::new(NativeLocation::new());
         if let Some(app_data) = std::env::var_os("APPDATA") {
             locator.set_data_dir(PathBuf::from(app_data).join("mypaper/plugin-data/weather"));
@@ -65,10 +67,7 @@ impl OpenMeteo {
             .query("count", "100")
             .query("language", "en")
             .query("format", "json")
-            .call()
-            .map_err(|e| unreachable(&e))?
-            .body_mut()
-            .read_json()
+            .json()
             .map_err(|e| RpcError::internal(format!("unexpected geocoding response: {e}")))?;
         let hits = rank_places(raw, query);
         if cache.len() >= 128 {
@@ -77,10 +76,6 @@ impl OpenMeteo {
         cache.insert(key, (Instant::now(), hits.clone()));
         Ok(hits)
     }
-}
-
-fn unreachable(e: &ureq::Error) -> RpcError {
-    RpcError::unavailable(format!("weather service unreachable: {e}"))
 }
 
 impl Source for OpenMeteo {
@@ -121,10 +116,7 @@ impl Source for OpenMeteo {
             .query("temperature_unit", temperature)
             .query("wind_speed_unit", wind)
             .query("precipitation_unit", precipitation)
-            .call()
-            .map_err(|e| unreachable(&e))?
-            .body_mut()
-            .read_json()
+            .json()
             .map_err(|e| RpcError::internal(format!("unexpected forecast response: {e}")))?;
         map_forecast(place, units, raw)
     }

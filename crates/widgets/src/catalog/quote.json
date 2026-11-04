@@ -1,0 +1,67 @@
+{
+  "id": "quote",
+  "name": "Quote",
+  "version": "1.1.0",
+  "author": "mypaper",
+  "description": "A short quote, new every day. Click for another.",
+  "size": {
+    "default": [
+      3,
+      1
+    ],
+    "min": [
+      2,
+      1
+    ],
+    "max": [
+      4,
+      2
+    ]
+  },
+  "resizable": true,
+  "permissions": [],
+  "plugins": [],
+  "settings": [
+    {
+      "key": "mode",
+      "type": "select",
+      "label": "New quote",
+      "options": [
+        "daily",
+        "hourly",
+        "click"
+      ],
+      "default": "daily"
+    },
+    {
+      "key": "source",
+      "type": "select",
+      "label": "Quotes from",
+      "options": [
+        "builtin",
+        "custom",
+        "both"
+      ],
+      "default": "builtin"
+    },
+    {
+      "key": "custom",
+      "type": "list",
+      "label": "Your quotes",
+      "fields": [
+        {
+          "key": "text",
+          "type": "string",
+          "label": "Quote"
+        },
+        {
+          "key": "author",
+          "type": "string",
+          "label": "Author"
+        }
+      ],
+      "maxItems": 50,
+      "default": []
+    }
+  ]
+}
