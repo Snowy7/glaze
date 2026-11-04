@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mypaper native: the plan</title>
+<style>
+:root{--bg:#0b0b0c;--panel:#121214;--line:#26262a;--text:#f2f2f3;--muted:#9a9aa2;--accent:#7cc4ff;--warn:#ffcf70}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+main{max-width:920px;margin:0 auto;padding:48px 20px 96px}
+h1{font-size:30px;line-height:1.2;margin:0 0 8px;font-weight:650;letter-spacing:-.01em}
+h2{font-size:21px;margin:56px 0 12px;font-weight:620;padding-top:20px;border-top:1px solid var(--line)}
+h3{font-size:16px;margin:28px 0 6px;font-weight:620}
+p{margin:10px 0}
+.sub{color:var(--muted);margin:0 0 28px}
+.lead{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--panel);padding:18px 20px;border-radius:8px}
+.lead p:first-child{margin-top:0}.lead p:last-child{margin-bottom:0}
+.open{border:1px solid var(--line);border-left:3px solid var(--warn);background:var(--panel);padding:16px 20px;border-radius:8px;margin:18px 0}
+.open b{color:var(--warn)}
+ul,ol{padding-left:22px;margin:8px 0}li{margin:4px 0}
+code{font:13.5px/1.4 "Cascadia Code",Consolas,monospace;background:#18181b;border:1px solid var(--line);padding:1px 5px;border-radius:4px}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+td.n,th.n{text-align:right;white-space:nowrap}
+.muted{color:var(--muted)}
+.tag{display:inline-block;font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 8px;margin-left:6px}
+.slice{border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:12px 0;background:var(--panel)}
+.slice h3{margin:0 0 6px}
+.check{color:var(--accent)}
+svg{width:100%;height:auto;display:block;margin:16px 0}
+.wrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<main>
+<h1>mypaper native: the plan</h1>
+<p class="sub">This plan rebuilds the shell fully native, with live Liquid Glass on every surface and near-zero resource use. A council of GPT&nbsp;Sol, Claude&nbsp;Opus and Grok signed it off after six review rounds. Source: <code>plans/council/native-plan.md</code> (v8).</p>
+
+<div class="lead">
+<p><strong>The plan.</strong> WebView2 goes everywhere. Three processes stay always on. The engine is the only process with a hardware GPU, and it draws both the wallpaper and all Liquid Glass. The new shell draws the bars, dock, flyouts, menus and widgets in software, at about 40&nbsp;MB.</p>
+<p><strong>Result.</strong> Idle CPU drops from 38–87% of a core to about 0.1%. Total RAM drops from about 670&nbsp;MB to an expected 330–370&nbsp;MB. Glass on every surface stays live to what is behind it.</p>
+<p><strong>From you:</strong> one decision is open (below). Everything else is decided, and the build runs in one go, in the order listed.</p>
+</div>
+
+<div class="open">
+<p><b>Open decision D-W: web and app wallpapers.</b> These include Fluids, Vanta Waves, web pages you add, and a Unity game running as the wallpaper. The engine can't draw glass into them, because they render themselves.</p>
+<p><b>Default:</b> delete both kinds, so every wallpaper is engine-drawn and no second capture design gets built. <b>Alternative:</b> keep them, and glass over them uses the same capture path as flyouts, costing a little while it's on screen.</p>
+</div>
+
+<h2>Council scores</h2>
+<div class="wrap"><table>
+<thead><tr><th>Delegate</th><th class="n">R2</th><th class="n">R3</th><th class="n">R4</th><th class="n">R5</th><th class="n">R6</th><th class="n">Final</th></tr></thead>
+<tbody>
+<tr><td>GPT Sol (gpt-6.1-sol, xhigh)</td><td class="n">8</td><td class="n">9</td><td class="n">9</td><td class="n">n/a</td><td class="n">n/a</td><td class="n"><strong>9</strong></td></tr>
+<tr><td>Claude Opus (opus-5.5, xhigh)</td><td class="n">6</td><td class="n">7</td><td class="n">8</td><td class="n">8</td><td class="n">8</td><td class="n"><strong>9</strong></td></tr>
+<tr><td>Grok (grok-4.7 via Cursor, xhigh)</td><td class="n">5</td><td class="n">6</td><td class="n">8</td><td class="n">8</td><td class="n">8</td><td class="n"><strong>9</strong></td></tr>
+</tbody></table></div>
+<p class="muted">R1 was the three independent plans. Sol's 9 from R4 stood through R5–R6, because the changes after it only added checks. Before this plan, an earlier WebView2-based plan went through 6 rounds; it was dropped when the goal became minimizing RAM too.</p>
+
+<h2>Your decisions this plan is built on</h2>
+<ul>
+<li><strong>Everything native.</strong> Minimize CPU, RAM and GPU, at idle and in use.</li>
+<li><strong>A destructive rebuild.</strong> No dual paths, no WebView2 fallback; old code is deleted as each slice lands.</li>
+<li><strong>Anything may be rebuilt:</strong> the shell, the engine, core, Studio and themes.</li>
+<li><strong>Styles:</strong> Liquid Glass is the default, alongside One UI, Solid, Fluent and Mono.</li>
+<li><strong>Liquid Glass on every surface,</strong> live to what is behind it, with adjustable clear↔tinted and blur.</li>
+<li><strong>Bars float over the wallpaper,</strong> like the widgets.</li>
+<li><strong>Standalone.</strong> Restyling the inside of Explorer and Settings is a separate project, after this one.</li>
+<li><strong>Kept:</strong> the panic hotkey and the undo journal.</li>
+</ul>
+
+<h2>Two rules</h2>
+<h3>1. One hardware GPU device for the whole product: the engine's</h3>
+<p>On your machine, any process that opens a hardware GPU device pays <strong>235–246&nbsp;MB</strong> for the graphics driver (<code>docs/engine-notes.md:27-40</code>). So:</p>
+<ul>
+<li>The shell draws with software Direct2D and DirectWrite into layered windows.</li>
+<li>Windows' built-in software renderer (WARP) is allowed. A test asserts that no NVIDIA or AMD driver DLL ever loads into the shell.</li>
+<li>If WARP itself turns out too heavy, a pure-CPU renderer (tiny-skia) takes over.</li>
+</ul>
+<p>Found along the way: today's desktop menu creates a <em>hardware</em> render target (<code>menu_ui.rs:126</code>), so core probably loads the whole driver on your first right-click.</p>
+<h3>2. If nothing changes, nothing is drawn</h3>
+<p>Each surface redraws only the region that changed. Animation timers run only while something moves. Glass redraws only when the pixels behind <em>that</em> surface change.</p>
+
+<h2>Architecture</h2>
+<svg viewBox="0 0 880 330" role="img" aria-label="Three always-on processes and two glass paths">
+<style>.b{fill:#121214;stroke:#2e2e33}.a{fill:#121214;stroke:#7cc4ff}.t{fill:#f2f2f3;font:600 15px Segoe UI,sans-serif}.s{fill:#9a9aa2;font:13px Segoe UI,sans-serif}.l{stroke:#3a3a40;stroke-width:1.5;fill:none}.la{stroke:#7cc4ff;stroke-width:1.5;fill:none}</style>
+<rect class="b" x="20" y="20" width="250" height="110" rx="8"/><text class="t" x="36" y="48">mypaper-core</text><text class="s" x="36" y="72">supervisor, tray, panic hotkey</text><text class="s" x="36" y="92">styling journal, restarts the shell</text><text class="s" x="36" y="112">≤8 MB</text>
+<rect class="b" x="315" y="20" width="250" height="110" rx="8"/><text class="t" x="331" y="48">mypaper-shell (new)</text><text class="s" x="331" y="72">bars, dock, flyouts, menus, widgets</text><text class="s" x="331" y="92">software D2D, no hardware GPU</text><text class="s" x="331" y="112">≤40 MB, ≤0.1% idle</text>
+<rect class="a" x="610" y="20" width="250" height="110" rx="8"/><text class="t" x="626" y="48">mypaper-wallpaper</text><text class="s" x="626" y="72">the only hardware GPU process</text><text class="s" x="626" y="92">wallpaper + all Liquid Glass</text><text class="s" x="626" y="112">gate set by the first spike</text>
+<path class="l" d="M270 75H315"/><path class="la" d="M565 75H610"/><text class="s" x="560" y="150" text-anchor="middle">shared memory: glass geometry</text>
+<rect class="b" x="315" y="190" width="250" height="120" rx="8"/><text class="t" x="331" y="218">Plates</text><text class="s" x="331" y="242">bars, dock, widgets over the wallpaper</text><text class="s" x="331" y="262">drawn into the wallpaper frame</text><text class="s" x="331" y="282">live by construction, 0 at idle</text>
+<rect class="b" x="610" y="190" width="250" height="120" rx="8"/><text class="t" x="626" y="218">Overlays</text><text class="s" x="626" y="242">flyouts, menus, notifications</text><text class="s" x="626" y="262">screen capture, only on change</text><text class="s" x="626" y="282">exist only while open</text>
+<path class="la" d="M735 130V190"/><path class="la" d="M735 160H440V190"/>
+</svg>
+<div class="wrap"><table>
+<thead><tr><th>Process</th><th>Role</th><th>Always on</th></tr></thead>
+<tbody>
+<tr><td><code>mypaper-core</code></td><td>Supervisor, tray icon, panic hotkey, styling journal; restores the taskbar if the shell dies</td><td>yes</td></tr>
+<tr><td><code>mypaper-wallpaper</code></td><td>wgpu: wallpaper, glass plates, glass overlays</td><td>yes</td></tr>
+<tr><td><code>mypaper-shell</code></td><td>Top bar, dock, flyouts, notification center, launcher, all menus (the desktop menu moves here from core), widgets, tray host, window list</td><td>yes</td></tr>
+<tr><td>Plugins</td><td>Third-party data providers over JSON-RPC</td><td>only while used</td></tr>
+<tr><td>Studio</td><td>Settings app</td><td>only while open</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>Deleted:</strong> the <code>mypaper-bars</code> and <code>mypaper-widgets</code> processes. Their Rust services (app bars, tray host, window list, media, audio, network, notifications, stats, icons, journal) become one library inside the shell, with the duplicates between them merged.</li>
+<li><strong>Cut:</strong> HTML widgets and the widget SDK. No third-party HTML widget exists, and plugins cover data needs.</li>
+<li><strong>Crashes:</strong> if the shell dies, core restores the taskbar immediately and restarts the shell in ≤300&nbsp;ms. Core never waits on the shell, so the panic hotkey works even if the shell hangs.</li>
+</ul>
+
+<h2>Liquid Glass, live on every surface</h2>
+<h3>Plates: surfaces over the wallpaper</h3>
+<ul>
+<li><strong>Where:</strong> the top bar, the dock and the widgets.</li>
+<li><strong>How:</strong> the shell writes each surface's shape into shared memory. The engine draws the glass into its own wallpaper frame: edge refraction, blur, tint and a highlight that follows the light. The shell draws its content on top.</li>
+<li><strong>Cost:</strong> live by construction, and zero over a still wallpaper unless something moves.</li>
+<li><strong>Moving surfaces:</strong> when the dock magnifies or a widget is dragged, the engine redraws only the glass over its last wallpaper frame, so glass stays at most one frame behind, even on a 30&nbsp;fps wallpaper.</li>
+<li><strong>Bars keep their reserved screen space,</strong> so maximized apps stop at the bar and its glass needs no capture.</li>
+</ul>
+<h3>Overlays: surfaces over app windows</h3>
+<ul>
+<li><strong>Where:</strong> flyouts, the notification center, the launcher, tray overflow, all menus, and a bar while a window is dragged under it.</li>
+<li><strong>How:</strong> the engine puts a click-through glass window, with rounded corners, directly under ours. It feeds that window from one screen capture per monitor, which exists only while something is open.</li>
+<li><strong>Cost:</strong> the capture reports which regions changed. Frames that don't touch the area behind an open surface are skipped, so a video playing elsewhere costs almost nothing.</li>
+<li><strong>Screenshots:</strong> our windows are excluded from the engine's own capture only (<code>SetWindowExclusionList</code>, confirmed by all three reviewers). So they still appear in your screenshots and screen shares.</li>
+<li><strong>Menus never overlap.</strong> Submenus sit flush against their parent.</li>
+</ul>
+<h3>Controls and styles</h3>
+<p>Every style exposes <strong>clarity</strong> (clear↔tinted, like Apple's Clear/Tinted setting, as a slider), <strong>blur</strong>, <strong>refraction</strong>, <strong>highlight</strong> and <strong>tint colour</strong>.</p>
+<div class="wrap"><table>
+<thead><tr><th>Style</th><th>Character</th><th>Material</th></tr></thead>
+<tbody>
+<tr><td><strong>Liquid</strong><span class="tag">default</span></td><td>macOS Tahoe calm, Lucide icons</td><td>Liquid Glass, mostly clear</td></tr>
+<tr><td><strong>One UI</strong></td><td>Large radii, bold type, roomy cards</td><td>Blur, tinted</td></tr>
+<tr><td><strong>Fluent</strong></td><td>Windows 11 metrics, Fluent icons</td><td>Blur, tinted</td></tr>
+<tr><td><strong>Solid</strong></td><td>Opaque surfaces, crisp borders</td><td>None (no capture at all)</td></tr>
+<tr><td><strong>Mono</strong></td><td>Today's mono look</td><td>Tint (no capture at all)</td></tr>
+</tbody></table></div>
+<p>One style switch also sets Windows' own frame colour, accent, light/dark mode and accent-coloured title bars.</p>
+<h3>Wallpapers</h3>
+<p>Rain-city, its amber and midnight versions, snow-city and snow-forest move from web pages to engine shaders over their photo. Their glass then works everywhere, and each one stops running its own ~100&nbsp;MB browser. Rain-city goes from about 30% of a core to ≤4% across both screens.</p>
+
+<h2>Targets</h2>
+<p class="muted">Measured with <code>tools/perf</code> as the median of 3×60&nbsp;s on your 2 monitors at 1440p, both visible. The theme is rain-city with Liquid on the bar, dock and 6 widgets, with media paused. CPU is % of one core.</p>
+<div class="wrap"><table>
+<thead><tr><th></th><th class="n">Today</th><th class="n">Target</th></tr></thead>
+<tbody>
+<tr><td>Always-on processes</td><td class="n">~14</td><td class="n"><strong>3</strong></td></tr>
+<tr><td>Shell RAM / idle CPU</td><td class="n">~415 MB</td><td class="n"><strong>≤40 MB / ≤0.1%</strong></td></tr>
+<tr><td>Core</td><td class="n">n/a</td><td class="n">≤8 MB</td></tr>
+<tr><td>A flyout or menu open</td><td class="n">n/a</td><td class="n">+6 MB, on screen ≤30 ms, 0 redraws once settled</td></tr>
+<tr><td>Engine RAM</td><td class="n">n/a</td><td class="n">first spike's measurement + 10 MB</td></tr>
+<tr><td>Rain-city, 2 screens</td><td class="n">~30%</td><td class="n">≤4% CPU, ≤2 ms GPU per frame</td></tr>
+<tr><td>Glass on an animated wallpaper</td><td class="n">n/a</td><td class="n">≤0.3 ms GPU per frame</td></tr>
+<tr><td>Glass overlay while open</td><td class="n">n/a</td><td class="n">≤3% CPU, ≤30 MB, freed on close</td></tr>
+<tr><td>Whole product RAM</td><td class="n">~670 MB</td><td class="n"><strong>~330–370 MB</strong></td></tr>
+</tbody></table></div>
+<p class="muted">Most of the engine's RAM is the graphics driver, which no app can avoid.</p>
+
+<h2>Build order</h2>
+<div class="slice"><h3>N0 · Experiments first</h3>
+<p><strong>1. Software shell:</strong> ≤10&nbsp;MB, 0% CPU over 60&nbsp;s, ≤1&nbsp;ms to redraw a full-width bar, and no driver DLL loaded. It also records the first-paint time.</p>
+<p><strong>2. Glass overlay:</strong></p>
+<ul>
+<li>Sits under a moving popup with the right z-order.</li>
+<li>Keeps our windows out of the capture, while a Snipping Tool screenshot still shows them.</li>
+<li>No yellow capture border: tries the unpackaged path first, and falls back to a signed sparse package.</li>
+<li>Clicks reach the popup.</li>
+<li>Lags ≤1 frame.</li>
+<li>0 glass work while only a video elsewhere changes, or only our own windows change.</li>
+</ul>
+<p><strong>3. Engine memory</strong> with 2 screens and all the glass; this sets the engine target.</p></div>
+<div class="slice"><h3>N1 · New UI layer and shell, with the desktop menu</h3>
+<p><span class="check">Check:</span> a golden-image test matches; opens in ≤25&nbsp;ms; core loads no Direct2D.</p></div>
+<div class="slice"><h3>N2 · Top bar, dock and glass, plus the rain-city/snow port</h3>
+<p>Core starts the shell right after waiting for Explorer. The shell owns the taskbar hide and the journal.</p>
+<p><span class="check">Check:</span> shell and engine targets, golden images and click tests, rain-city ≤4%, glass ≤1 frame behind the dock.</p>
+<p><span class="muted">Deletes:</span> the bars web page, the WebView host, the stand-ins, capture, blur, the bridge, the bars process, the old glass scratch memory, its file transport and its spring.</p></div>
+<div class="slice"><h3>N3 · Flyouts, notification center, launcher, all menus, with live glass</h3>
+<p><span class="check">Check:</span> overlay targets, content ≤30&nbsp;ms, Arabic and CJK typing in the launcher.</p></div>
+<div class="slice"><h3>N4 · All 17 widgets and edit mode</h3>
+<p><span class="check">Check:</span> the whole-product target, no WebView2 anywhere.</p>
+<p><span class="muted">Deletes:</span> the widget pages, the HTML widgets, the SDK and the widgets process.</p></div>
+<div class="slice"><h3>N5 · Engine cleanup</h3>
+<p>Remove web and app wallpapers (per D-W), the old snapshot pipeline, and the probe of the high-power GPU.</p></div>
+<div class="slice"><h3>N6 · Styles and materials</h3>
+<p>Five styles, the material sliders, icon fonts, and Windows settings sync. <span class="check">Check:</span> one switch restyles everything, and the undo round-trip passes.</p></div>
+<div class="slice"><h3>N7 · Studio native <span class="tag">last, can wait</span></h3>
+<p>Rebuilt on the same UI layer, so previews are the real renderer. Tauri and pnpm go. ≤60&nbsp;MB while open.</p></div>
+
+<h2>Given up on purpose</h2>
+<ul>
+<li>Theme CSS, gradients, image, noise and glow fills, neon presets, ambient widget motion, and two of the four launcher layouts.</li>
+<li>Settings edited on the widget itself (they move to Studio), HTML widgets, and Windows' own backdrop blur.</li>
+<li>Per D-W's default: the web and app wallpaper kinds, Fluids and Vanta Waves.</li>
+</ul>
+
+<h2>Risks</h2>
+<ul>
+<li><strong>Text sharpness:</strong> software text on transparent windows uses grayscale smoothing. You compare it side by side in N0.</li>
+<li><strong>The glass overlay</strong> is the biggest unknown, so it is proven in N0 before any port.</li>
+<li><strong>Typing in other languages</strong> through Windows' rich text control is tested in N3.</li>
+<li><strong>Size:</strong> roughly 15k new Rust lines replace about 21k lines of TypeScript, CSS and glue, plus Studio.</li>
+</ul>
+</main>
+</body>
+</html>

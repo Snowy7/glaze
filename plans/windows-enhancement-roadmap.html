@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>mypaper: a better Windows, measured</title>
+<style>
+:root{--bg:#0b0b0b;--panel:#141414;--line:#292929;--text:#fafafa;--muted:#a3a3a3;--accent:#a8c6ff;--radius:12px;font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font-size:16px;line-height:1.65}main{max-width:1080px;margin:auto;padding:64px 32px 80px}a{color:var(--accent);text-underline-offset:4px}a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:5px}header{max-width:870px}.eyebrow,.kicker{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}h1{font-size:clamp(36px,6vw,62px);letter-spacing:-.045em;line-height:1.08;margin:18px 0 24px}h2{font-size:27px;letter-spacing:-.025em;line-height:1.25;margin:0 0 16px}h3{font-size:18px;letter-spacing:-.015em;margin:24px 0 10px}p{margin:0 0 15px}.lead{font-size:20px;line-height:1.55;color:#dedede}.muted,small{color:var(--muted)}.decision{border-left:3px solid var(--accent);padding:4px 0 4px 20px;margin:28px 0}.decision p:last-child{margin:0}.scope{font-size:14px;color:var(--muted)}nav{display:flex;gap:12px 22px;flex-wrap:wrap;margin:32px 0 44px;padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:14px}nav a{color:#d1d1d1;text-decoration:none}section{padding:36px 0;border-top:1px solid var(--line);scroll-margin-top:20px}section:first-of-type{border:0;padding-top:0}.phase{display:grid;grid-template-columns:52px minmax(0,1fr);gap:18px}.number{font-size:15px;color:var(--accent);font-variant-numeric:tabular-nums;padding-top:5px}.tag{display:inline-block;border:1px solid #404040;color:#d5d5d5;font-size:11px;letter-spacing:.04em;border-radius:5px;padding:2px 7px;vertical-align:middle;margin-left:8px}.gate{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;margin-top:20px;font-size:14px}.gate strong{color:var(--accent)}ul,ol{padding-left:23px;margin:12px 0 18px}li{margin:8px 0}li strong{color:#f2f2f2}code{font:12px/1.6 "Cascadia Mono",Consolas,monospace;background:#1b1b1b;border:1px solid var(--line);padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px;margin:18px 0}th,td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:top}th{font-weight:600;color:#f0f0f0;background:#141414}td:first-child{font-weight:600;color:#e8e8e8}table p{margin:0}.evidence{display:grid;grid-template-columns:1fr 1fr;gap:28px}.evidence h3{margin-top:0}.sequence{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0}.sequence span{border:1px solid var(--line);padding:7px 10px;border-radius:5px;font-size:13px}.sequence b{align-self:center;color:var(--muted);font-weight:400}.source-list{font-size:14px}.source-list li{margin:10px 0}details{border-top:1px solid var(--line);padding:16px 0;margin-top:20px}summary{cursor:pointer;font-weight:600}.architecture{font-size:14px}.architecture li{margin:10px 0}.ui-caption{font-size:13px;color:var(--muted);margin-bottom:12px}.studio{display:grid;grid-template-columns:155px minmax(0,1fr);border:1px solid #353535;border-radius:12px;overflow:hidden;background:#0b0b0b;font-size:13px;line-height:1.45;color:#c9c9c9}.studio aside{background:#141414;padding:20px 12px}.brand{display:flex;gap:9px;align-items:center;font-weight:650;color:#fafafa;margin-bottom:24px}.mark{width:26px;height:26px;background:#f2f2f2;border-radius:6px;color:#0b0b0b;display:grid;place-items:center}.studio aside span.navitem{display:block;padding:9px 10px;color:#8c8c8c;margin-bottom:3px}.studio aside span.selected{background:#2f2f2f;border:1px solid #353535;color:#fafafa;border-radius:8px}.studio .workspace{padding:0;min-width:0;max-width:none;margin:0}.toolbar{padding:16px 22px;border-bottom:1px solid #262626;display:flex;justify-content:space-between;gap:10px}.toolbar strong{font-size:15px;color:#fafafa}.studio-content{padding:24px}.studio h3{font-size:17px;margin:0 0 7px}.studio p{margin:0 0 16px}.studio .ui-muted{color:#8c8c8c}.ui-button{display:inline-block;border:1px solid #353535;border-radius:8px;padding:8px 12px;font-weight:600;color:#0b0b0b;background:#f2f2f2}.ui-row{border-top:1px solid #262626;margin-top:22px;padding-top:17px;display:flex;justify-content:space-between;gap:16px}.ui-row strong{display:block;color:#fafafa;margin-bottom:3px}.ui-status{font-size:11px;color:#c9c9c9;border:1px solid #353535;border-radius:5px;padding:4px 7px;white-space:nowrap;align-self:flex-start}.footer{font-size:13px;color:var(--muted);padding-top:24px;border-top:1px solid var(--line)}
+@media(max-width:650px){main{padding:32px 20px 48px}.phase{grid-template-columns:30px minmax(0,1fr);gap:10px}.evidence{grid-template-columns:1fr;gap:20px}h2{font-size:23px}.lead{font-size:18px}th,td{padding:10px}table{font-size:12px}.studio{grid-template-columns:1fr}.studio aside{display:none}.studio-content{padding:20px}.toolbar{padding:14px 20px}.ui-row{flex-direction:column;gap:8px}}
+@media print{body{background:white;color:#111;font-size:11px}main{max-width:none;padding:0}h1{font-size:35px}h2{font-size:20px}.lead,li strong,td:first-child,th{color:#111}.muted,.scope,.eyebrow,.kicker,small{color:#555}a{color:#234a78}.gate,th{background:#f5f5f5}.gate strong{color:#234a78}section{break-inside:auto}.phase h2{break-after:avoid}.studio{break-inside:avoid}nav{display:none}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">mypaper / proposed build plan / 4 November 2026</div>
+<h1>A better Windows,<br>measured.</h1>
+<p class="lead">Make real work faster: dependency installs, repository operations, file handling, and everyday desktop tasks. Use mypaper as the interface for improvements that can also benefit other applications.</p>
+<div class="decision"><p><strong>Start with a Windows performance lab and one native workspace acceleration experiment.</strong> Ship a benefit only after it survives repeatable measurements and correctness checks. Broader system improvements and native shell styling follow as independent features.</p></div>
+<p class="scope">Planning document. No benchmarks, migrations, system-setting changes, or application implementation have been performed for this plan. The percentage targets below are proposed acceptance criteria, not measured results or promised speedups.</p>
+</header>
+<nav aria-label="Plan sections"><a href="#evidence">What we know</a><a href="#lab">1. Measure</a><a href="#workspaces">2. Faster workspaces</a><a href="#system">3. Better Windows</a><a href="#shell">4. Native shell</a><a href="#research">5. Deeper storage</a><a href="#implementation">First implementation</a></nav>
+
+<section id="evidence">
+<h2>The opportunity and the unknown</h2>
+<div class="evidence">
+<div><h3>Confirmed</h3><p>The community benchmark exercises cleanup and cached dependency installation. It contains large differences across software stacks, including Windows versus WSL entries with matching listed hardware. Its submissions also show why Dev Drive should be tested rather than assumed to win. <a href="#sources">[1]</a></p><p>The current app already has a performance harness, Rust/Win32 integration, a typed Studio frontend, and registry rollback for per-user appearance settings.</p></div>
+<div><h3>Still unproven</h3><p>How much native Windows overhead is recoverable on our machines, which layer causes it, and whether a transparent acceleration technique can improve unrelated Windows applications.</p><p>Theo's examples motivate the workload selection; they do not establish the cause of every Windows slowdown. A faster Linux environment remains a separate result from faster native Windows. <a href="#sources">[2]</a></p></div>
+</div>
+<p><strong>Working scope:</strong> investigate current Windows 11 first; detect support for every feature. Keep existing wallpaper and desktop functionality usable independently of the new work.</p>
+<div class="sequence" aria-label="Execution order"><span>Measure native Windows</span><b aria-hidden="true">→</b><span>Prove one improvement</span><b aria-hidden="true">→</b><span>Integrate and verify</span><b aria-hidden="true">→</b><span>Expand from evidence</span></div>
+</section>
+
+<section id="lab" class="phase">
+<div class="number">01</div><div>
+<div class="kicker">First deliverable</div><h2>A repeatable Windows performance lab</h2>
+<p>Extend <code>tools/perf</code> with a separate system-workload command. The existing scenarios measure mypaper's own processes; this command measures real application work and relevant whole-machine activity without restarting the desktop by default.</p>
+<ul>
+<li><strong>Pin the workload.</strong> Use benchmark commit <code>535aef76843fe52d6336604111708d884110a0e5</code>. Record exact Git, Node, pnpm, Windows build, SSD, filesystem, volume, package-store location, security software, power state, and free space. Use one exact Node/pnpm pair for the initial comparison; test upgrades separately.</li>
+<li><strong>Measure meaningful tasks.</strong> Start with cached dependency installation, generated-file cleanup, checkout/worktree creation, directory enumeration, and <code>git status</code>. Then add one representative project install or incremental build when benchmark execution is explicitly started.</li>
+<li><strong>Separate conditions.</strong> Distinguish native NTFS, native Dev Drive, and WSL-local storage. First compare software choices on the same volume, then compare volumes; changing drives is a hardware confound. A VHDX-backed Dev Drive is its own configuration. A fresh directory is not a cold OS cache.</li>
+<li><strong>Collect evidence.</strong> Record elapsed and process CPU time, file-operation counts where tracing permits, I/O, private memory, file counts, and logical versus allocated storage. Escalate to short ETW/WPA or Defender recordings only for slow cases. Record tracing overhead. <a href="#sources">[3]</a></li>
+<li><strong>Repeat fairly.</strong> Warm dependencies, use offline installs with a fixed lockfile and consistent lifecycle-script policy, and preserve equivalent produced contents. Alternate baseline/candidate order for at least five paired runs; report medians, spread, individual runs, and failures. Label first-run measurements separately. Add repetitions only when noise prevents a decision.</li>
+</ul>
+<div class="gate"><strong>Exit condition:</strong> a reproducible baseline report and an evidence-backed list of the dominant costs. All cleanup is restricted to a newly created disposable checkout under a verified test root. Never run the benchmark's cleanup commands in the user's repository.</div>
+</div></section>
+
+<section id="workspaces" class="phase">
+<div class="number">02</div><div>
+<div class="kicker">Primary performance experiment</div><h2>Make native development workspaces cheaper</h2>
+<p>First try reducing work using existing filesystem and tool capabilities. Run each candidate independently before combining successful changes.</p>
+<div class="scroll"><table>
+<thead><tr><th>Experiment</th><th>Concrete implementation</th><th>What would count as success</th></tr></thead>
+<tbody>
+<tr><td>Dependency imports</td><td>Compare supported pnpm copy, hard-link, and clone modes with the package store on the same volume. Verify which operation actually happens and preserve lockfile/install semantics.</td><td>Less creation work and lower install time, without shared mutable dependencies, failed links, or slower subsequent builds.</td></tr>
+<tr><td>Native Dev Drive</td><td>Use an existing test volume or a deliberately created test VHDX. Compare with NTFS and record Defender's actual mode. Explain asynchronous scanning's tradeoff; never silently turn protection off. <a href="#sources">[4]</a></td><td>A repeatable win for the target workload. Keep NTFS when it wins. No conversion or repartitioning of the user's existing volume.</td></tr>
+<tr><td>Workspace copies</td><td>Explore filesystem-supported copy-on-write copies of prepared workspaces. Keep Git worktree metadata valid; materialize independent metadata where needed. ReFS block cloning is a candidate, not a guarantee. <a href="#sources">[5]</a></td><td>Faster creation and lower allocated storage. Edits, deletes, permissions, native modules, watchers, and cleanup remain isolated and correct.</td></tr>
+<tr><td>Toolchain fixes</td><td>Use traces to identify excessive scans, redundant subprocesses, metadata calls, or an inefficient import fallback. Fix the responsible tool or integrate an upstream improvement where practical.</td><td>The workload improves with fewer operations. Any benefit requiring a patched tool is explicitly scoped to that tool.</td></tr>
+</tbody></table></div>
+<p><strong>Separate option:</strong> offer WSL-local workspaces for Linux-compatible toolchains. Keep both files and the hot-path tools inside WSL; accessing the same project through Windows bridges is a separate test. Label this “Linux workspace,” never “native Windows acceleration.” <a href="#sources">[6]</a></p>
+<div class="gate"><strong>Proposed release gate:</strong> one native intervention improves the median of two representative workflows by at least 20%, beyond observed run variation, with no repeatable regression over 5% in secondary workflows. Verify on a second Windows machine before recommending it broadly. These thresholds can be revised explicitly after the baseline, not silently relaxed to declare success.</div>
+<p class="muted" style="margin-top:14px">If nothing wins, publish the negative result and the trace evidence. Do not ship a performance switch that has no demonstrated benefit.</p>
+</div></section>
+
+<section id="system" class="phase">
+<div class="number">03</div><div>
+<div class="kicker">Broader operating-system improvements</div><h2>Three small features with practical value</h2>
+<p>After the lab, choose the first feature based on the machine's measured problem. Each action is independent of wallpaper themes and records exactly what changed.</p>
+<h3>Startup and background activity</h3>
+<p>Show startup entries, their owner, launch mechanism, and measured activity. Help the user disable selected unwanted entries through supported controls. Explain existing Windows behavior before introducing a background resource controller. Later, investigate per-app efficiency settings only when traces demonstrate contention; avoid indiscriminate suspension.</p>
+<p class="muted"><strong>Acceptance:</strong> selected entries stop auto-launching, restoration recreates the original configuration, and a real sign-in confirms any boot/readiness claim. Measure net foreground benefit, not merely a smaller process list.</p>
+<h3>Sleep and docking recovery</h3>
+<p>Read SleepStudy and wake diagnostics to identify likely drain sources; offer supported hibernation configuration as a labeled workaround. Independently, remember window placement by monitor arrangement and restore it after docking or wake. Use stable monitor identities and respect windows the user moved afterward. <a href="#sources">[7]</a></p>
+<p class="muted"><strong>Acceptance:</strong> repeat the relevant sleep/dock cycle, preserve reachable window positions across DPI changes, and measure overnight drain before claiming a power improvement. Driver and firmware defects remain separately identified.</p>
+<h3>One place for supported Windows preferences</h3>
+<p>Start with a short, version-aware set of recommendation, notification, privacy, and update-scheduling preferences. Show current state, effect, and availability. Do not market quieter UI as a filesystem improvement. Respect organization policy and explain settings unavailable on the installed edition. <a href="#sources">[8]</a></p>
+<div class="gate"><strong>Settings contract:</strong> inspect → show the specific change → apply → verify → undo. Persist these preferences independently of theme lifetime. If another program or the user changes a value afterward, flag a conflict rather than blindly restoring an obsolete value.</div>
+</div></section>
+
+<section id="shell" class="phase">
+<div class="number">04</div><div>
+<div class="kicker">Independent customization experiment</div><h2>Restyle real Explorer and the native taskbar</h2>
+<p>Prove native customization with one narrow Explorer change first, then test native taskbar styling. Existing Windhawk implementations are reference material; inspect their licensing before reusing code. This track can expand beyond the app's present no-injection architecture, but does not establish any filesystem speedup. <a href="#sources">[9]</a></p>
+<ul>
+<li><strong>First prototype:</strong> restyle a specific Explorer surface on one recorded Windows build; retain native file operations and accessibility. Record what is supported and what is deliberately outside the prototype.</li>
+<li><strong>Second prototype:</strong> make the real taskbar resemble our floating dock, preserving window grouping, previews, tray, keyboard access, and multi-monitor behavior where supported. Compare its feature coverage and resource use with our custom dock.</li>
+<li><strong>Decide from the result:</strong> keep native and custom modes as alternatives during evaluation. Move toward the native implementation only when its feature coverage and maintenance cost justify it. Arbitrary top-bar layouts and extra panels can remain our own UI.</li>
+</ul>
+<div class="gate"><strong>Exit condition:</strong> feature probes, an explicit supported-build list, a disable path outside Explorer, and automatic disabling after repeated shell failures. Validate Explorer restart, sign-out, DPI changes, and recovery before wider use. A title-bar recolor alone does not satisfy the native-restyling experiment.</div>
+</div></section>
+
+<section id="research" class="phase">
+<div class="number">05</div><div>
+<div class="kicker">Conditional research</div><h2>Pursue deeper storage improvements when traces justify them</h2>
+<p>This is the route toward transparent benefits for unrelated native Windows applications. The first question is which repeated work we can eliminate while preserving file semantics.</p>
+<ol>
+<li><strong>User-mode workspace virtualization.</strong> Explore lazy materialization with ProjFS when measurements show workspace creation dominates. Test metadata enumeration, file watching, renames, locking, hydration, and offline behavior. Reduced initial copying must not merely move all latency to the first build. <a href="#sources">[10]</a></li>
+<li><strong>Filesystem driver research.</strong> Consider a minifilter or another storage-layer technique only after identifying a specific expensive path that supported controls cannot improve. A filter adds work too; it needs a concrete algorithm and benchmarked advantage. Prototype in a disposable environment before real data. <a href="#sources">[11]</a></li>
+</ol>
+<div class="gate"><strong>Research gate:</strong> demonstrate a net native-workload improvement, including first access, steady state, cleanup, memory, and storage overhead. Establish write durability, isolation, crash recovery, and interoperation with security/backup software before product integration. Do not weaken security or durability to manufacture a faster comparison.</div>
+<p style="margin-top:14px">A replacement filesystem, generic RAM cache, scheduler rewrite, or universal “Linux-speed Windows” claim is outside the first release. Each would need its own evidence and implementation proposal.</p>
+</div></section>
+
+<section id="implementation">
+<h2>The first implementation slice</h2>
+<p>Build these in order. The later tracks remain proposals until the first reports tell us where to spend effort.</p>
+<ol>
+<li><strong>Add the lab command</strong> under <code>tools/perf/src/system/</code>, with typed workload definitions, explicit execution, isolated paths, environment capture, and JSON reports under <code>perf/system/</code>. The default desktop benchmark remains separate.</li>
+<li><strong>Run the pinned native baseline</strong> when benchmark execution is started. Inspect traces for the slowest task. Compare NTFS import strategies first; add Dev Drive and WSL only as separately labeled configurations.</li>
+<li><strong>Implement the simplest evidence-backed candidate</strong> and repeat paired measurements. If the cost belongs to Git/pnpm rather than Windows storage, target that tool directly.</li>
+<li><strong>Add reusable change handling only when needed.</strong> Introduce <code>crates/system</code> for actual inspection/apply/verify/undo operations. Reuse the current journal's before-write discipline, but do not force machine settings into its HKCU-only, theme-lifetime model.</li>
+<li><strong>Expose a proven feature in Studio.</strong> Add a System entry using existing navigation, Tauri API bindings, and UI components. Store measurements and explicit choices; do not invent an overall “PC health” score.</li>
+</ol>
+
+<h3>One proposed Studio entry point</h3>
+<p class="ui-caption">Static proposal using Studio's current monochrome tokens. Initial state shown; these are not findings from this machine. Detailed apply, result, undo, and failure screens follow only after the first intervention is known.</p>
+<div class="studio" aria-label="Proposed System page in mypaper Studio">
+<aside><div class="brand"><span class="mark" aria-hidden="true">m</span><span>mypaper<br><small>Studio</small></span></div><span class="navitem">Desktop</span><span class="navitem">Themes</span><span class="navitem">Widgets</span><span class="navitem">Bars</span><span class="navitem">Windows</span><span class="navitem selected">System</span><span class="navitem">Settings</span></aside>
+<div class="workspace"><div class="toolbar"><strong>System</strong><span class="ui-muted">No changes applied</span></div><div class="studio-content"><h3>Find what slows your work</h3><p class="ui-muted">Compare a disposable copy of a project before changing your setup.</p><span class="ui-button">Choose project</span><div class="ui-row"><div><strong>Workspace performance</strong><span class="ui-muted">Installs, repository operations, and cleanup.</span></div><span class="ui-status">Not measured</span></div><div class="ui-row"><div><strong>Measurement history</strong><span class="ui-muted">Your comparisons and verified changes will appear here.</span></div><span class="ui-status">No runs yet</span></div></div></div>
+</div>
+
+<h3>Architecture that stays small</h3>
+<ul class="architecture">
+<li><strong>On demand first:</strong> the lab and settings actions run when requested. Add no permanent service or second WebView solely for this feature. Any later continuous feature must justify its own idle and memory budget.</li>
+<li><strong>Privilege only for the operation:</strong> inspect without elevation where supported; a narrow helper handles a specific machine-level action when required. The renderer does not receive a general elevated command runner.</li>
+<li><strong>Typed boundaries:</strong> inspection facts, candidate operations, applied-change records, and verification results are distinct types. Represent unsupported, blocked by policy, not measured, no improvement, and rollback conflict explicitly.</li>
+<li><strong>Correctness tests where they matter:</strong> test path containment, paired-result calculations, change conflict/rollback behavior, and workspace isolation. Use real workload runs for performance evidence; avoid tests that merely mirror configuration fields.</li>
+<li><strong>Net benefit:</strong> compare stock Windows, mypaper without the feature, and mypaper with it when evaluating shipped features. Include the app and any helper costs. Working-set trimming does not count as releasing committed memory.</li>
+</ul>
+<div class="decision"><p><strong>First-release definition:</strong> a reproducible performance report plus one demonstrated native Windows improvement with clear scope, verification, and recovery. WSL support, native shell mods, and a custom driver are separate milestones.</p></div>
+<p class="muted">No calendar estimates yet. The first baseline determines which implementation has enough evidence to estimate. Proposed assumptions: Windows 11 first, native speed as the primary target, no blanket security reductions, no background tuning daemon, and user-controlled workspace migration.</p>
+</section>
+
+<section id="sources">
+<h2>Evidence and implementation references</h2>
+<ol class="source-list">
+<li><a href="https://github.com/NullVoxPopuli/disk-perf-git-and-pnpm/tree/535aef76843fe52d6336604111708d884110a0e5">Pinned developer I/O benchmark</a>. Workload and community reports; useful motivation, not a controlled isolation of filesystem cost.</li>
+<li>Theo: <a href="https://www.youtube.com/watch?v=4wVNFaFDIn8">filesystem discussion</a>, <a href="https://www.youtube.com/watch?v=9tGrhrVKCrE">moving development to Linux</a>, and <a href="https://x.com/theo/status/2090528543746965991">related X post</a>. Context for high-volume agent/worktree workloads.</li>
+<li><a href="https://learn.microsoft.com/en-us/windows-hardware/test/wpt/windows-performance-analyzer">Windows Performance Analyzer</a> and <a href="https://learn.microsoft.com/en-us/defender-endpoint/tune-performance-defender-antivirus">Defender performance analyzer</a>.</li>
+<li><a href="https://learn.microsoft.com/en-us/windows/dev-drive/">Dev Drive setup and requirements</a>; <a href="https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint-antivirus-performance-mode">Defender performance mode and its tradeoff</a>.</li>
+<li><a href="https://learn.microsoft.com/en-us/windows-server/storage/refs/block-cloning">ReFS block cloning</a>. Shared data with isolation on subsequent writes, subject to platform and operation restrictions.</li>
+<li><a href="https://learn.microsoft.com/en-us/windows/wsl/filesystems">WSL file placement guidance</a>.</li>
+<li><a href="https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/modern-standby-sleepstudy">Modern Standby SleepStudy</a>.</li>
+<li><a href="https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience">Windows experience policies</a> and <a href="https://learn.microsoft.com/en-us/windows/privacy/configure-windows-diagnostic-data-in-your-organization">diagnostic-data limits by edition</a>.</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-file-explorer-styler.wh.cpp">Native Explorer styling reference</a> and <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-taskbar-styler.wh.cpp">native taskbar styling reference</a>.</li>
+<li><a href="https://learn.microsoft.com/en-us/windows/win32/projfs/projected-file-system">Windows Projected File System</a>.</li>
+<li><a href="https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/about-file-system-filter-drivers">Filesystem minifilters</a>.</li>
+</ol>
+<details><summary>Repository touchpoints inspected for this plan</summary><p style="margin-top:14px"><code>tools/perf/src/main.rs</code>, <code>tools/perf/src/scenario.rs</code>, <code>perf/budget.toml</code>, <code>perf/latest.md</code>, <code>crates/tweaks/src/undo.rs</code>, <code>crates/tweaks/src/registry.rs</code>, <code>crates/core/src/main.rs</code>, <code>crates/inject/src/lib.rs</code>, <code>apps/studio/src/App.tsx</code>, <code>apps/studio/src/lib/pages.ts</code>, <code>apps/studio/src/index.css</code>, and the existing Windows editor and sidebar.</p><p>The named new modules and System page are proposed. This document adds no runtime code.</p></details>
+</section>
+<footer class="footer">Decision record: start with measurements and one native improvement; let the results earn the deeper work. Plan versioning is handled by publishing this same HTML file.</footer>
+</main>
+</body>
+</html>
+
