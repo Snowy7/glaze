@@ -29,8 +29,10 @@ pub enum Msg {
     Volume,
     /// A network interface or the Wi-Fi connection changed.
     Network,
-    /// The notification-area icons, read through UI Automation.
+    /// The notification-area icons (the tray host's, or UI Automation's).
     Tray(Vec<TrayItem>),
+    /// A flyout provider finished something (docs/bars.md, "Flyouts").
+    Flyout(crate::flyouts::Done),
     /// A file watcher failed and stopped (logged).
     WatchError(PathBuf, String),
 }

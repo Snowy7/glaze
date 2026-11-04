@@ -1,5 +1,5 @@
-//! The tray module, best effort (docs/bars.md, "Modules"). Notification-area icons belong to
-//! Explorer; this reads them through UI Automation, a supported accessibility API, from the
+//! The tray module's fallback (docs/bars.md, "Modules"; the tray host in `tray_host.rs` is the
+//! main source). Notification-area icons belong to Explorer; this reads them through UI Automation, a supported accessibility API, from the
 //! taskbar (hidden or not), on its own MTA worker thread while a tray module is on screen.
 //!
 //! What Windows 11 exposes: each promoted icon is a `SystemTray.NormalButton` with AutomationId
@@ -18,7 +18,6 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 
-use serde::Serialize;
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemFree,
     CoUninitialize,
@@ -39,24 +38,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VIRTUAL_KEY, VK_B, VK_F10, VK_LWIN, VK_RETURN, VK_SHIFT,
 };
 use windows::Win32::UI::Shell::{KF_FLAG_DEFAULT, SHGetKnownFolderPath};
-use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
 use windows::core::{GUID, HSTRING, PCWSTR, implement, w};
 
 use crate::bridge::Button;
+pub use crate::tray_data::TrayItem;
 use crate::wake::{Msg, Waker};
 
 /// The id of the overflow chevron (and of the fallback button).
 pub const OVERFLOW: &str = "overflow";
 /// Coalesces the burst of UIA events one tray change produces.
 const SETTLE: Duration = Duration::from_millis(400);
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct TrayItem {
-    pub id: String,
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub icon: Option<String>,
-}
 
 enum Cmd {
     Refresh,
@@ -152,7 +143,7 @@ impl Taskbar {
     fn find(uia: &IUIAutomation, again: &Sender<Cmd>) -> Option<Self> {
         // SAFETY: COM calls on objects we own; the handler is removed on drop.
         unsafe {
-            let tray = FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()).ok()?;
+            let tray = mypaper_bars::taskbar::explorer_tray()?;
             let root = uia.ElementFromHandle(tray).ok()?;
             let handler: IUIAutomationStructureChangedEventHandler = Changed(again.clone()).into();
             if let Err(e) =
@@ -324,6 +315,7 @@ fn fallback() -> TrayItem {
         id: OVERFLOW.to_owned(),
         name: "Show hidden icons".to_owned(),
         icon: None,
+        pinned: true,
     }
 }
 
@@ -367,6 +359,7 @@ fn items(
                     id,
                     name: label,
                     icon: None,
+                    pinned: true,
                 };
             }
             let icon = match_icon(name, &known)
@@ -376,6 +369,7 @@ fn items(
                 id,
                 name: name.clone(),
                 icon,
+                pinned: true,
             }
         })
         .collect()
@@ -395,7 +389,7 @@ fn click(taskbar: &Taskbar, id: &str, button: Button) -> bool {
     // SAFETY: COM calls on a live element.
     unsafe {
         match button {
-            Button::Left => element
+            Button::Left | Button::Middle | Button::Double => element
                 .GetCurrentPatternAs::<IUIAutomationInvokePattern>(UIA_InvokePatternId)
                 .and_then(|invoke| invoke.Invoke())
                 .inspect_err(|e| log::info!("tray: invoking {id:?} failed: {e}"))
@@ -528,7 +522,7 @@ fn known_icons(descriptions: &mut HashMap<String, Option<String>>) -> Vec<Known>
 }
 
 /// `{6D809377-…}\App\app.exe` (a known-folder id, as the shell stores it) → a real path.
-fn resolve_known_folder(path: &str) -> String {
+pub(crate) fn resolve_known_folder(path: &str) -> String {
     let Some((id, rest)) = path.strip_prefix('{').and_then(|p| p.split_once('}')) else {
         return path.to_owned();
     };
@@ -548,7 +542,7 @@ fn resolve_known_folder(path: &str) -> String {
     }
 }
 
-fn reg_string(key: HKEY, sub: &HSTRING, name: PCWSTR) -> Option<String> {
+pub(crate) fn reg_string(key: HKEY, sub: &HSTRING, name: PCWSTR) -> Option<String> {
     let mut buffer = [0u16; 1024];
     let mut bytes = size_of_val(&buffer) as u32;
     // SAFETY: the buffer and its size outlive the call.
@@ -569,7 +563,7 @@ fn reg_string(key: HKEY, sub: &HSTRING, name: PCWSTR) -> Option<String> {
     Some(String::from_utf16_lossy(&buffer[..len]))
 }
 
-fn reg_dword(key: HKEY, sub: &HSTRING, name: PCWSTR) -> Option<u32> {
+pub(crate) fn reg_dword(key: HKEY, sub: &HSTRING, name: PCWSTR) -> Option<u32> {
     let mut value = 0u32;
     let mut bytes = size_of::<u32>() as u32;
     // SAFETY: as above.

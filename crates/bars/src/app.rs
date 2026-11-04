@@ -24,14 +24,14 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
     COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE, ICoreWebView2Environment,
 };
-use windows::Win32::Foundation::{HANDLE, HWND, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{HANDLE, HWND, POINT, WAIT_OBJECT_0};
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows::Win32::System::Threading::{GetCurrentThreadId, INFINITE};
 use windows::Win32::UI::Shell::{ABN_FULLSCREENAPP, ABN_POSCHANGED, ABN_STATECHANGE};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, GetForegroundWindow, GetShellWindow, GetWindowThreadProcessId, IsIconic,
-    IsWindow, IsWindowVisible, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
-    PeekMessageW, QS_ALLINPUT, SetForegroundWindow, TranslateMessage, WM_CLOSE, WM_QUIT,
+    DispatchMessageW, GetCursorPos, GetForegroundWindow, GetShellWindow, GetWindowThreadProcessId,
+    IsIconic, IsWindow, IsWindowVisible, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx,
+    PM_REMOVE, PeekMessageW, QS_ALLINPUT, SetForegroundWindow, TranslateMessage, WM_CLOSE, WM_QUIT,
 };
 use windows::core::{PCWSTR, w};
 
@@ -42,8 +42,11 @@ use crate::bar::{
     self, Bar, Geometry, WM_BARS_ACTIVATED, WM_BARS_APPBAR, WM_BARS_DISPLAY, WM_BARS_EDGE,
     WM_BARS_POWER, WM_BARS_TASKBAR, WM_BARS_TIME,
 };
-use crate::bridge::{Activate, BarError, BarKind, Envelope, Method, Topic, bar_topics};
+use crate::bridge::{Activate, BarError, BarKind, Button, Envelope, Method, Topic, bar_topics};
 use crate::desktops::{Desktops, Workspaces};
+use crate::flyouts::language::{self as lang, LanguageWatch};
+use crate::flyouts::winkey::WinKey;
+use crate::flyouts::{Done, Flyouts, Request, Watched};
 use crate::hooks::{self, Hooks};
 use crate::icons::{Icons, Source};
 use crate::look::{self, ThemeSkin};
@@ -51,6 +54,8 @@ use crate::media::{Media, MediaInfo};
 use crate::network::{self, NetworkInfo, NetworkWatch};
 use crate::system::{self, Sampler, Stats};
 use crate::tray::{Tray, TrayItem};
+use crate::tray_data::Click;
+use crate::tray_host::{self, TrayHost};
 use crate::wake::{Msg, WM_WAKE, Waker};
 use crate::web::{self, Events, Folders, PAGE_HOST, Web, WebEvent};
 
@@ -248,11 +253,24 @@ pub struct App {
     network: Option<NetworkWatch>,
     network_state: Option<NetworkInfo>,
     tray: Tray,
+    /// The notification area's own host (docs/bars.md, "Tray host"); `tray` is its fallback.
+    tray_host: TrayHost,
     tray_items: Vec<TrayItem>,
     desktops: Option<Desktops>,
     workspaces: Workspaces,
     sampler: Option<Sampler>,
     stats: Option<Stats>,
+    /// The flyouts' providers, watches and the launcher's index (docs/bars.md, "Flyouts").
+    flyouts: Flyouts,
+    /// The Windows key hook, while the launcher replaces Start.
+    winkey: Option<WinKey>,
+    language_watch: Option<LanguageWatch>,
+    /// The installed keyboard layouts, read when the `language` topic first needs them.
+    layouts: Option<Vec<lang::Layout>>,
+    /// The notification count, once the lane has counted.
+    notification_count: Option<Option<usize>>,
+    /// The bar that took the keyboard for a flyout (the launcher): it keeps the foreground.
+    keyboard: Option<u32>,
 
     /// Topics being produced right now.
     active: BTreeSet<Topic>,
@@ -327,7 +345,8 @@ impl App {
             audio: None,
             network: None,
             network_state: None,
-            tray: Tray::new(waker.clone(), icons_dir),
+            tray: Tray::new(waker.clone(), icons_dir.clone()),
+            tray_host: TrayHost::new(waker.clone()),
             tray_items: Vec::new(),
             desktops: None,
             workspaces: Workspaces {
@@ -336,6 +355,12 @@ impl App {
             },
             sampler: None,
             stats: None,
+            flyouts: Flyouts::new(waker.clone(), icons_dir.clone()),
+            winkey: None,
+            language_watch: None,
+            layouts: None,
+            notification_count: None,
+            keyboard: None,
             active: BTreeSet::new(),
             sent: HashMap::new(),
             timers: Timers::default(),
@@ -352,6 +377,7 @@ impl App {
             if app.config.top.enabled { "on" } else { "off" },
             if app.config.dock.enabled { "on" } else { "off" },
         );
+        app.flyouts.switch_output = app.config.audio.switch_output;
         app.apply_taskbar();
         app.watch();
         app.reconcile();
@@ -377,7 +403,11 @@ impl App {
     }
 
     fn wait(&mut self) {
-        let timeout = self.timers.earliest().map_or(INFINITE, |at| {
+        let earliest = [self.timers.earliest(), self.flyouts.deadline()]
+            .into_iter()
+            .flatten()
+            .min();
+        let timeout = earliest.map_or(INFINITE, |at| {
             let left = at.saturating_duration_since(Instant::now());
             left.as_millis().min(u128::from(INFINITE - 1)) as u32
                 + u32::from(left.subsec_micros() % 1000 != 0)
@@ -426,9 +456,12 @@ impl App {
                     },
                     WM_BARS_EDGE => self.reveal(msg.lParam.0),
                     WM_BARS_DISPLAY => soon(&mut self.timers.display, SETTLE_DISPLAY),
+                    // The tray host's own broadcast (asking apps for their icons) isn't a restart.
+                    WM_BARS_TASKBAR if tray_host::own_broadcast() => {}
                     WM_BARS_TASKBAR => {
                         log::info!("Explorer (re)started");
                         soon(&mut self.timers.explorer, SETTLE_EXPLORER);
+                        self.tray_host.explorer_restarted();
                     }
                     WM_BARS_POWER => {
                         self.holds
@@ -439,6 +472,8 @@ impl App {
                         self.timers.clock = None;
                         self.sync_clock();
                     }
+                    // A flyout that took the keyboard (the launcher) keeps the foreground.
+                    WM_BARS_ACTIVATED if self.keyboard.is_some() => {}
                     WM_BARS_ACTIVATED => {
                         log::debug!("a bar was activated without a click; handing it back");
                         self.hand_back(None);
@@ -478,6 +513,7 @@ impl App {
                 self.tray_items = items;
                 self.emit(Topic::Tray);
             }
+            Msg::Flyout(done) => self.on_flyout(done),
             Msg::WatchError(path, error) => {
                 log::warn!("stopped watching {}: {error}", path.display())
             }
@@ -550,6 +586,7 @@ impl App {
         if due(&mut self.timers.webview, now) {
             self.ensure_webviews();
         }
+        self.flyouts.tick(now);
     }
 
     // --- Bars --------------------------------------------------------------------------------
@@ -633,6 +670,7 @@ impl App {
             // App bars moved the work areas: look again once they settle.
             soon(&mut self.timers.display, SETTLE_DISPLAY);
         }
+        self.place_tray();
         if self.bars.is_empty() {
             if !matches!(self.env, Env::None) {
                 log::info!("no bars on screen; releasing WebView2");
@@ -864,9 +902,16 @@ impl App {
                 self.push_all(index);
             }
         }
+        self.sync_winkey();
     }
 
     // --- Topics --------------------------------------------------------------------------------
+
+    /// Whether a bar shows a topic: one of its modules, or a flyout open on it.
+    fn shows(&self, bar: &Bar, topic: Topic) -> bool {
+        bar_topics(bar.kind, &self.config.top).contains(&topic)
+            || self.flyouts.watches.watching(bar.id, Watched::Core(topic))
+    }
 
     fn shown_topics(&self) -> BTreeSet<Topic> {
         if self.asleep {
@@ -877,6 +922,7 @@ impl App {
             .iter()
             .filter(|b| !b.hidden)
             .flat_map(|b| bar_topics(b.kind, &self.config.top))
+            .chain(self.flyouts.watches.core())
             .filter(|t| !(idle && t.periodic()))
             .collect()
     }
@@ -889,7 +935,6 @@ impl App {
         }
         let on = |topic| wanted.contains(&topic);
         self.media.set_active(on(Topic::Media));
-        self.tray.set_active(on(Topic::Tray));
         match (on(Topic::Volume), self.audio.is_some()) {
             (true, false) => self.audio = Audio::new(self.waker.clone()),
             (false, true) => self.audio = None,
@@ -925,8 +970,15 @@ impl App {
             }
             _ => {}
         }
+        match (on(Topic::Language), self.language_watch.is_some()) {
+            (true, false) => self.language_watch = LanguageWatch::start(self.waker.clone()),
+            (false, true) => self.language_watch = None,
+            _ => {}
+        }
+        self.flyouts.set_counting(on(Topic::Notifications));
         let started: Vec<Topic> = wanted.difference(&self.active).copied().collect();
         self.active = wanted;
+        self.sync_tray();
         self.sync_clock();
         for topic in started {
             self.emit(topic);
@@ -958,6 +1010,14 @@ impl App {
             Topic::Tray => json!(self.tray_items),
             Topic::Workspaces => json!(self.workspaces),
             Topic::Stats => json!(self.stats?),
+            Topic::Language => {
+                let layouts = self.layouts.get_or_insert_with(lang::layouts).clone();
+                json!(lang::Languages {
+                    current: lang::current(self.foreground),
+                    layouts,
+                })
+            }
+            Topic::Notifications => json!({ "count": self.notification_count? }),
         })
     }
 
@@ -971,8 +1031,7 @@ impl App {
         };
         let message = json!({ "event": topic.event(), "data": value }).to_string();
         for bar in &self.bars {
-            if !bar.ready || bar.hidden || !bar_topics(bar.kind, &self.config.top).contains(&topic)
-            {
+            if !bar.ready || bar.hidden || !self.shows(bar, topic) {
                 continue;
             }
             if self.sent.get(&(bar.id, topic)) != Some(&message) {
@@ -986,9 +1045,14 @@ impl App {
     fn push_all(&mut self, index: usize) {
         let id = self.bars[index].id;
         self.sent.retain(|(bar, _), _| *bar != id);
-        let topics = bar_topics(self.bars[index].kind, &self.config.top);
-        for topic in topics.intersection(&self.active.clone()) {
-            self.emit(*topic);
+        let topics: Vec<Topic> = self
+            .active
+            .iter()
+            .copied()
+            .filter(|&topic| self.shows(&self.bars[index], topic))
+            .collect();
+        for topic in topics {
+            self.emit(topic);
         }
     }
 
@@ -1023,6 +1087,7 @@ impl App {
             soon(&mut self.timers.windows, SETTLE_WINDOWS);
             self.emit(Topic::Apps);
             self.emit(Topic::Foreground);
+            self.emit(Topic::Language); // a layout can be per window
         }
     }
 
@@ -1222,8 +1287,13 @@ impl App {
             envelope.method,
             envelope.params
         );
-        let reply = Method::parse(&envelope.method, envelope.params)
-            .and_then(|method| self.call(index, method));
+        let reply = match Method::parse(&envelope.method, envelope.params) {
+            Ok(Method::Flyout(request)) => self.flyout(index, envelope.id, request),
+            Ok(method) => Some(self.call(index, method)),
+            Err(error) => Some(Err(error)),
+        };
+        // A flyout provider answers later (`Done::Reply`).
+        let Some(reply) = reply else { return };
         let message = match reply {
             Ok(result) => json!({ "id": envelope.id, "result": result }),
             Err(error) => {
@@ -1235,7 +1305,15 @@ impl App {
             bar.post(&message.to_string());
         }
         if hello && index < self.bars.len() {
+            // A new page: its flyouts are gone.
+            let id = self.bars[index].id;
+            self.flyouts.watches.forget(id);
+            self.bars[index].set_room(0.0);
+            if self.keyboard == Some(id) {
+                self.keyboard = None;
+            }
             self.bars[index].ready = true;
+            self.sync_winkey();
             self.push_all(index);
         }
     }
@@ -1326,8 +1404,8 @@ impl App {
                 self.media.control(action);
                 done
             }
-            Method::Tray { id, button } => {
-                self.tray.click(id, button);
+            Method::Tray { id, button, rect } => {
+                self.click_tray(index, id, button, rect);
                 done
             }
             Method::Power { action } => {
@@ -1346,6 +1424,8 @@ impl App {
                 self.bars[index].set_region(rects);
                 done
             }
+            // Routed to `flyout` before `call`.
+            Method::Flyout(_) => Err(BarError::internal("a flyout request reached call()")),
         }
     }
 
@@ -1359,6 +1439,300 @@ impl App {
         {
             self.post_event(index, "reveal", &Value::Null);
         }
+    }
+
+    // --- Flyouts ------------------------------------------------------------------------------------
+
+    /// A flyout's request. The ones about the bars themselves are answered here, the providers'
+    /// by `Flyouts` (`None`: the answer comes later).
+    fn flyout(
+        &mut self,
+        index: usize,
+        id: u64,
+        request: Request,
+    ) -> Option<Result<Value, BarError>> {
+        let bar = self.bars[index].id;
+        let done = Some(Ok(Value::Null));
+        match request {
+            Request::Watch { topic } => {
+                let Some(what) = Watched::parse(&topic) else {
+                    return Some(Err(BarError::invalid(format!("watch: no topic {topic:?}"))));
+                };
+                if self.flyouts.watches.add(bar, what) {
+                    self.flyouts.watched(what);
+                    if let Watched::Core(topic) = what {
+                        self.sync_topics();
+                        self.sent.remove(&(bar, topic));
+                        self.emit(topic);
+                    }
+                }
+                done
+            }
+            Request::Unwatch { topic } => {
+                if let Some(what) = Watched::parse(&topic) {
+                    self.flyouts.watches.remove(bar, what);
+                    if matches!(what, Watched::Core(_)) {
+                        self.sync_topics();
+                    }
+                }
+                done
+            }
+            Request::Room { extent } => {
+                self.bars[index].set_room(extent);
+                done
+            }
+            Request::Keyboard { on } => {
+                self.take_keyboard(index, on);
+                done
+            }
+            // The shell's HSHELL_LANGUAGE (or the next foreground change) updates the module.
+            Request::SetLayout { id: layout } => Some(match self.foreground {
+                Some(window) => lang::switch(window, &layout)
+                    .map(|()| Value::Null)
+                    .map_err(BarError::unavailable),
+                None => Err(BarError::unavailable("no app in front")),
+            }),
+            Request::LauncherPin {
+                path,
+                name,
+                index: at,
+            } => Some(self.edit_launcher_pins(|pins| {
+                let pinned = Pinned { path, name };
+                let found = pins
+                    .iter()
+                    .position(|p| p.path.eq_ignore_ascii_case(&pinned.path));
+                let pinned = match found {
+                    Some(found) => pins.remove(found),
+                    None => pinned,
+                };
+                let at = at.unwrap_or(pins.len()).min(pins.len());
+                pins.insert(at, pinned);
+            })),
+            Request::LauncherUnpin { path } => {
+                Some(self.edit_launcher_pins(|pins| {
+                    pins.retain(|p| !p.path.eq_ignore_ascii_case(&path))
+                }))
+            }
+            other => self.flyouts.call(bar, id, other),
+        }
+    }
+
+    fn on_flyout(&mut self, done: Done) {
+        let post_to = |bars: &[Bar], id: u32, message: &str| {
+            if let Some(bar) = bars.iter().find(|b| b.id == id && b.ready) {
+                bar.post(message);
+            }
+        };
+        match done {
+            Done::Reply { bar, id, result } => {
+                let message = match result {
+                    Ok(result) => json!({ "id": id, "result": result }),
+                    Err(error) => {
+                        log::info!("flyout request {id}: {}", error.message);
+                        json!({ "id": id, "error": error })
+                    }
+                };
+                post_to(&self.bars, bar, &message.to_string());
+            }
+            Done::Event {
+                topic: Watched::Core(Topic::Notifications),
+                data,
+            } => {
+                self.notification_count = Some(data["count"].as_u64().map(|c| c as usize));
+                self.emit(Topic::Notifications);
+            }
+            Done::Event { topic, data } => {
+                let message = json!({ "event": topic.event(), "data": data }).to_string();
+                for bar in self.flyouts.watches.bars(topic).collect::<Vec<_>>() {
+                    post_to(&self.bars, bar, &message);
+                }
+            }
+            Done::WinKey => self.open_launcher(),
+            Done::Index(apps) => {
+                let (value, replies) = self.flyouts.index_built(apps);
+                for (bar, id, result) in replies {
+                    post_to(
+                        &self.bars,
+                        bar,
+                        &json!({ "id": id, "result": result }).to_string(),
+                    );
+                }
+                let message = json!({ "event": Watched::Apps.event(), "data": value }).to_string();
+                for bar in self.flyouts.watches.bars(Watched::Apps).collect::<Vec<_>>() {
+                    post_to(&self.bars, bar, &message);
+                }
+            }
+            Done::Changed(Watched::Core(Topic::Language)) => {
+                self.layouts = None; // a layout may have been added or removed
+                self.emit(Topic::Language);
+            }
+            Done::Changed(what) => self.flyouts.changed(what),
+        }
+    }
+
+    /// The Windows key hook runs while the launcher replaces Start (`launcher.winKey` with the
+    /// native taskbar hidden) and opens it while some bar can show it.
+    fn sync_winkey(&mut self) {
+        let wanted = self.config.launcher.win_key
+            && self.wanted_taskbar().mode == TaskbarMode::Hide
+            && !self.bars.is_empty();
+        match (wanted, self.winkey.is_some()) {
+            (true, false) => self.winkey = WinKey::start(self.waker.clone()),
+            (false, true) => self.winkey = None,
+            _ => {}
+        }
+        WinKey::set_enabled(
+            wanted && !self.asleep && self.bars.iter().any(|b| b.ready && !b.hidden),
+        );
+    }
+
+    /// A lone Windows key press: the launcher opens on the monitor the user works on (the app in
+    /// front's), on its top bar if it has one, and takes the keyboard. With no bar to show it,
+    /// the native Start menu opens instead.
+    fn open_launcher(&mut self) {
+        let mut rect = windows::Win32::Foundation::RECT::default();
+        let center = self.foreground.and_then(|window| {
+            // SAFETY: a read-only query; `rect` outlives it.
+            unsafe {
+                windows::Win32::UI::WindowsAndMessaging::GetWindowRect(
+                    system::hwnd(window),
+                    &mut rect,
+                )
+            }
+            .ok()
+            .map(|()| ((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2))
+        });
+        let start = self
+            .config
+            .top
+            .modules()
+            .any(|m| m == mypaper_bars::Module::Start);
+        let index = self
+            .bars
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.ready && !b.hidden)
+            .max_by_key(|(_, b)| {
+                let here = center.is_some_and(|(x, y)| b.monitor.rect.contains_point(x, y));
+                (here, b.kind == BarKind::Top && start, b.monitor.primary)
+            })
+            .map(|(index, _)| index);
+        let Some(index) = index else {
+            return system::start_menu();
+        };
+        self.take_keyboard(index, true);
+        self.post_event(index, "open", &json!({ "flyout": "launcher" }));
+    }
+
+    /// Makes the bar the foreground window with the keyboard in its page (a flyout that types),
+    /// or gives the foreground back to the app.
+    fn take_keyboard(&mut self, index: usize, on: bool) {
+        let bar = &self.bars[index];
+        if on {
+            self.keyboard = Some(bar.id);
+            // SAFETY: our own window; Windows refuses it without the foreground rights a click
+            // or the key press gave us.
+            if !unsafe { SetForegroundWindow(bar.hwnd()) }.as_bool() {
+                log::info!("Windows refused the foreground to the {:?} bar", bar.kind);
+            }
+            if let Some(web) = &bar.web {
+                web.focus();
+            }
+        } else if self.keyboard == Some(bar.id) {
+            self.keyboard = None;
+            // SAFETY: read-only queries.
+            let ours = unsafe {
+                let mut pid = 0;
+                GetWindowThreadProcessId(GetForegroundWindow(), Some(&mut pid));
+                pid == std::process::id()
+            };
+            if ours {
+                self.hand_back(None);
+            }
+        }
+    }
+
+    /// Edits the launcher's pins (`launcher.pinned`; until the first edit, the dock's) and tells
+    /// every bar.
+    fn edit_launcher_pins(
+        &mut self,
+        change: impl FnOnce(&mut Vec<Pinned>),
+    ) -> Result<Value, BarError> {
+        let mut pins = (self.config.launcher.pinned.clone())
+            .or_else(|| self.config.dock.pinned.clone())
+            .unwrap_or_default();
+        change(&mut pins);
+        let value = serde_json::to_value(&pins).map_err(|e| BarError::internal(e.to_string()))?;
+        config::edit(&self.config_path, |root| {
+            config::set(root, "launcher", "pinned", value.clone())
+        })
+        .map_err(|e| BarError::internal(format!("{e:#}")))?;
+        self.config.launcher.pinned = Some(pins);
+        self.broadcast_event("launcherPins", |_| value.clone());
+        Ok(Value::Null)
+    }
+
+    // --- The tray -----------------------------------------------------------------------------------
+
+    /// The tray host runs while a tray module is on screen and the native taskbar is replaced
+    /// (`taskbar.mode: hide`, or `tray.host`); otherwise UI Automation reads Explorer's.
+    fn sync_tray(&mut self) {
+        let shown = self.active.contains(&Topic::Tray);
+        let replaced = self.wanted_taskbar().mode == TaskbarMode::Hide || self.config.tray.host;
+        let host = shown && replaced;
+        if host != self.tray_host.active() {
+            // The other source reports its own list.
+            self.tray_items.clear();
+        }
+        self.tray.set_active(shown && !host);
+        self.tray_host.set_active(host);
+        self.place_tray();
+    }
+
+    /// Tells the host where the tray is: the band of the first top bar showing it (the primary
+    /// monitor's if it has one). Apps put their popups there.
+    fn place_tray(&mut self) {
+        let shows = self
+            .config
+            .top
+            .modules()
+            .any(|m| m == mypaper_bars::Module::Tray);
+        let band = self
+            .bars
+            .iter()
+            .filter(|b| shows && b.kind == BarKind::Top && !b.hidden)
+            .max_by_key(|b| b.monitor.primary)
+            .map(|bar| {
+                let height = (bar.geometry.thickness * bar.scale()).round() as i32;
+                tray_host::Band {
+                    rect: [bar.rect.x, bar.rect.y, bar.rect.width, height],
+                    edge: 1, // ABE_TOP
+                }
+            });
+        self.tray_host.place(band);
+    }
+
+    fn click_tray(&mut self, index: usize, id: String, button: Button, rect: Option<[f64; 4]>) {
+        if !self.tray_host.active() {
+            return self.tray.click(id, button);
+        }
+        let bar = &self.bars[index];
+        let scale = bar.scale();
+        let anchor = rect.map(|[x, y, w, h]| {
+            let px = |v: f64| (v * scale).round() as i32;
+            [bar.rect.x + px(x), bar.rect.y + px(y), px(w), px(h)]
+        });
+        let mut cursor = POINT::default();
+        // SAFETY: `cursor` outlives the call.
+        let _ = unsafe { GetCursorPos(&mut cursor) };
+        let click = match button {
+            Button::Left => Click::Left,
+            Button::Right => Click::Right,
+            Button::Middle => Click::Middle,
+            Button::Double => Click::Double,
+        };
+        self.tray_host
+            .click(id, click, (cursor.x, cursor.y), anchor);
     }
 
     // --- The native taskbar -----------------------------------------------------------------------
@@ -1446,6 +1820,9 @@ impl App {
             self.timers.clock = None;
             self.sync_clock();
         }
+        self.sync_tray();
+        self.flyouts.switch_output = self.config.audio.switch_output;
+        self.sync_winkey();
         let config = json!(self.config);
         self.broadcast_event("config", |_| config.clone());
         if appearance_changed {
@@ -1590,6 +1967,7 @@ impl Drop for App {
     fn drop(&mut self) {
         let started = Instant::now();
         self.media.set_active(false);
+        self.tray_host.set_active(false); // apps re-register with Explorer
         self.tray.set_active(false);
         self.bars.clear(); // app bars removed: the work area comes back
         self.env = Env::None;

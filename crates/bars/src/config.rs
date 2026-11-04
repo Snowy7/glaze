@@ -13,6 +13,10 @@ use mypaper_theme::Appearance;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+pub use crate::flyout_config::{
+    AudioConfig, CalendarConfig, LauncherConfig, LauncherLayout, TrayConfig, Weekday, Zone,
+};
+
 pub const FILE: &str = "bars.json";
 
 /// `%APPDATA%\mypaper\bars.json`.
@@ -27,6 +31,10 @@ pub struct BarsConfig {
     pub taskbar: TaskbarConfig,
     pub top: TopConfig,
     pub dock: DockConfig,
+    pub launcher: LauncherConfig,
+    pub tray: TrayConfig,
+    pub calendar: CalendarConfig,
+    pub audio: AudioConfig,
     /// The user's appearance layer; the page gets the resolved look instead.
     #[serde(skip_serializing)]
     pub appearance: Appearance,
@@ -39,6 +47,10 @@ impl Default for BarsConfig {
             taskbar: TaskbarConfig::default(),
             top: TopConfig::default(),
             dock: DockConfig::default(),
+            launcher: LauncherConfig::default(),
+            tray: TrayConfig::default(),
+            calendar: CalendarConfig::default(),
+            audio: AudioConfig::default(),
             appearance: Appearance::default(),
         }
     }
@@ -227,6 +239,10 @@ pub enum Module {
     Quick,
     Power,
     Stats,
+    /// The keyboard layout of the app in front.
+    Language,
+    /// A bell with the number of notifications.
+    Notifications,
 }
 
 /// Which monitors a bar shows on.
@@ -320,6 +336,7 @@ impl BarsConfig {
         if pinned.clone().any(|p| p.path.trim().is_empty()) {
             bail!("dock.pinned: every item needs a path");
         }
+        crate::flyout_config::validate(&self.launcher, &self.calendar)?;
         self.appearance.validate()
     }
 

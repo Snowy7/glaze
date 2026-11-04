@@ -72,6 +72,10 @@ pub enum Method {
     Tray {
         id: String,
         button: Button,
+        /// The icon's rect in the bar (DIPs from the window's top-left), for apps that place
+        /// their popup beside their icon.
+        #[serde(default)]
+        rect: Option<[f64; 4]>,
     },
     Power {
         action: PowerAction,
@@ -85,6 +89,9 @@ pub enum Method {
     Region {
         rects: Vec<[f64; 4]>,
     },
+    /// A flyout's request (`crate::flyouts::Request`, the methods in `flyouts::METHODS`).
+    #[serde(skip)]
+    Flyout(crate::flyouts::Request),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -114,6 +121,8 @@ pub enum MediaAction {
 pub enum Button {
     Left,
     Right,
+    Middle,
+    Double,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -136,6 +145,9 @@ pub enum Direction {
 impl Method {
     /// Parses a request's method and params.
     pub fn parse(method: &str, params: Value) -> Result<Self, BarError> {
+        if crate::flyouts::METHODS.contains(&method) {
+            return crate::flyouts::Request::parse(method, params).map(Self::Flyout);
+        }
         let request = if params.is_null() {
             json!({ "method": method })
         } else {
@@ -228,6 +240,10 @@ pub enum Topic {
     Tray,
     Workspaces,
     Stats,
+    /// The keyboard layout of the app in front.
+    Language,
+    /// How many notifications there are.
+    Notifications,
 }
 
 impl Topic {
@@ -243,13 +259,16 @@ impl Topic {
             Self::Tray => "tray",
             Self::Workspaces => "workspaces",
             Self::Stats => "stats",
+            Self::Language => "language",
+            Self::Notifications => "notifications",
         }
     }
 
     /// Driven by a timer (not by the system's own notifications), so it stops on bars that are
     /// idle while a fullscreen app is in front on another monitor.
     pub fn periodic(self) -> bool {
-        self == Self::Stats
+        // Notifications are re-counted on a timer: change events need package identity.
+        matches!(self, Self::Stats | Self::Notifications)
     }
 }
 
@@ -265,6 +284,8 @@ pub fn module_topic(module: Module) -> Option<Topic> {
         Module::Volume => Some(Topic::Volume),
         Module::Battery => Some(Topic::Battery),
         Module::Stats => Some(Topic::Stats),
+        Module::Language => Some(Topic::Language),
+        Module::Notifications => Some(Topic::Notifications),
         Module::Start | Module::Quick | Module::Power => None,
     }
 }

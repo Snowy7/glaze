@@ -18,6 +18,7 @@ mod audio;
 mod bar;
 mod bridge;
 mod desktops;
+mod flyouts;
 mod hooks;
 mod icons;
 mod look;
@@ -25,6 +26,8 @@ mod media;
 mod network;
 mod system;
 mod tray;
+mod tray_data;
+mod tray_host;
 mod wake;
 mod web;
 

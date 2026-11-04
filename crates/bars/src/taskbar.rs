@@ -19,8 +19,8 @@ use windows::Win32::UI::Shell::{
     ABM_GETSTATE, ABM_SETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowW, GetClassNameW, IsWindowVisible, SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA,
-    SendMessageTimeoutW, ShowWindow, WM_SETTINGCHANGE,
+    EnumWindows, FindWindowExW, GetClassNameW, GetWindowThreadProcessId, IsWindowVisible,
+    SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA, SendMessageTimeoutW, ShowWindow, WM_SETTINGCHANGE,
 };
 use windows::core::{BOOL, PCWSTR, w};
 
@@ -231,9 +231,7 @@ impl Shell for NativeShell {
     }
 
     fn set_appbar_state(&mut self, state: u32) -> Result<()> {
-        // SAFETY: a lookup by class name.
-        let tray = unsafe { FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()) }
-            .context("the taskbar isn't there (is Explorer running?)")?;
+        let tray = explorer_tray().context("the taskbar isn't there (is Explorer running?)")?;
         let mut data = APPBARDATA {
             cbSize: size_of::<APPBARDATA>() as u32,
             hWnd: tray,
@@ -334,7 +332,25 @@ pub fn hide_visible() -> (usize, bool) {
     (shown, NativeShell.appbar_state() & ABS_AUTOHIDE != 0)
 }
 
-/// `Shell_TrayWnd` and every `Shell_SecondaryTrayWnd`.
+/// Explorer's `Shell_TrayWnd`: the first one that isn't ours (the bars' tray host makes one too,
+/// kept above Explorer's so apps find it).
+pub fn explorer_tray() -> Option<HWND> {
+    let mut after = None;
+    // SAFETY: lookups by class name and a read-only query; a stale handle just ends the loop.
+    unsafe {
+        loop {
+            let tray = FindWindowExW(None, after, w!("Shell_TrayWnd"), PCWSTR::null()).ok()?;
+            let mut pid = 0;
+            GetWindowThreadProcessId(tray, Some(&mut pid));
+            if pid != std::process::id() {
+                return Some(tray);
+            }
+            after = Some(tray);
+        }
+    }
+}
+
+/// Explorer's `Shell_TrayWnd` and every `Shell_SecondaryTrayWnd` (never the tray host's).
 pub fn taskbar_windows() -> Vec<HWND> {
     let mut found: Vec<HWND> = Vec::new();
     // SAFETY: the callback only runs during this call, while `found` is alive.
@@ -353,7 +369,10 @@ unsafe extern "system" fn push_taskbar(hwnd: HWND, out: LPARAM) -> BOOL {
     let mut class = [0u16; 32];
     // SAFETY: a window handle from EnumWindows; the buffer outlives the call.
     let len = unsafe { GetClassNameW(hwnd, &mut class) } as usize;
-    if is_taskbar_class(&String::from_utf16_lossy(&class[..len])) {
+    let mut pid = 0;
+    // SAFETY: a read-only query on a window handle from EnumWindows.
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    if pid != std::process::id() && is_taskbar_class(&String::from_utf16_lossy(&class[..len])) {
         // SAFETY: `out` is the Vec passed by `taskbar_windows`.
         unsafe { (*(out.0 as *mut Vec<HWND>)).push(hwnd) };
     }

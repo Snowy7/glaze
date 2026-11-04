@@ -259,6 +259,15 @@ impl Web {
         }
     }
 
+    /// Gives the page the keyboard (after the bar became the foreground window).
+    pub fn focus(&self) {
+        // SAFETY: COM call on a live controller.
+        let _ = unsafe {
+            self.controller
+                .MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)
+        };
+    }
+
     pub fn reload(&self) {
         // SAFETY: COM call on a live WebView.
         let _ = unsafe { self.webview.Reload() };

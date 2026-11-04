@@ -29,9 +29,22 @@ windows-core = "0.62"
 [dependencies.windows]
 workspace = true
 features = [
+  "ApplicationModel",
+  "ApplicationModel_DataTransfer",
+  "Devices_Radios",
   "Foundation",
+  "Foundation_Collections",
   "Media_Control",
+  "Storage_Streams",
+  "UI_Notifications",
+  "UI_Notifications_Management",
+  "UI_Shell",
+  "Win32_Devices_Display",
   "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_System_DataExchange",
+  "Win32_System_Memory",
+  "Win32_System_Wmi",
   "Win32_Graphics_Dwm",
   "Win32_Graphics_Gdi",
   "Win32_Graphics_Imaging",

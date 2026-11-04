@@ -260,6 +260,9 @@ pub struct Bar {
     pub rect: Rect,
     /// The page's visible parts, in DIPs from the window's top-left.
     region: Vec<[f64; 4]>,
+    /// How far the window reaches past the band (DIPs): [`ROOM`], or more while a big flyout
+    /// (the launcher) is open.
+    room: f64,
 }
 
 impl Bar {
@@ -303,6 +306,7 @@ impl Bar {
                 height: 0,
             },
             region: Vec::new(),
+            room: ROOM,
         };
         bar.apply_region();
         bar.place();
@@ -381,7 +385,7 @@ impl Bar {
             // native taskbar is kept there.
             settle(self.monitor.work, edge, thickness)
         };
-        self.rect = window_rect(band, edge, px(ROOM), self.monitor.rect);
+        self.rect = window_rect(band, edge, px(self.room), self.monitor.rect);
         let Rect {
             x,
             y,
@@ -481,6 +485,18 @@ impl Bar {
                 },
             );
         }
+    }
+
+    /// Makes the window reach `extent` DIPs past the band (at least [`ROOM`]; the monitor clips
+    /// it), for a flyout bigger than the room. Returns whether the window changed.
+    pub fn set_room(&mut self, extent: f64) -> bool {
+        let room = extent.max(ROOM);
+        if room == self.room {
+            return false;
+        }
+        self.room = room;
+        self.place();
+        true
     }
 
     /// The page's visible parts (DIPs from the window's top-left); the rest clicks through.

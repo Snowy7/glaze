@@ -28,8 +28,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowW, IsIconic, IsWindow, PostMessageW, SC_MINIMIZE, SC_RESTORE, SC_TASKLIST,
-    SW_SHOWNORMAL, SetForegroundWindow, WM_CLOSE, WM_SYSCOMMAND,
+    IsIconic, IsWindow, PostMessageW, SC_MINIMIZE, SC_RESTORE, SC_TASKLIST, SW_SHOWNORMAL,
+    SetForegroundWindow, WM_CLOSE, WM_SYSCOMMAND,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -120,10 +120,11 @@ pub fn open(target: String) {
 
 /// Opens the Start menu.
 pub fn start_menu() {
-    // SAFETY: a lookup and a post to the taskbar; without one, the Windows key does it.
+    // SAFETY: a post to Explorer's taskbar (never the tray host's window); without one, the
+    // Windows key does it.
     unsafe {
-        match FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()) {
-            Ok(tray) => {
+        match mypaper_bars::taskbar::explorer_tray() {
+            Some(tray) => {
                 let _ = PostMessageW(
                     Some(tray),
                     WM_SYSCOMMAND,
@@ -131,7 +132,7 @@ pub fn start_menu() {
                     LPARAM(0),
                 );
             }
-            Err(_) => keys(&[VK_LWIN]),
+            None => keys(&[VK_LWIN]),
         }
     }
 }

@@ -183,7 +183,7 @@ fn describe_path(path: &str, wic: Option<&IWICImagingFactory>, dir: &Path) -> De
     described
 }
 
-fn shell_item(path: &str) -> Option<IShellItem> {
+pub(crate) fn shell_item(path: &str) -> Option<IShellItem> {
     // SAFETY: a valid string; the item is a new COM object we own.
     unsafe { SHCreateItemFromParsingName(&HSTRING::from(path), None) }.ok()
 }
@@ -199,7 +199,7 @@ fn display_name(item: &IShellItem) -> Option<String> {
 }
 
 /// A shortcut's target (lowercase) and its AppUserModelID, if it declares one.
-fn resolve_link(path: &str) -> (Option<String>, Option<String>) {
+pub(crate) fn resolve_link(path: &str) -> (Option<String>, Option<String>) {
     // SAFETY: COM calls on objects we create; buffers outlive the calls.
     unsafe {
         let Ok(link) = CoCreateInstance::<_, IShellLinkW>(&ShellLink, None, CLSCTX_INPROC_SERVER)
@@ -294,7 +294,12 @@ pub fn store_png(dir: &Path, png: &[u8]) -> Option<String> {
 }
 
 /// The item's icon as a cached PNG, by URL.
-fn icon(item: &IShellItem, key: &str, wic: &IWICImagingFactory, dir: &Path) -> Option<String> {
+pub(crate) fn icon(
+    item: &IShellItem,
+    key: &str,
+    wic: &IWICImagingFactory,
+    dir: &Path,
+) -> Option<String> {
     let name = cache_name(key);
     let file = dir.join(&name);
     if file.exists() {

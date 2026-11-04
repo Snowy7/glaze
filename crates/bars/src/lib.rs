@@ -4,6 +4,9 @@
 
 pub mod config;
 pub mod files;
+/// The flyouts' `bars.json` sections, kept beside the flyouts (the binary's `flyouts` module).
+#[path = "flyouts/config.rs"]
+pub mod flyout_config;
 pub mod taskbar;
 
 pub use config::{BarsConfig, Module, TaskbarMode};
