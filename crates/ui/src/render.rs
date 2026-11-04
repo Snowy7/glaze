@@ -41,6 +41,55 @@ pub struct Ui {
 }
 
 impl Ui {
+    /// Decode a photo/icon to bounded premultiplied pixels. Keep this result, not the original
+    /// full-resolution image, while a widget is visible.
+    pub fn decode_image(&self, bytes: &[u8], max_size: (u32, u32)) -> Result<Image> {
+        use windows::Win32::Graphics::Imaging::{
+            WICBitmapDitherTypeNone, WICBitmapInterpolationModeFant, WICBitmapPaletteTypeCustom,
+            WICDecodeMetadataCacheOnLoad,
+        };
+        // SAFETY: WIC consumes this owned stream synchronously. The copied stream buffer stays
+        // alive until decoder/converter/scaler are dropped at the end of this block.
+        unsafe {
+            let stream = self.wic.CreateStream()?;
+            stream.InitializeFromMemory(bytes)?;
+            let decoder = self.wic.CreateDecoderFromStream(
+                &stream,
+                std::ptr::null(),
+                WICDecodeMetadataCacheOnLoad,
+            )?;
+            let frame = decoder.GetFrame(0)?;
+            let (mut w, mut h) = (0, 0);
+            frame.GetSize(&mut w, &mut h)?;
+            anyhow::ensure!(
+                w > 0 && h > 0 && w <= 32768 && h <= 32768,
+                "invalid image dimensions"
+            );
+            let scale = (max_size.0 as f64 / w as f64)
+                .min(max_size.1 as f64 / h as f64)
+                .min(1.0);
+            let width = (w as f64 * scale).round().max(1.0) as u32;
+            let height = (h as f64 * scale).round().max(1.0) as u32;
+            let scaler = self.wic.CreateBitmapScaler()?;
+            scaler.Initialize(&frame, width, height, WICBitmapInterpolationModeFant)?;
+            let converter = self.wic.CreateFormatConverter()?;
+            converter.Initialize(
+                &scaler,
+                &GUID_WICPixelFormat32bppPBGRA,
+                WICBitmapDitherTypeNone,
+                None,
+                0.0,
+                WICBitmapPaletteTypeCustom,
+            )?;
+            let mut pixels = vec![0; width as usize * height as usize * 4];
+            converter.CopyPixels(std::ptr::null(), width * 4, &mut pixels)?;
+            Ok(Image {
+                width,
+                height,
+                pixels,
+            })
+        }
+    }
     /// Makes the factories. Initializes COM on this thread (apartment-threaded) if nothing has.
     pub fn new() -> Result<Self> {
         // SAFETY: documented factory calls on this thread; a COM apartment that already exists
@@ -257,6 +306,75 @@ impl Canvas {
         // SAFETY: per this function's contract.
         unsafe {
             match op {
+                Op::Arc {
+                    center,
+                    radius,
+                    sweep,
+                    width,
+                    color: c,
+                } => {
+                    use windows::Win32::Graphics::Direct2D::Common::{
+                        D2D_SIZE_F, D2D1_FIGURE_BEGIN_HOLLOW, D2D1_FIGURE_END_OPEN,
+                    };
+                    use windows::Win32::Graphics::Direct2D::{
+                        D2D1_ARC_SEGMENT, D2D1_ARC_SIZE_LARGE, D2D1_ARC_SIZE_SMALL, D2D1_ELLIPSE,
+                        D2D1_SWEEP_DIRECTION_CLOCKWISE,
+                    };
+                    brush.SetColor(&color(*c));
+                    if *sweep >= std::f32::consts::TAU - 0.0001 {
+                        t.DrawEllipse(
+                            &D2D1_ELLIPSE {
+                                point: Vector2 {
+                                    X: center.x,
+                                    Y: center.y,
+                                },
+                                radiusX: *radius,
+                                radiusY: *radius,
+                            },
+                            brush,
+                            *width,
+                            None,
+                        );
+                    } else if *sweep > 0.0
+                        && let Ok(path) = t.GetFactory().and_then(|f| f.CreatePathGeometry())
+                        && let Ok(sink) = path.Open()
+                    {
+                        sink.BeginFigure(
+                            Vector2 {
+                                X: center.x,
+                                Y: center.y - radius,
+                            },
+                            D2D1_FIGURE_BEGIN_HOLLOW,
+                        );
+                        let angle = sweep - std::f32::consts::FRAC_PI_2;
+                        sink.AddArc(&D2D1_ARC_SEGMENT {
+                            point: Vector2 {
+                                X: center.x + radius * angle.cos(),
+                                Y: center.y + radius * angle.sin(),
+                            },
+                            size: D2D_SIZE_F {
+                                width: *radius,
+                                height: *radius,
+                            },
+                            rotationAngle: 0.0,
+                            sweepDirection: D2D1_SWEEP_DIRECTION_CLOCKWISE,
+                            arcSize: if *sweep > std::f32::consts::PI {
+                                D2D1_ARC_SIZE_LARGE
+                            } else {
+                                D2D1_ARC_SIZE_SMALL
+                            },
+                        });
+                        sink.EndFigure(D2D1_FIGURE_END_OPEN);
+                        if sink.Close().is_ok() {
+                            t.DrawGeometry(&path, brush, *width, None);
+                        }
+                    }
+                }
+                Op::TextField { rect, field, .. } => {
+                    if let Err(e) = field.draw(t, *rect) {
+                        log::error!("text field: {e:#}");
+                    }
+                }
                 Op::Fill {
                     rect,
                     radius,
@@ -304,7 +422,12 @@ impl Canvas {
                         t.DrawTextLayout(origin, layout, brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
                     }
                 }
-                Op::Image { rect, image } => {
+                Op::Image {
+                    rect,
+                    image,
+                    opacity,
+                    source,
+                } => {
                     // CreateBitmap reads the whole supplied buffer. Public Image values must be
                     // checked before passing a pointer to that FFI call.
                     if image.width == 0
@@ -348,9 +471,9 @@ impl Canvas {
                         t.DrawBitmap(
                             bitmap,
                             Some(&d2d(*rect)),
-                            1.0,
+                            *opacity,
                             D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-                            None,
+                            source.map(d2d).as_ref().map(|r| r as *const _),
                         );
                     }
                 }
@@ -427,6 +550,8 @@ mod tests {
             ops: vec![Op::Image {
                 rect: Rect::new(1.0, 1.0, 2.0, 2.0),
                 image: bitmap,
+                opacity: 1.0,
+                source: None,
             }],
             ..Default::default()
         };

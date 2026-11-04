@@ -41,12 +41,9 @@ fn resolve(theme: &Appearance, auto_accent: Option<Color>) -> Tokens {
         .tint
         .map_or(base.material.tint, |c| Rgba::rgb8(c.0, 1.0))
         .with_alpha(theme.opacity.unwrap_or(base.material.tint.a));
-    let font = theme
-        .font
-        .as_deref()
-        .map_or(base.font.clone(), |css| {
-            TextStyle::new(&font_family(css), base.font.size)
-        });
+    let font = theme.font.as_deref().map_or(base.font.clone(), |css| {
+        TextStyle::new(&font_family(css), base.font.size)
+    });
     Tokens {
         font,
         colors: Colors::new(dark, accent),
@@ -97,8 +94,16 @@ mod tests {
             ..Default::default()
         };
         let tokens = resolve(&theme, Some(Color([0x19, 0xcd, 0x86])));
-        assert_eq!(tokens.colors, Colors::new(false, [0x19, 0xcd, 0x86]), "dark text, a light menu");
-        assert_eq!(tokens.material.tint, Rgba::rgb8([0xf0, 0xf0, 0xf2], 0.94), "default opacity");
+        assert_eq!(
+            tokens.colors,
+            Colors::new(false, [0x19, 0xcd, 0x86]),
+            "dark text, a light menu"
+        );
+        assert_eq!(
+            tokens.material.tint,
+            Rgba::rgb8([0xf0, 0xf0, 0xf2], 0.94),
+            "default opacity"
+        );
         assert_eq!(tokens.radius, 4.0);
         assert_eq!(&*tokens.font.family, "Inter");
         assert!(!tokens.shadow);

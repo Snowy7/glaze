@@ -512,16 +512,10 @@ pub async fn dock_icon(app: AppHandle, path: String) -> CmdResult<String> {
     Ok(file.display().to_string())
 }
 
-/// The installed widgets. Their folders may then be read by the webview, which runs the real
-/// widget pages in Studio's live preview.
+/// Native widget metadata and settings schemas. Native surfaces have no asset directories.
 #[tauri::command]
-pub async fn list_widgets(app: AppHandle) -> Vec<WidgetInfo> {
-    let list = widgets::list();
-    let scope = app.asset_protocol_scope();
-    for widget in list.iter().filter(|w| w.error.is_none()) {
-        let _ = scope.allow_directory(&widget.dir, true);
-    }
-    list
+pub async fn list_widgets() -> Vec<WidgetInfo> {
+    widgets::list()
 }
 
 /// Calls one of a widget's plugin methods for it: a place setting's town search, and the plugin

@@ -14,11 +14,10 @@ log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 notify.workspace = true
-# Only for the WebView2 hosts (feature `webview`): the shared environment helper.
-webview2-com = { version = "0.39", optional = true }
 
 [features]
-webview = ["dep:webview2-com"]
+# Temporary feature name for N2's base dependency; it contains no browser environment.
+webview = []
 
 [dependencies.windows]
 workspace = true

@@ -47,7 +47,11 @@ pub fn check(image: &Image, path: &Path) -> Result<()> {
         .0
         .iter()
         .zip(golden.pixels.as_chunks::<4>().0)
-        .filter(|(a, b)| a.iter().zip(*b).any(|(x, y)| x.abs_diff(*y) > CHANNEL_TOLERANCE))
+        .filter(|(a, b)| {
+            a.iter()
+                .zip(*b)
+                .any(|(x, y)| x.abs_diff(*y) > CHANNEL_TOLERANCE)
+        })
         .count();
     let total = (image.width * image.height) as usize;
     if differing as f64 > total as f64 * PIXEL_TOLERANCE {

@@ -66,7 +66,13 @@ mod tests {
         ] {
             assert!(is_gpu_driver(driver), "{driver}");
         }
-        for system in ["d3d11.dll", "dxgi.dll", "d3d10warp.dll", "d2d1.dll", "nvml.dll"] {
+        for system in [
+            "d3d11.dll",
+            "dxgi.dll",
+            "d3d10warp.dll",
+            "d2d1.dll",
+            "nvml.dll",
+        ] {
             assert!(!is_gpu_driver(system), "{system}");
         }
         assert!(loaded().iter().any(|m| m == "kernel32.dll"));

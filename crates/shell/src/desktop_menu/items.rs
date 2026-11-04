@@ -75,7 +75,11 @@ fn builtin_item(builtin: Builtin, state: ViewState) -> Item {
         Builtin::Separator => Entry::Separator,
         Builtin::View => {
             let size = |label, size| {
-                Entry::check(label, Command::IconSize(size), state.icon_size == Some(size))
+                Entry::check(
+                    label,
+                    Command::IconSize(size),
+                    state.icon_size == Some(size),
+                )
             };
             Entry::Submenu {
                 label: "View".into(),
@@ -279,9 +283,12 @@ mod tests {
             let r = tokens.radius.ceil() as u32;
             for y in edge..edge + h {
                 for x in edge..edge + w {
-                    let corner = (x < edge + r || x >= edge + w - r)
-                        && (y < edge + r || y >= edge + h - r);
-                    assert!(corner || image.pixel(x, y)[3] > 0, "({x}, {y}) lets clicks through");
+                    let corner =
+                        (x < edge + r || x >= edge + w - r) && (y < edge + r || y >= edge + h - r);
+                    assert!(
+                        corner || image.pixel(x, y)[3] > 0,
+                        "({x}, {y}) lets clicks through"
+                    );
                 }
             }
             assert_eq!(image.pixel(0, 0)[3], 0);

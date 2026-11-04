@@ -1,0 +1,174 @@
+{
+  "id": "launcher",
+  "name": "Launcher",
+  "version": "3.0.0",
+  "author": "mypaper",
+  "description": "Your apps with their real icons, as a dock, a grid or a list, under an optional web search bar.",
+  "size": {
+    "default": [
+      4,
+      2
+    ],
+    "min": [
+      1,
+      1
+    ],
+    "max": [
+      8,
+      4
+    ]
+  },
+  "resizable": true,
+  "permissions": [
+    "launch"
+  ],
+  "plugins": [],
+  "settings": [
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Layout",
+      "options": [
+        {
+          "value": "dock",
+          "label": "Dock",
+          "icon": "▃"
+        },
+        {
+          "value": "grid",
+          "label": "Grid",
+          "icon": "▦"
+        },
+        {
+          "value": "list",
+          "label": "List",
+          "icon": "☰"
+        }
+      ],
+      "default": "dock"
+    },
+    {
+      "key": "shortcuts",
+      "type": "list",
+      "label": "Apps (an .exe path, shell:AppsFolder\\<app id>, a folder or a link)",
+      "group": "Apps",
+      "fields": [
+        {
+          "key": "label",
+          "type": "string",
+          "label": "Name"
+        },
+        {
+          "key": "target",
+          "type": "string",
+          "label": "Path, app id or link"
+        }
+      ],
+      "maxItems": 24,
+      "default": [
+        {
+          "label": "Files",
+          "target": "C:\\Windows\\explorer.exe"
+        },
+        {
+          "label": "Notepad",
+          "target": "C:\\Windows\\System32\\notepad.exe"
+        },
+        {
+          "label": "Calculator",
+          "target": "C:\\Windows\\System32\\calc.exe"
+        },
+        {
+          "label": "Paint",
+          "target": "C:\\Windows\\System32\\mspaint.exe"
+        },
+        {
+          "label": "Terminal",
+          "target": "C:\\Windows\\System32\\cmd.exe"
+        },
+        {
+          "label": "Settings",
+          "target": "shell:AppsFolder\\windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel"
+        }
+      ]
+    },
+    {
+      "key": "labels",
+      "type": "boolean",
+      "label": "Show names",
+      "group": "Apps",
+      "default": true
+    },
+    {
+      "key": "iconSize",
+      "type": "slider",
+      "label": "Largest icon size",
+      "group": "Apps",
+      "min": 28,
+      "max": 72,
+      "step": 2,
+      "unit": "px",
+      "default": 48
+    },
+    {
+      "key": "search",
+      "type": "boolean",
+      "label": "Search bar",
+      "group": "Search",
+      "default": true
+    },
+    {
+      "key": "engine",
+      "type": "select",
+      "label": "Search engine",
+      "group": "Search",
+      "options": [
+        {
+          "value": "duckduckgo",
+          "label": "DuckDuckGo"
+        },
+        {
+          "value": "google",
+          "label": "Google"
+        },
+        {
+          "value": "bing",
+          "label": "Bing"
+        },
+        {
+          "value": "brave",
+          "label": "Brave"
+        },
+        {
+          "value": "ecosia",
+          "label": "Ecosia"
+        },
+        {
+          "value": "startpage",
+          "label": "Startpage"
+        },
+        {
+          "value": "custom",
+          "label": "Custom"
+        }
+      ],
+      "default": "duckduckgo"
+    },
+    {
+      "key": "customUrl",
+      "type": "string",
+      "label": "Custom engine URL ({q} is the search text)",
+      "group": "Search",
+      "default": "https://duckduckgo.com/?q={q}"
+    }
+  ],
+  "replaces": {
+    "app-shortcuts": {
+      "search": false
+    },
+    "search": {
+      "search": true,
+      "shortcuts": []
+    }
+  }
+}

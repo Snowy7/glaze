@@ -1,0 +1,8 @@
+N4_MEDIA paused_existing=false
+N4_READY pid=75900 monitors=2 seconds=70
+N4_MONITORS [("\\\\.\\DISPLAY1", 96), ("\\\\.\\DISPLAY2", 96)]
+N4_SAMPLE wall_s=60.013 cpu_core_pct=0.26036 counters=(41, 2)
+N4_COST stats_us,paint_us,polls=(56909, 65684, 265)
+N4_VISIBLE_HITS 6/6
+N4_DONE drivers=[]
+N4_MEDIAN Some(0.2603606960599657)

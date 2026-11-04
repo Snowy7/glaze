@@ -4,11 +4,7 @@
 //! location and `search` disambiguates towns. Weather is cached for 10 minutes; stale entries are
 //! refreshed in the background and announced with an `updated` event.
 
-mod client;
-mod location;
-mod rpc;
-mod service;
-mod weather;
+use mypaper_plugin_weather::{client, location, rpc, service};
 
 use std::io::{self, BufRead};
 use std::sync::Arc;

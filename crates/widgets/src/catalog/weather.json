@@ -1,0 +1,91 @@
+{
+  "id": "weather",
+  "name": "Weather",
+  "version": "3.0.0",
+  "author": "mypaper",
+  "description": "The weather where you are, or in any town: an animated sky, the next hours and the week. Weather by Open-Meteo.",
+  "size": {
+    "default": [
+      3,
+      2
+    ],
+    "min": [
+      2,
+      1
+    ],
+    "max": [
+      5,
+      3
+    ]
+  },
+  "resizable": true,
+  "permissions": [
+    "launch"
+  ],
+  "plugins": [
+    "weather"
+  ],
+  "settings": [
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Layout",
+      "group": "Layout",
+      "options": [
+        {
+          "value": "card",
+          "label": "Card",
+          "icon": "◐"
+        },
+        {
+          "value": "compact",
+          "label": "Compact",
+          "icon": "▭"
+        },
+        {
+          "value": "forecast",
+          "label": "Forecast",
+          "icon": "▤"
+        }
+      ],
+      "default": "card"
+    },
+    {
+      "key": "city",
+      "type": "place",
+      "label": "Location",
+      "group": "Location",
+      "search": {
+        "plugin": "weather",
+        "method": "search"
+      },
+      "default": null
+    },
+    {
+      "key": "units",
+      "type": "select",
+      "label": "Units",
+      "group": "Units",
+      "options": [
+        {
+          "value": "metric",
+          "label": "Celsius",
+          "icon": "°C"
+        },
+        {
+          "value": "imperial",
+          "label": "Fahrenheit",
+          "icon": "°F"
+        }
+      ],
+      "default": "metric"
+    },
+    {
+      "key": "animate",
+      "type": "boolean",
+      "label": "Animated illustration",
+      "group": "Look",
+      "default": true
+    }
+  ]
+}

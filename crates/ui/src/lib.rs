@@ -7,6 +7,7 @@
 //! window messages. [`Menu`] is the first component built on it.
 
 mod a11y;
+pub mod calendar;
 pub mod focus;
 pub mod geom;
 #[cfg(any(test, feature = "golden"))]
@@ -19,6 +20,7 @@ mod render;
 mod scene;
 mod surface;
 mod text;
+pub mod text_field;
 mod tokens;
 
 pub use geom::{PixelRect, Point, Rect, Rgba};
@@ -28,6 +30,7 @@ pub use render::{Image, Ui, render};
 pub use scene::{DisplayList, Hit, HitId, Op};
 pub use surface::{Button, Event, Kind, Pointer, Surface, SurfaceId, next_event};
 pub use text::{Text, TextStyle};
+pub use text_field::TextField;
 pub use tokens::{Colors, Material, MenuMetrics, Tokens};
 
 /// Accessibility roles for [`Hit`] items.

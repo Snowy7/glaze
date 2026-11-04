@@ -547,9 +547,8 @@ impl<C: Clone> Menu<C> {
     fn key(&mut self, ui: &mut Ui, key: u16) -> Option<Outcome<C>> {
         let current = self.panels.len().checked_sub(1)?;
         let hover = self.panels[current].hover;
-        let on_submenu = hover.is_some_and(|row| {
-            matches!(self.panels[current].items[row], Entry::Submenu { .. })
-        });
+        let on_submenu = hover
+            .is_some_and(|row| matches!(self.panels[current].items[row], Entry::Submenu { .. }));
         match key {
             k if k == VK_DOWN.0 || k == VK_UP.0 => {
                 let delta = if k == VK_DOWN.0 { 1 } else { -1 };
@@ -691,13 +690,7 @@ impl<C: Clone> Menu<C> {
     }
 
     fn create(&self, submenu: bool) -> Result<Surface> {
-        Surface::new(
-            Kind::Popup {
-                activate: !submenu,
-            },
-            &self.name,
-            Role::Menu,
-        )
+        Surface::new(Kind::Popup { activate: !submenu }, &self.name, Role::Menu)
     }
 }
 
@@ -785,7 +778,11 @@ mod tests {
         let work = (0, 0, 1920, 1040);
         let size = (200, 180);
         let parent = (100, 100, 340, 600);
-        assert_eq!(place_submenu(size, parent, 140, work), (340, 140), "no gap, no overlap");
+        assert_eq!(
+            place_submenu(size, parent, 140, work),
+            (340, 140),
+            "no gap, no overlap"
+        );
         // No room on the right: against the parent's left edge.
         let near_right = (1600, 100, 1840, 600);
         assert_eq!(place_submenu(size, near_right, 140, work), (1400, 140));

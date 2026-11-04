@@ -1,23 +1,24 @@
 [package]
 name = "mypaper-widgets"
-description = "The widget host: desktop-layer WebView2 widgets, their bridge and plugins."
+description = "Native widget services: layout, storage, media, stats, audio, icons and JSON-RPC plugins."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
 [dependencies]
 mypaper-config.workspace = true
-mypaper-desktop = { workspace = true, features = ["webview"] }
 mypaper-theme.workspace = true
 
 anyhow.workspace = true
 log.workspace = true
-notify.workspace = true
 # Encodes `appIcon` results (already in the lockfile through Studio).
 png = "0.18"
 serde.workspace = true
 serde_json.workspace = true
-webview2-com = "0.39"
+quick-xml = { version = "0.42.0", default-features = false }
 
 [dependencies.windows]
 workspace = true

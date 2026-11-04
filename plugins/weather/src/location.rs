@@ -267,17 +267,19 @@ impl<S: LocationSource> Locator<S> {
 }
 
 pub struct NativeLocation {
-    agent: ureq::Agent,
+    agent: crate::http::Http,
+}
+
+impl Default for NativeLocation {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NativeLocation {
     pub fn new() -> Self {
         Self {
-            agent: ureq::Agent::config_builder()
-                .timeout_global(Some(Duration::from_secs(5)))
-                .user_agent("mypaper-weather/1.1 (desktop weather location)")
-                .build()
-                .into(),
+            agent: crate::http::Http::new(Duration::from_secs(5)),
         }
     }
 }
@@ -335,10 +337,7 @@ impl LocationSource for NativeLocation {
                 "fields",
                 "success,message,latitude,longitude,city,region,country",
             )
-            .call()
-            .map_err(|e| e.to_string())?
-            .body_mut()
-            .read_json()
+            .json()
             .map_err(|e| e.to_string())?;
         if !raw.success {
             return Err(raw.message.unwrap_or_else(|| "IP lookup failed".into()));
@@ -377,10 +376,7 @@ impl LocationSource for NativeLocation {
             .query("latitude", location.lat.to_string())
             .query("longitude", location.lon.to_string())
             .query("localityLanguage", "en")
-            .call()
-            .map_err(|e| e.to_string())?
-            .body_mut()
-            .read_json()
+            .json()
             .map_err(|e| e.to_string())?;
         raw.names()
             .ok_or_else(|| "reverse geocoder returned no locality".into())

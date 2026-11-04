@@ -398,7 +398,12 @@ fn item(
         16.0 * scale,
     );
     if let Some(image) = icon {
-        frame.list.ops.push(Op::Image { rect: g, image });
+        frame.list.ops.push(Op::Image {
+            rect: g,
+            image,
+            opacity: 1.0,
+            source: None,
+        });
         label.left += 20.0 * scale;
     } else if let Some(glyph) = content.glyph {
         text(
@@ -713,6 +718,8 @@ pub fn dock(
             frame.list.ops.push(Op::Image {
                 rect: icon_rect,
                 image,
+                opacity: 1.0,
+                source: None,
             });
         } else {
             text(

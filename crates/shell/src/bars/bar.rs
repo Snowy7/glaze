@@ -440,6 +440,7 @@ impl Bar {
             .shapes
             .iter()
             .map(|(rect, radius)| Plate {
+                id: 0,
                 rect: rect.offset(
                     (x - self.monitor.rect.x) as f32,
                     (y - self.monitor.rect.y) as f32,

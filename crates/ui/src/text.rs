@@ -99,7 +99,8 @@ impl Text {
 
     /// The width and height of `text` in `style`, in device pixels.
     pub fn measure(&mut self, text: &str, style: &TextStyle) -> (f32, f32) {
-        self.laid(text, style).map_or((0.0, 0.0), |l| (l.width, l.height))
+        self.laid(text, style)
+            .map_or((0.0, 0.0), |l| (l.width, l.height))
     }
 
     /// The cached layout of `text` (made on first use).
@@ -113,7 +114,9 @@ impl Text {
         let (mut index, mut exists) = (0u32, BOOL(0));
         // SAFETY: documented calls; the out pointers are valid locals.
         unsafe {
-            self.factory.GetSystemFontCollection(&mut fonts, false).is_ok()
+            self.factory
+                .GetSystemFontCollection(&mut fonts, false)
+                .is_ok()
                 && fonts.is_some_and(|fonts| {
                     fonts
                         .FindFamilyName(&HSTRING::from(family), &mut index, &mut exists)
@@ -213,7 +216,10 @@ mod tests {
         }
         assert!(text.layouts.len() <= MAX_LAYOUTS);
         let kept = (style.key(), Arc::<str>::from("View"));
-        assert!(text.layouts.contains_key(&kept), "the label in use survives");
+        assert!(
+            text.layouts.contains_key(&kept),
+            "the label in use survives"
+        );
         assert_eq!(text.measure("View", &style), label);
     }
 }

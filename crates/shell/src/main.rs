@@ -16,6 +16,7 @@ mod flyouts;
 mod glass;
 mod inbox;
 mod look;
+mod widgets;
 
 use std::process::ExitCode;
 
@@ -72,6 +73,9 @@ fn run() -> Result<()> {
         inbox: inbox.hwnd(),
         menu: None,
         bars,
+        widgets: widgets::Widgets::new(&mut ui, inbox.hwnd())
+            .inspect_err(|e| log::error!("widgets not started: {e:#}"))
+            .ok(),
     };
     shell.follow_config(&ui);
     shell.bars.tick(&mut ui);
@@ -80,12 +84,25 @@ fn run() -> Result<()> {
 
     let mut msg = MSG::default();
     'run: loop {
-        let handles: Vec<HANDLE> = parent.iter().copied().chain(shell.bars.handles()).collect();
+        // Order matters: the parent, then the widgets' frame timer, then the bars' handles.
+        let handles: Vec<HANDLE> = parent
+            .iter()
+            .copied()
+            .chain(shell.widgets.as_ref().map(widgets::Widgets::timer_handle))
+            .chain(shell.bars.handles())
+            .collect();
         // SAFETY: the parent's handle stays open for the whole loop.
         let woke = unsafe {
             MsgWaitForMultipleObjectsEx(
                 (!handles.is_empty()).then_some(handles.as_slice()),
-                shell.bars.timeout(),
+                shell
+                    .widgets
+                    .as_ref()
+                    .map_or(
+                        windows::Win32::System::Threading::INFINITE,
+                        widgets::Widgets::timeout_ms,
+                    )
+                    .min(shell.bars.timeout()),
                 QS_ALLINPUT,
                 MWMO_INPUTAVAILABLE,
             )
@@ -94,11 +111,19 @@ fn run() -> Result<()> {
             log::info!("the process that started the shell exited; stopping");
             break;
         }
+        if let Some(widgets) = &mut shell.widgets
+            && woke.0 == WAIT_OBJECT_0.0 + u32::from(parent.is_some())
+        {
+            widgets.frame_ready();
+        }
         // SAFETY: standard message pump on the thread that owns every window of the shell.
         unsafe {
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
                 if msg.message == WM_QUIT {
                     break 'run;
+                }
+                if let Some(widgets) = &mut shell.widgets {
+                    widgets.raw_message(&msg);
                 }
                 if shell.bars.message(&msg) {
                     continue;
@@ -130,6 +155,7 @@ struct Shell {
     inbox: windows::Win32::Foundation::HWND,
     /// The desktop right-click menu, while `desktop_menu.enabled`.
     menu: Option<DesktopMenu>,
+    widgets: Option<widgets::Widgets>,
 }
 
 impl Shell {
@@ -139,6 +165,9 @@ impl Shell {
         let mut config_changed = false;
         loop {
             if let Some(msg) = inbox::next() {
+                if let Some(widgets) = &mut self.widgets {
+                    widgets.handle(ui, msg);
+                }
                 match msg.message {
                     WM_CONFIG | WM_PALETTE => {
                         config_changed = true;
@@ -152,12 +181,18 @@ impl Shell {
                 }
             } else if let Some((id, event)) = next_event() {
                 self.bars.event(ui, id, &event);
+                if let Some(widgets) = &mut self.widgets {
+                    widgets.on_event(ui, id, &event);
+                }
                 if let Some(menu) = &mut self.menu {
                     menu.on_event(ui, id, &event);
                 }
             } else {
                 break;
             }
+        }
+        if let Some(widgets) = &mut self.widgets {
+            widgets.poll(ui);
         }
         // The menu's look follows the theme and its palette, so both count.
         if config_changed {
@@ -167,6 +202,9 @@ impl Shell {
 
     fn fact(&mut self, ui: &mut Ui, wparam: usize, lparam: isize) {
         self.bars.fact(wparam, lparam);
+        if let Some(widgets) = &mut self.widgets {
+            widgets.fact(wparam, lparam);
+        }
         if let Some(menu) = &mut self.menu {
             menu.handle(
                 ui,

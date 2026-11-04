@@ -15,8 +15,6 @@ mod monitors;
 mod power;
 pub mod raw_input;
 pub mod startup;
-#[cfg(feature = "webview")]
-pub mod webview_env;
 
 pub use config_watch::{ConfigWatcher, watch_config, watch_file};
 pub use control::{ControlWindow, WM_FACT};

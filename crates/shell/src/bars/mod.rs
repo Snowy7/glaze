@@ -430,7 +430,7 @@ impl Bars {
         for monitor in &self.monitors {
             let next = self.plates(monitor);
             if self.published.get(&monitor.device) != Some(&next) {
-                glass::publish(monitor, &next);
+                glass::publish(glass::Source::Bars, monitor, &next);
                 self.published.insert(monitor.device.clone(), next);
             }
         }
@@ -492,7 +492,7 @@ impl Bars {
             return;
         };
         match event {
-            Event::DpiChanged => self.display_due = Some(now),
+            Event::DpiChanged(_) => self.display_due = Some(now),
             Event::Leave => {
                 if self.press.is_none() {
                     self.bars[index].leave(now);
@@ -989,7 +989,7 @@ impl Bars {
         let monitors = monitor_infos();
         for old in &self.monitors {
             if !monitors.iter().any(|m| m.device == old.device) {
-                glass::publish(old, &[]);
+                glass::publish(glass::Source::Bars, old, &[]);
                 self.published.remove(&old.device);
             }
         }
@@ -1167,7 +1167,7 @@ impl Drop for Bars {
         providers::hooks::watch_taskbar(false);
         self.services.tray_host.set_active(false);
         for monitor in monitor_infos() {
-            glass::publish(&monitor, &[]);
+            glass::publish(glass::Source::Bars, &monitor, &[]);
         }
         self.bars.clear();
         if let Err(e) = self.taskbar.restore() {

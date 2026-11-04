@@ -43,8 +43,8 @@ use windows::core::{HSTRING, PCWSTR, w};
 
 use self::hook::{HookThread, ICONS, ICONS_DIRTY_QUEUED, MENU_OPEN, replay_right_click, unpack};
 use self::items::{Command, ViewState};
-use crate::inbox::{self, Msg};
 use crate::apps;
+use crate::inbox::{self, Msg};
 
 // Inbox messages of the desktop menu.
 const WM_RECHECK: u32 = WM_APP + 40;

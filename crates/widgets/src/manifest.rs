@@ -1693,13 +1693,10 @@ mod tests {
                 .filter(|p| p.join(manifest).is_file())
                 .collect()
         };
-        let widgets = folders("widgets", WIDGET_MANIFEST);
-        for dir in &widgets {
-            WidgetManifest::load(dir).unwrap();
-        }
+        let widgets = crate::registry::builtins();
         for dir in folders("plugins", PLUGIN_MANIFEST) {
             PluginManifest::load(&dir).unwrap();
         }
-        assert!(widgets.len() >= 6, "expected the six example widgets");
+        assert_eq!(widgets.widgets.len(), 17);
     }
 }

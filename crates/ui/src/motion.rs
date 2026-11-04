@@ -50,8 +50,7 @@ impl Spring {
         let zeta = c / (2.0 * (k * m).sqrt());
         let x = if zeta < 1.0 {
             let wd = w0 * (1.0 - zeta * zeta).sqrt();
-            1.0 - (-zeta * w0 * t).exp()
-                * ((wd * t).cos() + (zeta * w0 / wd) * (wd * t).sin())
+            1.0 - (-zeta * w0 * t).exp() * ((wd * t).cos() + (zeta * w0 / wd) * (wd * t).sin())
         } else if zeta == 1.0 {
             1.0 - (-w0 * t).exp() * (1.0 + w0 * t)
         } else {
@@ -237,11 +236,17 @@ mod tests {
         ticker.schedule(true);
         assert!(ticker.armed());
         // SAFETY: waits on our own timer.
-        assert_eq!(unsafe { WaitForSingleObject(ticker.handle(), 200) }, WAIT_OBJECT_0);
+        assert_eq!(
+            unsafe { WaitForSingleObject(ticker.handle(), 200) },
+            WAIT_OBJECT_0
+        );
         ticker.schedule(true);
         ticker.schedule(false);
         assert!(!ticker.armed());
         // SAFETY: as above.
-        assert_eq!(unsafe { WaitForSingleObject(ticker.handle(), 100) }, WAIT_TIMEOUT);
+        assert_eq!(
+            unsafe { WaitForSingleObject(ticker.handle(), 100) },
+            WAIT_TIMEOUT
+        );
     }
 }

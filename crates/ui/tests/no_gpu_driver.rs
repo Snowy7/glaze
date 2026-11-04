@@ -31,10 +31,16 @@ fn drawing_text_and_shapes_on_a_surface_loads_no_gpu_driver() {
     surface.present(&mut ui, (0, 0), (200, 40), list).unwrap();
 
     let loaded = modules::loaded();
-    let drivers: Vec<&String> = loaded.iter().filter(|m| modules::is_gpu_driver(m)).collect();
+    let drivers: Vec<&String> = loaded
+        .iter()
+        .filter(|m| modules::is_gpu_driver(m))
+        .collect();
     assert!(
         drivers.is_empty(),
         "GPU drivers loaded: {drivers:?}\nall modules: {loaded:?}"
     );
-    assert!(loaded.iter().any(|m| m == "d2d1.dll"), "Direct2D did the drawing");
+    assert!(
+        loaded.iter().any(|m| m == "d2d1.dll"),
+        "Direct2D did the drawing"
+    );
 }

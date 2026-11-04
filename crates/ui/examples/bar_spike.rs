@@ -15,8 +15,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
 use mypaper_ui::{
-    DisplayList, Kind, Op, Rect, Rgba, Role, Spring, Surface, TextStyle, Ticker, Tween, Ui,
-    icons, modules,
+    DisplayList, Kind, Op, Rect, Rgba, Role, Spring, Surface, TextStyle, Ticker, Tween, Ui, icons,
+    modules,
 };
 use windows::Win32::Foundation::{FILETIME, WAIT_OBJECT_0};
 use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX};
@@ -59,7 +59,10 @@ fn main() -> Result<()> {
     surface.show();
     let first_paint = first.elapsed();
     let first_paint_age = process_age();
-    memory.push(("first paint (render target, WIC + DIB bitmaps)", private_mb()));
+    memory.push((
+        "first paint (render target, WIC + DIB bitmaps)",
+        private_mb(),
+    ));
 
     // The bar slides down and fades in: position and alpha only, one tick per display frame.
     let mut ticker = Ticker::new()?;
@@ -90,15 +93,26 @@ fn main() -> Result<()> {
             })
             .collect();
         samples.sort();
-        (samples[samples.len() / 2], samples[samples.len() * 95 / 100], samples[samples.len() - 1])
+        (
+            samples[samples.len() / 2],
+            samples[samples.len() * 95 / 100],
+            samples[samples.len() - 1],
+        )
     };
     // A partial redraw: only the clock changes.
     let partial = time(&mut ui, &mut surface, &mut |i| (i as u32 + 1, 0.0));
     clock = redraws as u32;
     // A full redraw: the whole bar's tint changes.
-    let full = time(&mut ui, &mut surface, &mut |i| (clock, (i % 2) as f32 * 0.02 + 0.01));
+    let full = time(&mut ui, &mut surface, &mut |i| {
+        (clock, (i % 2) as f32 * 0.02 + 0.01)
+    });
     // An identical frame: nothing to draw.
-    let same = bar(&mut ui, &icons_family, clock, 0.01 + ((redraws - 1) % 2) as f32 * 0.02);
+    let same = bar(
+        &mut ui,
+        &icons_family,
+        clock,
+        0.01 + ((redraws - 1) % 2) as f32 * 0.02,
+    );
     let t = Instant::now();
     let redrew = surface.present(&mut ui, (x, y), (WIDTH, HEIGHT), same)?;
     let identical = t.elapsed();
@@ -110,7 +124,9 @@ fn main() -> Result<()> {
     let deadline = idle_start + Duration::from_secs(seconds);
     let mut wakeups = 0;
     while Instant::now() < deadline {
-        let left = deadline.saturating_duration_since(Instant::now()).as_millis() as u32;
+        let left = deadline
+            .saturating_duration_since(Instant::now())
+            .as_millis() as u32;
         wait(&[ticker.handle()], left);
         wakeups += 1;
     }
@@ -119,11 +135,16 @@ fn main() -> Result<()> {
     memory.push(("after idle", private_mb()));
 
     let loaded = modules::loaded();
-    let drivers: Vec<&String> = loaded.iter().filter(|m| modules::is_gpu_driver(m)).collect();
+    let drivers: Vec<&String> = loaded
+        .iter()
+        .filter(|m| modules::is_gpu_driver(m))
+        .collect();
     let has = |name: &str| loaded.iter().any(|m| m == name);
 
     println!("== N0.1 bar spike: {WIDTH}x{HEIGHT}, software Direct2D on WIC ==");
-    println!("first paint: {first_paint:.2?} to draw and show; {first_paint_age:.1?} after process creation");
+    println!(
+        "first paint: {first_paint:.2?} to draw and show; {first_paint_age:.1?} after process creation"
+    );
     println!("slide-in: {frames} frames in {slid:.0?} (position and alpha only)");
     let ms = |d: Duration| d.as_secs_f64() * 1000.0;
     println!(
@@ -194,11 +215,15 @@ fn bar(ui: &mut Ui, icon_family: &str, clock: u32, shade: f32) -> DisplayList {
         x + w
     };
     let mut x = 24.0;
-    for app in ["Files", "Edit", "View", "Window", "Help", "Terminal", "Browser", "Mail"] {
+    for app in [
+        "Files", "Edit", "View", "Window", "Help", "Terminal", "Browser", "Mail",
+    ] {
         x = text(&mut ops, x, app, &label) + 20.0;
     }
     let mut x = WIDTH as f32 - 420.0;
-    for glyph_code in ['\u{E701}', '\u{E767}', '\u{E83F}', '\u{E7E7}', '\u{E713}', '\u{E8BE}'] {
+    for glyph_code in [
+        '\u{E701}', '\u{E767}', '\u{E83F}', '\u{E7E7}', '\u{E713}', '\u{E8BE}',
+    ] {
         x = text(&mut ops, x, &glyph_code.to_string(), &glyph) + 16.0;
     }
     let time = format!("Wed 4 Nov  {:02}:{:02}", 9 + clock / 60 % 12, clock % 60);
@@ -230,11 +255,7 @@ fn private_mb() -> f64 {
     };
     // SAFETY: the struct and its size match; our own pseudo process handle.
     let _ = unsafe {
-        GetProcessMemoryInfo(
-            GetCurrentProcess(),
-            (&raw mut counters).cast(),
-            counters.cb,
-        )
+        GetProcessMemoryInfo(GetCurrentProcess(), (&raw mut counters).cast(), counters.cb)
     };
     counters.PrivateUsage as f64 / (1024.0 * 1024.0)
 }
@@ -247,7 +268,15 @@ fn ticks(t: FILETIME) -> u64 {
 fn cpu_time() -> Duration {
     let (mut created, mut exited, mut kernel, mut user) = Default::default();
     // SAFETY: our own pseudo handle; every out pointer is a valid local.
-    let _ = unsafe { GetProcessTimes(GetCurrentProcess(), &mut created, &mut exited, &mut kernel, &mut user) };
+    let _ = unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut created,
+            &mut exited,
+            &mut kernel,
+            &mut user,
+        )
+    };
     Duration::from_nanos((ticks(kernel) + ticks(user)) * 100)
 }
 
@@ -255,7 +284,15 @@ fn cpu_time() -> Duration {
 fn process_age() -> Duration {
     let (mut created, mut exited, mut kernel, mut user) = Default::default();
     // SAFETY: as above.
-    let _ = unsafe { GetProcessTimes(GetCurrentProcess(), &mut created, &mut exited, &mut kernel, &mut user) };
+    let _ = unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut created,
+            &mut exited,
+            &mut kernel,
+            &mut user,
+        )
+    };
     // SAFETY: no preconditions.
     let now = ticks(unsafe { GetSystemTimePreciseAsFileTime() });
     Duration::from_nanos(now.saturating_sub(ticks(created)) * 100)

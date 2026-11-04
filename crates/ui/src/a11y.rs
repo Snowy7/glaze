@@ -6,8 +6,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use accesskit::{
-    Action, ActionHandler, ActionRequest, ActivationHandler, Node, NodeId, Role, Toggled,
-    TreeId, TreeInfo, TreeUpdate,
+    Action, ActionHandler, ActionRequest, ActivationHandler, Node, NodeId, Role, Toggled, TreeId,
+    TreeInfo, TreeUpdate,
 };
 use accesskit_windows::{Adapter, QueuedEvents};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};

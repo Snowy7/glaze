@@ -22,8 +22,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, MOUSEEVENTF_RIGHTDOWN,
-    MOUSEEVENTF_RIGHTUP, MOUSEINPUT, SendInput, VK_ESCAPE,
+    INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
+    MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEINPUT, SendInput, VK_ESCAPE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowExW, GetCursorPos, GetWindowRect, IsWindowVisible, SetCursorPos,
@@ -90,12 +90,9 @@ fn visible_panels() -> Vec<(HWND, (i32, i32, i32, i32))> {
     let mut after = None;
     // SAFETY: plain window lookups.
     unsafe {
-        while let Ok(hwnd) = FindWindowExW(
-            None,
-            after,
-            w!("mypaper.ui"),
-            w!("mypaper desktop menu"),
-        ) {
+        while let Ok(hwnd) =
+            FindWindowExW(None, after, w!("mypaper.ui"), w!("mypaper desktop menu"))
+        {
             if IsWindowVisible(hwnd).as_bool() {
                 let mut r = Default::default();
                 let _ = GetWindowRect(hwnd, &mut r);
@@ -223,7 +220,10 @@ fn main() -> Result<()> {
                 let _ = unsafe { SetCursorPos(root.0 + 80, root.1 + 14 + 6 + 16) };
                 if wait_for(2, Duration::from_millis(800)).is_some() {
                     let panels = visible_panels();
-                    println!("submenu open; panels: {:?}", panels.iter().map(|p| p.1).collect::<Vec<_>>());
+                    println!(
+                        "submenu open; panels: {:?}",
+                        panels.iter().map(|p| p.1).collect::<Vec<_>>()
+                    );
                 }
             }
             std::thread::sleep(Duration::from_millis(args.hold / 2));

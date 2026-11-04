@@ -63,9 +63,15 @@ impl Colors {
     /// for highlights.
     pub fn new(dark: bool, accent: [u8; 3]) -> Self {
         let (text, edge) = if dark {
-            (Rgba::new(0.94, 0.94, 0.96, 1.0), Rgba::new(1.0, 1.0, 1.0, 0.14))
+            (
+                Rgba::new(0.94, 0.94, 0.96, 1.0),
+                Rgba::new(1.0, 1.0, 1.0, 0.14),
+            )
         } else {
-            (Rgba::new(0.09, 0.09, 0.11, 1.0), Rgba::new(0.0, 0.0, 0.0, 0.14))
+            (
+                Rgba::new(0.09, 0.09, 0.11, 1.0),
+                Rgba::new(0.0, 0.0, 0.0, 0.14),
+            )
         };
         Self {
             text,

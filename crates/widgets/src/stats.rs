@@ -7,7 +7,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use windows::Win32::Foundation::{ERROR_SUCCESS, FILETIME, HANDLE};
 use windows::Win32::NetworkManagement::IpHelper::{
-    FreeMibTable, GetIfTable2, IF_TYPE_ETHERNET_CSMACD, IF_TYPE_SOFTWARE_LOOPBACK, MIB_IF_TABLE2,
+    FreeMibTable, GetIfTable2Ex, IF_TYPE_ETHERNET_CSMACD, IF_TYPE_SOFTWARE_LOOPBACK, MIB_IF_TABLE2,
+    MibIfTableRaw,
 };
 use windows::Win32::NetworkManagement::Ndis::{IfOperStatusUp, MediaConnectStateConnected};
 use windows::Win32::NetworkManagement::WiFi::{
@@ -162,6 +163,7 @@ fn net_rates(before: &Counters, after: &Counters) -> Option<Net> {
 /// The busiest engine from "GPU Engine" instances named like
 /// `pid_1234_luid_0x0_0x1_phys_0_eng_0_engtype_3D`: sums each engine
 /// (`luid_…`) over processes, then takes the maximum, as Task Manager does.
+#[cfg(test)]
 fn busiest_engine<'a>(items: impl IntoIterator<Item = (&'a str, f64)>) -> Option<f64> {
     let mut engines: std::collections::HashMap<&str, f64> = std::collections::HashMap::new();
     for (name, value) in items {
@@ -207,7 +209,7 @@ fn interface_table() -> Option<Interfaces> {
     // SAFETY: GetIfTable2 allocates the table, which FreeMibTable releases
     // below; rows are read only while it is alive.
     unsafe {
-        if GetIfTable2(&mut table) != ERROR_SUCCESS || table.is_null() {
+        if GetIfTable2Ex(MibIfTableRaw, &mut table) != ERROR_SUCCESS || table.is_null() {
             return None;
         }
         let rows =
@@ -429,6 +431,8 @@ fn fixed_disks() -> Vec<Disk> {
 struct GpuCounters {
     query: PDH_HQUERY,
     counter: PDH_HCOUNTER,
+    buffer: Vec<PDH_FMT_COUNTERVALUE_ITEM_W>,
+    engines: std::collections::HashMap<Vec<u16>, f64>,
 }
 
 impl GpuCounters {
@@ -448,7 +452,12 @@ impl GpuCounters {
                 return None;
             }
         }
-        Some(Self { query, counter })
+        Some(Self {
+            query,
+            counter,
+            buffer: Vec::new(),
+            engines: std::collections::HashMap::new(),
+        })
     }
 
     fn read(&mut self) -> Option<f64> {
@@ -458,36 +467,58 @@ impl GpuCounters {
             if PdhCollectQueryData(self.query) != 0 {
                 return None;
             }
-            let (mut bytes, mut count) = (0u32, 0u32);
-            let status = PdhGetFormattedCounterArrayW(
+            let item_size = size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>();
+            let mut bytes = (self.buffer.len() * item_size) as u32;
+            let mut count = 0;
+            let mut status = PdhGetFormattedCounterArrayW(
                 self.counter,
                 PDH_FMT_DOUBLE,
                 &mut bytes,
                 &mut count,
-                None,
+                (!self.buffer.is_empty()).then_some(self.buffer.as_mut_ptr()),
             );
-            if status != PDH_MORE_DATA || bytes == 0 {
+            if status == PDH_MORE_DATA {
+                self.buffer.resize(
+                    (bytes as usize).div_ceil(item_size),
+                    PDH_FMT_COUNTERVALUE_ITEM_W::default(),
+                );
+                status = PdhGetFormattedCounterArrayW(
+                    self.counter,
+                    PDH_FMT_DOUBLE,
+                    &mut bytes,
+                    &mut count,
+                    Some(self.buffer.as_mut_ptr()),
+                );
+            }
+            if status != 0 || count as usize > self.buffer.len() {
                 return None;
             }
-            let item = size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>();
-            let mut buffer =
-                vec![PDH_FMT_COUNTERVALUE_ITEM_W::default(); (bytes as usize).div_ceil(item)];
-            let status = PdhGetFormattedCounterArrayW(
-                self.counter,
-                PDH_FMT_DOUBLE,
-                &mut bytes,
-                &mut count,
-                Some(buffer.as_mut_ptr()),
-            );
-            if status != 0 {
-                return None;
+            self.engines.values_mut().for_each(|n| *n = 0.0);
+            const LUID: [u16; 5] = [108, 117, 105, 100, 95];
+            for item in &self.buffer[..count as usize] {
+                if item.FmtValue.CStatus > 1 || item.szName.is_null() {
+                    continue;
+                }
+                let name = item.szName.as_wide();
+                let Some(at) = name.windows(5).position(|s| s == LUID) else {
+                    continue;
+                };
+                let key = &name[at..];
+                let value = item.FmtValue.Anonymous.doubleValue;
+                if !value.is_finite() {
+                    continue;
+                }
+                if let Some(total) = self.engines.get_mut(key) {
+                    *total += value;
+                } else {
+                    self.engines.insert(key.to_vec(), value);
+                }
             }
-            let items = buffer[..count as usize].iter().filter_map(|item| {
-                let name = item.szName.to_string().ok()?;
-                Some((name, item.FmtValue.Anonymous.doubleValue))
-            });
-            let named: Vec<(String, f64)> = items.collect();
-            busiest_engine(named.iter().map(|(name, value)| (name.as_str(), *value)))
+            self.engines
+                .values()
+                .copied()
+                .reduce(f64::max)
+                .map(|n| n.clamp(0.0, 100.0))
         }
     }
 }
@@ -496,6 +527,34 @@ impl Drop for GpuCounters {
     fn drop(&mut self) {
         // SAFETY: we opened this query.
         unsafe { PdhCloseQuery(self.query) };
+    }
+}
+
+/// Expensive fields requested by visible consumers. CPU and memory are always cheap snapshots.
+#[derive(Debug, Clone, Copy)]
+pub struct SampleFields {
+    pub gpu: bool,
+    pub disks: bool,
+    pub net: bool,
+    pub battery: bool,
+    pub network: bool,
+}
+impl SampleFields {
+    pub const ALL: Self = Self {
+        gpu: true,
+        disks: true,
+        net: true,
+        battery: true,
+        network: true,
+    };
+    fn union(self, other: Self) -> Self {
+        Self {
+            gpu: self.gpu || other.gpu,
+            disks: self.disks || other.disks,
+            net: self.net || other.net,
+            battery: self.battery || other.battery,
+            network: self.network || other.network,
+        }
     }
 }
 
@@ -519,17 +578,20 @@ impl Sampler {
         }
     }
 
-    fn sample(&mut self) -> SystemStats {
+    fn sample(&mut self, fields: SampleFields) -> SystemStats {
         let now = read_counters();
         let stats = SystemStats {
             cpu: cpu_percent(&self.last, &now),
             memory: memory(),
-            gpu: self.gpu.as_mut().and_then(GpuCounters::read),
-            net: net_rates(&self.last, &now),
-            disks: Some(self.disks().to_vec()),
-            battery: battery(),
+            gpu: fields
+                .gpu
+                .then(|| self.gpu.as_mut().and_then(GpuCounters::read))
+                .flatten(),
+            net: fields.net.then(|| net_rates(&self.last, &now)).flatten(),
+            disks: fields.disks.then(|| self.disks().to_vec()),
+            battery: fields.battery.then(battery).flatten(),
             uptime: uptime(),
-            network: Some(self.network(now.ethernet)),
+            network: fields.network.then(|| self.network(now.ethernet)),
         };
         self.last = now;
         stats
@@ -568,6 +630,7 @@ struct Sub {
     /// The widget's own id for the subscription.
     sub: String,
     interval: Duration,
+    fields: SampleFields,
     due: Instant,
 }
 
@@ -618,11 +681,24 @@ impl Stats {
     /// Starts (or replaces) subscription `sub`: a sample right away, then
     /// one per `interval`.
     pub fn subscribe(&mut self, instance: &str, sub: &str, interval: Duration, now: Instant) {
+        self.subscribe_fields(instance, sub, interval, now, SampleFields::ALL);
+    }
+
+    /// Subscribe only to fields the view actually displays; hidden disk/connection fields do no I/O.
+    pub fn subscribe_fields(
+        &mut self,
+        instance: &str,
+        sub: &str,
+        interval: Duration,
+        now: Instant,
+        fields: SampleFields,
+    ) {
         self.unsubscribe(instance, sub);
         self.subs.push(Sub {
             instance: instance.to_owned(),
             sub: sub.to_owned(),
             interval,
+            fields,
             due: now,
         });
         self.wake(now);
@@ -673,7 +749,17 @@ impl Stats {
         let Some(sampler) = &mut self.sampler else {
             return Vec::new();
         };
-        let stats = sampler.sample();
+        let fields = if self.once.is_empty() {
+            self.subs
+                .iter()
+                .filter(|s| s.due <= now + COALESCE)
+                .map(|s| s.fields)
+                .reduce(SampleFields::union)
+        } else {
+            Some(SampleFields::ALL)
+        }
+        .unwrap_or(SampleFields::ALL);
+        let stats = sampler.sample(fields);
         let mut out: Vec<Delivery> = self
             .once
             .drain(..)
@@ -695,6 +781,70 @@ impl Stats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "profiles the real OS samplers"]
+    fn profile_sampler_cost() {
+        use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
+        let busy = || {
+            let (mut a, mut b, mut k, mut u) = (
+                FILETIME::default(),
+                FILETIME::default(),
+                FILETIME::default(),
+                FILETIME::default(),
+            );
+            // SAFETY: own-process query into valid local FILETIMEs.
+            unsafe {
+                GetProcessTimes(GetCurrentProcess(), &mut a, &mut b, &mut k, &mut u).unwrap();
+            }
+            ticks(k) + ticks(u)
+        };
+        let mut sampler = Sampler::new();
+        let _ = sampler.sample(SampleFields::ALL);
+        for part in 0..5 {
+            let start = Instant::now();
+            let before = busy();
+            for _ in 0..500 {
+                match part {
+                    0 => {
+                        let _ = read_counters();
+                    }
+                    1 => {
+                        let _ = memory();
+                    }
+                    2 => {
+                        let _ = sampler.gpu.as_mut().and_then(GpuCounters::read);
+                    }
+                    3 => {
+                        let _ = sampler.disks();
+                    }
+                    _ => {
+                        let _ = sampler.network(false);
+                        let _ = battery();
+                    }
+                }
+            }
+            println!(
+                "sampler part={part} wall_us={} cpu_us={}",
+                start.elapsed().as_micros() / 500,
+                (busy() - before) / 5000
+            );
+        }
+    }
+
+    #[test]
+    fn native_views_can_omit_expensive_fields_they_do_not_display() {
+        let mut stats = Stats::default();
+        let start = Instant::now();
+        stats.subscribe_fields("system-1", "system", Duration::from_secs(2), start,
+            SampleFields { gpu: false, disks: false, net: false, battery: false, network: false });
+        let out = stats.tick(start + WARMUP);
+        let Delivery::Event { stats: snapshot, .. } = &out[0] else { panic!("subscription result") };
+        assert!(snapshot.disks.is_none() && snapshot.gpu.is_none() && snapshot.net.is_none() && snapshot.network.is_none());
+        assert!(snapshot.memory.total > 0);
+        stats.forget("system-1");
+        assert!(stats.deadline().is_none());
+    }
 
     fn counters(at: Instant, idle: u64, total: u64, net: Option<(u64, u64)>) -> Counters {
         Counters {

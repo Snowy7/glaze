@@ -10,13 +10,11 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+static WARNED_CSS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 use mypaper_theme::{
     Appearance, Color, Liquid, LoadedTheme, Paint, Surface, TextTone, WidgetStyle,
 };
 use serde_json::{Map, Value};
-
-/// A style sheet bigger than this is ignored (it is sent to every widget on every change).
-const MAX_CSS_BYTES: u64 = 512 * 1024;
 
 /// The accent when the palette is missing.
 const FALLBACK_ACCENT: Color = Color([0xff, 0xff, 0xff]);
@@ -85,28 +83,14 @@ pub fn load_skin(dir: Option<&Path>) -> Skin {
     let Some(skin) = theme.theme.widgets.as_ref() else {
         return Skin::default();
     };
-    let css = skin.css.as_ref().and_then(|css| {
-        read_css(&theme.asset(css))
-            .inspect_err(|e| log::warn!("theme style sheet: {e:#}"))
-            .ok()
-    });
+    if skin.css.is_some() && !WARNED_CSS.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        log::warn!("widget CSS is no longer supported; use native appearance tokens");
+    }
     Skin {
         appearance: skin.appearance.clone().unwrap_or_default(),
-        css,
+        css: None,
         glass: skin.glass.unwrap_or_default(),
     }
-}
-
-fn read_css(path: &Path) -> Result<String> {
-    let size = std::fs::metadata(path)
-        .with_context(|| format!("reading {}", path.display()))?
-        .len();
-    anyhow::ensure!(
-        size <= MAX_CSS_BYTES,
-        "{} is {size} bytes (the limit is {MAX_CSS_BYTES})",
-        path.display()
-    );
-    std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))
 }
 
 /// The layers below the user's: built-in defaults, then the theme's skin.
@@ -123,7 +107,7 @@ const DARK_TEXT_ACCENT: Color = Color([0x0a, 0x0a, 0x0c]);
 /// `accent` (the palette's accent; [`accent`] picks it). With dark text, a tint or accent that is
 /// still the built-in default becomes the dark-text default (`#f2f2f2`, `#0a0a0c`): the host sends
 /// final values, so the widget kit has nothing to flip. (The shell mirrors this in
-/// `widgets/shell/src/appearance.ts` for live previews.)
+/// `crates/shell/src/widgets` for native views.)
 pub fn resolve(
     own: &Appearance,
     user: &Appearance,
@@ -365,7 +349,7 @@ mod tests {
         let skin = load_skin(Some(&dir));
         assert_eq!(skin.appearance.surface, Some(Surface::Glass));
         assert_eq!(skin.appearance.accent, Some(Paint::Auto));
-        assert_eq!(skin.css.as_deref(), Some("html { --x: 1 }"));
+        assert_eq!(skin.css, None);
         let glass = liquid(&skin);
         assert_eq!(glass.refraction, Some(0.3), "the theme's knob");
         assert_eq!(
