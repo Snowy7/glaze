@@ -33,7 +33,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
-use crate::bridge::{Direction, Native, Panel, PowerAction};
+use crate::actions::{Direction, Native, Panel, PowerAction};
 
 pub fn hwnd(raw: isize) -> HWND {
     HWND(raw as _)
@@ -123,7 +123,7 @@ pub fn start_menu() {
     // SAFETY: a post to Explorer's taskbar (never the tray host's window); without one, the
     // Windows key does it.
     unsafe {
-        match mypaper_bars::taskbar::explorer_tray() {
+        match crate::taskbar::explorer_tray() {
             Some(tray) => {
                 let _ = PostMessageW(
                     Some(tray),
@@ -177,7 +177,7 @@ pub fn show_desktop() {
 }
 
 /// Presses `chord` (in order) and releases it (in reverse).
-fn keys(chord: &[VIRTUAL_KEY]) {
+pub fn keys(chord: &[VIRTUAL_KEY]) {
     let key = |vk: VIRTUAL_KEY, up: bool| {
         let mut flags = KEYBD_EVENT_FLAGS(0);
         if up {
@@ -402,5 +402,11 @@ mod tests {
     fn cpu_is_the_busy_share() {
         assert_eq!(cpu_percent((1_000, 2_000), (1_750, 3_000)), 25.0);
         assert_eq!(cpu_percent((5, 5), (5, 5)), 0.0);
+    }
+}
+
+impl Default for Sampler {
+    fn default() -> Self {
+        Self::new()
     }
 }

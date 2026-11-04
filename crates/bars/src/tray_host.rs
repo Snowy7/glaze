@@ -331,7 +331,7 @@ fn hwnd(raw: u32) -> HWND {
 }
 
 fn find_explorer() -> Option<Explorer> {
-    let tray = mypaper_bars::taskbar::explorer_tray()?;
+    let tray = crate::taskbar::explorer_tray()?;
     let mut pid = 0;
     // SAFETY: a read-only query.
     unsafe { GetWindowThreadProcessId(tray, Some(&mut pid)) };
@@ -1117,7 +1117,7 @@ fn on_notify(wparam: WPARAM, mut bytes: Vec<u8>) -> LRESULT {
     if let Some(icon) = icon {
         let image = with_state(|s| s.wic.clone())
             .flatten()
-            .and_then(|wic| icon_data_url(icon, &wic));
+            .and_then(|wic| icon_image_path(icon, &wic));
         with_state(|s| {
             if s.icons.set_image(&notify, image) {
                 s.report_soon(REPORT_SETTLE);
@@ -1554,11 +1554,12 @@ fn reg_bytes(key: HKEY, name: PCWSTR) -> Option<Vec<u8>> {
 
 // --- Icons → PNG ---------------------------------------------------------------------------------
 
-/// An `HICON` as a PNG `data:` URL.
-pub fn icon_data_url(icon: HICON, wic: &IWICImagingFactory) -> Option<String> {
+/// An `HICON` as a cached PNG path for the native renderer.
+pub fn icon_image_path(icon: HICON, wic: &IWICImagingFactory) -> Option<String> {
     let (width, height, pixels) = icon_pixels(icon)?;
     let png = encode_png(wic, width, height, &pixels).ok()?;
-    Some(format!("data:image/png;base64,{}", base64(&png)))
+    let dir = crate::files::local("icons").ok()?;
+    crate::icons::store_png(&dir, &png)
 }
 
 /// The icon's pixels, top-down BGRA with straight alpha (icons without an alpha channel take

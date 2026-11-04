@@ -1,5 +1,5 @@
-//! Where the bars keep things: `%APPDATA%\mypaper` for settings, `%LOCALAPPDATA%\mypaper` for
-//! the taskbar journal, the icon cache and the WebView2 profile.
+//! Settings and native-service caches: APPDATA for configuration, LOCALAPPDATA for the taskbar
+//! journal and app icons.
 
 use std::path::{Path, PathBuf};
 

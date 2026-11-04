@@ -1,21 +1,17 @@
 [package]
 name = "mypaper-bars"
-description = "The shell bars: a top bar, a dock and the native taskbar's mode, with an undo journal."
+description = "Windows services and configuration for the native shell bars."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# The library is what core needs: `bars.json` and the taskbar journal's replay.
+# Plain Rust services used by shell, core and Studio.
 [lib]
 path = "src/lib.rs"
 
-[[bin]]
-name = "mypaper-bars"
-path = "src/main.rs"
-
 [dependencies]
 mypaper-config.workspace = true
-mypaper-desktop = { workspace = true, features = ["webview"] }
+mypaper-desktop.workspace = true
 mypaper-theme.workspace = true
 
 anyhow.workspace = true
@@ -23,7 +19,6 @@ log.workspace = true
 notify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-webview2-com = "0.39"
 windows-core = "0.62"
 windows-numerics = "0.3"
 

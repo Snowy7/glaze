@@ -12,9 +12,82 @@ use windows::core::{HSTRING, PCWSTR};
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemClock {
-    time: String,
-    time_with_seconds: String,
-    date: String,
+    pub time: String,
+    pub time_with_seconds: String,
+    pub date: String,
+}
+
+/// The former page's token clock, localized with Windows NLS. Quoted text stays literal.
+pub fn format(
+    config: &crate::config::ClockConfig,
+    local: &windows::Win32::Foundation::SYSTEMTIME,
+) -> String {
+    let Some(pattern) = &config.format else {
+        return system().map_or_else(String::new, |s| {
+            format!(
+                "{}\n{}",
+                if config.seconds {
+                    s.time_with_seconds
+                } else {
+                    s.time
+                },
+                s.date
+            )
+        });
+    };
+    const TOKENS: &[&str] = &[
+        "dddd", "MMMM", "yyyy", "ddd", "MMM", "dd", "MM", "yy", "HH", "hh", "mm", "ss", "tt", "d",
+        "M", "H", "h",
+    ];
+    let mut rest = pattern.as_str();
+    let mut result = String::new();
+    let mut quoted = false;
+    while !rest.is_empty() {
+        if rest.starts_with("''") {
+            result.push('\'');
+            rest = &rest[2..];
+            continue;
+        }
+        if rest.starts_with('\'') {
+            quoted = !quoted;
+            rest = &rest[1..];
+            continue;
+        }
+        if !quoted && let Some(&token) = TOKENS.iter().find(|&&t| rest.starts_with(t)) {
+            let mut buffer = [0u16; 128];
+            let pattern = HSTRING::from(token);
+            // SAFETY: local time, pattern and output buffer remain valid throughout the call.
+            let len = unsafe {
+                if token.starts_with(['d', 'M', 'y']) {
+                    GetDateFormatEx(
+                        PCWSTR::null(),
+                        ENUM_DATE_FORMATS_FLAGS(0),
+                        Some(local),
+                        &pattern,
+                        Some(&mut buffer),
+                        PCWSTR::null(),
+                    )
+                } else {
+                    GetTimeFormatEx(
+                        PCWSTR::null(),
+                        TIME_FORMAT_FLAGS(0),
+                        Some(local),
+                        &pattern,
+                        Some(&mut buffer),
+                    )
+                }
+            };
+            if len > 1 {
+                result.push_str(&String::from_utf16_lossy(&buffer[..len as usize - 1]));
+            }
+            rest = &rest[token.len()..];
+        } else {
+            let c = rest.chars().next().unwrap();
+            result.push(c);
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+    result
 }
 
 fn pattern(kind: u32) -> Option<HSTRING> {

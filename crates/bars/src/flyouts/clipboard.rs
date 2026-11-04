@@ -189,3 +189,9 @@ mod tests {
         assert!(!is_link("example.com"));
     }
 }
+
+impl Default for ClipboardLane {
+    fn default() -> Self {
+        Self::new()
+    }
+}

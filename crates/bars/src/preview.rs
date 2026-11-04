@@ -1,8 +1,5 @@
-//! Window previews over the dock (docs/bars.md, "Previews"): live DWM thumbnails
-//! (`DwmRegisterThumbnail`) drawn into the bar's own topmost window, over the card the page draws
-//! in its preview flyout, so the card's frame, title and close button follow the theme. The page
-//! asks for the windows' sizes (`previewOpen`), lays the card out, then places each thumbnail
-//! (`previewPlace`); `previewClose` (or the bar going away) unregisters them.
+//! Live DWM thumbnails registered into a native preview popup. Call open for source sizes,
+//! place with popup-local rects, and close (or drop) to unregister. No window capture or device.
 
 use serde::Serialize;
 use windows::Win32::Foundation::{HWND, RECT, SIZE};

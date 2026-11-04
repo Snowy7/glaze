@@ -1,18 +1,5 @@
-//! Icon packs (docs/bars.md, "Icon packs"): a folder with an `icons.json` that maps apps (by
-//! AppUserModelID or path), file extensions, and our own glyph keys (`start`, `wifi-3`,
-//! `volume-mute`…) to image files in the folder. Packs live in `%APPDATA%\mypaper\icons\<pack>\`;
-//! `mono` ships with the page. The host loads and checks a pack; the page matches it
-//! (`bars/shell/src/style/icon-pack.ts`).
-//!
-//! ```json
-//! { "name": "Mono", "mono": true, "missing": "app.svg",
-//!   "entries": [
-//!     { "umid": "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", "icon": "terminal.svg" },
-//!     { "path": "code.exe", "icon": "code.svg" },
-//!     { "extension": "txt", "icon": "text.svg" },
-//!     { "key": "start", "icon": "start.svg" }
-//!   ] }
-//! ```
+//! User icon-pack manifests shared by the native shell and Studio (docs/bars.md).
+//! Mapping and CPU decoding live in `crates/shell/src/bars/icons.rs`.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -140,16 +127,6 @@ mod tests {
             r#"{ "name": "A", "entries": [], "size": 3 }"#,
         ] {
             assert!(IconPack::parse(bad).is_err(), "accepted {bad}");
-        }
-    }
-
-    #[test]
-    fn the_bundled_pack_is_valid() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bars/shell/public/icons/mono");
-        let pack = IconPack::load(&dir).unwrap();
-        assert!(pack.mono);
-        for entry in &pack.entries {
-            assert!(dir.join(&entry.icon).is_file(), "{} is missing", entry.icon);
         }
     }
 }

@@ -32,8 +32,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowExW, GWL_EXSTYLE, GetLayeredWindowAttributes, GetShellWindow, GetWindowLongPtrW,
     GetWindowThreadProcessId, IsWindowVisible, LAYERED_WINDOW_ATTRIBUTES_FLAGS, LWA_ALPHA,
     SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA, SendMessageTimeoutW, SetLayeredWindowAttributes,
-    SetWindowLongPtrW, ShowWindow, ShowWindowAsync, WM_SETTINGCHANGE, WS_EX_LAYERED,
-    WS_EX_TRANSPARENT,
+    SetWindowLongPtrW, ShowWindowAsync, WM_SETTINGCHANGE, WS_EX_LAYERED, WS_EX_TRANSPARENT,
 };
 use windows::core::{PCWSTR, PWSTR, w};
 
@@ -157,7 +156,9 @@ impl<S: Shell> Taskbar<S> {
         }
         if let Some(Was { was }) = journal.appbar {
             let target = if autohide { was | ABS_AUTOHIDE } else { was };
-            let done = self.shell.appbar_state() == target
+            // Restoring the known original needs one round trip, not GETSTATE then SETSTATE.
+            // Explorer's cross-process app-bar calls are measurable on the crash path.
+            let done = (autohide && self.shell.appbar_state() == target)
                 || attempt("auto-hide", self.shell.set_appbar_state(target));
             if done && !autohide {
                 journal.appbar = None;
@@ -269,7 +270,12 @@ impl Shell for NativeShell {
                 unveil(hwnd);
             }
             // SAFETY: a taskbar window found just now; SW_SHOWNA never activates it.
-            let _ = unsafe { ShowWindow(hwnd, if hidden { SW_HIDE } else { SW_SHOWNA }) };
+            let _ = unsafe {
+                windows::Win32::UI::WindowsAndMessaging::ShowWindowAsync(
+                    hwnd,
+                    if hidden { SW_HIDE } else { SW_SHOWNA },
+                )
+            };
         }
         Ok(())
     }

@@ -1,15 +1,5 @@
-//! Designs and presets (docs/bars.md, "Designs and presets").
-//!
-//! A **design** is one bar's whole character: a partial `top` (or `dock`) with its own `look` and
-//! `animation` (`presets/top/<id>.json`, `presets/dock/<id>.json`), plus CSS the page bundles
-//! (`bars/shell/src/designs/`, scoped by `data-design`). The top bar and the dock each pick one
-//! (`top.design`, `dock.design`), so any top bar goes with any dock.
-//!
-//! A **preset** is a pairing: which design each bar starts from, and whether each bar is on
-//! (`presets/<name>.json`). `preset` picks the pairing; a bar's own `design` beats it.
-//!
-//! Layers, lowest first: each bar's design, the preset, the shared `look` and `animation`, then
-//! the bar's own fields (see `config.rs`, `BarsConfig::merged`).
+//! Top/dock designs and preset pairings, layered as typed configuration for the native shell.
+//! Layout, metrics, modules, look and motion are data; there is no companion CSS.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};

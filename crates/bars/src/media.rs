@@ -15,7 +15,7 @@ use windows::Media::Control::{
 };
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
 
-use crate::bridge::MediaAction;
+use crate::actions::MediaAction;
 use crate::wake::{Msg, Waker};
 
 /// Coalesces the burst of SMTC events one track change produces.

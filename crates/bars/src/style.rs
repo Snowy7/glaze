@@ -1,6 +1,5 @@
-//! The bars' look and motion as `bars.json` writes them (docs/bars.md, "Look" and "Animation"):
-//! backgrounds and materials, borders, glow and shadow per state, item states, and the animation
-//! tree. The host only validates these; the page turns them into CSS (`bars/shell/src/style/`).
+//! bars.json style and animation tokens shared with Studio. The native shell resolves Rust
+//! tokens; legacy CSS decoration fields only load for migration and are ignored with one warning.
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -663,10 +662,22 @@ impl FontStyle {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NativeStyle {
+    #[default]
+    Liquid,
+    Mono,
+    Solid,
+}
+
 /// The bar surfaces' look beyond `appearance` (docs/bars.md, "Look").
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Look {
+    /// Native style; absent selects liquid. N6 adds the other styles.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<NativeStyle>,
     /// Light or dark; missing: from `appearance.text`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheme: Option<Scheme>,
@@ -761,7 +772,7 @@ impl Look {
 
 // --- Animation ---------------------------------------------------------------------------------
 
-/// Named easing curves; the page maps them to CSS (`bars/shell/src/style/motion.ts`).
+/// Named easing curves, resolved by the native shell motion module.
 pub const NAMED_CURVES: &[&str] = &[
     "linear",
     "ease",

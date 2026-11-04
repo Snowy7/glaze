@@ -124,7 +124,7 @@ unsafe extern "system" fn on_event(
         return;
     }
     let top = event != EVENT_OBJECT_DESTROY && event != EVENT_SYSTEM_FOREGROUND && top_level(hwnd);
-    let taskbar = || mypaper_bars::taskbar::is_taskbar_class(&crate::apps::class_name(hwnd));
+    let taskbar = || crate::taskbar::is_taskbar_class(&crate::apps::class_name(hwnd));
     let watching = WATCH_TASKBAR.load(Ordering::Relaxed);
     let bits = classify(event, top, watching, taskbar);
     if bits != 0 {
