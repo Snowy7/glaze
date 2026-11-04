@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 mypaper-config.workspace = true
-mypaper-desktop.workspace = true
+mypaper-desktop = { workspace = true, features = ["webview"] }
 mypaper-theme.workspace = true
 
 anyhow.workspace = true

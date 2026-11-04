@@ -15,7 +15,9 @@ use mypaper_bars::config::{self, BarsConfig, DockPosition, Pinned, TaskbarMode};
 use mypaper_bars::taskbar::{NativeShell, Taskbar, Wanted};
 use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, Holds, Reason};
-use mypaper_desktop::{ControlWindow, Monitor, WM_FACT, fullscreen_app_monitor, monitor_infos};
+use mypaper_desktop::{
+    ControlWindow, Monitor, WM_FACT, fullscreen_app_monitor, monitor_infos, startup,
+};
 use mypaper_theme::Color;
 use notify::Watcher;
 use serde_json::{Value, json};
@@ -759,6 +761,10 @@ impl App {
                         }
                     }
                 }
+                WebEvent::Painted { bar } => {
+                    log::debug!("bar {bar} painted");
+                    startup::ready("bars", "first_paint_ms");
+                }
             }
         }
     }
@@ -1237,6 +1243,9 @@ impl App {
         if hello && index < self.bars.len() {
             self.bars[index].ready = true;
             self.push_all(index);
+            if let Some(web) = &self.bars[index].web {
+                web.probe_paint();
+            }
         }
     }
 

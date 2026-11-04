@@ -12,6 +12,11 @@ anyhow.workspace = true
 env_logger.workspace = true
 log.workspace = true
 notify.workspace = true
+# Only for the WebView2 hosts (feature `webview`): the shared environment helper.
+webview2-com = { version = "0.39", optional = true }
+
+[features]
+webview = ["dep:webview2-com"]
 
 [dependencies.windows]
 workspace = true
@@ -23,6 +28,7 @@ features = [
   "Win32_System_LibraryLoader",
   "Win32_System_Power",
   "Win32_System_RemoteDesktop",
+  "Win32_System_SystemInformation",
   "Win32_System_SystemServices",
   "Win32_System_Threading",
   "Win32_UI_Accessibility",
