@@ -87,12 +87,12 @@ vendor driver stack (`docs/engine-notes.md:27-40`).
 | core | (part of 255) | ≤8 MB, ~0% |
 | shell, idle fixture | ~415 MB | **≤40 MB, ≤0.1%** (bars over maximized apps ≤0.05%) |
 | shell, a flyout or menu open | n/a | ≤+6 MB, freed on close; content on screen ≤30 ms; 0 redraws once settled |
-| engine, idle fixture | n/a (see above) | **≤ N0's 2-screen plate measurement + 10 MB**; CPU per the rain-city row (0% over a still image) |
+| engine, idle fixture | n/a (see above) | **≤458.1 MiB private** (N0.3: 448.1 + 10 MiB); CPU per the rain-city row (0% over a still image) |
 | plates on an animated wallpaper | n/a | ≤0.3 ms GPU per frame for all plates, measured with wgpu timestamp queries added in N2, only on frames drawn anyway |
-| default rain-city wallpaper, 2 screens at 30 fps, keeping its 0.65 render scale | ~30% (web) | ≤4% CPU (the per-frame cost is ~0.57 ms, from aurora's 3.43% at 60 fps, `perf/results/2026-11-04-0502-final.md:38,69`); GPU ≤2 ms per frame per screen with wgpu timestamps, which covers `rain.frag`'s 16-tap blur |
+| default rain-city wallpaper, 2 screens at 30 fps, keeping its 0.65 render scale | ~30% (web) | ≤4% CPU (the per-frame cost is ~0.57 ms, from aurora's 3.43% at 60 fps, `perf/results/2026-11-04-0502-final.md:38,69`); GPU ≤2 ms per frame per screen with wgpu timestamps, which covers `rain.frag`'s inclusive blur loop (18 samples including the centre) |
 | glass overlay open | n/a | glass fades in within the 300 ms open animation; engine ≤3% CPU and ≤0.5 ms GPU per update; frames whose dirty rects miss the region are skipped; ≤ +30 MB while open, freed on close |
 | dwm.exe vs the same wallpaper without the shell | n/a | ≤ +0.5% CPU, ≤ +1% GPU at idle |
-| Whole product, idle fixture | ~670 MB | **≤ engine gate + 48 MB** (expected about 330–370 MB) |
+| Whole product, idle fixture | ~670 MB | **≤ engine gate + 48 MB** (engine fixture gate: 458.1 MiB; combined allowance 506.1 MiB) |
 
 ## UI technology: software D2D + DirectWrite + layered windows (`crates/ui`)
 Chosen over:
@@ -275,9 +275,11 @@ are preserved.
      - **the desktop-layer variant (D-W):** an engine overlay that's a child of the desktop host sits
        between a web wallpaper window and a widget window, and its glass stays live.
   3. **Engine with plates:** private MB with 2 visible screens and the bar, dock and 6 widget plates,
-     on today's engine with a full-scale `shader` wallpaper (aurora), plus an estimate for rain-city.
-     Rain-city adds its ~11 MB photo and two ~6 MB 0.65 targets, and drops the two ~14.7 MB scratches.
-     This sets the engine gate.
+     measured on the rebuilt engine, default integrated GPU: full-scale aurora **420.21 MiB**,
+     ported rain-city **448.07 MiB** (median of three 60-second runs each; 16 plates across both
+     screens). Rain retains two 1664 x 936 frames and aurora two 2560 x 1440 frames; no plate
+     scratch remains. The larger measured median + 10 MiB sets **458.1 MiB** as the engine gate.
+     Reproduction and remaining GPU/lag gaps: `docs/performance.md`, Native measurements.
 
   If spike 2 fails, redesign the overlay inside the engine before N3. There is no shell device.
 - **N1 `crates/ui` and `mypaper-shell`, with the desktop menu** (tint, no glass yet). ✅ A golden PNG
@@ -314,7 +316,11 @@ are preserved.
     widgets use desktop-layer overlays. ✅ Glass is live over fluids and a Unity app wallpaper, costs
     0 over a still web page, and the web wallpaper's own cost is unchanged.
   - Delete the 1/8 BMP backdrop pipeline.
-  - Probe only the low-power GPU (the `wgpu-hal` patch, `docs/performance.md` Limitations).
+  - Probe only the selected GPU (the `wgpu-hal` patch, `docs/performance.md` Limitations).
+    **Default remains integrated/low-power on desktops and laptops.** Honour explicit
+    `engine.gpu` / per-wallpaper `integrated`, `high-performance`, or `auto` settings; never
+    promote a desktop to discrete graphics because a budget is missed. GPU and wallpaper FPS
+    preferences already have a live config/theme schema; Studio exposes them in N7.
 
   ✅ The engine gate improves or holds; the only WebView2 left is the web wallpaper source (used only
   while a web wallpaper is chosen) and Studio's, until N7.

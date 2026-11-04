@@ -9,6 +9,183 @@ Machine: 16 logical CPUs, an AMD iGPU (the wallpaper's) and an NVIDIA RTX 4070 S
 visible). Release builds. Other agents were compiling on the same machine during some runs,
 so differences under about 100 ms are within noise. Reports: `perf/results/`.
 
+## Native engine scenarios (N0.3 / N2)
+
+The historical tables below used one visible screen and the WebView shell. The native engine
+fixture instead requires **two visible 2560x1440 screens**, a bar, dock and six widget plates
+on **each** (16 plates total). `tools/perf` refuses covered screens rather than reporting a
+paused engine as a two-screen result. This is an engine/geometry fixture, not an N4 shell
+memory or whole-product measurement.
+
+Build only the needed release binaries and plate example, then run:
+
+```powershell
+$env:CARGO_TARGET_DIR = 'C:/mypaper-targets/native-engine'
+cargo build --release -p mypaper-wallpaper -p mypaper-perf --example plates --bin mypaper-wallpaper --bin mypaper-perf
+$build = 'C:/mypaper-targets/native-engine/release'
+& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 60 --runs 3 real-look
+& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 60 --runs 3 engine-aurora
+& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 30 --runs 1 --timestamps real-look
+& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 20 --runs 1 --timestamps --composition glass-motion
+& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 20 --runs 1 --timestamps still-plates
+py -3 tools/perf/summarize-gpu.py "$build/real-look.run0.jsonl" --window "$build/real-look.json"
+```
+
+`--exercise-settings --timestamps` checks a live 12 fps cap (20-28 frames per screen in a two-second
+window) and integrated/high-performance/auto/revert GPU restart requests, ending on integrated.
+The fixture lives through the restarts. Normal runs use default integrated selection and no
+user cap; renderer keys and precedence are documented in [engine-notes.md](engine-notes.md#renderer-settings-gpu-and-frame-cap).
+
+Native scenarios are `real-look` (rain-city), `engine-aurora` (full-scale), `glass-motion`
+(rain-city plus moving docks), `still-plates` and `still-motion` (photo). The harness takes the
+shared desktop lock, stops the user's core, saves/minimizes covered windows, launches only the
+engine and plate fixture in isolated settings, samples private bytes and process CPU time,
+then stops both, restores window placements and restarts the original core. Sessions remain
+under the five-minute lock expiry. CPU is reported in **both** percent of one core and percent
+of the machine; existing `perf/budget.toml` values retain their machine-percent meaning.
+
+`--output <path.json>` saves each run; report medians of three independent 60-second runs.
+`--timestamps` enables wgpu GPU queries and saves a separate JSONL per run. Keep it disabled
+for CPU/private-memory baselines. `--theme <path>` and `--capture <absolute.png>` provide live
+before/after weather captures through the same engine; captures retain physical resolution.
+The harness restores taskbar/wallpaper state through the existing Session cleanup. It neither
+hides the stock taskbar nor starts native shell content during the engine fixture.
+
+Timestamps split wallpaper rendering, swapchain restore/backdrop work, and glass. The GPU
+summarizer reports median/p95/max per screen plus the **sum of both screens' plates** for each
+engine frame. Geometry-only rows have `wallpaper_drawn: false`. Publish-to-submit is delivery
+latency to the CPU queue submission, **not** proof of compositor-visible lag; a display-latency
+claim uses the separate `--composition` path: DwmFlush runs once after both screens present
+and adds `publish_to_composition_ms`. It is a conservative two-screen upper bound and changes
+pacing, so it is excluded from idle CPU samples. `--window <sample.json>` on the summarizer
+selects the exact CPU window and excludes startup/teardown publications. The async slots may omit a
+sample if all are still mapping, and no timestamp work runs when telemetry is disabled.
+
+### Native measurements (4-5 November 2026)
+
+Release build, AMD Radeon(TM) integrated GPU (DX12/FXC), Ryzen 7 7800X3D / 16 logical
+CPUs. Both physical 2560 x 1440 displays were visible throughout every accepted sample:
+DISPLAY1 at 240 Hz, DISPLAY2 at 200 Hz. The default clear fixture publishes a bar, dock and
+six widgets on each display (16 plates); writer cost is excluded from engine-process figures.
+Each run takes the shared desktop lock, and restores the original core and window placements.
+
+CPU/private memory below are medians of **three independent 60-second samples**, without
+queries or composition waits. MiB means private bytes / 1,048,576; these are not VRAM figures.
+
+| Engine fixture | Private MiB (three runs) | Median MiB | CPU, % of one core (three runs) | Median CPU |
+|---|---|---:|---|---:|
+| Rain-city, 30 fps / 0.65 | 445.56 / 448.07 / 449.09 | **448.07** | 3.175 / 2.759 / 2.134 | **2.759%** |
+| Aurora, 60 fps / full scale | 420.21 / 418.10 / 420.68 | **420.21** | 2.629 / 2.212 / 2.889 | **2.629%** |
+
+The engine memory gate is the larger median + 10 MiB: **458.1 MiB private** (448.1 + 10,
+rounded to one decimal). Rain meets the <=4% one-core CPU gate on both screens together.
+The plan's whole-product allowance remains engine gate + 48 MiB (506.1 MiB); no native-shell
+or whole-product pass is claimed by this engine-only fixture.
+
+A separate 20-second timestamp run measures every component. Values below are
+**median / p95 / maximum milliseconds**; complete-frame time includes wallpaper + restore/
+backdrop + glass, so the 2 ms gate cannot be passed by timing only the wallpaper pass.
+All 600 two-screen frame pairs were complete.
+
+| GPU work | DISPLAY1 (240 Hz) | DISPLAY2 (200 Hz) | Gate / result |
+|---|---|---|---|
+| Wallpaper pass | 4.341 / 4.566 / 4.723 | 3.829 / 3.958 / 4.671 | Both already exceed 2 ms |
+| Restore / backdrop | 1.125 / 1.285 / 1.698 | 1.149 / 1.325 / 1.643 | Included in frame time |
+| Plates, per screen | 0.204 / 0.230 / 0.248 | 0.215 / 0.240 / 0.275 | Not the all-plate gate |
+| **Complete frame** | **5.623 / 5.949 / 6.542** | **5.196 / 5.466 / 6.160** | **FAIL <=2 ms per screen** |
+| **All 16 plates, summed** | **0.401 / 0.460 / 0.502** | (both screens combined) | **FAIL <=0.3 ms** |
+
+The remaining median gaps are **3.623 / 3.196 ms** per complete frame, and **0.101 ms** for
+all plates. Analytic gradients share Heartfelt field evaluation; one-time float32 row/column
+caching removes repeated trig/hash work; photo mipmaps are built once; static sources and
+unchanged plates skip rendering; glass reads the kept frame without a scratch copy or spring.
+All 18 photo samples, every rain/snow layer, 0.65 scale and 30 fps are retained. A static photo
+blur changed the grain and was removed; branchy droplet early-outs were slower and removed.
+The row-cache-only comparison was modest: before 4.415 / 3.877 ms wallpaper medians, after
+4.341 / 3.829 ms, with scheduling noise. This is not enough to meet the iGPU budget.
+
+A 20-second motion run publishes moving docks at **240 Hz**. Only glass-only rows are used
+for lag below: 2,005 on DISPLAY1 and 1,834 on DISPLAY2; 1,200 wallpaper submissions still run
+at 30 fps total across both screens. Latest geometry is latched after swapchain acquisition.
+
+| Rain + moving plates | DISPLAY1 | DISPLAY2 |
+|---|---|---|
+| One display frame | 4.167 ms | 5.000 ms |
+| Publish -> queue submit, median / p95 / max | 2.867 / 4.185 / 4.779 ms | 2.369 / 4.207 / 4.897 ms |
+| Publish -> DWM completion bound, median / p95 / max | 7.486 / 11.984 / 13.368 ms | 5.858 / 8.312 / 10.137 ms |
+| One-frame glass lag gate | **Not established** | **Not established** |
+
+The DwmFlush bound exceeds one frame by 3.319 / 0.858 ms at the median, and 7.817 / 3.312 ms
+at p95. This is a conservative completion bound for both screens, not a per-display scanout
+measurement. Queue submission alone cannot establish visible lag. Precise scanout remains
+unverified; the <=1-frame gate is not claimed. The composition wait changes pacing and is
+excluded from the ordinary CPU/memory baselines.
+
+Over a still photo with unchanged plates, the 60-second exact window contains **0 submissions,
+0 wallpaper passes and 0 glass passes**, with 362.09 MiB private and 0.104% one-core CPU.
+The frame loop has no idle render timer; window/config events can still wake the process.
+The telemetry-off 60-second still baseline measures **363.98 MiB / 0.078% of one core**.
+The strict 0% still-CPU gate is therefore not met in this desktop session, even though the
+separate query run proves zero rendering; event handling still has a measurable CPU cost.
+
+A separate 15-second still + 240 Hz motion run has **0 wallpaper submissions** throughout:
+2,158 / 2,110 glass-only rows. Queue delivery is 1.801 / 1.344 ms median,
+4.203 / 4.089 ms p95, 4.847 / 4.647 ms maximum. Its DWM completion bound is
+6.132 / 5.383 ms median, 8.740 / 8.160 ms p95, and 29.241 / 29.241 ms maximum.
+Its all-plate GPU time is 0.377 / 0.431 / 0.589 ms (median / p95 / max).
+This verifies source reuse, not the one-frame presentation gate.
+
+Telemetry overhead is measured separately: GPU-query rain uses 4.607% one-core CPU / 454.80 MiB;
+rain motion + DwmFlush uses 12.023% / 456.97 MiB; still motion + DwmFlush uses 13.534% /
+380.80 MiB. These opt-in runs are not substituted for the telemetry-off idle fixture.
+
+**Default stays integrated** on both desktops and laptops. The earlier RTX candidate's roughly
+0.62 ms rain / 0.067 ms all-plate figures used the rejected photo prefilter, so they are not
+final-quality measurements and do not justify a policy change. Users can explicitly select
+`high-performance` or `auto`; there is no automatic RTX promotion. Studio controls remain N7.
+
+Raw CPU/RAM samples and GPU/lag summaries are committed under
+[`tools/perf/results/native-2026-11-04`](../tools/perf/results/native-2026-11-04).
+Full JSONL traces and fixed-time images remain in `C:/mypaper-targets/native-engine/`.
+The five `visuals/<theme>-web.png` / `-native.png` pairs and `visuals/weather-comparison.png`
+were inspected for photo/crop, preset colour, weather density and blur. WebGL/WGSL hash
+rounding changes individual rain/snow locations; the port is not pixel-identical to WebGL.
+`visuals/quality-comparison.png` compares the native rain shader before/after the row cache at
+12 seconds: **99.99507% identical pixels** in a 1800 x 800 crop, RGB MAE 0.00001644,
+p99 difference 0 and maximum 1/255. No blur taps, scale or layer counts were reduced.
+Clear-glass edge/dock crops were compared with the Tahoe clear references: inward lensing,
+clear centre, opposite angle-dependent glints, no clear-material shadow.
+
+The required `measure.ps1 -Label native-engine-restored-desktop -Seconds 60` also ran
+under its own lock after the isolated fixture was stopped. It samples the **restored legacy
+product**, not the native engine fixture: 24 processes, 98.72% of one core (6.170% of this
+machine), 7.73% GPU 3D, 455 MiB GPU memory, 1,069 MiB private / 1,587 MiB working set.
+Its 19 WebView2 processes account for 852 MiB private and 96.43% one-core CPU. This separate
+counter sample is excluded from N0.3 gates; its raw output is `restored-product-counters.json`.
+
+Cleanup limitation: automatic approval review rejected removal of the stopped test WebView
+profile, returning only "blocked by policy". No test WebView processes remain, but
+`C:/mypaper-targets/native-engine/release/native-stage/env-0/local/mypaper/webview2` was left
+on disk. No user browser profile was targeted.
+
+Desktop cleanup stopped all fixture engines/writers and restarted the original
+`D:/Coding/projects/desktop/wallpaper/target/release/mypaper-core.exe`. The existing user's
+`bars.json` has `taskbar.mode: "hide"`: a final show request left the primary taskbar hidden
+and the secondary visible. That user setting was not changed. Another agent subsequently
+acquired the desktop lock for its own session; its processes/lock were left alone.
+
+The native runner's success exit means the sample was accepted (including visibility), not
+that GPU/lag/zero-CPU budgets passed. These open gates are reported explicitly above.
+
+Validation: 132 scoped Rust tests pass (config 11, IPC 2, theme 14, wallpaper 87, perf 18),
+with two existing wallpaper dev tests ignored (real desktop wallpaper mutation and the still
+export helper). All-target Clippy is clean on the five changed crates. The GPU port-compile
+test ran under the desktop lock; all 66 catalog asset byte counts and SHA-256 hashes match.
+Live config verified a 12 fps cap without restart and high-performance/auto/integrated restart
+requests using core's existing EXIT_RESTART contract. No bars/widgets compatibility patch,
+N7 Studio UI, or overlay code was changed. GPU, lag and strict still-CPU gates remain open for further optimization.
+
+
 ## What you see after sign-in
 
 README-ready (milliseconds from the moment core starts, warm start, `full` scenario unless noted):

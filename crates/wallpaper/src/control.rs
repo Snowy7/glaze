@@ -22,6 +22,7 @@ const CONFIG_DEBOUNCE: Duration = Duration::from_millis(100);
 #[derive(Debug, PartialEq, Eq)]
 enum Action {
     SwitchTheme(String),
+    UpdateRenderer,
     /// Paused / pause-on-battery / pause-on-fullscreen changed.
     UpdateHold,
     /// `static_snapshot` was switched; off puts the user's wallpaper back right away.
@@ -31,6 +32,9 @@ enum Action {
 /// The actions that take the engine from `old` to `new`.
 fn actions(old: &Config, new: &Config) -> Vec<Action> {
     let mut actions = Vec::new();
+    if old.engine != new.engine {
+        actions.push(Action::UpdateRenderer);
+    }
     if old.theme != new.theme {
         actions.push(Action::SwitchTheme(new.theme.clone()));
     }
@@ -91,6 +95,7 @@ impl Live {
         };
         for action in actions(&self.config, &new) {
             match action {
+                Action::UpdateRenderer => engine.apply_renderer_config(&new.engine),
                 Action::SwitchTheme(name) => self.switch_theme(engine, &name),
                 Action::UpdateHold => engine.apply_config(&new),
                 Action::SetSnapshot(on) => engine.set_static_snapshot(on),
@@ -152,6 +157,21 @@ mod tests {
     #[test]
     fn identical_configs_ask_for_nothing() {
         assert!(actions(&Config::default(), &Config::default()).is_empty());
+    }
+
+    #[test]
+    fn renderer_changes_are_applied_before_a_simultaneous_theme_switch() {
+        let new = config(|c| {
+            c.engine.fps = Some(24);
+            c.theme = "rain-city".into();
+        });
+        assert_eq!(
+            actions(&Config::default(), &new),
+            [
+                Action::UpdateRenderer,
+                Action::SwitchTheme("rain-city".into())
+            ]
+        );
     }
 
     #[test]

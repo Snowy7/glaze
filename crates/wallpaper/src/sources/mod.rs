@@ -51,6 +51,10 @@ pub enum Redraw {
 }
 
 pub trait Source {
+    /// Size of the kept wallpaper texture; scaled shaders render directly into this target.
+    fn render_size(&self, size: (u32, u32)) -> (u32, u32) {
+        size
+    }
     /// Advances time-based state once per engine tick, before any drawing
     /// (decode the next video frame, advance a slideshow, ...).
     fn update(&mut self, _gpu: &Gpu, _clock: Duration) {}

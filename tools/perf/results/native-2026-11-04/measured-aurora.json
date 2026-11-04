@@ -1,0 +1,38 @@
+[
+  {
+    "scenario": "engine-aurora",
+    "run": 0,
+    "seconds": 60.0317712,
+    "private_mb": 420.20703125,
+    "cpu_core_pct": 2.628816322514236,
+    "cpu_machine_pct": 0.16430102015713974,
+    "visible_screens": 2,
+    "timing_file": null,
+    "sample_started_qpc": 3581625058517,
+    "sample_ended_qpc": 3582225376232
+  },
+  {
+    "scenario": "engine-aurora",
+    "run": 1,
+    "seconds": 60.0288462,
+    "private_mb": 418.09765625,
+    "cpu_core_pct": 2.2124779736312843,
+    "cpu_machine_pct": 0.13827987335195527,
+    "visible_screens": 2,
+    "timing_file": null,
+    "sample_started_qpc": 3582331137931,
+    "sample_ended_qpc": 3582931426398
+  },
+  {
+    "scenario": "engine-aurora",
+    "run": 2,
+    "seconds": 60.0305138,
+    "private_mb": 420.67578125,
+    "cpu_core_pct": 2.8891556813561707,
+    "cpu_machine_pct": 0.18057223008476067,
+    "visible_screens": 2,
+    "timing_file": null,
+    "sample_started_qpc": 3583037970844,
+    "sample_ended_qpc": 3583638275985
+  }
+]

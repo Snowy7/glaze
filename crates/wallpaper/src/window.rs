@@ -184,21 +184,19 @@ impl Waiter {
     }
 
     /// `None` sleeps until the next message: zero CPU while fully paused.
-    pub fn wait(&self, deadline: Option<Instant>) {
+    pub fn wait(&self, deadline: Option<Instant>, extra: &[HANDLE]) {
         // SAFETY: the timer handle is valid for our lifetime.
         unsafe {
-            let handles = match deadline {
-                Some(deadline) => {
-                    let Some(left) = deadline.checked_duration_since(Instant::now()) else {
-                        return;
-                    };
-                    let due = -((left.as_nanos() / 100) as i64).max(1); // relative, 100ns units
-                    let _ = SetWaitableTimer(self.timer, &due, 0, None, None, false);
-                    Some(std::slice::from_ref(&self.timer))
-                }
-                None => None,
-            };
-            MsgWaitForMultipleObjectsEx(handles, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            let mut handles = extra.to_vec();
+            if let Some(deadline) = deadline {
+                let Some(left) = deadline.checked_duration_since(Instant::now()) else {
+                    return;
+                };
+                let due = -((left.as_nanos() / 100) as i64).max(1); // relative, 100ns units
+                let _ = SetWaitableTimer(self.timer, &due, 0, None, None, false);
+                handles.push(self.timer);
+            }
+            MsgWaitForMultipleObjectsEx(Some(&handles), INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         }
     }
 }

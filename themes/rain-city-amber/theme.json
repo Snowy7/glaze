@@ -1,7 +1,26 @@
 {
   "name": "Amber Downpour (non-commercial)",
   "wallpaper": {
-    "kind": "web",
-    "url": "index.html"
+    "kind": "shader",
+    "source": "rain.wgsl",
+    "fps": 30,
+    "scale": 0.65,
+    "images": [
+      {
+        "source": "media/city.jpg",
+        "binding": 1
+      },
+      {
+        "binding": 3,
+        "prefilter": {
+          "source": "profile.wgsl",
+          "size": [
+            8192,
+            1
+          ],
+          "format": "rgba32float"
+        }
+      }
+    ]
   }
 }

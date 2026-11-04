@@ -4,7 +4,7 @@
   "notice": "Eight NC selections block commercial distribution of the complete bundle. Preserve ShareAlike and all notices.",
   "new_binary_bytes": 23947981,
   "curated_binary_bytes": 23945606,
-  "curated_bytes": 28053809,
+  "curated_bytes": 24706400,
   "themes": [
     {
       "id": "charge-city",
@@ -549,7 +549,7 @@
     {
       "id": "rain-city",
       "name": "Rainy Hong Kong (non-commercial)",
-      "kind": "web",
+      "kind": "shader",
       "category": "City & rain",
       "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
       "license": "CC-BY-NC-SA-3.0",
@@ -558,53 +558,6 @@
       "noncommercial": true,
       "description": "Lively’s rainy window / Heartfelt, with a separately licensed Hong Kong night panorama.",
       "assets": [
-        {
-          "path": "rain-city/index.html",
-          "title": "Rainy Hong Kong (non-commercial)",
-          "author": "mypaper contributors",
-          "license": "MIT",
-          "source": "../LICENSE",
-          "changes": "Local host and full visible credit; upstream icon, Pexels image, loading art and controls omitted.",
-          "license_url": "https://opensource.org/license/mit/",
-          "bytes": 990,
-          "sha256": "fe2e9b2cb25829d5142d1cc91460636649676e96edf661537b52a65e42251214"
-        },
-        {
-          "path": "rain-city/js/dat.gui.min.js",
-          "title": "Rainy Hong Kong (non-commercial)",
-          "author": "Data Arts Team, Google Creative Lab",
-          "license": "Apache-2.0",
-          "source": "https://github.com/dataarts/dat.gui",
-          "changes": "Unmodified.",
-          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
-          "upstream_sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944",
-          "bytes": 50323,
-          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
-        },
-        {
-          "path": "rain-city/js/script.js",
-          "title": "Rainy Hong Kong (non-commercial)",
-          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
-          "license": "CC-BY-NC-SA-3.0",
-          "source": "https://github.com/rocksdanister/rain",
-          "changes": "Local background path/dimensions changed; fixed 0.65 render scale at device ratio 1. Original animation and 30 fps timer retained. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
-          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "upstream_sha256": "ac15b78aeb3abfee2a1bf61bdca9c5885fc72f9018a9f501b597d73da8a7886c",
-          "bytes": 11021,
-          "sha256": "3b3bbd69f44e0d801772927927796a2d59e3a1ffebd24a74e999c0f266ea0d1a"
-        },
-        {
-          "path": "rain-city/js/three.min.js",
-          "title": "Rainy Hong Kong (non-commercial)",
-          "author": "Three.js authors",
-          "license": "MIT",
-          "source": "https://github.com/mrdoob/three.js/tree/r150",
-          "changes": "Unmodified.",
-          "license_url": "https://opensource.org/license/mit/",
-          "upstream_sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff",
-          "bytes": 613502,
-          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
-        },
         {
           "path": "rain-city/media/city.jpg",
           "title": "Rainy Hong Kong (non-commercial)",
@@ -646,18 +599,40 @@
           "author": "mypaper contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale.",
           "license_url": "https://opensource.org/license/mit/",
-          "bytes": 114,
-          "sha256": "2db79ed814b139542514fc74b57ab852d9e42b3e5ac574ce709feb7da51d995c"
+          "bytes": 456,
+          "sha256": "bdf652d1fadb951213a72fe2bf201921bbf1f19aa376daf99a65bf3d1d8da380"
+        },
+        {
+          "path": "rain-city/rain.wgsl",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "bytes": 5812,
+          "sha256": "cfd735995ad772d0a0e1276ae41103d350e8f1330bcbd350db5e6d10bf03d077"
+        },
+        {
+          "path": "rain-city/profile.wgsl",
+          "title": "Rainy Hong Kong (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Theme-owned float32 Heartfelt row/column cache generated once on the selected GPU; CC BY-NC-SA adaptation.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "bytes": 829,
+          "sha256": "be3394afcd2994bd206a1303a33023af92588c1c76e46f2bde99128c1004148d"
         }
       ],
-      "bytes": 1606469
+      "bytes": 935416
     },
     {
       "id": "rain-city-amber",
       "name": "Amber Downpour (non-commercial)",
-      "kind": "web",
+      "kind": "shader",
       "category": "City & rain",
       "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
       "license": "CC-BY-NC-SA-3.0",
@@ -666,53 +641,6 @@
       "noncommercial": true,
       "description": "A weather/palette variant of the credited Lively Rain / Heartfelt effect over the same licensed night city.",
       "assets": [
-        {
-          "path": "rain-city-amber/index.html",
-          "title": "Amber Downpour (non-commercial)",
-          "author": "mypaper contributors",
-          "license": "MIT",
-          "source": "../LICENSE",
-          "changes": "Local host and full visible credit; upstream icon, Pexels image, loading art and controls omitted.",
-          "license_url": "https://opensource.org/license/mit/",
-          "bytes": 989,
-          "sha256": "f380b34f6ca0659ef09423cd07801b06393b155cb5832f2f5fabf9c73394085c"
-        },
-        {
-          "path": "rain-city-amber/js/dat.gui.min.js",
-          "title": "Amber Downpour (non-commercial)",
-          "author": "Data Arts Team, Google Creative Lab",
-          "license": "Apache-2.0",
-          "source": "https://github.com/dataarts/dat.gui",
-          "changes": "Unmodified.",
-          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
-          "upstream_sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944",
-          "bytes": 50323,
-          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
-        },
-        {
-          "path": "rain-city-amber/js/script.js",
-          "title": "Amber Downpour (non-commercial)",
-          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
-          "license": "CC-BY-NC-SA-3.0",
-          "source": "https://github.com/rocksdanister/rain",
-          "changes": "Local background path/dimensions changed; fixed 0.65 render scale at device ratio 1. Original animation and 30 fps timer retained. Variant: intensity 0.72, speed 0.32, brightness 0.85, blur 0.65; no clock reset. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
-          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "upstream_sha256": "ac15b78aeb3abfee2a1bf61bdca9c5885fc72f9018a9f501b597d73da8a7886c",
-          "bytes": 11024,
-          "sha256": "bfdc63d4e743711ecd5cf3255beca6681d11192be41cc89680ec3be2a4629c14"
-        },
-        {
-          "path": "rain-city-amber/js/three.min.js",
-          "title": "Amber Downpour (non-commercial)",
-          "author": "Three.js authors",
-          "license": "MIT",
-          "source": "https://github.com/mrdoob/three.js/tree/r150",
-          "changes": "Unmodified.",
-          "license_url": "https://opensource.org/license/mit/",
-          "upstream_sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff",
-          "bytes": 613502,
-          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
-        },
         {
           "path": "rain-city-amber/media/city.jpg",
           "title": "Amber Downpour (non-commercial)",
@@ -754,18 +682,40 @@
           "author": "mypaper contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale.",
           "license_url": "https://opensource.org/license/mit/",
-          "bytes": 113,
-          "sha256": "5fc92d57ae01b68838e1536fb970ac50da7ebdd525a8a97392bc3c1da435a8dd"
+          "bytes": 455,
+          "sha256": "4413b669211c95f14a664b5ec15f29db2514d449e75ff54498ae2a435758eaf5"
+        },
+        {
+          "path": "rain-city-amber/rain.wgsl",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "bytes": 5818,
+          "sha256": "525d72ea3abc508f27e78a760d050355727b6679003dada94427ad115ee9936d"
+        },
+        {
+          "path": "rain-city-amber/profile.wgsl",
+          "title": "Amber Downpour (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Theme-owned float32 Heartfelt row/column cache generated once on the selected GPU; CC BY-NC-SA adaptation.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "bytes": 829,
+          "sha256": "be3394afcd2994bd206a1303a33023af92588c1c76e46f2bde99128c1004148d"
         }
       ],
-      "bytes": 1611486
+      "bytes": 940437
     },
     {
       "id": "rain-city-midnight",
       "name": "Midnight Drizzle (non-commercial)",
-      "kind": "web",
+      "kind": "shader",
       "category": "City & rain",
       "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
       "license": "CC-BY-NC-SA-3.0",
@@ -774,53 +724,6 @@
       "noncommercial": true,
       "description": "A weather/palette variant of the credited Lively Rain / Heartfelt effect over the same licensed night city.",
       "assets": [
-        {
-          "path": "rain-city-midnight/index.html",
-          "title": "Midnight Drizzle (non-commercial)",
-          "author": "mypaper contributors",
-          "license": "MIT",
-          "source": "../LICENSE",
-          "changes": "Local host and full visible credit; upstream icon, Pexels image, loading art and controls omitted.",
-          "license_url": "https://opensource.org/license/mit/",
-          "bytes": 991,
-          "sha256": "e22f6a35e8c93cd825f4d217173d4d246b8503dbe6ee89cd0b6b6dd5d737b514"
-        },
-        {
-          "path": "rain-city-midnight/js/dat.gui.min.js",
-          "title": "Midnight Drizzle (non-commercial)",
-          "author": "Data Arts Team, Google Creative Lab",
-          "license": "Apache-2.0",
-          "source": "https://github.com/dataarts/dat.gui",
-          "changes": "Unmodified.",
-          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
-          "upstream_sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944",
-          "bytes": 50323,
-          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
-        },
-        {
-          "path": "rain-city-midnight/js/script.js",
-          "title": "Midnight Drizzle (non-commercial)",
-          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
-          "license": "CC-BY-NC-SA-3.0",
-          "source": "https://github.com/rocksdanister/rain",
-          "changes": "Local background path/dimensions changed; fixed 0.65 render scale at device ratio 1. Original animation and 30 fps timer retained. Variant: intensity 0.26, speed 0.18, brightness 0.65, blur 0.35; no clock reset. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
-          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "upstream_sha256": "ac15b78aeb3abfee2a1bf61bdca9c5885fc72f9018a9f501b597d73da8a7886c",
-          "bytes": 11024,
-          "sha256": "b7add33b10b430bdb8820c45feb0b07639766bef26760793e79e5cb7a8c63dd2"
-        },
-        {
-          "path": "rain-city-midnight/js/three.min.js",
-          "title": "Midnight Drizzle (non-commercial)",
-          "author": "Three.js authors",
-          "license": "MIT",
-          "source": "https://github.com/mrdoob/three.js/tree/r150",
-          "changes": "Unmodified.",
-          "license_url": "https://opensource.org/license/mit/",
-          "upstream_sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff",
-          "bytes": 613502,
-          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
-        },
         {
           "path": "rain-city-midnight/media/city.jpg",
           "title": "Midnight Drizzle (non-commercial)",
@@ -862,13 +765,35 @@
           "author": "mypaper contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale.",
           "license_url": "https://opensource.org/license/mit/",
-          "bytes": 115,
-          "sha256": "92f4508d3bf85e77ad81040b61cf882a8ecb0df588813b24a43669ffd7598751"
+          "bytes": 457,
+          "sha256": "d01cb9157de7034d1d54cf4de9f9a67fb0c908f4c984c2abca2b9451b12bfe98"
+        },
+        {
+          "path": "rain-city-midnight/rain.wgsl",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "bytes": 5818,
+          "sha256": "89109c8432b486b7cb95184bff767973a8b36d02a53d590c8f309ea4c977fa91"
+        },
+        {
+          "path": "rain-city-midnight/profile.wgsl",
+          "title": "Midnight Drizzle (non-commercial)",
+          "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
+          "license": "CC-BY-NC-SA-3.0",
+          "source": "https://github.com/rocksdanister/rain",
+          "changes": "Theme-owned float32 Heartfelt row/column cache generated once on the selected GPU; CC BY-NC-SA adaptation.",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "bytes": 829,
+          "sha256": "be3394afcd2994bd206a1303a33023af92588c1c76e46f2bde99128c1004148d"
         }
       ],
-      "bytes": 1600707
+      "bytes": 929656
     },
     {
       "id": "seascape",
@@ -995,7 +920,7 @@
     {
       "id": "snow-city",
       "name": "Snow over Hong Kong (non-commercial)",
-      "kind": "web",
+      "kind": "shader",
       "category": "City & rain",
       "author": "Andrew Baldwin; Lively adaptation by Dani John",
       "license": "CC-BY-NC-SA-3.0",
@@ -1004,50 +929,6 @@
       "source": "https://github.com/rocksdanister/snow",
       "description": "The existing Lively snow effect over a separately licensed atmospheric background.",
       "assets": [
-        {
-          "path": "snow-city/index.html",
-          "title": "Snow over Hong Kong (non-commercial)",
-          "author": "mypaper contributors",
-          "license": "MIT",
-          "license_url": "https://opensource.org/license/mit/",
-          "source": "../LICENSE",
-          "changes": "Local wallpaper host and visible credit; controls and upstream stock media omitted.",
-          "bytes": 899,
-          "sha256": "645c89e1a4aa0ebd1c8e2a0a30671e3dcf78d0633754a294a2d245bef796e4b8"
-        },
-        {
-          "path": "snow-city/js/dat.gui.min.js",
-          "title": "Snow over Hong Kong (non-commercial)",
-          "author": "Data Arts Team, Google Creative Lab",
-          "license": "Apache-2.0",
-          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
-          "source": "https://github.com/dataarts/dat.gui",
-          "changes": "Unmodified.",
-          "bytes": 50323,
-          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
-        },
-        {
-          "path": "snow-city/js/script.js",
-          "title": "Snow over Hong Kong (non-commercial)",
-          "author": "Andrew Baldwin; Lively adaptation by Dani John",
-          "license": "CC-BY-NC-SA-3.0",
-          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "source": "https://github.com/rocksdanister/snow",
-          "changes": "Local texture replaced; original snow algorithm, light-snow parameters and 30 fps pacing retained; render scale 0.65; six-hour clock reset removed. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
-          "bytes": 7947,
-          "sha256": "d848e2f1566b07a8d6eab2381d985ec24a30accc9f62fbd807f658b1a7e175e3"
-        },
-        {
-          "path": "snow-city/js/three.min.js",
-          "title": "Snow over Hong Kong (non-commercial)",
-          "author": "Three.js authors",
-          "license": "MIT",
-          "license_url": "https://opensource.org/license/mit/",
-          "source": "https://github.com/mrdoob/three.js/tree/r150",
-          "changes": "Unmodified.",
-          "bytes": 613502,
-          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
-        },
         {
           "path": "snow-city/media/image.jpg",
           "title": "Snow over Hong Kong (non-commercial)",
@@ -1088,17 +969,28 @@
           "license": "MIT",
           "license_url": "https://opensource.org/license/mit/",
           "source": "../LICENSE",
-          "changes": "mypaper manifest.",
-          "bytes": 118,
-          "sha256": "86610a6348aa2451c813ecc3e4fd7a5e15222eeeef5b6177b8e022e3218e9672"
+          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale.",
+          "bytes": 254,
+          "sha256": "7d78fb782c9ec9184a2f6b241aff8ed60289b54734f7c9cd99666454582eddf1"
+        },
+        {
+          "path": "snow-city/snow.wgsl",
+          "title": "Snow over Hong Kong (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/snow",
+          "changes": "Native WGSL/paper port with image binding, 30 fps and 0.65 scale; original photo, presets and non-commercial ShareAlike terms retained. Preserves the original 50 layers and CSS-resolution crop/density.",
+          "bytes": 2121,
+          "sha256": "12c034f7a6b44196c24a2fcd79ea86113e61be2f3727c03d13b506fc27b38bde"
         }
       ],
-      "bytes": 1589854
+      "bytes": 919440
     },
     {
       "id": "snow-forest",
       "name": "Snow in the Misty Forest (non-commercial)",
-      "kind": "web",
+      "kind": "shader",
       "category": "Nature",
       "author": "Andrew Baldwin; Lively adaptation by Dani John",
       "license": "CC-BY-NC-SA-3.0",
@@ -1107,50 +999,6 @@
       "source": "https://github.com/rocksdanister/snow",
       "description": "The existing Lively snow effect over a separately licensed atmospheric background.",
       "assets": [
-        {
-          "path": "snow-forest/index.html",
-          "title": "Snow in the Misty Forest (non-commercial)",
-          "author": "mypaper contributors",
-          "license": "MIT",
-          "license_url": "https://opensource.org/license/mit/",
-          "source": "../LICENSE",
-          "changes": "Local wallpaper host and visible credit; controls and upstream stock media omitted.",
-          "bytes": 927,
-          "sha256": "1492c51a925d6c11a715e8b4cb4e075b89c44e5f78593457e9a5d163af29bb2d"
-        },
-        {
-          "path": "snow-forest/js/dat.gui.min.js",
-          "title": "Snow in the Misty Forest (non-commercial)",
-          "author": "Data Arts Team, Google Creative Lab",
-          "license": "Apache-2.0",
-          "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
-          "source": "https://github.com/dataarts/dat.gui",
-          "changes": "Unmodified.",
-          "bytes": 50323,
-          "sha256": "6e21301e269b7fff15f217c1454b0f614c937d53081e998e8559c26ab0be3944"
-        },
-        {
-          "path": "snow-forest/js/script.js",
-          "title": "Snow in the Misty Forest (non-commercial)",
-          "author": "Andrew Baldwin; Lively adaptation by Dani John",
-          "license": "CC-BY-NC-SA-3.0",
-          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "source": "https://github.com/rocksdanister/snow",
-          "changes": "Local texture replaced; original snow algorithm, light-snow parameters and 30 fps pacing retained; render scale 0.65; six-hour clock reset removed. Continuous animation clock; removed the upstream six-hour reset so weather never snaps back.",
-          "bytes": 7947,
-          "sha256": "d848e2f1566b07a8d6eab2381d985ec24a30accc9f62fbd807f658b1a7e175e3"
-        },
-        {
-          "path": "snow-forest/js/three.min.js",
-          "title": "Snow in the Misty Forest (non-commercial)",
-          "author": "Three.js authors",
-          "license": "MIT",
-          "license_url": "https://opensource.org/license/mit/",
-          "source": "https://github.com/mrdoob/three.js/tree/r150",
-          "changes": "Unmodified.",
-          "bytes": 613502,
-          "sha256": "4d2e6fde359dcfd3de70163cb7f73e6eca16a658716153703c9a26b19f5258ff"
-        },
         {
           "path": "snow-forest/media/image.jpg",
           "title": "Snow in the Misty Forest (non-commercial)",
@@ -1191,12 +1039,23 @@
           "license": "MIT",
           "license_url": "https://opensource.org/license/mit/",
           "source": "../LICENSE",
-          "changes": "mypaper manifest.",
-          "bytes": 123,
-          "sha256": "4263042986573ac755bb7cdf20f75a8b1f9853885fc3816e471e2ba287d0c8b9"
+          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale.",
+          "bytes": 259,
+          "sha256": "4a8804df8b8baa990031b0a762e922bc0c810073e4fb9f2b08196924d7070543"
+        },
+        {
+          "path": "snow-forest/snow.wgsl",
+          "title": "Snow in the Misty Forest (non-commercial)",
+          "author": "Andrew Baldwin; Lively adaptation by Dani John",
+          "license": "CC-BY-NC-SA-3.0",
+          "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+          "source": "https://github.com/rocksdanister/snow",
+          "changes": "Native WGSL/paper port with image binding, 30 fps and 0.65 scale; original photo, presets and non-commercial ShareAlike terms retained. Preserves the original 50 layers and CSS-resolution crop/density.",
+          "bytes": 2121,
+          "sha256": "12c034f7a6b44196c24a2fcd79ea86113e61be2f3727c03d13b506fc27b38bde"
         }
       ],
-      "bytes": 760264
+      "bytes": 89822
     },
     {
       "id": "snowfall",

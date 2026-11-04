@@ -5,6 +5,7 @@
 use std::num::NonZeroIsize;
 
 use anyhow::{Context, Result, anyhow, bail};
+use mypaper_config::GpuPreference;
 use raw_window_handle::{Win32WindowHandle, WindowsDisplayHandle};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 
@@ -21,6 +22,7 @@ pub struct Gpu {
     pub format: wgpu::TextureFormat,
     /// Shared textured-quad pipeline with fit modes and opacity.
     pub blit: Blitter,
+    pub preference: GpuPreference,
 }
 
 /// The device being opened on its own thread, from the first moment of the process.
@@ -37,19 +39,22 @@ pub struct Opened {
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    preference: GpuPreference,
 }
 
 impl Opening {
-    pub fn start() -> Self {
-        Self(std::thread::spawn(|| {
+    pub fn start(preference: GpuPreference) -> Self {
+        Self(std::thread::spawn(move || {
             let instance = instance();
-            let adapter = pollster::block_on(instance.request_adapter(&low_power(None)))?;
+            let adapter =
+                pollster::block_on(instance.request_adapter(&adapter_options(None, preference)))?;
             let (device, queue) = open_device(&adapter)?;
             Ok(Opened {
                 instance,
                 adapter,
                 device,
                 queue,
+                preference,
             })
         }))
     }
@@ -61,12 +66,17 @@ impl Opening {
     }
 }
 
-/// Integrated GPU on laptops: a wallpaper should never wake the dGPU.
-fn low_power<'a, 'w>(
+/// Integrated is the default on every machine; high-performance/auto require user settings.
+fn adapter_options<'a, 'w>(
     surface: Option<&'a wgpu::Surface<'w>>,
+    preference: GpuPreference,
 ) -> wgpu::RequestAdapterOptions<'a, 'w> {
     wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::LowPower,
+        power_preference: match preference {
+            GpuPreference::Integrated => wgpu::PowerPreference::LowPower,
+            GpuPreference::HighPerformance => wgpu::PowerPreference::HighPerformance,
+            GpuPreference::Auto => wgpu::PowerPreference::None,
+        },
         compatible_surface: surface,
         force_fallback_adapter: false,
         apply_limit_buckets: false,
@@ -84,6 +94,7 @@ impl Gpu {
             mut adapter,
             mut device,
             mut queue,
+            preference,
         } = opening.wait()?;
         let surfaces = windows
             .iter()
@@ -94,11 +105,17 @@ impl Gpu {
         if let Some(first) = surfaces.first()
             && !adapter.is_surface_supported(first)
         {
-            adapter = pollster::block_on(instance.request_adapter(&low_power(Some(first))))?;
+            adapter = pollster::block_on(
+                instance.request_adapter(&adapter_options(Some(first), preference)),
+            )?;
             (device, queue) = open_device(&adapter)?;
         }
         let info = adapter.get_info();
-        log::info!("GPU: {} ({:?})", info.name, info.backend);
+        log::info!(
+            "GPU: {} ({:?}), preference={preference:?}",
+            info.name,
+            info.backend
+        );
 
         // Non-sRGB target: shader output is used as-is, matching Shadertoy-style code.
         let caps = surfaces
@@ -121,6 +138,7 @@ impl Gpu {
             queue,
             format,
             blit,
+            preference,
         };
         Ok((gpu, surfaces))
     }
@@ -130,7 +148,10 @@ impl Gpu {
     #[cfg(test)]
     pub fn headless() -> Option<Self> {
         let instance = instance();
-        let adapter = pollster::block_on(instance.request_adapter(&low_power(None))).ok()?;
+        let adapter = pollster::block_on(
+            instance.request_adapter(&adapter_options(None, GpuPreference::Integrated)),
+        )
+        .ok()?;
         let (device, queue) = open_device(&adapter).ok()?;
         let format = wgpu::TextureFormat::Bgra8Unorm;
         let blit = Blitter::new(&device, format);
@@ -141,6 +162,7 @@ impl Gpu {
             queue,
             format,
             blit,
+            preference: GpuPreference::Integrated,
         })
     }
 
@@ -215,6 +237,64 @@ pub struct Screen {
     pub dirty: bool,
     /// The swapchain images can be copied from (the backdrop needs it).
     pub copy_src: bool,
+    /// Unmodified last wallpaper, at its source's render scale. Never contains glass.
+    pub kept: Option<KeptFrame>,
+    pub glass_dirty: bool,
+}
+
+pub struct KeptFrame {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub quad: crate::sources::blit::BlitQuad,
+}
+
+impl KeptFrame {
+    pub fn new(gpu: &Gpu, size: (u32, u32)) -> Self {
+        let texture = gpu.texture(
+            "kept wallpaper",
+            size,
+            gpu.format,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            None,
+        );
+        let view = texture.create_view(&Default::default());
+        let quad = gpu.blit.quad(&gpu.device, &view);
+        Self {
+            texture,
+            view,
+            quad,
+        }
+    }
+
+    /// A full-scale frame copies directly when supported; a scaled frame uses the upscale blit.
+    pub fn restore(
+        &self,
+        gpu: &Gpu,
+        target: &wgpu::Texture,
+        view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        if target.size() == self.texture.size()
+            && target.usage().contains(wgpu::TextureUsages::COPY_DST)
+        {
+            encoder.copy_texture_to_texture(
+                self.texture.as_image_copy(),
+                target.as_image_copy(),
+                target.size(),
+            );
+        } else {
+            self.quad.set(
+                &gpu.queue,
+                (self.texture.width(), self.texture.height()),
+                (target.width(), target.height()),
+                mypaper_theme::Fit::Stretch,
+                1.0,
+            );
+            let mut pass =
+                crate::sources::begin(encoder, view, wgpu::LoadOp::Clear(wgpu::Color::BLACK));
+            self.quad.draw(&gpu.blit, &mut pass);
+        }
+    }
 }
 
 impl Screen {
@@ -239,6 +319,9 @@ impl Screen {
         if copy_src {
             config.usage |= wgpu::TextureUsages::COPY_SRC;
         }
+        if caps.usages.contains(wgpu::TextureUsages::COPY_DST) {
+            config.usage |= wgpu::TextureUsages::COPY_DST;
+        }
         Ok(Self {
             surface,
             config,
@@ -247,6 +330,8 @@ impl Screen {
             paused: false,
             dirty: true,
             copy_src,
+            kept: None,
+            glass_dirty: false,
         })
     }
 
@@ -304,18 +389,21 @@ fn instance() -> wgpu::Instance {
 
 /// Opens the device and queue, routing GPU errors to the log.
 fn open_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue)> {
-    let (device, queue) = pollster::block_on(
-        adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("mypaper"),
-            // 16-bit normalized formats: the planes of 10-bit (P010) video.
-            required_features: adapter
-                .features()
-                .intersection(wgpu::Features::TEXTURE_FORMAT_16BIT_NORM),
-            required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
-            memory_hints: wgpu::MemoryHints::MemoryUsage,
-            ..Default::default()
-        }),
-    )?;
+    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("mypaper"),
+        // 16-bit normalized formats: the planes of 10-bit (P010) video.
+        required_features: adapter.features().intersection(
+            wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+                | if crate::timing::requested() {
+                    crate::timing::FEATURES
+                } else {
+                    wgpu::Features::empty()
+                },
+        ),
+        required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
+        memory_hints: wgpu::MemoryHints::MemoryUsage,
+        ..Default::default()
+    }))?;
     device.on_uncaptured_error(std::sync::Arc::new(|e| log::error!("GPU: {e}")));
     Ok((device, queue))
 }
