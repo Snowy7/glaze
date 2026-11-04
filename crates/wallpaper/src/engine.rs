@@ -81,11 +81,23 @@ impl Engine {
     ) -> Result<Self> {
         let (gpu, surfaces) = Gpu::new(gpu, &windows)?;
         startup::ready("wallpaper", "device_ms");
-        let screens: Vec<Screen> = surfaces
+        let mut screens: Vec<Screen> = surfaces
             .into_iter()
             .zip(windows)
             .map(|(surface, window)| Screen::new(&gpu, surface, window))
             .collect::<Result<_>>()?;
+        // Only what can be seen is drawn, from the first frame on: a screen a window already
+        // covers starts paused, and makes its swapchain (the costliest part of a first frame,
+        // 50-150 ms here) only once it's uncovered.
+        if let Some(known) = &monitors {
+            for (screen, covered) in screens.iter_mut().zip(covered_monitors(known)) {
+                if covered {
+                    let (w, h) = screen.size();
+                    log::info!("pausing {w}x{h} screen");
+                    screen.paused = true;
+                }
+            }
+        }
         let hwnds: Vec<HWND> = screens.iter().map(|s| s.window.0).collect();
         let (source, loaded) = load_or_broken(&gpu, &theme, &hwnds);
         startup::ready("wallpaper", "source_ms");

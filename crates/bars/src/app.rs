@@ -352,6 +352,14 @@ impl App {
         };
         app.holds
             .set(Fact::OnBattery, mypaper_desktop::on_battery());
+        // The native stand-ins first: they're on screen while the bars reserve their space and
+        // WebView2 starts (docs/performance.md, "Native first paint").
+        app.refresh_fullscreen();
+        let looks = [BarKind::Top, BarKind::Dock].map(|kind| app.look(kind));
+        let look = |kind| looks[usize::from(kind == BarKind::Dock)].clone();
+        let covered = app.fullscreen.as_deref();
+        app.first_paint
+            .show_early(&app.monitors, &app.config, covered, look);
         log::info!(
             "taskbar {:?}, top bar {}, dock {}",
             app.config.taskbar.mode,

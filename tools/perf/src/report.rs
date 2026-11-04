@@ -64,17 +64,21 @@ impl Report {
             "Milliseconds from core's process creation to each component being ready, \
              cold (fresh profile) / warm (median).\n\n",
         );
-        md.push_str("| Scenario | core spawned | wallpaper first frame | widgets first paint | bars first paint | taskbar hidden |\n");
-        md.push_str("|---|---|---|---|---|---|\n");
+        md.push_str(
+            "| Scenario | core spawned | wallpaper first frame | widgets first paint \
+             | bars native paint | bars first paint | taskbar hidden |\n",
+        );
+        md.push_str("|---|---|---|---|---|---|---|\n");
         for s in &self.scenarios {
             let t = |key: &str| cold_warm(&s.metrics, key);
             let _ = writeln!(
                 md,
-                "| `{}` | {} | {} | {} | {} | {} |",
+                "| `{}` | {} | {} | {} | {} | {} | {} |",
                 s.scenario,
                 t("core.spawn_ms"),
                 t("wallpaper.first_frame_ms"),
                 t("widgets.first_paint_ms"),
+                t("bars.native_paint_ms"),
                 t("bars.first_paint_ms"),
                 t("taskbar.hidden_ms"),
             );
@@ -83,15 +87,19 @@ impl Report {
         md.push_str("\n## CPU\n\n");
         md.push_str(
             "Percent of the whole machine (of one core in parentheses), WebView2 processes \
-             included in their host. *Held* is paused from the tray (`paused: true`).\n\n",
+             included in their host (or in *shared WebView2*). *Held* is paused from the tray \
+             (`paused: true`).\n\n",
         );
-        md.push_str("| Scenario | screens visible | total | wallpaper | widgets | bars | core | held total |\n");
-        md.push_str("|---|---|---|---|---|---|---|---|\n");
+        md.push_str(
+            "| Scenario | screens visible | total | wallpaper | widgets | bars \
+             | shared WebView2 | core | held total |\n",
+        );
+        md.push_str("|---|---|---|---|---|---|---|---|---|\n");
         for s in &self.scenarios {
             let c = |component: &str, phase: &str| cpu(&s.metrics, component, phase);
             let _ = writeln!(
                 md,
-                "| `{}` | {} | {} | {} | {} | {} | {} | {} |",
+                "| `{}` | {} | {} | {} | {} | {} | {} | {} | {} |",
                 s.scenario,
                 s.metrics
                     .get("screens.visible")
@@ -100,6 +108,7 @@ impl Report {
                 c("wallpaper", "steady"),
                 c("widgets", "steady"),
                 c("bars", "steady"),
+                c("webview", "steady"),
                 c("core", "steady"),
                 c("total", "held"),
             );

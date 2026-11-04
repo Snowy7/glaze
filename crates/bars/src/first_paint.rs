@@ -17,7 +17,8 @@ use std::path::PathBuf;
 use std::sync::Once;
 use std::time::{Duration, Instant};
 
-use mypaper_desktop::{Rect, startup};
+use mypaper_bars::BarsConfig;
+use mypaper_desktop::{Monitor, Rect, startup};
 use mypaper_theme::Surface;
 use serde::{Deserialize, Serialize};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, SIZE, WPARAM};
@@ -87,15 +88,25 @@ fn rect_array(rect: Rect) -> [i32; 4] {
     [rect.x, rect.y, rect.width, rect.height]
 }
 
+/// A bar by what it is rather than by id: (kind, monitor device). Stand-ins go up before any
+/// bar exists, so they're keyed by this.
+type Key = (&'static str, String);
+
+fn key_of(bar: &Bar) -> Key {
+    (kind_name(bar.kind), bar.monitor.device.clone())
+}
+
 /// The bars' first-paint state: the cache, the stand-in windows, and which late topics have
 /// reported since the start.
 pub struct FirstPaint {
     path: Option<PathBuf>,
     cache: Cache,
-    /// Stand-ins on screen, by bar id.
-    splashes: HashMap<u32, Splash>,
+    /// Stand-ins on screen.
+    splashes: HashMap<Key, Splash>,
     /// Bars that got a stand-in (or were found to need none) already.
-    handled: HashSet<u32>,
+    handled: HashSet<Key>,
+    /// Which bar is which, once they exist.
+    keys: HashMap<u32, Key>,
     /// Bars whose page painted since it loaded.
     painted: HashSet<u32>,
     /// Bars whose page set a region since it loaded (its shape is recorded then).
@@ -117,6 +128,7 @@ impl FirstPaint {
             cache,
             splashes: HashMap::new(),
             handled: HashSet::new(),
+            keys: HashMap::new(),
             painted: HashSet::new(),
             laid_out: HashSet::new(),
             reported: HashSet::new(),
@@ -124,26 +136,74 @@ impl FirstPaint {
         }
     }
 
-    /// Shows a stand-in for every new, visible bar whose last shape still fits, and removes the
-    /// stand-ins of bars that are gone or hidden. `look` is each kind's current look.
-    pub fn sync(&mut self, bars: &[Bar], look: impl Fn(BarKind) -> Look) {
-        self.splashes
-            .retain(|id, _| bars.iter().any(|b| b.id == *id && !b.hidden));
-        for bar in bars.iter().filter(|b| !b.hidden) {
-            if !self.handled.insert(bar.id) {
+    /// Puts up the stand-in of every bar `config` puts on `monitors` (but not on `covered`, the
+    /// monitor of a fullscreen app) whose shape is cached. Called as soon as the host knows the
+    /// look, before the bars reserve their space (several synchronous round trips to Explorer);
+    /// [`sync`](Self::sync) then drops any that the real bar doesn't land on.
+    pub fn show_early(
+        &mut self,
+        monitors: &[Monitor],
+        config: &BarsConfig,
+        covered: Option<&str>,
+        look: impl Fn(BarKind) -> Look,
+    ) {
+        let (top, dock) = (&config.top, &config.dock);
+        let wanted = monitors
+            .iter()
+            .filter(|m| covered != Some(m.device.as_str()))
+            .flat_map(|m| {
+                [
+                    (
+                        BarKind::Top,
+                        top.enabled && top.monitors.includes(&m.device, m.primary),
+                    ),
+                    (
+                        BarKind::Dock,
+                        dock.enabled && dock.monitors.includes(&m.device, m.primary),
+                    ),
+                ]
+                .into_iter()
+                .filter(|(_, on)| *on)
+                .map(|(kind, _)| (kind, m.clone()))
+            });
+        self.show_cached(wanted.collect::<Vec<_>>(), look);
+    }
+
+    /// Puts up the stand-in of every bar in `wanted` (kind and monitor) that doesn't have one
+    /// yet and whose shape is cached for a monitor at the same scale.
+    fn show_cached(
+        &mut self,
+        wanted: impl IntoIterator<Item = (BarKind, Monitor)>,
+        look: impl Fn(BarKind) -> Look,
+    ) {
+        for (kind, monitor) in wanted {
+            let key = (kind_name(kind), monitor.device.clone());
+            if !self.handled.insert(key.clone()) {
                 continue;
             }
-            let shape = self.cache.shapes.iter().find(|s| {
-                s.kind == kind_name(bar.kind)
-                    && s.device == bar.monitor.device
-                    && s.rect == rect_array(bar.rect)
-                    && s.scale == bar.scale()
-            });
-            if let Some(splash) = shape.and_then(|s| Splash::show(s, bar, &look(bar.kind))) {
+            let scale = f64::from(monitor.dpi) / 96.0;
+            let shape = self
+                .cache
+                .shapes
+                .iter()
+                .find(|s| s.kind == key.0 && s.device == key.1 && s.scale == scale);
+            if let Some(splash) = shape.and_then(|s| Splash::show(s, &monitor, &look(kind))) {
                 startup::ready("bars", "native_paint_ms");
-                self.splashes.insert(bar.id, splash);
+                self.splashes.insert(key, splash);
             }
         }
+    }
+
+    /// Follows the real bars: a stand-in stays only over a visible bar placed where it was
+    /// cached; a bar that shows up later gets one too, once.
+    pub fn sync(&mut self, bars: &[Bar], look: impl Fn(BarKind) -> Look) {
+        self.keys = bars.iter().map(|b| (b.id, key_of(b))).collect();
+        self.splashes.retain(|key, splash| {
+            bars.iter()
+                .any(|b| key_of(b) == *key && !b.hidden && splash.rect == rect_array(b.rect))
+        });
+        let visible = bars.iter().filter(|b| !b.hidden);
+        self.show_cached(visible.map(|b| (b.kind, b.monitor.clone())), look);
     }
 
     /// The page of bar `id` (re)loaded: its next region is its new shape.
@@ -183,8 +243,11 @@ impl FirstPaint {
     /// The stand-in goes once the page both painted and set its region (the window shows
     /// nothing before it has a region).
     fn reveal(&mut self, id: u32) {
-        if self.painted.contains(&id) && self.laid_out.contains(&id) {
-            self.splashes.remove(&id);
+        if self.painted.contains(&id)
+            && self.laid_out.contains(&id)
+            && let Some(key) = self.keys.get(&id)
+        {
+            self.splashes.remove(key);
         }
     }
 
@@ -230,11 +293,16 @@ impl FirstPaint {
 }
 
 /// A stand-in window: click-through, never activated, topmost, painted once.
-struct Splash(HWND);
+struct Splash {
+    hwnd: HWND,
+    /// The bar window rect it stands in for.
+    rect: [i32; 4],
+}
 
 impl Splash {
-    /// Paints `shape` in `look` over `bar`'s window. `None` when there's nothing to paint.
-    fn show(shape: &Shape, bar: &Bar, look: &Look) -> Option<Self> {
+    /// Paints `shape` in `look` where its bar's window was, on `monitor`. `None` when there's
+    /// nothing to paint.
+    fn show(shape: &Shape, monitor: &Monitor, look: &Look) -> Option<Self> {
         if look.surface == Surface::None || look.opacity <= 0.0 {
             return None;
         }
@@ -261,12 +329,12 @@ impl Splash {
         if width <= 0 || height <= 0 || width > 16384 || height > 16384 {
             return None;
         }
-        let origin = (bar.rect.x + left as i32, bar.rect.y + top as i32);
+        let origin = (shape.rect[0] + left as i32, shape.rect[1] + top as i32);
         let local: Vec<[f64; 4]> = rects
             .iter()
             .map(|[x, y, w, h]| [x - left, y - top, *w, *h])
             .collect();
-        let backdrop = Backdrop::load(&bar.monitor.device, bar.monitor.rect);
+        let backdrop = Backdrop::load(&monitor.device, monitor.rect);
         let backdrop_at = |px: i32, py: i32| {
             backdrop
                 .as_ref()
@@ -280,10 +348,12 @@ impl Splash {
             look.opacity.clamp(0.0, 1.0),
             backdrop_at,
         );
-        let hwnd = create_window()?;
-        let splash = Self(hwnd);
+        let splash = Self {
+            hwnd: create_window()?,
+            rect: shape.rect,
+        };
         // SAFETY: our own window; `pixels` covers width x height.
-        unsafe { present(hwnd, origin, (width, height), &pixels) }
+        unsafe { present(splash.hwnd, origin, (width, height), &pixels) }
             .inspect_err(|e| log::warn!("no native first paint: {e}"))
             .ok()?;
         Some(splash)
@@ -293,7 +363,7 @@ impl Splash {
 impl Drop for Splash {
     fn drop(&mut self) {
         // SAFETY: our own window, destroyed on its thread.
-        let _ = unsafe { DestroyWindow(self.0) };
+        let _ = unsafe { DestroyWindow(self.hwnd) };
     }
 }
 
@@ -582,6 +652,7 @@ mod tests {
             cache: Cache::default(),
             splashes: HashMap::new(),
             handled: HashSet::new(),
+            keys: HashMap::new(),
             painted: HashSet::new(),
             laid_out: HashSet::new(),
             reported: HashSet::new(),

@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use mypaper_bars::taskbar::{Taskbar, Wanted};
+use mypaper_bars::taskbar::{NativeShell, Shell, Taskbar, Wanted};
 use mypaper_bars::{BarsConfig, TaskbarMode};
 use mypaper_desktop::startup;
 use windows::Win32::Foundation::{CloseHandle, LPARAM, WPARAM};
@@ -42,8 +42,33 @@ pub fn wait_for_shell() {
     );
 }
 
+/// The native taskbar as core touches it before the bars run: only its windows are hidden.
+/// Auto-hide and alignment make Explorer lay the desktop out again, which held up the
+/// wallpaper's attach to the desktop by most of a second (docs/performance.md), so they are left
+/// to the bars, which apply the whole mode right after. Their originals are still journaled
+/// here: [`Taskbar::apply`] records before it changes, and the bars keep those records.
+struct HideOnly(NativeShell);
+
+impl Shell for HideOnly {
+    fn appbar_state(&self) -> u32 {
+        self.0.appbar_state()
+    }
+    fn set_appbar_state(&mut self, _state: u32) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn set_hidden(&mut self, hidden: bool) -> anyhow::Result<()> {
+        self.0.set_hidden(hidden)
+    }
+    fn alignment(&self) -> anyhow::Result<Option<u32>> {
+        self.0.alignment()
+    }
+    fn set_alignment(&mut self, _value: Option<u32>) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
 /// When `bars.json` hides the native taskbar, hides it now, before any child starts, so it
-/// never shows while the bars load (they apply the same mode again; the journal keeps the
+/// never shows while the bars load (they apply the whole mode right after; the journal keeps the
 /// originals either way). Returns whether `bars.json` says hide.
 pub fn hide_taskbar_early() -> bool {
     let config = mypaper_bars::config::path().and_then(|path| BarsConfig::load(&path));
@@ -59,7 +84,8 @@ pub fn hide_taskbar_early() -> bool {
         mode: taskbar.mode,
         alignment: taskbar.alignment,
     };
-    match Taskbar::native().and_then(|mut native| native.apply(wanted)) {
+    let journal = mypaper_bars::files::local(mypaper_bars::taskbar::JOURNAL);
+    match journal.and_then(|path| Taskbar::new(HideOnly(NativeShell), path).apply(wanted)) {
         Ok(()) => startup::ready("core", "taskbar_hidden_ms"),
         // No taskbar yet (Explorer is still starting): the bars hide it when it comes.
         Err(e) => log::warn!("hiding the taskbar early: {e:#}"),
