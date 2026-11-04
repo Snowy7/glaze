@@ -19,6 +19,7 @@ use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use crate::backdrop::{Backdrop, Draw};
+use crate::glass_pass::GlassPass;
 use crate::gpu::{Gpu, Opening, Screen};
 use crate::hold::{Fact, HoldReasons, Holds};
 use crate::palette;
@@ -72,6 +73,8 @@ pub struct Engine {
     backdrop: Backdrop,
     /// Sets a still of the theme as the Windows wallpaper (desktop mode, `static_snapshot`).
     snapshot: Snapshot,
+    /// Liquid glass under the widgets' (and bars') plates, when they ask for it.
+    glass: GlassPass,
 }
 
 impl Engine {
@@ -107,6 +110,7 @@ impl Engine {
         let mut snapshot = Snapshot::new();
         snapshot.theme_loaded(loaded);
         let backdrop = Backdrop::new(monitors.as_deref(), |i| source.native(i));
+        let glass = GlassPass::new(monitors.as_deref());
         Ok(Self {
             theme,
             gpu,
@@ -127,7 +131,18 @@ impl Engine {
             palette_due: true,
             backdrop,
             snapshot,
+            glass,
         })
+    }
+
+    /// The registered message that says a glass plates file changed.
+    pub fn glass_message(&self) -> u32 {
+        self.glass.message
+    }
+
+    /// Re-reads the glass plates (their writer posted `mypaper.glass`).
+    pub fn glass_changed(&mut self) {
+        self.glass.reload();
     }
 
     /// Follows `static_snapshot`: on, the theme's first frame becomes the Windows wallpaper;
@@ -235,8 +250,10 @@ impl Engine {
         }
 
         self.sync_visibility();
+        self.glass.advance(now);
         for (index, screen) in self.screens.iter_mut().enumerate() {
             screen.dirty |= self.source.take_dirty(index);
+            screen.dirty |= self.glass.take_dirty(index);
         }
         let active = !self.held && self.screens.iter().any(|s| !s.paused);
         if !active {
@@ -294,10 +311,15 @@ impl Engine {
     }
 
     fn deadline(&self, frame: Option<Instant>) -> Option<Instant> {
-        [frame, self.reload_at, self.recheck_at]
-            .into_iter()
-            .flatten()
-            .min()
+        [
+            frame,
+            self.reload_at,
+            self.recheck_at,
+            self.glass.deadline(),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     /// Draws visible screens: all of them if a frame is `due`, otherwise
@@ -356,6 +378,15 @@ impl Engine {
                     held: self.held,
                     animated,
                 },
+                &mut encoder,
+            );
+            // After the backdrop's copy, so the bars' blurred wallpaper has no plates in it.
+            self.glass.encode(
+                &self.gpu,
+                index,
+                screen.size(),
+                &texture.texture,
+                screen.copy_src,
                 &mut encoder,
             );
             self.gpu.queue.submit([encoder.finish()]);

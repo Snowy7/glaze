@@ -19,6 +19,7 @@
 mod backdrop;
 mod control;
 mod engine;
+mod glass_pass;
 mod gpu;
 mod palette;
 mod snapshot;
@@ -190,6 +191,7 @@ fn pump(engine: &mut Engine, live: &mut Live) -> Option<u8> {
                 WM_QUIT => return Some(msg.wParam.0 as u8),
                 WM_RELOAD => engine.schedule_reload(),
                 WM_CONFIG => live.schedule(),
+                m if m == engine.glass_message() => engine.glass_changed(),
                 WM_FACT => {
                     if let Some(fact) = Fact::from_wparam(msg.wParam.0) {
                         engine.set_fact(fact, msg.lParam.0 != 0);
