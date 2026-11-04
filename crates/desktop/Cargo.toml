@@ -11,9 +11,16 @@ mypaper-config.workspace = true
 anyhow.workspace = true
 env_logger.workspace = true
 log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 notify.workspace = true
 # Direct2D takes its points as `Vector2`; the version `windows` 0.62 already uses.
 windows-numerics = "0.3"
+# Only for the WebView2 hosts (feature `webview`): the shared environment helper.
+webview2-com = { version = "0.39", optional = true }
+
+[features]
+webview = ["dep:webview2-com"]
 
 [dependencies.windows]
 workspace = true
@@ -33,6 +40,7 @@ features = [
   "Win32_System_Ole",
   "Win32_System_Performance",
   "Win32_System_Power",
+  "Win32_System_Registry",
   "Win32_System_RemoteDesktop",
   "Win32_System_SystemInformation",
   "Win32_System_SystemServices",

@@ -7,6 +7,7 @@ mod cover;
 pub mod desktop_hit;
 pub mod desktop_menu;
 pub mod desktop_view;
+pub mod desktop_wallpaper;
 mod fullscreen;
 pub mod hold;
 mod host;
@@ -15,6 +16,9 @@ mod menu_ui;
 mod monitors;
 mod power;
 pub mod raw_input;
+pub mod startup;
+#[cfg(feature = "webview")]
+pub mod webview_env;
 
 pub use config_watch::{ConfigWatcher, watch_config, watch_file};
 pub use control::{ControlWindow, WM_FACT};

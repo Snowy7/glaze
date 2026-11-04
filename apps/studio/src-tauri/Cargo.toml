@@ -21,7 +21,6 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 # A second launch focuses the running Studio instead of opening another window.
 tauri-plugin-single-instance = "2"
-winreg = "0.56"
 png = "0.18"
 
 [dependencies.windows]

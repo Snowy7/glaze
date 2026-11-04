@@ -1356,6 +1356,7 @@ impl App {
             FromShell::Ready => {
                 self.surfaces[index].ready = true;
                 self.push_state(index);
+                self.surfaces[index].probe_paint();
             }
             FromShell::Hello { instance } => self.forget(&instance),
             FromShell::Call {

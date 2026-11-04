@@ -32,6 +32,10 @@ pub struct Config {
     /// Windows 11: use the classic full context menu everywhere (undocumented
     /// registry switch, opt-in, reversible; Explorer needs a restart to show it).
     pub classic_context_menu: bool,
+    /// Also set a still of the theme as the Windows desktop wallpaper, so Windows shows the
+    /// theme's look before mypaper starts (docs/performance.md, "Static snapshot"). Turning it
+    /// off puts the user's own wallpaper back.
+    pub static_snapshot: bool,
 }
 
 impl Default for Config {
@@ -43,6 +47,7 @@ impl Default for Config {
             pause_on_fullscreen: true,
             desktop_menu: DesktopMenu::default(),
             classic_context_menu: false,
+            static_snapshot: true,
         }
     }
 }

@@ -21,6 +21,7 @@ mod bar;
 mod bridge;
 mod custom;
 mod desktops;
+mod first_paint;
 mod glass;
 mod hooks;
 mod icons;

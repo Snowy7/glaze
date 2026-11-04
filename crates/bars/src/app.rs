@@ -22,7 +22,9 @@ use mypaper_bars::config::{self, BarsConfig, DockPosition, Pinned, TaskbarMode, 
 use mypaper_bars::taskbar::{NativeShell, Taskbar, Wanted};
 use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, Holds, Reason};
-use mypaper_desktop::{ControlWindow, Monitor, WM_FACT, fullscreen_app_monitor, monitor_infos};
+use mypaper_desktop::{
+    ControlWindow, Monitor, WM_FACT, fullscreen_app_monitor, monitor_infos, startup,
+};
 use mypaper_theme::Color;
 use notify::Watcher;
 use serde_json::{Value, json};
@@ -54,6 +56,7 @@ use crate::bridge::{
     Activate, BarError, BarKind, Envelope, Method, Topic, TrashAction, bar_topics,
 };
 use crate::desktops::{Desktops, Workspaces};
+use crate::first_paint::FirstPaint;
 use crate::glass::BACKDROP_HOST;
 use crate::hooks::{self, Hooks};
 use crate::icons::ICON_HOST;
@@ -285,6 +288,8 @@ pub struct App {
     watchers: Vec<notify::RecommendedWatcher>,
     theme_watch: Option<(PathBuf, notify::RecommendedWatcher)>,
     _palette_watch: Option<mypaper_desktop::ConfigWatcher>,
+    /// The native stand-ins shown until the pages paint, and the late topics' last values.
+    first_paint: FirstPaint,
 }
 
 impl App {
@@ -367,10 +372,19 @@ impl App {
             watchers: Vec::new(),
             theme_watch: None,
             _palette_watch: None,
+            first_paint: FirstPaint::load(),
             waker,
         };
         app.holds
             .set(Fact::OnBattery, mypaper_desktop::on_battery());
+        // The native stand-ins first: they're on screen while the bars reserve their space and
+        // WebView2 starts (docs/performance.md, "Native first paint").
+        app.refresh_fullscreen();
+        let looks = [BarKind::Top, BarKind::Dock].map(|kind| app.look(kind));
+        let look = |kind| looks[usize::from(kind == BarKind::Dock)].clone();
+        let covered = app.fullscreen.as_deref();
+        app.first_paint
+            .show_early(&app.monitors, &app.config, covered, look);
         log::info!(
             "taskbar {:?}, top bar {}, dock {}",
             app.config.taskbar.mode,
@@ -495,6 +509,7 @@ impl App {
             }
             Msg::Media(state) => {
                 self.media_state = state;
+                self.first_paint.reported(Topic::Media);
                 self.emit(Topic::Media);
             }
             Msg::Volume => {
@@ -506,6 +521,7 @@ impl App {
             Msg::Network => soon(&mut self.timers.network, SETTLE_NETWORK),
             Msg::Tray(items) => {
                 self.tray_items = items;
+                self.first_paint.reported(Topic::Tray);
                 self.emit(Topic::Tray);
             }
             Msg::Backdrop => self.backdrop_changed(),
@@ -521,6 +537,7 @@ impl App {
     }
 
     fn tick(&mut self, now: Instant) {
+        self.first_paint.expire(now);
         if let Some(hooks) = &self.hooks {
             let happened = hooks.take();
             if happened & hooks::WINDOWS != 0 {
@@ -580,6 +597,7 @@ impl App {
         if due(&mut self.timers.stats, now) {
             if let Some(sampler) = &mut self.sampler {
                 self.stats = Some(sampler.sample());
+                self.first_paint.reported(Topic::Stats);
                 self.timers.stats = Some(now + STATS_EVERY);
             }
             self.emit(Topic::Stats);
@@ -816,6 +834,10 @@ impl App {
                         }
                     }
                 }
+                WebEvent::Painted { bar } => {
+                    startup::ready("bars", "first_paint_ms");
+                    self.first_paint.painted(bar);
+                }
             }
         }
     }
@@ -934,6 +956,10 @@ impl App {
         if changed {
             self.sync_glass();
         }
+        let looks = [BarKind::Top, BarKind::Dock].map(|kind| self.look(kind));
+        self.first_paint.sync(&self.bars, |kind| {
+            looks[usize::from(kind == BarKind::Dock)].clone()
+        });
     }
 
     // --- Topics --------------------------------------------------------------------------------
@@ -1055,6 +1081,7 @@ impl App {
                         return;
                     };
                     let message = json!({ "event": topic.event(), "data": value }).to_string();
+                    self.first_paint.sent(topic, &message);
                     shared = Some(message.clone());
                     message
                 }
@@ -1067,13 +1094,20 @@ impl App {
         }
     }
 
-    /// A bar just said hello or came back: everything it shows, now.
+    /// A bar just said hello or came back: everything it shows, now. A late topic whose
+    /// provider hasn't reported yet gets its last value from the previous run.
     fn push_all(&mut self, index: usize) {
         let id = self.bars[index].id;
         self.sent.retain(|(bar, _), _| *bar != id);
         let topics = bar_topics(self.bars[index].kind, &self.bars[index].config);
         for topic in topics.intersection(&self.active.clone()) {
-            self.emit(*topic);
+            match self.first_paint.stand_in(*topic).map(str::to_owned) {
+                Some(cached) => {
+                    self.bars[index].post(&cached);
+                    self.sent.insert((id, *topic), cached);
+                }
+                None => self.emit(*topic),
+            }
         }
     }
 
@@ -1325,8 +1359,12 @@ impl App {
         if hello && index < self.bars.len() {
             self.bars[index].ready = true;
             self.looks.forget(self.bars[index].id);
+            self.first_paint.hello(self.bars[index].id);
             self.push_all(index);
             self.push_looks();
+            if let Some(web) = &self.bars[index].web {
+                web.probe_paint();
+            }
         }
     }
 
@@ -1434,6 +1472,7 @@ impl App {
                 done
             }
             Method::Region { rects } => {
+                self.first_paint.region(&self.bars[index], &rects);
                 self.bars[index].set_region(rects);
                 done
             }
@@ -1694,6 +1733,7 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         let started = Instant::now();
+        self.first_paint.save();
         self.media.set_active(false);
         self.tray.set_active(false);
         self.bars.clear(); // app bars removed: the work area comes back

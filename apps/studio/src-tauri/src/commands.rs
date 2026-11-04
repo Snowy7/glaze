@@ -411,7 +411,7 @@ mod tests {
             .apply(&mut config);
         assert_eq!(
             config,
-            Config { theme: "photo".into(), paused: true, pause_on_battery: false, pause_on_fullscreen: true }
+            Config { theme: "photo".into(), paused: true, pause_on_battery: false, pause_on_fullscreen: true, ..Config::default() }
         );
     }
 

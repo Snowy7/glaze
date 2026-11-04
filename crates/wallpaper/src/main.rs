@@ -13,12 +13,15 @@
 
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Proving that wgpu's buffers can move to the snapshot thread (`Send`) walks a deep type graph.
+#![recursion_limit = "256"]
 
 mod backdrop;
 mod control;
 mod engine;
 mod gpu;
 mod palette;
+mod snapshot;
 mod sources;
 mod trim;
 mod window;
@@ -28,7 +31,9 @@ use std::time::Instant;
 
 use anyhow::{Result, bail};
 use mypaper_config::Config;
-use mypaper_desktop::{ControlWindow, DesktopHost, EXIT_CONFIG, WindowEvents, hold, monitors};
+use mypaper_desktop::{
+    ControlWindow, DesktopHost, EXIT_CONFIG, WindowEvents, hold, monitors, startup,
+};
 use mypaper_theme::LoadedTheme;
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage, WM_QUIT,
@@ -57,14 +62,24 @@ fn main() -> ExitCode {
 
     // Bad arguments, config or theme will not fix themselves: exit with
     // EXIT_CONFIG so the supervisor reports it instead of restarting.
-    let (args, config, theme) = match startup() {
-        Ok(started) => started,
+    let args = match parse_args() {
+        Ok(args) => args,
         Err(e) => {
             log::error!("{e:#}");
             return ExitCode::from(EXIT_CONFIG);
         }
     };
-    match run(args, config, theme) {
+    // The slowest part of starting, so it starts first and runs while the theme loads and the
+    // windows are made.
+    let gpu = gpu::Opening::start();
+    let (config, theme) = match load(&args) {
+        Ok(loaded) => loaded,
+        Err(e) => {
+            log::error!("{e:#}");
+            return ExitCode::from(EXIT_CONFIG);
+        }
+    };
+    match run(args, config, theme, gpu) {
         Ok(code) => ExitCode::from(code),
         Err(e) => {
             log::error!("{e:#}");
@@ -73,13 +88,12 @@ fn main() -> ExitCode {
     }
 }
 
-/// Reads the arguments and config, and loads the theme they select.
-fn startup() -> Result<(Args, Config, LoadedTheme)> {
-    let args = parse_args()?;
+/// Reads the config and loads the theme it (or the arguments) select.
+fn load(args: &Args) -> Result<(Config, LoadedTheme)> {
     let config = Config::load()?;
     let name = args.theme.as_deref().unwrap_or(&config.theme);
     let theme = LoadedTheme::load(mypaper_theme::locate(Some(name))?)?;
-    Ok((args, config, theme))
+    Ok((config, theme))
 }
 
 fn parse_args() -> Result<Args> {
@@ -99,7 +113,7 @@ fn parse_args() -> Result<Args> {
     Ok(Args { windowed, theme })
 }
 
-fn run(args: Args, config: Config, theme: LoadedTheme) -> Result<u8> {
+fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Result<u8> {
     log::info!("theme: {} ({})", theme.theme.name, theme.dir.display());
     window::init_com_apartment()?;
     window::register_class()?;
@@ -129,15 +143,18 @@ fn run(args: Args, config: Config, theme: LoadedTheme) -> Result<u8> {
     };
 
     let _control = ControlWindow::new(CONTROL_CLASS)?;
-    let mut engine = Engine::new(theme, windows, monitors)?;
+    startup::ready("wallpaper", "windows_ms");
+    let mut engine = Engine::new(theme, gpu, windows, monitors)?;
     // Facts first, so the initial hold is logged once.
     engine.set_fact(Fact::OnBattery, mypaper_desktop::on_battery());
     engine.apply_config(&config);
+    engine.set_static_snapshot(config.static_snapshot);
     let mut live = Live::new(config, engine.theme_dir())?;
     let events = host.is_some().then(WindowEvents::install);
     let waiter = Waiter::new()?;
 
     let mut trimmer = Trimmer::new(engine.theme_dir());
+    startup::ready("wallpaper", "loop_ms");
     let code = loop {
         if let Some(code) = pump(&mut engine, &mut live) {
             break code;

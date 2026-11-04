@@ -11,14 +11,14 @@ use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
-use mypaper_desktop::{DesktopHost, EXIT_RESTART, Monitor};
+use mypaper_desktop::{DesktopHost, EXIT_RESTART, Monitor, startup, webview_env};
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::{
-    AddScriptToExecuteOnDocumentCreatedCompletedHandler, CoreWebView2EnvironmentOptions,
-    CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
-    NavigationStartingEventHandler, NewWindowRequestedEventHandler,
-    PermissionRequestedEventHandler, ProcessFailedEventHandler, TrySuspendCompletedHandler,
-    WebMessageReceivedEventHandler, WebResourceRequestedEventHandler, take_pwstr,
+    AddScriptToExecuteOnDocumentCreatedCompletedHandler,
+    CreateCoreWebView2ControllerCompletedHandler, NavigationStartingEventHandler,
+    NewWindowRequestedEventHandler, PermissionRequestedEventHandler, ProcessFailedEventHandler,
+    TrySuspendCompletedHandler, WebMessageReceivedEventHandler, WebResourceRequestedEventHandler,
+    take_pwstr,
 };
 use windows::Win32::Foundation::{E_POINTER, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -121,31 +121,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     }
 }
 
-/// Starts creating the shared WebView2 environment; the result arrives as
-/// [`WebEvent::Environment`].
+/// Starts creating the WebView2 environment, shared with the bars (one browser process,
+/// docs/performance.md); the result arrives as [`WebEvent::Environment`].
 pub fn create_environment(generation: u64, events: &Events) -> Result<()> {
-    let data_dir = crate::files::local("webview2-widgets")?;
-    std::fs::create_dir_all(&data_dir)?;
     let events = events.clone();
-    let handler =
-        CreateCoreWebView2EnvironmentCompletedHandler::create(Box::new(move |result, env| {
-            let result = result.and_then(|()| env.ok_or_else(|| E_POINTER.into()));
-            events
-                .borrow_mut()
-                .push_back(WebEvent::Environment { generation, result });
-            Ok(())
-        }));
-    let options: ICoreWebView2EnvironmentOptions = CoreWebView2EnvironmentOptions::default().into();
-    // SAFETY: valid strings and COM objects that outlive the call.
-    unsafe {
-        CreateCoreWebView2EnvironmentWithOptions(
-            PCWSTR::null(),
-            &HSTRING::from(crate::files::plain(&data_dir)),
-            &options,
-            &handler,
-        )
-    }
-    .context("starting WebView2 (is the WebView2 Runtime installed?)")
+    webview_env::create_environment(&webview_env::shared_data_dir()?, move |result| {
+        events
+            .borrow_mut()
+            .push_back(WebEvent::Environment { generation, result });
+    })
 }
 
 /// Reads a COM-allocated string out-parameter.
@@ -444,6 +428,10 @@ impl Surface {
                     if let Some(args) = args {
                         let source = out_string(|p| args.Source(p))?;
                         let json = out_string(|p| args.WebMessageAsJson(p))?;
+                        if json == webview_env::PAINTED {
+                            startup::ready("widgets", "first_paint_ms");
+                            return Ok(());
+                        }
                         events.borrow_mut().push_back(WebEvent::Message {
                             surface,
                             source,
@@ -606,6 +594,16 @@ impl Surface {
             if let Err(e) = unsafe { web.webview.PostWebMessageAsJson(&HSTRING::from(json)) } {
                 log::warn!("couldn't message the shell: {e}");
             }
+        }
+    }
+
+    /// Asks the shell to answer once what it was just sent is on screen (the first-paint
+    /// marker, docs/performance.md).
+    pub fn probe_paint(&self) {
+        if let Some(web) = &self.web {
+            let script = HSTRING::from(webview_env::PAINT_PROBE);
+            // SAFETY: COM call on a live WebView; no completion handler is needed.
+            let _ = unsafe { web.webview.ExecuteScript(&script, None) };
         }
     }
 

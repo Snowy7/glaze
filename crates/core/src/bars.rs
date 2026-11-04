@@ -1,12 +1,16 @@
-//! The shell bars child (docs/bars.md, "Core and tray"): asking it to stop so it restores the
-//! native taskbar itself, and replaying the taskbar journal when it couldn't (killed, crashed).
+//! The shell bars child (docs/bars.md, "Core and tray"): hiding the native taskbar before the
+//! bars start, asking them to stop so they restore it themselves, and replaying the taskbar
+//! journal when they couldn't (killed, crashed).
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use mypaper_bars::taskbar::{NativeShell, Shell, Taskbar, Wanted};
+use mypaper_bars::{BarsConfig, TaskbarMode};
+use mypaper_desktop::startup;
 use windows::Win32::Foundation::{CloseHandle, LPARAM, WPARAM};
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject};
 use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowExW, GetWindowThreadProcessId, HWND_MESSAGE, PostMessageW, WM_CLOSE,
+    FindWindowExW, GetShellWindow, GetWindowThreadProcessId, HWND_MESSAGE, PostMessageW, WM_CLOSE,
 };
 use windows::core::{PCWSTR, w};
 
@@ -14,6 +18,80 @@ use windows::core::{PCWSTR, w};
 const HOST_CLASS: PCWSTR = w!("mypaper.bars.host");
 /// How long the bars get to restore the taskbar and exit before they're killed.
 pub const GRACE: Duration = Duration::from_secs(3);
+/// How long core waits for Explorer's desktop at logon before starting without it.
+const SHELL_WAIT: Duration = Duration::from_secs(60);
+
+/// At logon the scheduled task can start core before Explorer has made its desktop window,
+/// which every child needs. Waits for it, checking every 25 ms; returns at once when Explorer
+/// is up (every start but the logon one).
+pub fn wait_for_shell() {
+    // SAFETY: a read-only query.
+    let up = || !unsafe { GetShellWindow() }.is_invalid();
+    if up() {
+        return;
+    }
+    let started = Instant::now();
+    log::info!("waiting for Explorer's desktop");
+    while !up() && started.elapsed() < SHELL_WAIT {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    log::info!(
+        "Explorer's desktop {} after {:.1?}",
+        if up() { "is up" } else { "is still missing" },
+        started.elapsed()
+    );
+}
+
+/// The native taskbar as core touches it before the bars run: only its windows are hidden.
+/// Auto-hide and alignment make Explorer lay the desktop out again, which held up the
+/// wallpaper's attach to the desktop by most of a second (docs/performance.md), so they are left
+/// to the bars, which apply the whole mode right after. Their originals are still journaled
+/// here: [`Taskbar::apply`] records before it changes, and the bars keep those records.
+struct HideOnly(NativeShell);
+
+impl Shell for HideOnly {
+    fn appbar_state(&self) -> u32 {
+        self.0.appbar_state()
+    }
+    fn set_appbar_state(&mut self, _state: u32) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn set_hidden(&mut self, hidden: bool) -> anyhow::Result<()> {
+        self.0.set_hidden(hidden)
+    }
+    fn alignment(&self) -> anyhow::Result<Option<u32>> {
+        self.0.alignment()
+    }
+    fn set_alignment(&mut self, _value: Option<u32>) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+/// When `bars.json` hides the native taskbar, hides it now, before any child starts, so it
+/// never shows while the bars load (they apply the whole mode right after; the journal keeps the
+/// originals either way). Returns whether `bars.json` says hide.
+pub fn hide_taskbar_early() -> bool {
+    let config = mypaper_bars::config::path().and_then(|path| BarsConfig::load(&path));
+    let taskbar = match config {
+        Ok(config) if config.taskbar.mode == TaskbarMode::Hide => config.taskbar,
+        Ok(_) => return false,
+        Err(e) => {
+            log::warn!("bars.json: {e:#}");
+            return false;
+        }
+    };
+    let wanted = Wanted {
+        mode: taskbar.mode,
+        alignment: taskbar.alignment,
+    };
+    let journal = mypaper_bars::files::local(mypaper_bars::taskbar::JOURNAL);
+    match journal.and_then(|path| Taskbar::new(HideOnly(NativeShell), path).apply(wanted)) {
+        Ok(()) => startup::ready("core", "taskbar_hidden_ms"),
+        // No taskbar yet (Explorer is still starting): the bars hide it when it comes.
+        Err(e) => log::warn!("hiding the taskbar early: {e:#}"),
+    }
+    true
+}
 
 /// Posts `WM_CLOSE` to a running bars host. Returns whether there was one.
 pub fn ask_to_close() -> bool {
@@ -27,12 +105,13 @@ pub fn ask_to_close() -> bool {
 }
 
 /// A bars process left by an earlier run (it outlived a crashed core) would keep ours from
-/// starting and fight over the taskbar: ask it to exit, and wait for it.
-pub fn stop_leftover() {
+/// starting and fight over the taskbar: ask it to exit, and wait for it. Returns whether there
+/// was one.
+pub fn stop_leftover() -> bool {
     // SAFETY: a lookup, a post and a wait on a handle we open and close here.
     unsafe {
         let Ok(host) = FindWindowExW(Some(HWND_MESSAGE), None, HOST_CLASS, PCWSTR::null()) else {
-            return;
+            return false;
         };
         log::warn!("stopping the shell bars left by an earlier run");
         let mut pid = 0;
@@ -43,6 +122,7 @@ pub fn stop_leftover() {
             WaitForSingleObject(process, GRACE.as_millis() as u32);
             let _ = CloseHandle(process);
         }
+        true
     }
 }
 
