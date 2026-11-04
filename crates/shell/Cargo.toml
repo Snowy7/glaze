@@ -1,0 +1,40 @@
+[package]
+name = "mypaper-shell"
+description = "The native shell: one UI thread on mypaper-ui. Hosts the desktop right-click menu (N1)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mypaper-config.workspace = true
+mypaper-desktop.workspace = true
+mypaper-theme.workspace = true
+mypaper-tweaks.workspace = true
+mypaper-ui.workspace = true
+
+anyhow.workspace = true
+log.workspace = true
+
+[dependencies.windows]
+workspace = true
+features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Com",
+  "Win32_System_DataExchange",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_LibraryLoader",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_UI_Accessibility",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+]
+
+[dev-dependencies]
+mypaper-ui = { workspace = true, features = ["golden"] }
+
+[lints]
+workspace = true

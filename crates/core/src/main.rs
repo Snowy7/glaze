@@ -1,6 +1,7 @@
 //! mypaper-core: the supervisor. Starts the wallpaper engine, the widget
-//! host and the shell bars, restarts them when they crash or the desktop
-//! changes, and owns the panic hotkey.
+//! host, the shell bars and the native shell (`mypaper-shell`, which hosts the
+//! desktop right-click menu for now), restarts them when they crash or the
+//! desktop changes, and owns the panic hotkey.
 //!
 //! ```text
 //! mypaper-core [THEME]
@@ -121,11 +122,13 @@ fn run() -> Result<()> {
     };
     let mut wallpaper = Supervised::new("wallpaper", wallpaper_exe, wallpaper_args);
     wallpaper.start()?;
-    // The widget host and the shell bars (docs/bars.md) are optional: if one is missing or gives
-    // up, mypaper keeps running without it. When the bars stop for good, the taskbar journal is
-    // replayed so the native taskbar is never left hidden.
+    // The widget host, the shell bars (docs/bars.md) and the native shell (docs/ui.md) are
+    // optional: if one is missing or gives up, mypaper keeps running without it. When the bars
+    // stop for good, the taskbar journal is replayed so the native taskbar is never left hidden.
+    // The native shell also exits by itself when core does.
     let mut widgets = start_optional("widget host", exe.with_file_name("mypaper-widgets.exe"));
     let mut shell_bars = start_optional("shell bars", bars_exe);
+    let mut shell = start_optional("shell", exe.with_file_name("mypaper-shell.exe"));
     startup::ready("core", "spawn_ms");
     log::info!("running; panic hotkey: Ctrl+Alt+Shift+Backspace");
 
@@ -149,12 +152,17 @@ fn run() -> Result<()> {
         styling.set_theme(theme);
     }
 
-    // The desktop right-click menu (on by default) and the classic-menu switch (opt-in), via
-    // config.json (docs/desktop-extras.md). With the menu turned off nothing is installed.
+    // The classic-menu switch (opt-in), via config.json (docs/desktop-extras.md). The desktop
+    // right-click menu is the native shell's.
     let mut extras = DesktopExtras::new(&config);
 
     let panicked = loop {
-        let children = [Some(&wallpaper), widgets.as_ref(), shell_bars.as_ref()];
+        let children = [
+            Some(&wallpaper),
+            widgets.as_ref(),
+            shell_bars.as_ref(),
+            shell.as_ref(),
+        ];
         let handles: Vec<HANDLE> = children
             .iter()
             .flatten()
@@ -196,6 +204,13 @@ fn run() -> Result<()> {
                         widgets = None;
                     }
                 }
+                name if shell.as_ref().is_some_and(|s| s.name == name) => {
+                    if let Some(child) = &mut shell
+                        && child.on_exit()? == Outcome::Stopped
+                    {
+                        shell = None;
+                    }
+                }
                 _ => {
                     if let Some(child) = &mut shell_bars
                         && child.on_exit()? == Outcome::Stopped
@@ -212,6 +227,12 @@ fn run() -> Result<()> {
         {
             log::warn!("{e:#}; continuing without widgets");
             widgets = None;
+        }
+        if let Some(child) = &mut shell
+            && let Err(e) = child.restart_if_due()
+        {
+            log::warn!("{e:#}; continuing without the shell");
+            shell = None;
         }
         if let Some(child) = &mut shell_bars
             && let Err(e) = child.restart_if_due()
@@ -245,8 +266,7 @@ fn run() -> Result<()> {
                 styling.palette_changed();
             }
         }
-        // The menu's look follows the theme (and its palette), so both signals count.
-        if pumped.config_changed || pumped.palette_changed {
+        if pumped.config_changed {
             extras.follow_config();
         }
     };
@@ -260,8 +280,10 @@ fn run() -> Result<()> {
     if let Some(host) = &mut widgets {
         host.stop();
     }
+    if let Some(child) = &mut shell {
+        child.stop();
+    }
     wallpaper.stop();
-    extras.stop();
     if let Some(styling) = &mut styling {
         styling.stop();
     }

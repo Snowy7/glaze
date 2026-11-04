@@ -1,87 +1,44 @@
-//! Desktop extras (docs/desktop-extras.md), hosted in core because core is long-lived
-//! and idle: mypaper's own right-click menu for the bare desktop (on by default), the opt-in Win11
-//! "classic context menu" switch, and the desktop view helpers the tray uses.
+//! Desktop extras (docs/desktop-extras.md) that stay in core: the opt-in Win11 "classic context
+//! menu" switch, following `config.json` live, and the desktop view helpers the tray uses.
 //!
-//! Both options follow `config.json` live. The right-click menu runs on two threads of its
-//! own (see `mypaper_desktop::desktop_menu`), so core's supervisor loop is never in the path
-//! of a mouse event.
+//! mypaper's own right-click menu lives in the shell (`mypaper-shell`, which core supervises),
+//! so core loads no Direct2D and installs no mouse hook.
 
 use std::sync::mpsc;
 use std::time::Duration;
 
 use mypaper_config::Config;
-use mypaper_desktop::desktop_menu::{AppAction, DesktopMenu, Look, Settings};
 use mypaper_desktop::desktop_view::{DesktopView, IconSize};
-use mypaper_theme::{Appearance, Color, LoadedTheme, Paint, Surface, TextTone};
 use mypaper_tweaks::classic_menu::{Change, ClassicMenu};
-use mypaper_tweaks::palette;
 use windows::Win32::UI::WindowsAndMessaging::{
     MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
 };
 use windows::core::{HSTRING, w};
-
-use crate::tray;
 
 /// How long the tray waits for Explorer to describe the desktop before showing its
 /// menu without that part (a hung Explorer must not hang the supervisor).
 const VIEW_TIMEOUT: Duration = Duration::from_millis(400);
 
 pub struct DesktopExtras {
-    menu: Option<DesktopMenu>,
     classic: Option<ClassicMenu>,
 }
 
 impl DesktopExtras {
-    /// Starts what `config` asks for. Nothing runs, and no hook is installed, unless
-    /// `desktop_menu.enabled`.
+    /// Applies the classic-menu switch of `config`.
     pub fn new(config: &Config) -> Self {
         let classic = ClassicMenu::new()
             .inspect_err(|e| log::warn!("classic menu switch unavailable: {e:#}"))
             .ok();
-        let mut extras = Self {
-            menu: None,
-            classic,
-        };
-        extras.apply(config);
+        let mut extras = Self { classic };
+        extras.apply_classic(config.classic_context_menu);
         extras
     }
 
-    /// `config.json` or the theme's look changed: bring both options in line.
+    /// `config.json` changed: bring the switch in line.
     pub fn follow_config(&mut self) {
         match Config::load() {
-            Ok(config) => self.apply(&config),
+            Ok(config) => self.apply_classic(config.classic_context_menu),
             Err(e) => log::warn!("desktop extras unchanged: {e:#}"),
-        }
-    }
-
-    /// Drops the menu (and with it the hook). The classic-menu setting stays as the user left it.
-    pub fn stop(&mut self) {
-        self.menu = None;
-    }
-
-    fn apply(&mut self, config: &Config) {
-        self.apply_menu(config);
-        self.apply_classic(config.classic_context_menu);
-    }
-
-    fn apply_menu(&mut self, config: &Config) {
-        if !config.desktop_menu.enabled {
-            self.menu = None;
-            return;
-        }
-        let settings = Settings {
-            menu: config.desktop_menu.clone(),
-            look: look_for(&config.theme),
-        };
-        match &self.menu {
-            Some(menu) => menu.update(settings),
-            None => match DesktopMenu::start(settings, run_app_action) {
-                Ok(menu) => {
-                    log::info!("desktop right-click menu on");
-                    self.menu = Some(menu);
-                }
-                Err(e) => log::warn!("desktop right-click menu not started: {e:#}"),
-            },
         }
     }
 
@@ -99,14 +56,6 @@ impl DesktopExtras {
             Ok(Change::Unchanged) => {}
             Err(e) => log::warn!("classic context menu not changed: {e:#}"),
         }
-    }
-}
-
-/// The items that belong to the rest of mypaper.
-fn run_app_action(action: AppAction) {
-    match action {
-        AppAction::OpenStudio => tray::open_studio(),
-        AppAction::EditWidgets => tray::toggle_widget_edit_mode(),
     }
 }
 
@@ -129,64 +78,6 @@ fn notify_restart_explorer(classic: bool) {
         });
     if let Err(e) = spawned {
         log::warn!("could not show the Explorer restart notice: {e}");
-    }
-}
-
-/// The menu's look: the built-in defaults under the active theme's `bars` appearance
-/// (the same variables the bars use), with `accent: "auto"` taken from the wallpaper palette.
-/// `blur` has no counterpart: the menu is drawn as a nearly opaque tint.
-fn look_for(theme_name: &str) -> Look {
-    let loaded = mypaper_theme::locate(Some(theme_name))
-        .and_then(LoadedTheme::load)
-        .inspect_err(|e| log::debug!("desktop menu look: {e:#}"))
-        .ok();
-    let theme_look = loaded
-        .as_ref()
-        .and_then(|t| t.theme.bars.as_ref())
-        .and_then(|skin| skin.appearance.clone())
-        .unwrap_or_default();
-    let auto_accent = loaded.as_ref().and_then(|t| {
-        palette::read()
-            .filter(|snapshot| snapshot.is_for(&t.dir))
-            .map(|snapshot| snapshot.palette.accent)
-    });
-    resolve_look(&theme_look, auto_accent)
-}
-
-/// The menu's built-in appearance.
-fn default_appearance() -> Appearance {
-    Appearance {
-        surface: Some(Surface::Glass),
-        tint: Some(Color([0x16, 0x18, 0x1d])),
-        opacity: Some(0.94),
-        radius: Some(10.0),
-        border: Some(true),
-        text: Some(TextTone::Light),
-        accent: Some(Paint::Color(Color([0xff; 3]))),
-        font: Some("Segoe UI Variable Text, Segoe UI".into()),
-        scale: Some(1.0),
-        shadow: Some(true),
-        blur: None,
-        style: None,
-    }
-}
-
-fn resolve_look(theme: &Appearance, auto_accent: Option<Color>) -> Look {
-    let merged = theme.over(&default_appearance());
-    let fallback = Look::default();
-    Look {
-        dark: merged.text.unwrap_or(TextTone::Light) == TextTone::Light,
-        tint: merged.tint.map_or(fallback.tint, |c| c.0),
-        opacity: merged.opacity.unwrap_or(fallback.opacity),
-        radius: merged.radius.unwrap_or(fallback.radius),
-        border: merged.border.unwrap_or(fallback.border),
-        accent: match merged.accent {
-            Some(Paint::Color(color)) => color.0,
-            Some(Paint::Auto) | None => auto_accent.map_or(fallback.accent, |c| c.0),
-        },
-        font: merged.font.unwrap_or(fallback.font),
-        scale: merged.scale.unwrap_or(fallback.scale),
-        shadow: merged.shadow.unwrap_or(fallback.shadow),
     }
 }
 
@@ -230,41 +121,5 @@ fn on_desktop_view(
         });
     if let Err(e) = spawned {
         log::warn!("could not change the {what}: {e}");
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn without_a_theme_look_the_defaults_apply() {
-        let look = resolve_look(&Appearance::default(), None);
-        assert_eq!(look, Look::default());
-    }
-
-    #[test]
-    fn the_themes_bars_appearance_wins_and_auto_accent_follows_the_palette() {
-        let theme = Appearance {
-            tint: Some(Color([0xf0, 0xf0, 0xf2])),
-            text: Some(TextTone::Dark),
-            radius: Some(4.0),
-            accent: Some(Paint::Auto),
-            font: Some("Inter".into()),
-            shadow: Some(false),
-            ..Default::default()
-        };
-        let look = resolve_look(&theme, Some(Color([0x19, 0xcd, 0x86])));
-        assert!(!look.dark, "dark text means a light menu");
-        assert_eq!(look.tint, [0xf0, 0xf0, 0xf2]);
-        assert_eq!(look.radius, 4.0);
-        assert_eq!(look.accent, [0x19, 0xcd, 0x86]);
-        assert_eq!(look.font, "Inter");
-        assert!(!look.shadow);
-        // Unset fields keep the defaults.
-        assert_eq!(look.opacity, Look::default().opacity);
-        // `auto` without a palette falls back to the default accent.
-        let waiting = resolve_look(&theme, None);
-        assert_eq!(waiting.accent, Look::default().accent);
     }
 }

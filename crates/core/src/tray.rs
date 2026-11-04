@@ -527,21 +527,6 @@ fn post_to_widget_host(name: PCWSTR, what: &str) {
     }
 }
 
-/// Starts Studio (like the tray's "Open Studio"; Studio focuses itself if it is already running).
-pub(crate) fn open_studio() {
-    let studio = std::env::current_exe()
-        .ok()
-        .and_then(|exe| find_studio(&exe));
-    match studio {
-        Some(path) => {
-            if let Err(e) = Process::new(&path).spawn() {
-                log::error!("could not start {}: {e}", path.display());
-            }
-        }
-        None => log::warn!("{STUDIO_EXE} not found"),
-    }
-}
-
 /// Sets one field of `bars.json` (the bars apply it live). Like the config, a file that doesn't
 /// parse is left alone.
 fn edit_bars(section: &str, key: &str, value: impl serde::Serialize) {
