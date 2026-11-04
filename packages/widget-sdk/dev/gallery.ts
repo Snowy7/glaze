@@ -12,6 +12,7 @@ import { MypaperError, WIDGET_STYLES, normalizeAppearance } from "../src";
 import type { AppearanceState, Settings, SizeInfo, WidgetManifest } from "../src/types";
 import { FakeBackend } from "./fake";
 import { BridgeHost, type HostOutput } from "./host";
+import { seedSharedFromParams } from "./seed";
 import { lookFromParams } from "./look";
 import { mockPlugin, type FolderMocks } from "./mock-plugins";
 import { withDefaults } from "./settings-form";
@@ -35,6 +36,7 @@ const CELL = num("cell", 96);
 const GAP = num("gap", 8);
 
 const backend = new FakeBackend();
+seedSharedFromParams(backend, new URLSearchParams(location.search));
 const battery = q.get("battery");
 backend.hasBattery = battery !== "none";
 backend.charging = battery === "charging";

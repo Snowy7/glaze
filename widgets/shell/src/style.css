@@ -539,6 +539,19 @@ button {
   font-size: 12px;
 }
 
+.entry:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.entry:disabled:hover {
+  background: transparent;
+}
+
+.entry .desc.why {
+  font-style: italic;
+}
+
 .panel {
   width: 280px;
 }
@@ -778,6 +791,112 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 50%;
   background: var(--white);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- settings form: groups, icon bars, files, alpha, fonts ---- */
+
+.group {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.form > .group:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.group-title {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.seg.icons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 4px;
+}
+
+.seg.icons .ico {
+  flex: none;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.seg.icons .lbl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Four or five options: the glyph alone, the label is the tooltip. */
+.seg.icons.dense .lbl {
+  display: none;
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file .file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file .file-name.none {
+  color: var(--dim);
+}
+
+.file .thumb {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--well);
+}
+
+.file .thumb[hidden] {
+  display: none;
+}
+
+.file .btn {
+  flex: none;
+}
+
+.alpha {
+  flex-wrap: nowrap;
+}
+
+.alpha input {
+  flex: 1;
+  min-width: 0;
+}
+
+.alpha .readout {
+  flex: none;
+  width: 36px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--line-strong);
+  outline: 1px dashed var(--dim);
 }
 
 /* ---- appearance panel ---- */

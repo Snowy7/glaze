@@ -10,7 +10,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /** Why `method` is denied for this manifest, or `undefined` if it is allowed (or not the shell's to judge). */
 export function denial(manifest: Granted, method: string, params: unknown): string | undefined {
-  const needs = (permission: "system.stats" | "media" | "launch" | "theme") =>
+  const needs = (permission: "system.stats" | "media" | "launch" | "theme" | "audio" | "user") =>
     manifest.permissions?.includes(permission)
       ? undefined
       : `"${method}" needs the "${permission}" permission in widget.json`;
@@ -27,9 +27,21 @@ export function denial(manifest: Granted, method: string, params: unknown): stri
     case "media.control":
       return needs("media");
     case "launch":
+    case "appIcon":
       return needs("launch");
     case "theme.current":
       return needs("theme");
+    case "user.info":
+      return needs("user");
+    case "storage.get":
+    case "storage.set": {
+      // Instance storage needs nothing; a shared namespace needs `storage.shared:<ns>`.
+      if (!isRecord(params) || params.shared === undefined) return undefined;
+      const permission = `storage.shared:${String(params.shared)}`;
+      return typeof params.shared === "string" && manifest.permissions?.some((p) => p === permission)
+        ? undefined
+        : `"${method}" on the shared namespace ${JSON.stringify(params.shared)} needs the "${permission}" permission in widget.json`;
+    }
     case "plugin":
       return plugin(isRecord(params) ? params.plugin : undefined);
     case "subscribe": {
@@ -41,6 +53,8 @@ export function denial(manifest: Granted, method: string, params: unknown): stri
           return needs("media");
         case "theme":
           return needs("theme");
+        case "audio":
+          return needs("audio");
         case "plugin":
           return plugin(params.plugin);
         default:
@@ -48,6 +62,6 @@ export function denial(manifest: Granted, method: string, params: unknown): stri
       }
     }
     default:
-      return undefined; // hello, storage.*, unsubscribe need nothing; unknown methods go to the host
+      return undefined; // hello, storage.*, pickFile (the dialog is the consent), unsubscribe need nothing; unknown methods go to the host
   }
 }

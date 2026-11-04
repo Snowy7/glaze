@@ -24,6 +24,7 @@ import {
   type Vec2,
 } from "./grid";
 import type { Frames, Slot } from "./frames";
+import { canAdd, inPalette } from "./placement";
 import type { Layer, ShellState, ShellToHost } from "./protocol";
 import { buildSettingsForm, type SettingsForm } from "./settings-form";
 
@@ -201,12 +202,19 @@ export function createEditor({ root, frames, send }: Options): Editor {
     if (popover?.key === "palette") return closePopover();
     const list = h("div", "palette");
     list.append(h("div", "popover-title", "Add widget"));
-    if (state.widgets.length === 0) list.append(h("div", "empty", "No widgets installed."));
-    for (const manifest of state.widgets) {
+    const listed = state.widgets.filter(inPalette);
+    if (listed.length === 0) list.append(h("div", "empty", "No widgets installed."));
+    for (const manifest of listed) {
       const [w, hgt] = manifest.size.default;
       const entry = h("button", "entry", h("span", "name", manifest.name), h("span", "dims", `${w}×${hgt}`));
       entry.type = "button";
       if (manifest.description) entry.append(h("span", "desc", manifest.description));
+      const check = canAdd(manifest, state);
+      if (!check.ok) {
+        entry.disabled = true;
+        entry.title = check.reason;
+        entry.append(h("span", "desc why", check.reason));
+      }
       entry.addEventListener("click", () => {
         closePopover();
         addWidget(manifest.id);
@@ -216,18 +224,34 @@ export function createEditor({ root, frames, send }: Options): Editor {
     openPopover("palette", list, addButton.getBoundingClientRect(), "below-start", addButton);
   }
 
+  /** The open settings panel: the form and the settings as last saved or previewed. */
+  let settingsPanel: { instance: string; form: SettingsForm; shown: Record<string, unknown> } | undefined;
+
   function openSettings(slot: Slot) {
     const inst = state?.instances.find((i) => i.instance === slot.instance);
-    const specs = slot.manifest.settings ?? [];    if (!inst || specs.length === 0) return;
-    const form: SettingsForm = buildSettingsForm(specs, inst.settings, (key, value) =>
-      send({ type: "settings", instance: slot.instance, values: { [key]: value } }),
-    );
+    const specs = slot.manifest.settings ?? [];
+    if (!inst || specs.length === 0) return;
+    const shown = { ...inst.settings };
+    const form: SettingsForm = buildSettingsForm(specs, inst.settings, {
+      onChange: (key, value) => {
+        shown[key] = value;
+        send({ type: "settings", instance: slot.instance, values: { [key]: value } });
+      },
+      // The widget sees the value now; the host hears it on release (onChange).
+      onPreview: (key, value) => frames.previewSettings(slot.instance, { ...shown, [key]: value }),
+      onPickFile: (key, extensions) =>
+        send({ type: "pickFile", instance: slot.instance, key, ...(extensions && { extensions }) }),
+    });
+    settingsPanel = { instance: slot.instance, form, shown };
     const close = h("button", "icon-btn close");
     close.type = "button";
     close.setAttribute("aria-label", "Close");
     close.addEventListener("click", closePopover);
     const panel = h("div", "panel", h("div", "popover-title row", h("span", "", slot.manifest.name), close), form.el);
-    openPopover(`settings:${slot.instance}`, panel, slot.el.getBoundingClientRect(), "side", undefined, form.flush);
+    openPopover(`settings:${slot.instance}`, panel, slot.el.getBoundingClientRect(), "side", undefined, () => {
+      form.flush();
+      settingsPanel = undefined;
+    });
   }
 
   // ---- appearance: the user layer (toolbar) and an instance's own layer (⋯ menu) ----
@@ -288,22 +312,24 @@ export function createEditor({ root, frames, send }: Options): Editor {
 
   function openMenu(slot: Slot, anchorEl: HTMLElement) {
     if (popover?.key === `menu:${slot.instance}`) return closePopover();
-    const item = (label: string, action: () => void, disabled = false) => {
+    const item = (label: string, action: () => void, disabled = false, why = "") => {
       const button = h("button", "menu-item", label);
       button.type = "button";
       button.disabled = disabled;
+      if (disabled && why) button.title = why;
       button.addEventListener("click", () => {
         closePopover();
         action();
       });
       return button;
     };
+    const copy = state ? canAdd(slot.manifest, state) : ({ ok: true } as const);
     const menu = h(
       "div",
       "menu",
       item("Settings", () => openSettings(slot), (slot.manifest.settings?.length ?? 0) === 0),
       item("Appearance", () => openAppearance(slot)),
-      item("Duplicate", () => duplicate(slot.instance)),
+      item("Duplicate", () => duplicate(slot.instance), !copy.ok, copy.ok ? "" : copy.reason),
       item("Remove", () => remove(slot.instance)),
     );
     openPopover(`menu:${slot.instance}`, menu, anchorEl.getBoundingClientRect(), "below-end", anchorEl);
@@ -549,6 +575,14 @@ export function createEditor({ root, frames, send }: Options): Editor {
 
     banner.textContent = next.error ?? "";
     banner.classList.toggle("on", Boolean(next.error));
+
+    // The open settings form learns what the host saved (a picked file); its other rows keep their own value.
+    const inst = settingsPanel && next.instances.find((i) => i.instance === settingsPanel?.instance);
+    if (settingsPanel && inst) {
+      for (const key of Object.keys(settingsPanel.shown)) delete settingsPanel.shown[key];
+      Object.assign(settingsPanel.shown, inst.settings);
+      settingsPanel.form.update(inst.settings);
+    }
 
     if (selected && !frames.slots.has(selected)) select(undefined);
     else select(selected);

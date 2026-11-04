@@ -6,7 +6,10 @@
  * panel needs the same merge locally so a slider can preview before anything is saved.
  */
 
-import type { AppearanceValues, Layer, LayerPatch } from "./protocol";
+import type { AppearanceValues, Layer, LayerPatch, WidgetStyle } from "./protocol";
+
+/** The design languages, in the order the style control shows them. */
+export const STYLES = ["minimal", "depth", "neon", "paper", "aero"] as const satisfies readonly WidgetStyle[];
 
 export interface Range {
   min: number;
@@ -64,10 +67,12 @@ const DARK_TEXT_ACCENT = "#0a0a0c";
 /**
  * What a widget shows: `own` over `user` over `base`, with `accent: auto` replaced by `autoAccent`
  * (the wallpaper palette's accent, resolved by the host). With dark text, a tint or accent that is
- * still the built-in default becomes the dark-text default.
+ * still the built-in default becomes the dark-text default. A `base` without a `style` (a host
+ * older than v2) shows `minimal`.
  */
 export function resolve(base: AppearanceValues, user: Layer, own: Layer, autoAccent: string): AppearanceValues {
   const merged = over(over(base, user), own);
+  if (!STYLES.includes(merged.style)) merged.style = "minimal";
   if (merged.accent === "auto") merged.accent = autoAccent;
   if (merged.text === "dark") {
     if (merged.tint.toLowerCase() === DEFAULT_TINT) merged.tint = DARK_TEXT_TINT;

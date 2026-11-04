@@ -10,6 +10,7 @@ import { MypaperError } from "../src";
 import type { AppearanceState, PluginManifest, Settings, SizeInfo, WidgetManifest } from "../src/types";
 import { FakeBackend, THEMES } from "./fake";
 import { BridgeHost, type HostOutput } from "./host";
+import { seedSharedFromParams } from "./seed";
 import { appearanceForm, lookFromParams } from "./look";
 import { mockPlugin, type FolderMocks } from "./mock-plugins";
 import { settingsForm, withDefaults } from "./settings-form";
@@ -36,6 +37,7 @@ const DPIS = [96, 120, 144, 192];
 // ---------------------------------------------------------------- state
 
 const backend = new FakeBackend();
+seedSharedFromParams(backend, new URLSearchParams(location.search));
 const state = {
   widgets: [] as WidgetInfo[],
   plugins: [] as PluginInfo[],

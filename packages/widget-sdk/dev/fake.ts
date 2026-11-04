@@ -1,8 +1,8 @@
 // Fake data for the mock host: stats, media, themes.
 
 import type { Backend } from "./host";
-import type { MediaAction, MediaState, SystemStats, ThemeInfo } from "../src/types";
-import { MypaperError } from "../src";
+import type { MediaAction, MediaState, PickedFile, PickFileOptions, SystemStats, ThemeInfo, UserInfo } from "../src/types";
+import { audioBins, MypaperError } from "../src";
 import { mockPlugin } from "./mock-plugins";
 
 export interface Track {
@@ -53,6 +53,73 @@ function artwork(hue: number): string {
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const GB = 1024 ** 3;
+
+/** Beats per second of the fake music (120 bpm). */
+const BEAT_HZ = 2;
+
+/** The fake kick drum at time `t` (seconds): 1 on the beat, decaying to about 0 before the next. */
+export function fakeBeat(t: number): number {
+  const phase = (((t * BEAT_HZ) % 1) + 1) % 1;
+  return Math.exp(-phase * 7);
+}
+
+/**
+ * A fake audio spectrum at time `t` (seconds): `bins` floats in 0..1, lowest frequency first. Three
+ * bumps drift across the log-spaced bins over a floor that tilts down towards the highs, and the
+ * fake beat kicks the lows. Pure, so the harness and tests agree.
+ */
+export function fakeSpectrum(t: number, bins: number): number[] {
+  const bumps = [
+    { centre: (u: number) => 0.14 + 0.1 * Math.sin(u * 0.9), width: 0.07, gain: 0.55 },
+    { centre: (u: number) => 0.45 + 0.22 * Math.sin(u * 0.6 + 2), width: 0.09, gain: 0.5 },
+    { centre: (u: number) => 0.75 + 0.15 * Math.sin(u * 1.3 + 4), width: 0.08, gain: 0.4 },
+  ];
+  const kick = fakeBeat(t);
+  return Array.from({ length: Math.max(0, Math.floor(bins)) }, (_, i) => {
+    const x = bins > 1 ? i / (bins - 1) : 0;
+    let level = 0.28 * (1 - x) ** 1.5 + 0.03; // the tilted floor
+    for (const { centre, width, gain } of bumps) {
+      const d = (x - centre(t)) / width;
+      level += gain * Math.exp(-d * d) * (0.75 + 0.25 * Math.sin(t * 5 + i * 0.3));
+    }
+    level += 0.45 * kick * Math.max(0, 1 - x / 0.25);
+    return clamp(level, 0, 1);
+  });
+}
+
+/**
+ * A rounded coloured tile with the first letter of the target's file name, as an SVG data URL.
+ * The colour comes from the target, so the same target always gets the same icon.
+ */
+export function fakeAppIcon(target: string, size: number): string {
+  const name = target.split(/[\\/]/).filter(Boolean).at(-1) ?? target;
+  const letter = (/[\p{L}\p{N}]/u.exec(name)?.[0] ?? "?").toUpperCase();
+  let hash = 0;
+  for (const ch of target.toLowerCase()) hash = (hash * 31 + ch.codePointAt(0)!) >>> 0;
+  const hue = hash % 360;
+  const px = clamp(Math.round(size), 16, 256);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 64 64">` +
+    `<rect width="64" height="64" rx="14" fill="hsl(${hue} 55% 48%)"/>` +
+    `<text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, sans-serif" ` +
+    `font-size="34" font-weight="600" fill="white">${letter}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/** Opens the browser's file chooser (hidden input). Resolves with an object URL, or `null` if cancelled. */
+export function pickLocalFile(opts: PickFileOptions = {}): Promise<PickedFile | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    if (opts.extensions?.length) input.accept = opts.extensions.map((e) => `.${e}`).join(",");
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      resolve(file ? { url: URL.createObjectURL(file), name: file.name } : null);
+    });
+    input.addEventListener("cancel", () => resolve(null));
+    input.click();
+  });
+}
 
 export class FakeBackend implements Backend {
   // stats: a mean-reverting random walk with occasional bursts, so sparklines look alive
@@ -182,6 +249,37 @@ export class FakeBackend implements Backend {
 
   launch(target: string): void {
     this.onLaunch(target);
+  }
+
+  spectrum(bins: number): number[] {
+    return fakeSpectrum(performance.now() / 1000, audioBins(bins));
+  }
+
+  user(): UserInfo {
+    return { name: "Ada Lovelace", account: "ada" };
+  }
+
+  appIcon(target: string, size: number): string {
+    return fakeAppIcon(target, size);
+  }
+
+  pickFile(opts: PickFileOptions): Promise<PickedFile | null> {
+    return pickLocalFile(opts);
+  }
+
+  /** Shared storage namespaces, one map per namespace, common to every widget in the page. */
+  private sharedStores = new Map<string, Map<string, unknown>>();
+
+  shared(namespace: string): Map<string, unknown> {
+    let store = this.sharedStores.get(namespace);
+    if (!store) this.sharedStores.set(namespace, (store = new Map()));
+    return store;
+  }
+
+  /** Fills a namespace, for pages that show populated data (`?shared=` in the harness). */
+  seedShared(namespace: string, data: Record<string, unknown>): void {
+    const store = this.shared(namespace);
+    for (const [key, value] of Object.entries(data)) store.set(key, value);
   }
 
   plugin(id: string, method: string, params: unknown): Promise<unknown> {

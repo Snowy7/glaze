@@ -9,6 +9,7 @@ import { MypaperError } from "../src";
 import type { AppearanceState, Settings, SizeInfo, WidgetManifest } from "../src/types";
 import { FakeBackend } from "./fake";
 import { BridgeHost, type HostOutput } from "./host";
+import { seedSharedFromParams } from "./seed";
 import { lookFromParams } from "./look";
 import { withDefaults } from "./settings-form";
 
@@ -31,6 +32,7 @@ const CELL = num("cell", 96);
 const GAP = num("gap", 8);
 
 const backend = new FakeBackend();
+seedSharedFromParams(backend, new URLSearchParams(location.search));
 backend.hasBattery = q.get("battery") !== "none";
 const media = q.get("media");
 if (media === "none" || media === "paused" || media === "playing") backend.setMedia(media);

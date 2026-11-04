@@ -145,6 +145,11 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
     see [Audio spectrum](#audio-spectrum)). Capturing is the host's loopback of the speakers; nothing
     is recorded or stored, and no microphone is touched.
   - `user`: the signed-in user's display name (`mypaper.user.info`).
+  - `storage.shared:<namespace>`: read and write a storage namespace that every widget declaring the
+    same permission shares (`namespace` is `[a-z0-9-]+`, for example `storage.shared:activity` for the
+    todo list, the timer and the contribution heatmap). Values live in
+    `%APPDATA%\mypaper\widget-data\_shared\<namespace>.json` (1 MB per namespace). There is no
+    locking: give each writer its own keys.
   - `clipboard.write`: the shell adds `allow="clipboard-write"` to the widget's iframe, so
     `navigator.clipboard.writeText` works. There's no wire method for it.
 - `plugins`: plugin ids whose methods this widget may call (see Plugins).
@@ -169,14 +174,15 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   | type | extra fields | value the widget receives |
   |---|---|---|
   | `slider` | `min`, `max` (both required), `step`, `unit` (a suffix such as `"px"` or `"%"`) | a number. Like `number`, but always a slider with a readout; while it is dragged the shell previews the value in the widget at once (a `settings` event), and saves once on release |
-  | `color` | `alpha: true` | `#rrggbb`, or `#rrggbbaa` when `alpha` is set (a plain `#rrggbb` is also accepted there). The form shows an opacity slider with the swatch |
+  | `color` | `alpha: true` | `#rrggbb`, or `#rrggbbaa` when `alpha` is set (a plain `#rrggbb` is also accepted there). The form shows an opacity slider with the swatch, and with `alpha` it always saves `#rrggbbaa` (8 digits, even when opaque) |
   | `file`, `image` | `extensions`: the allowed extensions without dots (`["jpg", "png"]`; `image` defaults to the common image formats) | a string: `""`, or the served URL of the picked file, which the host copied into the widget's data folder (see [Picking files](#picking-files)). `image` shows a thumbnail and **Clear** |
   | `font` | | a CSS font-family name (for example `"Cascadia Code"`; at most 200 characters, none of `; { } < > \`). The form offers common fonts and a text box. The widget uses it as `font-family: var(--w-font, ...)`-style CSS, quoting the name |
   | `select` | `options` may hold **objects** `{ "value", "label"?, "icon"? }` as well as plain strings (`icon` is a short glyph, an emoji or a symbol, shown beside or instead of the label; a select of 5 or fewer options with icons renders as an icon bar) | the option's `value` |
 
   **Groups.** Any setting (and a `list`) may carry `"group": "Layout"`. The form shows a section
   heading whenever the group changes from one setting to the next (settings without a group are
-  shown first, ungrouped), so keep a group's settings together. Groups are presentation only: the
+  moved to the top, ungrouped, in their order), so keep a group's settings together: a group that
+  comes back later is a new section. Groups are presentation only: the
   settings stay a flat list of keys. At most 64 characters.
 
   A saved value that doesn't fit its setting (wrong type, a number outside `min`/`max`, a select
@@ -418,6 +424,8 @@ interface Mypaper {
   storage: {                           // per instance, persisted
     get<T>(key: string): Promise<T | undefined>;
     set(key: string, value: unknown): Promise<void>;
+    // "storage.shared:<ns>": the same two calls on a namespace shared between widgets
+    shared(namespace: string): { get<T>(key: string): Promise<T | undefined>; set(key: string, value: unknown): Promise<void> };
   };
   system: {                            // "system.stats"
     stats(): Promise<{ cpu: number; memory: { used: number; total: number };
@@ -491,8 +499,8 @@ from the manifest *before* forwarding to the host (the host checks again, from d
 | method | params | result | needs |
 |---|---|---|---|
 | `hello` | `{ sdk }` | the handshake state above | |
-| `storage.get` | `{ key }` | the value, or `null` when missing | |
-| `storage.set` | `{ key, value }` | `null` (a missing `value`, which is what `undefined` becomes, deletes the key; 1 MB per instance) | |
+| `storage.get` | `{ key, shared? }` | the value, or `null` when missing | `storage.shared:<shared>` when `shared` is set |
+| `storage.set` | `{ key, value, shared? }` | `null` (a missing `value`, which is what `undefined` becomes, deletes the key; 1 MB per instance, or per shared namespace) | `storage.shared:<shared>` when `shared` is set |
 | `system.stats` | | `SystemStats` | `system.stats` |
 | `media.current` | | `MediaState` or `null` | `media` |
 | `media.control` | `{ action }` | `null` | `media` |
