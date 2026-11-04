@@ -239,6 +239,15 @@ mod tests {
     };
 
     use super::*;
+
+    /// Writes the catalog for the screenshot harness (apps/studio/tools/shots/catalog.json):
+    /// `STUDIO_CATALOG_OUT=<path> cargo test write_catalog -- --ignored`.
+    #[test]
+    #[ignore = "a tool, not a check"]
+    fn write_catalog_for_the_screenshot_harness() {
+        let out = std::env::var("STUDIO_CATALOG_OUT").expect("set STUDIO_CATALOG_OUT");
+        std::fs::write(out, serde_json::to_string(&catalog().unwrap()).unwrap()).unwrap();
+    }
     use crate::source::tests::temp_dir;
 
     fn json(text: &str) -> Value {

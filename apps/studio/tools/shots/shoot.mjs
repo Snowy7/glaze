@@ -5,7 +5,8 @@
 //   pnpm -C apps/studio build
 //   node apps/studio/tools/shots/shoot.mjs <repo> <outDir> [sizes=1280x800,2560x1440] [only=desktop,settings] [scheme=dark]
 //
-// Steps are page-side JavaScript using the helpers below, or `key:<Key>[*n][+ctrl]` and `type:<text>`.
+// Steps are page-side JavaScript using the helpers below, or `key:<Key>[*n][+ctrl]`, `type:<text>`
+// and `drag:<expression giving [x1, y1, x2, y2]>` (pressed and moved, held for the shot).
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
@@ -47,7 +48,14 @@ const SHOTS = {
   "widgets-more": [`nav("Widgets")`, settle, `openMore()`],
   windows: [`nav("Windows")`, settle],
   "windows-menu": [`nav("Windows")`, settle, `clickText("Right-click menu")`],
-  bars: [`nav("Bars")`, `await sleep(800)`],
+  bars: [`nav("Bars")`, settle],
+  "bars-top": [`nav("Bars")`, settle, `clickLabel("Top bar")`, `await sleep(1500)`],
+  "bars-dock": [`nav("Bars")`, settle, `clickLabel("Bottom bar")`, `await sleep(1500)`],
+  "bars-top-more": [`nav("Bars")`, settle, `clickLabel("Top bar")`, `openMore()`, `document.querySelector("aside[aria-label=Inspector]").scrollTop = 1500; await sleep(400)`],
+  "bars-module": [`nav("Bars")`, settle, `clickLabel("Top bar")`, `await clickIn("aside", "Clock")`],
+  "bars-add": [`nav("Bars")`, settle, `clickLabel("Top bar")`, `await clickIn("aside", "Add")`],
+  "bars-drag": [`nav("Bars")`, settle, "drag:[...moduleAt('Top bar', 'clock'), ...moduleAt('Top bar', 'start', -12)]"],
+  "bars-overview-more": [`nav("Bars")`, settle, `openMore()`, `document.querySelector("aside[aria-label=Inspector]").scrollTop = 900; await sleep(400)`],
   settings: [`nav("Settings")`],
   "settings-details": [`nav("Settings")`, `document.querySelector("details summary")?.click(); await sleep(300)`],
   palette: [`nav("Desktop")`, settle, "key:k+ctrl", "type:blur"],
@@ -86,6 +94,22 @@ async function clickLabel(label) {
   if (!el) throw new Error("no label " + label);
   el.click();
   await sleep(700);
+}
+async function clickIn(scope, text) {
+  const el = [...document.querySelectorAll(scope + " button")].filter(visible).find((b) => b.textContent.trim() === text);
+  if (!el) throw new Error("no " + text + " in " + scope);
+  el.click();
+  await sleep(700);
+}
+/** The page point at the middle of a module in a bar frame (moved dx page pixels). */
+function moduleAt(frameTitle, ref, dx = 0) {
+  const frame = document.querySelector('iframe[title="' + frameTitle + '"]');
+  const el = frame?.contentDocument?.querySelector('[data-module="' + ref + '"]');
+  if (!el) throw new Error("no module " + ref);
+  const outer = frame.getBoundingClientRect();
+  const k = outer.width / frame.offsetWidth;
+  const box = el.getBoundingClientRect();
+  return [outer.left + (box.left + box.width / 2) * k + dx, outer.top + (box.top + box.height / 2) * k];
 }
 async function openMore() {
   for (const d of document.querySelectorAll("aside details")) d.open = true;
@@ -266,6 +290,20 @@ async function main() {
             for (let i = 0; i < Number(times); i++) {
               for (const type of ["keyDown", "keyUp"]) await s("Input.dispatchKeyEvent", { type, key, code: key.length === 1 ? `Key${key.toUpperCase()}` : key, windowsVirtualKeyCode: KEY_CODES[key], modifiers });
             }
+            await new Promise((r) => setTimeout(r, 300));
+            continue;
+          }
+          if (step.startsWith("drag:")) {
+            // Press, then move in steps, and hold: the shot shows the drag in progress.
+            const found = await s("Runtime.evaluate", { expression: step.slice(5), returnByValue: true });
+            if (found.exceptionDetails) {
+              errors.push(`${name} ${width}: ${found.exceptionDetails.exception?.description ?? found.exceptionDetails.text}`);
+              continue;
+            }
+            const [x1, y1, x2, y2] = found.result.value;
+            await s("Input.dispatchMouseEvent", { type: "mouseMoved", x: x1, y: y1 });
+            await s("Input.dispatchMouseEvent", { type: "mousePressed", x: x1, y: y1, button: "left", buttons: 1, clickCount: 1 });
+            for (let i = 1; i <= 10; i++) await s("Input.dispatchMouseEvent", { type: "mouseMoved", x: x1 + ((x2 - x1) * i) / 10, y: y1 + ((y2 - y1) * i) / 10, button: "left", buttons: 1 });
             await new Promise((r) => setTimeout(r, 300));
             continue;
           }

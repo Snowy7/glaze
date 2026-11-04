@@ -5,7 +5,7 @@
     config: structuredClone(F.config),
     themes: structuredClone(F.themes),
     layout: structuredClone(F.layout),
-    bars: { doc: { version: 1, preset: "macos" }, exists: true, path: "C:\\Users\\me\\AppData\\Roaming\\mypaper\\bars.json", problem: null },
+    bars: { doc: { version: 1, preset: "macos", dock: { enabled: true } }, exists: true, path: "C:\\Users\\me\\AppData\\Roaming\\mypaper\\bars.json", problem: null },
   };
   const delay = (value, ms = 30) => new Promise((resolve) => setTimeout(() => resolve(value), ms));
   const putInstance = ({ patch }) => {
