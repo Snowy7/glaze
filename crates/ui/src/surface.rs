@@ -60,6 +60,9 @@ pub enum Kind {
     /// layered tool window anchored immediately above `parent` (Progman), never a WS_CHILD.
     /// Raised desktops do not display ULW children, and WGC cannot exclude child windows.
     DesktopChild { parent: HWND },
+    /// A normal app window (Studio): resizable, activated, in the taskbar, drawn opaque.
+    /// `min` is its smallest client size in design pixels. See [`crate::app_window`].
+    App { min: (u32, u32) },
 }
 
 /// Identifies a surface in [`Event`]s.
@@ -108,6 +111,12 @@ pub enum Event {
     TextChanged,
     /// Enter in a single-line windowless field.
     TextSubmit,
+    /// An app window's client area is now this many pixels.
+    Resized(u32, u32),
+    /// The user asked an app window to close (its close button, Alt+F4, the taskbar).
+    Close,
+    /// Windows' settings or theme changed (light or dark, contrast, text size).
+    SettingChanged,
 }
 
 thread_local! {
@@ -120,13 +129,15 @@ pub fn next_event() -> Option<(SurfaceId, Event)> {
     EVENTS.with(|queue| queue.borrow_mut().pop_front())
 }
 
-fn push(id: SurfaceId, event: Event) {
+pub(crate) fn push(id: SurfaceId, event: Event) {
     EVENTS.with(|queue| queue.borrow_mut().push_back((id, event)));
 }
 
 /// What the window procedure shares with the [`Surface`].
-struct Shared {
+pub(crate) struct Shared {
     id: SurfaceId,
+    /// App windows only.
+    pub(crate) app: Option<crate::app_window::AppShared>,
     activate: bool,
     desktop: Option<HWND>,
     restacking: Cell<bool>,
@@ -202,7 +213,7 @@ impl Drop for Dib {
 /// One layered window and what it shows.
 pub struct Surface {
     hwnd: HWND,
-    shared: Rc<Shared>,
+    pub(crate) shared: Rc<Shared>,
     pixels: Option<(Canvas, Dib)>,
     shown: DisplayList,
     origin: (i32, i32),
@@ -213,6 +224,11 @@ pub struct Surface {
 impl Surface {
     /// A hidden, empty window. `name` and `role` describe it to assistive technology.
     pub fn new(kind: Kind, name: &str, role: Role) -> Result<Self> {
+        if let Kind::App { min } = kind {
+            let hwnd = crate::app_window::create(name, Some(wndproc))?;
+            let app = crate::app_window::AppShared::new(min);
+            return Ok(Self::adopt(hwnd, kind, name, role, Some(app)));
+        }
         register_class()?;
         let (style, ex, parent) = match kind {
             Kind::Popup { activate } => {
@@ -233,8 +249,8 @@ impl Surface {
                 WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
                 None,
             ),
+            Kind::App { .. } => unreachable!("created above"),
         };
-        let activate = !ex.contains(WS_EX_NOACTIVATE);
         // SAFETY: class registered above; position and size come with the first update.
         let hwnd = unsafe {
             CreateWindowExW(
@@ -253,9 +269,27 @@ impl Surface {
             )
         }
         .context("creating a surface window")?;
+        Ok(Self::adopt(hwnd, kind, name, role, None))
+    }
+
+    /// Ties a new window to its shared state (the window procedure's view of the surface).
+    fn adopt(
+        hwnd: HWND,
+        kind: Kind,
+        name: &str,
+        role: Role,
+        app: Option<crate::app_window::AppShared>,
+    ) -> Self {
+        let activate = match kind {
+            Kind::Popup { activate } => activate,
+            Kind::App { .. } => true,
+            Kind::Bar | Kind::DesktopChild { .. } => false,
+        };
         let id = SurfaceId(hwnd.0 as isize);
+        let is_app = app.is_some();
         let shared = Rc::new(Shared {
             id,
+            app,
             activate,
             desktop: match kind {
                 Kind::DesktopChild { parent } => Some(parent),
@@ -279,7 +313,10 @@ impl Surface {
                 );
             }
         };
-        Ok(Self {
+        if is_app {
+            crate::app_window::created(hwnd);
+        }
+        Self {
             hwnd,
             shared,
             pixels: None,
@@ -287,7 +324,7 @@ impl Surface {
             origin: (0, 0),
             size: (0, 0),
             alpha: 255,
-        })
+        }
     }
 
     pub fn id(&self) -> SurfaceId {
@@ -325,6 +362,9 @@ impl Surface {
         size: (u32, u32),
         list: DisplayList,
     ) -> Result<bool> {
+        if self.shared.app.is_some() {
+            return self.present_app(ui, size, list);
+        }
         let resized = self.pixels.is_none() || size != self.size;
         if resized {
             self.pixels = None; // the old bitmaps go before the new ones come
@@ -629,7 +669,18 @@ impl Surface {
         Ok(())
     }
 
+    /// Records `list` as on screen (hits included) without drawing it.
+    pub(crate) fn set_shown(&mut self, list: DisplayList) {
+        self.set_hits(&list);
+        self.shown = list;
+    }
+
     fn set_hits(&self, list: &DisplayList) {
+        if let Some(app) = &self.shared.app {
+            let mut hits = app.hits.borrow_mut();
+            hits.clear();
+            hits.extend(list.hits.iter().map(|h| h.rect));
+        }
         let events = self
             .shared
             .a11y
@@ -730,6 +781,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
     }
     let id = shared.id;
+    if let Some(app) = &shared.app
+        && let Some(result) = crate::app_window::message(id, app, hwnd, msg, wparam, lparam)
+    {
+        return result;
+    }
     if let Some(field) = shared.field.borrow().clone() {
         use windows::Win32::UI::Input::KeyboardAndMouse::{GetCapture, GetFocus};
         use windows::Win32::UI::WindowsAndMessaging::{

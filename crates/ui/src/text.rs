@@ -74,6 +74,8 @@ pub struct Text {
     layouts: HashMap<(FormatKey, Arc<str>), Laid>,
     /// Counts lookups, to find the least recently used layouts.
     clock: u64,
+    /// How many layouts to keep ([`MAX_LAYOUTS`] unless the app says otherwise).
+    capacity: usize,
 }
 
 /// A layout costs about 19 KB private (measured, docs/ui.md), so the cache keeps this many and
@@ -90,11 +92,97 @@ impl Text {
             formats: HashMap::new(),
             layouts: HashMap::new(),
             clock: 0,
+            capacity: MAX_LAYOUTS,
         })
     }
 
     pub(crate) fn factory(&self) -> &IDWriteFactory {
         &self.factory
+    }
+
+    /// Keeps up to `layouts` laid-out strings (about 19 KB each). A window that shows a few
+    /// hundred labels at once (Studio) raises it so a frame never re-shapes its own text.
+    pub fn set_capacity(&mut self, layouts: usize) {
+        self.capacity = layouts.max(8);
+    }
+
+    /// `text` broken into lines no wider than `width` (word wrap; explicit newlines kept).
+    /// Each line is then drawn and cached like any label.
+    pub fn wrap(&mut self, text: &str, style: &TextStyle, width: f32) -> Vec<String> {
+        use windows::Win32::Graphics::DirectWrite::{
+            DWRITE_LINE_METRICS, DWRITE_WORD_WRAPPING_WRAP,
+        };
+        let Some(format) = self.format(style) else {
+            return vec![text.to_owned()];
+        };
+        let wide: Vec<u16> = text.encode_utf16().collect();
+        // SAFETY: documented calls; DirectWrite copies the string; out pointers are locals.
+        let metrics = unsafe {
+            let Ok(layout) = self
+                .factory
+                .CreateTextLayout(&wide, &format, width.max(1.0), 1.0e6)
+            else {
+                return vec![text.to_owned()];
+            };
+            let _ = layout.SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+            let mut count = 0u32;
+            let _ = layout.GetLineMetrics(None, &mut count);
+            let mut metrics = vec![DWRITE_LINE_METRICS::default(); count as usize];
+            if layout
+                .GetLineMetrics(Some(&mut metrics), &mut count)
+                .is_err()
+            {
+                return vec![text.to_owned()];
+            }
+            metrics
+        };
+        let mut at = 0usize;
+        metrics
+            .iter()
+            .map(|m| {
+                let end = (at + m.length as usize).min(wide.len());
+                let keep = (m.length - m.newlineLength - m.trailingWhitespaceLength) as usize;
+                let line = String::from_utf16_lossy(&wide[at..(at + keep).min(end)]);
+                at = end;
+                line
+            })
+            .collect()
+    }
+
+    /// `text` shortened with an ellipsis to fit `width`, or as is when it fits.
+    pub fn fit(&mut self, text: &str, style: &TextStyle, width: f32) -> String {
+        use windows::Win32::Graphics::DirectWrite::DWRITE_HIT_TEST_METRICS;
+        if self.measure(text, style).0 <= width {
+            return text.to_owned();
+        }
+        let ellipsis = self.measure("…", style).0;
+        let Some(format) = self.format(style) else {
+            return text.to_owned();
+        };
+        let wide: Vec<u16> = text.encode_utf16().collect();
+        // SAFETY: documented calls on a temporary layout; out pointers are locals.
+        let cut = unsafe {
+            let Ok(layout) = self.factory.CreateTextLayout(&wide, &format, 1.0e6, 1.0e6) else {
+                return text.to_owned();
+            };
+            let (mut trailing, mut inside) = (BOOL(0), BOOL(0));
+            let mut hit = DWRITE_HIT_TEST_METRICS::default();
+            if layout
+                .HitTestPoint(
+                    (width - ellipsis).max(0.0),
+                    0.0,
+                    &mut trailing,
+                    &mut inside,
+                    &mut hit,
+                )
+                .is_err()
+            {
+                return text.to_owned();
+            }
+            hit.textPosition as usize
+        };
+        let kept = String::from_utf16_lossy(&wide[..cut.min(wide.len())]);
+        format!("{}…", kept.trim_end())
     }
 
     /// The width and height of `text` in `style`, in device pixels.
@@ -132,7 +220,7 @@ impl Text {
         match self.layouts.get_mut(&key) {
             Some(laid) => laid.used = self.clock,
             None => {
-                if self.layouts.len() >= MAX_LAYOUTS {
+                if self.layouts.len() >= self.capacity {
                     self.evict();
                 }
                 let laid = self.make(text, style)?;
