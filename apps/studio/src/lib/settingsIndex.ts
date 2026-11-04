@@ -40,7 +40,7 @@ export const SETTINGS: readonly SettingEntry[] = [
   look("scale", "Widget size", "scale bigger smaller zoom"),
   look("border", "Widget edge line", "border outline"),
   look("shadow", "Widget text shadow", "readable"),
-  { id: "widgets.overlay", title: "Always-on-top widgets", section: "Widgets › More options", route: { page: "widgets" }, keywords: "overlay topmost float above windows media pill" },
+  { id: "widgets.overlay", title: "Always-on-top widgets", section: "Widgets › All widgets", route: { page: "widgets" }, keywords: "overlay topmost float above windows media pill" },
   { id: "widgets.add", title: "Add a widget", section: "Widgets", route: { page: "widgets", adding: true }, keywords: "new place install catalog" },
 
   windows("accent", "Accent color", "color highlight taskbar start"),

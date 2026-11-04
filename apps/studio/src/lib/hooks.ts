@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 
 import { api, fileUrl, onChanged, type ActiveSkins, type BarsCatalog, type MonitorInfo, type WidgetInfo } from "./api";
 import { resolve, type Resolved } from "./barsDoc";
+import { useStudio } from "./studio";
+
+/** The wallpaper on screen as a CSS background, for small previews painted over it (look tiles). */
+export function useWallpaperBackground(): string | null {
+  const { themes } = useStudio();
+  const preview = themes.find((t) => t.active)?.preview;
+  return preview ? `center / cover no-repeat url("${fileUrl(preview)}")` : null;
+}
 
 /** The bars as the host will show them (file over preset over defaults), for the stage. Re-read when bars.json changes. */
 export function useBarsPreview(): { config: Resolved; catalog: BarsCatalog } | null {

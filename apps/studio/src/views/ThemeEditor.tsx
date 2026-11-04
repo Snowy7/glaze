@@ -17,7 +17,7 @@ import { useAutosaved, type Autosaved } from "../lib/useAutosaved";
 
 type Tab = "wallpaper" | "windows" | "widgets" | "bars";
 
-const EMPTY_SKIN: SkinEdit = { appearance: {}, css: null };
+const EMPTY_SKIN: SkinEdit = { appearance: {}, css: null, glass: null };
 
 /** One theme, edited in place: its wallpaper options, Windows style, and the looks it gives widgets and bars. */
 export function ThemeEditor({ themeId }: { themeId: string }) {
@@ -130,7 +130,17 @@ function SkinFields({ skin, kind, theme, editable, userSets }: { skin: Autosaved
           Your own widget look changes {userSets} of these on your desktop, and wins over the theme.
         </p>
       )}
-      {skin.value && <LookFields target={kind} prefix={`theme.${kind}`} value={value.appearance} belowLabel="Default" disabled={!editable} onChange={(appearance, label) => skin.edit((current) => ({ ...current, appearance }), label)} />}
+      {skin.value && (
+        <LookFields
+          target={kind}
+          prefix={`theme.${kind}`}
+          value={value.appearance}
+          belowLabel="Default"
+          disabled={!editable}
+          onChange={(appearance, label) => skin.edit((current) => ({ ...current, appearance }), label)}
+          glass={kind === "widgets" ? { value: value.glass, onChange: (glass, label) => skin.edit((current) => ({ ...current, glass }), label) } : undefined}
+        />
+      )}
       <More label="Style sheet">
         <div data-setting={`theme.${kind}.css`} className="setting-anchor flex items-center gap-3">
           <FileCode className="size-4 shrink-0 text-ink-3" aria-hidden />

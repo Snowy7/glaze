@@ -987,7 +987,7 @@ export function Prop({ id, label, hint, inherited, onReset, stacked = false, chi
           aria-label={`Reset ${lower(label)}`}
           title="Reset"
           onClick={onReset}
-          className={`grid size-6 shrink-0 cursor-default place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-hi hover:text-ink ${stacked ? "ml-auto" : ""}`}
+          className="-ml-0.5 grid size-6 shrink-0 cursor-default place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-hi hover:text-ink"
         >
           <RotateCcw className="size-3.5" aria-hidden />
         </button>

@@ -26,35 +26,38 @@ type StageProps = {
 
 export function Stage({ screen, children, onBackground, tools, footer, label }: StageProps) {
   const area = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState({ width: 0, height: 0 });
+  const strip = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState({ width: 0, height: 0, footer: 0 });
 
   useLayoutEffect(() => {
     const element = area.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const box = entry?.contentRect;
-      if (box) setFit({ width: box.width, height: box.height });
-    });
+    const measure = () => setFit({ width: element.clientWidth, height: element.clientHeight, footer: strip.current?.offsetHeight ?? 0 });
+    const observer = new ResizeObserver(measure);
     observer.observe(element);
+    if (strip.current) observer.observe(strip.current);
     return () => observer.disconnect();
   }, []);
 
-  const k = Math.max(0.05, Math.min(fit.width / screen.width, fit.height / screen.height));
+  // The screen and the strip under it are one column, centered, as wide as the screen.
+  const room = fit.height - (footer ? fit.footer + FOOTER_GAP : 0);
+  const k = Math.max(0.05, Math.min(fit.width / screen.width, room / screen.height));
   const size: CSSProperties = { width: screen.width * k, height: screen.height * k };
   const inner: CSSProperties & Record<"--k", string> = { width: screen.width, height: screen.height, transform: `scale(${k})`, "--k": String(k) };
 
   return (
     <div className="stage-backdrop relative flex min-h-0 flex-1 flex-col">
-      {tools && <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-2 px-(--gutter) pt-3">{tools}</div>}
-      <div ref={area} className={`mx-(--gutter) min-h-0 flex-1 ${tools ? "mt-14" : "mt-5"} ${footer ? "mb-3" : "mb-5"}`}>
-        <div className="grid size-full place-items-center">
+      {tools && <div className="flex shrink-0 items-center justify-between gap-2 px-(--gutter) pt-3">{tools}</div>}
+      <div ref={area} className="mx-(--gutter) my-4 min-h-0 flex-1">
+        <div className="flex size-full flex-col items-center justify-center" style={{ gap: FOOTER_GAP }}>
           <div
             role="group"
             aria-label={label}
-            className="relative overflow-hidden rounded-[10px] bg-black shadow-[0_0_0_1px_rgb(255_255_255/0.09),0_0_0_6px_rgb(0_0_0/0.55),0_0_0_7px_rgb(255_255_255/0.06),0_30px_70px_-20px_rgb(0_0_0/0.9)] transition-[width,height] duration-200"
+            className="relative shrink-0 overflow-hidden rounded-lg bg-black shadow-[0_0_0_1px_var(--line-hi),0_16px_40px_-16px_rgb(0_0_0/0.8)]"
             style={size}
             onPointerDown={(event) => {
-              if (event.target === event.currentTarget || (event.target as HTMLElement).dataset.stageBackground !== undefined) onBackground?.();
+              const target = event.target;
+              if (target === event.currentTarget || (target instanceof HTMLElement && target.dataset.stageBackground !== undefined)) onBackground?.();
             }}
           >
             <ScaleContext value={k}>
@@ -63,12 +66,19 @@ export function Stage({ screen, children, onBackground, tools, footer, label }: 
               </div>
             </ScaleContext>
           </div>
+          {footer && (
+            <div ref={strip} className="min-w-0 shrink-0" style={{ width: size.width }}>
+              {footer}
+            </div>
+          )}
         </div>
       </div>
-      {footer && <div className="shrink-0 px-(--gutter) pb-4">{footer}</div>}
     </div>
   );
 }
+
+/** Between the screen and the strip under it. */
+const FOOTER_GAP = 16;
 
 /** The wallpaper layer: the theme's picture, or its placeholder art. Clicks on it count as the background unless `onSelect` is given. */
 export function WallpaperLayer({ children, selected = false, onSelect }: { children: ReactNode; selected?: boolean; onSelect?: () => void }) {

@@ -1,5 +1,6 @@
 import { appearanceData, appearanceVars, BUILT_IN, FONT_PRESETS, resolve, setsField, without, type Resolved } from "../../lib/appearance";
-import { WIDGET_STYLES, type Appearance, type SkinKind, type Surface, type TextTone, type WidgetStyle } from "../../lib/api";
+import { WIDGET_STYLES, type Appearance, type Glass, type SkinKind, type Surface, type TextTone, type WidgetStyle } from "../../lib/api";
+import { useWallpaperBackground } from "../../lib/hooks";
 import { ColorField, Combobox, InspectorSection, More, Prop, Segmented, Slider, Switch, TilePicker, units, type Tile } from "../ui";
 
 // One layer of how widgets (or the bars) look (docs/widgets.md, "Appearance"), as inspector
@@ -11,8 +12,21 @@ const STYLE_INFO: Record<WidgetStyle, { label: string; hint: string }> = {
   depth: { label: "Depth", hint: "Raised cards under a soft light" },
   neon: { label: "Neon", hint: "A glowing gradient edge" },
   paper: { label: "Paper", hint: "Soft matte with a grain" },
-  aero: { label: "Aero", hint: "Glossy glass with a bright rim" },
+  aero: { label: "Aero", hint: "Light glass with a bright rim" },
+  liquid: { label: "Liquid", hint: "Clear glass that bends the wallpaper at its rim" },
 };
+
+/**
+ * What unset glass values come to. The widget kit doesn't publish its defaults yet; these are the
+ * values of the theme crate's reference plate (crates/theme/src/glass.rs).
+ */
+const GLASS_DEFAULTS: Required<Glass> = { intensity: 0.8, refraction: 0.6, highlight: 0.7 };
+
+const GLASS_FIELDS: readonly { key: keyof Glass; label: string; hint: string }[] = [
+  { key: "intensity", label: "Strength", hint: "The whole effect" },
+  { key: "refraction", label: "Bend", hint: "How much the rim bends what's behind it" },
+  { key: "highlight", label: "Shine", hint: "The bright edge" },
+];
 
 const SURFACES: readonly { value: Surface; label: string; hint: string }[] = [
   { value: "none", label: "None", hint: "Content sits right on the wallpaper" },
@@ -42,15 +56,17 @@ type Props = {
   prefix: string;
   /** Read-only (a built-in theme). */
   disabled?: boolean;
+  /** The layer's liquid glass values, where the layer has them (a theme's widget look). */
+  glass?: { value: Glass | null; onChange: (next: Glass | null, label: string) => void };
 };
 
-export function LookFields({ target, value, below = [], belowLabel = "Theme", onChange, prefix, disabled = false }: Props) {
+export function LookFields({ target, value, below = [], belowLabel = "Theme", onChange, prefix, disabled = false, glass }: Props) {
   const shown = resolve(BUILT_IN[target], ...below, value);
   const set = <K extends keyof Appearance>(key: K, next: Appearance[K], label: string) => !disabled && onChange({ ...value, [key]: next }, label);
   const prop = (key: keyof Appearance) => ({
     id: `${prefix}.${key}`,
     inherited: value[key] === undefined ? (setsField(below, key) ? belowLabel : "Default") : undefined,
-    onReset: () => !disabled && onChange(without(value, key), `Reset ${key}`),
+    onReset: disabled ? undefined : () => onChange(without(value, key), `Reset ${key}`),
   });
 
   return (
@@ -63,11 +79,11 @@ export function LookFields({ target, value, below = [], belowLabel = "Theme", on
               value={shown.style}
               options={WIDGET_STYLES.map((style) => ({ value: style, label: STYLE_INFO[style].label, hint: STYLE_INFO[style].hint, preview: <Sample look={{ ...shown, style, surface: shown.surface === "none" ? "glass" : shown.surface }} /> }))}
               onChange={(style) => set("style", style, "Change style")}
-              columns={5}
-              aspect="aspect-square"
+              columns={3}
             />
           </Prop>
         )}
+        {shown.style === "liquid" && glass && <GlassFields prefix={prefix} glass={glass} disabled={disabled} />}
         <Prop {...prop("surface")} label="Surface" stacked>
           <TilePicker<Surface>
             label="Surface"
@@ -143,10 +159,31 @@ function AccentControl({ value, onChange }: { value: string; onChange: (value: s
   );
 }
 
-/** A tiny clock card painted with a look, on a stand-in wallpaper: what a tile shows. */
-export function Sample({ look }: { look: Resolved }) {
+/** Liquid glass: strength, bend and shine, each a share of the full effect. */
+function GlassFields({ prefix, glass, disabled }: { prefix: string; glass: NonNullable<Props["glass"]>; disabled: boolean }) {
+  const own = glass.value ?? {};
+  const set = (key: keyof Glass, next: number | undefined, label: string) => {
+    if (disabled) return;
+    const { [key]: _old, ...rest } = own;
+    const values = next === undefined ? rest : { ...rest, [key]: next };
+    glass.onChange(Object.keys(values).length === 0 ? null : values, label);
+  };
   return (
-    <span className="ap-stage absolute inset-0" data-wallpaper="dark">
+    <>
+      {GLASS_FIELDS.map(({ key, label, hint }) => (
+        <Prop key={key} id={`${prefix}.glass.${key}`} label={label} inherited={own[key] === undefined ? "Default" : undefined} onReset={() => set(key, undefined, `Reset ${label.toLowerCase()}`)}>
+          <Slider className={SLIDER} label={`${label}: ${hint}`} value={own[key] ?? GLASS_DEFAULTS[key]} min={0} max={1} step={0.05} {...units.percent} onChange={(v) => set(key, v, `Change ${label.toLowerCase()}`)} />
+        </Prop>
+      ))}
+    </>
+  );
+}
+
+/** A tiny clock card painted with a look, on your wallpaper: what a tile shows. */
+export function Sample({ look }: { look: Resolved }) {
+  const wallpaper = useWallpaperBackground();
+  return (
+    <span className="ap-stage absolute inset-0" data-wallpaper="dark" style={wallpaper ? { background: wallpaper } : undefined}>
       <span className="ap-root absolute inset-0 grid place-items-center" {...appearanceData(look)} style={appearanceVars(look)}>
         <span className="ap-surface block w-[78%] px-1.5 py-1.5">
           <span className="block text-[12px] leading-none font-light tabular-nums">10:42</span>

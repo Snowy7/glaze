@@ -20,6 +20,7 @@ use crate::iconpacks::{self, AppIcon, PackInfo};
 use crate::icons;
 use crate::look::Look;
 use crate::manifest::{SkinEdit, SkinKind, WindowsStyle};
+use crate::plugins;
 use crate::source::{self, Kind};
 use crate::themes::{self, NewTheme, Origin, ThemeEntry, ThemeList};
 use crate::widgets::{self, InstancePatch, Layout, WidgetInfo};
@@ -521,6 +522,27 @@ pub async fn list_widgets(app: AppHandle) -> Vec<WidgetInfo> {
         let _ = scope.allow_directory(&widget.dir, true);
     }
     list
+}
+
+/// Calls one of a widget's plugin methods for it: a place setting's town search, and the plugin
+/// calls of the widget pages in the live preview.
+#[tauri::command]
+pub async fn plugin_call(
+    widget: String,
+    plugin: String,
+    method: String,
+    params: serde_json::Value,
+) -> CmdResult<serde_json::Value> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let info = widgets::list()
+            .into_iter()
+            .find(|w| w.id == widget)
+            .with_context(|| format!("the {widget} widget isn't installed"))?;
+        plugins::call(&info.manifest, &plugin, &method, params)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(text)
 }
 
 /// Adds a placed widget or changes some of its fields (cell, size, monitor, settings, own look).

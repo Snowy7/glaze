@@ -12,7 +12,7 @@ export function ThemeStrip() {
   if (usable.length === 0) return null;
   return (
     <div className="flex items-center gap-2.5">
-      <div role="list" aria-label="Themes" className="flex min-w-0 flex-1 gap-2 overflow-x-auto px-0.5 py-1 [scrollbar-width:none]">
+      <div role="list" aria-label="Themes" className="flex min-w-0 flex-1 gap-2 overflow-x-auto px-0.5 py-1 [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] [scrollbar-width:none]">
         {usable.map((theme) => {
           const applying = busy.has(`apply:${theme.id}`);
           return (

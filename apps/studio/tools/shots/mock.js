@@ -17,7 +17,28 @@
     state.layout = { ...state.layout, instances: index < 0 ? [...items, next] : items.with(index, next) };
     return state.layout;
   };
+  // The weather plugin's answers, in its real shapes (plugins/weather/src/weather.rs).
+  const place = { name: "Reykjavík", region: "Capital Region", country: "Iceland", lat: 64.1466, lon: -21.9426, source: "windows" };
+  const units = { temperature: "°C", speed: "km/h", precipitation: "mm" };
+  const day = (offset, code, icon, condition, min, max) => ({ date: new Date(Date.now() + offset * 864e5).toISOString().slice(0, 10), code, icon, condition, min, max, precipitation_probability: code > 3 ? 60 : 10 });
+  const weather = {
+    locate: () => place,
+    current: () => ({ location: place, units, time: new Date().toISOString(), temperature: -2.4, apparent: -7.1, humidity: 81, wind: 18, wind_direction: 240, precipitation: 0, code: 2, condition: "Partly cloudy", icon: "partly-cloudy-night", is_day: false }),
+    forecast: () => ({
+      location: place,
+      units,
+      days: [day(0, 2, "partly-cloudy-day", "Partly cloudy", -5, -1), day(1, 71, "snow", "Light snow", -6, -2), day(2, 3, "cloudy", "Overcast", -4, 0), day(3, 0, "clear-day", "Clear sky", -8, -3), day(4, 61, "rain", "Light rain", -1, 3), day(5, 2, "partly-cloudy-day", "Partly cloudy", -3, 1), day(6, 3, "cloudy", "Overcast", -2, 2)],
+      hourly: Array.from({ length: 24 }, (_, i) => ({ time: new Date(Date.now() + i * 36e5).toISOString(), temperature: -2 - Math.sin(i / 4) * 2, code: 2, condition: "Partly cloudy", icon: i > 8 && i < 16 ? "partly-cloudy-day" : "partly-cloudy-night", is_day: i > 8 && i < 16 })),
+    }),
+    search: ({ query }) =>
+      [
+        { name: "Paris", admin1: "Île-de-France", admin2: "Paris", country: "France", country_code: "FR", lat: 48.8534, lon: 2.3488, population: 2138551 },
+        { name: "Paris", admin1: "Texas", admin2: "Lamar", country: "United States", country_code: "US", lat: 33.6609, lon: -95.5555, population: 24782 },
+        { name: "Parisot", admin1: "Occitanie", admin2: "Tarn", country: "France", country_code: "FR", lat: 43.7976, lon: 1.8628, population: 1243 },
+      ].filter((c) => c.name.toLowerCase().startsWith(String(query).toLowerCase().slice(0, 3))),
+  };
   const handlers = {
+    plugin_call: ({ plugin, method, params }) => (plugin === "weather" && weather[method] ? weather[method](params ?? {}) : Promise.reject(`the ${plugin} plugin isn't installed`)),
     get_config: () => state.config,
     update_config: ({ patch }) => {
       const { desktop_menu, ...flat } = patch;

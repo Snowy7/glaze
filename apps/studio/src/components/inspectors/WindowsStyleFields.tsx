@@ -51,7 +51,8 @@ type Props = {
 
 export function WindowsStyleFields({ style, onChange, disabled = false }: Props) {
   const set = <K extends keyof WindowsStyle>(key: K, value: WindowsStyle[K], label: string) => !disabled && onChange({ ...style, [key]: value }, label);
-  const reset = (key: keyof WindowsStyle, label: string) => (style[key] === null ? undefined : () => set(key, null, `Reset ${label}`));
+  // Read-only (a built-in theme): nothing to reset.
+  const reset = (key: keyof WindowsStyle, label: string) => (disabled || style[key] === null ? undefined : () => set(key, null, `Reset ${label}`));
 
   return (
     <>
@@ -66,7 +67,7 @@ export function WindowsStyleFields({ style, onChange, disabled = false }: Props)
         <Prop id="windows.accent" label="Accent color" onReset={reset("accent", "accent color")} stacked>
           <PaintChoice label="Accent color" value={style.accent} auto onChange={(v) => set("accent", v, "Change accent color")} />
         </Prop>
-        <Prop id="windows.mode" label="Apps" onReset={reset("dark_mode", "light or dark")}>
+        <Prop id="windows.mode" label="Light or dark" onReset={reset("dark_mode", "light or dark")}>
           <Segmented<"as-is" | "dark" | "light">
             label="Light or dark apps"
             hideLabel
@@ -119,16 +120,17 @@ const isHex = (value: string | null): value is string => value !== null && /^#[0
 function PaintChoice({ label, value, auto = false, onChange }: { label: string; value: string | null; auto?: boolean; onChange: (value: string | null) => void }) {
   const mode = value === null ? "as-is" : value === "auto" ? "auto" : "color";
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-2">
       <Segmented<"as-is" | "auto" | "color">
         label={label}
         hideLabel
         size="sm"
+        className="w-full"
         value={mode}
         options={[{ value: "as-is", label: "As is" }, ...(auto ? [{ value: "auto" as const, label: "From wallpaper" }] : []), { value: "color", label: "Pick" }]}
         onChange={(next) => onChange(next === "as-is" ? null : next === "auto" ? "auto" : isHex(value) ? value : "#7a8599")}
       />
-      {mode === "color" && <ColorField label={`${label} color`} value={isHex(value) ? value : "#7a8599"} onChange={onChange} />}
+      {mode === "color" && <ColorField label={`${label} color`} className="w-full" value={isHex(value) ? value : "#7a8599"} onChange={onChange} />}
     </div>
   );
 }

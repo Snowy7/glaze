@@ -110,8 +110,7 @@ export function ThemePreview({ name, kind, preview, loading = false, zoom = fals
   const Icon = kind ? KINDS[kind].icon : TriangleAlert;
   return (
     <div className={`relative grid size-full place-items-center ${motion}`} style={{ background: placeholderBackground(name) }}>
-      <div className="grain absolute inset-0" aria-hidden />
-      <Icon className={`relative size-9 text-white/55 ${loading ? "animate-pulse" : ""}`} strokeWidth={1.4} aria-hidden />
+      <Icon className={`relative size-8 text-white/45 ${loading ? "animate-pulse" : ""}`} strokeWidth={1.5} aria-hidden />
     </div>
   );
 }

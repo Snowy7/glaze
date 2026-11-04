@@ -41,6 +41,18 @@ export function useNav(): Nav {
 const REVEAL_TRIES = 30;
 
 /**
+ * Scrolls only the nearest scrolling panel so `element` is in its middle. (`scrollIntoView` also
+ * scrolls clipped ancestors, which would shift the whole page under its bar.)
+ */
+function scrollToCenter(element: HTMLElement) {
+  let scroller = element.parentElement;
+  while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+  if (!scroller) return;
+  const offset = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  scroller.scrollTo({ top: scroller.scrollTop + offset - scroller.clientHeight / 2 + element.offsetHeight / 2, behavior: "smooth" });
+}
+
+/**
  * After a `go` with `focus`: waits for that setting to render (pages load their data), opens the
  * "More options" around it, scrolls it into view and flashes it.
  */
@@ -56,7 +68,7 @@ export function useRevealFocus() {
       window.clearInterval(timer);
       if (!element) return;
       for (let parent = element.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
-      element.scrollIntoView({ block: "center", behavior: "smooth" });
+      scrollToCenter(element);
       element.classList.remove("flash");
       void element.offsetWidth;
       element.classList.add("flash");

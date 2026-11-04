@@ -1,9 +1,10 @@
 // Studio as a widget shell, for the live preview: the real widget pages run in sandboxed iframes
 // and talk to Studio over the SDK's wire protocol (docs/widgets.md, "Wire protocol"). Studio
-// answers with the instance's settings and look and with sample data. Nothing a widget asks for
-// leaves the preview: `launch` does nothing, there are no files to pick and no plugins.
+// answers with the instance's settings and look and with sample data (stats, media), and runs the
+// widget's own plugins for real (weather shows the real weather). Nothing else leaves the
+// preview: `launch` does nothing, there are no files to pick, and settings aren't saved from here.
 
-import type { Appearance, WidgetManifest, WidgetSetting } from "./api";
+import { api, errorText, type Appearance, type WidgetManifest, type WidgetSetting } from "./api";
 import type { Json } from "./barsSchema";
 
 /** What a widget is told about itself: the handshake's state, and what later events update. */
@@ -128,7 +129,13 @@ function answer(bridge: Bridge, request: Request): unknown {
       return null;
     }
     case "plugin":
-      throw Object.assign(new Error("Plugins don't run in Studio's preview"), { code: "PluginUnavailable" });
+      // The widget's own plugin, run by Studio with the widget host's rules (its manifest must list it).
+      return api.pluginCall(state.manifest.id, String(params.plugin), String(params.method), params.params ?? null).catch((error: unknown) => {
+        throw Object.assign(new Error(errorText(error)), { code: "PluginUnavailable" });
+      });
+    case "settings.set":
+      // The desktop's widget host owns those writes; in the preview the widget keeps what Studio shows.
+      return null;
     default:
       throw Object.assign(new Error(`${request.method} isn't available in the preview`), { code: "NotFound" });
   }
@@ -151,12 +158,16 @@ function onMessage(event: MessageEvent) {
   const bridge = event.source ? bridges.get(event.source as Window) : undefined;
   if (!bridge || !isRequest(event.data)) return;
   const request = event.data;
-  try {
-    post(bridge, { id: request.id, result: answer(bridge, request) });
-  } catch (error) {
-    const code = isObject(error) && typeof error.code === "string" ? error.code : "Internal";
-    post(bridge, { id: request.id, error: { code, message: error instanceof Error ? error.message : String(error) } });
-  }
+  // Some answers (plugin calls) take a moment; every answer goes out the same way.
+  Promise.resolve()
+    .then(() => answer(bridge, request))
+    .then(
+      (result) => post(bridge, { id: request.id, result }),
+      (error: unknown) => {
+        const code = isObject(error) && typeof error.code === "string" ? error.code : "Internal";
+        post(bridge, { id: request.id, error: { code, message: errorText(error) } });
+      },
+    );
 }
 
 let listening = false;

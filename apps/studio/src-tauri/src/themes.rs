@@ -655,6 +655,7 @@ mod tests {
             )
             .unwrap(),
             css: Some("widgets.css".into()),
+            glass: None,
         };
         save_skin(&dir, &mine, SkinKind::Widgets, &skin).unwrap();
         assert_eq!(read_skin(&dir, SkinKind::Widgets).unwrap(), skin);
@@ -679,6 +680,7 @@ mod tests {
         let loud = SkinEdit {
             appearance: serde_json::from_str(r#"{ "blur": 500 }"#).unwrap(),
             css: None,
+            glass: None,
         };
         let error = format!(
             "{:#}",

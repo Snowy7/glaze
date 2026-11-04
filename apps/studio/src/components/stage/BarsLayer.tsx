@@ -33,6 +33,8 @@ function clock(): string {
 export function BarsLayer({ config, catalog, screen, selected, onSelect }: Props) {
   const [hovered, setHovered] = useState<BarId | null>(null);
   const light = config.look.scheme === "light";
+  // A bar whose background is "none" is just its modules on the wallpaper (a macOS menu bar).
+  const bare = config.look.background?.type === "none";
   const radius = config.look.radius;
   const rects = layout(config, catalog, screen);
 
@@ -73,13 +75,13 @@ export function BarsLayer({ config, catalog, screen, selected, onSelect }: Props
           config.top.layout === "islands" ? (
             <div className="absolute inset-0 flex items-stretch justify-between">
               {[config.top.left, config.top.center, config.top.right].map((modules, i) => (
-                <Glass key={i} light={light} radius={top.height / 2} className="flex items-center gap-4 px-4">
+                <Glass key={i} light={light} bare={bare} radius={top.height / 2} className="flex items-center gap-4 px-4">
                   <Modules refs={modules} size={top.height} />
                 </Glass>
               ))}
             </div>
           ) : (
-            <Glass light={light} radius={topRound} className="absolute inset-0 grid grid-cols-[1fr_auto_1fr] items-center gap-6 px-4">
+            <Glass light={light} bare={bare} radius={topRound} className="absolute inset-0 grid grid-cols-[1fr_auto_1fr] items-center gap-6 px-4">
               <Modules refs={config.top.left} size={top.height} />
               <Modules refs={config.top.center} size={top.height} />
               <Modules refs={config.top.right} size={top.height} end />
@@ -97,7 +99,7 @@ export function BarsLayer({ config, catalog, screen, selected, onSelect }: Props
               {Array.from({ length: dock.apps }, (_, i) => {
                 const Icon = SAMPLE_APPS[i % SAMPLE_APPS.length] ?? AppWindow;
                 return (
-                  <span key={i} className="grid place-items-center rounded-[22%] bg-gradient-to-b from-white/30 to-white/10 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.18)]" style={{ width: dock.icon, height: dock.icon }}>
+                  <span key={i} className="grid place-items-center rounded-[22%] bg-white/14" style={{ width: dock.icon, height: dock.icon }}>
                     <Icon style={{ width: dock.icon * 0.5, height: dock.icon * 0.5 }} strokeWidth={1.6} />
                   </span>
                 );
@@ -144,12 +146,12 @@ function widthOf(width: Resolved["top"]["width"], full: number): number {
   return width === "auto" ? full * 0.55 : full;
 }
 
-function Glass({ light, radius, className = "", children }: { light: boolean; radius: number; className?: string; children: ReactNode }) {
-  const style: CSSProperties = {
+function Glass({ light, radius, bare = false, className = "", children }: { light: boolean; radius: number; bare?: boolean; className?: string; children: ReactNode }) {
+  const style: CSSProperties = bare ? { borderRadius: radius } : {
     borderRadius: radius,
-    background: light ? "rgb(246 246 248 / 0.62)" : "rgb(18 18 20 / 0.5)",
-    backdropFilter: "blur(22px) saturate(1.5)",
-    boxShadow: light ? "inset 0 0 0 1px rgb(255 255 255 / 0.55), 0 6px 24px -8px rgb(0 0 0 / 0.35)" : "inset 0 0 0 1px rgb(255 255 255 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.12), 0 8px 28px -10px rgb(0 0 0 / 0.6)",
+    background: light ? "rgb(246 246 248 / 0.55)" : "rgb(22 24 30 / 0.42)",
+    backdropFilter: "blur(20px) saturate(1.2)",
+    boxShadow: light ? "inset 0 0 0 1px rgb(0 0 0 / 0.08)" : "inset 0 0 0 1px rgb(255 255 255 / 0.1)",
   };
   return (
     <div className={className} style={style}>

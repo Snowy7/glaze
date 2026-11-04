@@ -5,7 +5,7 @@ import { LookFields } from "../components/inspectors/LookFields";
 import { WidgetCatalog } from "../components/inspectors/WidgetCatalog";
 import { WidgetInspector } from "../components/inspectors/WidgetInspector";
 import { DesktopScene } from "../components/stage/DesktopScene";
-import { Banner, Button, EditorLayout, IconButton, Inspector, InspectorHeader, InspectorSection, More, NavRow, PageBar, Prop, SaveState, Switch } from "../components/ui";
+import { Banner, Button, EditorLayout, IconButton, Inspector, InspectorHeader, InspectorSection, NavRow, PageBar, Prop, SaveState, Switch } from "../components/ui";
 import { setCount } from "../lib/appearance";
 import { api, errorText, type WidgetInfo } from "../lib/api";
 import { useDesktop, type Desktop } from "../lib/desktop";
@@ -122,11 +122,11 @@ function AllWidgets({ desktop, onSelect, onAdd }: { desktop: Desktop; onSelect: 
           </div>
         )}
       </InspectorSection>
-      <More>
-        <Prop id="widgets.overlay" label="Always-on-top widgets" hint="Widgets made to float over your windows, like the media pill. Off hides them until you turn this back on.">
-          <Switch label="Always-on-top widgets" checked={model.layout?.overlay ?? true} disabled={!model.layout} onChange={model.setOverlay} />
+      <InspectorSection title="Always on top">
+        <Prop id="widgets.overlay" label="Show them" hint="Widgets made to float over your windows, like the media pill.">
+          <Switch label="Show always-on-top widgets" checked={model.layout?.overlay ?? true} disabled={!model.layout} onChange={model.setOverlay} />
         </Prop>
-      </More>
+      </InspectorSection>
     </>
   );
 }

@@ -21,7 +21,7 @@ export function Settings() {
     <>
       <PageBar title="Settings" />
       <div className="min-h-0 flex-1 overflow-y-auto px-(--gutter) pt-8 pb-14 [scrollbar-gutter:stable]">
-        <div className="mx-auto flex max-w-[46rem] flex-col gap-9">
+        <div className="flex max-w-[46rem] flex-col gap-9">
           <Group title="Startup">
             <div data-setting="settings.autostart" className="setting-anchor">
               <ToggleRow title="Start with Windows" detail="mypaper starts when you sign in." checked={autostart?.enabled ?? false} disabled={!autostart || !engine?.corePath || busy.has("autostart")} onChange={(on) => void setAutostart(on)} />

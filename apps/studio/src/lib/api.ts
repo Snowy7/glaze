@@ -121,7 +121,7 @@ export type Surface = "none" | "glass" | "solid";
 export type TextTone = "light" | "dark";
 
 /** The widget design language (docs/widgets.md, "Styles"). Bars ignore it. */
-export const WIDGET_STYLES = ["minimal", "depth", "neon", "paper", "aero"] as const;
+export const WIDGET_STYLES = ["minimal", "depth", "neon", "paper", "aero", "liquid"] as const;
 export type WidgetStyle = (typeof WIDGET_STYLES)[number];
 
 /** One layer of how widgets or bars look. An absent field means "use the layer below". */
@@ -149,8 +149,11 @@ export type Appearance = {
 
 export type SkinKind = "widgets" | "bars";
 
+/** Liquid glass, each 0 to 1 (for `style: "liquid"`): the whole effect, how much the rim bends, the rim's shine. */
+export type Glass = { intensity?: number; refraction?: number; highlight?: number };
+
 /** A theme's `widgets` / `bars` section. */
-export type SkinEdit = { appearance: Appearance; css: string | null };
+export type SkinEdit = { appearance: Appearance; css: string | null; glass: Glass | null };
 
 export type ActiveSkins = { widgets: Appearance; bars: Appearance };
 
@@ -276,7 +279,14 @@ export type WidgetSetting =
   | (SettingBase<"slider", number> & { min: number; max: number; step?: number; unit?: string })
   | (SettingBase<"file", string> & { extensions?: readonly string[] })
   | (SettingBase<"image", string> & { extensions?: readonly string[] })
-  | (SettingBase<"list", Record<string, string | number | boolean>[]> & { fields: readonly unknown[]; maxItems?: number });
+  | (SettingBase<"list", Record<string, string | number | boolean>[]> & { fields: readonly unknown[]; maxItems?: number })
+  | (SettingBase<"place", Place | null> & { search?: { plugin: string; method: string } });
+
+/** A `place` value other than automatic: a picked town. */
+export type Place = { name: string; lat?: number; lon?: number; region?: string; country?: string };
+
+/** A town suggestion, as a `place` setting's `search` method answers `{ query }`. */
+export type PlaceCandidate = { name: string; admin1?: string | null; admin2?: string | null; country?: string | null; country_code?: string | null; lat: number; lon: number; population?: number | null };
 
 /** The parts of `widget.json` Studio reads; the rest is passed to the widget as is. */
 export type WidgetManifest = { id: string; name: string; settings?: readonly WidgetSetting[] } & { [key: string]: Json | readonly WidgetSetting[] | undefined };
@@ -359,6 +369,8 @@ export const api = {
   removeInstance: (instance: string) => invoke<Layout>("remove_instance", { instance }),
   resetInstanceLook: (instance: string) => invoke<Layout>("reset_instance_look", { instance }),
   putInstance: (patch: InstancePatch) => invoke<Layout>("put_instance", { patch }),
+  /** One of a widget's plugin methods, run for it (the widget must list the plugin). */
+  pluginCall: (widget: string, plugin: string, method: string, params: unknown) => invoke<unknown>("plugin_call", { widget, plugin, method, params }),
   toggleWidgetEdit: () => invoke<void>("toggle_widget_edit"),
   components: () => invoke<Component[]>("components"),
   engineStatus: () => invoke<EngineStatus>("engine_status"),

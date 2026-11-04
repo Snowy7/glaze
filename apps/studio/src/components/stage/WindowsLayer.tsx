@@ -89,7 +89,7 @@ function SampleWindow({ style, light, accent, radius }: { style: WindowsStyle; l
     borderRadius: radius,
     background: base,
     backdropFilter: see < 1 ? `blur(${backdrop === "acrylic" ? 26 : 60}px) saturate(${backdrop === "acrylic" ? 1.3 : 1.8})` : undefined,
-    boxShadow: `0 0 0 1px ${border}, 0 24px 60px -12px rgb(0 0 0 / 0.55)`,
+    boxShadow: `0 0 0 1px ${border}, 0 12px 32px -12px rgb(0 0 0 / 0.5)`,
     color: ink,
   };
   const files = [
@@ -154,7 +154,7 @@ function SampleMenu({ items }: { items: readonly MenuEntry[] }) {
   return (
     <div
       className="absolute inset-0 overflow-hidden p-1.5 font-sans text-[12.5px] text-white"
-      style={{ borderRadius: 10, background: "rgb(28 28 30 / 0.92)", boxShadow: "inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 18px 40px -10px rgb(0 0 0 / 0.65)" }}
+      style={{ borderRadius: 10, background: "rgb(30 31 35 / 0.94)", boxShadow: "inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 10px 28px -10px rgb(0 0 0 / 0.55)" }}
     >
       {items.map((item, i) =>
         item === "separator" ? (
@@ -175,7 +175,7 @@ function Pointer({ at, set }: { at: { x: number; y: number }; set: string | null
   const dark = set === "mypaper-dark";
   const custom = set !== null && !set.startsWith("mypaper-");
   return (
-    <svg viewBox="0 0 24 24" className="pointer-events-none absolute z-30 drop-shadow-[0_2px_3px_rgb(0_0_0/0.5)]" style={{ left: at.x, top: at.y, width: 30, height: 30 }} aria-hidden>
+    <svg viewBox="0 0 24 24" className="pointer-events-none absolute z-30 drop-shadow-[0_1px_1.5px_rgb(0_0_0/0.45)]" style={{ left: at.x, top: at.y, width: 30, height: 30 }} aria-hidden>
       <path
         d="M4 2.5 L4 19 L8.6 15.1 L11.6 21.6 L14.3 20.4 L11.4 14 L17.6 14 Z"
         fill={dark ? "#121212" : "#ffffff"}

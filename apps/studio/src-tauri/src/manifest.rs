@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result, bail};
 use mypaper_theme as theme;
-use mypaper_theme::{Backdrop, Color, Corners, Paint};
+use mypaper_theme::{Backdrop, Color, Corners, Liquid, Paint};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -195,11 +195,22 @@ pub struct SkinEdit {
     pub appearance: Look,
     /// A style sheet, relative to the theme folder.
     pub css: Option<String>,
+    /// How liquid glass looks for this family (`style: "liquid"`); kept as written when not edited.
+    pub glass: Option<Liquid>,
 }
 
 impl SkinEdit {
     fn is_empty(&self) -> bool {
-        self.appearance.is_empty() && self.css.is_none()
+        self.appearance.is_empty() && self.css.is_none() && self.glass_map().is_none()
+    }
+
+    /// The set glass fields as JSON (through text, so `f32`s print as written), or none.
+    fn glass_map(&self) -> Option<Map<String, Value>> {
+        let text = serde_json::to_string(self.glass.as_ref()?).ok()?;
+        match serde_json::from_str(&text).ok()? {
+            Value::Object(map) if !map.is_empty() => Some(map),
+            _ => None,
+        }
     }
 }
 
@@ -228,6 +239,9 @@ pub fn with_skin(text: &str, kind: SkinKind, skin: &SkinEdit) -> Result<String> 
         }
         if let Some(css) = &skin.css {
             section.insert("css".into(), Value::String(css.clone()));
+        }
+        if let Some(glass) = skin.glass_map() {
+            section.insert("glass".into(), Value::Object(glass));
         }
         manifest.insert(kind.key().into(), Value::Object(section));
     }
@@ -444,6 +458,7 @@ mod tests {
             )
             .unwrap(),
             css: Some("bars.css".into()),
+            glass: None,
         };
         let edited = with_skin(MANIFEST, SkinKind::Bars, &skin).unwrap();
         for key in ["wallpaper", "widgets"] {
@@ -475,6 +490,7 @@ mod tests {
         let skin = SkinEdit {
             appearance: serde_json::from_str(r#"{ "style": "neon", "surface": "solid" }"#).unwrap(),
             css: None,
+            glass: None,
         };
         let edited = with_skin(MANIFEST, SkinKind::Widgets, &skin).unwrap();
         assert_eq!(field(&edited, "widgets")["appearance"]["style"], "neon");
@@ -492,10 +508,53 @@ mod tests {
     }
 
     #[test]
+    fn liquid_glass_params_survive_an_edit() {
+        let text = with_skin(
+            MANIFEST,
+            SkinKind::Widgets,
+            &SkinEdit {
+                appearance: serde_json::from_str(r#"{ "style": "liquid" }"#).unwrap(),
+                css: None,
+                glass: Some(
+                    serde_json::from_str(r#"{ "intensity": 0.6, "highlight": 0.3 }"#).unwrap(),
+                ),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            field(&text, "widgets")["glass"],
+            serde_json::json!({ "intensity": 0.6, "highlight": 0.3 }),
+            "written as typed, no float noise, unset fields left out"
+        );
+        let read = read_skin(&text, SkinKind::Widgets).unwrap();
+        assert_eq!(read.glass.and_then(|g| g.refraction), None);
+        let theme = loaded(&text).theme.widgets.unwrap();
+        assert_eq!(
+            theme.appearance.unwrap().style,
+            Some(theme::WidgetStyle::Liquid)
+        );
+        assert_eq!(theme.glass.unwrap().intensity, Some(0.6));
+
+        let empty = SkinEdit {
+            glass: Some(Liquid::default()),
+            ..Default::default()
+        };
+        assert!(
+            field(
+                &with_skin(MANIFEST, SkinKind::Bars, &empty).unwrap(),
+                "bars"
+            )
+            .is_null(),
+            "empty glass is no skin"
+        );
+    }
+
+    #[test]
     fn skin_values_are_left_for_the_theme_crate_to_refuse() {
         let loud = SkinEdit {
             appearance: serde_json::from_str(r#"{ "opacity": 4 }"#).unwrap(),
             css: None,
+            glass: None,
         };
         let text = with_skin(MANIFEST, SkinKind::Widgets, &loud).unwrap();
         assert!(LoadedTheme::parse(PathBuf::from("themes/a"), &text).is_err());

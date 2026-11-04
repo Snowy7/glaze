@@ -71,7 +71,7 @@ function Gallery() {
         {newTheme}
       </PageBar>
       <div className="min-h-0 flex-1 overflow-y-auto px-(--gutter) pt-6 pb-12 [scrollbar-gutter:stable]">
-        <div className="mx-auto max-w-[120rem]">
+        <div>
           {configError && (
             <Banner>
               <span>Your settings file can't be read: {configError}</span>

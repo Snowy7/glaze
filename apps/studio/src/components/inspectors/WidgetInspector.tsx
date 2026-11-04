@@ -13,6 +13,8 @@ import { Button, IconButton, InspectorHeader, InspectorSection, NumberField, Pro
 import { LookFields } from "./LookFields";
 import { editableHere, stackedControl, WidgetSettingControl } from "./WidgetSettingControl";
 
+const LOOK = "Look";
+
 type Props = {
   item: PlacedWidget;
   widget: WidgetInfo | undefined;
@@ -57,8 +59,24 @@ export function WidgetInspector({ item, widget, grid, placements, model, themeLo
     onSelect(instance);
   }
 
+  // The manifest's own groups; its "Look" group joins the look section, so there is one.
   const groups = [...new Set(settings.filter(editableHere).map((s) => s.group ?? "Options"))];
   const elsewhere = settings.filter((s) => !editableHere(s));
+  const settingsIn = (group: string) =>
+    settings
+      .filter((s) => editableHere(s) && (s.group ?? "Options") === group)
+      .map((setting) => (
+        <Prop
+          key={setting.key}
+          id={`widget.${item.widget}.${setting.key}`}
+          label={setting.label}
+          stacked={stackedControl(setting)}
+          inherited={item.settings[setting.key] === undefined ? "Default" : undefined}
+          onReset={() => setSetting(setting, undefined)}
+        >
+          <WidgetSettingControl setting={setting} value={values[setting.key]} widget={item.widget} onChange={(value) => setSetting(setting, value)} onEditOnDesktop={onEditOnDesktop} />
+        </Prop>
+      ));
 
   return (
     <>
@@ -79,24 +97,13 @@ export function WidgetInspector({ item, widget, grid, placements, model, themeLo
           <p className="text-[13px] text-ink-3">This widget isn't installed, so it isn't shown. Remove it, or install it again and it comes back here.</p>
         </InspectorSection>
       )}
-      {groups.map((group) => (
-        <InspectorSection key={group} title={group}>
-          {settings
-            .filter((s) => editableHere(s) && (s.group ?? "Options") === group)
-            .map((setting) => (
-              <Prop
-                key={setting.key}
-                id={`widget.${item.widget}.${setting.key}`}
-                label={setting.label}
-                stacked={stackedControl(setting)}
-                inherited={item.settings[setting.key] === undefined ? "Default" : undefined}
-                onReset={() => setSetting(setting, undefined)}
-              >
-                <WidgetSettingControl setting={setting} value={values[setting.key]} onChange={(value) => setSetting(setting, value)} onEditOnDesktop={onEditOnDesktop} />
-              </Prop>
-            ))}
-        </InspectorSection>
-      ))}
+      {groups
+        .filter((group) => group !== LOOK)
+        .map((group) => (
+          <InspectorSection key={group} title={group}>
+            {settingsIn(group)}
+          </InspectorSection>
+        ))}
       {widget?.resizable && (
         <InspectorSection title="Size">
           <div className="grid grid-cols-2 gap-2">
@@ -105,7 +112,8 @@ export function WidgetInspector({ item, widget, grid, placements, model, themeLo
           </div>
         </InspectorSection>
       )}
-      <InspectorSection title="Look">
+      <InspectorSection title={LOOK}>
+        {groups.includes(LOOK) && settingsIn(LOOK)}
         <Prop id="widget.ownLook" label="Its own look" hint={ownLook ? undefined : "Follows the look of all widgets."}>
           <Switch
             label="Its own look"
