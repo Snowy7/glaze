@@ -72,7 +72,7 @@
       "description": "Anything not listed is denied.",
       "items": {
         "type": "string",
-        "pattern": "^(system.stats|media|launch|theme|audio|user|clipboard.write|network:https?://[^s/]+)$"
+        "pattern": "^(system\\.stats|media|launch|theme|audio|user|storage\\.shared:[a-z0-9-]+|clipboard\\.write|network:https?://[^\\s/]+)$"
       }
     },
     "plugins": {

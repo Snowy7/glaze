@@ -26,6 +26,7 @@ export type Permission =
   | "audio"
   | "user"
   | "clipboard.write"
+  | `storage.shared:${string}`
   | `network:${string}`;
 
 interface SettingBase<K extends string, V> {
@@ -266,6 +267,15 @@ export interface Mypaper {
   storage: {
     get<T>(key: string): Promise<T | undefined>;
     set(key: string, value: unknown): Promise<void>;
+    /**
+     * A namespace shared by every widget that declares `storage.shared:<namespace>` (for example the
+     * todo list and the heatmap share `activity`). Give each writer its own keys: there is no
+     * locking, the last write to a key wins.
+     */
+    shared(namespace: string): {
+      get<T>(key: string): Promise<T | undefined>;
+      set(key: string, value: unknown): Promise<void>;
+    };
   };
   /** Needs "system.stats". */
   system: {
@@ -333,8 +343,8 @@ export type SubscribeParams =
 /** Everything the widget can ask the shell, as `method -> [params, result]`. */
 export interface WireMethods {
   hello: [params: { sdk: number }, result: HelloResult];
-  "storage.get": [{ key: string }, unknown];
-  "storage.set": [{ key: string; value: unknown }, null];
+  "storage.get": [{ key: string; shared?: string }, unknown];
+  "storage.set": [{ key: string; value: unknown; shared?: string }, null];
   "system.stats": [undefined, SystemStats];
   "media.current": [undefined, MediaState | null];
   "media.control": [{ action: MediaAction }, null];

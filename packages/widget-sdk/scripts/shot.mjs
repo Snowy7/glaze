@@ -29,7 +29,8 @@ const dir = join(tmpdir(), "mypaper-shots");
 mkdirSync(dir, { recursive: true });
 const out = join(dir, `${name}.png`);
 const base = process.env["MYPAPER_HARNESS"] ?? "http://localhost:5173";
-const profile = join(dir, "profile");
+// One profile per shot name, so several agents can shoot at once.
+const profile = join(dir, `profile-${name}`);
 rmSync(out, { force: true });
 
 const result = spawnSync(
@@ -53,4 +54,5 @@ if (result.status !== 0 || !existsSync(out)) {
   console.error(`screenshot failed (exit ${result.status})`);
   process.exit(1);
 }
+rmSync(profile, { recursive: true, force: true });
 console.log(out);

@@ -260,6 +260,15 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
       async set(key, value) {
         await call("storage.set", { key, value });
       },
+      shared: (shared: string) => ({
+        async get<T>(key: string) {
+          const value = await call("storage.get", { key, shared });
+          return value === null ? undefined : (value as T);
+        },
+        async set(key: string, value: unknown) {
+          await call("storage.set", { key, value, shared });
+        },
+      }),
     },
 
     system: {
