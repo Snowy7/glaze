@@ -25,7 +25,7 @@
 //!
 //! **Memory and warmth.** Nothing exists until the first overlay opens. WGC's first frame takes
 //! ~100-250 ms after a session starts, so the capture device, sessions, pipelines and
-//! DirectComposition device stay [`WARM`] after the last close: the next popup (a submenu, the
+//! DirectComposition device stay [`WARM`] after the last close (the pipelines stay for good): the next popup (a submenu, the
 //! next flyout) gets its glass in a frame. A warm session with no overlay drops every frame on
 //! WGC's thread. (A warm-up on pointer-down was measured and dropped: starting the capture while
 //! the button is down stalled the click's delivery to the shell by ~30 ms.)
@@ -156,13 +156,16 @@ pub struct Overlays {
     timing: bool,
     /// Until when sessions without an overlay (and, with none open, `live`) are kept.
     warm_until: Option<Instant>,
+    /// The glass and compare pipelines, built at the first open and kept (small, and their
+    /// shader compile is the slowest part of a cold open).
+    pipes: Option<Rc<Pipelines>>,
 }
 
 /// What exists only while an overlay is open, or the capture is warm.
 struct Live {
     capture: CaptureDevice,
     dcomp: IDCompositionDesktopDevice,
-    pipes: Pipelines,
+    pipes: Rc<Pipelines>,
     timer: Option<Timer>,
     copy_timer: Option<CopyTimer>,
 }
@@ -211,6 +214,7 @@ impl Overlays {
             // Measuring only: with the device's timestamp queries (MYPAPER_GPU_TIMINGS).
             timing: std::env::var_os("MYPAPER_OVERLAY_TIMINGS").is_some(),
             warm_until: None,
+            pipes: None,
         })
     }
 
@@ -369,7 +373,12 @@ impl Overlays {
             let capture = CaptureDevice::new(&self.gpu.adapter, &self.gpu.device)?;
             // Capture first: its first frame takes ~300 ms, the rest is built meanwhile.
             self.start_session(&capture, monitor, bounds)?;
-            self.live = Some(Live::new(&self.gpu, capture, self.timing)?);
+            // Compiled once per engine: rebuilding them made every cold open ~100 ms slower.
+            let pipes = self
+                .pipes
+                .get_or_insert_with(|| Rc::new(Pipelines::new(&self.gpu.device)))
+                .clone();
+            self.live = Some(Live::new(&self.gpu, capture, pipes, self.timing)?);
         }
         if !self.sessions.iter().any(|s| s.monitor == monitor) {
             let live = self.live.take().context("no overlays")?;
@@ -792,7 +801,7 @@ impl Overlays {
 }
 
 impl Live {
-    fn new(gpu: &Gpu, capture: CaptureDevice, timing: bool) -> Result<Self> {
+    fn new(gpu: &Gpu, capture: CaptureDevice, pipes: Rc<Pipelines>, timing: bool) -> Result<Self> {
         // SAFETY: a DirectComposition device drawing surfaces with the capture device.
         let dcomp: IDCompositionDesktopDevice =
             unsafe { DCompositionCreateDevice3(&capture.dxgi()?)? };
@@ -805,7 +814,7 @@ impl Live {
             (None, None)
         };
         Ok(Self {
-            pipes: Pipelines::new(&gpu.device),
+            pipes,
             capture,
             dcomp,
             timer,
