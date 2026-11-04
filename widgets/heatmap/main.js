@@ -153,8 +153,8 @@ function build(variant) {
   const total = el("b", "hero num total");
   const sub = el("span", "sub dim");
   sub.append(el("span", "what"), el("span", "span"));
-  lead.append(el("span", "caps", "Activity"), total, sub);
-  const legend = el("div", "legend caps");
+  lead.append(el("span", "label", "Activity"), total, sub);
+  const legend = el("div", "legend label");
   legend.append(el("span", "", "Less"));
   for (let l = 0; l < 5; l++) legend.append(heatCell("", l));
   legend.append(el("span", "", "More"));
@@ -194,9 +194,12 @@ function paintWeeks() {
   const shown = grid.flat().filter((c) => !c.future);
   const source = /** @type {Source} */ (settings.source);
   const total = shown.reduce((sum, c) => sum + (counts[c.key] ?? 0), 0);
+  // Nothing yet: the header says how to start, over ghost squares.
+  const none = total === 0;
+  $(".total").hidden = none;
   setText($(".total"), String(total));
-  setText($(".what"), WORDS[source].total);
-  setText($(".span"), ` · ${weeks} weeks`);
+  setText($(".what"), none ? "Finish a task or a focus session to start" : WORDS[source].total);
+  setText($(".span"), none ? "" : ` · ${weeks} weeks`);
   $(".legend").hidden = !settings.legend;
 
   // Too short even for the smallest squares: the total in the header says it all.
@@ -241,7 +244,6 @@ function paintWeeks() {
   } else {
     body.append(cells);
   }
-  if (empty) body.append(el("span", "hint chip", "Finish a task or a focus session to light this up"));
   inner.replaceChildren(body);
 }
 

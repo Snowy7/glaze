@@ -9,6 +9,7 @@ import { MypaperError } from "../src";
 import type { AppearanceState, Settings, SizeInfo, WidgetManifest } from "../src/types";
 import { FakeBackend } from "./fake";
 import { BridgeHost, type HostOutput } from "./host";
+import { type FolderMocks, mockPlugin } from "./mock-plugins";
 import { seedSharedFromParams } from "./seed";
 import { lookFromParams } from "./look";
 import { withDefaults } from "./settings-form";
@@ -56,6 +57,13 @@ async function main() {
   const only = list("only");
   const skip = list("skip");
   const widgets = all.filter((w) => (only.length === 0 || only.includes(w.id)) && !skip.includes(w.id));
+  // Every widget's canned plugin answers (mypaper.mock.json), merged: they are keyed by plugin id.
+  const mocks: FolderMocks = {};
+  for (const { id } of widgets) {
+    const res = await fetch(`/__widget/${id}/mypaper.mock.json`).catch(() => null);
+    if (res?.ok) Object.assign(mocks, (await res.json()) as FolderMocks);
+  }
+  backend.pluginCall = (pid, method, params) => mockPlugin(pid, method, params, mocks);
   const base = lookFromParams(q);
   const bg = q.get("bg") ?? "photo-dark";
   const text =

@@ -108,19 +108,20 @@ function blockNode(block) {
   }
 }
 
+const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4.2L16.6 4.2a1.7 1.7 0 0 1 2.4 0l.8.8a1.7 1.7 0 0 1 0 2.4L8.2 19ZM14.5 6.3l3.2 3.2"/></svg>';
+
 function render() {
   if (text.trim() === "") {
-    const hint = el("div", "empty");
+    // The kit's empty state: a pen, what to do, and that Markdown works.
+    const hint = el("div", "empty state");
     if (loaded) {
-      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      icon.setAttribute("viewBox", "0 0 24 24");
-      icon.setAttribute("aria-hidden", "true");
-      const pen = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      pen.setAttribute("d", "M4 20l1-4.2L16.6 4.2a1.7 1.7 0 0 1 2.4 0l.8.8a1.7 1.7 0 0 1 0 2.4L8.2 19ZM14.5 6.3l3.2 3.2");
-      icon.append(pen);
-      const line = el("span");
-      line.textContent = "Click to write a note";
-      hint.append(icon, line);
+      const icon = el("div", "state-icon");
+      icon.innerHTML = PEN; // a constant
+      const title = el("div", "state-title");
+      title.textContent = "Click to write";
+      const tip = el("div", "state-hint");
+      tip.textContent = "# a heading, - [ ] a task";
+      hint.append(icon, title, tip);
     }
     view.replaceChildren(hint);
     return;

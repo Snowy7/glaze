@@ -30,7 +30,8 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: clamp(10px, calc(var(--fs) * 0.68), 12px);
+  font-size: clamp(11.5px, calc(var(--fs) * 0.8), 13px);
+  color: var(--t1);
 }
 .count {
   margin-left: auto;

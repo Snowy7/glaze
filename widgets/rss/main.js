@@ -19,6 +19,8 @@ const msg = $("#msg");
 const msgTitle = $("#msg-title");
 const msgHint = $("#msg-hint");
 const foot = $("#foot");
+const head = $("#head");
+const headTitle = $("#head-title");
 
 const defaults = { feeds: /** @type {unknown} */ ([]), maxItems: 12, showSource: true, showTime: true, refreshMinutes: 20, variant: "list" };
 let settings = defaults;
@@ -122,11 +124,6 @@ function itemElement(item, nowSec, lead) {
   el.className = settings.variant === "cards" ? "item tile" : "item";
   el.setAttribute("role", "listitem");
 
-  if (lead) {
-    const bar = document.createElement("i");
-    bar.className = "lead-bar flow";
-    el.append(bar);
-  }
   const title = document.createElement("div");
   title.className = "title";
   title.textContent = item.title;
@@ -136,7 +133,7 @@ function itemElement(item, nowSec, lead) {
 
   const meta = document.createElement("div");
   meta.className = "meta";
-  if (settings.showSource && item.source) meta.append(span("source caps ellipsis", item.source));
+  if (settings.showSource && item.source) meta.append(span("source ellipsis", item.source));
   if (settings.showTime && item.published !== undefined) meta.append(span("time num", relativeTime(item.published, nowSec)));
   if (meta.childElementCount) el.append(meta);
 
@@ -158,6 +155,7 @@ function itemElement(item, nowSec, lead) {
  */
 function showMessage(title, hint = "") {
   list.replaceChildren();
+  head.hidden = true;
   foot.hidden = true;
   msg.hidden = false;
   msgTitle.textContent = title;
@@ -181,6 +179,11 @@ function render() {
   }
 
   msg.hidden = true;
+  // The header names the feed when every headline comes from one, else just "Headlines".
+  const sources = new Set(cache.items.map((item) => item.source).filter(Boolean));
+  const only = sources.size === 1 ? [...sources][0] : undefined;
+  headTitle.textContent = only ?? "Headlines";
+  head.hidden = false;
   const nowSec = Date.now() / 1000;
   list.dataset.variant = settings.variant === "cards" ? "cards" : "list";
   list.replaceChildren(...cache.items.slice(0, clamp(Math.round(settings.maxItems), 3, 30)).map((item, i) => itemElement(item, nowSec, i === 0)));
@@ -198,29 +201,17 @@ function render() {
 }
 
 /**
- * Shows only the headlines that fit, plus a clipped peek of the next one under a fade (when there
- * is room for it to read as more to come). Runs after every render and whenever the list resizes.
+ * Shows only the headlines that fit whole: never a clipped one. Runs after every render and
+ * whenever the list resizes.
  */
 function fit() {
   const rows = Array.from(list.children).filter((el) => el instanceof HTMLElement);
   for (const row of rows) row.hidden = false;
   const height = list.clientHeight;
   // Read every position first, then write: one layout.
-  const layout = rows.map((row) => ({ top: row.offsetTop, bottom: row.offsetTop + row.offsetHeight }));
-  const PEEK_MIN = 26; // px of the next headline worth showing under the fade
-  let peeked = false;
-  let clipped = false;
-  rows.forEach((row, i) => {
-    const { top, bottom } = layout[i] ?? { top: 0, bottom: 0 };
-    if (bottom <= height + 0.5) return;
-    clipped = true;
-    // Always show at least one headline, however small the widget.
-    if (i === 0) return;
-    const peek = !peeked && top + PEEK_MIN < height;
-    peeked ||= peek;
-    row.hidden = !peek;
-  });
-  list.toggleAttribute("data-clipped", clipped);
+  const bottoms = rows.map((row) => row.offsetTop + row.offsetHeight);
+  // Always at least one headline, however small the widget (its title clamps to fit).
+  rows.forEach((row, i) => (row.hidden = i > 0 && (bottoms[i] ?? 0) > height + 0.5));
 }
 
 new ResizeObserver(() => fit()).observe(list);
