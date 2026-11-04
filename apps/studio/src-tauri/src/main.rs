@@ -23,8 +23,18 @@ mod thumbs;
 mod watch;
 mod widgets;
 
+use tauri::Manager;
+
 fn main() {
     tauri::Builder::default()
+        // Must be the first plugin: a second launch exits here and focuses this one.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let window = capture::build_main_window(app.handle())?;
