@@ -1,0 +1,9 @@
+{
+  "name": "Seascape (non-commercial)",
+  "wallpaper": {
+    "kind": "shader",
+    "source": "seascape.wgsl",
+    "fps": 30,
+    "scale": 0.5
+  }
+}

@@ -20,6 +20,9 @@ pub const MANIFEST: &str = "theme.json";
 /// Used when no theme is given on the command line.
 pub const DEFAULT_THEME: &str = "aurora";
 
+/// Legacy and developer themes stay addressable by ID, outside the curated gallery.
+pub const EXAMPLES_DIR: &str = "examples";
+
 /// Finds a theme folder and returns its absolute path. `name` is a path
 /// (absolute or relative to the current directory) or a bare theme name,
 /// looked up in the user themes folder (`%APPDATA%\mypaper\themes`) and
@@ -52,13 +55,27 @@ pub fn theme_roots() -> Vec<PathBuf> {
 
 fn locate_from(name: &str, user: Option<&Path>, exe: &Path) -> Result<PathBuf> {
     let direct = PathBuf::from(name);
+    // Also preserve saved relative/absolute paths such as `themes/webdemo` after the move.
+    let moved = direct
+        .parent()
+        .filter(|p| p.file_name().is_some_and(|n| n == "themes"))
+        .zip(direct.file_name())
+        .map(|(parent, folder)| parent.join(EXAMPLES_DIR).join(folder));
     let in_user = user.map(|dir| dir.join(name));
-    let beside_exe = exe
-        .ancestors()
-        .skip(1)
-        .flat_map(|dir| [dir.join("themes").join(name), dir.join(name)]);
+    let beside_exe = exe.ancestors().skip(1).flat_map(|dir| {
+        let themes = dir.join("themes");
+        [
+            themes.join(name),
+            themes.join(EXAMPLES_DIR).join(name),
+            dir.join(name),
+        ]
+    });
     let mut tried = Vec::new();
-    for candidate in std::iter::once(direct).chain(in_user).chain(beside_exe) {
+    for candidate in std::iter::once(direct)
+        .chain(moved)
+        .chain(in_user)
+        .chain(beside_exe)
+    {
         if candidate.join(MANIFEST).is_file() {
             return Ok(std::path::absolute(&candidate)?);
         }
@@ -74,6 +91,9 @@ fn locate_from(name: &str, user: Option<&Path>, exe: &Path) -> Result<PathBuf> {
 #[serde(deny_unknown_fields)]
 pub struct Theme {
     pub name: String,
+    /// Exclude from discovery while still allowing an existing selection to resolve.
+    #[serde(default)]
+    pub hidden: bool,
     pub wallpaper: Wallpaper,
     /// Native window styling (accent, borders, corners, backdrop) applied
     /// to allowlisted Windows windows while this theme is active.
@@ -827,6 +847,160 @@ mod tests {
         let found = locate_from("aurora", None, &exe).unwrap();
         assert_eq!(found, theme);
         assert!(locate_from("nope", None, &exe).is_err());
+
+        for id in [
+            "webdemo",
+            "interactive",
+            "aurora",
+            "midnight",
+            "earth-orbit",
+            "islands",
+            "photo",
+            "gallery",
+        ] {
+            let example = root.join("themes").join(EXAMPLES_DIR).join(id);
+            std::fs::create_dir_all(&example).unwrap();
+            std::fs::write(example.join(MANIFEST), "{}").unwrap();
+            // A top-level theme still wins when both locations exist.
+            let expected = if id == "aurora" { &theme } else { &example };
+            assert_eq!(locate_from(id, None, &exe).unwrap(), *expected);
+            assert_eq!(
+                locate_from(root.join("themes").join(id).to_str().unwrap(), None, &exe).unwrap(),
+                *expected,
+            );
+        }
+        let user = root.join("user");
+        let user_web = user.join("webdemo");
+        std::fs::create_dir_all(&user_web).unwrap();
+        std::fs::write(user_web.join(MANIFEST), "{}").unwrap();
+        assert_eq!(locate_from("webdemo", Some(&user), &exe).unwrap(), user_web);
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn hidden_defaults_to_false_and_accepts_only_booleans() {
+        let json = r#"{"name":"A","wallpaper":{"kind":"image","source":"a.jpg"}}"#;
+        assert!(!parse(json).unwrap().theme.hidden);
+        assert!(
+            parse(&json.replacen('{', r#"{"hidden":true,"#, 1))
+                .unwrap()
+                .theme
+                .hidden
+        );
+        assert!(parse(&json.replacen('{', r#"{"hidden":"true","#, 1)).is_err());
+    }
+
+    fn bundled_dirs(root: &Path) -> Vec<PathBuf> {
+        [root.to_owned(), root.join(EXAMPLES_DIR)]
+            .into_iter()
+            .flat_map(|dir| std::fs::read_dir(dir).unwrap().map(Result::unwrap))
+            .map(|entry| entry.path())
+            .filter(|dir| dir.join(MANIFEST).is_file())
+            .collect()
+    }
+
+    #[test]
+    fn bundled_manifests_and_referenced_assets_are_valid() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes");
+        let mut visible = 0;
+        for dir in bundled_dirs(&root) {
+            let loaded = LoadedTheme::load(&dir).unwrap();
+            let exists = |path: &Path| {
+                assert!(
+                    loaded.asset(path).exists(),
+                    "missing {}",
+                    loaded.asset(path).display()
+                );
+            };
+            match &loaded.theme.wallpaper {
+                Wallpaper::Shader(w) => exists(&w.source),
+                Wallpaper::Image(w) => exists(&w.source),
+                Wallpaper::Video(w) => exists(&w.source),
+                Wallpaper::Scene(w) => exists(&w.source),
+                Wallpaper::Web(w) if !w.url.starts_with("http") => exists(Path::new(&w.url)),
+                Wallpaper::App(w) => exists(&w.command),
+                Wallpaper::Slideshow(w) => {
+                    exists(&w.folder);
+                    assert!(std::fs::read_dir(loaded.asset(&w.folder)).unwrap().count() >= 2);
+                }
+                Wallpaper::Web(_) => {}
+            }
+            for skin in [&loaded.theme.widgets, &loaded.theme.bars]
+                .into_iter()
+                .flatten()
+            {
+                if let Some(css) = &skin.css {
+                    exists(css);
+                }
+            }
+            if !loaded.theme.hidden {
+                visible += 1;
+                exists(Path::new("preview.jpg"));
+            }
+        }
+        assert!(
+            (15..=25).contains(&visible),
+            "{visible} visible curated themes"
+        );
+    }
+
+    #[test]
+    fn every_bundled_file_has_a_credit_entry() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes");
+        let credits = std::fs::read_to_string(root.join("CREDITS.md")).unwrap();
+        let catalog: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(root.join("catalog.json")).unwrap())
+                .unwrap();
+        let paths: std::collections::HashSet<_> = catalog["themes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|theme| theme["assets"].as_array().unwrap())
+            .chain(catalog["legacy_assets"].as_array().unwrap())
+            .chain(catalog["shared_assets"].as_array().unwrap())
+            .map(|asset| {
+                let path = asset["path"].as_str().unwrap();
+                for field in [
+                    "author",
+                    "source",
+                    "license",
+                    "license_url",
+                    "changes",
+                    "sha256",
+                ] {
+                    assert!(
+                        !asset[field].as_str().unwrap_or_default().is_empty(),
+                        "{path}: missing {field}"
+                    );
+                }
+                assert!(credits.contains(path), "{path} is missing from CREDITS.md");
+                assert_eq!(
+                    std::fs::metadata(root.join(path)).unwrap().len(),
+                    asset["bytes"].as_u64().unwrap()
+                );
+                path
+            })
+            .collect();
+        let mut pending = vec![root.clone()];
+        while let Some(dir) = pending.pop() {
+            for entry in std::fs::read_dir(dir).unwrap().map(Result::unwrap) {
+                let path = entry.path();
+                if path.is_dir() {
+                    pending.push(path);
+                    continue;
+                }
+                let relative = path
+                    .strip_prefix(&root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if !["CREDITS.md", "catalog.json"].contains(&relative.as_str()) {
+                    assert!(
+                        paths.contains(relative.as_str()),
+                        "{relative} has no attribution record"
+                    );
+                }
+            }
+        }
     }
 }

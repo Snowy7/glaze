@@ -44,16 +44,21 @@
 
 <table>
   <tr>
-    <td align="center"><img src="themes/aurora/preview.jpg" width="250"><br><b>Aurora</b> · shader</td>
-    <td align="center"><img src="themes/midnight/preview.jpg" width="250"><br><b>Midnight</b> · shader + Windows styling</td>
-    <td align="center"><img src="themes/islands/preview.jpg" width="250"><br><b>Islands</b> · 3D scene</td>
+    <td align="center"><img src="themes/rain-city/preview.jpg" width="250"><br><b>Rainy Hong Kong</b> · Rocksdanister / BigWings</td>
+    <td align="center"><img src="themes/rain-city-amber/preview.jpg" width="250"><br><b>Amber Downpour</b> · Rain / Heartfelt variant</td>
+    <td align="center"><img src="themes/snow-forest/preview.jpg" width="250"><br><b>Snow in the Misty Forest</b> · Baldwin / Blender</td>
   </tr>
   <tr>
-    <td align="center"><img src="themes/earth-orbit/preview.jpg" width="250"><br><b>Earth orbit</b> · video</td>
-    <td align="center"><img src="themes/gallery/preview.jpg" width="250"><br><b>Gallery</b> · slideshow</td>
-    <td align="center"><img src="themes/photo/preview.jpg" width="250"><br><b>Photo</b> · image</td>
+    <td align="center"><img src="themes/cozy-fireplace/preview.jpg" width="250"><br><b>Cozy Fireplace</b> · Blender Studio</td>
+    <td align="center"><img src="themes/milky-way/preview.jpg" width="250"><br><b>Milky Way over Paranal</b> · ESO/C. Malin</td>
+    <td align="center"><img src="themes/star-nest/preview.jpg" width="250"><br><b>Star Nest</b> · Pablo Román Andrioli</td>
   </tr>
 </table>
+
+**15 live selections:** rainy city windows, snow, a cozy fireplace, misty forest, night sky,
+ocean waves and established abstract effects. Every card has a real preview. See
+[credits and licenses](themes/CREDITS.md) and the [source audit](docs/research/wallpaper-sources.md).
+Eight selections are clearly marked **non-commercial** and must be excluded from a commercial bundle.
 
 | Kind | What it is | How it stays light |
 |---|---|---|
@@ -65,7 +70,7 @@
 | `web` | A local page or URL (WebView2); optionally interactive (mouse input over the bare desktop) | suspended while hidden; a still is shown on paused screens |
 | `app` | Any renderer that takes a window handle (e.g. Unity's `-parentHWND`) | the process is suspended while hidden |
 
-The bundled photos and video are public-domain NASA media ([credits](themes/CREDITS.md)).
+The curated media and source-backed effects retain their individual licenses and credits. Existing demo themes remain available by their old IDs under `themes/examples/`.
 
 ### Widgets
 

@@ -1,0 +1,9 @@
+{
+  "name": "Spring — Misty Forest",
+  "wallpaper": {
+    "kind": "video",
+    "source": "loop.mp4",
+    "fit": "cover",
+    "fps": 24
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Snowfall (non-commercial)",
+  "wallpaper": {
+    "kind": "shader",
+    "source": "snowfall.wgsl",
+    "fps": 30,
+    "scale": 0.75
+  }
+}

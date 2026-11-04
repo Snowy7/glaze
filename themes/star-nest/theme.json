@@ -1,0 +1,9 @@
+{
+  "name": "Star Nest",
+  "wallpaper": {
+    "kind": "shader",
+    "source": "star-nest.wgsl",
+    "fps": 30,
+    "scale": 0.5
+  }
+}

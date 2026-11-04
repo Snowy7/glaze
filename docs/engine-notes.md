@@ -226,3 +226,121 @@ Most of the small-count cost is fixed (the copy out of and the second pass into 
 swapchain texture), so the 0.1 ms target is not met yet; the ideas that would get there are in
 the widgets agent's report (drawing the plates inside the source's own pass, or into a small
 per-plate target).
+
+## Curated live wallpapers — 4 November 2026
+
+The gallery contains 15 live themes: four H.264 videos, seven local WebView2 pages and
+four WGSL ports/palettes. The user rejected plain stills and weak loops; those candidates
+were removed. Rainy Hong Kong is retained with amber/heavier-rain and midnight/lighter-rain
+presets. No new original shader artwork was invented. Sources, author grants, exclusions
+and the proposed local importer are in [the research record](research/wallpaper-sources.md).
+Every shipped file is attributed in [CREDITS.md](../themes/CREDITS.md); the machine-readable
+[catalog](../themes/catalog.json) holds sources, changes, sizes, hashes and measured loops.
+
+New binary data is **23,947,981 bytes (22.84 MiB)**, including the new legacy interactive
+preview. Curated binaries account for 23,945,606 bytes; all curated theme files total
+28,053,809 bytes. Existing assets moved into `examples/` are excluded from new-binary
+accounting. Full upstream movies, download tools and temporary recordings are not shipped.
+Eight selections are CC BY-NC-SA 3.0: the rain, snow and Seascape families. Remove them or
+obtain permission before a commercial distribution; retain their ShareAlike terms and the
+separate CC BY background credits. The other seven selections use MIT or CC BY 4.0.
+
+### Compatibility and adapters
+
+- The original `aurora`, `midnight`, `earth-orbit`, `islands`, `photo`, `gallery`, `webdemo`
+  and `interactive` folders moved to `themes/examples/`, with `hidden: true`. The app template
+  moved too. Existing shader/media content remains; the stopped WIP's new shaders were omitted.
+- The theme schema accepts a default-false boolean `hidden`. Lookup falls back to `examples/`
+  for bare IDs and old direct `themes/<id>` paths. Existing direct paths and user-theme
+  overrides keep precedence. No user's config was rewritten. Studio must honor `hidden`
+  and retain a current legacy selection; Studio code is outside this branch's ownership.
+- Shader ports use the existing 32-byte `paper` uniforms, bottom-left Shadertoy coordinates
+  and the engine prelude. Original GLSL and license headers are supplied. Seascape keeps its
+  default mouse position to avoid cursor-driven camera jumps; its midnight variant only
+  grades the output. The existing snapshot tests now reference the relocated Aurora.
+- The ignored `snapshot::tests::still_of_a_theme` helper renders native sources through the
+  actual offscreen DX12 pipeline without changing the desktop. `MYPAPER_STILL` supplies
+  `theme;absolute-output.jpg;seconds;widthxheight`; its examples are in the test's comment.
+- Web dependencies are local. Fluids retains the upstream simulation with automatic original
+  splats, reduced resolution and a 30 fps ceiling. Removing analytics also fixes its actual
+  startup `ga is not defined` failure. Rain/Snow clocks no longer reset every six hours.
+  No engine runtime changes were needed for these pages or the videos.
+
+### Finite video loop verification
+
+Every retained video was re-encoded at its source's 24/25 fps, muted H.264/yuv420p, no larger
+than 1920×1080, CRF 18 with a 6 Mb/s VBV cap. Spring was trimmed between film cuts; its earlier
+candidate contained an internal cut and was rejected. Bright/generic and less suitable
+selections were dropped rather than kept to fill the gallery.
+
+Each clip starts after its source head. Its tail overlaps that head with a quintic
+smootherstep fade; the next file start is the next source frame after the head. There is no
+ping-pong or reversed motion. For an N-frame overlap, FFmpeg's descending progress `P` is
+normalized as `q=clip((P-1/N)/(1-1/N),0,1)` and weighted with `q³(6q²−15q+10)`. This gives exact
+discrete endpoints and zero endpoint fade slopes, avoiding the residual blend snap found
+in the earlier linear overlaps. Exact recipes and source time ranges are in the catalog.
+
+| Theme | Output / overlap | Seam SSIM | Adjacent SSIM before / after | Seam PSNR | Seam / nearby pixel-difference ratio |
+|---|---|---:|---|---:|---:|
+| charge-city | 2.500 s / 0.75 s | 0.98663 | 0.98789 / 0.99108 | 46.88 dB | 1.17 |
+| cozy-fireplace | 23.000 s / 2 s | 0.97837 | 0.97831 / 0.98929 | 42.07 dB | 1.67 |
+| milky-way | 16.000 s / 2 s | 0.72178 | 0.72623 / 0.72396 | 30.34 dB | 1.09 |
+| spring-forest | 2.875 s / 1 s | 0.99007 | 0.99416 / 0.99923 | 47.63 dB | 1.57 |
+
+SSIM/PSNR use decoded 640×360 RGB frames. Pixel differences, camera registration and optical
+flow use 160×90 frames. The ratio compares the last→first mean absolute difference with six
+nearby normal transitions. The Milky Way timelapse's moving stars/noise lower normal adjacent
+SSIM too; its seam matches that behavior rather than an arbitrary 0.99 threshold. Flame
+flicker explains a higher fireplace ratio; its seam SSIM is the same as the preceding normal
+transition. Each seam's difference is below the clip's largest ordinary internal transition.
+
+Phase registration at the seam matched the surrounding frame shifts for all four clips:
+**0.0 px excess translation at 160×90**, measured in 0.1 px increments. Mean optical-flow speeds
+before / across / after the seam were respectively 0.209/0.079/0.119, 0.195/0.122/0.107,
+0.284/0.210/0.304 and 0.065/0.043/0.013 px/frame. The full-stream cut scan and five additional
+flow samples through each overlap were inspected together with these values; there is no
+detected camera snap or hard cut. Local flame/foliage motion is not constant-speed translation.
+Crossfades softly combine two source moments during the overlap; these are prepared looping
+excerpts rather than claims that the original films were inherently cyclic.
+
+Reproduce the measurements without changing content:
+
+```powershell
+py -3 themes/verify-loops.py --ffmpeg C:/tools/ffmpeg.exe --ffprobe C:/tools/ffprobe.exe --output C:/temp/loops.json
+```
+
+The script requires numpy and scikit-image, decodes every frame, and records codec, size,
+audio count, seam/ordinary SSIM, PSNR, pixel differences, registration and flow. Scores are
+evidence to assess together, not an automatic universal perceptual pass threshold. Procedural
+pages/shaders run continuously and have no last→first media restart; original algorithms were
+preserved and the weather clock resets were removed.
+
+### Checks and visual evidence
+
+With `CARGO_TARGET_DIR=C:\mypaper-targets\wallpapers`:
+
+- `cargo test -p mypaper-theme --lib`: **12 passed**. Includes all 23 manifests, referenced
+  assets, 15 curated previews, every file's attribution/size, strict hidden parsing and old-ID
+  and old-path compatibility.
+- `cargo test -p mypaper-wallpaper sources::shader -- --nocapture`: **2 passed**. All four
+  curated WGSL shaders compile through the actual DX12 engine prelude; uniform layout matches.
+- Independent catalog checks: **121 attributed files**, all sizes and SHA-256 hashes match;
+  every curated preview is 640×360; independently counted new binaries match 23,947,981 bytes.
+- JavaScript syntax checks: **19 programs parse**, local HTML dependencies exist. A focused
+  probe of Fluids' actual WebGL context initializer passes without a global analytics function.
+- The loop tool decoded all four final videos successfully: H.264/yuv420p, native 24/25 fps,
+  no audio tracks, within the resolution limit. Final metrics are embedded in the catalog.
+
+Native shader previews came from actual DX12 renders; web previews came from real local
+WebView2 desktop captures, with the taskbar cropped out. Earlier desktop batches showed the
+weather variants and working Fluids. The final two-cycle desktop recordings were obscured by
+an open application and were discarded; they are **not playback evidence**. No windows were
+focused or rearranged. The desktop lock was released and the user's original release core
+was restored. Final video verification therefore covers decoded files and source motion,
+not an unobscured end-to-end recording of the engine's decoder restart.
+
+The final contact sheet is `C:\WINDOWS\TEMP\mypaper-curation-aeb50a5e75cd490fb27d58f080e87bfd\gallery-contact-sheet.png`;
+the weather desktop contact is `weather-variants.png` in the same directory. These review
+artifacts are temporary and excluded from repository byte totals. Source fetch limits are
+recorded honestly: no current live Shadertoy popularity ranking or complete current Lively
+installer contents were independently verified, so no unresolved asset was bundled.

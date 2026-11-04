@@ -1,0 +1,12 @@
+{
+  "name": "Gallery",
+  "wallpaper": {
+    "kind": "slideshow",
+    "folder": "images",
+    "interval": 60,
+    "transition": 2,
+    "shuffle": true,
+    "fit": "cover"
+  },
+  "hidden": true
+}
