@@ -15,8 +15,33 @@ pub type HitId = u32;
 /// One paint operation, in the surface's device pixels, drawn in list order.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
+    /// A clockwise circular arc from twelve o'clock, in radians. Full turns draw an ellipse.
+    Arc {
+        center: Point,
+        radius: f32,
+        sweep: f32,
+        width: f32,
+        color: Rgba,
+    },
+    /// An immutable premultiplied bitmap (photos, album artwork and app icons).
+    Image {
+        rect: Rect,
+        image: Arc<crate::Image>,
+        opacity: f32,
+        source: Option<Rect>,
+    },
+    /// A snapshot of a field's revision, so edits invalidate its bounds without an idle tick.
+    TextField {
+        rect: Rect,
+        field: crate::TextField,
+        revision: u64,
+    },
     /// A filled rectangle, rounded when `radius > 0`.
-    Fill { rect: Rect, radius: f32, color: Rgba },
+    Fill {
+        rect: Rect,
+        radius: f32,
+        color: Rgba,
+    },
     /// A rectangle's outline, centred on its edge.
     Stroke {
         rect: Rect,
@@ -52,6 +77,19 @@ impl Op {
     /// Every pixel this operation may touch, antialiasing included.
     pub fn bounds(&self) -> Rect {
         match self {
+            Self::Arc {
+                center,
+                radius,
+                width,
+                ..
+            } => Rect::new(
+                center.x - radius,
+                center.y - radius,
+                radius * 2.0,
+                radius * 2.0,
+            )
+            .inflate(width / 2.0 + 1.0),
+            Self::Image { rect, .. } | Self::TextField { rect, .. } => rect.inflate(1.0),
             Self::Fill { rect, .. } => rect.inflate(1.0),
             Self::Stroke { rect, width, .. } => rect.inflate(width / 2.0 + 1.0),
             Self::Line {

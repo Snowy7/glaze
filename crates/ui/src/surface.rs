@@ -31,11 +31,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, HICON, IDC_ARROW,
     IsWindowVisible, LoadCursorW, MA_NOACTIVATE, RegisterClassExW, SW_HIDE, SW_SHOWNOACTIVATE,
     SetForegroundWindow, SetWindowLongPtrW, ShowWindow, ULW_ALPHA, UPDATELAYEREDWINDOWINFO,
-    UpdateLayeredWindowIndirect, WA_INACTIVE, WINDOW_EX_STYLE, WM_ACTIVATE,
-    WM_GETOBJECT, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN,
-    WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_NCDESTROY, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SETFOCUS, WNDCLASSEXW, WS_CHILD, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    UpdateLayeredWindowIndirect, WA_INACTIVE, WINDOW_EX_STYLE, WM_ACTIVATE, WM_GETOBJECT,
+    WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
+    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_NCDESTROY, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETFOCUS,
+    WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -55,8 +55,9 @@ pub enum Kind {
     /// A floating bar: topmost and never activated. Its app-bar reservation
     /// (`SHAppBarMessage`) belongs to the bar (N2).
     Bar,
-    /// A layered child of the desktop host, for widgets. Layered child windows need the
-    /// Windows 8+ compatibility manifest, which the shell gains with the widgets (N4).
+    /// Desktop-layer surface. The name is retained for callers, but this is a top-level
+    /// layered tool window anchored immediately above `parent` (Progman), never a WS_CHILD.
+    /// Raised desktops do not display ULW children, and WGC cannot exclude child windows.
     DesktopChild { parent: HWND },
 }
 
@@ -94,6 +95,13 @@ pub enum Event {
     Invoke(HitId),
     /// Assistive technology moved the focus to a hit item.
     Focus(HitId),
+    DpiChanged(u32),
+    VisibilityChanged,
+    Cancelled,
+    /// Windowless RichEdit changed text, selection or caret.
+    TextChanged,
+    /// Enter in a single-line windowless field.
+    TextSubmit,
 }
 
 thread_local! {
@@ -114,6 +122,9 @@ fn push(id: SurfaceId, event: Event) {
 struct Shared {
     id: SurfaceId,
     activate: bool,
+    desktop: Option<HWND>,
+    restacking: Cell<bool>,
+    field: RefCell<Option<crate::TextField>>,
     /// The window's top-left on screen, for pointer events.
     origin: Cell<(i32, i32)>,
     a11y: RefCell<Option<A11y>>,
@@ -211,10 +222,10 @@ impl Surface {
                 WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                 None,
             ),
-            Kind::DesktopChild { parent } => (
-                WS_CHILD,
-                WS_EX_LAYERED | WS_EX_NOACTIVATE,
-                Some(parent),
+            Kind::DesktopChild { .. } => (
+                WS_POPUP,
+                WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+                None,
             ),
         };
         let activate = !ex.contains(WS_EX_NOACTIVATE);
@@ -240,13 +251,28 @@ impl Surface {
         let shared = Rc::new(Shared {
             id,
             activate,
+            desktop: match kind {
+                Kind::DesktopChild { parent } => Some(parent),
+                _ => None,
+            },
+            restacking: Cell::new(false),
+            field: RefCell::new(None),
             origin: Cell::new((0, 0)),
             a11y: RefCell::new(Some(A11y::new(hwnd, role, name.into()))),
         });
         // The window holds a strong reference, released in WM_NCDESTROY.
         let raw = Rc::into_raw(shared.clone());
         // SAFETY: our own window; the pointer stays valid until WM_NCDESTROY takes it back.
-        unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, raw as isize) };
+        unsafe {
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, raw as isize);
+            if shared.desktop.is_some() {
+                let _ = windows::Win32::UI::WindowsAndMessaging::SetPropW(
+                    hwnd,
+                    w!("mypaper.ui.desktop"),
+                    Some(windows::Win32::Foundation::HANDLE(std::ptr::dangling_mut())),
+                );
+            }
+        };
         Ok(Self {
             hwnd,
             shared,
@@ -264,6 +290,14 @@ impl Surface {
 
     pub fn hwnd(&self) -> HWND {
         self.hwnd
+    }
+
+    /// Attach a windowless field to receive raw keyboard, pointer and IME messages.
+    /// Drop/blur it before hiding or destroying its surface.
+    pub fn set_text_field(&self, field: Option<crate::TextField>) {
+        if let Some(old) = self.shared.field.replace(field) {
+            old.blur();
+        }
     }
 
     /// The window's top-left on screen.
@@ -329,8 +363,131 @@ impl Surface {
 
     /// Shows the window without activating it.
     pub fn show(&self) {
-        // SAFETY: our own window.
-        let _ = unsafe { ShowWindow(self.hwnd, SW_SHOWNOACTIVATE) };
+        // SAFETY: read-only window queries and a show of our own window, without activation.
+        unsafe {
+            if !IsWindowVisible(self.hwnd).as_bool()
+                || windows::Win32::UI::WindowsAndMessaging::IsIconic(self.hwnd).as_bool()
+            {
+                let _ = ShowWindow(self.hwnd, SW_SHOWNOACTIVATE);
+            }
+        }
+        if self.shared.desktop.is_some() {
+            let _ = self.keep_above_desktop();
+        }
+    }
+
+    /// Keep a desktop surface and its directly-underlying engine glass in the bottom band.
+    /// Returns true only when a z-order repair was necessary. Coordinates never change here.
+    pub fn keep_above_desktop(&self) -> Result<bool> {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GW_HWNDNEXT, GW_HWNDPREV, GetWindow, HWND_TOP, IsWindow, SWP_NOACTIVATE, SWP_NOMOVE,
+            SWP_NOSIZE, SetWindowPos,
+        };
+        let Some(anchor) = self.shared.desktop else {
+            return Ok(false);
+        };
+        // SAFETY: handle queries only. A destroyed Explorer anchor is resolved by the host's
+        // DesktopEvents before it creates replacement surfaces.
+        unsafe {
+            if !IsWindow(Some(anchor)).as_bool() {
+                return Ok(false);
+            }
+            let next = GetWindow(self.hwnd, GW_HWNDNEXT).ok();
+            let mut below = next;
+            while let Some(window) = below {
+                if window == anchor {
+                    return Ok(false);
+                }
+                if !desktop_member(window) {
+                    break;
+                }
+                below = GetWindow(window, GW_HWNDNEXT).ok();
+            }
+            self.shared.restacking.set(true);
+            let result = (|| -> windows::core::Result<()> {
+                let glass = next.filter(|&window| is_desktop_glass(window));
+                let last = GetWindow(anchor, GW_HWNDPREV)
+                    .ok()
+                    .filter(|&w| w != self.hwnd)
+                    .unwrap_or(HWND_TOP);
+                let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+                if let Some(glass) = glass {
+                    SetWindowPos(glass, Some(last), 0, 0, 0, 0, flags)?;
+                    let before = GetWindow(glass, GW_HWNDPREV)
+                        .ok()
+                        .filter(|&w| w != self.hwnd)
+                        .unwrap_or(HWND_TOP);
+                    SetWindowPos(self.hwnd, Some(before), 0, 0, 0, 0, flags)?;
+                } else {
+                    SetWindowPos(self.hwnd, Some(last), 0, 0, 0, 0, flags)?;
+                }
+                Ok(())
+            })();
+            self.shared.restacking.set(false);
+            result.context("restacking a desktop surface")?;
+        }
+        Ok(true)
+    }
+
+    /// Read-only z-order probe for live harnesses. Desktop windows must be in the contiguous
+    /// widget/glass band over their Explorer anchor, below ordinary applications.
+    pub fn desktop_order_valid(&self) -> bool {
+        use windows::Win32::UI::WindowsAndMessaging::{GW_HWNDNEXT, GetWindow};
+        let Some(anchor) = self.shared.desktop else {
+            return true;
+        };
+        // SAFETY: read-only z-order walk. GetWindow ends the walk when a handle disappears.
+        unsafe {
+            let mut next = GetWindow(self.hwnd, GW_HWNDNEXT).ok();
+            while let Some(window) = next {
+                if window == anchor {
+                    return true;
+                }
+                if !desktop_member(window) {
+                    return false;
+                }
+                next = GetWindow(window, GW_HWNDNEXT).ok();
+            }
+        }
+        false
+    }
+
+    /// Put edit chrome above the other desktop surfaces, while leaving every app above it.
+    pub fn raise_in_desktop_band(&self) -> Result<()> {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GW_HWNDPREV, GetWindow, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+        };
+        let Some(anchor) = self.shared.desktop else {
+            return Ok(());
+        };
+        // SAFETY: z-order queries and moves on our own window. The guard permits this explicit
+        // repair through WM_WINDOWPOSCHANGING, which otherwise refuses automatic raises.
+        unsafe {
+            let mut top = anchor;
+            while let Ok(previous) = GetWindow(top, GW_HWNDPREV) {
+                if !desktop_member(previous) {
+                    break;
+                }
+                top = previous;
+            }
+            if top == self.hwnd {
+                return Ok(());
+            }
+            let before = GetWindow(top, GW_HWNDPREV).unwrap_or(HWND_TOP);
+            self.shared.restacking.set(true);
+            let result = SetWindowPos(
+                self.hwnd,
+                Some(before),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+            self.shared.restacking.set(false);
+            result?;
+        }
+        Ok(())
     }
 
     pub fn hide(&self) {
@@ -487,6 +644,26 @@ impl Drop for Surface {
     }
 }
 
+fn desktop_member(window: HWND) -> bool {
+    // SAFETY: read-only query of a live or recently destroyed window handle.
+    unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetPropW(window, w!("mypaper.ui.desktop")).0
+            as usize
+            == 1
+            || is_desktop_glass(window)
+    }
+}
+fn is_desktop_glass(window: HWND) -> bool {
+    let mut class = [0u16; 64];
+    // SAFETY: bounded local buffer for a read-only class-name query.
+    let len = unsafe { windows::Win32::UI::WindowsAndMessaging::GetClassNameW(window, &mut class) }
+        .max(0) as usize;
+    class[..len]
+        .iter()
+        .copied()
+        .eq("mypaper.wallpaper.glass".encode_utf16())
+}
+
 fn register_class() -> Result<()> {
     // SAFETY: plain Win32 registration with a 'static window procedure.
     unsafe {
@@ -533,7 +710,70 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     }
     // SAFETY: the window still holds its reference (see above).
     let shared = unsafe { &*raw };
+    if msg == windows::Win32::UI::WindowsAndMessaging::WM_WINDOWPOSCHANGING
+        && shared.desktop.is_some()
+        && !shared.restacking.get()
+        && lparam.0 != 0
+    {
+        // SAFETY: WM_WINDOWPOSCHANGING provides a live WINDOWPOS. Explicit desktop repairs
+        // use the guard above; activation/ULW may move/resize but cannot raise a widget.
+        unsafe {
+            (*(lparam.0 as *mut windows::Win32::UI::WindowsAndMessaging::WINDOWPOS)).flags |=
+                windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER;
+        }
+    }
     let id = shared.id;
+    if let Some(field) = shared.field.borrow().clone() {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{GetCapture, GetFocus};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            WM_CHAR, WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION, WM_IME_KEYUP, WM_IME_SETCONTEXT,
+            WM_IME_STARTCOMPOSITION, WM_KEYFIRST, WM_KEYLAST, WM_MOUSEWHEEL, WM_TIMER,
+        };
+        if msg == crate::text_field::WM_TEXT_INVALIDATED {
+            field.invalidated();
+            push(id, Event::TextChanged);
+            return LRESULT(0);
+        }
+        // SAFETY: read-only queries of this thread's focus and capture windows.
+        let focused = unsafe { GetFocus() } == hwnd;
+        // SAFETY: same read-only query, with no borrowed pointer.
+        let captured = unsafe { GetCapture() } == hwnd;
+        let mouse = (WM_MOUSEMOVE..=WM_MOUSEWHEEL).contains(&msg);
+        let keyboard = (WM_KEYFIRST..=WM_KEYLAST).contains(&msg)
+            || matches!(
+                msg,
+                WM_IME_STARTCOMPOSITION | WM_IME_ENDCOMPOSITION | WM_IME_COMPOSITION
+            )
+            || (WM_IME_SETCONTEXT..=WM_IME_KEYUP).contains(&msg);
+        let in_field = field.contains(
+            i32::from(lparam.0 as i16),
+            i32::from((lparam.0 >> 16) as i16),
+        );
+        if msg == WM_LBUTTONDOWN && in_field && !focused {
+            field.focus();
+        }
+        if msg == WM_KEYDOWN && focused && wparam.0 == 13 && !field.multiline() {
+            push(id, Event::TextSubmit);
+            return LRESULT(0);
+        }
+        if msg == WM_CHAR && focused && wparam.0 == 13 && !field.multiline() {
+            return LRESULT(0);
+        }
+        if msg == WM_TIMER && field.timer(wparam.0) {
+            return field.send(msg, WPARAM(wparam.0 - 0x50000), lparam);
+        }
+        if (mouse && (in_field || captured))
+            || (keyboard && focused && wparam.0 != 27)
+            || msg == WM_SETFOCUS
+            || msg == WM_KILLFOCUS
+        {
+            let result = field.send(msg, wparam, lparam);
+            if msg == WM_KILLFOCUS {
+                push(id, Event::Deactivated);
+            }
+            return result;
+        }
+    }
     let button = |button| (pointer(shared, lparam), button);
     match msg {
         WM_MOUSEACTIVATE if !shared.activate => return LRESULT(MA_NOACTIVATE as isize),
@@ -547,6 +787,19 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             push(id, Event::Release(p, b));
         }
         WM_KEYDOWN => push(id, Event::Key(wparam.0 as u16)),
+        windows::Win32::UI::WindowsAndMessaging::WM_DPICHANGED => {
+            push(id, Event::DpiChanged((wparam.0 & 0xffff) as u32))
+        }
+        windows::Win32::UI::WindowsAndMessaging::WM_SHOWWINDOW => {
+            push(id, Event::VisibilityChanged)
+        }
+        windows::Win32::UI::WindowsAndMessaging::WM_WINDOWPOSCHANGED
+            if shared.desktop.is_some() && !shared.restacking.get() =>
+        {
+            push(id, Event::VisibilityChanged)
+        }
+        windows::Win32::UI::WindowsAndMessaging::WM_CANCELMODE
+        | windows::Win32::UI::WindowsAndMessaging::WM_CAPTURECHANGED => push(id, Event::Cancelled),
         WM_ACTIVATE if (wparam.0 & 0xFFFF) as u32 == WA_INACTIVE => push(id, Event::Deactivated),
         WM_A11Y_ACTION => {
             let hit = lparam.0 as HitId;

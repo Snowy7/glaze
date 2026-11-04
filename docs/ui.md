@@ -1,7 +1,7 @@
 # Native UI: `crates/ui` and `mypaper-shell`
 
 The native rebuild (`plans/council/native-plan.md`) draws every shell surface (menus now; the top
-bar, dock, flyouts and widgets next) with one small UI layer, `crates/ui` (`mypaper-ui`), hosted by
+bar, dock and flyouts next; widgets in N4) with one small UI layer, `crates/ui` (`mypaper-ui`), hosted by
 one process, `mypaper-shell`. This page is how both work, and what they measured.
 
 ## Rules it follows
@@ -15,7 +15,7 @@ one process, `mypaper-shell`. This page is how both work, and what they measured
 - **If nothing changes, nothing is drawn** (plan Rule 2). A surface redraws only the bounds of
   the paint operations that changed, and an identical frame costs a list comparison. The frame
   ticker runs only while something moves. The shell's loop sleeps in
-  `MsgWaitForMultipleObjectsEx` until a message or its supervisor's exit wakes it.
+  `MsgWaitForMultipleObjectsEx` until a message, a scheduled widget tick, or its supervisor's exit wakes it.
 
 ## A frame
 
@@ -31,7 +31,7 @@ Surface::present(ui, origin, size, list)
 ```
 
 - **Ops** (`Op`): `Fill`, `Stroke` (rounded or not), `Line`, `Text` (a string or an icon glyph,
-  placed by its measured size), `Shadow` (stepped rings; a plain render target has no blur).
+  placed by its measured size), `Shadow` (stepped rings), `Arc`, `Image` and `TextField`.
 - **Hits** (`Hit`): rectangle, id, AccessKit role, label, enabled, checked. Input hit-tests them,
   keyboard focus steps over them (`focus::step`), and assistive technology sees them.
 - **Damage** is computed op by op in list order: a changed clock redraws the clock; a moved fill
@@ -55,7 +55,7 @@ A `Surface` is one per-pixel-alpha layered window (`WS_EX_LAYERED`, updated only
 |---|---|---|
 | `Popup { activate }` | topmost popup; `activate: false` adds `WS_EX_NOACTIVATE` and answers `MA_NOACTIVATE` | menus, flyouts |
 | `Bar` | topmost, never activated (the app-bar reservation is the bar's, N2) | top bar, dock |
-| `DesktopChild { parent }` | a layered child of the desktop host (needs the Windows 8+ compatibility manifest, which the shell gains in N4) | widgets |
+| `DesktopChild { parent }` | **top-level** layered tool window in the bottom band immediately above `parent` (Progman); the historic name describes its layer, not its Win32 parentage | widgets and edit chrome |
 
 - **Hit-testing follows alpha.** A layered window lets clicks through where alpha is 0 and keeps
   them everywhere else. So views fill each surface's whole shape at least with `Rgba::HIT`
@@ -65,10 +65,66 @@ A `Surface` is one per-pixel-alpha layered window (`WS_EX_LAYERED`, updated only
 - **Memory follows visibility.** `release` drops a hidden surface's bitmaps; the next `present`
   draws everything again. Bitmaps are cropped to each surface.
 
+
+### Desktop windows (N4)
+
+`DesktopChild` uses `WS_POPUP | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`.
+It has no Win32 parent or owner. `parent` is the Explorer **z-order anchor**. Screen coordinates
+and per-monitor physical pixels apply. The shell manifest declares Windows 8/8.1/10 compatibility
+and PerMonitorV2. The manifest does not make ULW children visible: N0.2 measured that raised
+Progman hides GDI/ULW children, and WGC exclusion lists ignore children. A top-level surface can
+be excluded from the desktop glass overlay capture; the engine's order is widget > glass > Progman.
+See [engine-notes.md](engine-notes.md#glass-overlays).
+
+`Surface::keep_above_desktop() -> Result<bool>` repairs the bottom band when necessary and
+preserves directly underlying `mypaper.wallpaper.glass` overlays. `desktop_order_valid() -> bool`
+is a read-only harness probe. `raise_in_desktop_band() -> Result<()>` lifts the edit palette above
+other widgets while keeping ordinary apps above it. `WM_WINDOWPOSCHANGING` suppresses automatic
+activation raises; explicit repairs use a guarded move. No periodic z-order timer runs. The host
+reacts to window events and restores surfaces hidden by Show Desktop; Explorer destruction drops
+surfaces and `DesktopEvents::Ready` recreates them against the new anchor. `DpiChanged(u32)` tells
+the host to rebuild its monitor geometry and text/image scale. Mixed-DPI hardware must still be
+validated when available; physical-pixel fixtures alone cannot establish that behavior.
+
+### Images, rings and reusable calendar (N4)
+
+`Ui::decode_image(bytes: &[u8], max_size: (u32, u32)) -> Result<Image>` uses WIC, scales before
+converting to premultiplied BGRA, and bounds decoded dimensions. `Op::Image { rect, image:
+Arc<Image>, opacity, source: Option<Rect> }` shares pixel storage between frames. `source` crops
+in source pixels; `None` uses the full image. `Op::Arc { center, radius, sweep, width, color }`
+draws a clockwise ring segment starting at twelve o'clock, with `sweep` in radians. These ops
+participate in normal damage detection. Crossfades arm the ticker only for their finite duration.
+
+`calendar::Date { year: i32, month: u32, day: u32 }` supplies checked `new`, `parse`, `key`,
+`ordinal`, `from_ordinal`, `weekday` (Sunday = 0), `iso_week`, `add_days`, and `shift_month`.
+`MonthGrid::new(month: Date, week_start: u32)` builds the reusable calendar grid. Its `view(&self,
+list: &mut DisplayList, rect: Rect, today: Date, text: Rgba, accent: Rgba, base: u32,
+font: &TextStyle)` appends cells and hits `base + day`. Consumers own selection and event storage;
+the calendar flyout can reuse the same component without depending on widget state.
+
+### Windowless text fields (N4)
+
+`TextField::new(window: HWND, rect: Rect, multiline: bool, size: f32, color: Rgba) -> Result<Self>`
+creates windowless RichEdit text services from `Msftedit.dll`. It is UI-thread-local and cloneable.
+Call `set_text(&str)`, `text() -> Result<String>`, `set_rect(Rect)`, `focus()`, `blur()`, and
+`revision() -> u64`. Attach it with `Surface::set_text_field(Option<TextField>)`, and append
+`Op::TextField { rect, field: TextField, revision: u64 }` to the display list. Detach and blur on
+close. Text and its undo history stay in the component while it is attached.
+
+`ITextServices2::TxDrawD2D` paints into the same software Direct2D target. The host supplies
+selection/capture, timers, caret invalidation, scrolling and the surface's IMM context. Raw Win32
+keyboard, pointer and IME messages enter RichEdit synchronously; app callbacks remain queued.
+`Event::TextChanged` covers text, selection and caret changes; compare/read text before saving.
+`Event::TextSubmit` is Enter in a single-line field. Multiline Enter stays with RichEdit. Native
+selection, bidirectional shaping and undo are covered by the component test. The live fixture
+also enters and persists Arabic/CJK through Unicode keyboard events; that check does not exercise
+a language-specific IME candidate/composition UI.
+
 ## Input
 
-Window procedures never run app code. They turn messages into `Event`s (`Move`, `Press`,
-`Release`, `Key`, `Deactivated`, `Invoke`, `Focus`) on the thread's queue, and the app's loop takes
+Window procedures never run app callbacks. They turn messages into `Event`s (`Move`, `Press`,
+`Release`, `Key`, `Deactivated`, `Invoke`, `Focus`, `DpiChanged`, `VisibilityChanged`,
+`Cancelled`, `TextChanged`, `TextSubmit`) on the thread's queue, and the app's loop takes
 them with `next_event()` after dispatching. So app state is never borrowed twice, even when Windows
 sends a message from inside our own call (showing, focusing, a COM call to Explorer whose wait loop
 dispatches). `Surface::discard_events` drops what a hidden or reused surface said.
@@ -119,7 +175,7 @@ for the other hosts).
   quits the shell.
 - **Lifetime:** one shell at a time (a named mutex; a second one exits at once); it exits when the
   process that started it does, so a crashed core never leaves a shell (and its hook) behind.
-- **Today it hosts** the desktop right-click menu ([desktop-extras.md](desktop-extras.md)): it
+- **It hosts** the native desktop widgets and the desktop right-click menu ([desktop-extras.md](desktop-extras.md)): it
   follows `desktop_menu` in `config.json` and the theme's look live; with the menu off, nothing is
   installed. Core loads no Direct2D and installs no hook.
 
