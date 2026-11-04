@@ -11,7 +11,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
-use mypaper_desktop::{DesktopHost, EXIT_RESTART, Monitor, startup, webview_env};
+use mypaper_desktop::{DesktopHost, Monitor, startup, webview_env};
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::{
     AddScriptToExecuteOnDocumentCreatedCompletedHandler,
@@ -25,12 +25,13 @@ use windows::Win32::Graphics::Gdi::{
     CombineRgn, CreateRectRgn, DeleteObject, RGN_OR, SetWindowRgn,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Shell::SHCreateMemStream;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GWLP_USERDATA, GetWindowLongPtrW, IDC_ARROW,
-    LoadCursorW, PostQuitMessage, RegisterClassExW, SW_HIDE, SW_SHOWNA, SetWindowLongPtrW,
-    ShowWindow, WM_DESTROY, WM_ERASEBKGND, WNDCLASSEXW, WS_CHILD, WS_CLIPCHILDREN,
-    WS_EX_NOACTIVATE,
+    IsWindow, LoadCursorW, PostThreadMessageW, RegisterClassExW, SW_HIDE, SW_SHOWNA,
+    SetWindowLongPtrW, ShowWindow, WM_APP, WM_DESTROY, WM_ERASEBKGND, WNDCLASSEXW, WS_CHILD,
+    WS_CLIPCHILDREN, WS_EX_NOACTIVATE,
 };
 use windows::core::{BOOL, HSTRING, Interface, PCWSTR, PWSTR, w};
 
@@ -43,7 +44,9 @@ const SHELL_PREFIX: &str = "https://shell.mypaper/";
 const CLASS: PCWSTR = w!("mypaper.widgets.surface");
 /// Set on a surface window we destroy ourselves, so `WM_DESTROY` can tell
 /// that apart from Explorer taking the desktop down.
-const CLOSING: isize = 1;
+const CLOSING: isize = -1;
+/// A layer was destroyed externally; rebuild on the app loop, outside the window procedure.
+pub const WM_DESKTOP_LOST: u32 = WM_APP + 12;
 
 /// What WebView2 callbacks report to the main loop.
 pub enum WebEvent {
@@ -110,9 +113,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             WM_ERASEBKGND => LRESULT(1), // the WebView paints everything
             WM_DESTROY => {
                 if GetWindowLongPtrW(hwnd, GWLP_USERDATA) != CLOSING {
-                    // Explorer took the desktop down: ask to be restarted.
-                    log::warn!("the desktop went away; restarting");
-                    PostQuitMessage(EXIT_RESTART.into());
+                    let _ = PostThreadMessageW(
+                        GetCurrentThreadId(),
+                        WM_DESKTOP_LOST,
+                        WPARAM(0),
+                        LPARAM(0),
+                    );
                 }
                 LRESULT(0)
             }
@@ -299,6 +305,8 @@ impl Surface {
     }
 
     fn with_window(id: u32, hwnd: HWND, monitor: Monitor, layer: Layer) -> Self {
+        // SAFETY: our window; a generation tag lets Drop reject a recycled HWND.
+        unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, id as isize + 1) };
         Self {
             id,
             monitor,
@@ -667,10 +675,12 @@ impl Surface {
     }
 
     /// Follows a monitor that moved, resized or changed scale.
-    pub fn set_monitor(&mut self, host: &DesktopHost, monitor: Monitor) -> Result<()> {
+    pub fn set_monitor(&mut self, host: Option<&DesktopHost>, monitor: Monitor) -> Result<()> {
         self.monitor = monitor;
         match self.layer {
-            Layer::Desktop => host.place_above_icons(self.hwnd, self.monitor.rect)?,
+            Layer::Desktop => host
+                .context("desktop layer needs a host")?
+                .place_above_icons(self.hwnd, self.monitor.rect)?,
             Layer::Overlay => overlay::place(self.hwnd, self.monitor.rect)?,
         }
         if self.hidden {
@@ -697,8 +707,13 @@ impl Drop for Surface {
         // SAFETY: our window, destroyed on its creating thread; the flag tells
         // its WM_DESTROY this isn't Explorer going away.
         unsafe {
-            SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, CLOSING);
-            let _ = DestroyWindow(self.hwnd);
+            // Explorer may already have destroyed this HWND. Never touch a recycled handle.
+            if IsWindow(Some(self.hwnd)).as_bool()
+                && GetWindowLongPtrW(self.hwnd, GWLP_USERDATA) == self.id as isize + 1
+            {
+                SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, CLOSING);
+                let _ = DestroyWindow(self.hwnd);
+            }
         }
     }
 }

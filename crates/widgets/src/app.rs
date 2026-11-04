@@ -15,8 +15,8 @@ use anyhow::{Context, Result, ensure};
 use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, HoldReasons, Holds, Reason};
 use mypaper_desktop::{
-    ControlWindow, DesktopHost, Monitor, Rect, WM_FACT, WindowEvents, covered_monitors,
-    monitor_infos,
+    ControlWindow, DesktopEvents, DesktopHost, Monitor, Rect, WM_FACT, WindowEvents,
+    covered_monitors, monitor_infos,
 };
 use mypaper_theme::{Color, Surface as SurfaceKind, WidgetStyle};
 use notify::Watcher;
@@ -83,6 +83,7 @@ const SETTLE_WIDGETS: Duration = Duration::from_millis(250);
 const SETTLE_SHELL: Duration = Duration::from_millis(500);
 /// App bars announce a work-area change in bursts (one per bar, per edge).
 const SETTLE_DISPLAY: Duration = Duration::from_millis(200);
+const SETTLE_EXPLORER: Duration = Duration::from_millis(250);
 const RETRY_WEBVIEW: Duration = Duration::from_secs(30);
 /// After a monitor's layer has been hidden this long (a game or maximized window
 /// over it, a locked PC), that layer and its WebView are released entirely: a
@@ -168,9 +169,14 @@ struct Timers {
     webview: Option<Instant>,
     park: Option<Instant>,
     display: Option<Instant>,
+    explorer: Option<Instant>,
 }
 
 impl Timers {
+    fn explorer_ready(&mut self, now: Instant) {
+        self.explorer = Some(now + SETTLE_EXPLORER);
+    }
+
     fn earliest(&self) -> Option<Instant> {
         [
             self.recheck,
@@ -181,6 +187,7 @@ impl Timers {
             self.webview,
             self.park,
             self.display,
+            self.explorer,
         ]
         .into_iter()
         .flatten()
@@ -194,7 +201,8 @@ fn due(timer: &mut Option<Instant>, now: Instant) -> bool {
 }
 
 pub struct App {
-    host: DesktopHost,
+    host: Option<DesktopHost>,
+    desktop_events: DesktopEvents,
     control: ControlWindow,
     edit_message: u32,
     overlay_message: u32,
@@ -271,6 +279,7 @@ impl App {
             .context("CoInitializeEx")?;
         let host = DesktopHost::find()?;
         log::info!("desktop host: {host:?}");
+        let desktop_events = DesktopEvents::new(host)?;
         let control = ControlWindow::new(HOST_CLASS)?;
         // SAFETY: a static name.
         let (edit_message, overlay_message) = unsafe {
@@ -348,7 +357,8 @@ impl App {
             .ok();
         let data_dir = crate::files::user("widget-data")?;
         let mut app = Self {
-            host,
+            host: Some(host),
+            desktop_events,
             control,
             edit_message,
             overlay_message,
@@ -423,6 +433,13 @@ impl App {
             if let Some(code) = self.pump() {
                 return code;
             }
+            if self.desktop_events.take_lost() {
+                self.release_desktop();
+            }
+            if self.desktop_events.take_ready() {
+                // Trailing debounce: a burst must settle before rebuilding WebViews.
+                self.timers.explorer_ready(Instant::now());
+            }
             self.handle_web_events();
             while let Ok(msg) = self.rx.try_recv() {
                 self.handle(msg);
@@ -475,6 +492,10 @@ impl App {
                         }
                     }
                     WM_WAKE => {}
+                    surface::WM_DESKTOP_LOST => {
+                        self.release_desktop();
+                        self.timers.explorer_ready(Instant::now());
+                    }
                     WM_DISPLAY => {
                         self.timers
                             .display
@@ -549,6 +570,9 @@ impl App {
     }
 
     fn tick(&mut self, now: Instant) {
+        if due(&mut self.timers.explorer, now) {
+            self.rebuild_desktop();
+        }
         if self
             .window_events
             .as_ref()
@@ -696,6 +720,56 @@ impl App {
         }
     }
 
+    /// Retires dead HWNDs/controllers immediately; layout, settings, storage and edit mode survive.
+    fn release_desktop(&mut self) {
+        if self.host.take().is_none() {
+            return;
+        }
+        log::info!("Explorer desktop destroyed; waiting for its replacement");
+        self.desktop_events.set_host(None);
+        let instances: Vec<String> = self
+            .layout
+            .instances
+            .iter()
+            .filter(|i| self.layer_of(i) == Some(Layer::Desktop))
+            .map(|i| i.instance.clone())
+            .collect();
+        for instance in instances {
+            self.forget(&instance);
+        }
+        self.surfaces.retain(|s| s.layer != Layer::Desktop);
+        // The environment isn't parented to Explorer. Reuse it for the new controllers.
+        self.timers.webview = None;
+        self.plates.retain(|_| false);
+        self.offer_plates();
+    }
+
+    /// One attempt per shell event, never a retry poll. Unchanged hosts ignore tray-host broadcasts.
+    fn rebuild_desktop(&mut self) {
+        let host = match DesktopHost::find_once() {
+            Ok(host) => host,
+            Err(e) => {
+                log::debug!("replacement desktop not ready: {e:#}");
+                self.release_desktop();
+                return;
+            }
+        };
+        if self.host == Some(host) {
+            return;
+        }
+        self.release_desktop();
+        self.host = Some(host);
+        self.desktop_events.set_host(Some(host));
+        self.monitors = monitor_infos();
+        self.icon_cell = icon_cell();
+        log::info!(
+            "Explorer restarted: rebuilding widget layers on {} monitors",
+            self.monitors.len()
+        );
+        self.reconcile();
+        self.recheck();
+    }
+
     /// After `WM_DISPLAYCHANGE` or `WM_SETTINGCHANGE` for the work area (see `display.rs`).
     /// Unlike window events these arrive even when no window moved, e.g. an app bar that
     /// reserves screen space.
@@ -723,7 +797,9 @@ impl App {
                 .collect();
         }
         for surface in self.surfaces.iter().filter(|s| s.layer == Layer::Desktop) {
-            self.host.keep_above_icons(surface.hwnd());
+            if let Some(host) = &self.host {
+                host.keep_above_icons(surface.hwnd());
+            }
         }
         self.sync_hold();
         if self
@@ -1019,6 +1095,9 @@ impl App {
         let mut wanted: Vec<(Monitor, Layer)> = Vec::new();
         for monitor in &self.monitors {
             for layer in [Layer::Desktop, Layer::Overlay] {
+                if layer == Layer::Desktop && self.host.is_none() {
+                    continue;
+                }
                 let has_instances = self.layout.instances.iter().any(|instance| {
                     self.layer_of(instance) == Some(layer)
                         && self.shown_on(instance).as_deref() == Some(monitor.device.as_str())
@@ -1053,7 +1132,7 @@ impl App {
                 .find(|s| s.monitor.device == monitor.device && s.layer == layer)
             {
                 Some(surface) if surface.monitor != monitor => {
-                    if let Err(e) = surface.set_monitor(&self.host, monitor) {
+                    if let Err(e) = surface.set_monitor(self.host.as_ref(), monitor) {
                         log::warn!("moving the widget layer: {e:#}");
                     }
                 }
@@ -1061,7 +1140,11 @@ impl App {
                 None => {
                     self.next_surface += 1;
                     let created = match layer {
-                        Layer::Desktop => Surface::new(self.next_surface, &self.host, monitor),
+                        Layer::Desktop => Surface::new(
+                            self.next_surface,
+                            self.host.as_ref().expect("desktop layer needs a host"),
+                            monitor,
+                        ),
                         Layer::Overlay => Surface::new_overlay(self.next_surface, monitor),
                     };
                     match created {
@@ -1072,10 +1155,12 @@ impl App {
             }
         }
         if self.surfaces.is_empty() {
-            if !matches!(self.env, Env::None) {
-                log::info!("no widgets on screen; releasing WebView2");
+            if self.host.is_some() {
+                if !matches!(self.env, Env::None) {
+                    log::info!("no widgets on screen; releasing WebView2");
+                }
+                self.env = Env::None;
             }
-            self.env = Env::None;
         } else {
             self.ensure_webviews();
         }
@@ -1171,6 +1256,9 @@ impl App {
                     }
                 }
                 WebEvent::ProcessFailed { surface, kind } => {
+                    if !self.surfaces.iter().any(|s| s.id == surface) {
+                        continue;
+                    }
                     if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED {
                         log::warn!("the WebView2 browser process exited; starting over");
                         for surface in &mut self.surfaces {
@@ -1198,9 +1286,6 @@ impl App {
             webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller,
         >,
     ) {
-        let (Env::Ready(env), Some(shell)) = (&self.env, &self.shell) else {
-            return;
-        };
         let Some(index) = self.surfaces.iter().position(|s| s.id == id) else {
             if let Ok(controller) = result {
                 // SAFETY: COM call on a controller nobody else holds.
@@ -1214,6 +1299,11 @@ impl App {
                 self.surfaces[index].creating = false;
                 return log::error!("creating a WebView: {e}");
             }
+        };
+        let (Env::Ready(env), Some(shell)) = (&self.env, &self.shell) else {
+            // SAFETY: a late completion after its environment or shell was released.
+            let _ = unsafe { controller.Close() };
+            return;
         };
         let setup = Setup {
             env,
@@ -2058,6 +2148,28 @@ fn icon_cell() -> [f64; 2] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explorer_bursts_wait_for_the_last_notification_and_fire_once() {
+        let start = Instant::now();
+        let mut timers = Timers::default();
+        for millis in [0, 180, 360, 540, 720] {
+            let now = start + Duration::from_millis(millis);
+            timers.explorer_ready(now);
+            assert!(!due(&mut timers.explorer, now));
+        }
+        assert_eq!(timers.earliest(), Some(start + Duration::from_millis(970)));
+        assert!(!due(
+            &mut timers.explorer,
+            start + Duration::from_millis(969)
+        ));
+        assert!(due(
+            &mut timers.explorer,
+            start + Duration::from_millis(970)
+        ));
+        assert_eq!(timers.earliest(), None);
+        assert!(!due(&mut timers.explorer, start + Duration::from_secs(2)));
+    }
 
     fn reasons(paused: bool, on_battery: bool, display_off: bool, locked: bool) -> HoldReasons {
         let mut holds = Holds::default();
