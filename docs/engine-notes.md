@@ -370,3 +370,101 @@ the weather desktop contact is `weather-variants.png` in the same directory. The
 artifacts are temporary and excluded from repository byte totals. Source fetch limits are
 recorded honestly: no current live Shadertoy popularity ranking or complete current Lively
 installer contents were independently verified, so no unresolved asset was bundled.
+
+## Glass overlays
+
+Liquid Glass under shell surfaces that are not over the engine's own frame: flyouts, menus and bars
+over app windows (`Layer::Popup`), and widgets over web and app wallpapers (`Layer::Desktop`, D-W).
+Built in N0.2 as `crates/wallpaper/src/overlay`; the engine loop drives it from N3. Measured on the
+dev desktop (Windows build 26300, the engine on the low-power AMD iGPU, both 1440p monitors on the
+NVIDIA dGPU at 239 and 199 Hz) with `examples/overlay_spike.rs`.
+
+How it works, per open surface: a click-through, never-activated window directly under the shell's
+window shows glass.wgsl (the plate pass's shader, used unchanged) through a DirectComposition
+surface under a rounded clip. What it refracts comes from one Windows.Graphics.Capture session per
+monitor that has an overlay, with one frame-pool buffer, `DirtyRegionMode::ReportOnly`, no cursor,
+no border, and an exclusion list holding every overlay and client window.
+
+What the spike decided, each by measurement:
+
+- **The capture device is a separate D3D11 device** on wgpu's adapter: +16 MB private.
+  D3D11On12 on wgpu's own device costs +92 MB. The CPU per crop update is the same for both
+  (`examples/overlay_spike_device.rs none|11on12|d3d11`). Crops are D3D12 textures in a shared heap
+  with simultaneous access, opened in D3D11; one shared fence orders D3D11's copies before wgpu
+  reads them and wgpu's glass before D3D11 copies it out.
+- **Overlays show DirectComposition surfaces, not swapchains.** The first composition swapchain on
+  the iGPU, shown on the dGPU's monitors, costs ~32 MB private whether wgpu or D3D11 makes it
+  (+15 MB for a 600x400 one); on the dGPU it costs ~0. A DirectComposition surface drawn by the
+  capture device costs ~3 MB (`overlay_spike_device swapchain-wgpu|swapchain-d3d11|swapchain-surface|swapchain-wgpu-hp`).
+  wgpu draws the glass into a shared texture, D3D11 copies it into the surface, one commit.
+- **Excluded windows still produce dirty rects.** An excluded window that repaints or moves
+  reports a dirty rect exactly over itself, though the captured pixels don't change
+  (`overlay_spike_device frames`). DWM also reports an animated wallpaper as dirty under opaque
+  windows. So dirty rects alone can't stop the glass redrawing itself:
+  1. On WGC's thread, frames older than the exclusion list's configuration iteration, or with
+     dirty rects that miss every overlay's frame, are dropped.
+  2. A frame that touches an overlay is copied into a spare crop and compared with the shown one
+     on the GPU (`compare.wgsl`).
+  3. Only a crop that differs is drawn.
+
+  While what is behind keeps changing, the glass is drawn speculatively in the compare's own
+  submission (one GPU round trip) and shown only if the compare says so. The same dirty rects are
+  also what makes a new or moved overlay get its pixels at once.
+- **Window exclusion works only for top-level windows.** `IDisplayGraphicsCaptureSession` is in
+  neither the installed SDK (10.0.26100.0) nor `windows` 0.62, so `overlay/abi.rs` defines it by IID
+  (`bb91f61b-…`, `SetWindowExclusionList` at vtable slot 6), along with `IDirect3D11CaptureFrame3`
+  for `ConfigurationIteration`. Support is detected by `QueryInterface`. With top-level windows it
+  works:
+  - the glass's backdrop shows none of the popup's marker pixels;
+  - a GDI screenshot and an independent capture session (Snipping Tool's API) show all of them.
+
+  With **child windows** of the desktop host it does nothing: a child overlay captured itself
+  (over a still web page it kept redrawing, 55 passes in 15 s, with a doubled rim) and its widget.
+  So `Layer::Desktop` is a plain top-level window directly under the widget, and the shell must
+  keep its widget windows top-level, just above the desktop (Progman). Over the same still page:
+  0 passes, and the widget is excluded.
+- **Under the raised desktop, neither GDI nor per-pixel-alpha (`UpdateLayeredWindow`) child
+  windows of Progman show anything**, even with a Windows 8 manifest; DirectComposition children
+  do. That matters for the shell's widget surfaces too (N1, N4).
+- **Borderless capture needs no package.** `GraphicsCaptureAccess::RequestAccessAsync(Borderless)`
+  returns `Allowed` for the unpackaged exe (Settings > Privacy & security > Screenshot borders), so
+  no sparse package was made. It is asked once when the overlays are created, off the open path.
+  The check is controlled: a session that requires the border puts 11,321 yellow pixels on the
+  monitor's edges (`overlay_spike_device border`); ours, 0.
+- **Moves land in one frame.** A `Place` moves the overlay window inside the client's
+  `SendMessage`, so the client's own move follows it within the same composition frame.
+
+N0.2's checks (popups on the left monitor; two runs, 20 s phases untimed for CPU and 10 s phases
+with timestamp queries for GPU; CPU is % of one core):
+
+| Check | Result | Gate |
+|---|---|---|
+| z-order while both move | overlay directly under the popup; 286 of 287 moves placed inside the client's `SendMessage`, the popup followed 0.56 ms later (max 1.15 ms) | pass |
+| glass lag | window: same composition frame (0 of 287 more than a 4.17 ms refresh apart); the glass inside: redrawn 8 ms after the move (median; p95 16 ms) | window passes; the glass inside is up to ~4 refreshes at 239 Hz, bounded by the capture's frame rate |
+| clicks | the popup's alpha 1/255 body gets a real click; the overlay's rim outside it is not hit | pass |
+| one session, two overlays | 2 overlays on 1 session | pass |
+| video elsewhere, nothing behind changes | 0.08–0.70% CPU, 0 glass passes (all frames dropped on WGC's thread) | pass (≤1%) |
+| no feedback loop (popup hover 10 Hz and clock, overlay presents) | 0 glass passes, ~10 compares/s, 0.3–0.65% CPU | pass |
+| open-to-glass | cold (first overlay, new session) 182–379 ms over 14 runs (median ~260), then the 300 ms fade; warm (session running) 15–20 ms | warm passes; cold misses (WGC's first frame takes ~170–340 ms after `StartCapture`) |
+| memory while open, after close | +21 MB just after the first open (the capture device is 16), +4 to +7 MB a few seconds later with 1–2 overlays; below the starting figure after close | pass (≤ +30 MB) |
+| CPU per update, a video behind the popup (~59 updates/s at 60 or 30 fps: at 30 every change is followed by a compare of our own present) | 1.6–4.4% over 6 runs, median ~3.4% (about 0.55 ms per update; `Commit` ~0.2 ms of it); other agents were running perf tools at the time | borderline miss (≤3%) |
+| GPU per update | 0.071–0.075 ms (copy, compare, glass); a compare alone 0.054 ms | pass (≤0.5 ms) |
+| desktop layer over a web wallpaper (fluids), under a widget | widget > glass > Progman; 323 glass passes in 15 s (live), 0.080 ms GPU each, 2.2% CPU; 0 passes over a still page | pass with top-level overlays (fails as a child of the desktop host) |
+| exclusion and screenshots | 0 popup pixels in the glass's backdrop; 256 of 256 in a GDI screenshot and in an independent capture session | pass |
+| borderless | `Allowed`, 0 yellow edge pixels | pass |
+
+Running it: take the desktop lock first, then
+`cargo build --release -p mypaper-wallpaper --example overlay_spike --example overlay_spike_popup`
+and `target/release/examples/overlay_spike popup 20 left`. The `desktop` scenario expects a web
+wallpaper showing, for example a second `mypaper-wallpaper fluids` run with `RUST_LOG=off`.
+`MYPAPER_SPIKE_NO_TIMING=1` leaves out the GPU timestamps (they wait for the GPU). Screenshots go
+to `%TEMP%\mypaper-overlay-spike\`.
+
+Left for N3:
+- The cold open misses the 300 ms window. Options: keep the session (and the 16 MB device) for a
+  few seconds after the last close, or let the shell send a hint on pointer-down.
+- At ~59 updates/s the CPU is at the 3% gate. `MIN_INTERVAL` (`capture.rs`) caps updates at
+  60/s; 1/30 s would halve it, at the cost of 30 fps glass over 60 fps content.
+- `gpu.rs` must expose the adapter for `overlay::Gpu`.
+- The engine's loop calls `Overlays::tick` after each message pump. Requests and frame wakes
+  arrive as messages to its own window, so no new wait handle is needed.
