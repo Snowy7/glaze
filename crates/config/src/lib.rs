@@ -6,7 +6,11 @@
 
 pub mod desktop_menu;
 mod engine;
+pub mod look;
+mod windows;
 pub use engine::{EngineConfig, GpuPreference, RenderOptions, RenderSettings};
+pub use look::Look;
+pub use windows::{Backdrop, Color, Corners, Paint, WindowsStyle};
 
 use std::path::PathBuf;
 
@@ -40,6 +44,10 @@ pub struct Config {
     /// theme's look before mypaper starts (docs/performance.md, "Static snapshot"). Turning it
     /// off puts the user's own wallpaper back.
     pub static_snapshot: bool,
+    /// The user's look (D2): style, material and colour over the wallpaper's, and how Windows
+    /// draws its own windows. Left out of the file while it is empty.
+    #[serde(skip_serializing_if = "Look::is_empty")]
+    pub look: Look,
 }
 
 impl Default for Config {
@@ -53,6 +61,7 @@ impl Default for Config {
             desktop_menu: DesktopMenu::default(),
             classic_context_menu: false,
             static_snapshot: true,
+            look: Look::default(),
         }
     }
 }
@@ -88,6 +97,7 @@ impl Config {
         let config: Self = serde_json::from_str(json)?;
         config.desktop_menu.validate()?;
         config.engine.validate()?;
+        config.look.validate()?;
         Ok(config)
     }
 
