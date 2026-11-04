@@ -1,6 +1,6 @@
 //! mypaper-shell: the native shell (docs/ui.md). One UI thread on `mypaper-ui`, whose loop sleeps
 //! in `MsgWaitForMultipleObjectsEx` until a message, an input event or its supervisor's exit
-//! wakes it. For now it hosts the desktop right-click menu; the bars, flyouts and widgets follow.
+//! wakes it. It hosts the native top bar, dock and desktop right-click menu.
 //!
 //! Core starts it as a supervised child. It exits when core does (it waits on its parent
 //! process), and on `WM_CLOSE` to its inbox window (class `mypaper.shell.inbox`). A second
@@ -10,7 +10,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod apps;
+mod bars;
 mod desktop_menu;
+mod flyouts;
+mod glass;
 mod inbox;
 mod look;
 
@@ -27,8 +30,7 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Threading::{
-    CreateMutexW, GetCurrentProcessId, INFINITE, OpenProcess, PROCESS_SYNCHRONIZE,
-    WaitForSingleObject,
+    CreateMutexW, GetCurrentProcessId, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
@@ -58,32 +60,37 @@ fn run() -> Result<()> {
         log::info!("another mypaper-shell is running; leaving it be");
         return Ok(());
     }
+    let parent = parent_process();
+    anyhow::ensure!(parent.is_some(), "could not watch the shell supervisor");
+    let bars_start = bars::prepare()?;
     let _com = Com::init();
     let mut ui = Ui::new()?;
+    let bars = bars::Bars::new(&mut ui, bars_start)?;
     let inbox = Inbox::new()?;
     let _watchers = watch_files();
-    let parent = parent_process();
     let mut shell = Shell {
         inbox: inbox.hwnd(),
         menu: None,
+        bars,
     };
     shell.follow_config(&ui);
+    shell.bars.tick(&mut ui);
     startup::ready("shell", "ready_ms");
     log::info!("running");
 
-    let handles: Vec<HANDLE> = parent.iter().copied().collect();
     let mut msg = MSG::default();
     'run: loop {
+        let handles: Vec<HANDLE> = parent.iter().copied().chain(shell.bars.handles()).collect();
         // SAFETY: the parent's handle stays open for the whole loop.
         let woke = unsafe {
             MsgWaitForMultipleObjectsEx(
                 (!handles.is_empty()).then_some(handles.as_slice()),
-                INFINITE,
+                shell.bars.timeout(),
                 QS_ALLINPUT,
                 MWMO_INPUTAVAILABLE,
             )
         };
-        if !handles.is_empty() && woke == WAIT_OBJECT_0 {
+        if parent.is_some() && woke == WAIT_OBJECT_0 {
             log::info!("the process that started the shell exited; stopping");
             break;
         }
@@ -92,6 +99,9 @@ fn run() -> Result<()> {
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
                 if msg.message == WM_QUIT {
                     break 'run;
+                }
+                if shell.bars.message(&msg) {
+                    continue;
                 }
                 if msg.hwnd.is_invalid() && msg.message == WM_FACT {
                     // Posted to the thread by the menu's control window (power and session).
@@ -103,6 +113,7 @@ fn run() -> Result<()> {
             }
         }
         shell.drain(&mut ui);
+        shell.bars.tick(&mut ui);
     }
     drop(shell);
     if let Some(parent) = parent {
@@ -115,6 +126,7 @@ fn run() -> Result<()> {
 
 /// What the shell hosts.
 struct Shell {
+    bars: bars::Bars,
     inbox: windows::Win32::Foundation::HWND,
     /// The desktop right-click menu, while `desktop_menu.enabled`.
     menu: Option<DesktopMenu>,
@@ -128,7 +140,10 @@ impl Shell {
         loop {
             if let Some(msg) = inbox::next() {
                 match msg.message {
-                    WM_CONFIG | WM_PALETTE => config_changed = true,
+                    WM_CONFIG | WM_PALETTE => {
+                        config_changed = true;
+                        self.bars.config_changed();
+                    }
                     _ => {
                         if let Some(menu) = &mut self.menu {
                             menu.handle(ui, msg);
@@ -136,6 +151,7 @@ impl Shell {
                     }
                 }
             } else if let Some((id, event)) = next_event() {
+                self.bars.event(ui, id, &event);
                 if let Some(menu) = &mut self.menu {
                     menu.on_event(ui, id, &event);
                 }
@@ -150,6 +166,7 @@ impl Shell {
     }
 
     fn fact(&mut self, ui: &mut Ui, wparam: usize, lparam: isize) {
+        self.bars.fact(wparam, lparam);
         if let Some(menu) = &mut self.menu {
             menu.handle(
                 ui,

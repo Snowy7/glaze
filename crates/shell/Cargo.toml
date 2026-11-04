@@ -1,6 +1,6 @@
 [package]
 name = "mypaper-shell"
-description = "The native shell: one UI thread on mypaper-ui. Hosts the desktop right-click menu (N1)."
+description = "The native shell: one UI thread on mypaper-ui. Hosts the native bars, dock and desktop menu."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,10 @@ mypaper-desktop.workspace = true
 mypaper-theme.workspace = true
 mypaper-tweaks.workspace = true
 mypaper-ui.workspace = true
+mypaper-bars.workspace = true
+notify.workspace = true
+serde_json.workspace = true
+resvg = { version = "0.45", default-features = false }
 
 anyhow.workspace = true
 log.workspace = true
