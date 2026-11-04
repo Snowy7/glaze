@@ -1,0 +1,333 @@
+//! The flyouts' and the tray host's part of the main loop (docs/bars.md, "Flyouts"): routing a
+//! flyout's requests, delivering what the providers finished, the Windows key, the keyboard for
+//! the launcher, and which tray source runs. A child module of `app`, so it works on `App`
+//! directly; app.rs only calls in.
+
+use super::*;
+
+impl App {
+    /// Whether a bar shows a topic: one of its modules, or a flyout open on it.
+    pub(super) fn shows(&self, bar: &Bar, topic: Topic) -> bool {
+        bar_topics(bar.kind, &self.config.top).contains(&topic)
+            || self.flyouts.watches.watching(bar.id, Watched::Core(topic))
+    }
+
+    // --- Flyouts ------------------------------------------------------------------------------------
+
+    /// A flyout's request. The ones about the bars themselves are answered here, the providers'
+    /// by `Flyouts` (`None`: the answer comes later).
+    pub(super) fn flyout(
+        &mut self,
+        index: usize,
+        id: u64,
+        request: Request,
+    ) -> Option<Result<Value, BarError>> {
+        let bar = self.bars[index].id;
+        let done = Some(Ok(Value::Null));
+        match request {
+            Request::Watch { topic } => {
+                let Some(what) = Watched::parse(&topic) else {
+                    return Some(Err(BarError::invalid(format!("watch: no topic {topic:?}"))));
+                };
+                if self.flyouts.watches.add(bar, what) {
+                    self.flyouts.watched(what);
+                    if let Watched::Core(topic) = what {
+                        self.sync_topics();
+                        self.sent.remove(&(bar, topic));
+                        self.emit(topic);
+                    }
+                }
+                done
+            }
+            Request::Unwatch { topic } => {
+                if let Some(what) = Watched::parse(&topic) {
+                    self.flyouts.watches.remove(bar, what);
+                    if matches!(what, Watched::Core(_)) {
+                        self.sync_topics();
+                    }
+                }
+                done
+            }
+            Request::Room { extent } => {
+                self.bars[index].set_room(extent);
+                done
+            }
+            Request::Keyboard { on } => {
+                self.take_keyboard(index, on);
+                done
+            }
+            // The shell's HSHELL_LANGUAGE (or the next foreground change) updates the module.
+            Request::SetLayout { id: layout } => Some(match self.foreground {
+                Some(window) => lang::switch(window, &layout)
+                    .map(|()| Value::Null)
+                    .map_err(BarError::unavailable),
+                None => Err(BarError::unavailable("no app in front")),
+            }),
+            Request::LauncherPin {
+                path,
+                name,
+                index: at,
+            } => Some(self.edit_launcher_pins(|pins| {
+                let pinned = Pinned { path, name };
+                let found = pins
+                    .iter()
+                    .position(|p| p.path.eq_ignore_ascii_case(&pinned.path));
+                let pinned = match found {
+                    Some(found) => pins.remove(found),
+                    None => pinned,
+                };
+                let at = at.unwrap_or(pins.len()).min(pins.len());
+                pins.insert(at, pinned);
+            })),
+            Request::LauncherUnpin { path } => {
+                Some(self.edit_launcher_pins(|pins| {
+                    pins.retain(|p| !p.path.eq_ignore_ascii_case(&path))
+                }))
+            }
+            other => self.flyouts.call(bar, id, other),
+        }
+    }
+
+    pub(super) fn on_flyout(&mut self, done: Done) {
+        let post_to = |bars: &[Bar], id: u32, message: &str| {
+            if let Some(bar) = bars.iter().find(|b| b.id == id && b.ready) {
+                bar.post(message);
+            }
+        };
+        match done {
+            Done::Reply { bar, id, result } => {
+                let message = match result {
+                    Ok(result) => json!({ "id": id, "result": result }),
+                    Err(error) => {
+                        log::info!("flyout request {id}: {}", error.message);
+                        json!({ "id": id, "error": error })
+                    }
+                };
+                post_to(&self.bars, bar, &message.to_string());
+            }
+            Done::Event {
+                topic: Watched::Core(Topic::Notifications),
+                data,
+            } => {
+                self.notification_count = Some(data["count"].as_u64().map(|c| c as usize));
+                self.emit(Topic::Notifications);
+            }
+            Done::Event { topic, data } => {
+                let message = json!({ "event": topic.event(), "data": data }).to_string();
+                for bar in self.flyouts.watches.bars(topic).collect::<Vec<_>>() {
+                    post_to(&self.bars, bar, &message);
+                }
+            }
+            Done::WinKey => self.open_launcher(),
+            Done::Index(apps) => {
+                let (value, replies) = self.flyouts.index_built(apps);
+                for (bar, id, result) in replies {
+                    post_to(
+                        &self.bars,
+                        bar,
+                        &json!({ "id": id, "result": result }).to_string(),
+                    );
+                }
+                let message = json!({ "event": Watched::Apps.event(), "data": value }).to_string();
+                for bar in self.flyouts.watches.bars(Watched::Apps).collect::<Vec<_>>() {
+                    post_to(&self.bars, bar, &message);
+                }
+            }
+            Done::Changed(Watched::Core(Topic::Language)) => {
+                self.layouts = None; // a layout may have been added or removed
+                self.emit(Topic::Language);
+            }
+            Done::Changed(what) => self.flyouts.changed(what),
+        }
+    }
+
+    /// The Windows key hook runs while the launcher replaces Start (`launcher.winKey` with the
+    /// native taskbar hidden) and opens it while some bar can show it.
+    pub(super) fn sync_winkey(&mut self) {
+        let wanted = self.config.launcher.win_key
+            && self.wanted_taskbar().mode == TaskbarMode::Hide
+            && !self.bars.is_empty();
+        match (wanted, self.winkey.is_some()) {
+            (true, false) => self.winkey = WinKey::start(self.waker.clone()),
+            (false, true) => self.winkey = None,
+            _ => {}
+        }
+        WinKey::set_enabled(
+            wanted && !self.asleep && self.bars.iter().any(|b| b.ready && !b.hidden),
+        );
+    }
+
+    /// A lone Windows key press: the launcher opens on the monitor the user works on (the app in
+    /// front's), on its top bar if it has one, and takes the keyboard. With no bar to show it,
+    /// the native Start menu opens instead.
+    pub(super) fn open_launcher(&mut self) {
+        let mut rect = windows::Win32::Foundation::RECT::default();
+        let center = self.foreground.and_then(|window| {
+            // SAFETY: a read-only query; `rect` outlives it.
+            unsafe {
+                windows::Win32::UI::WindowsAndMessaging::GetWindowRect(
+                    system::hwnd(window),
+                    &mut rect,
+                )
+            }
+            .ok()
+            .map(|()| ((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2))
+        });
+        let start = self
+            .config
+            .top
+            .modules()
+            .any(|m| m == mypaper_bars::Module::Start);
+        let index = self
+            .bars
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.ready && !b.hidden)
+            .max_by_key(|(_, b)| {
+                let here = center.is_some_and(|(x, y)| b.monitor.rect.contains_point(x, y));
+                (here, b.kind == BarKind::Top && start, b.monitor.primary)
+            })
+            .map(|(index, _)| index);
+        let Some(index) = index else {
+            return system::start_menu();
+        };
+        self.take_keyboard(index, true);
+        self.post_event(index, "open", &json!({ "flyout": "launcher" }));
+    }
+
+    /// Makes the bar the foreground window with the keyboard in its page (a flyout that types),
+    /// or gives the foreground back to the app.
+    pub(super) fn take_keyboard(&mut self, index: usize, on: bool) {
+        let bar = &self.bars[index];
+        if on {
+            self.keyboard = Some(bar.id);
+            // A click already gave the bar the foreground and its page the focus; moving the focus
+            // again would blur the page (and close the flyout asking).
+            // SAFETY: a read-only query.
+            if unsafe { GetForegroundWindow() } == bar.hwnd() {
+                return;
+            }
+            // SAFETY: our own window; Windows refuses it without the foreground rights a click
+            // or the key press gave us.
+            if !unsafe { SetForegroundWindow(bar.hwnd()) }.as_bool() {
+                log::info!("Windows refused the foreground to the {:?} bar", bar.kind);
+            }
+            if let Some(web) = &bar.web {
+                web.focus();
+            }
+        } else if self.keyboard == Some(bar.id) {
+            self.keyboard = None;
+            // SAFETY: read-only queries.
+            let ours = unsafe {
+                let mut pid = 0;
+                GetWindowThreadProcessId(GetForegroundWindow(), Some(&mut pid));
+                pid == std::process::id()
+            };
+            // A press (on another module) closed it: that click keeps the bar in front. Escape,
+            // or opening an app, hands it back (an app that took it is left alone).
+            if ours && !mouse_button_down() {
+                self.hand_back(None);
+            }
+        }
+    }
+
+    /// Edits the launcher's pins (`launcher.pinned`; until the first edit, the dock's) and tells
+    /// every bar.
+    pub(super) fn edit_launcher_pins(
+        &mut self,
+        change: impl FnOnce(&mut Vec<Pinned>),
+    ) -> Result<Value, BarError> {
+        let mut pins = (self.config.launcher.pinned.clone())
+            .or_else(|| self.config.dock.pinned.clone())
+            .unwrap_or_default();
+        change(&mut pins);
+        let value = serde_json::to_value(&pins).map_err(|e| BarError::internal(e.to_string()))?;
+        config::edit(&self.config_path, |root| {
+            config::set(root, "launcher", "pinned", value.clone())
+        })
+        .map_err(|e| BarError::internal(format!("{e:#}")))?;
+        self.config.launcher.pinned = Some(pins);
+        self.broadcast_event("launcherPins", |_| value.clone());
+        Ok(Value::Null)
+    }
+
+    // --- The tray -----------------------------------------------------------------------------------
+
+    /// The tray host runs while a tray module is on screen and the native taskbar is replaced
+    /// (`taskbar.mode: hide`, or `tray.host`); otherwise UI Automation reads Explorer's.
+    pub(super) fn sync_tray(&mut self) {
+        let shown = self.active.contains(&Topic::Tray);
+        let replaced = self.wanted_taskbar().mode == TaskbarMode::Hide || self.config.tray.host;
+        let host = shown && replaced;
+        if host != self.tray_host.active() {
+            // The other source reports its own list.
+            self.tray_items.clear();
+        }
+        self.tray.set_active(shown && !host);
+        self.tray_host.set_active(host);
+        self.place_tray();
+    }
+
+    /// Tells the host where the tray is: the band of the first top bar showing it (the primary
+    /// monitor's if it has one). Apps put their popups there.
+    pub(super) fn place_tray(&mut self) {
+        let shows = self
+            .config
+            .top
+            .modules()
+            .any(|m| m == mypaper_bars::Module::Tray);
+        let band = self
+            .bars
+            .iter()
+            .filter(|b| shows && b.kind == BarKind::Top && !b.hidden)
+            .max_by_key(|b| b.monitor.primary)
+            .map(|bar| {
+                let height = (bar.geometry.thickness * bar.scale()).round() as i32;
+                tray_host::Band {
+                    rect: [bar.rect.x, bar.rect.y, bar.rect.width, height],
+                    edge: 1, // ABE_TOP
+                }
+            });
+        self.tray_host.place(band);
+    }
+
+    pub(super) fn click_tray(
+        &mut self,
+        index: usize,
+        id: String,
+        button: Button,
+        rect: Option<[f64; 4]>,
+    ) {
+        if !self.tray_host.active() {
+            return self.tray.click(id, button);
+        }
+        let bar = &self.bars[index];
+        let scale = bar.scale();
+        let anchor = rect.map(|[x, y, w, h]| {
+            let px = |v: f64| (v * scale).round() as i32;
+            [bar.rect.x + px(x), bar.rect.y + px(y), px(w), px(h)]
+        });
+        let mut cursor = POINT::default();
+        // SAFETY: `cursor` outlives the call.
+        let _ = unsafe { GetCursorPos(&mut cursor) };
+        let click = match button {
+            Button::Left => Click::Left,
+            Button::Right => Click::Right,
+            Button::Middle => Click::Middle,
+            Button::Double => Click::Double,
+        };
+        self.tray_host
+            .click(id, click, (cursor.x, cursor.y), anchor);
+    }
+}
+
+/// Is a mouse button held right now (physically or by injected input)?
+fn mouse_button_down() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
+    };
+    [VK_LBUTTON, VK_RBUTTON, VK_MBUTTON]
+        .into_iter()
+        // SAFETY: no preconditions.
+        .any(|vk| unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16 & 0x8000 != 0)
+}

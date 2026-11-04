@@ -275,8 +275,9 @@ replace the taskbar's own menus; nothing goes into Explorer.
   region keeps everything outside the flyout click-through.
 - **Keyboard.** The launcher asks for the keyboard (`keyboard`): the bar becomes the foreground
   window and the WebView takes focus, and the host stops handing the foreground back while it's
-  open. On close it hands the foreground back to the app before it, unless the pointer is over a
-  bar (the press that closed it was on another module).
+  open. On close (Escape) it hands the foreground back to the app before it, unless a mouse button
+  is down (the press that closed it was on another module, whose flyout then opens) or an app
+  already took it.
 - **Providers** (`crates/bars/src/flyouts`) run on lanes, one thread each (COM in the apartment the
   API wants). A lane starts on the first request and stops after 60 s unused, unless something it
   feeds is watched. Slow requests (DDC/CI, WLAN scans, WinRT reads) answer *later* through the main
@@ -447,7 +448,8 @@ RetroBar way (research 2.5 and 4.1; `crates/bars/src/tray_host.rs`, wire formats
    - `Shell_NotifyIcon` and `SHAppBarMessage` find the first `Shell_TrayWnd` in Z-order, so the host
      keeps its window above Explorer's.
    - It re-checks on Explorer's own window events (out-of-context WinEvents filtered to Explorer's
-     process), and with one `FindWindow` every 3 s.
+     process), and with one `FindWindow` every 3 s. Measured: hiding the taskbar makes Explorer
+     raise its tray a dozen times in the first second, and the events catch each one.
 2. It broadcasts `TaskbarCreated`, so every running app adds its icons again, now to the host. That
    is the initial enumeration; the bars ignore their own broadcast.
 3. It keeps each icon: owner window, uID or GUID, callback message, `NOTIFYICON_VERSION`, tooltip,

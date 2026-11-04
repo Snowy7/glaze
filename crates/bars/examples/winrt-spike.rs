@@ -12,9 +12,7 @@ use windows::ApplicationModel::DataTransfer::Clipboard;
 use windows::Data::Xml::Dom::XmlDocument;
 use windows::Devices::Radios::Radio;
 use windows::UI::Notifications::Management::UserNotificationListener;
-use windows::UI::Notifications::{
-    NotificationKinds, ToastNotification, ToastNotificationManager,
-};
+use windows::UI::Notifications::{NotificationKinds, ToastNotification, ToastNotificationManager};
 use windows::UI::Shell::FocusSessionManager;
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows::Win32::System::Registry::{
@@ -68,7 +66,10 @@ fn toast_round_trip(listener: &UserNotificationListener) -> windows::core::Resul
         let before = ours()?;
         println!("spike toasts listed: {before:?}");
         for id in &before {
-            println!("RemoveNotification({id}): {:?}", listener.RemoveNotification(*id));
+            println!(
+                "RemoveNotification({id}): {:?}",
+                listener.RemoveNotification(*id)
+            );
         }
         std::thread::sleep(std::time::Duration::from_millis(300));
         let after = ours()?;
