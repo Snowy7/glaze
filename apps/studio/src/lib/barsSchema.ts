@@ -32,12 +32,25 @@ export const LAUNCHER_LAYOUTS = ["win11", "grid", "compact", "dashboard"] as con
 export type LauncherLayout = (typeof LAUNCHER_LAYOUTS)[number];
 export const CORNERS = ["round", "squircle", "bevel", "scoop", "notch"] as const;
 export type Corner = (typeof CORNERS)[number];
-export const MOTION_STYLES = ["slide", "fade", "pop", "scale", "none"] as const;
+export const MOTION_STYLES = ["slide", "fade", "pop", "scale", "morph", "none"] as const;
 export type MotionStyle = (typeof MOTION_STYLES)[number];
 export const COLOR_TOKENS = ["accent", "text", "transparent", "system-accent", "system-accent-light-1", "system-accent-light-2", "system-accent-light-3", "system-accent-dark-1", "system-accent-dark-2", "system-accent-dark-3"] as const;
 export type ColorToken = (typeof COLOR_TOKENS)[number];
 
-export type PresetId = "monochrome" | "macos" | "windows11" | "islands" | "neon-glass" | "floating";
+export const PRESET_IDS = ["monochrome", "macos", "windows11", "windows10", "chromeos", "islands", "neon-glass", "floating"] as const;
+export type PresetId = (typeof PRESET_IDS)[number];
+export const TOP_DESIGNS = ["monochrome", "macos", "fluent", "capsule", "minimal", "islands", "neon", "floating"] as const;
+export type TopDesign = (typeof TOP_DESIGNS)[number];
+export const DOCK_DESIGNS = ["monochrome", "macos", "windows11", "windows10", "chromeos", "fluent", "islands", "neon", "floating"] as const;
+export type DockDesign = (typeof DOCK_DESIGNS)[number];
+export const GLASS_STYLES = ["liquid", "frosted", "none"] as const;
+export type GlassStyle = (typeof GLASS_STYLES)[number];
+export const FAMILIES = ["mono", "fluent", "macos", "material"] as const;
+export type Family = (typeof FAMILIES)[number];
+export const GLYPH_SETS = ["default", "fluent", "symbols"] as const;
+export type GlyphSet = (typeof GLYPH_SETS)[number];
+/** Which bar a panel edits. */
+export type BarKind = "top" | "dock";
 export type TaskbarMode = "keep" | "autohide" | "hide";
 export type TaskbarAlignment = "center" | "left";
 export type Performance = "auto" | "on" | "off";
@@ -70,7 +83,8 @@ export type Fill =
   | { type: "solid"; color: Color }
   | ({ type: "gradient" } & Gradient)
   | { type: "image"; path: string; fit?: ImageFit; position?: string; brightness?: number; blur?: number }
-  | { type: "wallpaper"; brightness?: number; blur?: number; interval?: number };
+  | { type: "wallpaper"; brightness?: number; blur?: number; interval?: number }
+  | { type: "blur"; brightness?: number; blur?: number };
 export type FillType = Fill["type"];
 
 export type Border = { width?: number; color?: Paint };
@@ -82,8 +96,18 @@ export type ItemState = { background?: Paint; color?: Color; border?: Border; gl
 export const STATES = ["rest", "hover", "active"] as const;
 export type State = (typeof STATES)[number];
 
+/** `look.glass`: the material and its knobs (each 0..1, blur in DIPs); a string is the style alone. */
+export type Glass =
+  | GlassStyle
+  | { style?: GlassStyle; intensity?: number; refraction?: number; highlight?: number; tint?: number; blur?: number; sheen?: number; depth?: number };
+
 export type Look = {
   scheme?: Scheme;
+  family?: Family;
+  glyphs?: GlyphSet;
+  font?: { family?: string; size?: number; weight?: number };
+  glass?: Glass;
+  flyouts?: { blur?: boolean; tint?: number };
   background?: Fill;
   tint?: number;
   saturation?: number;
@@ -146,6 +170,9 @@ export type Running = boolean | "monitor";
 export type Extra = "desktop" | "trash";
 
 export type TopSection = {
+  design?: TopDesign;
+  look?: Look;
+  animation?: Motion;
   enabled?: boolean;
   monitors?: Monitors;
   layout?: TopLayout;
@@ -162,6 +189,11 @@ export type TopSection = {
 };
 
 export type DockSection = {
+  design?: DockDesign;
+  look?: Look;
+  animation?: Motion;
+  clock?: { seconds?: boolean; format?: string | null };
+  button?: number;
   enabled?: boolean;
   monitors?: Monitors;
   style?: DockStyle;

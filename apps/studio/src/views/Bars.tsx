@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { BarPreview } from "../components/bars/BarPreview";
 import { TaskbarPanel, TopBarPanel } from "../components/bars/BarPanels";
+import { DesignPicker } from "../components/bars/DesignPicker";
 import { DockPanel } from "../components/bars/DockPanel";
 import { IconsPanel } from "../components/bars/IconsPanel";
 import { LookPanel } from "../components/bars/LookPanel";
@@ -12,26 +13,55 @@ import { PresetsPanel } from "../components/bars/PresetsPanel";
 import { Banner, Button, PageHeader, SaveStatus, Segmented, Skeleton } from "../components/ui";
 import { api, errorText, type BarsCatalog, type BarsState } from "../lib/api";
 import { getIn, resolve, setIn, type Path } from "../lib/barsDoc";
-import { BarsContext, type BarsEditor } from "../lib/barsContext";
+import { BarsContext, forBar, type BarsEditor } from "../lib/barsContext";
+import type { BarKind } from "../lib/barsSchema";
 import { useStudio } from "../lib/studio";
 import { useAutosaved } from "../lib/useAutosaved";
 
-type Tab = "presets" | "top" | "dock" | "modules" | "look" | "motion" | "menus" | "icons" | "taskbar";
+type Tab = "presets" | "top" | "dock" | "menus" | "icons" | "taskbar";
 
 const TABS: readonly { value: Tab; label: string }[] = [
   { value: "presets", label: "Presets" },
   { value: "top", label: "Top bar" },
-  { value: "dock", label: "Dock" },
-  { value: "modules", label: "Modules" },
-  { value: "look", label: "Look" },
-  { value: "motion", label: "Motion" },
+  { value: "dock", label: "Bottom bar" },
   { value: "menus", label: "Menus" },
   { value: "icons", label: "Icons" },
   { value: "taskbar", label: "Windows taskbar" },
 ];
 
-/** Tabs that change what the bars look like show the live preview above them. */
-const PREVIEWED: ReadonlySet<Tab> = new Set(["top", "dock", "modules", "look"]);
+/** What each bar's editor has: its design, its layout, modules, its own look and its own motion. */
+type Section = "design" | "layout" | "modules" | "look" | "motion";
+const SECTIONS: readonly { value: Section; label: string }[] = [
+  { value: "design", label: "Design" },
+  { value: "layout", label: "Layout" },
+  { value: "modules", label: "Modules" },
+  { value: "look", label: "Look" },
+  { value: "motion", label: "Motion" },
+];
+
+/** One bar's editor; look and motion edit that bar's own (`top.look`, `dock.animation`...). */
+function BarEditor({ bar, editor }: { bar: BarKind; editor: BarsEditor }) {
+  const [section, setSection] = useState<Section>("design");
+  const scoped = useMemo(() => forBar(editor, bar), [editor, bar]);
+  return (
+    <>
+      <Segmented<Section> label="Part" hideLabel className="mb-6" value={section} options={SECTIONS} onChange={setSection} />
+      {section !== "design" && (
+        // The page's top padding scrolls under a sticky box, so it reaches up over it.
+        <div className="sticky -top-9 z-10 -mx-1 -mt-6 mb-5 bg-canvas px-1 pt-9 pb-2">
+          <BarPreview config={editor.resolved} catalog={editor.catalog} vars={editor.doc.vars} appearance={editor.doc.appearance} width={360} />
+        </div>
+      )}
+      {section === "design" && <DesignPicker bar={bar} />}
+      {section === "layout" && (bar === "top" ? <TopBarPanel /> : <DockPanel />)}
+      {section === "modules" && <ModulesPanel />}
+      <BarsContext value={scoped}>
+        {section === "look" && <LookPanel />}
+        {section === "motion" && <MotionPanel />}
+      </BarsContext>
+    </>
+  );
+}
 
 /** The top bar, the dock and the Windows taskbar: edits `bars.json`, which `mypaper-bars` watches. */
 export function Bars() {
@@ -112,18 +142,8 @@ export function Bars() {
         <BarsContext value={editor}>
           <div className="max-w-3xl">
             <Segmented<Tab> label="Section" hideLabel className="mb-6" value={tab} options={TABS} onChange={setTab} />
-            {PREVIEWED.has(tab) && (
-              // The page's top padding scrolls under a sticky box, so it reaches up over it.
-              <div className="sticky -top-9 z-10 -mx-1 -mt-6 mb-5 bg-canvas px-1 pt-9 pb-2">
-                <BarPreview config={editor.resolved} catalog={editor.catalog} vars={editor.doc.vars} appearance={editor.doc.appearance} width={360} />
-              </div>
-            )}
             {tab === "presets" && <PresetsPanel />}
-            {tab === "top" && <TopBarPanel />}
-            {tab === "dock" && <DockPanel />}
-            {tab === "modules" && <ModulesPanel />}
-            {tab === "look" && <LookPanel />}
-            {tab === "motion" && <MotionPanel />}
+            {(tab === "top" || tab === "dock") && <BarEditor key={tab} bar={tab} editor={editor} />}
             {tab === "menus" && <MenusPanel />}
             {tab === "icons" && <IconsPanel />}
             {tab === "taskbar" && <TaskbarPanel />}

@@ -53,12 +53,20 @@ impl Behind {
     /// Copies `rect` (screen px) as it looks without our `windows`, and writes it for `bar`.
     /// Returns the file's name in the folder.
     pub fn capture(&mut self, bar: u32, windows: &[HWND], rect: Rect) -> Result<String> {
+        let start = std::time::Instant::now();
         let pixels = copy_screen(windows, rect)?;
+        let copied = start.elapsed();
         self.next += 1;
         let name = format!("{bar}-{}.bmp", self.next);
         let path = self.dir.join(&name);
         std::fs::write(&path, bmp(rect.width, rect.height, &pixels))
             .with_context(|| format!("writing {}", path.display()))?;
+        log::debug!(
+            "liquid glass: captured {}x{} for bar {bar} in {copied:?} (+{:?} to write)",
+            rect.width,
+            rect.height,
+            start.elapsed() - copied
+        );
         let kept = self.files.entry(bar).or_default();
         kept.push_back(path);
         while kept.len() > KEEP {

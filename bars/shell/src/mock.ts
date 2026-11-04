@@ -3,13 +3,16 @@
 //
 //   ?bar=top|dock   ?preset=<pairing>   ?top=<top design>   ?dock=<dock design>
 //   ?click=<selector>: clicks it once the bar is up (opens a module's flyout, for screenshots)
+//   ?embed: a live preview inside another page (Studio): the parent posts
+//     { type: "mypaper-bars", bars: <a bars.json, or part of one> } and the bar redraws with it,
+//     resolved like the host does (designs, preset, the file). The query's own settings go under it.
 //   ?pos=bottom|top|left|right   ?size=48   ?h=28   ?autohide=1   ?scheme=light|dark
 //   ?text=light|dark   ?surface=none|glass|solid   ?wall=dark|light|vivid   ?reduce=1   ?perf=1
 
 import { flyoutMock, flyoutStart } from "./flyouts/mock";
 import { LAUNCHER_LAYOUTS } from "./flyouts/protocol";
 import type { Transport } from "./host";
-import { DOCK_BUNDLES, mockConfig, PRESETS, TOP_BUNDLES } from "./mock-config";
+import { deepMerge, DOCK_BUNDLES, mockConfig, PRESETS, TOP_BUNDLES } from "./mock-config";
 import type {
   Appearance,
   BarKind,
@@ -142,7 +145,7 @@ export function createMockTransport(): Transport {
     shadow: false,
   };
   const scheme = q.get("scheme");
-  const config = mockConfig(preset, {
+  const fromQuery: Parameters<typeof mockConfig>[1] = {
     dock: {
       ...(dockDesign && dockDesign in DOCK_BUNDLES ? { design: dockDesign } : {}),
       enabled: true,
@@ -167,7 +170,8 @@ export function createMockTransport(): Transport {
     },
     calendar: { zones: [{ zone: "America/New_York" }, { zone: "Asia/Tokyo", label: "Tokyo office" }] },
     ...(scheme === "light" || scheme === "dark" ? { look: { scheme } } : {}),
-  });
+  };
+  let config = mockConfig(preset, fromQuery);
   const look: LookPayload = {
     appearance,
     themeCss: null,
@@ -244,20 +248,18 @@ export function createMockTransport(): Transport {
     }, 400);
   }
 
-  // ?debug: a line of liquid-glass state, for headless screenshots.
-  if (q.has("debug")) {
-    setTimeout(() => {
-      const el = document.createElement("pre");
-      el.style.cssText = "position:fixed;left:8px;bottom:8px;margin:0;color:#ff0;font:12px monospace;z-index:99";
-      const panes = [...document.querySelectorAll<HTMLElement>(".surface, .layer")];
-      el.textContent = JSON.stringify({
-        html: Object.fromEntries(["data-liquid", "data-fly-liquid", "data-glass-style", "data-fill", "data-live"].map((a) => [a, document.documentElement.getAttribute(a)])),
-        panes: panes.map((p) => ({ c: p.className, liquid: getComputedStyle(p).getPropertyValue("--liquid"), lens: !!p.querySelector(":scope > .lens"), bg: p.querySelector<HTMLElement>(":scope > .lens")?.style.backgroundImage.slice(0, 30) })),
-      });
-      document.body.append(el);
-    }, 1200);
+  // ?embed: the parent page sends a bars.json to preview (see the top of this file).
+  if (q.has("embed")) {
+    window.addEventListener("message", (event: MessageEvent<unknown>) => {
+      const data = event.data;
+      if (typeof data !== "object" || data === null || !("type" in data) || data.type !== "mypaper-bars" || !("bars" in data)) return;
+      const bars = data.bars as { preset?: string };
+      const named = bars.preset && isPreset(bars.preset) ? bars.preset : preset;
+      config = mockConfig(named, deepMerge(fromQuery, bars) as Parameters<typeof mockConfig>[1]);
+      emit("config", config);
+    });
   }
-    const click = q.get("click");
+  const click = q.get("click");
   if (click) setTimeout(() => (document.querySelector(click) as HTMLElement | null)?.click(), 500);
 
   // ?dump=<selector>: after 2 s, the matching elements' boxes go into body[data-dump] (read it

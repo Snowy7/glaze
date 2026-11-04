@@ -7,7 +7,7 @@ import { button, glyph, h, viewport } from "../dom";
 import {
   languageModule,
   notificationsModule,
-  openCalendar,
+  openNotifications,
   openLauncher,
   openMixer,
   openNetwork,
@@ -103,7 +103,8 @@ const app: Factory = ({ scope }) => {
 const clock: Factory = ({ config, scope, kind }) => {
   const el = button("mod clock");
   const { format } = kind === "dock" ? config.dock.clock : config.top.clock;
-  el.addEventListener("click", () => openCalendar(el));
+  // As on Windows 11 and macOS, the clock opens the notification center (with the month under it).
+  el.addEventListener("click", () => openNotifications(el));
   scope.on("clock", ({ now }) => {
     const date = new Date(now);
     el.textContent = formatClock(format, date);

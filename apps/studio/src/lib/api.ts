@@ -5,7 +5,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import type { BarsDoc, FillType, Json, PresetId } from "./barsSchema";
+import type { BarsDoc, DockDesign, FillType, Json, PresetId, TopDesign } from "./barsSchema";
 
 /** The built-in rows of the desktop right-click menu (docs/desktop-extras.md). */
 export const MENU_BUILTINS = ["separator", "view", "sort", "refresh", "new", "paste", "wallpaper", "widgets", "display", "personalize", "terminal", "more"] as const;
@@ -175,6 +175,9 @@ export type Geometry = { margin: number; padding: number; spacing: number };
 export type BarsCatalog = {
   defaults: BarsDoc;
   presets: { id: PresetId; bundle: BarsDoc }[];
+  /** Each bar's designs (partial `top` / `dock` with their look and motion). */
+  topDesigns: { id: TopDesign; bundle: NonNullable<BarsDoc["top"]> }[];
+  dockDesigns: { id: DockDesign; bundle: NonNullable<BarsDoc["dock"]> }[];
   geometry: {
     top: Record<"strip" | "floating" | "islands", Geometry>;
     dock: Record<"floating" | "taskbar", Geometry & { size: number }>;
