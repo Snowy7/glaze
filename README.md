@@ -98,15 +98,42 @@ and scale.
 
 Widgets keep running on any monitor you can see, and pause only where they're covered.
 
-### Top bar and dock
+### Top bar, dock and menus
 
-- **The top bar** shows:
-  - your desktops and the active app;
-  - the clock, media, tray icons, system stats, network and volume;
-  - quick settings and a power menu.
-- **The dock** shows pinned and running apps with magnify, a list of each app's windows, and a
-  right-click menu.
-- **The native taskbar** can be kept, auto-hidden or hidden completely. It's always restored exactly.
+<table>
+  <tr>
+    <td align="center"><img src="docs/media/bars-macos.jpg" width="380"><br><b>macOS</b> · top bar + centered dock</td>
+    <td align="center"><img src="docs/media/bars-windows11.jpg" width="380"><br><b>Windows 11</b> · full taskbar replacement</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/media/bars-islands.jpg" width="380"><br><b>Islands</b> · one pill per group</td>
+    <td align="center"><img src="docs/media/bars-neon-glass.jpg" width="380"><br><b>Neon glass</b> · floating, glowing edge</td>
+  </tr>
+</table>
+
+Six presets: monochrome, macOS, Windows 11, islands, neon glass and floating.
+
+**Everything about the bars is configurable:**
+- **Layout:** floating, islands, full-width or strip; any screen edge; per-monitor overrides.
+- **Backgrounds:** solid, gradient, image, or **wallpaper glass**, a blurred copy of your *live*
+  wallpaper behind the bars.
+- **Edges:** tint, grain, squircle corners, and border, glow and shadow for each state.
+- **Motion:** named curves, custom cubic-béziers and springs.
+- **Dock:** magnify with falloff, launch bounce, attention pulse, five indicator styles, and live
+  window previews.
+- **Modules:** click, middle-click, wheel and right-click actions, custom modules (any command, on
+  an interval), and icon packs.
+
+**Our own menus replace Windows':**
+- a Start menu with four layouts (Windows 11, launchpad grid, a compact search bar, or a dashboard),
+  optionally opened with the Win key;
+- quick settings (brightness, radios, power mode);
+- a Wi-Fi list, a per-app volume mixer, a language switcher and a calendar;
+- notifications;
+- a real **tray host** that shows your tray icons with no injection, the same approach ManagedShell
+  uses.
+
+The native taskbar can be kept, auto-hidden or hidden completely. It's always restored exactly.
 
 ### Windows styling
 
@@ -156,13 +183,24 @@ Measured on a Ryzen laptop (AMD iGPU and NVIDIA dGPU, two 1440p monitors), relea
 | 7 widgets | 0.07% |
 | Everything covered, or a game fullscreen | **0.00%**; all of mypaper in ~35 MB |
 
-How it stays this way:
+**At sign-in, your look comes first.**
+
+| Step | Time |
+|---|---|
+| Your look on screen | at once: Windows itself shows a still of your theme before mypaper starts |
+| Native taskbar hidden | ~23–60 ms after mypaper starts |
+| Native stand-in for the bars | ~224 ms |
+| Live wallpaper, first frame | ~1.1 s (a shader alone: ~0.75 s) |
+
+**How it stays this way:**
 - **Event-driven everywhere.** Nothing polls; every process sleeps on its message queue.
 - **Wallpaper GPU work:** the low-power GPU, our own frame pacing, render scale, and zero-copy video.
-- **After 30 s paused**, widget WebViews are released entirely.
-- **Budgets enforced by a harness.** An automated harness is being added that measures every
-  component's startup, CPU and memory, and fails when a budget is exceeded. See
-  `docs/performance.md` once it lands.
+- **Widgets and bars** share one WebView2 browser process. After 30 s paused, widget WebViews are
+  released entirely.
+- **Budgets enforced by a harness.** `mypaper-perf` runs 10 fixed scenarios against **102
+  budgets** (startup, CPU, memory, cost while paused) in [`perf/budget.toml`](perf/budget.toml), and
+  fails on any regression. See [docs/performance.md](docs/performance.md) and the
+  [latest results](perf/latest.md).
 
 ## Quick start
 
@@ -252,7 +290,8 @@ frontend, rust-lld and a DX12-only wgpu ([engine notes](docs/engine-notes.md)).
 |---|---|
 | [widgets.md](docs/widgets.md) | The widget system: host, grid, edit mode, appearance, API, plugins |
 | [writing-widgets.md](docs/writing-widgets.md) · [writing-plugins.md](docs/writing-plugins.md) | Tutorials |
-| [bars.md](docs/bars.md) | Top bar, dock and taskbar |
+| [bars.md](docs/bars.md) | Top bar, dock, menus, presets and taskbar |
+| [performance.md](docs/performance.md) | The harness, the budgets, and before/after startup numbers |
 | [windows-styling.md](docs/windows-styling.md) | Accent, borders, Mica, dark mode, and what is restored |
 | [web-and-app-wallpapers.md](docs/web-and-app-wallpapers.md) | Web and external-renderer wallpapers |
 | [desktop-extras.md](docs/desktop-extras.md) | Desktop right-click menu, cursor themes, classic menu, interactive wallpapers |
@@ -261,12 +300,14 @@ frontend, rust-lld and a DX12-only wgpu ([engine notes](docs/engine-notes.md)).
 
 ## Roadmap
 
-In progress:
-- **Bars:** layout presets (floating, islands, full Windows-style taskbar, macOS), rich backgrounds,
-  "wallpaper glass" behind the bars, animation curves, and dock effects.
-- **Menus:** our own Start menu, quick settings, network, audio mixer, language, calendar,
-  notifications, and a native tray host.
-- **Performance:** a measured, enforced budget, and an instant first paint at login.
+Done recently: bar presets and rich backgrounds, wallpaper glass, our own menus and tray host,
+widgets v2, the performance harness and instant first paint at sign-in, and the logo.
+
+Next:
+- **Live notifications:** instant updates instead of a 15 s recount. This needs package identity
+  (a sparse package).
+- **Theme sharing:** import and export a whole look (wallpaper, bars, widgets, cursors) as one file.
+- **Startup:** cut the wgpu adapter probe, about 350 ms of the wallpaper's start.
 
 Not planned: restyling Explorer's own UI or other apps from the inside. That needs code injection,
 which mypaper doesn't do.
