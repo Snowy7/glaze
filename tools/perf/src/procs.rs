@@ -66,22 +66,31 @@ pub fn list() -> Vec<Proc> {
     out
 }
 
-/// `root` and everything it started, parents before children. Parent ids aren't validated by
-/// Windows (a reused pid can look like a child), so callers check creation times when it
-/// matters.
-pub fn tree(root: u32, all: &[Proc]) -> Vec<Proc> {
+/// `root` and everything it started, parents before children. Windows keeps a dead parent's id
+/// in its children's entries and reuses ids, so an unrelated old process can name one of ours as
+/// its parent: a process only counts as a child when it was created after its parent
+/// (`created`: creation time by pid; unknown times don't count).
+pub fn tree(root: u32, all: &[Proc], created: impl Fn(u32) -> Option<u64>) -> Vec<Proc> {
     let mut found: Vec<Proc> = all.iter().filter(|p| p.pid == root).cloned().collect();
     let mut next = 0;
     while next < found.len() {
         let parent = found[next].pid;
-        found.extend(
-            all.iter()
-                .filter(|p| p.parent == parent && p.pid != parent && p.pid != root)
-                .cloned(),
-        );
+        let born = created(parent);
+        let children: Vec<Proc> = all
+            .iter()
+            .filter(|p| p.parent == parent && !found.iter().any(|f| f.pid == p.pid))
+            .filter(|p| born.zip(created(p.pid)).is_some_and(|(b, c)| c >= b))
+            .cloned()
+            .collect();
+        found.extend(children);
         next += 1;
     }
     found
+}
+
+/// The creation time of `pid` (FILETIME ticks), if it can be read.
+pub fn created(pid: u32) -> Option<u64> {
+    Handle::query(pid)?.times().map(|t| t.created)
 }
 
 /// Memory of one process.
@@ -298,9 +307,19 @@ mod tests {
     #[test]
     fn a_tree_is_the_root_and_its_descendants_parents_first() {
         let all = [proc(1, 0), proc(2, 1), proc(3, 2), proc(4, 9), proc(5, 1)];
-        let pids: Vec<u32> = tree(1, &all).iter().map(|p| p.pid).collect();
+        let created = |pid: u32| Some(u64::from(pid));
+        let pids: Vec<u32> = tree(1, &all, created).iter().map(|p| p.pid).collect();
         assert_eq!(pids, [1, 2, 5, 3]);
-        assert!(tree(42, &all).is_empty());
+        assert!(tree(42, &all, created).is_empty());
+    }
+
+    #[test]
+    fn processes_older_than_their_parent_id_are_not_its_children() {
+        // 7 names 2 as its parent, but is older: its real parent died and 2 reused the id.
+        let all = [proc(1, 0), proc(2, 1), proc(7, 2), proc(8, 7)];
+        let created = |pid: u32| Some(if pid == 7 { 0 } else { u64::from(pid) * 10 });
+        let pids: Vec<u32> = tree(1, &all, created).iter().map(|p| p.pid).collect();
+        assert_eq!(pids, [1, 2]);
     }
 
     #[test]

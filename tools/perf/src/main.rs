@@ -99,7 +99,7 @@ fn real_main() -> Result<bool> {
         pause_settle: Duration::from_secs(3),
     };
     for scenario in &args.scenarios {
-        stage_exes(&args.build, &stage.join(scenario.name), scenario)?;
+        stage_exes(&args.build, &stage_dir(&stage, scenario), scenario)?;
     }
 
     let mut outcomes = Vec::new();
@@ -114,7 +114,7 @@ fn real_main() -> Result<bool> {
             match run::scenario(
                 scenario,
                 &session,
-                &stage.join(scenario.name),
+                &stage_dir(&stage, scenario),
                 &temp,
                 &args.content,
                 &plan,
@@ -243,6 +243,13 @@ fn parse_args() -> Result<Option<Args>> {
     args.content = std::path::absolute(&args.content)?;
     args.build = std::path::absolute(&args.build)?;
     Ok(Some(args))
+}
+
+/// A scenario's folder under the stage. Prefixed: the executables look for `widgets\`,
+/// `themes\`, `bars\` and `plugins\` in every folder above them, so a folder named after the
+/// `widgets` scenario would pass for the bundled widgets.
+fn stage_dir(stage: &Path, scenario: &Scenario) -> PathBuf {
+    stage.join(format!("run-{}", scenario.name))
 }
 
 /// Copies the scenario's executables into its own folder under the repo, so they find the

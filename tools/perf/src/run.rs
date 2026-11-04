@@ -339,7 +339,7 @@ fn sample(root: u32) -> Vec<Sampled> {
     let all = procs::list();
     let mut groups: HashMap<u32, String> = HashMap::new();
     let mut out = Vec::new();
-    for proc in procs::tree(root, &all) {
+    for proc in procs::tree(root, &all, procs::created) {
         let Some(handle) = Handle::query(proc.pid) else {
             continue;
         };
@@ -462,7 +462,7 @@ impl Launched {
 
     /// Asks core to quit and waits for its whole tree. Returns a note if it had to be killed.
     fn quit(&mut self, stage: &Path) -> Option<String> {
-        let tree: Vec<u32> = procs::tree(self.pid, &procs::list())
+        let tree: Vec<u32> = procs::tree(self.pid, &procs::list(), procs::created)
             .iter()
             .map(|p| p.pid)
             .collect();
