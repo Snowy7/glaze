@@ -129,7 +129,7 @@ impl Launcher {
             .as_deref()
             .map(History::load)
             .unwrap_or_default();
-        let mut launcher = Self {
+        let launcher = Self {
             field,
             field_rect,
             query: String::new(),
@@ -141,7 +141,6 @@ impl Launcher {
             top: 0,
             icons: Vec::new(),
         };
-        launcher.load_icons(cx);
         Ok(launcher)
     }
 
@@ -351,6 +350,11 @@ impl Panel for Launcher {
         true
     }
 
+    fn opened(&mut self, cx: &mut Cx) -> bool {
+        self.load_icons(cx);
+        self.icons.iter().any(|(_, image)| image.is_some())
+    }
+
     fn field(&self) -> Option<&TextField> {
         Some(&self.field)
     }
@@ -359,6 +363,7 @@ impl Panel for Launcher {
         let query = self.field.text().unwrap_or_default();
         let query = query.trim_end_matches(['\r', '\n']).to_owned();
         if query != self.query {
+            log::debug!("launcher: query {query:?}");
             self.query = query;
             self.chosen = 0;
             self.top = 0;

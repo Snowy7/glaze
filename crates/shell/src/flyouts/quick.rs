@@ -41,7 +41,8 @@ impl Quick {
         cx.lanes.quick(|lane| Reply::Quick(lane.read()));
         Self {
             state: None,
-            volume: cx.lanes.audio().and_then(|a| a.read()),
+            // The endpoint (COM activation, tens of ms cold) is opened once on screen.
+            volume: None,
             network: network::read(None),
             battery: system::battery(),
             brightness: None,
@@ -352,6 +353,11 @@ impl Panel for Quick {
             }
             _ => false,
         }
+    }
+
+    fn opened(&mut self, cx: &mut Cx) -> bool {
+        self.volume = cx.lanes.audio().and_then(|a| a.read());
+        self.volume.is_some()
     }
 
     fn changed(&mut self, msg: &Msg, cx: &mut Cx) -> bool {

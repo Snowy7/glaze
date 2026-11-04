@@ -81,6 +81,8 @@ struct Request {
     kind: Kind,
     anchor: Rect,
     monitor: Monitor,
+    /// When it was asked for.
+    at: Instant,
 }
 
 thread_local! {
@@ -90,11 +92,18 @@ thread_local! {
 /// Opens flyout `kind` for `anchor_rect` (the clicked module, in physical **screen** pixels) on
 /// `monitor`, or closes it when it is the one open. The bars' only entry point.
 pub fn open(kind: Kind, anchor_rect: Rect, monitor: &Monitor) {
+    // SAFETY: plain queries of this thread's last message time and the tick count.
+    let since_input = unsafe {
+        windows::Win32::System::SystemInformation::GetTickCount()
+            .wrapping_sub(windows::Win32::UI::WindowsAndMessaging::GetMessageTime() as u32)
+    };
+    log::debug!("flyouts: {kind:?} asked for {since_input} ms after its input");
     REQUESTS.with_borrow_mut(|r| {
         r.push(Request {
             kind,
             anchor: anchor_rect,
             monitor: monitor.clone(),
+            at: Instant::now(),
         })
     });
 }
@@ -135,6 +144,11 @@ pub trait Panel {
     /// A right click on hit `id`.
     fn context(&mut self, _id: HitId, _cx: &mut Cx) -> Effect {
         Effect::None
+    }
+    /// The window is on screen: slow set-up that can follow a frame later (a COM endpoint, a
+    /// registry walk, icons) goes here instead of in its constructor. Whether it changed.
+    fn opened(&mut self, _cx: &mut Cx) -> bool {
+        false
     }
     /// Follows state the shell already holds (the bars' tray), on every loop pass while open;
     /// whether it changed.
@@ -364,6 +378,10 @@ struct Open {
     drag: Option<HitId>,
     /// The hit being activated, in screen px (for `Cx::hit`).
     hit: Rect,
+    /// Shown yet, and how often it was drawn: in all, and once its motion had settled.
+    shown: bool,
+    draws: u32,
+    settled_draws: u32,
     /// When the panel asked to be ticked.
     due: Option<Instant>,
     dirty: bool,
@@ -470,25 +488,13 @@ impl Flyouts {
                 .then(|| WinKey::start(self.lanes.waker.clone(), main))
                 .flatten();
         }
+        // The hook lets every key through until it is enabled.
+        WinKey::set_enabled(self.winkey.is_some());
     }
 
     /// Whether `id` is the flyout's window.
     pub fn owns(&self, id: SurfaceId) -> bool {
         self.surface.id() == id
-    }
-
-    /// A pointer went down somewhere in the shell: a popup may open there, so the engine's
-    /// capture of that monitor is started now (its first frame takes ~260 ms cold).
-    pub fn pressed(&self, screen: (i32, i32)) {
-        if self.look.glass.is_some() {
-            let shape = mypaper_ui::glass::Shape {
-                x: screen.0,
-                y: screen.1,
-                width: 1,
-                height: 1,
-            };
-            mypaper_ui::glass::warm(self.surface.hwnd(), shape);
-        }
     }
 
     /// Opens queued requests, takes provider results and worker news, ticks the panel and
@@ -604,6 +610,7 @@ impl Flyouts {
                         kind,
                         anchor: open.anchor,
                         monitor: open.monitor.clone(),
+                        at: Instant::now(),
                     };
                     self.show(ui, bars, request);
                 }
@@ -656,6 +663,7 @@ impl Flyouts {
                 kind,
                 anchor,
                 monitor,
+                at: Instant::now(),
             },
         );
     }
@@ -723,27 +731,50 @@ impl Flyouts {
             focus: None,
             drag: None,
             hit: request.anchor,
+            shown: false,
+            draws: 0,
+            settled_draws: 0,
             due: None,
             dirty: true,
         });
         if let Some(field) = self.open.as_ref().and_then(|o| o.panel.field()) {
             self.surface.set_text_field(Some(field.clone()));
         }
+        let made = started.elapsed();
         self.render(ui);
+        let drawn = started.elapsed();
         let Some(open) = &mut self.open else { return };
         // Shown at its first frame of motion, then focused (keys, and a click elsewhere closes).
         open.motion = Some(Tween::new(0.0, 1.0, OPEN, Instant::now()));
         self.animate(Instant::now());
         self.surface.show();
+        let shown = started.elapsed();
+        if let Some(open) = &mut self.open {
+            open.shown = true;
+        }
         let how = self.surface.take_focus();
         if let Some(field) = self.open.as_ref().and_then(|o| o.panel.field()) {
             field.focus();
         }
+        let ms = |d: Duration| d.as_secs_f64() * 1000.0;
         log::info!(
-            "flyout {:?}: on screen in {:.1} ms (focus: {how})",
+            "flyout {:?}: on screen in {:.1} ms (made {:.1}, drawn {:.1}), focused at {:.1} \
+             ({how}); asked for {:.1} ms before",
             request.kind,
-            started.elapsed().as_secs_f64() * 1000.0
+            ms(shown),
+            ms(made),
+            ms(drawn),
+            ms(started.elapsed()),
+            ms(started.duration_since(request.at)),
         );
+        // What can wait a frame (the volume endpoint, keyboard layouts, icons) comes now.
+        self.with_panel(ui, bars, |panel, cx| {
+            if panel.opened(cx) {
+                Effect::Redraw
+            } else {
+                Effect::None
+            }
+        });
         self.schedule_tick(ui, bars, Instant::now());
     }
 
@@ -757,6 +788,12 @@ impl Flyouts {
 
     fn hide(&mut self) {
         let Some(open) = self.open.take() else { return };
+        log::info!(
+            "flyout {:?} closed: drawn {} times, {} after its motion settled",
+            open.kind,
+            open.draws,
+            open.settled_draws
+        );
         if open.drag.is_some() {
             // SAFETY: releasing our own capture.
             let _ = unsafe { ReleaseCapture() };
@@ -805,8 +842,12 @@ impl Flyouts {
             material,
         }));
         let at = position(open, Instant::now());
-        if let Err(e) = self.surface.present(ui, at, size, list) {
-            log::warn!("flyout: drawing: {e:#}");
+        match self.surface.present(ui, at, size, list) {
+            Ok(drew) => {
+                open.draws += u32::from(drew);
+                open.settled_draws += u32::from(drew && open.shown && open.motion.is_none());
+            }
+            Err(e) => log::warn!("flyout: drawing: {e:#}"),
         }
     }
 

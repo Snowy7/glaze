@@ -37,7 +37,8 @@ impl Mixer {
             .mixer(move |lane| Reply::Mixer(lane.read(switchable)));
         Self {
             state: None,
-            volume: cx.lanes.audio().and_then(|a| a.read()),
+            // The endpoint (COM activation, tens of ms cold) is opened once on screen.
+            volume: None,
             switchable,
             icons: Vec::new(),
             error: None,
@@ -256,6 +257,11 @@ impl Panel for Mixer {
             }
             _ => false,
         }
+    }
+
+    fn opened(&mut self, cx: &mut Cx) -> bool {
+        self.volume = cx.lanes.audio().and_then(|a| a.read());
+        self.volume.is_some()
     }
 
     fn changed(&mut self, msg: &Msg, cx: &mut Cx) -> bool {

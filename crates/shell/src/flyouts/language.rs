@@ -22,7 +22,8 @@ impl Language {
     pub fn new(_: &mut Cx) -> Self {
         // SAFETY: a read-only query; the flyout has not taken the focus yet.
         let window = unsafe { GetForegroundWindow() }.0 as isize;
-        Self::with(language::layouts(), language::current(Some(window)), window)
+        // The layouts come once it is on screen (a registry walk, ~15 ms).
+        Self::with(Vec::new(), None, window)
     }
 
     pub fn with(layouts: Vec<Layout>, current: Option<String>, window: isize) -> Self {
@@ -57,6 +58,12 @@ impl Panel for Language {
             });
         }
         kit.footer_link(SETTINGS, "Language settings");
+    }
+
+    fn opened(&mut self, _: &mut Cx) -> bool {
+        self.layouts = language::layouts();
+        self.current = language::current(Some(self.window));
+        true
     }
 
     fn activate(&mut self, id: HitId, _: &mut Cx) -> Effect {

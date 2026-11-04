@@ -1,6 +1,6 @@
 //! The shell's end of the engine's glass overlays (docs/engine-notes.md, "Glass overlays"): the
-//! thread's [`Backdrop`], which sends each popup's `Open`, `Place`, `Material`, `Close` and
-//! `Warm` to the engine's request window as one `WM_COPYDATA`.
+//! thread's [`Backdrop`], which sends each popup's `Open`, `Place`, `Material` and `Close` to
+//! the engine's request window as one `WM_COPYDATA`.
 //!
 //! The wire is the engine's own `request.rs`, compiled here as is, so both ends always agree.
 //! Every popup is `Layer::Popup`. When no engine answers, [`Backdrop::available`] is false and
@@ -104,13 +104,6 @@ impl Backdrop for Client {
 
     fn close(&self, client: HWND) {
         self.send(&Request::Close { client });
-    }
-
-    fn warm(&self, client: HWND, shape: Shape) {
-        self.send(&Request::Warm {
-            client,
-            rect: rect(shape),
-        });
     }
 }
 

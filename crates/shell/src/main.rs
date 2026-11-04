@@ -187,9 +187,6 @@ impl Shell {
                     }
                 }
             } else if let Some((id, event)) = next_event() {
-                if let mypaper_ui::Event::Press(p, _) = event {
-                    self.flyouts.pressed(p.screen);
-                }
                 if self.flyouts.owns(id) {
                     self.flyouts.event(ui, &mut self.bars, id, &event);
                     continue;
