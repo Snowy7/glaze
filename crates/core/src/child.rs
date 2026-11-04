@@ -67,8 +67,8 @@ impl Supervised {
         let name = self.name;
         Ok(match self.restarts.on_exit(code, Instant::now()) {
             Decision::RestartAfter(delay) => {
-                // Replay has completed before this point. Restart the shell immediately;
-                // crash-loop limiting still applies. Other children retain their backoff.
+                // Shell recovery has no intentional delay; crash-loop limiting still applies.
+                // Other children retain their backoff.
                 let delay = if self.name == "shell" {
                     Duration::ZERO
                 } else {
