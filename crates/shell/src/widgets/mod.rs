@@ -1772,7 +1772,7 @@ impl Widgets {
                             / 96.0,
                         material: Material {
                             clarity: 1.0 - liquid.tint.unwrap_or(0.06),
-                            blur: liquid.blur.unwrap_or(0.0),
+                            blur: liquid.blur.unwrap_or(12.0),
                             refraction: liquid.refraction.unwrap_or(0.6),
                             highlight: liquid.highlight.unwrap_or(0.55),
                             tint: Rgba::rgb8(tint.0, liquid.tint.unwrap_or(0.06)),
