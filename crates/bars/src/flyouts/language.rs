@@ -30,7 +30,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{HSTRING, PCWSTR, PWSTR, w};
 
-use crate::bridge::Topic;
+use crate::actions::Topic;
 use crate::flyouts::{Done, Watched};
 use crate::wake::{Msg, Waker};
 

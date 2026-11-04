@@ -434,3 +434,9 @@ mod tests {
         assert_eq!(percent(5, 5, 5), 0, "no range");
     }
 }
+
+impl Default for QuickLane {
+    fn default() -> Self {
+        Self::new()
+    }
+}

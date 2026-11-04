@@ -304,7 +304,7 @@ impl TopConfig {
 pub struct ClockConfig {
     /// Tick every second instead of every minute.
     pub seconds: bool,
-    /// See `bars/shell/src/clock-format.ts` for tokens. Missing: the top bar's default format,
+    /// See `clock::format` for tokens. Missing: the top bar's default format,
     /// or Windows' short time and date on the dock.
     pub format: Option<String>,
 }
@@ -321,7 +321,7 @@ impl ClockConfig {
 
 // --- Dock --------------------------------------------------------------------------------------
 
-/// A dock layout. Each style is a page layout (`bars/shell/src/dock/styles.ts`); the band follows
+/// A native dock layout; the band follows
 /// from size, padding and margin ([`DockConfig::band`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -1613,7 +1613,7 @@ mod tests {
     }
 
     #[test]
-    fn serializes_for_the_page_without_the_user_appearance() {
+    fn serializes_resolved_settings_without_the_user_layers() {
         let mut config = BarsConfig::default();
         config.resolve(Vec::new);
         let json = serde_json::to_value(&config).unwrap();
@@ -1675,55 +1675,6 @@ mod tests {
         assert!(edit(&path, |root| set(root, "dock", "size", Value::from(1))).is_err());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{}");
         std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    /// The page runs the built-in actions (`bars/shell/src/actions.ts`): both sides must name the
-    /// same ones, or a valid `bars.json` would bind an action the page can't run (or the reverse).
-    #[test]
-    fn builtin_actions_are_the_pages() {
-        use BuiltinAction::*;
-        let host = [
-            Default,
-            None,
-            Start,
-            Search,
-            Notifications,
-            QuickSettings,
-            Calendar,
-            Network,
-            Mixer,
-            NativeStart,
-            NativeNotifications,
-            NativeQuickSettings,
-            TaskManager,
-            Settings,
-            ShowDesktop,
-            MediaToggle,
-            MediaNext,
-            MediaPrevious,
-            VolumeUp,
-            VolumeDown,
-            VolumeMute,
-            WorkspaceNext,
-            WorkspacePrevious,
-            Lock,
-            Explorer,
-        ]
-        .map(|action| serde_json::to_value(action).unwrap());
-
-        let protocol = include_str!("../../../bars/shell/src/protocol.ts");
-        let list = protocol
-            .split("BUILTIN_ACTIONS = [")
-            .nth(1)
-            .and_then(|rest| rest.split("] as const").next())
-            .expect("protocol.ts lists BUILTIN_ACTIONS");
-        let page: Vec<Value> = list
-            .split(',')
-            .map(|name| name.trim().trim_matches('"'))
-            .filter(|name| !name.is_empty())
-            .map(Value::from)
-            .collect();
-        assert_eq!(page, host);
     }
 
     #[test]

@@ -13,7 +13,7 @@ use windows::Win32::System::Registry::{
     RegOpenKeyExW,
 };
 use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
-use windows::Win32::System::Threading::{CreateEventW, GetCurrentProcessId};
+use windows::Win32::System::Threading::{CreateEventW, GetCurrentProcessId, ResetEvent};
 use windows::core::{HSTRING, PCWSTR, w};
 
 const KEY: PCWSTR = w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops");
@@ -58,7 +58,15 @@ impl Desktops {
             .ok()
             .inspect_err(|e| log::info!("not watching virtual desktops: {e}"))
             .ok()?;
-            let Ok(event) = CreateEventW(None, false, false, PCWSTR::null()) else {
+            Self::from_key(key)
+        }
+    }
+
+    /// Takes ownership of an open notification key.
+    fn from_key(key: HKEY) -> Option<Self> {
+        // SAFETY: the owned handles are closed together on drop.
+        unsafe {
+            let Ok(event) = CreateEventW(None, true, false, PCWSTR::null()) else {
                 let _ = RegCloseKey(key);
                 return None;
             };
@@ -88,6 +96,10 @@ impl Desktops {
 
     /// The event fired: watch again and read.
     pub fn changed(&self) -> Workspaces {
+        // The outer message wait must not consume the notification before the service reads it.
+        // Reset before rearming, so a change during the read remains signalled for the next pass.
+        // SAFETY: the event belongs to this service and remains open through the read.
+        let _ = unsafe { ResetEvent(self.event) };
         self.arm();
         self.read()
     }
@@ -161,6 +173,71 @@ fn binary(key: HKEY, subkey: PCWSTR, name: PCWSTR) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notification_survives_the_outer_wait_and_is_consumed_by_changed() {
+        use windows::Win32::{
+            Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT},
+            System::{
+                Registry::{KEY_ALL_ACCESS, REG_OPTION_VOLATILE, RegCreateKeyExW, RegDeleteKeyW},
+                Threading::{SetEvent, WaitForSingleObject},
+            },
+        };
+        let path = HSTRING::from(format!(
+            r"Software\mypaper\tests\desktops-{}",
+            std::process::id()
+        ));
+        struct Cleanup(HSTRING);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                // SAFETY: only the isolated key made by this test, after its handle is closed.
+                let _ = unsafe { RegDeleteKeyW(HKEY_CURRENT_USER, &self.0) };
+            }
+        }
+        let _cleanup = Cleanup(path.clone());
+        // SAFETY: an isolated key and event, owned by Desktops and closed before cleanup.
+        unsafe {
+            let mut key = HKEY::default();
+            RegCreateKeyExW(
+                HKEY_CURRENT_USER,
+                &path,
+                None,
+                None,
+                REG_OPTION_VOLATILE,
+                KEY_ALL_ACCESS,
+                None,
+                &mut key,
+                None,
+            )
+            .ok()
+            .unwrap();
+            let desktops = Desktops::from_key(key).unwrap();
+            let event = desktops.event();
+            SetEvent(event).unwrap();
+            assert_eq!(
+                WaitForSingleObject(event, 0),
+                WAIT_OBJECT_0,
+                "outer message wait"
+            );
+            assert_eq!(
+                WaitForSingleObject(event, 0),
+                WAIT_OBJECT_0,
+                "service still sees it"
+            );
+            assert_eq!(
+                desktops.changed(),
+                Workspaces {
+                    count: 1,
+                    current: 0
+                }
+            );
+            assert_eq!(
+                WaitForSingleObject(event, 0),
+                WAIT_TIMEOUT,
+                "changed consumes it"
+            );
+        }
+    }
 
     #[test]
     fn counts_guids_and_finds_the_current_one() {

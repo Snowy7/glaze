@@ -16,7 +16,11 @@ pub type HitId = u32;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     /// A filled rectangle, rounded when `radius > 0`.
-    Fill { rect: Rect, radius: f32, color: Rgba },
+    Fill {
+        rect: Rect,
+        radius: f32,
+        color: Rgba,
+    },
     /// A rectangle's outline, centred on its edge.
     Stroke {
         rect: Rect,
@@ -38,6 +42,11 @@ pub enum Op {
         style: TextStyle,
         color: Rgba,
     },
+    /// A premultiplied BGRA bitmap, shared by display lists and cached by each target.
+    Image {
+        rect: Rect,
+        image: Arc<crate::Image>,
+    },
     /// A soft shadow under `rect`: `spread` pixels of falloff, moved down by `drop`.
     Shadow {
         rect: Rect,
@@ -52,6 +61,7 @@ impl Op {
     /// Every pixel this operation may touch, antialiasing included.
     pub fn bounds(&self) -> Rect {
         match self {
+            Self::Image { rect, .. } => rect.inflate(1.0),
             Self::Fill { rect, .. } => rect.inflate(1.0),
             Self::Stroke { rect, width, .. } => rect.inflate(width / 2.0 + 1.0),
             Self::Line {

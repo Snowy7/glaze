@@ -197,3 +197,29 @@ This branch's core, wallpaper and shell, in place of the user's mypaper (no bars
   60 clicks over two runs had no other miss. The hook's decision logic is unchanged from core's.
 - Golden PNGs of the default menu and its View submenu match the live menu's content; the only
   visible change is the submenu, which now touches the root instead of overlapping it by 4 px.
+
+## N2 additions: bar icons and pointer events
+
+- `Op::Image { rect, image: Arc<Image> }` draws premultiplied BGRA on the same software target.
+  `Image::load(&Ui, &Path)` uses WIC to decode native PNG/ICO/JPEG/etc. A target caches up to 128
+  shared bitmaps; releasing the surface releases them. The shell handles SVG icon-pack rasterization
+  once with CPU-only resvg and shares decoded images across monitors.
+- `Event::Leave` uses `TrackMouseEvent`; `Event::Wheel(Pointer, i16)` converts Windows' screen
+  coordinates to the surface's local coordinates and retains the screen anchor. Positive delta is
+  upward. `Event::DoubleClick` preserves native tray double-click callbacks. `Event::CaptureLost` lets dock drags cancel cleanly, and `Event::DpiChanged` asks the owner
+  to recalculate monitor geometry. Existing menu/event consumers continue to work.
+- N2 uses `Kind::Bar` for top bars, cropped docks and one-pixel auto-hide edge surfaces. Invisible
+  glass bodies are explicitly filled at `Rgba::HIT`; only the gaps are alpha zero. Reservations live
+  in the bars service library, separate from visible window geometry. Slides use `move_to` only.
+- The shell loop also waits on the bars' disarmed-at-rest `Ticker` and virtual-desktop event. Its
+  timeout is the earliest active provider/config/auto-hide deadline; no periodic message pump was
+  introduced. Bar data/actions are Rust calls into `mypaper-bars` rather than a web bridge.
+
+See [bars.md](bars.md) for configuration, recovery ownership and the N3 flyout/plate seams.
+
+N2 bar measurements (2026-11-05, two visible 1440p screens, still photo, paused media): clean idle
+median 14 MB and 0.05% of one core; observed peak 21 MB. Three maximized samples have a 0.08% median,
+above the 0.05% gate. The final bar paint was at process age 164.4 ms (143.9 ms after core's post-spawn
+marker), above the 73 ms reference. Shell kill/repaint took 370-572 ms, above 300 ms. Alpha hit tests,
+the native clock click, panic restoration and six style PNGs pass. See [bars.md](bars.md#live-n2-measurements-2026-11-05)
+for raw samples, the interrupted Explorer sample and the missing engine/glass/N4 fixture checks.

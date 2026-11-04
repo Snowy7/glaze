@@ -1,8 +1,5 @@
-//! App-bar registration (`SHAppBarMessage`): a docked bar reserves its band of the screen, like
-//! the taskbar, so maximized windows and the widget grid stop at it.
-//!
-//! A bar's *band* is what it reserves; its *window* is the band plus room toward the middle of the
-//! screen for popovers and menus, which the page keeps click-through with a window region.
+//! App-bar registration and work-area reservations, independent of visible surface geometry.
+//! A floating bar reserves its complete band; auto-hide reserves nothing.
 
 use mypaper_desktop::Rect;
 use windows::Win32::Foundation::{HWND, RECT};

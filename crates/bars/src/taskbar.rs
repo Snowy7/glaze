@@ -32,8 +32,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowExW, GWL_EXSTYLE, GetLayeredWindowAttributes, GetShellWindow, GetWindowLongPtrW,
     GetWindowThreadProcessId, IsWindowVisible, LAYERED_WINDOW_ATTRIBUTES_FLAGS, LWA_ALPHA,
     SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA, SendMessageTimeoutW, SetLayeredWindowAttributes,
-    SetWindowLongPtrW, ShowWindow, ShowWindowAsync, WM_SETTINGCHANGE, WS_EX_LAYERED,
-    WS_EX_TRANSPARENT,
+    SetWindowLongPtrW, ShowWindowAsync, WM_SETTINGCHANGE, WS_EX_LAYERED, WS_EX_TRANSPARENT,
 };
 use windows::core::{PCWSTR, PWSTR, w};
 
@@ -128,9 +127,12 @@ impl<S: Shell> Taskbar<S> {
         // Write-ahead: the originals are on disk before anything changes.
         let before = journal.clone();
         if autohide && journal.appbar.is_none() {
-            journal.appbar = Some(Was {
-                was: self.shell.appbar_state(),
-            });
+            let was = self.shell.appbar_state();
+            // Already auto-hidden is the user's setting, not a change for us to undo. Besides
+            // preserving later user edits, this avoids an unnecessary Explorer call on replay.
+            if was & ABS_AUTOHIDE == 0 {
+                journal.appbar = Some(Was { was });
+            }
         }
         journal.hidden |= hide;
         if wanted.alignment.is_some() && journal.alignment.is_none() {
@@ -157,7 +159,9 @@ impl<S: Shell> Taskbar<S> {
         }
         if let Some(Was { was }) = journal.appbar {
             let target = if autohide { was | ABS_AUTOHIDE } else { was };
-            let done = self.shell.appbar_state() == target
+            // Restoring the known original needs one round trip, not GETSTATE then SETSTATE.
+            // Explorer's cross-process app-bar calls are measurable on the crash path.
+            let done = (autohide && self.shell.appbar_state() == target)
                 || attempt("auto-hide", self.shell.set_appbar_state(target));
             if done && !autohide {
                 journal.appbar = None;
@@ -269,7 +273,12 @@ impl Shell for NativeShell {
                 unveil(hwnd);
             }
             // SAFETY: a taskbar window found just now; SW_SHOWNA never activates it.
-            let _ = unsafe { ShowWindow(hwnd, if hidden { SW_HIDE } else { SW_SHOWNA }) };
+            let _ = unsafe {
+                windows::Win32::UI::WindowsAndMessaging::ShowWindowAsync(
+                    hwnd,
+                    if hidden { SW_HIDE } else { SW_SHOWNA },
+                )
+            };
         }
         Ok(())
     }
@@ -641,6 +650,25 @@ mod tests {
         let mut bar = taskbar("keep");
         bar.apply(Wanted::default()).unwrap();
         bar.apply(Wanted::default()).unwrap();
+        assert_eq!(bar.shell.writes, 0);
+        assert!(!bar.pending());
+    }
+
+    #[test]
+    fn hiding_an_already_auto_hidden_taskbar_owns_only_the_window_visibility() {
+        let mut bar = taskbar("already-autohide");
+        bar.shell.state |= ABS_AUTOHIDE;
+        bar.apply(wanted(TaskbarMode::Hide, None)).unwrap();
+        assert!(bar.shell.hidden);
+        assert!(bar.load().unwrap().unwrap().appbar.is_none());
+        assert_eq!(bar.shell.writes, 0);
+
+        // The user changes this setting while our windows are hidden. We didn't change it,
+        // so recovery must leave the new preference alone and only show the windows again.
+        bar.shell.state = ALWAYS_ON_TOP;
+        bar.restore().unwrap();
+        assert!(!bar.shell.hidden);
+        assert_eq!(bar.shell.state, ALWAYS_ON_TOP);
         assert_eq!(bar.shell.writes, 0);
         assert!(!bar.pending());
     }

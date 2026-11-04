@@ -22,20 +22,21 @@ use windows::Win32::Foundation::{
 use windows::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BLENDFUNCTION,
     CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, HBITMAP, HDC,
-    HGDIOBJ, SelectObject,
+    HGDIOBJ, ScreenToClient, SelectObject,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GWL_EXSTYLE, GWLP_USERDATA,
+    CS_DBLCLKS, CreateWindowExW, DefWindowProcW, DestroyWindow, GWL_EXSTYLE, GWLP_USERDATA,
     GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, HICON, IDC_ARROW,
     IsWindowVisible, LoadCursorW, MA_NOACTIVATE, RegisterClassExW, SW_HIDE, SW_SHOWNOACTIVATE,
     SetForegroundWindow, SetWindowLongPtrW, ShowWindow, ULW_ALPHA, UPDATELAYEREDWINDOWINFO,
-    UpdateLayeredWindowIndirect, WA_INACTIVE, WINDOW_EX_STYLE, WM_ACTIVATE,
-    WM_GETOBJECT, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN,
-    WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_NCDESTROY, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SETFOCUS, WNDCLASSEXW, WS_CHILD, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    UpdateLayeredWindowIndirect, WA_INACTIVE, WINDOW_EX_STYLE, WM_ACTIVATE, WM_CAPTURECHANGED,
+    WM_DPICHANGED, WM_GETOBJECT, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
+    WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_NCDESTROY, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETFOCUS,
+    WNDCLASSEXW, WS_CHILD, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -44,6 +45,7 @@ use crate::geom::{PixelRect, Point};
 use crate::render::{Canvas, Ui};
 use crate::scene::{DisplayList, HitId};
 
+const WM_MOUSELEAVE: u32 = 0x02A3;
 const CLASS: PCWSTR = w!("mypaper.ui");
 
 /// What kind of window a surface is.
@@ -84,8 +86,14 @@ pub struct Pointer {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     Move(Pointer),
+    Leave,
+    /// Positive delta scrolls up; position uses the same coordinates as other pointer events.
+    Wheel(Pointer, i16),
+    CaptureLost,
+    DpiChanged,
     Press(Pointer, Button),
     Release(Pointer, Button),
+    DoubleClick(Pointer, Button),
     /// A key went down (a virtual-key code).
     Key(u16),
     /// The surface lost the activation (another window was clicked or focused).
@@ -211,11 +219,9 @@ impl Surface {
                 WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                 None,
             ),
-            Kind::DesktopChild { parent } => (
-                WS_CHILD,
-                WS_EX_LAYERED | WS_EX_NOACTIVATE,
-                Some(parent),
-            ),
+            Kind::DesktopChild { parent } => {
+                (WS_CHILD, WS_EX_LAYERED | WS_EX_NOACTIVATE, Some(parent))
+            }
         };
         let activate = !ex.contains(WS_EX_NOACTIVATE);
         // SAFETY: class registered above; position and size come with the first update.
@@ -493,6 +499,7 @@ fn register_class() -> Result<()> {
         let class = WNDCLASSEXW {
             cbSize: size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(wndproc),
+            style: CS_DBLCLKS,
             hInstance: GetModuleHandleW(None)?.into(),
             hCursor: LoadCursorW(None, IDC_ARROW)?,
             hIcon: HICON::default(),
@@ -537,7 +544,48 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     let button = |button| (pointer(shared, lparam), button);
     match msg {
         WM_MOUSEACTIVATE if !shared.activate => return LRESULT(MA_NOACTIVATE as isize),
-        WM_MOUSEMOVE => push(id, Event::Move(pointer(shared, lparam))),
+        WM_MOUSEMOVE => {
+            use windows::Win32::UI::Input::KeyboardAndMouse::{
+                TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent,
+            };
+            // SAFETY: tracks this owned window; no callback or borrowed state escapes.
+            unsafe {
+                let _ = TrackMouseEvent(&mut TRACKMOUSEEVENT {
+                    cbSize: size_of::<TRACKMOUSEEVENT>() as u32,
+                    dwFlags: TME_LEAVE,
+                    hwndTrack: hwnd,
+                    dwHoverTime: 0,
+                });
+            }
+            push(id, Event::Move(pointer(shared, lparam)));
+        }
+        WM_MOUSELEAVE => push(id, Event::Leave),
+        WM_CAPTURECHANGED => push(id, Event::CaptureLost),
+        WM_DPICHANGED => push(id, Event::DpiChanged),
+        WM_MOUSEWHEEL => {
+            let mut at = POINT {
+                x: i32::from(lparam.0 as i16),
+                y: i32::from((lparam.0 >> 16) as i16),
+            };
+            let screen = (at.x, at.y);
+            // SAFETY: owned window and writable local point.
+            let _ = unsafe { ScreenToClient(hwnd, &mut at) };
+            push(
+                id,
+                Event::Wheel(
+                    Pointer {
+                        at: Point::new(at.x as f32, at.y as f32),
+                        screen,
+                    },
+                    (wparam.0 >> 16) as i16,
+                ),
+            );
+        }
+        WM_LBUTTONDBLCLK | WM_RBUTTONDBLCLK | WM_MBUTTONDBLCLK => {
+            let (p, b) = button(button_of(msg));
+            push(id, Event::Press(p, b));
+            push(id, Event::DoubleClick(p, b));
+        }
         WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN => {
             let (p, b) = button(button_of(msg));
             push(id, Event::Press(p, b));
@@ -588,8 +636,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
 
 fn button_of(msg: u32) -> Button {
     match msg {
-        WM_LBUTTONDOWN | WM_LBUTTONUP => Button::Left,
-        WM_RBUTTONDOWN | WM_RBUTTONUP => Button::Right,
+        WM_LBUTTONDOWN | WM_LBUTTONUP | WM_LBUTTONDBLCLK => Button::Left,
+        WM_RBUTTONDOWN | WM_RBUTTONUP | WM_RBUTTONDBLCLK => Button::Right,
         _ => Button::Middle,
     }
 }

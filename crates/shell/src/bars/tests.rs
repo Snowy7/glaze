@@ -1,0 +1,261 @@
+//! Goldens and alpha/hit tests use precisely the display lists the live surfaces present.
+use super::*;
+use mypaper_bars::{
+    apps::{Item, ItemWindow},
+    style::NativeStyle,
+};
+use mypaper_ui::{Image, Op, Rgba, render};
+
+fn model() -> services::Model {
+    let (tx, _) = std::sync::mpsc::channel();
+    services::Model {
+        foreground: Some(1),
+        app_name: "File Explorer".into(),
+        app_icon: None,
+        media: None,
+        volume: Some(providers::audio::Volume {
+            level: 0.5,
+            muted: false,
+        }),
+        network: None,
+        battery: None,
+        stats: None,
+        workspaces: providers::desktops::Workspaces {
+            count: 3,
+            current: 0,
+        },
+        language: "ENG\nUS".into(),
+        notifications: Some(2),
+        tray: vec![],
+        clock: windows::Win32::Foundation::SYSTEMTIME {
+            wYear: 2026,
+            wMonth: 11,
+            wDay: 4,
+            wDayOfWeek: 3,
+            wHour: 13,
+            wMinute: 24,
+            ..Default::default()
+        },
+        custom: providers::custom::Custom::new(providers::wake::Waker::new(tx, 0)),
+        trash_full: false,
+    }
+}
+fn apps() -> Vec<Item> {
+    ["Explorer", "Terminal", "Studio"]
+        .into_iter()
+        .enumerate()
+        .map(|(i, name)| Item {
+            key: name.into(),
+            name: name.into(),
+            path: format!("{name}.exe"),
+            icon: None,
+            pinned: i < 2,
+            windows: if i == 2 {
+                vec![]
+            } else {
+                vec![ItemWindow {
+                    hwnd: i as isize + 1,
+                    title: name.into(),
+                    active: i == 0,
+                    minimized: false,
+                    attention: false,
+                }]
+            },
+            aumid: None,
+            exe: None,
+        })
+        .collect()
+}
+
+fn assert_shape_hit_pixels(frame: &view::Frame, image: &Image) {
+    for &(rect, radius) in &frame.shapes {
+        for y in rect.top.ceil() as u32..rect.bottom.floor().max(0.0) as u32 {
+            for x in rect.left.ceil() as u32..rect.right.floor().max(0.0) as u32 {
+                let px = x as f32 + 0.5;
+                let py = y as f32 + 0.5;
+                let dx = (radius - (px - rect.left).min(rect.right - px)).max(0.0);
+                let dy = (radius - (py - rect.top).min(rect.bottom - py)).max(0.0);
+                if dx * dx + dy * dy < (radius - 0.5).max(0.0).powi(2) || radius == 0.0 {
+                    assert!(
+                        image.pixel(x, y)[3] >= 1,
+                        "surface body clicks through at {x},{y}"
+                    );
+                }
+            }
+        }
+        assert!(
+            frame.list.ops.iter().any(
+                |op| matches!(op,Op::Fill { rect: r,color,.. } if *r == rect && *color == Rgba::HIT)
+            ),
+            "every shape explicitly fills HIT"
+        );
+    }
+    for hit in &frame.list.hits {
+        let p = Point::new(
+            (hit.rect.left + hit.rect.right) / 2.0,
+            (hit.rect.top + hit.rect.bottom) / 2.0,
+        );
+        assert!(
+            frame.target(p).is_some(),
+            "{} has no click target",
+            hit.label
+        );
+        assert!(
+            image.pixel(p.x as u32, p.y as u32)[3] > 0,
+            "{} is invisible to Windows hit testing",
+            hit.label
+        );
+    }
+}
+
+#[test]
+fn bars_match_goldens_in_each_style_and_keep_glass_bodies_hit_testable() {
+    let mut ui = Ui::new().unwrap();
+    let model = model();
+    let golden = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/bars");
+    for (name, style) in [
+        ("liquid", NativeStyle::Liquid),
+        ("mono", NativeStyle::Mono),
+        ("solid", NativeStyle::Solid),
+    ] {
+        let mut config = BarsConfig::parse(r#"{"top":{"layout":"floating","left":["start","app"],"center":["clock"],"right":["volume","quick","power"]}}"#).unwrap();
+        config.resolve(Vec::new);
+        config.top.look.style = Some(style);
+        config.dock.look.style = Some(style);
+        let tokens = look::Tokens::resolve(
+            &config.top.look,
+            &Appearance::default(),
+            &providers::accent::read(),
+        );
+        let mut images = view::Images::default();
+        let top = view::top(
+            1280,
+            &config,
+            &model,
+            &tokens,
+            1.0,
+            &mut ui,
+            &mut images,
+            None,
+        );
+        let dock = view::dock(
+            &config,
+            &model,
+            &apps(),
+            &tokens,
+            1.0,
+            (1280, 80),
+            &[],
+            &[],
+            &mut ui,
+            &mut images,
+            None,
+        );
+        for (surface, frame) in [("top", top), ("dock", dock)] {
+            let image = render(&mut ui, &frame.list, frame.size.0, frame.size.1).unwrap();
+            assert_shape_hit_pixels(&frame, &image);
+            mypaper_ui::golden::check(&image, &golden.join(format!("{surface}-{name}.png")))
+                .unwrap();
+        }
+    }
+}
+
+#[test]
+fn islands_leave_the_gaps_click_through_and_minute_clock_damages_only_its_module() {
+    let mut ui = Ui::new().unwrap();
+    let mut model = model();
+    let mut config = BarsConfig::parse(
+        r#"{"top":{"layout":"islands","left":["start"],"center":["clock"],"right":["power"]}}"#,
+    )
+    .unwrap();
+    config.resolve(Vec::new);
+    let tokens = look::Tokens::resolve(
+        &config.top.look,
+        &Appearance::default(),
+        &providers::accent::read(),
+    );
+    let mut images = view::Images::default();
+    let a = view::top(
+        1280,
+        &config,
+        &model,
+        &tokens,
+        1.0,
+        &mut ui,
+        &mut images,
+        None,
+    );
+    let image = render(&mut ui, &a.list, a.size.0, a.size.1).unwrap();
+    assert_shape_hit_pixels(&a, &image);
+    let p = Point::new(250.0, 16.0);
+    assert_eq!(image.pixel(p.x as u32, p.y as u32)[3], 0);
+    assert!(a.target(p).is_none());
+    let same = view::top(
+        1280,
+        &config,
+        &model,
+        &tokens,
+        1.0,
+        &mut ui,
+        &mut images,
+        None,
+    );
+    assert_eq!(same.list.damage(&a.list), None);
+    model.clock.wMinute += 1;
+    let b = view::top(
+        1280,
+        &config,
+        &model,
+        &tokens,
+        1.0,
+        &mut ui,
+        &mut images,
+        None,
+    );
+    let damage = b.list.damage(&a.list).unwrap();
+    assert!(
+        damage.width() < 250.0,
+        "minute tick repaints the full bar: {damage:?}"
+    );
+}
+
+#[test]
+fn docks_on_all_edges_and_taskbar_module_clicks_have_alpha() {
+    let mut ui = Ui::new().unwrap();
+    let model = model();
+    let apps = apps();
+    for position in [
+        config::DockPosition::Top,
+        config::DockPosition::Bottom,
+        config::DockPosition::Left,
+        config::DockPosition::Right,
+    ] {
+        for style in [config::DockStyle::Floating, config::DockStyle::Taskbar] {
+            let mut config = BarsConfig::parse("{}").unwrap();
+            config.resolve(Vec::new);
+            config.dock.position = position;
+            config.dock.style = style;
+            let tokens = look::Tokens::resolve(
+                &config.dock.look,
+                &Appearance::default(),
+                &providers::accent::read(),
+            );
+            let mut images = view::Images::default();
+            let frame = view::dock(
+                &config,
+                &model,
+                &apps,
+                &tokens,
+                1.0,
+                (1280, 1280),
+                &[],
+                &[],
+                &mut ui,
+                &mut images,
+                None,
+            );
+            let image = render(&mut ui, &frame.list, frame.size.0, frame.size.1).unwrap();
+            assert_shape_hit_pixels(&frame, &image);
+        }
+    }
+}

@@ -3,14 +3,16 @@
 //! may use WARP, which is allowed.
 
 use anyhow::{Context, Result};
+use std::{cell::RefCell, collections::HashMap, path::Path, sync::Arc};
 use windows::Win32::Graphics::Direct2D::Common::{
     D2D_RECT_F, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
 };
 use windows::Win32::Graphics::Direct2D::{
-    D2D1_ANTIALIAS_MODE_ALIASED, D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_FACTORY_TYPE_SINGLE_THREADED,
-    D2D1_FEATURE_LEVEL_DEFAULT, D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_SOFTWARE,
-    D2D1_RENDER_TARGET_USAGE_NONE, D2D1_ROUNDED_RECT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE,
-    D2D1CreateFactory, ID2D1Factory, ID2D1RenderTarget, ID2D1SolidColorBrush,
+    D2D1_ANTIALIAS_MODE_ALIASED, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, D2D1_BITMAP_PROPERTIES,
+    D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_FEATURE_LEVEL_DEFAULT,
+    D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_SOFTWARE, D2D1_RENDER_TARGET_USAGE_NONE,
+    D2D1_ROUNDED_RECT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE, D2D1CreateFactory, ID2D1Bitmap,
+    ID2D1Factory, ID2D1RenderTarget, ID2D1SolidColorBrush,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_PIXEL_GEOMETRY_FLAT, DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC, IDWriteRenderingParams,
@@ -82,6 +84,48 @@ pub struct Image {
 }
 
 impl Image {
+    /// Decode a cached app icon or user image to premultiplied BGRA with Windows WIC.
+    pub fn load(ui: &Ui, path: &Path) -> Result<Self> {
+        use windows::Win32::{
+            Foundation::GENERIC_READ,
+            Graphics::Imaging::{
+                WICBitmapDitherTypeNone, WICBitmapPaletteTypeCustom, WICDecodeMetadataCacheOnLoad,
+            },
+        };
+        // SAFETY: valid WIC objects and buffers, all confined to this thread.
+        unsafe {
+            let decoder = ui.wic.CreateDecoderFromFilename(
+                &windows::core::HSTRING::from(path.as_os_str()),
+                None,
+                GENERIC_READ,
+                WICDecodeMetadataCacheOnLoad,
+            )?;
+            let frame = decoder.GetFrame(0)?;
+            let converter = ui.wic.CreateFormatConverter()?;
+            converter.Initialize(
+                &frame,
+                &GUID_WICPixelFormat32bppPBGRA,
+                WICBitmapDitherTypeNone,
+                None,
+                0.0,
+                WICBitmapPaletteTypeCustom,
+            )?;
+            let (mut width, mut height) = (0, 0);
+            converter.GetSize(&mut width, &mut height)?;
+            anyhow::ensure!(
+                width > 0 && height > 0 && width <= 4096 && height <= 4096,
+                "image dimensions"
+            );
+            let mut pixels = vec![0; (width * height * 4) as usize];
+            converter.CopyPixels(std::ptr::null(), width * 4, &mut pixels)?;
+            Ok(Self {
+                width,
+                height,
+                pixels,
+            })
+        }
+    }
+
     /// The `[b, g, r, a]` of a pixel.
     pub fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
         let at = ((y * self.width + x) * 4) as usize;
@@ -116,6 +160,7 @@ pub(crate) struct Canvas {
     bitmap: IWICBitmap,
     target: ID2D1RenderTarget,
     brush: ID2D1SolidColorBrush,
+    images: RefCell<HashMap<usize, (Arc<Image>, ID2D1Bitmap)>>,
 }
 
 impl Canvas {
@@ -153,6 +198,7 @@ impl Canvas {
                 bitmap,
                 target,
                 brush,
+                images: RefCell::new(HashMap::new()),
             })
         }
     }
@@ -258,6 +304,56 @@ impl Canvas {
                         t.DrawTextLayout(origin, layout, brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
                     }
                 }
+                Op::Image { rect, image } => {
+                    // CreateBitmap reads the whole supplied buffer. Public Image values must be
+                    // checked before passing a pointer to that FFI call.
+                    if image.width == 0
+                        || image.height == 0
+                        || image
+                            .width
+                            .checked_mul(image.height)
+                            .and_then(|n| n.checked_mul(4))
+                            .is_none_or(|n| n as usize != image.pixels.len())
+                    {
+                        return;
+                    }
+                    let key = Arc::as_ptr(image) as usize;
+                    let mut cache = self.images.borrow_mut();
+                    if !cache.contains_key(&key) {
+                        if cache.len() >= 128 {
+                            cache.clear();
+                        }
+                        let properties = D2D1_BITMAP_PROPERTIES {
+                            pixelFormat: D2D1_PIXEL_FORMAT {
+                                format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
+                            },
+                            dpiX: 96.0,
+                            dpiY: 96.0,
+                        };
+                        let size = windows::Win32::Graphics::Direct2D::Common::D2D_SIZE_U {
+                            width: image.width,
+                            height: image.height,
+                        };
+                        if let Ok(bitmap) = t.CreateBitmap(
+                            size,
+                            Some(image.pixels.as_ptr().cast()),
+                            image.width * 4,
+                            &properties,
+                        ) {
+                            cache.insert(key, (image.clone(), bitmap));
+                        }
+                    }
+                    if let Some((_, bitmap)) = cache.get(&key) {
+                        t.DrawBitmap(
+                            bitmap,
+                            Some(&d2d(*rect)),
+                            1.0,
+                            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+                            None,
+                        );
+                    }
+                }
                 Op::Shadow {
                     rect,
                     radius,
@@ -320,6 +416,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bitmap_ops_preserve_premultiplied_alpha_and_only_cover_their_rect() {
+        let mut ui = Ui::new().unwrap();
+        let bitmap = Arc::new(Image {
+            width: 1,
+            height: 1,
+            pixels: vec![0, 0, 128, 128],
+        });
+        let list = DisplayList {
+            ops: vec![Op::Image {
+                rect: Rect::new(1.0, 1.0, 2.0, 2.0),
+                image: bitmap,
+            }],
+            ..Default::default()
+        };
+        let image = render(&mut ui, &list, 4, 4).unwrap();
+        assert_eq!(image.pixel(0, 0), [0, 0, 0, 0]);
+        let [b, g, r, a] = image.pixel(1, 1);
+        assert_eq!((b, g), (0, 0));
+        assert!(r.abs_diff(128) <= 1 && a.abs_diff(128) <= 1);
+    }
+
+    #[test]
     fn a_fill_lands_premultiplied_and_only_the_damaged_area_is_redrawn() {
         let mut ui = Ui::new().unwrap();
         let red = |x| Op::Fill {
@@ -358,6 +476,9 @@ mod tests {
         assert_eq!(px(5), [0, 0, 0, 0], "between the fills: transparent");
         let old = px(9);
         assert!(old[2] > 120 && old[2] < 135 && old[3] > 120 && old[3] < 135);
-        assert_eq!(old[0], 0, "outside the damage: still the old red at half alpha");
+        assert_eq!(
+            old[0], 0,
+            "outside the damage: still the old red at half alpha"
+        );
     }
 }

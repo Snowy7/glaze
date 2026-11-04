@@ -40,7 +40,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::Shell::{KF_FLAG_DEFAULT, SHGetKnownFolderPath};
 use windows::core::{GUID, HSTRING, PCWSTR, implement, w};
 
-use crate::bridge::Button;
+use crate::actions::Button;
 pub use crate::tray_data::TrayItem;
 use crate::wake::{Msg, Waker};
 
@@ -105,7 +105,7 @@ impl Tray {
             Some(worker) => {
                 let _ = worker.send(Cmd::Click(id, button));
             }
-            None if id == OVERFLOW => open_overflow_by_keyboard(),
+            None if id == OVERFLOW => open_overflow(),
             None => {}
         }
     }
@@ -143,7 +143,7 @@ impl Taskbar {
     fn find(uia: &IUIAutomation, again: &Sender<Cmd>) -> Option<Self> {
         // SAFETY: COM calls on objects we own; the handler is removed on drop.
         unsafe {
-            let tray = mypaper_bars::taskbar::explorer_tray()?;
+            let tray = crate::taskbar::explorer_tray()?;
             let root = uia.ElementFromHandle(tray).ok()?;
             let handler: IUIAutomationStructureChangedEventHandler = Changed(again.clone()).into();
             if let Err(e) =
@@ -292,7 +292,7 @@ fn run(rx: &Receiver<Cmd>, again: &Sender<Cmd>, waker: &Waker, icons: &std::path
             Cmd::Click(id, button) => {
                 let clicked = taskbar.as_ref().is_some_and(|t| click(t, &id, button));
                 if !clicked && id == OVERFLOW {
-                    open_overflow_by_keyboard();
+                    open_overflow();
                 } else if !clicked {
                     // Explorer may have restarted under us.
                     taskbar = uia.as_ref().and_then(|uia| Taskbar::find(uia, again));
@@ -406,7 +406,7 @@ fn click(taskbar: &Taskbar, id: &str, button: Button) -> bool {
 }
 
 /// Win+B focuses the tray's chevron; Enter opens the overflow flyout.
-fn open_overflow_by_keyboard() {
+pub fn open_overflow() {
     keys(&[VK_LWIN, VK_B]);
     keys(&[VK_RETURN]);
 }

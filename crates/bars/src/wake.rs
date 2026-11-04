@@ -24,8 +24,6 @@ pub enum Msg {
     Config,
     /// The theme's files or the palette changed.
     Theme,
-    /// `bars/shell/dist` was rebuilt.
-    Page,
     /// The icon worker described an app, a shortcut or a file.
     Described(Source, Described),
     /// What's playing changed (SMTC).
@@ -38,8 +36,6 @@ pub enum Msg {
     Tray(Vec<TrayItem>),
     /// A flyout provider finished something (docs/bars.md, "Flyouts").
     Flyout(crate::flyouts::Done),
-    /// The wallpaper engine wrote a new snapshot (wallpaper glass).
-    Backdrop,
     /// A custom module's command finished.
     Custom(String, Output),
     /// A file watcher failed and stopped (logged).

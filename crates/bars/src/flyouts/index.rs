@@ -171,7 +171,7 @@ impl History {
 
     pub fn save(&self, path: &Path) {
         let text = serde_json::to_string_pretty(self).unwrap_or_default() + "\n";
-        if let Err(e) = mypaper_bars::files::write_atomic(path, text.as_bytes()) {
+        if let Err(e) = crate::files::write_atomic(path, text.as_bytes()) {
             log::warn!("launcher: not saving the history: {e:#}");
         }
     }
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     #[ignore = "reads this machine's Start menu"]
     fn real_index() {
-        let dir = mypaper_bars::files::local("icons-test").unwrap();
+        let dir = crate::files::local("icons-test").unwrap();
         let builder = Builder::new(dir.clone());
         let started = std::time::Instant::now();
         let apps = builder.build();

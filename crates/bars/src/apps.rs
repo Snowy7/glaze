@@ -183,7 +183,7 @@ pub fn pin_key(path: &str) -> String {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct View<'a> {
     /// Running apps that aren't pinned.
-    pub running: mypaper_bars::config::Running,
+    pub running: crate::config::Running,
     /// The dock's monitor, for `running: "monitor"`.
     pub monitor: isize,
     /// The window in front.
@@ -195,7 +195,7 @@ pub struct View<'a> {
 /// The dock: pinned items in order (with the windows of every app they match), then the other
 /// running apps in `order`, as `view` says.
 pub fn dock_items(pins: &[Pin], running: &[Running], order: &[String], view: View) -> Vec<Item> {
-    use mypaper_bars::config::Running as Show;
+    use crate::config::Running as Show;
     let here = |w: &AppWindow| view.running != Show::Monitor || w.monitor == view.monitor;
     let windows_of = |groups: &[&Group]| -> Vec<ItemWindow> {
         groups
@@ -626,7 +626,7 @@ mod tests {
         assert!(items[3].windows[0].attention, "spotify flashes");
         assert_eq!(items[3].aumid.as_deref(), Some("Spotify"));
 
-        use mypaper_bars::config::Running as Show;
+        use crate::config::Running as Show;
         let pinned_only = View {
             running: Show::None,
             ..View::default()

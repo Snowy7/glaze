@@ -1,7 +1,5 @@
-//! Names and icons for apps, shortcuts and files, made on a worker thread: 64 px PNGs from
-//! `IShellItemImageFactory`, cached in memory and in `%LOCALAPPDATA%\mypaper\icons\`. The page
-//! loads them from `https://icons.bars.mypaper/<file>` (that folder, mapped as a virtual host), so
-//! events carry short URLs and the WebView caches the images.
+//! App names, shortcut identities and 64 px PNG icons, resolved on an STA worker and cached
+//! on disk. Native callers receive file paths; there is no virtual host or browser cache.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -37,7 +35,6 @@ use crate::apps::file_stem;
 use crate::wake::{Msg, Waker};
 
 /// The virtual host the icon cache is mapped to.
-pub const ICON_HOST: &str = "icons.bars.mypaper";
 const ICON_SIZE: i32 = 64;
 
 /// Resolves toast app identities using the same shell images and PNG cache as dock icons.
@@ -169,7 +166,7 @@ impl Icons {
         }
     }
 
-    /// The folder mapped to [`ICON_HOST`].
+    /// The cache folder used by the native renderer.
     pub fn dir(&self) -> &Path {
         &self.dir
     }
@@ -362,18 +359,14 @@ pub fn cache_name(key: &str) -> String {
     format!("{hash:016x}.png")
 }
 
-pub fn url(file: &str) -> String {
-    format!("https://{ICON_HOST}/{file}")
-}
-
 /// Stores ready-made PNG bytes in the cache (named by their content) and returns the URL.
 pub fn store_png(dir: &Path, png: &[u8]) -> Option<String> {
     let name = cache_name(&String::from_utf8_lossy(png));
     let file = dir.join(&name);
     if !file.exists() {
-        mypaper_bars::files::write_atomic(&file, png).ok()?;
+        crate::files::write_atomic(&file, png).ok()?;
     }
-    Some(url(&name))
+    Some(file.display().to_string())
 }
 
 /// The item's icon as a cached PNG, by URL.
@@ -386,7 +379,7 @@ pub(crate) fn icon(
     let name = cache_name(key);
     let file = dir.join(&name);
     if file.exists() {
-        return Some(url(&name));
+        return Some(file.display().to_string());
     }
     let (width, height, mut pixels) = image(item)?;
     fix_alpha(&mut pixels);
@@ -397,7 +390,7 @@ pub(crate) fn icon(
         return None;
     }
     std::fs::rename(&temp, &file).ok()?;
-    Some(url(&name))
+    Some(file.display().to_string())
 }
 
 /// The item's icon as top-down BGRA pixels.
@@ -528,5 +521,11 @@ mod tests {
         let mut pixels = vec![200, 10, 10, 100];
         fix_alpha(&mut pixels);
         assert_eq!(pixels, [200, 10, 10, 100]);
+    }
+}
+
+impl Default for AppIconResolver {
+    fn default() -> Self {
+        Self::new()
     }
 }

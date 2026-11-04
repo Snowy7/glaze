@@ -33,7 +33,7 @@ impl Default for LauncherConfig {
     }
 }
 
-/// How the launcher is laid out; each is a page layout in `bars/shell/src/flyouts/launcher`.
+/// Launcher layout choices retained for the native flyout port.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LauncherLayout {
