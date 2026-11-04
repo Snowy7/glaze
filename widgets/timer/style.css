@@ -97,7 +97,7 @@ html[data-surface="none"] .ring-track {
   opacity: 0.7;
 }
 
-.label {
+.mode-name {
   display: none;
   max-width: 80%;
   overflow: hidden;
@@ -105,11 +105,11 @@ html[data-surface="none"] .ring-track {
   white-space: nowrap;
   font-size: clamp(8px, calc(min(100cqw, 100cqh) * 0.085), 11px);
 }
-.card[data-modes="off"] .label,
-.card[data-state="done"] .label {
+.card[data-modes="off"] .mode-name,
+.card[data-state="done"] .mode-name {
   display: block;
 }
-.card[data-state="done"] .label {
+.card[data-state="done"] .mode-name {
   color: var(--hi);
 }
 
@@ -211,10 +211,9 @@ html[data-surface="none"] :is(.modes, .btn) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: clamp(8.5px, 4.6cqmin, 10px);
+  font-size: clamp(10px, 5.2cqmin, 12px);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.005em;
   color: var(--t2);
 }
 .seg[aria-selected="true"] {

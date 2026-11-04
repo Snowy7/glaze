@@ -234,6 +234,9 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
         return { ...requireState("settings").settings };
       },
       onChange: (cb) => events.settings.on(cb),
+      async set(values) {
+        await call("settings.set", { values });
+      },
     },
     appearance: {
       async get() {

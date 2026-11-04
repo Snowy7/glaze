@@ -17,6 +17,7 @@ const SVG = "http://www.w3.org/2000/svg";
 const rows = $("#rows");
 const msg = $("#msg");
 const msgText = $("#msg-text");
+const msgHint = $("#msg-hint");
 const foot = $("#foot");
 
 const defaults = { coins: /** @type {unknown} */ ([]), currency: "usd", showChange: true, refreshMinutes: 5 };
@@ -97,8 +98,8 @@ function rowElement(id, quote, first) {
   if (first) row.dataset.first = "";
 
   const label = document.createElement("div");
-  label.className = "label";
-  label.append(span("sym ellipsis", symbolOf(id)), span("name caps ellipsis", nameOf(id)));
+  label.className = "coin";
+  label.append(span("sym ellipsis", symbolOf(id)), span("name ellipsis", nameOf(id)));
 
   const value = document.createElement("div");
   value.className = "value";
@@ -117,17 +118,19 @@ function rowElement(id, quote, first) {
   return row;
 }
 
-/** @param {string} text */
-function showMessage(text) {
+/** @param {string} text @param {string} [hint] */
+function showMessage(text, hint = "") {
   rows.replaceChildren();
   foot.hidden = true;
   msg.hidden = false;
   msgText.textContent = text;
+  msgHint.textContent = hint;
+  msgHint.hidden = hint === "";
 }
 
 function render() {
-  if (coins.length === 0) return showMessage("No coins set");
-  if (!cache) return showMessage(offline ? "Offline" : "Loading");
+  if (coins.length === 0) return showMessage("No coins set", "Add some in Settings");
+  if (!cache) return offline ? showMessage("Can't reach CoinGecko", "Trying again in a few minutes") : showMessage("Loading prices");
   const { data, at } = cache;
 
   msg.hidden = true;
@@ -141,7 +144,7 @@ function render() {
   foot.hidden = !layout.footer;
   foot.toggleAttribute("data-offline", offline); // the live dot goes quiet
   // Narrow: just the time (and a dot when offline); there is no room for words.
-  foot.textContent = layout.narrow ? `${offline ? "· " : ""}${time}` : `${offline ? "offline · " : ""}updated ${time}`;
+  foot.textContent = layout.narrow ? `${offline ? "· " : ""}${time}` : `${offline ? "Offline · " : "Updated "}${time}`;
 }
 
 function relayout() {

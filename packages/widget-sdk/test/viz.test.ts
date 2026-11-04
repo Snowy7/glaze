@@ -17,7 +17,7 @@ import {
   smoothInto,
   stepPeaks,
   wavePoints,
-} from "../../../widgets/visualizer/viz.js";
+} from "../../../widgets/now-playing/viz.js";
 
 describe("sampleBars", () => {
   const ramp = Array.from({ length: 64 }, (_, i) => i / 63);

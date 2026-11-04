@@ -26,6 +26,7 @@ import {
 import type { Frames, Slot } from "./frames";
 import { canAdd, inPalette } from "./placement";
 import type { Layer, ShellState, ShellToHost } from "./protocol";
+import { hostCall } from "./calls";
 import { buildSettingsForm, type SettingsForm } from "./settings-form";
 
 export interface Editor {
@@ -241,6 +242,8 @@ export function createEditor({ root, frames, send }: Options): Editor {
       onPreview: (key, value) => frames.previewSettings(slot.instance, { ...shown, [key]: value }),
       onPickFile: (key, extensions) =>
         send({ type: "pickFile", instance: slot.instance, key, ...(extensions && { extensions }) }),
+      // A place setting's suggestions come from the widget's own plugin, as the widget would ask.
+      onSearch: (plugin, method, query) => hostCall(send, slot.instance, "plugin", { plugin, method, params: { query } }),
     });
     settingsPanel = { instance: slot.instance, form, shown };
     const close = h("button", "icon-btn close");

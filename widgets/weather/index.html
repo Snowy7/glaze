@@ -166,7 +166,7 @@
           <div class="temp hero num" id="temp">--</div>
           <div class="cond ellipsis" id="cond">Loading</div>
           <div class="sub">
-            <span class="place caps ellipsis" id="place"></span>
+            <button class="place label ellipsis" type="button" id="place" title="Change the town"></button>
             <span class="hilo num" id="hilo"></span>
           </div>
         </div>
@@ -184,7 +184,24 @@
         <svg class="status-ico" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-cloudy" /></svg>
         <div class="status-title" id="status-title"></div>
         <div class="status-hint" id="status-hint"></div>
+        <div class="status-actions" id="status-actions" hidden>
+          <button class="btn" type="button" id="open-location"><span class="long">Location settings</span><span class="short">Settings</span></button>
+          <button class="btn primary" type="button" id="choose-town"><span class="long">Choose a town</span><span class="short">Pick a town</span></button>
+        </div>
       </div>
+      <!-- The town picker: a search as you type; picking saves the Location setting. -->
+      <div class="picker tile" id="picker" hidden>
+        <div class="picker-row">
+          <input class="field" id="town-q" type="text" placeholder="Search for a town" spellcheck="false" autocomplete="off" aria-label="Search for a town" />
+          <button class="btn" type="button" id="town-close">Done</button>
+        </div>
+        <div class="picker-list" id="town-list" role="listbox"></div>
+        <div class="picker-foot">
+          <button class="btn" type="button" id="town-auto">Use my location</button>
+          <span class="credit">Weather by Open-Meteo</span>
+        </div>
+      </div>
+      <span class="credit corner" aria-hidden="true">Weather by Open-Meteo</span>
     </main>
     <script src="mypaper.js"></script>
     <script type="module" src="main.js"></script>

@@ -9,18 +9,18 @@
   </head>
   <body>
     <main class="card" id="card">
-      <div class="grid" id="grid"></div>
-      <div class="empty" id="empty" hidden>
-        <div class="empty-icon tile">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="4" y="4" width="6.5" height="6.5" rx="1.8" />
-            <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8" />
-            <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8" />
-            <path d="M16.75 13.5v6.5M13.5 16.75H20" />
-          </svg>
-        </div>
-        <span>Add shortcuts in this widget's settings</span>
+      <!-- The search bar shows with the `search` setting (data-search on the card). -->
+      <div class="search" role="search">
+        <label class="field bar">
+          <svg class="mag" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.8" cy="8.8" r="5.6" /><path d="M13 13l4 4" /></svg>
+          <input class="q" id="q" type="text" placeholder="Search the web" aria-label="Search the web" maxlength="500" spellcheck="false" autocomplete="off" />
+          <span class="chip engine" id="engine"></span>
+          <span class="hint" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M13 3.5V8a1.5 1.5 0 0 1-1.5 1.5H3M3 9.5l3-3M3 9.5l3 3" /></svg></span>
+        </label>
+        <p class="chip err" id="err" role="alert" hidden></p>
       </div>
+      <!-- main.js builds the dock, grid or list into #area. -->
+      <div class="area" id="area"></div>
     </main>
     <script src="mypaper.js"></script>
     <script type="module" src="main.js"></script>

@@ -2,7 +2,7 @@
    data-variant  card | compact | forecast (the user's choice)
    data-layout   from the size: mini (one short row) | strip (one wide row) | stack | tall | side
    data-days     rows | cols (how the days are laid out)
-   data-state    loading | ready | error       data-motion  on | off
+   data-state    loading | locating | ready | error       data-motion  on | off
    The grid areas below say what each layout holds; counts of hours and days come from main.js,
    which measures their boxes. Groups are separated by spacing, never by boxes where there may be no
    surface; the hourly slots are .tile, which the style paints even on a bare wallpaper. */
@@ -490,7 +490,10 @@ html[data-surface="none"] .sk {
   }
 }
 
-.card[data-state="error"] .status {
+.card[data-state="locating"] .status-ico {
+  animation: sk 1.2s ease-in-out infinite alternate;
+}
+.card:is([data-state="error"], [data-state="locating"]) .status {
   display: grid;
   place-content: center;
   justify-items: center;
@@ -712,4 +715,143 @@ html[data-surface="none"] .sk {
   96% {
     opacity: 0;
   }
+}
+
+/* ---------------------------------------------------------------- location */
+
+/* The place's name is a button that opens the town picker. */
+button.place {
+  padding: 0;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  color: var(--t2);
+}
+button.place:hover {
+  background: none;
+  color: var(--t0);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11.5px;
+}
+.status-actions[hidden] {
+  display: none;
+}
+@container (max-height: 124px) {
+  .status-hint {
+    display: none;
+  }
+}
+
+.picker {
+  position: absolute;
+  inset: var(--pad);
+  z-index: 5;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 8px;
+  border-radius: calc(var(--radius) * 0.7);
+  background: var(--surface);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+.picker[hidden] {
+  display: none;
+}
+.picker-row,
+.picker-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.picker-row .field {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+}
+.picker .btn {
+  flex: none;
+  font-size: 11.5px;
+}
+.picker-list {
+  display: grid;
+  align-content: start;
+  overflow-y: auto;
+}
+.picker-item {
+  display: block;
+  justify-items: start;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--t1);
+}
+.picker-item:hover,
+.picker-item:focus-visible {
+  background: var(--fill-2);
+  color: var(--t0);
+}
+.picker-none {
+  padding: 5px 8px;
+  font-size: 11.5px;
+  color: var(--t2);
+}
+
+/* Open-Meteo asks for credit: a small line where there is room, and in the picker. */
+.credit {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: var(--t3);
+  white-space: nowrap;
+}
+.credit.corner {
+  position: absolute;
+  right: calc(var(--pad) + 2px);
+  bottom: calc(var(--pad) - 4px);
+  display: none;
+}
+.card[data-state="ready"]:is([data-layout="tall"], [data-layout="side"]) .credit.corner {
+  display: block;
+}
+
+.status-actions .short {
+  display: none;
+}
+/* One row: no icon or hint, short labels, the buttons side by side. */
+@container (max-height: 124px) {
+  .card:is([data-state="error"], [data-state="locating"]) .status-ico {
+    display: none;
+  }
+  .status-actions {
+    flex-wrap: nowrap;
+    margin-top: 4px;
+  }
+  .status-actions .btn {
+    padding: 0.3em 0.75em;
+    font-size: 11px;
+  }
+  .status-actions .long {
+    display: none;
+  }
+  .status-actions .short {
+    display: inline;
+  }
+}
+/* Where there is room, the whole place name, over two lines if need be. */
+.card:is([data-layout="tall"], [data-layout="side"]) button.place {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
 }

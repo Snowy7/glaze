@@ -117,3 +117,28 @@ export function fitCount(width, height, wanted, minCell = 70) {
   const fit = Math.max(1, Math.floor((width * height) / (minCell * minCell)));
   return clamp(wanted, 1, fit);
 }
+
+/**
+ * The grid that shows the most of `count` cells of at least `minW` x `minH` px in a box, then the
+ * biggest cells, closest to `ratio` (width / height). The last row may be short (the widget
+ * centres it); no row is ever empty. When nothing fits, one cell.
+ * @param {number} count
+ * @param {number} width
+ * @param {number} height
+ * @param {{ minW: number, minH: number, ratio?: number, gap?: number }} o
+ * @returns {{ cols: number, rows: number, shown: number }}
+ */
+export function fitGrid(count, width, height, { minW, minH, ratio = 1, gap = 8 }) {
+  let best = { cols: 1, rows: 1, shown: Math.min(1, count), score: -Infinity };
+  for (let cols = 1; cols <= count; cols++) {
+    for (let rows = 1; (rows - 1) * cols < count; rows++) {
+      const cw = (width - (cols - 1) * gap) / cols;
+      const ch = (height - (rows - 1) * gap) / rows;
+      if (cw < minW || ch < minH) continue;
+      const shown = Math.min(count, cols * rows);
+      const score = shown * 1000 + Math.min(cw / ratio, ch) - Math.abs(Math.log(cw / ch / ratio)) * 20 - (cols * rows - shown) * 30;
+      if (score > best.score) best = { cols, rows, shown, score };
+    }
+  }
+  return { cols: best.cols, rows: best.rows, shown: best.shown };
+}

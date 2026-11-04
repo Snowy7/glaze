@@ -1,54 +1,140 @@
 {
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "photo",
-  "name": "Photo",
-  "version": "1.1.0",
+  "name": "Photos",
+  "version": "3.0.0",
   "author": "mypaper",
-  "description": "A photo frame that cycles through the images in its folder, with an optional slow zoom.",
+  "description": "Your pictures, full bleed, matted or as a polaroid, with a slow Ken Burns drift and soft crossfades.",
   "entry": "index.html",
-  "size": { "default": [2, 2], "min": [1, 1], "max": [4, 4] },
+  "size": {
+    "default": [3, 2],
+    "min": [1, 1],
+    "max": [6, 4]
+  },
   "resizable": true,
   "permissions": [],
   "plugins": [],
   "settings": [
     {
-      "key": "images",
-      "type": "list",
-      "label": "Images (files in the widget's images folder)",
-      "fields": [{ "key": "file", "type": "string", "label": "File name, e.g. sunrise.svg" }],
-      "maxItems": 24,
-      "default": [
-        { "file": "sunrise.svg" },
-        { "file": "dunes.svg" },
-        { "file": "mist.svg" },
-        { "file": "dusk.svg" },
-        { "file": "tide.svg" }
-      ]
+      "key": "variant",
+      "type": "select",
+      "label": "Frame",
+      "options": [
+        {
+          "value": "bleed",
+          "label": "Full bleed",
+          "icon": "▇"
+        },
+        {
+          "value": "matte",
+          "label": "Matte",
+          "icon": "▣"
+        },
+        {
+          "value": "polaroid",
+          "label": "Polaroid",
+          "icon": "▢"
+        }
+      ],
+      "default": "bleed"
     },
-    { "key": "intervalSeconds", "type": "number", "label": "Change every (seconds)", "min": 5, "max": 600, "step": 5, "default": 30 },
+    {
+      "key": "image1",
+      "type": "image",
+      "label": "Photo 1",
+      "group": "Photos",
+      "default": ""
+    },
+    {
+      "key": "image2",
+      "type": "image",
+      "label": "Photo 2",
+      "group": "Photos",
+      "default": ""
+    },
+    {
+      "key": "image3",
+      "type": "image",
+      "label": "Photo 3",
+      "group": "Photos",
+      "default": ""
+    },
+    {
+      "key": "image4",
+      "type": "image",
+      "label": "Photo 4",
+      "group": "Photos",
+      "default": ""
+    },
+    {
+      "key": "image5",
+      "type": "image",
+      "label": "Photo 5",
+      "group": "Photos",
+      "default": ""
+    },
+    {
+      "key": "image6",
+      "type": "image",
+      "label": "Photo 6",
+      "group": "Photos",
+      "default": ""
+    },
+    {
+      "key": "interval",
+      "type": "slider",
+      "label": "Change every",
+      "group": "Playback",
+      "min": 5,
+      "max": 120,
+      "step": 5,
+      "unit": "s",
+      "default": 15
+    },
     {
       "key": "motion",
-      "type": "select",
+      "type": "slider",
       "label": "Motion",
-      "group": "Look",
-      "options": [
-        { "value": "still", "label": "Still", "icon": "▢" },
-        { "value": "kenburns", "label": "Slow zoom", "icon": "⤢" }
-      ],
-      "default": "still"
+      "group": "Playback",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "default": 40
+    },
+    {
+      "key": "shuffle",
+      "type": "boolean",
+      "label": "Shuffle",
+      "group": "Playback",
+      "default": false
     },
     {
       "key": "fit",
       "type": "select",
       "label": "Fit",
+      "group": "Look",
       "options": [
-        { "value": "cover", "label": "Fill", "icon": "▣" },
-        { "value": "contain", "label": "Whole picture", "icon": "▢" }
+        {
+          "value": "cover",
+          "label": "Fill"
+        },
+        {
+          "value": "contain",
+          "label": "Whole picture"
+        }
       ],
       "default": "cover"
     },
-    { "key": "shuffle", "type": "boolean", "label": "Shuffle", "default": false },
-    { "key": "rounded", "type": "boolean", "label": "Rounded corners", "default": true },
-    { "key": "showCaption", "type": "boolean", "label": "Show file name", "default": false }
-  ]
+    {
+      "key": "caption",
+      "type": "string",
+      "label": "Polaroid caption",
+      "group": "Look",
+      "default": ""
+    }
+  ],
+  "replaces": {
+    "photo-frame": {}
+  }
 }

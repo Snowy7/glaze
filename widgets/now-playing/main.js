@@ -1,13 +1,16 @@
 // @ts-check
-// Now playing: artwork-first media card with three looks (card, backdrop, strip), set with
-// `data-variant` on <html> and laid out entirely in CSS. JS only feeds it: track text, the cover, an
-// accent taken from the cover (once per track), and progress once a second while playing.
+// Now playing: an artwork-first media card with four looks (card, backdrop, strip, and the
+// visualizer: the sound's spectrum under the track), set with `data-variant` on <html> and laid
+// out in CSS. JS only feeds it: track text, the cover, an accent taken from the cover (once per
+// track), progress once a second while playing, and the spectrum (spectrum.js) in the visualizer.
 import { $, onVisible, setText, trackSettings } from "./kit.js";
 import { accentSaturation, clock, dominantHue, fraction, positionNow, remaining } from "./media.js";
+import { createSpectrum } from "./spectrum.js";
 
 /** @typedef {NonNullable<Awaited<ReturnType<typeof mypaper.media.current>>>} Media */
 
-const VARIANTS = /** @type {const} */ (["card", "blur", "strip"]);
+const VARIANTS = /** @type {const} */ (["card", "blur", "strip", "viz"]);
+const VIZ_STYLES = /** @type {const} */ (["bars", "mirror", "wave"]);
 const SAMPLE = 32; // the cover is shrunk to 32x32: for the accent, and as the backdrop's source
 
 const root = $("#root");
@@ -124,6 +127,24 @@ function show(next) {
   reschedule();
 }
 
+// ---- the visualizer
+
+const spectrum = createSpectrum($("#spectrum", HTMLCanvasElement), (silent) => root.toggleAttribute("data-quiet", silent));
+/** The highlight pair, resolved (a canvas can't read CSS variables). */
+function readColors() {
+  const css = getComputedStyle(root);
+  const probe = document.createElement("i");
+  root.append(probe);
+  const resolve = (/** @type {string} */ v) => {
+    probe.style.color = v;
+    return getComputedStyle(probe).color;
+  };
+  spectrum.setColors(resolve(css.getPropertyValue("--viz-1") || "var(--hi)"), resolve(css.getPropertyValue("--viz-2") || "var(--hi-2)"));
+  probe.remove();
+}
+mypaper.appearance.onChange(() => requestAnimationFrame(readColors));
+void mypaper.ready.then(() => requestAnimationFrame(readColors));
+
 const toggle = () => void mypaper.media.control("toggle");
 $("#toggle").addEventListener("click", toggle);
 $("#over").addEventListener("click", toggle);
@@ -133,21 +154,28 @@ $("#next").addEventListener("click", () => void mypaper.media.control("next"));
 /** @template {readonly string[]} L @param {string} v @param {L} list @param {L[number]} fallback @returns {L[number]} */
 const pick = (v, list, fallback) => list.find((x) => x === v) ?? fallback;
 
-trackSettings({ variant: /** @type {(typeof VARIANTS)[number]} */ ("card"), tint: true, glow: 55 }, (s) => {
-  document.documentElement.dataset["variant"] = pick(s.variant, VARIANTS, "card");
+const DEFAULTS = { variant: /** @type {string} */ ("card"), tint: true, glow: 55, viz: "bars", sensitivity: 1.2 };
+trackSettings(DEFAULTS, (s) => {
+  const variant = pick(s.variant, VARIANTS, "card");
+  document.documentElement.dataset["variant"] = variant;
   root.dataset["tint"] = s.tint ? "on" : "off";
   root.style.setProperty("--glow-amt", String(Math.min(1, Math.max(0, s.glow / 100))));
+  spectrum.configure({ style: pick(s.viz, VIZ_STYLES, "bars"), sensitivity: s.sensitivity });
+  spectrum.setActive(variant === "viz");
+  requestAnimationFrame(readColors);
 });
 
 // Subscribed only while visible (a hidden host sends nothing anyway); the first value is fetched.
 onVisible(
   () => {
     visible = true;
+    spectrum.setVisible(true);
     mypaper.media.current().then(show, () => show(null));
     unsubscribe = mypaper.media.onChange(show);
   },
   () => {
     visible = false;
+    spectrum.setVisible(false);
     unsubscribe?.();
     unsubscribe = undefined;
     reschedule();

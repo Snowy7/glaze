@@ -3,6 +3,14 @@ import {
   dayLabel,
   degrees,
   errorInfo,
+  OLD_DEFAULT_CITY,
+  candidateLine,
+  placeLabel,
+  placeOf,
+  placeRequest,
+  readCandidates,
+  readLocated,
+  readPlace,
   hourLabel,
   pickLayout,
   placeNow,
@@ -99,7 +107,7 @@ describe("weather numbers and labels", () => {
   });
 
   it("explains an error by its code", () => {
-    expect(errorInfo("NotFound", "Atlantis").title).toBe("Unknown city");
+    expect(errorInfo("NotFound", "Atlantis").title).toBe("Unknown town");
     expect(errorInfo("NotFound", "Atlantis").hint).toContain("Atlantis");
     expect(errorInfo("PluginUnavailable", "x").title).toBe("Weather unavailable");
     expect(errorInfo(undefined, "x").title).toBe("Couldn't load the weather");
@@ -123,5 +131,54 @@ describe("the hourly strip", () => {
     expect(upcomingHours(hourly, "2026-11-04T14:20", 9).map((h) => h.time)).toEqual(["2026-11-04T14:00", "2026-11-04T15:00", "2026-11-04T16:00"]);
     expect(upcomingHours(hourly, "2026-11-04T14:20", 2)).toHaveLength(2);
     expect(upcomingHours(hourly, "2026-11-04T18:00", 5)).toEqual([]);
+  });
+});
+
+describe("where the weather is for", () => {
+  it("reads the location setting: automatic, a picked town, or an older city name", () => {
+    expect(readPlace(null)).toBeNull();
+    expect(readPlace({ name: " " })).toBeNull();
+    expect(readPlace({ name: "Bergen", lat: 60.39, lon: 5.32, region: "Vestland", country: "Norway", extra: 1 })).toEqual({
+      name: "Bergen",
+      lat: 60.39,
+      lon: 5.32,
+      region: "Vestland",
+      country: "Norway",
+    });
+    expect(readPlace("Oslo")).toEqual({ name: "Oslo" });
+    expect(readPlace({ name: "Oslo", lat: 59.9 })).toEqual({ name: "Oslo" });
+  });
+
+  it("moves the old default city to automatic, but keeps a picked London", () => {
+    expect(readPlace(OLD_DEFAULT_CITY)).toBeNull();
+    expect(readPlace({ name: "London" })).toBeNull();
+    expect(readPlace({ name: "London", lat: 51.5, lon: -0.12 })).toEqual({ name: "London", lat: 51.5, lon: -0.12 });
+  });
+
+  it("asks by coordinates (with the names to show) when it has them, else by name", () => {
+    expect(placeRequest({ name: "Maadi", lat: 29.96, lon: 31.26, region: "Cairo", country: "Egypt" })).toEqual({
+      lat: 29.96,
+      lon: 31.26,
+      name: "Maadi",
+      region: "Cairo",
+      country: "Egypt",
+    });
+    expect(placeRequest({ name: "Oslo" })).toEqual({ city: "Oslo" });
+  });
+
+  it("shows where it is, and says so when the fix is approximate", () => {
+    const oslo = readLocated({ lat: 59.91, lon: 10.75, accuracy_m: 75, name: "Oslo", region: "Oslo County", country: "Norway", source: "windows" });
+    expect(oslo && placeLabel(oslo)).toBe("Oslo, Oslo County, Norway");
+    const byIp = readLocated({ lat: 59.91, lon: 10.75, accuracy_m: 25000, name: "Oslo", region: "", country: "Norway", source: "ip" });
+    expect(byIp && placeLabel(byIp)).toBe("Near Oslo, Norway");
+    expect(placeLabel({ name: "Monaco", region: "Monaco", country: "Monaco" })).toBe("Monaco");
+    expect(readLocated({ name: "Somewhere" })).toBeNull();
+  });
+
+  it("lists candidates so homonyms tell apart, and saves the picked one with its display fields", () => {
+    const [maadi] = readCandidates([{ name: "Maadi", admin1: "Cairo", admin2: null, country: "Egypt", country_code: "EG", lat: 29.96, lon: 31.26, population: null }, { name: "x" }]);
+    expect(maadi && candidateLine(maadi)).toBe("Maadi, Cairo, Egypt");
+    expect(maadi && placeOf(maadi)).toEqual({ name: "Maadi", lat: 29.96, lon: 31.26, region: "Cairo", country: "Egypt" });
+    expect(readCandidates(null)).toEqual([]);
   });
 });

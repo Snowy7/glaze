@@ -8,20 +8,42 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- main.js sets data-variant (desk | flip | minimal); style.css lays the same parts out per variant. -->
-    <main class="card" id="card" data-variant="desk">
-      <div class="stage" id="stage">
-        <div class="time num" id="time" aria-live="off">
-          <span class="hm hero"><span id="h">--</span><span class="colon">:</span><span id="m">--</span></span>
-          <span class="sup"><span class="sec" id="s" hidden></span><span class="ampm" id="ampm" hidden></span></span>
+    <!-- main.js sets data-face (desk | flip | analog | words | world); only that face shows. -->
+    <main class="card" id="card" data-face="desk">
+      <section class="face digital">
+        <div class="stage" id="stage">
+          <div class="time num" id="time" aria-live="off">
+            <span class="hm hero"><span id="h">--</span><span class="colon">:</span><span id="m">--</span></span>
+            <span class="sup"><span class="sec" id="s" hidden></span><span class="ampm" id="ampm" hidden></span></span>
+          </div>
+          <div class="flip" id="flip"></div>
         </div>
-        <div class="flip" id="flip"></div>
-      </div>
-      <i class="bar flow" aria-hidden="true"></i>
-      <div class="date" id="date">
-        <span class="wd"><span class="l" id="wd-l"></span><span class="s" id="wd-s"></span></span>
-        <span class="dt"><span class="l" id="d-l"></span><span class="s" id="d-s"></span></span>
-      </div>
+        <i class="bar flow" aria-hidden="true"></i>
+        <div class="date">
+          <span class="wd"><span class="l" id="wd-l"></span><span class="s" id="wd-s"></span></span>
+          <span class="dt"><span class="l" id="d-l"></span><span class="s" id="d-s"></span></span>
+        </div>
+      </section>
+
+      <section class="face analog">
+        <div class="dial-box" id="dial-box"></div>
+        <div class="aside">
+          <span class="a-wd" id="a-wd"></span>
+          <span class="a-dt" id="a-dt"></span>
+        </div>
+      </section>
+
+      <section class="face words" id="words">
+        <div class="w-text">
+          <p class="w-greet">
+            <span class="w-head"><span class="w-glyph" id="w-glyph"></span><span class="lead" id="w-lead"></span></span>
+            <span class="name" id="w-name"></span>
+          </p>
+          <p class="w-line num" id="w-line"></p>
+        </div>
+      </section>
+
+      <section class="face world" id="world"></section>
     </main>
     <script src="mypaper.js"></script>
     <script type="module" src="main.js"></script>

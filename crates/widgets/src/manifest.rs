@@ -280,6 +280,88 @@ pub enum Setting {
         max_items: Option<usize>,
         default: Vec<Map<String, Value>>,
     },
+    /// A place: `null` for "where this PC is" (automatic), or `{ name, lat?, lon? }`. The form
+    /// offers search-as-you-type suggestions from `search`, a method of one of this widget's
+    /// plugins. A plain string (an older city setting) reads as `{ name }`.
+    Place {
+        key: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        search: Option<PlaceSearch>,
+        default: Option<Place>,
+    },
+}
+
+/// Where a `place` setting's suggestions come from: `plugin`'s `method`, called with
+/// `{ query }`, answering a list of `{ name, admin1?, admin2?, country?, country_code?, lat,
+/// lon, population? }` (docs/widgets.md, "Places").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlaceSearch {
+    pub plugin: String,
+    pub method: String,
+}
+
+/// A `place` value other than automatic: a name, its coordinates when known (without them the
+/// widget looks the name up), and where it is, for showing (`region` is the state or province).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Place {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lat: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lon: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+}
+
+impl Place {
+    /// The longest place name kept.
+    const MAX_NAME: usize = 200;
+
+    /// A saved value as a place: `None` for anything that isn't one. Coordinates come in pairs
+    /// and in range, or not at all; unknown fields go.
+    fn read(value: &Value) -> Option<Self> {
+        let name = value.get("name")?.as_str()?.trim();
+        if name.is_empty() || name.chars().count() > Self::MAX_NAME {
+            return None;
+        }
+        let coord = |key: &str, limit: f64| -> Option<Option<f64>> {
+            match value.get(key) {
+                None | Some(Value::Null) => Some(None),
+                Some(v) => v.as_f64().filter(|n| n.abs() <= limit).map(Some),
+            }
+        };
+        let (lat, lon) = (coord("lat", 90.0)?, coord("lon", 180.0)?);
+        if lat.is_some() != lon.is_some() {
+            return None;
+        }
+        // Display text: kept when it is text of a sane length, else just left out.
+        let text = |key: &str| {
+            value
+                .get(key)?
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && s.chars().count() <= Self::MAX_NAME)
+                .map(str::to_owned)
+        };
+        Some(Self {
+            name: name.to_owned(),
+            lat,
+            lon,
+            region: text("region"),
+            country: text("country"),
+        })
+    }
+
+    fn to_value(&self) -> Value {
+        serde_json::to_value(self).unwrap_or(Value::Null)
+    }
 }
 
 /// A column of a `list` setting: a listable scalar setting (everything but `file` and `image`)
@@ -479,7 +561,8 @@ impl Setting {
             | Self::File { key, .. }
             | Self::Image { key, .. }
             | Self::Font { key, .. }
-            | Self::List { key, .. } => key,
+            | Self::List { key, .. }
+            | Self::Place { key, .. } => key,
         }
     }
 
@@ -494,7 +577,8 @@ impl Setting {
             | Self::File { group, .. }
             | Self::Image { group, .. }
             | Self::Font { group, .. }
-            | Self::List { group, .. } => group.as_deref(),
+            | Self::List { group, .. }
+            | Self::Place { group, .. } => group.as_deref(),
         }
     }
 
@@ -531,6 +615,7 @@ impl Setting {
                 let raw: Value = default.iter().cloned().map(Value::Object).collect();
                 self.fit(&raw).unwrap_or(raw)
             }
+            Self::Place { default, .. } => default.as_ref().map_or(Value::Null, Place::to_value),
         }
     }
 
@@ -540,6 +625,17 @@ impl Setting {
     /// A `file` or `image` value must be `""` or *a* widget data URL; that it is this widget's
     /// own is checked by [`WidgetManifest`], which knows the id.
     pub fn fit(&self, value: &Value) -> Option<Value> {
+        if let Self::Place { .. } = self {
+            return match value {
+                Value::Null => Some(Value::Null),
+                // An older plain-text city: "" was "not set", anything else a name to look up.
+                Value::String(s) if s.trim().is_empty() => Some(Value::Null),
+                Value::String(s) => {
+                    Place::read(&serde_json::json!({ "name": s })).map(|p| p.to_value())
+                }
+                _ => Place::read(value).map(|p| p.to_value()),
+            };
+        }
         let ok = match (self, value) {
             (Self::Boolean { .. }, Value::Bool(_)) => true,
             (Self::Number { min, max, .. }, Value::Number(_)) => in_range(value, *min, *max),
@@ -614,6 +710,22 @@ impl Setting {
             }
             Self::Select { options, .. } => {
                 ensure!(!options.is_empty(), "setting {key:?} has no options");
+            }
+            Self::Place {
+                search, default, ..
+            } => {
+                if let Some(search) = search {
+                    ensure!(
+                        valid_id(&search.plugin) && !search.method.is_empty(),
+                        "setting {key:?}: search needs a plugin id and a method"
+                    );
+                }
+                if let Some(place) = default {
+                    ensure!(
+                        Place::read(&place.to_value()).as_ref() == Some(place),
+                        "setting {key:?}: the default is not a valid place"
+                    );
+                }
             }
             Self::File {
                 extensions,
@@ -723,6 +835,10 @@ pub struct WidgetManifest {
     pub plugins: Vec<String>,
     #[serde(default)]
     pub settings: Vec<Setting>,
+    /// Widget ids this one took over, each with the settings an instance of the old widget gets
+    /// (docs/widgets.md, "Replaced widgets"). Host-only: not sent to the shell.
+    #[serde(default, skip_serializing)]
+    pub replaces: std::collections::BTreeMap<String, Map<String, Value>>,
 }
 
 impl WidgetManifest {
@@ -783,6 +899,28 @@ impl WidgetManifest {
                 "setting {:?} appears twice",
                 setting.key()
             );
+        }
+        for setting in &self.settings {
+            if let Setting::Place {
+                key,
+                search: Some(search),
+                ..
+            } = setting
+            {
+                ensure!(
+                    self.plugins.contains(&search.plugin),
+                    "setting {key:?} searches with {:?}, which isn't in \"plugins\"",
+                    search.plugin
+                );
+            }
+        }
+        for (old, settings) in &self.replaces {
+            ensure!(
+                valid_id(old) && *old != self.id,
+                "replaces: {old:?} must be another widget's id"
+            );
+            self.check_settings(settings.clone())
+                .with_context(|| format!("in replaces.{old}"))?;
         }
         Ok(())
     }
@@ -998,6 +1136,88 @@ mod tests {
             WidgetManifest::parse(CLOCK, "other").is_err(),
             "folder name must match"
         );
+    }
+
+    #[test]
+    fn a_place_is_automatic_or_a_name_with_coordinates() {
+        let manifest = |plugins: &str, default: &str| {
+            format!(
+                r#"{{ "id": "weather", "name": "Weather", "size": {{ "default": [2, 1] }}, "plugins": {plugins},
+                     "settings": [{{ "key": "city", "type": "place", "label": "Location",
+                                    "search": {{ "plugin": "weather", "method": "search" }}, "default": {default} }}] }}"#
+            )
+        };
+        let weather =
+            WidgetManifest::parse(&manifest(r#"["weather"]"#, "null"), "weather").unwrap();
+        let resolve = |saved: Value| {
+            weather.resolve_settings(&Map::from_iter([("city".to_owned(), saved)]))["city"].clone()
+        };
+        assert_eq!(resolve(Value::Null), Value::Null, "automatic");
+        assert_eq!(
+            resolve(json!("")),
+            Value::Null,
+            "an empty old city is automatic"
+        );
+        assert_eq!(
+            resolve(json!(" Oslo ")),
+            json!({ "name": "Oslo" }),
+            "an old city is a name to look up"
+        );
+        assert_eq!(
+            resolve(
+                json!({ "name": "Bergen", "lat": 60.39, "lon": 5.32, "region": "Vestland", "country": "Norway", "population": 1 })
+            ),
+            json!({ "name": "Bergen", "lat": 60.39, "lon": 5.32, "region": "Vestland", "country": "Norway" }),
+            "display fields stay, unknown fields go"
+        );
+        for bad in [
+            json!({ "name": "X", "lat": 91.0, "lon": 0.0 }),
+            json!({ "name": "X", "lat": 1.0 }),
+            json!({ "lat": 1.0, "lon": 2.0 }),
+            json!(3),
+        ] {
+            assert_eq!(
+                resolve(bad.clone()),
+                Value::Null,
+                "{bad} falls back to the default"
+            );
+        }
+        assert!(
+            WidgetManifest::parse(&manifest("[]", "null"), "weather").is_err(),
+            "the search plugin must be one the widget may call"
+        );
+        assert!(
+            WidgetManifest::parse(
+                &manifest(r#"["weather"]"#, r#"{ "name": "Oslo", "lat": 99 }"#),
+                "weather"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn replaces_needs_other_ids_and_valid_settings() {
+        let with =
+            |replaces: &str| CLOCK.replacen('{', &format!("{{ \"replaces\": {replaces},"), 1);
+        let ok = WidgetManifest::parse(
+            &with(r#"{ "analog-clock": { "density": "compact" } }"#),
+            "clock",
+        )
+        .unwrap();
+        assert_eq!(ok.replaces["analog-clock"]["density"], "compact");
+        // Not sent to the shell: it is the host's business.
+        assert!(serde_json::to_value(&ok).unwrap().get("replaces").is_none());
+        for (bad, why) in [
+            (r#"{ "clock": {} }"#, "itself"),
+            (r#"{ "Analog": {} }"#, "invalid id"),
+            (r#"{ "analog-clock": { "nope": 1 } }"#, "undeclared setting"),
+            (
+                r#"{ "analog-clock": { "density": "roomy" } }"#,
+                "invalid value",
+            ),
+        ] {
+            assert!(WidgetManifest::parse(&with(bad), "clock").is_err(), "{why}");
+        }
     }
 
     #[test]

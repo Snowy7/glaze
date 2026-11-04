@@ -1,181 +1,225 @@
 // @ts-check
+// Photo frame: two stacked slides that crossfade, each moving with a slow Ken Burns pan and zoom
+// (a CSS animation on transform only). The slide that is about to be shown is loaded and decoded in
+// the hidden layer ahead of time. The frame (matte, bleed, polaroid) is CSS keyed on html[data-variant].
+// Nothing runs while the widget is hidden: the timer stops and base.css pauses the animations.
 import { $, clamp, onVisible, trackSettings } from "./kit.js";
-import { captionOf, createRotation, imageUrl, readImages } from "./rotation.js";
+import { createRotation, kenBurns, moveSeconds, readImages } from "./frame.js";
+import { SCENES } from "./scenes.js";
 
-const FADE_MS = 600; // keep in sync with --fade in style.css
+/** @typedef {{ src: string, title: string }} Source */
+/** @typedef {{ slide: HTMLElement, img: HTMLImageElement, loaded: number }} Layer */
 
-const frame = $("#frame");
-const layers = [$("#a", HTMLImageElement), $("#b", HTMLImageElement)];
+/** Crossfade length; keep in sync with --fade in style.css. */
+const FADE_S = 1.2;
+
+const root = document.documentElement;
 const caption = $("#caption");
-const hint = $("#hint");
-const hintTitle = $("#hint-title");
-const hintSub = $("#hint-sub");
 
+/** @param {string} selector @returns {Layer} */
+function makeLayer(selector) {
+  const slide = $(selector);
+  const img = slide.firstElementChild;
+  if (!(img instanceof HTMLImageElement)) throw new Error(`missing picture in ${selector}`);
+  return { slide, img, loaded: -1 };
+}
+const layerA = makeLayer("#a");
+const layerB = makeLayer("#b");
+
+const VARIANTS = ["matte", "bleed", "polaroid"];
 const defaults = {
-  images: /** @type {unknown} */ ([]),
-  intervalSeconds: 30,
-  fit: "cover",
+  variant: "bleed",
+  image1: "",
+  image2: "",
+  image3: "",
+  image4: "",
+  image5: "",
+  image6: "",
+  interval: 15,
+  motion: 40,
   shuffle: false,
-  rounded: true,
-  showCaption: false,
-  motion: "still",
+  fit: "cover",
+  caption: "",
 };
 let settings = defaults;
-/** @type {string[]} */
-let files = [];
-/** The list as last applied (undefined before the first settings arrive). */
-let filesKey = /** @type {string | undefined} */ (undefined);
-let rotation = createRotation(0, false);
-/** Index into `files` of the picture on screen, once there is one. */
+/** What is shown: the user's pictures, or the built-in scenes. @type {readonly Source[]} */
+let sources = SCENES;
+let usingScenes = true;
+let rotation = createRotation(sources.length, false);
+/** What the current set of sources was made from, to tell a real change from a slider move. */
+let sourcesKey = "";
+/** Index into `sources` of the picture on screen (-1: none yet), and the layer that shows it. */
 let shown = -1;
-/** Which of the two stacked <img> layers is on top. */
-let front = 0;
-/** Newest advance wins: a click or a settings change can overtake one that is still loading. */
-let token = 0;
-let swappedAt = 0;
+let front = layerA;
+/** A newer begin() or settings change cancels the older one's pending work. */
+let epoch = 0;
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let timer;
 /** @type {ReturnType<typeof setTimeout> | undefined} */
-let cleanup;
+let retireTimer;
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let preloadTimer;
+
+/** The layer that is not showing. */
+const back = () => (front === layerA ? layerB : layerA);
+
+// ---------------------------------------------------------------- loading
 
 /**
- * Loads an image into the browser cache so swapping it in is instant; resolves whether it worked.
- * @param {string} url
+ * Puts a picture into a layer (hidden) and waits until it is decoded, so showing it later is free.
+ * @param {Layer} layer
+ * @param {number} index
  * @returns {Promise<boolean>}
  */
-function preload(url) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve(true);
-    img.onerror = () => resolve(false);
-    img.src = url;
-  });
+async function load(layer, index) {
+  const source = sources[index];
+  if (!source) return false;
+  if (layer.loaded === index) return true;
+  layer.loaded = -1;
+  layer.img.src = source.src;
+  try {
+    await layer.img.decode();
+  } catch {
+    return false;
+  }
+  layer.loaded = index;
+  return true;
 }
+
+/** Loads the picture after the current one into the layer that is not showing. */
+function preloadNext() {
+  if (sources.length > 1) void load(back(), rotation.peek());
+}
+
+// ---------------------------------------------------------------- showing
 
 /**
- * @param {string} title
- * @param {string} sub
- */
-function showHint(title, sub) {
-  frame.toggleAttribute("data-empty", true);
-  hint.hidden = false;
-  hintTitle.textContent = title;
-  hintSub.textContent = sub;
-  caption.hidden = true;
-}
-
-function clearHint() {
-  frame.removeAttribute("data-empty");
-  hint.hidden = true;
-}
-
-/**
- * Crossfade to `files[index]`: the new layer fades in over the old one, which stays opaque below.
+ * Starts a layer's Ken Burns and fades it in.
+ * @param {Layer} layer
  * @param {number} index
  */
-function swap(index) {
-  const file = files[index];
-  if (file === undefined) return;
-  const incoming = layers[1 - front];
-  const outgoing = layers[front];
-  if (!incoming || !outgoing) return;
-  clearTimeout(cleanup);
-
-  incoming.src = imageUrl(file);
-  incoming.className = "layer top";
-  void incoming.offsetWidth; // start from opacity 0, so the next class change transitions
-  incoming.classList.add("show");
-  if (shown >= 0) outgoing.className = "layer under";
-  cleanup = setTimeout(() => (outgoing.className = "layer"), FADE_MS + 50);
-
-  front = 1 - front;
+function present(layer, index) {
+  const move = kenBurns(clamp(settings.motion, 0, 100));
+  const interval = clamp(settings.interval, 5, 120);
+  const style = layer.slide.style;
+  style.setProperty("--x0", `${move.x0}%`);
+  style.setProperty("--y0", `${move.y0}%`);
+  style.setProperty("--s0", String(move.s0));
+  style.setProperty("--x1", `${move.x1}%`);
+  style.setProperty("--y1", `${move.y1}%`);
+  style.setProperty("--s1", String(move.s1));
+  const alone = sources.length < 2;
+  // One picture drifts back and forth for good; several each move once and are replaced.
+  style.setProperty("--dur", `${alone ? Math.max(20, interval) : moveSeconds(interval, FADE_S)}s`);
+  layer.slide.classList.toggle("loop", alone);
+  layer.slide.classList.remove("kb");
+  void layer.slide.offsetWidth; // restart the animation
+  layer.slide.classList.add("kb", "in");
   shown = index;
-  swappedAt = Date.now();
-  caption.textContent = captionOf(file);
-  caption.hidden = !settings.showCaption;
-  clearHint();
+  caption.textContent = captionFor(index);
 }
 
-/** Show the next picture (skipping files that fail to load), then wait for the following one. */
-async function advance() {
-  if (files.length === 0) return;
-  const mine = ++token;
-  for (let tries = 0; tries < files.length; tries++) {
-    const index = rotation.next();
-    if (index === shown && files.length > 1) continue;
-    const ok = await preload(imageUrl(files[index] ?? ""));
-    if (mine !== token) return;
-    if (!ok) continue;
-    if (index !== shown) swap(index);
-    schedule();
-    // Warm the cache with the one after, so the next swap doesn't wait for the disk.
-    const upcoming = files[rotation.peek()];
-    if (upcoming !== undefined) void preload(imageUrl(upcoming));
-    return;
+/** @param {number} index */
+function captionFor(index) {
+  return settings.caption.trim() || (usingScenes ? (sources[index]?.title ?? "") : "");
+}
+
+/** Fades a layer out; its move runs on until the fade is over. @param {Layer} layer */
+function retire(layer) {
+  layer.slide.classList.remove("in");
+  clearTimeout(retireTimer);
+  retireTimer = setTimeout(() => layer.slide.classList.remove("kb"), FADE_S * 1000 + 100);
+}
+
+/** Shows the first picture of a (new) set, then lines up the next one. */
+async function begin() {
+  const mine = ++epoch;
+  clearTimeout(timer);
+  clearTimeout(preloadTimer);
+  for (const layer of [layerA, layerB]) {
+    layer.slide.classList.remove("in", "kb");
+    layer.loaded = -1;
   }
-  // Nothing loads: say so, and don't spin.
-  showHint("Couldn't load the images", "Check the file names in settings");
+  front = layerA;
+  shown = -1;
+  for (let tries = 0; tries < sources.length; tries++) {
+    const index = rotation.next();
+    const ok = await load(front, index);
+    if (mine !== epoch) return;
+    if (ok) {
+      present(front, index);
+      preloadNext();
+      schedule();
+      return;
+    }
+  }
+  // Nothing loads (the files are gone): fall back to the built-in scenes.
+  if (!usingScenes) useSources([], false);
+}
+
+/** The next picture: fades in over the current one; it was loaded into the back layer already. */
+async function advance() {
+  const mine = epoch;
+  if (sources.length < 2) return;
+  const incoming = back();
+  for (let tries = 0; tries < sources.length; tries++) {
+    const index = rotation.next();
+    if (index === shown) continue;
+    const ok = await load(incoming, index);
+    if (mine !== epoch) return;
+    if (ok) {
+      present(incoming, index);
+      retire(front);
+      front = incoming;
+      // The layer that just faded out is still on screen for a moment: refill it afterwards.
+      clearTimeout(preloadTimer);
+      preloadTimer = setTimeout(preloadNext, FADE_S * 1000 + 150);
+      schedule();
+      return;
+    }
+  }
+  schedule();
 }
 
 /** One timer for the next picture, only while visible and only when there is something to cycle. */
 function schedule() {
   clearTimeout(timer);
   timer = undefined;
-  if (!mypaper.visible || files.length < 2) return;
-  timer = setTimeout(() => void advance(), clamp(settings.intervalSeconds, 5, 600) * 1000);
+  if (!mypaper.visible || sources.length < 2 || shown < 0) return;
+  timer = setTimeout(() => void advance(), clamp(settings.interval, 5, 120) * 1000);
 }
 
-function stop() {
-  clearTimeout(timer);
-  timer = undefined;
+/**
+ * Switches to a set of pictures and starts over.
+ * @param {readonly string[]} urls the user's pictures; none means the built-in scenes
+ * @param {boolean} shuffle
+ */
+function useSources(urls, shuffle) {
+  usingScenes = urls.length === 0;
+  sources = usingScenes ? SCENES : urls.map((src) => ({ src, title: "" }));
+  rotation = createRotation(sources.length, shuffle);
+  void begin();
 }
 
-frame.addEventListener("click", () => {
-  // Let a crossfade finish before the next one starts.
-  if (files.length > 1 && Date.now() - swappedAt > FADE_MS) void advance();
-});
+// ---------------------------------------------------------------- settings and visibility
 
 trackSettings(defaults, (next) => {
-  const previousFiles = filesKey;
-  const previousShuffle = settings.shuffle;
-  settings = next;
-  frame.dataset.fit = next.fit === "contain" ? "contain" : "cover";
-  frame.dataset.rounded = String(next.rounded);
-  frame.dataset.motion = next.motion === "kenburns" ? "kenburns" : "still";
-  // One slow zoom spans a picture's whole stay (and the crossfade into the next).
-  frame.style.setProperty("--kb", `${clamp(next.intervalSeconds, 5, 600) + FADE_MS / 1000 + 1}s`);
-  caption.hidden = !next.showCaption || shown < 0;
+  settings = { ...next, variant: VARIANTS.includes(next.variant) ? next.variant : "bleed" };
+  root.dataset["variant"] = settings.variant;
+  root.dataset["fit"] = next.fit === "contain" ? "contain" : "cover";
 
-  files = readImages(next.images);
-  filesKey = files.join("\n");
-  frame.toggleAttribute("data-multi", files.length > 1);
-
-  if (filesKey !== previousFiles) {
-    token++;
-    shown = -1;
-    for (const layer of layers) {
-      layer.className = "layer";
-      layer.removeAttribute("src");
-    }
-    rotation = createRotation(files.length, next.shuffle);
-    if (files.length === 0) {
-      showHint("No images", "Add images to widgets/photo/images");
-      return stop();
-    }
-    clearHint();
-    // Hidden: onVisible below starts it on becoming visible.
-    if (mypaper.visible) void advance();
+  const urls = readImages(next);
+  const key = JSON.stringify([urls, next.shuffle]);
+  if (key !== sourcesKey) {
+    sourcesKey = key;
+    useSources(urls, next.shuffle);
   } else {
-    if (next.shuffle !== previousShuffle) rotation = createRotation(files.length, next.shuffle);
+    if (shown >= 0) caption.textContent = captionFor(shown);
     schedule(); // the interval may have changed
   }
 });
 
-onVisible(
-  () => {
-    if (files.length === 0) return;
-    if (shown < 0) void advance();
-    else schedule();
-  },
-  stop,
-);
+onVisible(schedule, () => {
+  clearTimeout(timer);
+  timer = undefined;
+});
