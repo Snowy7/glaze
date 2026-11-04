@@ -100,6 +100,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LR
     match msg {
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
         WM_ERASEBKGND => LRESULT(1),
+        // SAFETY: default handling of a message we were called with.
         _ => unsafe { DefWindowProcW(hwnd, msg, w, l) },
     }
 }
@@ -109,6 +110,7 @@ fn main() -> windows::core::Result<()> {
         .nth(1)
         .and_then(|s| s.parse().ok())
         .unwrap_or(6);
+    // SAFETY: a spike: plain Win32 and composition calls on our own window, on this thread.
     unsafe {
         windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(
             windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,

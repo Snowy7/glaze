@@ -25,11 +25,19 @@
   color: var(--t0);
   letter-spacing: -0.003em;
 }
-:root[data-bar="top"][data-design="macos"][data-scheme="light"] .surface {
-  --s-tint: rgb(246 246 248 / 0.46);
+/* Straight on the wallpaper, as Tahoe draws it: white type (dark on a light scheme), a breath of
+   shadow so it holds over bright patches. */
+:root[data-bar="top"][data-design="macos"] .top {
+  text-shadow: 0 0.5px 1.5px rgb(0 0 0 / 0.28);
 }
-:root[data-bar="top"][data-design="macos"][data-scheme="dark"] .surface {
-  --s-tint: rgb(26 26 28 / 0.42);
+:root[data-bar="top"][data-design="macos"] .top .glyph {
+  filter: drop-shadow(0 0.5px 1px rgb(0 0 0 / 0.25));
+}
+:root[data-bar="top"][data-design="macos"][data-scheme="light"] .top {
+  text-shadow: 0 0 6px rgb(255 255 255 / 0.5);
+}
+:root[data-bar="top"][data-design="macos"][data-scheme="light"] .top .glyph {
+  filter: none;
 }
 :root[data-bar="top"][data-design="macos"] .zone {
   gap: 0;
@@ -43,7 +51,7 @@
   --i-bgc-hover: transparent;
 }
 :root[data-bar="top"][data-design="macos"] button.mod.icon-only {
-  padding: 0 7px;
+  padding: 0 8px;
 }
 :root[data-bar="top"][data-design="macos"] .top .glyph {
   width: 16px;
@@ -84,8 +92,9 @@
 :root[data-bar="top"][data-design="macos"] .ws-dot.is-current {
   background: var(--t0);
 }
+/* Status items are template images: monochrome. */
 :root[data-bar="top"][data-design="macos"] .tray-item .tray-icon {
-  filter: saturate(0.2) contrast(1.1);
+  filter: grayscale(1) brightness(1.6) contrast(1.1);
 }
 
 /* --- Fluent: a Windows 11 bar -------------------------------------------------------------------------

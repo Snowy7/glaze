@@ -20,6 +20,7 @@ use windows::core::w;
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     match msg {
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        // SAFETY: default handling of a message we were called with.
         _ => unsafe { DefWindowProcW(hwnd, msg, w, l) },
     }
 }
@@ -27,6 +28,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LR
 /// Average RGB of the screen rect, and how long the copy took.
 fn grab(x: i32, y: i32, width: i32, height: i32) -> ([u8; 3], Duration) {
     let start = Instant::now();
+    // SAFETY: GDI objects made, selected and released here; `bits` is read before the DIB goes.
     unsafe {
         let screen = GetDC(None);
         let memory = CreateCompatibleDC(Some(screen));
@@ -61,7 +63,7 @@ fn grab(x: i32, y: i32, width: i32, height: i32) -> ([u8; 3], Duration) {
         let elapsed = start.elapsed();
         let pixels = std::slice::from_raw_parts(bits as *const u8, (width * height * 4) as usize);
         let mut sum = [0u64; 3];
-        for px in pixels.chunks_exact(4) {
+        for px in pixels.as_chunks::<4>().0 {
             sum[0] += u64::from(px[2]);
             sum[1] += u64::from(px[1]);
             sum[2] += u64::from(px[0]);
@@ -76,6 +78,7 @@ fn grab(x: i32, y: i32, width: i32, height: i32) -> ([u8; 3], Duration) {
 }
 
 fn main() -> windows::core::Result<()> {
+    // SAFETY: a spike: plain Win32 on our own window, on this thread.
     unsafe {
         windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(
             windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,

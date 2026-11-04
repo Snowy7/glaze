@@ -42,24 +42,23 @@
     "border": {
       "rest": {
         "width": 1,
-        "color": "#ffffff3d"
+        "color": "#ffffff2e"
       }
     },
     "shadow": {
       "rest": {
-        "y": 3,
-        "blur": 10,
-        "color": "#0000002e"
+        "y": 1,
+        "blur": 6,
+        "color": "#00000026"
       }
     },
     "glass": {
       "style": "liquid",
       "intensity": 1,
-      "refraction": 0.75,
-      "highlight": 0.9,
-      "tint": 0.1,
-      "blur": 0.5,
-      "depth": 0.25
+      "refraction": 0.6,
+      "highlight": 0.5,
+      "tint": 0.08,
+      "blur": 0.5
     },
     "items": {
       "radius": 13,

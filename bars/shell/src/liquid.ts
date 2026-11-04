@@ -1,6 +1,6 @@
 // Liquid Glass (docs/bars.md, "Liquid glass"): what's behind a pane, bent by a thick convex lens
-// along its rim and nearly clear in the middle, with chromatic fringing where it bends and a
-// specular rim that follows the pointer.
+// along its rim and nearly clear in the middle, with chromatic fringing where it bends and one thin
+// specular edge.
 //
 // The host copies what's behind (the `capture` request: the screen without our windows, so the
 // wallpaper's current frame over the desktop, or the windows behind a flyout). Each pane (an
@@ -211,15 +211,17 @@ export function createLiquid(): Liquid {
     };
     const radius = Math.min(Number.parseFloat(style.borderTopLeftRadius) || 0, width / 2, height / 2);
     const [bx, by] = layoutBox(el);
-    const edges = {
-      top: by <= 0.5,
-      left: bx <= 0.5,
-      right: bx + width >= window.innerWidth - 0.5,
-      bottom: by + height >= window.innerHeight - 0.5,
-    };
     const short = Math.min(width, height);
     const bezel = Math.max(6, Math.min(radius * 1.3 + 10, short / 2));
     const reach = material.refraction * material.intensity * bezel * 1.6;
+    // An edge closer to the window's (the screen's, for a bar) than the lens reaches would bend in
+    // pixels nobody has: it gets no rim, like an edge flush with the screen.
+    const edges = {
+      top: by < reach,
+      left: bx < reach,
+      right: bx + width > window.innerWidth - reach,
+      bottom: by + height > window.innerHeight - reach,
+    };
     const margin = Math.ceil(reach * 1.2 + material.blur * 3 + 4);
     const key = JSON.stringify([width, height, radius, edges, reach, material.blur]);
     if (key === pane.key) return;
@@ -322,21 +324,6 @@ export function createLiquid(): Liquid {
     }, 60);
   }
 
-  // The specular rim follows the pointer across a pane (only while it moves over one).
-  document.addEventListener(
-    "pointermove",
-    (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      // The dock's pill draws its glass on a layer beside its icons.
-      const el = target?.closest<HTMLElement>(CANDIDATES) ?? target?.closest(".pill")?.querySelector<HTMLElement>(":scope > .pill-surface") ?? null;
-      const pane = el ? panes.get(el) : undefined;
-      if (!pane) return;
-      const r = pane.el.getBoundingClientRect();
-      pane.shine.style.setProperty("--lx", `${(((event.clientX - r.left) / r.width) * 100).toFixed(1)}%`);
-      pane.shine.style.setProperty("--ly", `${(((event.clientY - r.top) / r.height) * 100).toFixed(1)}%`);
-    },
-    { passive: true },
-  );
   window.addEventListener("resize", invalidate);
 
   return {

@@ -19,7 +19,7 @@
     "clock"
   ],
   "clock": {
-    "format": "ddd d MMM  HH:mm"
+    "format": "HH:mm"
   },
   "look": {
     "scheme": "auto",
@@ -31,12 +31,8 @@
       "weight": 400
     },
     "background": {
-      "type": "wallpaper",
-      "brightness": 1.04
+      "type": "none"
     },
-    "tint": 0.42,
-    "saturation": 1.8,
-    "noise": 0.012,
     "border": {
       "rest": {
         "width": 0
@@ -55,12 +51,7 @@
       }
     },
     "glass": {
-      "style": "liquid",
-      "intensity": 0.85,
-      "refraction": 0.4,
-      "highlight": 0.55,
-      "tint": 0.14,
-      "blur": 1
+      "style": "liquid"
     }
   },
   "animation": {

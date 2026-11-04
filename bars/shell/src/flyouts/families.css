@@ -264,7 +264,7 @@
   --badge-ink: #fff;
   --thumb: #fff;
   --thumb-ring: transparent;
-  --fly-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.6), inset 0 0 0 0.5px rgb(255 255 255 / 0.16), inset 0 1px 0 rgb(255 255 255 / 0.1), 0 12px 38px rgb(0 0 0 / 0.38);
+  --fly-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.5), inset 0 0 0 0.5px rgb(255 255 255 / 0.14), 0 12px 36px rgb(0 0 0 / 0.32);
 }
 [data-family="macos"][data-scheme="light"] :is(.layer, .dock-label) {
   --fly-bg: rgb(240 240 242);
@@ -420,7 +420,7 @@
   border-radius: 18px;
   --notif-card: rgb(from var(--fly-bg) r g b / 0.42);
   --notif-card-hover: rgb(from var(--fly-bg) r g b / 0.55);
-  box-shadow: inset 0 0 0 0.5px var(--edge), inset 0 1px 0 rgb(255 255 255 / 0.12), 0 2px 8px rgb(0 0 0 / 0.14);
+  box-shadow: inset 0 0 0 0.5px var(--edge);
 }
 [data-family="macos"] .notif-card :is(.notif-icon, .notif-badge-slot > *) {
   width: 34px;

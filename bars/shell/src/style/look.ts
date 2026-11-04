@@ -128,13 +128,13 @@ export function glassStyleOf(look: Look, appearance: Appearance): GlassStyle {
 const LIQUID_FILLS = new Set(["tint", "wallpaper", "blur"]);
 
 /** Glass highlights, the liquid knobs, the bar's type, and its flyouts' tint. */
-function materialTokens(look: Look, liquid: boolean): Record<string, string> {
+function materialTokens(look: Look): Record<string, string> {
   const { glass } = look;
   const intensity = glass.intensity ?? 1;
   const vars: Record<string, string> = {
     "--g-highlight": String(glass.highlight ?? 0),
     "--g-sheen": String(glass.sheen ?? 0),
-    "--g-depth": String(glass.depth ?? (liquid ? 0.2 : 0)),
+    "--g-depth": String(glass.depth ?? 0),
     "--lq-intensity": String(intensity),
     "--lq-refraction": String(glass.refraction ?? 0.6),
     "--lq-highlight": String(round((glass.highlight ?? 0.75) * intensity)),
@@ -292,7 +292,7 @@ export function lookTokens(
     "--system-accent-dark-2": dark2,
     "--system-accent-dark-3": dark3,
     ...fillTokens(look, assets, appearance.tint, appearance.opacity, live),
-    ...materialTokens(look, liquid),
+    ...materialTokens(look),
     "--s-noise": noiseImage(look.noise ?? 0),
     "--s-radius": `${look.radius ?? appearance.radius}px`,
     ...borderTokens("s", look.border, {
@@ -324,7 +324,7 @@ export function lookTokens(
       "data-liquid": liquid && LIQUID_FILLS.has(fill) ? "on" : "off",
       "data-fly-liquid": liquid && look.flyouts.blur !== false ? "on" : "off",
     },
-    vars: liquid ? { ...vars, "--s-tint": tintOver(appearance.tint, look.glass.tint ?? 0.12) } : vars,
+    vars: liquid ? { ...vars, "--s-tint": tintOver(appearance.tint, look.glass.tint ?? 0.06) } : vars,
   };
 }
 

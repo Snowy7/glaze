@@ -51,7 +51,7 @@ describe("designs and presets", () => {
   });
 
   it("turns an auto-hiding dock's wallpaper glass into live blur", () => {
-    const hiding = mockConfig("macos", { dock: { autohide: true } });
+    const hiding = mockConfig("monochrome", { dock: { autohide: true } });
     expect(effectiveLook("dock", hiding, mode).background?.type).toBe("blur");
     expect(effectiveLook("dock", hiding, { ...mode, blur: false }).background?.type).toBe("wallpaper");
     expect(effectiveLook("top", hiding, mode).background?.type).toBe("wallpaper");

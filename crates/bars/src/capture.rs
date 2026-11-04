@@ -89,8 +89,8 @@ fn copy_screen(windows: &[HWND], rect: Rect) -> Result<Vec<u8>> {
     if width <= 0 || height <= 0 || i64::from(width) * i64::from(height) > MAX_PIXELS {
         bail!("can't capture a {width}×{height} area");
     }
-    // SAFETY: our own windows; restored below whatever the copy does.
     for &hwnd in windows {
+        // SAFETY: our own windows; restored below whatever the copy does.
         let _ = unsafe { SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) };
     }
     let copied = blit(x, y, width, height);
@@ -170,7 +170,7 @@ pub fn bmp(width: i32, height: i32, pixels: &[u8]) -> Vec<u8> {
     out.extend_from_slice(&24u16.to_le_bytes());
     out.extend_from_slice(&[0; 24]);
     for line in pixels.chunks_exact(w * 4).take(h) {
-        for px in line.chunks_exact(4) {
+        for px in line.as_chunks::<4>().0 {
             out.extend_from_slice(&px[..3]);
         }
         out.resize(out.len() + row - w * 3, 0);

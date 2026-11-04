@@ -264,6 +264,8 @@ export function notificationCenter(actions: CenterActions): { el: HTMLElement; u
   };
 
   list.append(empty("Loading…", ""));
+  clear.hidden = true;
+  monthSlot.append(month(new Date()));
   return {
     el,
     update(next) {

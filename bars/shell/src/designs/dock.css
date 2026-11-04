@@ -15,37 +15,31 @@
 /* --- macOS: a frosted plate, magnify, running dots, the trash past a divider ------------------------- */
 
 :root[data-bar="dock"][data-design="macos"][data-scheme="light"] .surface {
-  --s-tint: rgb(250 250 252 / 0.32);
-  --bi: linear-gradient(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.3));
+  --s-tint: rgb(250 250 252 / 0.2);
 }
 :root[data-bar="dock"][data-design="macos"][data-scheme="dark"] .surface {
-  --s-tint: rgb(34 34 36 / 0.36);
-  --bi: linear-gradient(rgb(255 255 255 / 0.26), rgb(255 255 255 / 0.12));
+  --s-tint: rgb(28 28 30 / 0.2);
 }
 :root[data-bar="dock"][data-design="macos"] .pill-surface {
-  border-width: 0;
-  --bw: 0.5px;
-  box-shadow:
-    var(--shade-now),
-    0 0 0 0.5px rgb(0 0 0 / 0.16);
+  box-shadow: var(--shade-now);
 }
 :root[data-bar="dock"][data-design="macos"] .pic img {
-  filter: drop-shadow(0 1.5px 2px rgb(0 0 0 / 0.26));
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.22));
 }
 :root[data-bar="dock"][data-design="macos"] .dot {
-  width: 4px;
-  height: 4px;
-  background: color-mix(in srgb, var(--t0) 78%, transparent);
+  width: 3.5px;
+  height: 3.5px;
+  background: color-mix(in srgb, var(--t0) 70%, transparent);
 }
 :root[data-bar="dock"][data-design="macos"] .slot[data-state="active"] .dot {
-  width: 4px;
-  background: var(--t0);
+  width: 3.5px;
+  background: color-mix(in srgb, var(--t0) 85%, transparent);
 }
 :root[data-bar="dock"][data-design="macos"][data-position="bottom"] .dot {
-  bottom: -5px;
+  bottom: -5.5px;
 }
 :root[data-bar="dock"][data-design="macos"] .divider {
-  background: color-mix(in srgb, var(--t0) 28%, transparent);
+  background: color-mix(in srgb, var(--t0) 22%, transparent);
 }
 :root[data-bar="dock"][data-design="macos"] .dock-label {
   padding: 5px 11px;
