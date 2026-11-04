@@ -350,7 +350,7 @@ html[data-surface="solid"] .tip {
 .bar:focus-within .q:not(:placeholder-shown) ~ .hint {
   display: inline-flex;
 }
-html[data-style]:not([data-style="minimal"]) .bar:focus-within {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .bar:focus-within {
   box-shadow:
     inset 0 0 0 1px var(--hi),
     0 0 14px -2px var(--glow),
@@ -391,4 +391,14 @@ html[data-style]:not([data-style="minimal"]) .bar:focus-within {
   .card[data-search] .bar {
     --h: clamp(32px, 46cqh, 52px);
   }
+}
+
+/* ---------------------------------------------------------------- the calm looks (minimal, liquid)
+   On a card the dock needs no tray of its own (a box in a box): the icons sit on the card, flat.
+   On a bare wallpaper the tray stays, it is the dock's body. */
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]):is([data-surface="glass"], [data-surface="solid"]) .dock.tile {
+  background: none;
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .dock .ico img {
+  filter: none;
 }

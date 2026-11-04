@@ -89,7 +89,7 @@ html .badge.tile {
 .price {
   /* Grows with the row's height, but never so wide that the label has no room. */
   font-size: min(clamp(14px, 36cqh, 23px), 15cqw);
-  font-weight: 300;
+  font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.1;
   color: var(--t0);

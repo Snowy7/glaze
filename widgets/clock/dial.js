@@ -1,6 +1,7 @@
 // @ts-check
 // An analog dial: a disc (a kit `.tile`, so every style gives it its own body) under an SVG in a
-// 100x100 box with ticks, optional quarter numerals and date window, and the hands. The Analog
+// 100x100 box with ticks, optional numerals (all twelve, like a desk clock; style.css keeps only
+// the quarters on mid-sized dials) and date window, and the hands. The Analog
 // face shows one big dial; the World face one small dial per city. Markup comes from constants.
 
 const NS = "http://www.w3.org/2000/svg";
@@ -55,9 +56,13 @@ export function createDial(opts = {}) {
     );
   }
   const numerals = svg("g", { class: "numerals" });
-  for (const hour of [12, 3, 6, 9]) {
+  for (let hour = 1; hour <= 12; hour++) {
     const angle = (hour % 12) * 30 * (Math.PI / 180);
-    const text = svg("text", { x: (50 + 33 * Math.sin(angle)).toFixed(2), y: (50 - 33 * Math.cos(angle)).toFixed(2) });
+    const text = svg("text", {
+      class: hour % 3 === 0 ? "quarter" : "hour-n",
+      x: (50 + 33 * Math.sin(angle)).toFixed(2),
+      y: (50 - 33 * Math.cos(angle)).toFixed(2),
+    });
     text.textContent = String(hour);
     numerals.append(text);
   }

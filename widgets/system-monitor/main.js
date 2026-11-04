@@ -58,8 +58,8 @@ const valueMarkup = '<b class="v num"><span class="n">-</span><small class="u"><
 function paintCommon(node, m) {
   setText(part(node, ".n"), m.value);
   setText(part(node, ".u"), m.unit);
-  const label = node.querySelector(".lbl-text");
-  if (label) setText(label, m.label);
+  // A ring has two: inside it (short cells) and under it.
+  for (const label of node.querySelectorAll(".lbl-text")) setText(label, m.label);
   const detail = node.querySelector(".det");
   if (detail) setText(detail, m.detail);
   node.dataset.state = m.state;
@@ -90,12 +90,10 @@ function ringView(m) {
      <div class="cap"><span class="lbl lbl-text ellipsis"></span><span class="det ellipsis"></span></div>`,
   );
   const arc = part(node, ".arc");
-  const inner = part(node, ".lbl-in");
   return {
     el: node,
     paint(meter) {
       paintCommon(node, meter);
-      setText(inner, meter.label);
       arc.style.strokeDashoffset = String(ringOffset(RING_C, meter.fraction * 100));
     },
   };

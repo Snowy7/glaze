@@ -279,21 +279,21 @@ so users and themes can restyle every widget without editing widget code.
 
 | Field | Values | Default |
 |---|---|---|
-| `surface` | `none` (no background: text sits on the wallpaper), `glass` (tinted and blurred), `solid` | **`none`** |
-| `tint` | `"#rrggbb"`: the surface color | `#101010` (`#f2f2f2` with dark text, see below) |
-| `opacity` | 0–1: opacity of a `glass` surface (a `solid` surface is always opaque) | 0.55 |
+| `surface` | `none` (no background: text sits on the wallpaper), `glass` (a translucent tint, blurred where the page can see what is behind it), `solid` | **`glass`** |
+| `tint` | `"#rrggbb"`: the surface color | `#343a42`, a calm slate (`#f2f2f2` with dark text, see below) |
+| `opacity` | 0–1: opacity of a `glass` surface (a `solid` surface is always opaque) | 0.46 |
 | `blur` | 0–64 px: background blur (glass only) | 24 |
-| `radius` | 0–48 px: corner radius | 18 |
+| `radius` | 0–48 px: corner radius | 22 |
 | `border` | bool: hairline border | true |
 | `text` | `light` (for dark wallpapers) or `dark` | `light` |
 | `accent` | `"#rrggbb"` or `auto` (the wallpaper palette's accent) | `#ffffff` (`#0a0a0c` with dark text, see below) |
 | `font` | a CSS font-family list | Segoe UI Variable |
 | `scale` | 0.5–2: content scale | 1 |
 | `shadow` | bool: soft text shadow, for legibility with `surface: none` | true |
-| `style` | `minimal`, `depth`, `neon`, `paper` or `aero`: the design language, see [Styles](#styles) | `minimal` |
+| `style` | `minimal`, `depth`, `neon`, `paper`, `aero` or `liquid`: the design language, see [Styles](#styles) | `minimal` |
 
 **Tone-aware defaults.** A near-black tint is dark on dark text, and a white accent vanishes on a
-light surface, so with `text: dark` the built-in defaults flip: a `tint` that is still `#101010`
+light surface, so with `text: dark` the built-in defaults flip: a `tint` that is still `#343a42`
 becomes `#f2f2f2`, and an `accent` that is still `#ffffff` becomes the ink, `#0a0a0c`. **The host
 does this, once, in the merge**, and sends the final values (any color a theme or the user chose
 stays; picking exactly the default color counts as the default). So the SDK has nothing to flip: it
@@ -322,7 +322,8 @@ the same data travels in `state`, see [Host ⇄ shell](#host--shell); the shell 
 | `data-surface="none\|glass\|solid"` | `surface` |
 | `data-text="light\|dark"` | `text` |
 | `data-shadow="on\|off"` | `shadow` |
-| `data-style="minimal\|depth\|neon\|paper\|aero"` | `style` |
+| `data-style="minimal\|depth\|neon\|paper\|aero\|liquid"` | `style` |
+| `data-plate="on\|off"` | whether the wallpaper draws this widget's liquid glass (the state's `plate`) |
 | `--surface` | `tint` at `opacity` (always opaque for `solid`) |
 | `--blur`, `--radius` | `blur`, `radius` (px) |
 | `--line` | the border color, or **transparent if `border` is false** |
@@ -348,18 +349,22 @@ Rules for widget authors that follow from this:
 ### Styles
 
 `style` is the widget's design language. The host only carries the name; the kit
-(`packages/widget-sdk/widget-kit/base.css`) turns it into light and material. `minimal` is the flat
-look every widget had before (and the default). The others add depth to the *surface* and to the
+(`packages/widget-sdk/widget-kit/base.css`) turns it into light and material. `minimal` is the
+default: a calm desktop widget after macOS's (one flat translucent fill and a hairline, no
+gradients, gloss or shadows, generous padding, text in a few neutral steps, one accent used
+sparingly). `liquid` is as calm, with Apple-style Liquid Glass drawn by the wallpaper (see
+[Liquid glass](#liquid-glass)). The others add light to the *surface* and to the
 kit's building blocks (`.card`, `.panel`, `.chip`, `.track`, `button`, `.field`, `.glow`), so a
 widget that sticks to the kit looks right in all five without knowing about them:
 
 | `data-style` | Is | Surface it likes |
 |---|---|---|
-| `minimal` | Flat, quiet, monochrome. | any |
-| `depth` | Raised cards under a soft key light: layered soft shadows, an inner top highlight, a bevel, a faint edge gradient. 3D without perspective. | glass or solid |
+| `minimal` | The default: flat, quiet, monochrome. | any (glass by default) |
+| `depth` | The calm tile raised a little: one soft shadow, a faint top edge, a one-color highlight; no gradients on fills or text. | glass or solid |
 | `neon` | A dark card with a glowing gradient outline, glow on accent elements and bright tracks. | solid or glass |
 | `paper` | Soft matte: warm low-contrast fills, a grain, shallow inset shadows, no gloss. | solid |
 | `aero` | Glossy glass: a specular sheen across the top, a bright rim, saturated blur. | glass |
+| `liquid` | Calm like minimal; with a glass surface the card is a clear lens the wallpaper draws (refraction at the rim, one thin specular edge). | glass |
 
 Every style also works with `surface: none`: the building blocks then keep their own light
 (a glow, a rim, a sheen) without painting a card.
@@ -378,11 +383,42 @@ second, only while the widget is visible, and build it from `--hi`/`--hi-2` on t
 widget may retint a bar locally by setting those two). `data-style` is also on `<html>` for widget CSS:
 `html[data-style="neon"] .time { … }`.
 
+### Liquid glass
+
+With `style: liquid` and `surface: glass`, the wallpaper engine draws the widget's glass into its
+own frame, under the widget's window, so it is exactly as live as the wallpaper: a clear lens whose
+rim pulls in what is just outside the edge (with a slight chromatic split), one thin specular edge
+lit from the top left, nearly no tint and no blur. The page draws only its content.
+
+- **Where the card is.** The drop-in (`plate.ts`) reports the `.card`'s box and corner radius with
+  the wire request `plate` (`{ rect: [x, y, w, h], radius }` in page px, or `null`) whenever they
+  change, at most once a frame; `mypaper.plate(shape)` puts the glass elsewhere. The shell adds the
+  slot's position on the monitor (also while a slot is dragged in edit mode), clips it to the slot
+  and sends the host `plates` once a frame when they change (see [Host ⇄ shell](#host--shell)).
+- **The host** keeps only cards of instances shown on that monitor's desktop layer whose resolved
+  look is still `liquid` with `glass`, turns them into physical virtual-screen plates with the
+  glass knobs, and writes `%LOCALAPPDATA%\mypaper\glass\widgets.json` (`mypaper_theme::glass`, a
+  format any writer can use) at most every 33 ms, always ending on the latest, then posts
+  `mypaper.glass` to the wallpaper's control window. While no widget is liquid nothing is written
+  and the engine allocates and draws nothing; the file goes when the host stops.
+- **The knobs** are the theme's `widgets.glass`, with the bars' `look.glass` names and ranges:
+  `intensity` (0–1, the whole effect), `refraction` (0–1, how far the rim reaches out),
+  `highlight` (0–1, the specular edge), `tint` (0–1, how much of the appearance's `tint` color
+  washes over the lens) and `blur` (DIPs, 0–32). Built in: 1, 0.6, 0.55, 0.06 and 0.
+- **The engine** (`crates/wallpaper/src/glass_pass.rs`, see [engine-notes.md](engine-notes.md))
+  springs a plate to new rects (the liquid morph when a widget appears, moves or resizes), redraws a
+  still wallpaper while a plate moves and once when it settles, and copies only the frame around
+  the rims.
+- **Where it can't draw**, the state's `plate` is false and the kit draws a light stand-in (a
+  whisper of the tint and the specular edge): the overlay layer (it floats over windows), the dev
+  harness and Studio's previews. A `web`, `app` or `video` wallpaper that draws natively shows
+  no plate either; liquid widgets are then their content over the wallpaper, with the text shadow.
+
 **The CSP** allows `style-src 'self' 'unsafe-inline'`, so the kit can inject theme CSS.
 
 **Editing.** In edit mode, the toolbar's **Appearance** button edits the user layer (all widgets).
 Each widget's ⋯ menu has **Appearance** for the instance layer. Controls: style (segmented:
-minimal / depth / neon / paper / aero), surface (segmented: none / glass / solid), tint (color), opacity, blur and radius (sliders), border and text shadow
+minimal / depth / neon / paper / aero / liquid), surface (segmented: none / glass / solid), tint (color), opacity, blur and radius (sliders), border and text shadow
 (toggles), text (light / dark), accent (Auto, or a color), font (text field with presets) and scale
 (slider). A field the edited layer sets shows **Use default**, which clears it so the layer below
 shows through (an unset field shows that inherited value). Sliders and color pickers preview live on
@@ -515,7 +551,7 @@ the manifest on disk, never from the message.
 
 **Handshake.** On load the widget sends `hello` (`params: { sdk: 1 }`). The shell answers with
 everything a widget needs synchronously afterwards:
-`{ instance, widget /* the manifest */, settings, size, visible, editing, appearance, themeCss }`
+`{ instance, widget /* the manifest */, settings, size, visible, editing, appearance, themeCss, plate }`
 (see [Appearance](#appearance)). `mypaper.ready`
 resolves with that, and every other call waits for it. (A widget that gets no answer within
 10 s fails `ready`: it is not inside mypaper.)
@@ -538,6 +574,7 @@ from the manifest *before* forwarding to the host (the host checks again, from d
 | `settings.set` | `{ values }` | `null` (`InvalidParams` when a key isn't declared or a value doesn't fit) | |
 | `pickFile` | `{ extensions?, title? }` | `{ url, name }`, or `null` when cancelled | |
 | `appIcon` | `{ target, size? }` | a PNG data URL, or `null` | `launch` |
+| `plate` | `{ rect, radius }` or `null` | `null`; answered by the shell, never forwarded (see [Liquid glass](#liquid-glass)) | |
 | `subscribe` | see below | `null` | per topic |
 | `unsubscribe` | `{ sub }` | `null` | |
 
@@ -556,7 +593,7 @@ sample as soon as it is visible again.
 
 **Pushed events** (shell → widget, always on, no subscription): `visibility` (`boolean`),
 `editmode` (`boolean`), `settings` (the full settings object), `size`
-(`{ cells, px, dpi }`) and `appearance` (`{ appearance, themeCss }`).
+(`{ cells, px, dpi }`) and `appearance` (`{ appearance, themeCss, plate }`).
 
 **Plugin errors.** A JSON-RPC `error` from a plugin becomes a wire error as follows: if
 `error.data.code` is one of the five names above it is used; otherwise `-32601` is `NotFound`,
@@ -654,10 +691,12 @@ A manifest's `preset` says what kind of surface the widget is:
 
 Overlay details:
 
-- **Window**: a top-level `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` window with a
-  WebView2 (the same shell page, told which instances to show), whose region is the union of the
-  overlay instances' rectangles, so clicks everywhere else go to the windows below. It never takes
-  focus from the window you are using.
+- **Window**: a top-level `WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
+  WS_EX_NOREDIRECTIONBITMAP` window with a WebView2 (the same shell page, told which instances to
+  show), whose region is the union of the overlay instances' rectangles, so clicks everywhere else
+  go to the windows below. Having no redirection bitmap, it has no surface of its own: DWM composes
+  the page's transparent pixels with whatever is behind (without it, a widget sat on an opaque box
+  the size of its cell). It never takes focus from the window you are using.
 - **Toggle**: hotkey **Ctrl+Alt+Shift+O**, the tray item **Show overlay widgets** (in
   mypaper-core's tray menu, which posts the message below with `wParam` 2; not in this crate), or
   `mypaper-widgets --overlay on|off|toggle` (the registered window message `mypaper.widgets.overlay`,
@@ -723,7 +762,10 @@ type ShellToHost =
       extensions?: string[] }                                // dialog, copies the file, sets the setting
   | { type: "appearance"; instance?: string;                // the user's layer, or an instance's own
       values: { [K in keyof Appearance]?: Appearance[K] | null } }  // null clears a field ("Use default")
-  | { type: "edit"; on: boolean };                         // Done / Esc
+  | { type: "edit"; on: boolean }                          // Done / Esc
+  | { type: "plates"; plates: { instance: string;          // the liquid widgets' cards as shown now,
+      rect: [number, number, number, number];              // DIPs from the monitor's top-left
+      radius: number }[] };                                // (on change, once a frame at most)
 ```
 
 - The host sends `state` after `ready` and whenever anything in it changes. The shell reconciles by

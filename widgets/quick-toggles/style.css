@@ -26,7 +26,7 @@
     filter 0.14s,
     background-color 0.14s;
 }
-html[data-style]:not([data-style="minimal"]) .qt {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .qt {
   --ink-on: var(--on-spark);
 }
 /* The kit paints .tile in every style but a flat one without a surface: give that case a body. */
@@ -332,4 +332,43 @@ html[data-style="aero"] .v-list .qt[data-on] .ic {
   .v-list .lb {
     font-size: 11px;
   }
+}
+
+/* ---------------------------------------------------------------- the calm looks (minimal, liquid)
+   Like a Control Center: every tile keeps the same quiet body, and what is on shows in its icon,
+   a round badge in the accent (off: a faint one). No tile turns into a bright slab. */
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .qt {
+  --lit-bg: var(--accent);
+  --ink-on: var(--on-accent);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"])[data-surface] .v-grid .qt[data-on],
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"])[data-surface] .v-grid .qt[data-on].tile,
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"])[data-surface] .v-grid .qt[data-on]:hover {
+  --bg: var(--fill-1);
+  background: var(--fill-1);
+  color: var(--t0);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"])[data-surface="none"] .v-grid .qt[data-on].tile {
+  --bg: var(--chip);
+  background: var(--chip);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .v-grid .ic {
+  --s: clamp(20px, 40cqmin, 44px);
+  width: var(--s);
+  height: var(--s);
+  /* Not a percentage: those resolve against the tile's width. */
+  padding: calc(var(--s) * 0.24);
+  border-radius: 50%;
+  background: var(--fill-2);
+  color: var(--t1);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .v-grid .qt[data-on] .ic {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .v-grid .qt[data-on] .lb {
+  color: var(--t0);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .v-grid .qt[data-on] .st {
+  color: var(--t2);
 }

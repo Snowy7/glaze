@@ -711,7 +711,7 @@ mod tests {
         instance.size = [9, 9];
         let placed = place(&instance, &manifest(), &grid, &look::defaults());
         assert_eq!((placed.cell, placed.size), ([14, 7], [4, 2]));
-        assert_eq!(placed.appearance["surface"], "none");
+        assert_eq!(placed.appearance["surface"], "glass");
         assert!(placed.own.is_empty());
         assert_eq!(placed.settings["format24"], Value::Bool(true));
     }

@@ -68,7 +68,7 @@
 }
 .unit .v {
   font-size: 1em;
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1;
   letter-spacing: -0.035em;
   white-space: nowrap;
@@ -94,7 +94,7 @@
 .msg {
   margin: 0;
   font-size: var(--fs);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1.05;
   letter-spacing: -0.03em;
   white-space: nowrap;
@@ -184,7 +184,7 @@ html[data-surface="none"] .trk {
 }
 .center .v {
   font-size: min(calc(var(--ring) * 0.34), calc(var(--ring) * 0.7 / var(--kc)));
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1;
   letter-spacing: -0.035em;
   white-space: nowrap;

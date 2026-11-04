@@ -137,7 +137,7 @@ html[data-surface="none"] .trk {
   stroke-linecap: round;
   transition: stroke-dashoffset 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .arc {
+html:is([data-style="depth"], [data-style="neon"], [data-style="aero"]) .arc {
   filter: drop-shadow(0 0 2.5px var(--glow));
 }
 .s1 {
@@ -415,4 +415,17 @@ html:not([data-style])[data-surface="none"] .spark-m {
   .g-head .det {
     display: none;
   }
+}
+
+/* ---------------------------------------------------------------- the calm looks (minimal, liquid)
+   Thin rings in one quiet tone (a warning or charging keeps its color), medium numbers. */
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) :is(.trk, .arc) {
+  stroke-width: 6;
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .arc {
+  stroke: color-mix(in srgb, var(--m1) 82%, transparent);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .center .v {
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }

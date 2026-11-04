@@ -3,7 +3,7 @@
 // shows everything a reviewer needs.
 //   widget=<id>  sizes=min,default,max | 2x1,3x2,...  surfaces=none,glass,solid
 //   styles=minimal,depth,...|all  rows are style x surface (default: the style param, or minimal)
-//   bgs=photo-dark,photo-light  text=auto|light|dark  scale=<n>  cell=<px> gap=<px>
+//   bgs=photo-dark,photo-light  bgimg=<url> (an image instead, on every bg)  text=auto|light|dark  scale=<n>  cell=<px> gap=<px>
 //   settings=<json>  storage=<json>  media=playing|paused|none  battery=none|discharging|charging
 //   net=wifi|ethernet|none  appearance=<json>  themecss=<css>
 //   speed=<n>  makes system.subscribe tick n times faster, so sparklines fill up within a screenshot
@@ -88,6 +88,8 @@ async function main() {
     const stage = document.createElement("div");
     stage.className = `stage bg-${bg}`;
     stage.dataset["bg"] = bg;
+    const image = q.get("bgimg");
+    if (image) stage.style.background = `url(${JSON.stringify(image)}) center / cover`;
     const head = document.createElement("div");
     head.className = "head";
     head.textContent = `${m.id} / ${bg}`;

@@ -181,7 +181,9 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
   const ready: Promise<void> = rawCall("hello", { sdk: WIRE_VERSION }, helloTimeoutMs).then((hello) => {
     state = hello;
     // An `appearance` event that raced ahead of the answer is newer than the handshake's copy.
-    if (hello.appearance && !lookPushed) look = { appearance: hello.appearance, themeCss: hello.themeCss ?? null };
+    if (hello.appearance && !lookPushed) {
+      look = { appearance: hello.appearance, themeCss: hello.themeCss ?? null, plate: hello.plate ?? false };
+    }
   });
 
   async function call<M extends keyof WireMethods>(
@@ -314,5 +316,9 @@ export function createMypaper(transport: Transport, options: RuntimeOptions = {}
     user: { info: () => call("user.info", undefined) },
     pickFile: (opts = {}) => call("pickFile", opts),
     appIcon: (target, size) => call("appIcon", size === undefined ? { target } : { target, size }),
+    plate(shape) {
+      // Fire and forget: an older shell answers NotFound, which changes nothing.
+      void call("plate", shape).catch(() => {});
+    },
   };
 }

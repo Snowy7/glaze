@@ -118,15 +118,17 @@ pub struct Skin {
     /// and `data-*` attributes; it applies on top of `appearance`.
     #[serde(default)]
     pub css: Option<PathBuf>,
-    /// How liquid glass looks for this family (with `style: "liquid"`). `tint` and `blur`
-    /// come from `appearance`.
+    /// How liquid glass looks for this family (with `style: "liquid"`); the color of its `tint`
+    /// is `appearance.tint`.
     #[serde(default)]
     pub glass: Option<Liquid>,
 }
 
-/// Liquid glass parameters, each 0..=1 and optional (layered like [`Appearance`]): `intensity`
-/// scales the whole effect, `refraction` how strongly the rim bends what is behind it,
-/// `highlight` the specular rim. The same names as the bars' `look.glass`.
+/// Liquid glass knobs, each optional (layered like [`Appearance`]), with the bars' `look.glass`
+/// names and ranges: `intensity` scales the whole effect, `refraction` how strongly the rim bends
+/// what is behind it, `highlight` the specular rim, `tint` how much of the appearance's `tint`
+/// color washes over the lens (all 0..=1), and `blur` a light blur of what is behind (DIPs,
+/// 0..=32). Liquid glass wants little tint and no blur.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Liquid {
@@ -136,6 +138,10 @@ pub struct Liquid {
     pub refraction: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highlight: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blur: Option<f32>,
 }
 
 impl Liquid {
@@ -145,19 +151,23 @@ impl Liquid {
             intensity: self.intensity.or(base.intensity),
             refraction: self.refraction.or(base.refraction),
             highlight: self.highlight.or(base.highlight),
+            tint: self.tint.or(base.tint),
+            blur: self.blur.or(base.blur),
         }
     }
 
     pub fn validate(&self) -> Result<()> {
-        for (name, value) in [
-            ("intensity", self.intensity),
-            ("refraction", self.refraction),
-            ("highlight", self.highlight),
+        for (name, value, max) in [
+            ("intensity", self.intensity, 1.0),
+            ("refraction", self.refraction, 1.0),
+            ("highlight", self.highlight, 1.0),
+            ("tint", self.tint, 1.0),
+            ("blur", self.blur, 32.0),
         ] {
             if let Some(v) = value
-                && !(0.0..=1.0).contains(&v)
+                && !(0.0..=max).contains(&v)
             {
-                bail!("glass.{name} must be between 0 and 1, got {v}");
+                bail!("glass.{name} must be between 0 and {max}, got {v}");
             }
         }
         Ok(())
@@ -768,6 +778,27 @@ mod tests {
             Some(WidgetStyle::Aero),
             "the upper layer wins"
         );
+    }
+
+    #[test]
+    fn liquid_knobs_layer_and_are_range_checked() {
+        let skin = r##"{ "name": "A", "wallpaper": { "kind": "image", "source": "x.jpg" },
+            "widgets": { "glass": { "refraction": 0.4, "tint": 0.1, "blur": 2 } } }"##;
+        let glass = parse(skin).unwrap().theme.widgets.unwrap().glass.unwrap();
+        let base = Liquid {
+            intensity: Some(1.0),
+            refraction: Some(0.6),
+            ..Default::default()
+        };
+        let merged = glass.over(&base);
+        assert_eq!(merged.intensity, Some(1.0), "unset keeps the layer below");
+        assert_eq!(
+            (merged.refraction, merged.tint, merged.blur),
+            (Some(0.4), Some(0.1), Some(2.0))
+        );
+        assert!(parse(&skin.replace("\"blur\": 2", "\"blur\": 40")).is_err());
+        assert!(parse(&skin.replace("\"tint\": 0.1", "\"tint\": 1.5")).is_err());
+        assert!(parse(&skin.replace("\"tint\": 0.1", "\"sheen\": 1")).is_err());
     }
 
     #[test]
