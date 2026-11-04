@@ -1630,6 +1630,12 @@ impl App {
         let bar = &self.bars[index];
         if on {
             self.keyboard = Some(bar.id);
+            // A click already gave the bar the foreground and its page the focus; moving the focus
+            // again would blur the page (and close the flyout asking).
+            // SAFETY: a read-only query.
+            if unsafe { GetForegroundWindow() } == bar.hwnd() {
+                return;
+            }
             // SAFETY: our own window; Windows refuses it without the foreground rights a click
             // or the key press gave us.
             if !unsafe { SetForegroundWindow(bar.hwnd()) }.as_bool() {

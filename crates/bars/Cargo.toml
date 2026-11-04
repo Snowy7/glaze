@@ -31,6 +31,7 @@ workspace = true
 features = [
   "ApplicationModel",
   "ApplicationModel_DataTransfer",
+  "Data_Xml_Dom",
   "Devices_Radios",
   "Foundation",
   "Foundation_Collections",

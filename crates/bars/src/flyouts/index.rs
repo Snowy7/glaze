@@ -399,6 +399,29 @@ fn start_menu_links() -> Vec<Link> {
 mod tests {
     use super::*;
 
+    /// The real index of this machine: `cargo nextest run -p mypaper-bars --run-ignored only
+    /// real_index`. Reads the shell only (icons go to a temporary folder).
+    #[test]
+    #[ignore = "reads this machine's Start menu"]
+    fn real_index() {
+        let dir = mypaper_bars::files::local("icons-test").unwrap();
+        let builder = Builder::new(dir.clone());
+        let started = std::time::Instant::now();
+        let apps = builder.build();
+        let packaged = apps.iter().filter(|a| a.packaged).count();
+        let with_icons = apps.iter().filter(|a| a.icon.is_some()).count();
+        println!(
+            "{} apps ({packaged} packaged, {with_icons} with icons) in {:?}",
+            apps.len(),
+            started.elapsed()
+        );
+        for app in apps.iter().take(400) {
+            println!("  {} | {} | {:?}", app.name, app.id, app.keywords);
+        }
+        assert!(apps.len() > 10);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     fn entry(id: &str, name: &str) -> (String, String) {
         (id.into(), name.into())
     }

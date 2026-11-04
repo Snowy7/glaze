@@ -111,3 +111,52 @@ pub fn validate(launcher: &LauncherConfig, calendar: &CalendarConfig) -> Result<
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::BarsConfig;
+
+    #[test]
+    fn the_flyout_sections_parse_with_defaults() {
+        let config = BarsConfig::parse("{}").unwrap();
+        assert!(config.launcher.win_key);
+        assert_eq!(config.launcher.layout, LauncherLayout::Win11);
+        assert_eq!(config.launcher.pinned, None);
+        assert!(!config.tray.host);
+        assert!(!config.audio.switch_output);
+
+        let config = BarsConfig::parse(
+            r#"{ "launcher": { "winKey": false, "layout": "dashboard", "pinned": [ { "path": "a.exe" } ] },
+                 "tray": { "host": true },
+                 "calendar": { "zones": [ { "zone": "Asia/Tokyo", "label": "Studio" } ], "firstDay": "sunday" },
+                 "audio": { "switchOutput": true } }"#,
+        )
+        .unwrap();
+        assert!(!config.launcher.win_key);
+        assert_eq!(config.launcher.layout, LauncherLayout::Dashboard);
+        assert!(config.tray.host);
+        assert_eq!(config.calendar.first_day, Some(Weekday::Sunday));
+        assert_eq!(config.calendar.zones[0].label.as_deref(), Some("Studio"));
+        assert!(config.audio.switch_output);
+        // The page gets camelCase keys.
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["launcher"]["winKey"], false);
+        assert_eq!(json["audio"]["switchOutput"], true);
+    }
+
+    #[test]
+    fn bad_flyout_sections_are_refused() {
+        for bad in [
+            r#"{ "launcher": { "layout": "start10" } }"#,
+            r#"{ "launcher": { "pinned": [ { "path": "" } ] } }"#,
+            r#"{ "launcher": { "winkey": true } }"#,
+            r#"{ "tray": { "host": "yes" } }"#,
+            r#"{ "calendar": { "zones": [ { "zone": "" } ] } }"#,
+            r#"{ "calendar": { "zones": [ {"zone":"a"}, {"zone":"b"}, {"zone":"c"}, {"zone":"d"}, {"zone":"e"} ] } }"#,
+            r#"{ "audio": { "policyConfig": true } }"#,
+        ] {
+            assert!(BarsConfig::parse(bad).is_err(), "accepted {bad}");
+        }
+    }
+}

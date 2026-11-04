@@ -85,6 +85,10 @@ mypaper-core ── supervises (optional, like the widget host) ──► mypape
       { "path": "shell:AppsFolder\\Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", "name": "Terminal" }
     ]
   },
+  "launcher": { "winKey": true, "layout": "win11", "files": true },
+  "tray": { "host": false },
+  "calendar": { "zones": [{ "zone": "America/New_York" }, { "zone": "Asia/Tokyo", "label": "Tokyo office" }] },
+  "audio": { "switchOutput": false },
   "appearance": { }
 }
 ```
@@ -122,6 +126,19 @@ mypaper-core ── supervises (optional, like the widget host) ──► mypape
   Store apps pinned there aren't shortcuts and don't come along), or File Explorer when there are
   none. An empty list is a choice and stays empty.
 - **Modules** are listed at most once across `left`, `center` and `right`.
+- **`launcher`** (see "Flyouts" → "Launcher"):
+  - `winKey` (default `true`): a lone Windows key opens the launcher, only while `taskbar.mode` is
+    `hide`.
+  - `layout`: `win11` (default), `grid`, `compact` or `dashboard`.
+  - `pinned`: the launcher's pins, in the shape of `dock.pinned`; missing means the dock's pins.
+  - `files` (default `true`): search recent files too.
+- **`tray.host`** (default `false`): run the tray host even with the native taskbar kept. With
+  `taskbar.mode: hide` it always runs.
+- **`calendar`**: `zones` (at most 4) are extra clocks: `{ "zone": "<IANA name>", "label"? }`.
+  `firstDay` is `monday`, `sunday` or `saturday`; missing means the locale's.
+- **`audio.switchOutput`** (default `false`): lets the mixer switch the default output device. This
+  uses `IPolicyConfig`, an **undocumented** COM interface (the one Sound settings uses). Without it,
+  the mixer lists the devices and links to Sound settings.
 - **Unknown fields are rejected.** A file that fails to parse is logged and ignored, and the last
   good config keeps running.
 - **Writers change only what they set.** The tray, Studio and the dock's pin edits read the file as
@@ -156,23 +173,27 @@ These are the top-bar items, in `left` / `center` / `right` order. Each is a sma
 
 | Module | Shows | Click |
 |---|---|---|
-| `start` | a mypaper mark | opens the Start menu (`Shell_TrayWnd` `WM_SYSCOMMAND` `SC_TASKLIST`; the Windows key without a taskbar) |
+| `start` | a mypaper mark | opens the launcher (see "Flyouts") |
 | `workspaces` | virtual desktops: count and current (`VirtualDesktopIDs` / `CurrentVirtualDesktop` under `HKCU\…\Explorer\VirtualDesktops`, watched with `RegNotifyChangeKeyValue`; absent values mean one desktop) | switch desktop: Win+Ctrl+arrow, sent only on the user's click (once per step) |
 | `app` | the foreground app's name and icon (the last app window in front: clicking a bar doesn't change it) | — |
-| `clock` | time and date (format in `bars.json` → `top.clock`) | opens the calendar / notification center (`ms-actioncenter:`) |
+| `clock` | time and date (format in `bars.json` → `top.clock`) | opens the calendar |
 | `media` | now playing (SMTC): title and artist | play/pause; scroll for next and previous |
-| `tray` | the notification-area icons (see below) | left/right click forwarded |
-| `network` | wifi signal and name (WLAN API) / ethernet (the interface table: an up, physical, wired interface) / offline; changes from `NotifyIpInterfaceChange` and WLAN notifications | opens quick settings |
-| `volume` | level and mute (Core Audio `IAudioEndpointVolume` on the default output, with its change callback) | toggle mute; scroll to change (raising it unmutes) |
+| `tray` | the pinned notification-area icons, then a chevron (see below) | clicks go to the icon's app; the chevron opens the overflow grid |
+| `network` | wifi signal and name (WLAN API) / ethernet (the interface table: an up, physical, wired interface) / offline; changes from `NotifyIpInterfaceChange` and WLAN notifications | opens the network flyout |
+| `volume` | level and mute (Core Audio `IAudioEndpointVolume` on the default output, with its change callback) | opens the mixer; middle click mutes; scroll to change (raising it unmutes) |
 | `battery` | percent and charging (`GetSystemPowerStatus`, refreshed on `PBT_APMPOWERSTATUSCHANGE`); hidden on desktops | power settings |
-| `quick` | a settings glyph | opens quick settings (`ms-actioncenter:controlcenter/`) |
+| `quick` | a settings glyph | opens quick settings |
 | `power` | a power glyph | menu: lock, sleep, sign out, restart, shut down (restart and shut down ask first) |
 | `stats` | CPU / RAM mini gauges (sampled every 2 s) | Task Manager |
+| `language` | the keyboard layout of the app in front (`ENG` over `US`), followed on foreground changes and the shell's `HSHELL_LANGUAGE` | opens the layout list |
+| `notifications` | a bell with the number of notifications (re-counted every 15 s while shown: change events need package identity) | opens the notifications flyout |
 
-**The tray is best effort.** Notification-area icons belong to Explorer. The host reads them through
-UI Automation (a supported accessibility API) from the (possibly hidden) taskbar, on a worker
-thread, and refreshes on UIA structure-changed events. What Windows 11 (build 26300, "26H2")
-exposes:
+**The tray** comes from the tray host (see "Flyouts" → "Tray host") while the native taskbar is
+replaced (`taskbar.mode: hide`, or `tray.host`): the real icons, pinned ones in the bar and the rest
+behind the chevron, as the user arranged them in Windows. Otherwise, with Explorer's taskbar kept,
+the module reads Explorer's tray through UI Automation (a supported accessibility API), on a worker
+thread, refreshed on UIA structure-changed events. What Windows 11 (build 26300, "26H2") exposes to
+UI Automation:
 
 - Each *promoted* icon is a `SystemTray.NormalButton` with AutomationId `NotifyItemIcon`; its Name is
   the tooltip. It supports `Invoke`.
@@ -185,12 +206,10 @@ exposes:
   without a match show a monogram.
 - Left click is UIA `Invoke`. Right click focuses the button (UIA `SetFocus`) and sends the
   context-menu key (Shift+F10), which the tray turns into the app's context menu.
-- **With `taskbar.mode: hide` there are no tray icons**: Explorer removes a hidden taskbar's whole
-  XAML content from the UIA tree (measured: no `SystemTray.*` element at all), so there's nothing
-  to read or invoke. The icons are there in `keep` and `autohide` (an auto-hidden taskbar is only
-  slid off-screen), so use `autohide` to keep the tray module working.
-- If UI Automation is unavailable or finds no tray (as in `hide`), the module shows a single
-  `overflow` button that tries the native overflow flyout (Win+B, Enter). The fallback is logged.
+- A hidden taskbar has no tray in the UIA tree (Explorer removes its whole XAML content; measured:
+  no `SystemTray.*` element at all), which is why `hide` uses the tray host instead.
+- If UI Automation is unavailable or finds no tray, the module shows a single `overflow` button that
+  tries the native overflow flyout (Win+B, Enter). The fallback is logged.
 
 ## Dock
 
@@ -240,6 +259,254 @@ the pointer (`region`); the host sets that as the window region (`SetWindowRgn`)
 clicks through to the windows behind. The top bar's band is its strip at the top of the window;
 the dock's pill is centered along its edge, 6 DIPs from it.
 
+## Flyouts
+
+What the top-bar modules open: our own Start menu (the launcher), quick settings, network, the
+mixer, keyboard layouts, the calendar, notifications, the tray overflow and the power menu. They
+replace the taskbar's own menus; nothing goes into Explorer.
+
+- **The page side** (`bars/shell/src/flyouts`) builds each on `flyout.ts`. Each big one is its own
+  chunk, loaded the first time it opens; its DOM is built on open and dropped on close.
+  `surface.ts` places it: under the top bar's strip, or off the dock toward the middle of the
+  screen.
+- **Room.** A flyout taller than the bar's `ROOM` asks the host for more first (`room`): the host
+  grows the bar's window toward the middle of the screen (clipped to the monitor) and the page waits
+  for the resize. The window goes back to its usual size 450 ms after the last flyout closed. The
+  region keeps everything outside the flyout click-through.
+- **Keyboard.** The launcher asks for the keyboard (`keyboard`): the bar becomes the foreground
+  window and the WebView takes focus, and the host stops handing the foreground back while it's
+  open. On close it hands the foreground back to the app before it, unless the pointer is over a
+  bar (the press that closed it was on another module).
+- **Providers** (`crates/bars/src/flyouts`) run on lanes, one thread each (COM in the apartment the
+  API wants). A lane starts on the first request and stops after 60 s unused, unless something it
+  feeds is watched. Slow requests (DDC/CI, WLAN scans, WinRT reads) answer *later* through the main
+  loop, which never blocks on them. **Nothing polls while every flyout is closed**, except the
+  notification badge while a `notifications` module is on screen (below).
+- **Watching.** An open flyout `watch`es what it shows live: its provider's events (`mixer`,
+  `wifi`, ...) or a core topic (`media`, `stats`, ...). A core topic then runs as if a module showed
+  it, for that bar only. A bar's page reload drops its watches, its room and its keyboard.
+- **Styling.** Every flyout's root is `.layer > .flyout[data-flyout="<name>"]` (`launcher`, `quick`,
+  `network`, `mixer`, `language`, `calendar`, `notifications`, `tray`, `menu`). The shared pieces
+  are `.fly-panel`, `.fly-header`, `.fly-row`, `.fly-tile[data-on]`, `.fly-slider`, `.fly-switch`,
+  `.fly-list`, `.fly-notice` and `.fly-footer`. Each flyout's parts are prefixed with its name
+  (`.launcher-tile`, `.qs-tiles`, `.net-item`, `.mix-app`, `.cal-day.is-today`, `.notif-item`,
+  `.tray-cell`, `.lang-badge`). They're drawn from the appearance tokens like the bars, and
+  monochrome by default: "on" is the text color as a fill. Durations and curves are `--fly-duration`
+  and `--ease`, so presets retime them. The flyouts' glyphs are in `flyouts/glyphs.ts`.
+
+### Launcher
+
+The `start` module (and the Windows key, below) opens the launcher.
+
+- **Index.** Every app the Start menu lists, from `shell:AppsFolder`
+  (`SHGetKnownFolderItem(FOLDERID_AppsFolder)` enumerated with `BHID_EnumItems`):
+  - packaged apps by AUMID, and the Start Menu folders' shortcuts (user and common);
+  - names from the shell; icons from `IShellItemImageFactory` (64 px, in the icon cache);
+  - each shortcut's target exe as a search keyword (`msedge` finds Microsoft Edge);
+  - uninstallers, readmes and web links left out.
+
+  It's built on its lane at background priority, 8 s after start (or at the first `apps` request).
+  It's cached in `%LOCALAPPDATA%\mypaper\apps.json`, and rebuilt when the Start Menu folders change
+  (a file watch, settled 3 s) or when the launcher opens more than 10 minutes after the last build
+  (packaged installs don't touch those folders).
+- **Search** (`flyouts/launcher/fuzzy.ts`) covers apps, about 70 Windows Settings pages
+  (`settings-pages.ts`, `ms-settings:` URIs with keywords) and, with `launcher.files`, the recent
+  files (`%APPDATA%\Microsoft\Windows\Recent`, read when the launcher opens).
+  - Ranking: exact > prefix > a word's prefix > initials (`vsc`) > substring > in-order letters
+    (only from 3 typed). Apps come before settings, and settings before files.
+  - What the user runs often and lately goes first (`launcher.json`: each run's count and time).
+  - Results show as a best match, then apps (8), settings (5) and files (5).
+- **Keyboard first.** Typing goes to the search box from anywhere, the arrows walk the list (and
+  the pinned grid in two dimensions), Enter opens, Escape closes.
+- **Layouts** (`launcher.layout`):
+
+  | Layout | Shows |
+  |---|---|
+  | `win11` | search, pinned (6 columns, "All apps" A–Z), recommended (recent files, else recent apps) |
+  | `grid` | a big grid of every app (Launchpad) |
+  | `compact` | a search bar, recent apps until you type (Raycast, Flow) |
+  | `dashboard` | search, pinned, a widgets row (time and date, now playing with controls, CPU / memory / battery) and the clipboard history |
+
+  Every layout but `compact` has a footer: the user (`GetUserNameExW(NameDisplay)`), Settings, and
+  power (lock, sleep, sign out, restart, shut down; the last two ask first).
+- **Pins.** Right-click an app to pin it to the launcher (`launcher.pinned`, which starts as the
+  dock's pins), unpin it, or pin it to the dock.
+- **Clipboard history** is Windows' own (Win+V, `Clipboard.GetHistoryItemsAsync`). It answers an
+  unpackaged process on build 26300 (`examples/winrt-spike.rs`), so there's no history of our own.
+  Picking an entry makes it the clipboard's content. With history off, the launcher links to its
+  setting.
+
+**The Windows key.** With `launcher.winKey` and `taskbar.mode: hide`, a low-level keyboard hook
+(`WH_KEYBOARD_LL`, `flyouts/winkey.rs`) runs in our process, on a thread of its own; nothing is
+loaded anywhere else.
+- It lets every key through. The one exception is the release of a **lone** press of the Windows
+  key: the hook swallows that release and replays it after the unassigned key `vkE8` (AutoHotkey's
+  "menu mask key"). Explorer then sees a combination and keeps Start closed, and the launcher opens.
+- Combinations (Win+E, Win+Shift+S, ...) pass untouched.
+- With a fullscreen app in front (`SHQueryUserNotificationState`, or a window covering its
+  monitor), or no bar to show the launcher, the release passes and the native Start opens.
+- The keys the bars inject themselves carry `dwExtraInfo` `OURS`, and the hook ignores them. Other
+  injected input counts like a keyboard's (on-screen keyboards, remote desktop).
+- The launcher opens on the monitor of the app in front, on its top bar if it has one. The host
+  makes the bar the foreground window: our replayed input is the last input, so Windows allows it.
+
+### Quick settings
+
+- **Wi-Fi and Bluetooth** on/off: `Windows.Devices.Radios` (`RequestAccessAsync` was `Allowed` for
+  the unpackaged process). The Wi-Fi tile's chevron opens the network flyout.
+- **Power mode** cycles efficiency → balanced → performance: the Settings slider's overlay schemes,
+  `PowerGetEffectiveOverlayScheme` / `PowerSetActiveOverlayScheme` from powrprof.dll (not in the
+  SDK headers).
+- **Battery saver** (on machines with a battery), **do not disturb**
+  (`ToastNotificationManager.GetDefault().NotificationMode`) and **focus**
+  (`FocusSessionManager.IsFocusActive`) show their state. Clicking opens their Settings page:
+  changing them has no documented API. **Night light** opens its page for the same reason.
+- **Brightness:** the built-in panel through WMI (`WmiMonitorBrightness`,
+  `WmiMonitorBrightnessMethods.WmiSetBrightness`), else external monitors through DDC/CI
+  (`GetMonitorBrightness` / `SetMonitorBrightness`; one slider for all of them). The slider is
+  hidden without either.
+- **Volume** with mute and a chevron to the mixer, the battery level, and a link to Settings.
+
+### Network
+
+- **Wi-Fi:** the radio's switch and the networks in range (`WlanGetAvailableNetworkList`).
+  - One entry per SSID: the connected one, else the saved one, else the strongest. Each shows its
+    signal and security.
+  - It scans on open (`WlanScan`); the WLAN scan-complete notification updates the list.
+- **Connecting:**
+  - A saved network connects with its profile (`WlanConnect`).
+  - A new WPA/WPA2/WPA3-Personal or open network gets a profile written here
+    (`wifi::profile_xml`, the schema `netsh wlan export profile` writes; the SSID also in hex),
+    saved with `WlanSetProfile`, then connected.
+  - Enterprise and WEP networks link to Wi-Fi settings.
+  - The connected network offers Disconnect.
+- **Location consent (24H2 and later):** desktop apps see Wi-Fi networks only with location access
+  on. `WlanGetAvailableNetworkList` returns `ERROR_ACCESS_DENIED`, and the flyout explains this and
+  links to `ms-settings:privacy-location`.
+- **Ethernet** shows when wired (the `network` topic). **VPN** links to `ms-settings:network-vpn`.
+
+### Mixer
+
+- **Output:** the device in use and the master volume and mute (the `volume` topic).
+- **Devices** (`EnumAudioEndpoints`, friendly names). They're switchable only with
+  `audio.switchOutput` (`IPolicyConfig::SetDefaultEndpoint` for every role, an undocumented
+  interface); otherwise there's a link to Sound settings.
+- **Apps:** every app playing on the default output (`IAudioSessionManager2` sessions; expired
+  ones left out), system sounds first, then playing apps.
+  - Each has its own slider and mute (`ISimpleAudioVolume`).
+  - Names come from the session's display name (indirect strings resolved), else the exe's
+    `FileDescription`. Icons come from the exe.
+- **Live:** new sessions (`IAudioSessionNotification`), per-session volume and state changes
+  (`IAudioSessionEvents`) and default-device changes (`IMMNotificationClient`) refresh the open
+  mixer. Rows are kept across refreshes, so a slider being dragged isn't rebuilt under the pointer.
+
+### Language
+
+- The installed layouts come from `GetKeyboardLayoutList`. Each is named by its locale
+  (`GetLocaleInfoEx`: "English (United States)", `ENG`, `US`) and its layout's registry name (the
+  KLID from the HKL's high word: a substitute layout, an IME, or an `Fxxx` index mapped through
+  `Layout Id`; `Layout Display Name` resolved).
+- Picking one posts `WM_INPUTLANGCHANGEREQUEST` to the app in front, the documented request (its
+  default window procedure activates the layout). Console and some UWP windows ignore it.
+
+### Calendar
+
+Today (weekday, date, time), a month grid you page through (buttons, the wheel, "Today"), and the
+extra clocks of `calendar.zones` (local time, day, offset from here). Everything comes from Intl,
+and the first weekday is the locale's unless `calendar.firstDay` says otherwise. "Calendar" opens
+`outlookcal:`.
+
+### Notifications
+
+The open spike (research 4.2, 7), measured with `cargo run -p mypaper-bars --example winrt-spike`
+on build 26300, unpackaged:
+- `UserNotificationListener.GetAccessStatus()` and `RequestAccessAsync()` both return `Allowed`.
+- `GetNotificationsAsync(Toast)` returns every toast (52 that day), with app names.
+- `NotificationChanged` refuses to register: `0x80070490` ("Element not found"), needing package
+  identity. So the flyout re-reads the list every 4 s while it's open, and the `notifications`
+  module's badge is re-counted every 15 s while the module is on screen (a periodic topic, which
+  stops for fullscreen apps).
+- Removing one toast (`RemoveNotification`) works unpackaged; `ClearNotifications` may not, so
+  "Clear all" falls back to removing them one by one.
+
+No sparse package was needed, so none is shipped. The flyout groups toasts by app, newest first
+(the app's logo from `AppDisplayInfo.GetLogo`, the title and body from the toast's text elements),
+with dismiss, clear all and a link to the notification center. With access turned off in Settings
+it says so and links to `ms-settings:privacy-notifications`.
+
+### Tray host
+
+How the `tray` module gets the real notification-area icons without injection, the ManagedShell /
+RetroBar way (research 2.5 and 4.1; `crates/bars/src/tray_host.rs`, wire formats in
+`tray_data.rs`).
+
+**When it runs.** Only while a tray module is on screen **and** the native taskbar is replaced
+(`taskbar.mode: hide`, or `tray.host: true`), on its own thread:
+1. It creates a hidden, topmost window of class `Shell_TrayWnd` (with a `TrayNotifyWnd` child),
+   sized like the top bar that shows the tray.
+   - `Shell_NotifyIcon` and `SHAppBarMessage` find the first `Shell_TrayWnd` in Z-order, so the host
+     keeps its window above Explorer's.
+   - It re-checks on Explorer's own window events (out-of-context WinEvents filtered to Explorer's
+     process), and with one `FindWindow` every 3 s.
+2. It broadcasts `TaskbarCreated`, so every running app adds its icons again, now to the host. That
+   is the initial enumeration; the bars ignore their own broadcast.
+3. It keeps each icon: owner window, uID or GUID, callback message, `NOTIFYICON_VERSION`, tooltip,
+   hidden state, and a **copy** of the `HICON` (apps destroy theirs right after the call) as a PNG
+   `data:` URL. Each message is answered at once (`ReplyMessage`).
+4. **Everything is passed on to Explorer's real tray**, so Explorer's state stays correct:
+   - balloons still become toasts;
+   - `NotifyIconSettings` keeps learning about new icons;
+   - nothing is lost when the host goes away.
+
+   Icon messages are queued and forwarded one at a time (with the host's copy of the icon). App-bar
+   messages are forwarded synchronously, with `ABM_QUERYPOS`/`ABM_SETPOS` re-homed: `SHAppBarMessage`
+   shares its data with the receiving process, so the host copies it into a block shared with
+   Explorer and copies the answer back. `ABM_GETTASKBARPOS` is answered with the bar's rect, so
+   apps open their popups near our tray. `WM_COMMAND`, `SC_TASKLIST` and the `WM_USER` range go to
+   Explorer as they came (sent or posted). Registered messages don't: they're broadcasts Explorer
+   gets itself.
+
+**Clicks** go to the icon's owner as its callback message (`SendNotifyMessage`), after
+`AllowSetForegroundWindow(owner)` (the click on the bar gave us the foreground to pass on).
+- Version 4 packs the pointer into `wParam` and the message and uID into `lParam`; older versions
+  send the uID and the message.
+- Left: mouse move, down, up, then `NIN_SELECT` (v3+). Right: move, down, up, then `WM_CONTEXTMENU`
+  (v3+). Middle and double click too.
+- `Shell_NotifyIconGetRect` gets the icon's rect from its last click (or the pointer).
+- Icons whose owner window is gone, or recycled by another process, are dropped.
+
+**Pins and order** come from `HKCU\Control Panel\NotifyIconSettings`, as the user arranged them in
+Windows:
+- An icon is matched to its entry by exe and uID or GUID.
+- `IsPromoted` icons show in the bar; the rest are in the overflow grid.
+- `UIOrderList` sets the order.
+- The key is watched (`RegNotifyChangeKeyValue`, re-read at most every 2 s), so a change in
+  Settings shows at once.
+
+**Caveats, and what the host does about them:**
+- Explorer's restart (Zebar #301): a second `Shell_TrayWnd` during Explorer's start keeps it from
+  building its taskbar. So when Explorer's process exits, or its tray window is destroyed, the host
+  removes its window at once. It comes back 4 s after Explorer's own `TaskbarCreated`, and never
+  before Explorer has run for 4 s.
+- Stopping (the tray module off, `taskbar.mode` back to `keep`, quitting) destroys the window and
+  broadcasts `TaskbarCreated`, so apps re-register with Explorer.
+- A crash leaves nothing behind: the window dies with the process, and Explorer has every icon.
+- The bars' own `Shell_TrayWnd` lookups (`taskbar::explorer_tray`, `taskbar_windows`) skip our
+  process, so hiding and restoring the taskbar never touches the host's window.
+- Apps that don't handle `TaskbarCreated` keep their icon in Explorer only (Seelen and Zebar note
+  the same).
+- Elevated apps' icons arrive, but our clicks can't reach them unless they let the callback
+  message through UIPI.
+- Windows' own volume and network icons aren't tray icons on 24H2+; the modules show those. The
+  volume icon still arrives as an Explorer icon ("Speakers (USB): 94%").
+- Taskbar overlay badges and progress (`ITaskbarList3`) aren't tray messages and stay out of reach
+  (research 2.5).
+
+### Power
+
+The `power` module's menu (`menu.ts`): lock, sleep, sign out, restart, shut down; restart and shut
+down ask first. The launcher's footer has the same actions.
+
 ## Bridge (page ⇄ host)
 
 All messages go through WebView2 `postMessage` as JSON. The page's side is
@@ -260,7 +527,7 @@ events to a bar only after it said `hello`.
 | `actionCenter` | `{ panel: "notifications"\|"quick" }` | — |
 | `volume` | `{ set?: 0..1, mute?: bool, delta?: -1..1 }` | `{ level, muted }` |
 | `media` | `{ action: "toggle"\|"next"\|"previous" }` | — |
-| `tray` | `{ id, button: "left"\|"right" }` | — |
+| `tray` | `{ id, button: "left"\|"right"\|"middle"\|"double", rect? }` (`rect`: the icon in DIPs from the window's top-left) | — |
 | `power` | `{ action: "lock"\|"sleep"\|"signout"\|"restart"\|"shutdown" }` | — |
 | `workspace` | `{ direction: "left"\|"right" }` | — |
 | `openSettings` | `{ uri }` (an `ms-settings:` URI only) | — |
@@ -268,6 +535,29 @@ events to a bar only after it said `hello`.
 
 `pin` of an item that's already pinned moves it to `index`. `reorder`'s paths are matched
 case-insensitively; pins it doesn't list keep their order after the listed ones.
+
+The flyouts' methods (`crates/bars/src/flyouts/mod.rs` → `METHODS`; the page's side is
+`bars/shell/src/flyouts/protocol.ts`). Requests marked *later* are answered by a provider's lane
+once it has the answer, so the reply may come after other messages:
+
+| Method | Params | Result |
+|---|---|---|
+| `watch` / `unwatch` | `{ topic }`: `mixer`, `wifi`, `launcherApps`, `notificationList`, or a core topic (`media`, `volume`, `network`, `battery`, `stats`, `clock`, `language`, `notifications`) | — |
+| `room` | `{ extent }`: DIPs past the band the window must reach (0: back to `ROOM`) | — |
+| `keyboard` | `{ on }`: the bar becomes the foreground window with the page focused, or hands it back | — |
+| `apps` | — | `{ apps: [{ id, name, path, icon?, keywords?, packaged }], recent: [{ id, path, count, last }], user: { name } }` |
+| `run` | `{ id, path }` | `{ recent }` (opens it and records the run) |
+| `recentFiles` | — | *later*: `[{ name, path, at, icon? }]` (newest first, at most 40) |
+| `clipboard` / `clipboardPaste` | — / `{ index }` | *later*: `{ enabled, entries: [{ kind: "text"\|"link"\|"image"\|"other", text, image? }] }` / — |
+| `quick` | — | *later*: `{ radios: [{ kind, name, on }], brightness?, power?, saver?, dnd?, focus? }` |
+| `setRadio` / `setBrightness` / `setPowerMode` | `{ kind: "wifi"\|"bluetooth"\|"cellular", on }` / `{ level: 0..100 }` / `{ mode: "efficiency"\|"balanced"\|"performance" }` | *later*: the quick state / — / the quick state |
+| `wifi` | `{ scan? }` | *later*: `{ networks: [{ ssid, signal, security, connected, known }], error?: "noAdapter"\|"location"\|"unavailable" }` |
+| `wifiConnect` / `wifiDisconnect` | `{ ssid, password? }` / — | *later*: — |
+| `mixer` | — | *later*: `{ devices: [{ id, name, default }], sessions: [{ id, name, icon?, level, muted, system, active }], switchable }` |
+| `setSession` / `setOutput` | `{ id, level?, mute? }` / `{ id }` (only with `audio.switchOutput`) | *later*: — / the mixer state |
+| `setLayout` | `{ id }` (an HKL in hex) | — |
+| `launcherPin` / `launcherUnpin` | `{ path, name?, index? }` / `{ path }` | — (writes `launcher.pinned`) |
+| `notifications` / `dismissNotification` / `clearNotifications` | — / `{ id }` / — | *later*: `{ notifications: [{ id, app, icon?, title, body, at }], error?: "denied"\|"unavailable" }` |
 
 **Host → page events**: `{ event, data }`.
 
@@ -280,7 +570,12 @@ case-insensitively; pins it doesn't list keep their order after the listed ones.
 | `volume` | `{ level, muted }`, or null without an output device |
 | `network` | `{ kind: "wifi"\|"ethernet"\|"none", name?, signal? }` |
 | `battery` | `{ percent, charging }`, or null |
-| `tray` | `{ id, name, icon? }[]` |
+| `tray` | `{ id, name, icon?, pinned }[]` (`icon`: a PNG `data:` URL from the tray host, a cache URL from UI Automation) |
+| `language` | `{ current?, layouts: [{ id, language, layout, short, region }] }` |
+| `notifications` | `{ count }` (null when they can't be read) |
+| `mixer` / `wifi` / `launcherApps` / `notificationList` | a watched flyout's live data (the shapes above) |
+| `launcherPins` | the launcher's pins after an edit |
+| `open` | `{ flyout: "launcher" }`: the Windows key (transient) |
 | `workspaces` | `{ count, current }` (`current` is 0-based) |
 | `stats` | `{ cpu, memory: { used, total } }` |
 | `appearance` | `{ appearance, themeCss }` |
@@ -345,10 +640,14 @@ The page and the host are built so new bars, flyouts and looks are additions, no
   screen. `defineFlyout(id, render)` registers one; modules open it with `toggle(props, { anchor,
   place })`. One is open at a time; it closes on Escape, an outside press and window blur; it's part
   of the window region while open; its `scope` ends its subscriptions on close. Menus (`menu.ts`:
-  the power menu, the dock's context menu) are the `menu` flyout. A launcher, quick settings, a
-  network list, a volume mixer, a language switcher, a calendar and the tray overflow are further
-  flyouts. A flyout must fit in its bar's window: the band plus `ROOM` (360 DIPs,
-  `crates/bars/src/bar.rs`; raise it, or make it per bar, for bigger ones).
+  the power menu, the dock's context menu) are the `menu` flyout. The launcher, quick settings,
+  network, mixer, language, calendar, notifications and tray overflow are further flyouts
+  (`bars/shell/src/flyouts`, see "Flyouts").
+  - A new one opens through `flyouts/surface.ts` `show()`. That gives it placement, more window
+    room when it's taller than `ROOM` (360 DIPs; the `room` request), and the keyboard if it's
+    typed into.
+  - Its data is a provider on a lane (`crates/bars/src/flyouts/service.rs`): a `Request` variant
+    plus its name in `METHODS`, and a `Watched` variant for live data.
 - **Styling.** Everything is drawn from CSS variables and attributes, and the theme's CSS is
   inserted last (`<style id="theme-css">`), so presets restyle without code:
   - on `<html>`: `data-bar="top|dock"`, `data-position`, `data-style`, `data-surface`,
