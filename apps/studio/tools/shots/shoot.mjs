@@ -6,7 +6,7 @@
 //   node apps/studio/tools/shots/shoot.mjs <repo> <outDir> [sizes=1280x800,2560x1440] [only=desktop,settings] [scheme=dark]
 //
 // Steps are page-side JavaScript using the helpers below, or `key:<Key>[*n][+ctrl]` and `type:<text>`.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -137,26 +137,110 @@ class Cdp {
 
 const KEY_CODES = { Tab: 9, Enter: 13, Escape: 27, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, k: 75 };
 
-async function main() {
-  fs.mkdirSync(outDir, { recursive: true });
-  const server = await serve();
-  const base = `http://127.0.0.1:${server.address().port}/`;
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "studio-shots-"));
+// --- The browser: one headless Edge per run, never left behind ---
+//
+// Edge starts child processes (renderers, GPU) that outlive a plain kill of the one we spawned,
+// so cleanup ends every msedge whose command line names this run's own profile folder, then
+// deletes the folder. It runs on exit, on error, on Ctrl+C and, through a detached watchdog that
+// waits for this node process, even when node itself is killed.
+
+const PROFILE_PREFIX = "studio-shots-";
+const CALL_TIMEOUT_MS = 45_000;
+
+/**
+ * PowerShell that ends this run's browsers (matched by profile folder), waits until they're gone
+ * (a dying Edge still holds its profile's files), then deletes the folder, retrying for a while.
+ */
+const reapScript = (profile) => {
+  const quoted = profile.replace(/'/g, "''");
+  const mine = `@(Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" | Where-Object { $_.CommandLine -like '*${quoted}*' })`;
+  return (
+    `for ($i = 0; $i -lt 50; $i++) { $p = ${mine}; if ($p.Count -eq 0) { break }; $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 200 }; ` +
+    `for ($i = 0; $i -lt 50 -and (Test-Path -LiteralPath '${quoted}'); $i++) { Remove-Item -LiteralPath '${quoted}' -Recurse -Force -ErrorAction SilentlyContinue; if (Test-Path -LiteralPath '${quoted}') { Start-Sleep -Milliseconds 200 } }`
+  );
+};
+
+/** The watchdog's code (`node -e WATCHDOG <harness pid> <reap script>`): when the harness is gone, reap. */
+const WATCHDOG = `
+const [parent, script] = process.argv.slice(1);
+const alive = (pid) => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
+const timer = setInterval(() => {
+  if (alive(parent)) return;
+  clearInterval(timer);
+  require("node:child_process").spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { stdio: "ignore", windowsHide: true });
+}, 500);
+`;
+
+/** Removes profiles of earlier runs that died before cleaning up (older than an hour, so not a run in progress). */
+function sweepStaleProfiles() {
+  const hourAgo = Date.now() - 3600_000;
+  for (const entry of fs.readdirSync(os.tmpdir(), { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith(PROFILE_PREFIX)) continue;
+    const dir = path.join(os.tmpdir(), entry.name);
+    try {
+      if (fs.statSync(dir).mtimeMs < hourAgo) fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // In use: its run (or its watchdog) cleans it.
+    }
+  }
+}
+
+/** Starts headless Edge on a fresh profile; `close` (idempotent, synchronous) ends it and its profile. */
+function launchBrowser() {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), PROFILE_PREFIX));
   const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
   const port = 9300 + Math.floor(Math.random() * 500);
   const browser = spawn(edge, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--force-device-scale-factor=1", "--disable-extensions", "--autoplay-policy=no-user-gesture-required", "about:blank"], { stdio: "ignore" });
-  let version;
-  for (let i = 0; i < 50 && !version; i++) {
-    await new Promise((r) => setTimeout(r, 200));
-    version = await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.json(), () => undefined);
+  // If this node process is killed outright, nothing below runs: the watchdog cleans up then. It is
+  // a detached node (a detached PowerShell has no console and exits at once) that waits for this
+  // process to go, then runs the reap script with a hidden console.
+  spawn(process.execPath, ["-e", WATCHDOG, String(process.pid), reapScript(profile)], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (browser.pid) spawnSync("taskkill", ["/PID", String(browser.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", reapScript(profile)], { stdio: "ignore", windowsHide: true });
+  };
+  return { port, close };
+}
+
+/** `promise`, or an error after `ms`: a stuck page can't hang the run (and leave its browser). */
+function within(promise, ms, what) {
+  let timer;
+  const timeout = new Promise((_, reject) => (timer = setTimeout(() => reject(new Error(`timed out: ${what}`)), ms)));
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function main() {
+  fs.mkdirSync(outDir, { recursive: true });
+  sweepStaleProfiles();
+  const server = await serve();
+  const base = `http://127.0.0.1:${server.address().port}/`;
+  const { port, close } = launchBrowser();
+  process.on("exit", close);
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"]) {
+    process.on(signal, () => {
+      close();
+      process.exit(130);
+    });
   }
-  const ws = new WebSocket(version.webSocketDebuggerUrl);
-  await new Promise((r) => ws.addEventListener("open", r));
-  const cdp = new Cdp(ws);
-  const mock = fs.readFileSync(path.join(here, "mock.js"), "utf8");
   const errors = [];
+  let ws;
 
   try {
+    let version;
+    for (let i = 0; i < 50 && !version; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      version = await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.json(), () => undefined);
+    }
+    if (!version) throw new Error("headless Edge didn't start");
+    ws = new WebSocket(version.webSocketDebuggerUrl);
+    await within(new Promise((r) => ws.addEventListener("open", r)), 10_000, "connecting to Edge");
+    const raw = new Cdp(ws);
+    const cdp = { send: (method, params, sessionId) => within(raw.send(method, params, sessionId), CALL_TIMEOUT_MS, method) };
+    const mock = fs.readFileSync(path.join(here, "mock.js"), "utf8");
+
     for (const [name, steps] of Object.entries(SHOTS)) {
       if (only && !only.includes(name)) continue;
       const fixtures = buildFixtures(repo, { empty: name === "empty" });
@@ -202,8 +286,8 @@ async function main() {
       }
     }
   } finally {
-    ws.close();
-    browser.kill();
+    ws?.close();
+    close();
     server.close();
     if (errors.length) console.error("ERRORS:\n" + errors.join("\n"));
   }
