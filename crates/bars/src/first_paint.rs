@@ -542,7 +542,8 @@ fn rounded_coverage([left, top, width, height]: [f64; 4], radius: f64, x: f64, y
 }
 
 /// The wallpaper backdrop of a monitor, when one was saved
-/// (`%LOCALAPPDATA%\mypaper\backdrop\<DISPLAYn>.jpg`), decoded once.
+/// (`%LOCALAPPDATA%\mypaper\backdrop\<DISPLAYn>.bmp`, written by the wallpaper's `backdrop`
+/// module), decoded once.
 struct Backdrop {
     monitor: Rect,
     size: (u32, u32),

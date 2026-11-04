@@ -129,7 +129,7 @@ laid out and set the window's region, about 1.4 s after core starts, most of it 
 starting. Each bar now remembers where its page drew (`bars-first-paint.json`), and on the next
 start a layered window paints those parts in the bar's current look (the page's own background:
 the tint at its opacity, rounded like the page) over the wallpaper backdrop
-(`%LOCALAPPDATA%\mypaper\backdrop\<DISPLAYn>.jpg`) when one exists. It goes up as soon as the host
+(`%LOCALAPPDATA%\mypaper\backdrop\<DISPLAYn>.bmp`) when one exists. It goes up as soon as the host
 knows the look, before the bars reserve their space, and goes away once the page has painted
 (the paint probe) and set its region, or after 15 s. A stand-in only appears where the bar will
 land (same monitor, scale and window rect) and never on a monitor with a fullscreen app.
