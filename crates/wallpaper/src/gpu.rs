@@ -274,7 +274,8 @@ impl KeptFrame {
         (self.texture.width(), self.texture.height())
     }
 
-    /// A full-scale frame copies directly when supported; a scaled frame uses the upscale blit.
+    /// A full-scale frame copies directly when supported; a scaled frame uses the upscale blit,
+    /// which covers every pixel: no clear first, no blending (each a full-screen write here).
     pub fn restore(
         &self,
         gpu: &Gpu,
@@ -298,9 +299,10 @@ impl KeptFrame {
                 mypaper_theme::Fit::Stretch,
                 1.0,
             );
-            let mut pass =
-                crate::sources::begin(encoder, view, wgpu::LoadOp::Clear(wgpu::Color::BLACK));
-            self.quad.draw(&gpu.blit, &mut pass);
+            // SAFETY: `cover` writes every pixel and reads none of the target before it does.
+            let load = wgpu::LoadOp::DontCare(unsafe { wgpu::LoadOpDontCare::enabled() });
+            let mut pass = crate::sources::begin(encoder, view, load);
+            self.quad.cover(&gpu.blit, &mut pass);
         }
     }
 }
