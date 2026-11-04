@@ -6,7 +6,7 @@ import { useBars } from "../../lib/barsContext";
 import { CORNERS, STATES, type Corner, type Fill, type FillType, type ImageFit, type Scheme, type State } from "../../lib/barsSchema";
 import { useActiveSkins } from "../../lib/hooks";
 import { AppearanceEditor } from "../AppearanceEditor";
-import { Block, Group, IconButton, INPUT_CLASS, Note, Segmented, Select } from "../ui";
+import { Block, Group, IconButton, INPUT_BASE, Note, Segmented, Select } from "../ui";
 import { ChoiceSetting, FieldColor, FieldPaint, FieldSlider, SelectSetting, percent, px } from "./BarSettings";
 import { GradientEditor } from "./PaintEditor";
 import { ThemeVarsPanel } from "./ThemeVarsPanel";
@@ -151,7 +151,7 @@ function ImageFields() {
     <div className="space-y-3">
       <div className="flex items-center gap-3">
         <span className="w-28 shrink-0 text-[13px] text-ink-2">Image</span>
-        <input aria-label="Background image" readOnly value={image?.path ?? ""} title={image?.path} className={`${INPUT_CLASS} flex-1 font-mono text-[13px]`} />
+        <input aria-label="Background image" readOnly value={image?.path ?? ""} title={image?.path} className={`${INPUT_BASE} flex-1 font-mono text-[13px]`} />
         <IconButton icon={FolderOpen} label="Choose an image" onClick={() => void pickImage().then((file) => file && set([...path, "path"], file))} />
       </div>
       <Note>The host copies the file into its own folder and serves it from there. A path inside the theme's folder works too (write it in bars.json).</Note>
@@ -159,7 +159,7 @@ function ImageFields() {
         <span className="w-28 shrink-0 text-[13px] text-ink-2">Fit</span>
         <Select<ImageFit> label="Image fit" className="w-40" value={image?.fit ?? "cover"} options={(["cover", "contain", "fill", "tile"] as const).map((f) => ({ value: f, label: f }))} onChange={(fit) => set([...path, "fit"], fit)} />
         <span className="ml-3 text-[13px] text-ink-2">Position</span>
-        <input aria-label="Image position" value={image?.position ?? "center"} spellCheck={false} onChange={(e) => set([...path, "position"], e.currentTarget.value)} className={`${INPUT_CLASS} w-40 font-mono text-[13px]`} />
+        <input aria-label="Image position" value={image?.position ?? "center"} spellCheck={false} onChange={(e) => set([...path, "position"], e.currentTarget.value)} className={`${INPUT_BASE} w-40 font-mono text-[13px]`} />
       </div>
       <FieldSlider path={[...path, "brightness"]} label="Brightness" min={0} max={2} step={0.05} fallback={1} format={(v) => `${v.toFixed(2)}x`} />
       <FieldSlider path={[...path, "blur"]} label="Blur" min={0} max={64} fallback={0} format={px} />

@@ -15,7 +15,8 @@ export function StylePicker({ look, value, onChange }: { look: Resolved; value: 
     <div role="radiogroup" aria-label="Widget style" className="grid grid-cols-5 gap-2">
       {WIDGET_STYLES.map((style) => {
         const on = style === value;
-        const tile = { ...look, style };
+        // A style is how the surface is lit, so each tile draws one even when the look has none.
+        const tile: Resolved = { ...look, style, surface: look.surface === "none" ? "glass" : look.surface };
         return (
           <button
             key={style}

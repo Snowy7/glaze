@@ -113,8 +113,9 @@ export function Bars() {
           <div className="max-w-3xl">
             <Segmented<Tab> label="Section" hideLabel className="mb-6" value={tab} options={TABS} onChange={setTab} />
             {PREVIEWED.has(tab) && (
-              <div className="sticky top-0 z-10 -mx-1 mb-5 bg-canvas px-1 pb-1">
-                <BarPreview config={editor.resolved} catalog={editor.catalog} vars={editor.doc.vars} appearance={editor.doc.appearance} width={420} />
+              // The page's top padding scrolls under a sticky box, so it reaches up over it.
+              <div className="sticky -top-9 z-10 -mx-1 -mt-6 mb-5 bg-canvas px-1 pt-9 pb-2">
+                <BarPreview config={editor.resolved} catalog={editor.catalog} vars={editor.doc.vars} appearance={editor.doc.appearance} width={360} />
               </div>
             )}
             {tab === "presets" && <PresetsPanel />}

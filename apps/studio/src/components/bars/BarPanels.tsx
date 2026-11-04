@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { topGeometry } from "../../lib/barsDoc";
 import { useBars } from "../../lib/barsContext";
 import { OVERRIDE_SECTIONS, type Monitors, type TaskbarAlignment, type TaskbarMode, type TopLayout, type TopPosition } from "../../lib/barsSchema";
-import { Block, Group, IconButton, INPUT_CLASS, Row, Segmented, Slider } from "../ui";
+import { Block, Group, IconButton, INPUT_BASE, Row, Segmented, Slider } from "../ui";
 import { ChoiceSetting, GeometrySetting, SettingRow, SliderSetting, ToggleSetting, boolAt, px, stringAt } from "./BarSettings";
 import { MonitorPicker } from "./MonitorPicker";
 
@@ -57,7 +57,7 @@ export function TopBarPanel() {
             maxLength={64}
             spellCheck={false}
             onChange={(e) => set(["top", "clock", "format"], e.currentTarget.value === "" ? undefined : e.currentTarget.value)}
-            className={`${INPUT_CLASS} w-56 font-mono text-[13px]`}
+            className={`${INPUT_BASE} w-56 font-mono text-[13px]`}
           />
         </SettingRow>
       </Group>

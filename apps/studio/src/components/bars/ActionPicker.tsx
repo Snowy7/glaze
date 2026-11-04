@@ -2,7 +2,7 @@ import { FolderOpen } from "lucide-react";
 
 import { pickAnyFile } from "../../lib/api";
 import { BUILTIN_ACTIONS, type Action, type BuiltinAction } from "../../lib/barsSchema";
-import { IconButton, INPUT_CLASS, Segmented, Select } from "../ui";
+import { IconButton, INPUT_BASE, Segmented, Select } from "../ui";
 
 const ACTION_LABELS: Record<BuiltinAction, string> = {
   default: "The module's own behavior",
@@ -80,7 +80,7 @@ export function ActionPicker({ label, value, onChange }: Props) {
       {value !== undefined && typeof value === "object" && "exec" in value && (
         <div className="flex flex-wrap gap-2">
           <div className="flex min-w-0 flex-1 gap-2">
-            <input aria-label={`${label} program`} value={value.exec} placeholder="notepad.exe" spellCheck={false} onChange={(e) => onChange({ ...value, exec: e.currentTarget.value })} className={`${INPUT_CLASS} min-w-48 flex-1 font-mono text-[13px]`} />
+            <input aria-label={`${label} program`} value={value.exec} placeholder="notepad.exe" spellCheck={false} onChange={(e) => onChange({ ...value, exec: e.currentTarget.value })} className={`${INPUT_BASE} min-w-48 flex-1 font-mono text-[13px]`} />
             <IconButton icon={FolderOpen} label={`Choose the program for ${label}`} onClick={() => void pickAnyFile().then((path) => path && onChange({ ...value, exec: path }))} />
           </div>
           <input
@@ -90,13 +90,13 @@ export function ActionPicker({ label, value, onChange }: Props) {
             spellCheck={false}
             // One argument per space-separated word: quote nothing, the host passes them as a list.
             onChange={(e) => onChange({ ...value, args: e.currentTarget.value.split(" ").filter((word) => word !== "") })}
-            className={`${INPUT_CLASS} min-w-48 flex-1 font-mono text-[13px]`}
+            className={`${INPUT_BASE} min-w-48 flex-1 font-mono text-[13px]`}
           />
         </div>
       )}
       {value !== undefined && typeof value === "object" && "open" in value && (
         <div className="flex gap-2">
-          <input aria-label={`${label} path or link`} value={value.open} placeholder="https://example.com, ms-settings:display or a path" spellCheck={false} onChange={(e) => onChange({ open: e.currentTarget.value })} className={`${INPUT_CLASS} min-w-48 flex-1 font-mono text-[13px]`} />
+          <input aria-label={`${label} path or link`} value={value.open} placeholder="https://example.com, ms-settings:display or a path" spellCheck={false} onChange={(e) => onChange({ open: e.currentTarget.value })} className={`${INPUT_BASE} min-w-48 flex-1 font-mono text-[13px]`} />
           <IconButton icon={FolderOpen} label={`Choose the file for ${label}`} onClick={() => void pickAnyFile().then((path) => path && onChange({ open: path }))} />
         </div>
       )}

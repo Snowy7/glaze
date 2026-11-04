@@ -4,7 +4,7 @@ import { useState } from "react";
 import { setIn } from "../../lib/barsDoc";
 import { useBars } from "../../lib/barsContext";
 import { CUSTOM_ID, isCustom, type ModuleRef } from "../../lib/barsSchema";
-import { Block, Button, Group, INPUT_CLASS, Note, Segmented } from "../ui";
+import { Block, Button, Group, INPUT_BASE, Note, Segmented } from "../ui";
 import { ModuleLayout, type ZoneInfo, type Zones } from "./ModuleLayout";
 import { ModuleOptionsEditor } from "./ModuleOptions";
 
@@ -92,8 +92,8 @@ function AddCustom({ bar, onAdded }: { bar: Bar; onAdded: (ref: ModuleRef) => vo
     <Group title="Custom modules">
       <Block title="Add a module that shows a command's output" detail="Its first line of output becomes the module's text, or a JSON object { text, icon, tooltip, class }. The id is 1 to 32 of a-z, 0-9, - and _.">
         <div className="flex flex-wrap gap-2">
-          <input aria-label="Custom module id" value={id} placeholder="weather" spellCheck={false} maxLength={32} onChange={(e) => setId(e.currentTarget.value.toLowerCase())} className={`${INPUT_CLASS} w-40 font-mono text-[13px]`} />
-          <input aria-label="Custom module command" value={command} placeholder="curl.exe, powershell.exe, …" spellCheck={false} onChange={(e) => setCommand(e.currentTarget.value)} className={`${INPUT_CLASS} min-w-56 flex-1 font-mono text-[13px]`} />
+          <input aria-label="Custom module id" value={id} placeholder="weather" spellCheck={false} maxLength={32} onChange={(e) => setId(e.currentTarget.value.toLowerCase())} className={`${INPUT_BASE} w-40 font-mono text-[13px]`} />
+          <input aria-label="Custom module command" value={command} placeholder="curl.exe, powershell.exe, …" spellCheck={false} onChange={(e) => setCommand(e.currentTarget.value)} className={`${INPUT_BASE} min-w-56 flex-1 font-mono text-[13px]`} />
           <Button icon={Plus} variant="primary" disabled={!valid} onClick={add}>
             Add to the {bar === "top" ? "top bar" : "dock"}
           </Button>

@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { gradientCss, joinHex, splitHex, type ColorContext } from "../../lib/barLook";
 import { tidy } from "../../lib/barsDoc";
 import { COLOR_TOKENS, type Color, type Gradient, type Paint, type Stop } from "../../lib/barsSchema";
-import { Button, IconButton, INPUT_CLASS, Segmented, Select, Slider } from "../ui";
+import { Button, IconButton, INPUT_BASE, Segmented, Select, Slider } from "../ui";
 
 // Colors, gradients and paints as `bars.json` writes them (docs/bars.md, "Look"). The host
 // takes `#rgb`…`#rrggbbaa`, a token such as `accent`, or `var(--name)` for a theme variable.
@@ -55,7 +55,7 @@ export function ColorValue({ label, value, onChange, onClear, placeholder = "#ff
           setDraft(e.currentTarget.value);
           if (hexOnly ? isHexColor(text) : isColor(text)) onChange(text.startsWith("#") ? text.toLowerCase() : text);
         }}
-        className={`${INPUT_CLASS} w-36 font-mono text-[13px] ${value === undefined ? "opacity-60" : ""}`}
+        className={`${INPUT_BASE} w-36 font-mono text-[13px] ${value === undefined ? "opacity-60" : ""}`}
       />
       {!hexOnly && (
         <Select<string>

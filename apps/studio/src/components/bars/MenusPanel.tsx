@@ -5,7 +5,7 @@ import { setIn } from "../../lib/barsDoc";
 import { useBars } from "../../lib/barsContext";
 import { LAUNCHER_LAYOUTS, type BuiltinModule, type LauncherLayout, type Weekday, type Zone } from "../../lib/barsSchema";
 import { describeModule } from "../../lib/modules";
-import { Block, Button, Group, IconButton, INPUT_CLASS, Note, Notice, Row, Segmented, Switch } from "../ui";
+import { Block, Button, Group, IconButton, INPUT_BASE, Note, Notice, Row, Segmented, Switch } from "../ui";
 import { SettingRow, ToggleSetting } from "./BarSettings";
 import { PinnedList } from "./PinnedList";
 
@@ -157,7 +157,7 @@ function CalendarSection() {
                 value={zone.label ?? ""}
                 placeholder="Label (the city, by default)"
                 onChange={(e) => setZones(zones.map((z, i) => (i === index ? withLabel(z, e.currentTarget.value) : z)))}
-                className={`${INPUT_CLASS} flex-1`}
+                className={`${INPUT_BASE} flex-1`}
               />
               <IconButton icon={X} label={`Remove time zone ${index + 1}`} onClick={() => setZones(zones.filter((_, i) => i !== index))} />
             </li>
@@ -189,7 +189,7 @@ function ZoneName({ label, value, onCommit }: { label: string; value: string; on
         if (e.currentTarget.value.trim() !== "") onCommit(e.currentTarget.value.trim());
       }}
       onBlur={() => setDraft(value)}
-      className={`${INPUT_CLASS} w-56 font-mono text-[13px]`}
+      className={`${INPUT_BASE} w-56 font-mono text-[13px]`}
     />
   );
 }

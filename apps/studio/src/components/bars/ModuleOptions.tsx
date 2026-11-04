@@ -6,7 +6,7 @@ import { tidy } from "../../lib/barsDoc";
 import { useBars } from "../../lib/barsContext";
 import { customId, isCustom, TRIGGERS, type Action, type ModuleOptions, type ModuleRef, type Trigger } from "../../lib/barsSchema";
 import { describeModule } from "../../lib/modules";
-import { Block, ConfirmButton, Group, IconButton, INPUT_CLASS, Row, Slider } from "../ui";
+import { Block, ConfirmButton, Group, IconButton, INPUT_BASE, INPUT_CLASS, Row, Slider } from "../ui";
 import { ActionPicker } from "./ActionPicker";
 import { PaintValue, ColorValue } from "./PaintEditor";
 
@@ -86,7 +86,7 @@ export function ModuleOptionsEditor({ moduleRef, onRemoved }: { moduleRef: Modul
 
       <Block title="Icon" detail="An icon-pack key, or an image file (svg, png, ico). It replaces the module's glyph; SVGs are drawn in the text color.">
         <div className="flex gap-2">
-          <input aria-label="Icon" value={options.icon ?? ""} placeholder="wifi-3, or a file path" spellCheck={false} onChange={(e) => set(at("icon"), e.currentTarget.value === "" ? undefined : e.currentTarget.value)} className={`${INPUT_CLASS} max-w-96 flex-1 font-mono text-[13px]`} />
+          <input aria-label="Icon" value={options.icon ?? ""} placeholder="wifi-3, or a file path" spellCheck={false} onChange={(e) => set(at("icon"), e.currentTarget.value === "" ? undefined : e.currentTarget.value)} className={`${INPUT_BASE} max-w-96 flex-1 font-mono text-[13px]`} />
           <IconButton icon={FolderOpen} label="Choose an icon file" onClick={() => void pickImage().then((path) => path && set(at("icon"), path))} />
         </div>
       </Block>
@@ -105,7 +105,7 @@ function CustomFields({ moduleRef, options }: { moduleRef: ModuleRef; options: M
   useEffect(() => setCommand(options.command ?? ""), [options.command, moduleRef]);
   const [argsText, setArgsText] = useState((options.args ?? []).join("\n"));
   // Another module was selected: show its arguments.
-  useEffect(() => setArgsText((options.args ?? []).join("\n")), [moduleRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setArgsText((options.args ?? []).join("\n")), [moduleRef]);
 
   return (
     <>
@@ -121,7 +121,7 @@ function CustomFields({ moduleRef, options }: { moduleRef: ModuleRef; options: M
               // The host refuses a custom module without a command, so an empty box isn't written.
               if (e.currentTarget.value.trim() !== "") set(at("command"), e.currentTarget.value);
             }}
-            className={`${INPUT_CLASS} flex-1 font-mono text-[13px]`}
+            className={`${INPUT_BASE} flex-1 font-mono text-[13px]`}
           />
           <IconButton icon={FolderOpen} label="Choose the program" onClick={() => void pickAnyFile().then((path) => path && set(at("command"), path))} />
         </div>

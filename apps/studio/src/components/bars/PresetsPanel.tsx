@@ -82,7 +82,8 @@ export function PresetsPanel() {
           const active = id === current;
           return (
             <li key={id} className={`rounded-2xl bg-surface p-3 shadow-card ring-1 ${active ? "ring-2 ring-ink" : "ring-line"}`}>
-              <BarPreview config={resolve(catalog, { preset: id })} catalog={catalog} width={330} wallpaper="dark" dense />
+              {/* Presets leave the dock off; the preview shows it on, as it would look when enabled. */}
+              <BarPreview config={resolve(catalog, { preset: id, dock: { enabled: true } })} catalog={catalog} width={330} wallpaper="dark" dense />
               <div className="mt-3 flex items-start justify-between gap-3 px-1 pb-1">
                 <div className="min-w-0">
                   <h3 className="font-display text-[15px] font-semibold text-ink">{name}</h3>

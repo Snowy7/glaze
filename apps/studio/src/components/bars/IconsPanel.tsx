@@ -163,9 +163,10 @@ function AppIcons({ pack, onChanged }: { pack: string; onChanged: () => Promise<
         <ul className="divide-y divide-line overflow-hidden rounded-xl bg-canvas ring-1 ring-line">
           {apps.map((app) => (
             <li key={app.index} className="flex items-center gap-3 px-3 py-2">
-              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-hi">
-                <img src={fileUrl(app.file)} alt="" draggable={false} className="size-6 object-contain" onError={(e) => (e.currentTarget.style.display = "none")} />
-                <AppWindow className="absolute size-4 text-ink-3 opacity-0" aria-hidden />
+              <span className="relative grid size-9 shrink-0 place-items-center rounded-lg bg-surface-hi">
+                <AppWindow className="absolute size-4 text-ink-3" aria-hidden />
+                {/* Over the placeholder: a picture that fails to load just leaves it showing. */}
+                <img src={fileUrl(app.file)} alt="" draggable={false} className="relative size-6 object-contain" onError={(e) => (e.currentTarget.style.display = "none")} />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="selectable truncate font-mono text-[12.5px] text-ink" title={app.target}>

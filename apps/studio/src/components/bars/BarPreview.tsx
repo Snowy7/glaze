@@ -13,7 +13,7 @@ import { Segmented } from "../ui";
 // 1280x720 DIP screen at half size, scaled to `width`; shapes, colors, materials and the
 // layout read right, text is only suggested.
 
-const K = 0.5;
+const K = 2 / 3;
 const STAGE = { width: 640, height: 360 } as const;
 const DOCK_APPS = [Folder, Globe, Terminal, Music, SettingsIcon];
 
@@ -47,7 +47,7 @@ export function BarPreview({ config, catalog, vars = {}, appearance, width, wall
       <div
         className="ap-stage absolute top-0 left-0 origin-top-left overflow-hidden"
         data-wallpaper={tone}
-        style={{ width: STAGE.width, height: STAGE.height, transform: `scale(${scale})`, color: text, fontSize: 7, lineHeight: 1 }}
+        style={{ width: STAGE.width, height: STAGE.height, transform: `scale(${scale})`, color: text, fontSize: 8, lineHeight: 1 }}
         aria-hidden
       >
         {config.top.enabled && <TopBar config={config} catalog={catalog} base={base} ctx={ctx} dense={dense} />}

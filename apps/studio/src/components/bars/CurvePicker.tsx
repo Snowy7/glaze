@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties, type PointerEvent } from "react";
+import { useRef, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 
 import { tidy } from "../../lib/barsDoc";
 import { NAMED_CURVES, type Curve, type NamedCurve, type Spring } from "../../lib/barsSchema";
@@ -104,7 +104,9 @@ function BezierEditor({ label, value, onChange }: { label: string; value: [numbe
   );
 
   const field = (name: string, index: number, min: number, max: number) => (
-    <Slider key={name} className="w-48" label={`${label} ${name}`} value={value[index] ?? 0} min={min} max={max} step={0.01} format={(v) => v.toFixed(2)} onChange={(v) => onChange(value.map((n, i) => (i === index ? tidy(v) : n)) as [number, number, number, number])} />
+    <SpringField key={name} name={name}>
+      <Slider className="w-52" label={`${label} ${name}`} value={value[index] ?? 0} min={min} max={max} step={0.01} format={(v) => v.toFixed(2)} onChange={(v) => onChange([x1, y1, x2, y2].map((n, i) => (i === index ? tidy(v) : n)) as [number, number, number, number])} />
+    </SpringField>
   );
 
   return (
@@ -119,11 +121,20 @@ function BezierEditor({ label, value, onChange }: { label: string; value: [numbe
         {handle(1, x2, y2)}
       </svg>
       <div className="space-y-2">
-        {field("x1", 0, 0, 1)}
-        {field("y1", 1, -2, 3)}
-        {field("x2", 2, 0, 1)}
-        {field("y2", 3, -2, 3)}
+        {field("Start x", 0, 0, 1)}
+        {field("Start y", 1, -2, 3)}
+        {field("End x", 2, 0, 1)}
+        {field("End y", 3, -2, 3)}
       </div>
+    </div>
+  );
+}
+
+function SpringField({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-16 shrink-0 text-[12.5px] text-ink-2">{name}</span>
+      {children}
     </div>
   );
 }
@@ -141,9 +152,15 @@ function SpringEditor({ label, value, onChange }: { label: string; value: Spring
         <polyline points={samples} className="fill-none stroke-ink" strokeWidth={2} />
       </svg>
       <div className="space-y-2">
-        <Slider className="w-56" label={`${label} mass`} value={value.mass} min={0.1} max={10} step={0.1} format={(v) => `mass ${v.toFixed(1)}`} onChange={(mass) => onChange({ ...value, mass: tidy(mass) })} />
-        <Slider className="w-56" label={`${label} stiffness`} value={value.stiffness} min={1} max={2000} step={1} format={(v) => `stiff ${v}`} onChange={(stiffness) => onChange({ ...value, stiffness })} />
-        <Slider className="w-56" label={`${label} damping`} value={value.damping} min={0} max={200} step={1} format={(v) => `damp ${v}`} onChange={(damping) => onChange({ ...value, damping })} />
+        <SpringField name="Mass">
+          <Slider className="w-60" label={`${label} mass`} value={value.mass} min={0.1} max={10} step={0.1} format={(v) => v.toFixed(1)} onChange={(mass) => onChange({ ...value, mass: tidy(mass) })} />
+        </SpringField>
+        <SpringField name="Stiffness">
+          <Slider className="w-60" label={`${label} stiffness`} value={value.stiffness} min={1} max={2000} step={1} onChange={(stiffness) => onChange({ ...value, stiffness })} />
+        </SpringField>
+        <SpringField name="Damping">
+          <Slider className="w-60" label={`${label} damping`} value={value.damping} min={0} max={200} step={1} onChange={(damping) => onChange({ ...value, damping })} />
+        </SpringField>
       </div>
     </div>
   );

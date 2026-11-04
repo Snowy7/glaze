@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Plus, RotateCcw, X } from "lucide-react";
 import { useState } from "react";
 
 import { MENU_BUILTINS, type MenuBuiltin, type MenuEntry } from "../lib/api";
-import { Button, IconButton, INPUT_CLASS, Select } from "./ui";
+import { Button, IconButton, INPUT_BASE, Select } from "./ui";
 
 const LABELS: Record<MenuBuiltin, string> = {
   separator: "Separator",
@@ -82,9 +82,9 @@ export function DesktopMenuEditor({ items, defaults, onChange }: Props) {
       <div className="rounded-xl bg-canvas p-3 ring-1 ring-line">
         <div className="mb-2 text-[12.5px] font-medium text-ink-2">Your own command</div>
         <div className="flex flex-wrap gap-2">
-          <input aria-label="Custom item label" value={label} placeholder="Label" onChange={(e) => setLabel(e.currentTarget.value)} className={`${INPUT_CLASS} h-9 w-36`} />
-          <input aria-label="Custom item command" value={command} placeholder="notepad.exe" spellCheck={false} onChange={(e) => setCommand(e.currentTarget.value)} className={`${INPUT_CLASS} h-9 min-w-40 flex-1 font-mono text-[13px]`} />
-          <input aria-label="Custom item arguments" value={args} placeholder="Arguments" spellCheck={false} onChange={(e) => setArgs(e.currentTarget.value)} className={`${INPUT_CLASS} h-9 min-w-40 flex-1 font-mono text-[13px]`} />
+          <input aria-label="Custom item label" value={label} placeholder="Label" onChange={(e) => setLabel(e.currentTarget.value)} className={`${INPUT_BASE} h-9 w-36`} />
+          <input aria-label="Custom item command" value={command} placeholder="notepad.exe" spellCheck={false} onChange={(e) => setCommand(e.currentTarget.value)} className={`${INPUT_BASE} h-9 min-w-40 flex-1 font-mono text-[13px]`} />
+          <input aria-label="Custom item arguments" value={args} placeholder="Arguments" spellCheck={false} onChange={(e) => setArgs(e.currentTarget.value)} className={`${INPUT_BASE} h-9 min-w-40 flex-1 font-mono text-[13px]`} />
           <Button
             icon={Plus}
             disabled={label.trim() === "" || command.trim() === ""}

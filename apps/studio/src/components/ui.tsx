@@ -177,9 +177,12 @@ export function Notice({ title, children }: { title: string; children: ReactNode
   );
 }
 
-/** Text input styled for the monochrome surfaces. */
-export const INPUT_CLASS =
-  "selectable h-10 w-full rounded-lg bg-canvas px-3 text-[14px] text-ink ring-1 ring-line-strong transition placeholder:text-ink-3 hover:ring-line-hi focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none";
+/** Text input styled for the monochrome surfaces, without a width: add `w-…` or `flex-1` yourself. */
+export const INPUT_BASE =
+  "selectable h-10 rounded-lg bg-canvas px-3 text-[14px] text-ink ring-1 ring-line-strong transition placeholder:text-ink-3 hover:ring-line-hi focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none";
+
+/** The same, as wide as its container. */
+export const INPUT_CLASS = `w-full ${INPUT_BASE}`;
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (

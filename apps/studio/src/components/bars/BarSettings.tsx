@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { getIn, tidy, type Path } from "../../lib/barsDoc";
 import { useBars } from "../../lib/barsContext";
 import type { Gradient, Paint } from "../../lib/barsSchema";
-import { INPUT_CLASS, Row, Segmented, Select, Slider, Switch } from "../ui";
+import { INPUT_BASE, Row, Segmented, Select, Slider, Switch } from "../ui";
 import { ColorValue, PaintValue } from "./PaintEditor";
 
 // Controls bound to a path of the `bars.json` being edited. Each shows the value the host will
@@ -116,7 +116,7 @@ export function TextSetting({ path, title, detail, placeholder, mono }: { path: 
         spellCheck={false}
         // An empty box means "not set": the field leaves the file instead of becoming "".
         onChange={(e) => set(path, e.currentTarget.value === "" ? undefined : e.currentTarget.value)}
-        className={`${INPUT_CLASS} w-64 ${mono ? "font-mono text-[13px]" : ""}`}
+        className={`${INPUT_BASE} w-64 ${mono ? "font-mono text-[13px]" : ""}`}
       />
     </SettingRow>
   );
