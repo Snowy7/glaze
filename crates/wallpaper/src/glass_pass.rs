@@ -871,8 +871,9 @@ mod tests {
                 let (encode_many, many) = time(&mut glass, 51);
                 let encode = (encode_many - encode_one) / 50.0;
                 println!(
-                    "glass {name}: {:.3} ms of GPU, {encode:.3} ms of CPU encoding per frame with {keep} plates on {}x{}",
+                    "glass {name}: {:.3} ms of GPU, {encode:.3} ms of CPU encoding per frame with {keep} plates ({} copies) on {}x{}",
                     (many - one) / 50.0 - encode,
+                    glass.copies.len(),
                     size.0,
                     size.1
                 );

@@ -212,17 +212,37 @@ README-ready text: replace the "Rust hot-patching (experimental, not working yet
 ## Liquid glass pass (`crates/wallpaper/src/glass_pass.rs`)
 
 UI processes publish glass plates (`mypaper_theme::glass`: `%LOCALAPPDATA%\mypaper\glass\<source>.json`
-plus the registered `mypaper.glass` message to the control window); the engine draws them into its
-own frame after the backdrop copy: the rim strips are copied out of the swapchain, then each plate
-is drawn as rings (a soft shadow outside, the rim band bent inward with a chromatic split and a
-specular rim; the clear centre is never rasterized). Plates spring between rects. The hooks are four
-lines in `engine.rs` (`advance`, `take_dirty`, `deadline`, `encode`) and one in `main.rs`'s pump;
-without plates nothing is allocated or drawn.
+plus the registered `mypaper.glass` message to the control window; the widget host writes
+`widgets.json`, see docs/widgets.md, "Liquid glass"); the engine draws them into its own frame after
+the backdrop copy. Per plate: one instance of five quads (glass.wgsl). Four make the ring of the rim
+band, the only part that samples: what is just outside the edge is pulled into the rim (a
+quarter-circle profile, steep at the very edge, with a slight chromatic split), under one thin
+specular edge lit from the top left and a fainter one opposite. The fifth is the centre, drawn only
+for a tint (a flat wash, nothing sampled) or a blur; a clear centre is never rasterized. Before the
+draw, the frame around the rims (each band and as far out as it reaches) is copied into a scratch
+texture, the strips of one plate and the facing edges of plates side by side merged into as few
+copies as cover them (a copy costs more than its pixels). Plates spring between rects; a still
+wallpaper redraws while one moves and once in the frame it settles (on every screen it was or is
+on). The hooks are four lines in `engine.rs` (`advance`, `take_dirty`, `deadline`, `encode`) and one
+in `main.rs`'s pump; without plates nothing is allocated or drawn. A native source (web, app, video
+drawn by its own swapchain) gets no plates: there is no frame of ours to draw into.
 
-Cost, measured with the ignored test `glass_cost` (`cargo test --release -p mypaper-wallpaper
-glass_cost -- --include-ignored --nocapture`; many passes per submit, so it is GPU time, on the
-low-power AMD iGPU at 2560x1440): about 0.35 ms with 1 plate, 0.5 ms with 4 and 1.1 ms with 24.
-Most of the small-count cost is fixed (the copy out of and the second pass into a full-size
-swapchain texture), so the 0.1 ms target is not met yet; the ideas that would get there are in
-the widgets agent's report (drawing the plates inside the source's own pass, or into a small
-per-plate target).
+Cost, measured with the ignored test `glass_cost` (`cargo test -p mypaper-wallpaper glass_cost --
+--ignored --nocapture`; many passes per submit, with the CPU's encoding timed apart, so the GPU's
+share is the rest; low-power AMD iGPU, 2560x1440, widget-sized 300x200 plates). Old and new were run
+back to back, twice, with nothing else on the GPU:
+
+| plates | GPU before | GPU now | CPU encoding before | now | copies now |
+|---|---|---|---|---|---|
+| 1 | 0.07 to 0.095 ms | 0.06 to 0.075 ms | 0.05 ms | 0.05 ms | 4 |
+| 4 | 0.17 ms | 0.11 ms | 0.09 ms | 0.065 ms | 7 |
+| 24 | 0.69 ms | 0.37 ms | 0.335 ms | 0.18 ms | 13 (from 96) |
+
+(The first numbers here, 0.35 to 1.1 ms, counted the encoding as GPU time. The benchmark measures
+wall time: with another process drawing on the same GPU, a web wallpaper say, both versions show
+about 0.2 ms more of its work.) What it took: no shadow ring (half the instances and fragments), a
+narrower band, merged copies, and no allocations per frame. It is paid only on frames the wallpaper
+draws anyway (an animated source), or once (a still one). Left: at many plates the draw dominates
+(the band's three taps per fragment); a smaller band, or one tap in the band's inner half where the
+bend is under a pixel, would trim it. `glass_preview` (ignored) draws plates over a BMP, to judge
+the look without a desktop.
