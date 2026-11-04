@@ -878,3 +878,10 @@ still has them loads with one logged warning (N6):
 
 **At risk, decided by D7:** bar saturation, glass depth, sheen and the glass Strength master. Native
 `Material` is clarity, blur, refraction, highlight and tint.
+
+## Decisions (Alex, 2026-11-05)
+- D1: the UI says **Wallpapers**, not "theme"; a wallpaper can bring a look.
+- D2: Windows styling is **part of the user's Look** (small schema addition), not inside a theme file.
+- D3: previews use **engine-drawn glass**, plus **Peek** (Ctrl+D) to check the real desktop.
+- D4: clicking a wallpaper card **selects** it; a **Use** button applies it.
+- D5–D7: take the spec's recommendations.
