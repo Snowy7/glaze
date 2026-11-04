@@ -263,7 +263,7 @@ is after. Designs never decide whether a bar shows, where, or its pins.
 | `monochrome` (default) | a black wallpaper-glass strip, 32, white type |
 | `macos` | the macOS (Tahoe) menu bar: 24, no surface, white type on the wallpaper, the app's name in bold, SF-style monochrome status icons, the time on the right; its flyouts are the macOS family in liquid glass |
 | `fluent` | a Windows 11 bar: 32, Mica-like wallpaper glass, Segoe UI Variable 12, Segoe Fluent Icons, 4 DIP subtle-fill buttons, network/volume/battery as one button opening quick settings |
-| `capsule` | a floating liquid-glass pill hugging its modules, 36, iPadOS/visionOS style |
+| `capsule` | a floating liquid-glass pill hugging its modules, 36, iPadOS/visionOS style; its flyouts morph out of their button |
 | `minimal` | no surface: the clock in the middle, workspaces and a few status icons, a soft text shadow |
 | `islands` | a transparent rail with one solid pill per group |
 | `neon` | floating dark glass with a magenta-to-cyan edge and glow |

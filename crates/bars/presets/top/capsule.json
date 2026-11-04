@@ -81,9 +81,9 @@
       "style": "pop"
     },
     "open": {
-      "style": "scale",
+      "style": "morph",
       "curve": "spring",
-      "duration": 260
+      "duration": 300
     }
   }
 }

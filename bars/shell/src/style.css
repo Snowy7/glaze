@@ -678,6 +678,12 @@ button.mod.clock {
 [data-m-open="scale"] .flyout {
   animation-name: fly-scale;
 }
+[data-m-open="morph"] .flyout {
+  animation-name: fly-morph;
+}
+[data-m-open="morph"] .flyout.leaving {
+  animation-name: fly-morph-out;
+}
 [data-m-open="none"] .flyout {
   animation: none;
 }
@@ -710,6 +716,23 @@ button.mod.clock {
   from {
     opacity: 0;
     scale: 0.82;
+  }
+}
+/* Morph: the flyout grows out of the button that opened it (its origin is toward the anchor), and
+   folds back into it. */
+@keyframes fly-morph {
+  from {
+    opacity: 0;
+    scale: 0.42 0.16;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+@keyframes fly-morph-out {
+  to {
+    opacity: 0;
+    scale: 0.5 0.2;
   }
 }
 @keyframes fly-out {
