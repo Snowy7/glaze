@@ -399,6 +399,12 @@ const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::Manual {
     suballocated_device_memory_block_size: 4 << 20..4 << 20,
 };
 
+/// Size of DX12's shader-visible view descriptor heap: every bind group's textures and buffers
+/// live in it while the group exists. wgpu's default, 1,000,000, is allocated up front and cost
+/// 92 MiB private here; the engine's bind groups (a few per screen, source and pyramid level, a
+/// few hundred for a large glTF scene) fit in this many with room to spare.
+const DESCRIPTORS: u32 = 16_384;
+
 /// Opens the device and queue, routing GPU errors to the log. `timing` adds the timestamp
 /// features the adapter supports.
 fn open_device(adapter: &wgpu::Adapter, timing: bool) -> Result<(wgpu::Device, wgpu::Queue)> {
@@ -413,7 +419,10 @@ fn open_device(adapter: &wgpu::Adapter, timing: bool) -> Result<(wgpu::Device, w
                     wgpu::Features::empty()
                 },
         ),
-        required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
+        required_limits: wgpu::Limits {
+            max_non_sampler_bindings: DESCRIPTORS,
+            ..wgpu::Limits::default().using_resolution(adapter.limits())
+        },
         memory_hints: MEMORY_HINTS,
         ..Default::default()
     }))?;
