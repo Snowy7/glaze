@@ -735,8 +735,6 @@ impl App {
         self.surfaces.retain(|s| s.layer != Layer::Desktop);
         // The environment isn't parented to Explorer. Reuse it for the new controllers.
         self.timers.webview = None;
-        self.plates.retain(|_| false);
-        self.offer_plates();
     }
 
     /// One attempt per shell event, never a retry poll. Unchanged hosts ignore tray-host broadcasts.
