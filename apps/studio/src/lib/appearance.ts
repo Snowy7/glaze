@@ -67,6 +67,21 @@ export const APPEARANCE_KEYS = [
   "shadow",
 ] as const satisfies readonly (keyof Appearance)[];
 
+/** Layers merged, lowest first, keeping only the fields some layer sets. */
+export function mergeLayers(...layers: readonly Appearance[]): Appearance {
+  const merged: Appearance = {};
+  for (const layer of layers) {
+    for (const key of APPEARANCE_KEYS) {
+      const value = layer[key];
+      if (value !== undefined) Object.assign(merged, { [key]: value });
+    }
+  }
+  return merged;
+}
+
+/** Whether any of `layers` sets `key`. */
+export const setsField = (layers: readonly Appearance[], key: keyof Appearance) => layers.some((layer) => layer[key] !== undefined);
+
 /** How many fields the layer sets. */
 export function setCount(appearance: Appearance): number {
   return APPEARANCE_KEYS.filter((key) => appearance[key] !== undefined).length;

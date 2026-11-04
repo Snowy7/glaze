@@ -1,37 +1,37 @@
-import { Blocks, LayoutGrid, PanelTop, Pause, Plus, Settings, type LucideIcon } from "lucide-react";
+import { Pause, Play, Search } from "lucide-react";
 
+import { useNav } from "../lib/nav";
 import { useStudio } from "../lib/studio";
-import { StatusDot } from "./ui";
+import { PAGES } from "../lib/pages";
+import { Keycap, StatusDot } from "./ui";
 
-export type View = "gallery" | "widgets" | "bars" | "new" | "settings";
+/** The app's navigation: search, the six places, and what mypaper is doing. Below 1024 px it folds into an icon rail. */
+export function Sidebar({ onSearch }: { onSearch: () => void }) {
+  const { route, go } = useNav();
+  const main = PAGES.filter((p) => p.page !== "settings");
+  const settings = PAGES.find((p) => p.page === "settings");
+  const link = (item: (typeof PAGES)[number]) => {
+    const current = route.page === item.page;
+    return (
+      <button
+        key={item.page}
+        type="button"
+        aria-current={current ? "page" : undefined}
+        title={item.label}
+        onClick={() => go(item.route)}
+        className={`flex h-9 cursor-default items-center gap-3 rounded-lg px-2.5 text-[13px] font-medium transition-colors duration-150 max-lg:justify-center max-lg:px-0 ${
+          current ? "bg-surface-top text-ink shadow-[inset_0_0_0_1px_var(--line-strong)]" : "text-ink-3 hover:bg-surface-hi hover:text-ink"
+        }`}
+      >
+        <item.icon className="size-4 shrink-0" aria-hidden />
+        <span className="max-lg:sr-only">{item.label}</span>
+      </button>
+    );
+  };
 
-type Item = { view: View; label: string; icon: LucideIcon };
-
-const SECTIONS: readonly { title: string; items: readonly Item[] }[] = [
-  {
-    title: "Themes",
-    items: [
-      { view: "gallery", label: "Gallery", icon: LayoutGrid },
-      { view: "new", label: "New theme", icon: Plus },
-    ],
-  },
-  {
-    title: "Desktop",
-    items: [
-      { view: "widgets", label: "Widgets", icon: Blocks },
-      { view: "bars", label: "Bars", icon: PanelTop },
-    ],
-  },
-];
-
-const SETTINGS: Item = { view: "settings", label: "Settings", icon: Settings };
-
-/** The app's navigation. Below 1024 px wide it folds into an icon rail (labels stay for screen readers and tooltips). */
-export function Sidebar({ view, onNavigate }: { view: View; onNavigate: (view: View) => void }) {
-  const link = (item: Item) => <NavLink key={item.view} item={item} current={view === item.view} onNavigate={onNavigate} />;
   return (
     <aside className="flex w-[3.75rem] shrink-0 flex-col bg-sidebar px-2 pt-4 pb-3 lg:w-56 lg:px-3">
-      <div className="mb-6 flex items-center gap-2.5 max-lg:justify-center lg:px-1.5">
+      <div className="mb-5 flex items-center gap-2.5 max-lg:justify-center lg:px-1.5">
         <Mark />
         <div className="leading-none max-lg:hidden">
           <div className="font-display text-[15px] font-semibold tracking-tight text-ink">mypaper</div>
@@ -39,67 +39,60 @@ export function Sidebar({ view, onNavigate }: { view: View; onNavigate: (view: V
         </div>
       </div>
 
-      <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col">
-        {SECTIONS.map(({ title, items }) => (
-          <div key={title} className="mb-4 max-lg:mb-3 max-lg:border-b max-lg:border-line max-lg:pb-3 max-lg:last:border-0">
-            <div className="mb-1 px-2.5 text-[11.5px] font-medium text-ink-4 max-lg:sr-only">{title}</div>
-            <div className="flex flex-col gap-0.5">{items.map(link)}</div>
-          </div>
-        ))}
-        <div className="mt-auto flex flex-col gap-0.5">{link(SETTINGS)}</div>
+      <button
+        type="button"
+        onClick={onSearch}
+        title="Search"
+        className="mb-4 flex h-9 cursor-default items-center gap-2.5 rounded-lg bg-canvas px-2.5 text-[13px] text-ink-3 ring-1 ring-line-strong transition-colors ring-inset hover:text-ink-2 hover:ring-line-hi max-lg:justify-center max-lg:px-0"
+      >
+        <Search className="size-4 shrink-0" aria-hidden />
+        <span className="flex-1 text-left max-lg:sr-only">Search</span>
+        <span className="flex gap-0.5 max-lg:hidden" aria-hidden>
+          <Keycap>Ctrl</Keycap>
+          <Keycap>K</Keycap>
+        </span>
+      </button>
+
+      <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col gap-0.5">
+        {main.map(link)}
+        <div className="mt-auto flex flex-col gap-0.5">{settings && link(settings)}</div>
       </nav>
 
-      <EngineChip onOpen={() => onNavigate("settings")} />
+      <EngineChip />
     </aside>
   );
 }
 
-function NavLink({ item: { view, label, icon: Icon }, current, onNavigate }: { item: Item; current: boolean; onNavigate: (view: View) => void }) {
-  return (
-    <button
-      type="button"
-      aria-current={current ? "page" : undefined}
-      title={label}
-      onClick={() => onNavigate(view)}
-      className={`flex h-9 cursor-default items-center gap-3 rounded-lg px-2.5 text-[13px] font-medium transition-colors duration-150 max-lg:justify-center max-lg:px-0 ${
-        current ? "bg-surface-top text-ink shadow-[inset_0_0_0_1px_var(--line-strong)]" : "text-ink-3 hover:bg-surface-hi hover:text-ink"
-      }`}
-    >
-      <Icon className="size-4 shrink-0" aria-hidden />
-      <span className="max-lg:sr-only">{label}</span>
-    </button>
-  );
-}
-
-/** What the engine is doing, and the theme on screen. Opens Settings. */
-function EngineChip({ onOpen }: { onOpen: () => void }) {
-  const { engine, config, themes } = useStudio();
+/** What mypaper is doing and the theme on screen; pause and resume in one click, Settings in another. */
+function EngineChip() {
+  const { engine, config, themes, updateConfig } = useStudio();
+  const { go } = useNav();
   const state = !engine ? "unknown" : !engine.running ? "stopped" : config?.paused ? "paused" : "running";
-  const label = {
-    unknown: "Checking engine",
-    stopped: "Engine stopped",
-    paused: "Wallpaper paused",
-    running: "Wallpaper running",
-  }[state];
+  const label = { unknown: "Checking", stopped: "mypaper is off", paused: "Paused", running: "Playing" }[state];
   const active = themes.find((t) => t.active);
+  const canPause = state === "running" || state === "paused";
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title={`${label}. Engine settings`}
-      className="mt-3 flex min-h-11 cursor-default items-center gap-2.5 rounded-lg bg-surface px-3 py-2 text-left ring-1 ring-line-strong transition-colors duration-150 hover:bg-surface-hi hover:ring-line-hi max-lg:justify-center max-lg:px-0"
-    >
-      {state === "paused" ? (
-        <Pause className="size-2.5 shrink-0 fill-current text-ink" aria-hidden />
-      ) : (
-        <StatusDot state={state === "running" ? "on" : state === "stopped" ? "off" : "unknown"} />
+    <div className="mt-3 flex min-h-11 items-center gap-1 rounded-lg bg-surface py-1 pr-1 pl-3 ring-1 ring-line-strong max-lg:justify-center max-lg:p-1">
+      <button type="button" onClick={() => go({ page: "settings" })} title={`${label}. Settings`} className="flex min-w-0 flex-1 cursor-default items-center gap-2.5 text-left max-lg:hidden">
+        {state === "paused" ? <Pause className="size-2.5 shrink-0 fill-current text-ink" aria-hidden /> : <StatusDot state={state === "running" ? "on" : state === "stopped" ? "off" : "unknown"} />}
+        <span className="min-w-0">
+          <span className="block truncate text-[12.5px] font-medium text-ink">{label}</span>
+          {active && state !== "stopped" && <span className="block truncate text-[11.5px] text-ink-3">{active.name}</span>}
+        </span>
+      </button>
+      {canPause && config && (
+        <button
+          type="button"
+          aria-label={config.paused ? "Resume the wallpaper" : "Pause the wallpaper"}
+          title={config.paused ? "Resume" : "Pause"}
+          onClick={() => void updateConfig({ paused: !config.paused }, { label: config.paused ? "Resume wallpaper" : "Pause wallpaper" })}
+          className="grid size-8 shrink-0 cursor-default place-items-center rounded-md text-ink-2 transition-colors hover:bg-surface-hi hover:text-ink"
+        >
+          {config.paused ? <Play className="size-3.5" aria-hidden /> : <Pause className="size-3.5" aria-hidden />}
+        </button>
       )}
-      <span className="min-w-0 max-lg:sr-only">
-        <span className="block truncate text-[12.5px] font-medium text-ink">{label}</span>
-        {active && state !== "stopped" && <span className="block truncate text-[11.5px] text-ink-3">{active.name}</span>}
-      </span>
-    </button>
+    </div>
   );
 }
 

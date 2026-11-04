@@ -1,4 +1,4 @@
-import { Check, ChevronDown, LoaderCircle, Minus, Plus, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, GripVertical, LoaderCircle, Minus, Plus, Redo2, RotateCcw, TriangleAlert, Undo2, type LucideIcon } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -9,8 +9,11 @@ import {
   type ComponentProps,
   type CSSProperties,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+
+import { useHistory } from "../lib/history";
 
 // The control kit. Colors come only from the tokens in index.css; primary is the inverse fill,
 // selection is a raised gray with a bright edge, never a hue. Control bases (`ui-btn`,
@@ -978,4 +981,398 @@ export function ConfirmButton({
       {armed ? "Sure?" : children}
     </Button>
   );
+}
+
+// --- Page and inspector patterns (docs/studio-ux.md, "Few patterns") ---
+
+/**
+ * The bar on top of every page: the title (with a way back, for sub-pages), what's selected, and the
+ * page's actions on the right.
+ */
+export function PageBar({ title, back, detail, children }: { title: string; back?: { label: string; onClick: () => void }; detail?: ReactNode; children?: ReactNode }) {
+  return (
+    <header className="flex h-[3.25rem] shrink-0 items-center gap-3 border-b border-line px-4 lg:px-5">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        {back && (
+          <>
+            <button
+              type="button"
+              onClick={back.onClick}
+              className="-ml-1.5 flex h-8 cursor-default items-center gap-1 rounded-md pr-2 pl-1.5 text-[13.5px] font-medium text-ink-3 transition-colors hover:bg-surface-hi hover:text-ink"
+            >
+              <ChevronLeft className="size-4" aria-hidden />
+              {back.label}
+            </button>
+            <span className="text-ink-4" aria-hidden>
+              /
+            </span>
+          </>
+        )}
+        <h1 className={`truncate font-display text-[15px] font-semibold tracking-tight text-ink ${back ? "pl-1" : ""}`}>{title}</h1>
+        {detail && <span className="ml-1.5 min-w-0 truncate text-[13px] text-ink-3">{detail}</span>}
+      </div>
+      {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+    </header>
+  );
+}
+
+/** Saving / Saved, with Undo and Redo (history.tsx). Goes in the page bar of every editing page. */
+export function SaveState({ saving = false }: { saving?: boolean }) {
+  const { undo, redo, undoLabel, redoLabel } = useHistory();
+  return (
+    <div className="flex items-center gap-0.5">
+      <span className="mr-2 flex items-center gap-1.5 text-[12px] text-ink-3 max-md:hidden" aria-live="polite">
+        {saving ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
+        {saving ? "Saving" : "Saved"}
+      </span>
+      <IconButton icon={Undo2} variant="ghost" size="sm" label={undoLabel ? `Undo: ${lower(undoLabel)}` : "Nothing to undo"} disabled={!undoLabel} onClick={undo} />
+      <IconButton icon={Redo2} variant="ghost" size="sm" label={redoLabel ? `Redo: ${lower(redoLabel)}` : "Nothing to redo"} disabled={!redoLabel} onClick={redo} />
+    </div>
+  );
+}
+
+const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
+/** An editing page: the stage (left, live) and the inspector (right). Under 1100 px they stack. */
+export function EditorLayout({ stage, inspector }: { stage: ReactNode; inspector: ReactNode }) {
+  return (
+    <div className="flex min-h-0 flex-1 max-[1100px]:flex-col max-[1100px]:overflow-y-auto">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col max-[1100px]:min-h-[24rem] max-[1100px]:flex-none">{stage}</div>
+      {inspector}
+    </div>
+  );
+}
+
+/** The right-hand panel of an editing page: a header, presets, the common settings, More options. */
+export function Inspector({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <aside
+      aria-label={label}
+      className="flex w-[22rem] shrink-0 flex-col overflow-y-auto border-l border-line bg-sidebar [scrollbar-gutter:stable] max-[1100px]:w-full max-[1100px]:overflow-visible max-[1100px]:border-t max-[1100px]:border-l-0 2xl:w-[25rem]"
+    >
+      {children}
+    </aside>
+  );
+}
+
+/** What the inspector shows: an icon, a name, one line of context, a way back, and actions (Reset). */
+export function InspectorHeader({
+  icon: Icon,
+  title,
+  detail,
+  back,
+  actions,
+}: {
+  icon: LucideIcon;
+  title: string;
+  detail?: ReactNode;
+  back?: { label: string; onClick: () => void };
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="border-b border-line px-4 pt-3 pb-3.5">
+      {back && (
+        <button
+          type="button"
+          onClick={back.onClick}
+          className="-ml-1.5 mb-2 flex h-6 cursor-default items-center gap-0.5 rounded-md pr-1.5 pl-1 text-[12px] font-medium text-ink-3 hover:bg-surface-hi hover:text-ink"
+        >
+          <ChevronLeft className="size-3.5" aria-hidden />
+          {back.label}
+        </button>
+      )}
+      <div className="flex items-center gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-hi text-ink ring-1 ring-line-strong">
+          <Icon className="size-[18px]" strokeWidth={1.7} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-[14px] font-semibold tracking-tight text-ink">{title}</h2>
+          {detail && <div className="truncate text-[12px] text-ink-3">{detail}</div>}
+        </div>
+        {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** A run of settings in the inspector, with an optional small heading and an action beside it. */
+export function InspectorSection({ title, action, children }: { title?: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section aria-label={title} className="border-b border-line px-4 py-4 last:border-b-0">
+      {(title || action) && (
+        <div className="mb-3 flex min-h-6 items-center justify-between gap-2">
+          {title && <h3 className="text-[11.5px] font-semibold tracking-[0.06em] text-ink-3 uppercase">{title}</h3>}
+          {action}
+        </div>
+      )}
+      <div className="flex flex-col gap-3.5">{children}</div>
+    </section>
+  );
+}
+
+type PropProps = {
+  /** The search anchor (`data-setting`, see settingsIndex.ts). */
+  id?: string;
+  label: string;
+  /** One short line under the control. */
+  hint?: ReactNode;
+  /** Where an unset value comes from ("Theme", "Default"). Absent with `onReset`: the user's own. */
+  inherited?: string;
+  /** Hands the value back to the layer below; offered while the value is the user's own. */
+  onReset?: () => void;
+  /** The control under the label (full width) instead of beside it. */
+  stacked?: boolean;
+  children: ReactNode;
+};
+
+/**
+ * One setting in the inspector: its label, the control, and where the value comes from. A value
+ * from below is marked with its source; touching the control makes it the user's own (marked with a
+ * dot), and the reset arrow hands it back.
+ */
+export function Prop({ id, label, hint, inherited, onReset, stacked = false, children }: PropProps) {
+  const own = inherited === undefined && onReset !== undefined;
+  const labelRow = (
+    <div className="flex min-h-7 min-w-0 items-center gap-1.5">
+      <span className={`truncate text-[13px] ${own ? "font-medium text-ink" : "text-ink-2"}`}>{label}</span>
+      {own && <span title="Changed" className="size-1.5 shrink-0 rounded-full bg-ink" />}
+      {inherited && <span className="shrink-0 text-[11px] text-ink-4">{inherited}</span>}
+      {own && (
+        <button
+          type="button"
+          aria-label={`Reset ${lower(label)}`}
+          title="Reset"
+          onClick={onReset}
+          className="ml-auto grid size-6 shrink-0 cursor-default place-items-center rounded-md text-ink-4 transition-colors hover:bg-surface-hi hover:text-ink"
+        >
+          <RotateCcw className="size-3.5" aria-hidden />
+        </button>
+      )}
+    </div>
+  );
+  return (
+    <div data-setting={id} className="setting-anchor">
+      {stacked ? (
+        <>
+          {labelRow}
+          <div className="mt-1.5 min-w-0">{children}</div>
+        </>
+      ) : (
+        <div className="grid grid-cols-[minmax(0,7.25rem)_minmax(0,1fr)] items-center gap-3 2xl:grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)]">
+          {labelRow}
+          <div className="flex min-w-0 justify-end">{children}</div>
+        </div>
+      )}
+      {hint && <p className="mt-1.5 text-[12px] leading-snug text-ink-3">{hint}</p>}
+    </div>
+  );
+}
+
+/** "More options": the rest of a section, one step away. A native disclosure, so search can open it. */
+export function More({ label = "More options", children }: { label?: string; children: ReactNode }) {
+  return (
+    <details className="group/more border-b border-line last:border-b-0">
+      <summary className="flex h-11 cursor-default list-none items-center gap-2 px-4 text-[13px] font-medium text-ink-2 transition-colors select-none hover:bg-surface-hi/60 hover:text-ink [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="size-4 text-ink-3 transition-transform duration-200 group-open/more:rotate-90" aria-hidden />
+        {label}
+      </summary>
+      <div className="flex flex-col gap-3.5 px-4 pt-1 pb-4">{children}</div>
+    </details>
+  );
+}
+
+/** A row that leads somewhere: another selection, or another page. */
+export function NavRow({ icon: Icon, title, detail, trailing, onClick }: { icon: LucideIcon; title: string; detail?: ReactNode; trailing?: ReactNode; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="group -mx-2 flex min-h-11 cursor-default items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-hi">
+      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-surface-hi text-ink-2 ring-1 ring-line-strong transition-colors group-hover:bg-surface-top group-hover:text-ink">
+        <Icon className="size-4" strokeWidth={1.7} aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-medium text-ink">{title}</span>
+        {detail && <span className="block truncate text-[12px] text-ink-3">{detail}</span>}
+      </span>
+      {trailing && <span className="shrink-0 text-[12px] text-ink-3">{trailing}</span>}
+      <ChevronRight className="size-4 shrink-0 text-ink-4 transition-colors group-hover:text-ink-2" aria-hidden />
+    </button>
+  );
+}
+
+export type Tile<T extends string> = { value: T; label: string; preview: ReactNode; hint?: string };
+
+/**
+ * The one picker: visual tiles, one chosen (a radio group; arrow keys move the choice). Themes,
+ * presets, styles, surfaces, fits, corners and pointers all use it.
+ */
+export function TilePicker<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  min = "5.25rem",
+  aspect = "aspect-[4/3]",
+}: {
+  label: string;
+  /** Null: none of the tiles matches (a mix of their own). */
+  value: T | null;
+  options: readonly Tile<T>[];
+  onChange: (value: T) => void;
+  /** The smallest tile width; tiles fill the row. */
+  min?: string;
+  /** The preview's shape. */
+  aspect?: string;
+}) {
+  const group = useRef<HTMLDivElement>(null);
+  const focusable = value !== null && options.some((o) => o.value === value) ? value : options[0]?.value;
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (step === undefined) return;
+    event.preventDefault();
+    const index = options.findIndex((o) => o.value === focusable);
+    const next = options[(index + step + options.length) % options.length];
+    if (!next) return;
+    onChange(next.value);
+    group.current?.querySelector<HTMLElement>(`[data-tile="${CSS.escape(next.value)}"]`)?.focus();
+  }
+
+  const columns: CSSProperties = { gridTemplateColumns: `repeat(auto-fill, minmax(${min}, 1fr))` };
+  return (
+    <div ref={group} role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className="grid gap-2" style={columns}>
+      {options.map((option) => {
+        const on = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            tabIndex={option.value === focusable ? 0 : -1}
+            data-tile={option.value}
+            title={option.hint}
+            onClick={() => onChange(option.value)}
+            className={`relative min-w-0 cursor-default rounded-[10px] p-1 text-left transition-[box-shadow,background-color,color] duration-150 ${
+              on ? "bg-surface-top text-ink ring-2 ring-ink" : "bg-surface text-ink-3 ring-1 ring-line-strong hover:bg-surface-hi hover:text-ink hover:ring-line-hi"
+            }`}
+          >
+            <span className={`relative block overflow-hidden rounded-md bg-canvas ${aspect}`} aria-hidden>
+              {option.preview}
+            </span>
+            <span className="flex items-center gap-1 px-1 pt-1.5 pb-0.5 text-[12px] leading-tight font-medium">
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              {on && <Check className="size-3.5 shrink-0" aria-hidden />}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The one list: rows with a grip to drag into a new order (the grip also takes the up and down
+ * arrow keys), then the row's own content and actions.
+ */
+export function SortableList<T>({
+  label,
+  items,
+  keyOf,
+  renderItem,
+  onReorder,
+}: {
+  label: string;
+  items: readonly T[];
+  keyOf: (item: T, index: number) => string;
+  /** A row's content after the grip. */
+  renderItem: (item: T, index: number) => ReactNode;
+  /** Moves the item at `from` so it ends up at `to`. */
+  onReorder: (from: number, to: number) => void;
+}) {
+  const list = useRef<HTMLOListElement>(null);
+  const hint = useId();
+  const [drag, setDrag] = useState<{ from: number; to: number; dy: number; height: number } | null>(null);
+
+  function start(event: ReactPointerEvent<HTMLButtonElement>, index: number) {
+    if (event.button !== 0) return;
+    const rows = [...(list.current?.children ?? [])].map((row) => row.getBoundingClientRect());
+    const row = rows[index];
+    if (!row) return;
+    event.preventDefault();
+    const startY = event.clientY;
+    let last = { from: index, to: index, dy: 0, height: row.height };
+    setDrag(last);
+    const move = (e: PointerEvent) => {
+      const dy = e.clientY - startY;
+      const middle = row.top + row.height / 2 + dy;
+      const to = rows.filter((r, i) => i !== index && r.top + r.height / 2 < middle).length;
+      last = { from: index, to, dy, height: row.height };
+      setDrag(last);
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      setDrag(null);
+      if (last.to !== last.from) onReorder(last.from, last.to);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  }
+
+  function onKey(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const to = event.key === "ArrowUp" ? index - 1 : event.key === "ArrowDown" ? index + 1 : null;
+    if (to === null || to < 0 || to >= items.length) return;
+    event.preventDefault();
+    onReorder(index, to);
+    requestAnimationFrame(() => list.current?.querySelectorAll<HTMLElement>("[data-grip]")[to]?.focus());
+  }
+
+  const shift = (index: number): number => {
+    if (!drag || index === drag.from) return 0;
+    if (drag.from < index && index <= drag.to) return -drag.height;
+    if (drag.to <= index && index < drag.from) return drag.height;
+    return 0;
+  };
+
+  return (
+    <>
+      <span id={hint} className="sr-only">
+        Drag, or use the up and down arrow keys, to move it.
+      </span>
+      <ol ref={list} aria-label={label} className="flex flex-col rounded-lg bg-canvas p-1 ring-1 ring-line-strong ring-inset">
+        {items.map((item, index) => {
+          const dragging = drag?.from === index;
+          const style: CSSProperties = { transform: `translateY(${dragging ? drag.dy : shift(index)}px)` };
+          return (
+            <li
+              key={keyOf(item, index)}
+              style={style}
+              className={`group/row relative flex min-h-9 items-center gap-1 rounded-md pr-1 ${dragging ? "z-10 bg-surface-top shadow-pop ring-1 ring-line-hi" : "transition-transform duration-150 hover:bg-surface-hi"}`}
+            >
+              <button
+                type="button"
+                data-grip
+                aria-label={`Move item ${index + 1}`}
+                aria-describedby={hint}
+                onPointerDown={(e) => start(e, index)}
+                onKeyDown={(e) => onKey(e, index)}
+                className="grid h-8 w-6 shrink-0 cursor-grab touch-none place-items-center rounded text-ink-4 transition-colors group-hover/row:text-ink-3 hover:text-ink active:cursor-grabbing"
+              >
+                <GripVertical className="size-3.5" aria-hidden />
+              </button>
+              {renderItem(item, index)}
+            </li>
+          );
+        })}
+      </ol>
+    </>
+  );
+}
+
+/** `list` with the item at `from` moved so it ends up at `to`. */
+export function moved<T>(list: readonly T[], from: number, to: number): T[] {
+  const item = list[from];
+  if (item === undefined || from === to) return [...list];
+  return list.toSpliced(from, 1).toSpliced(to, 0, item);
 }
