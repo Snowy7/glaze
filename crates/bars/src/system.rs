@@ -1,8 +1,7 @@
 //! What the bars' clicks do, and the small system readings (battery, CPU, memory).
 //!
-//! Window activation relies on the foreground rights the user's click on a bar gives our process
-//! (the bar windows are activatable, not `WS_EX_NOACTIVATE`), so `SetForegroundWindow` may pass the
-//! foreground on to the app.
+//! Window activation runs on the bar's input thread. The user's click gives the process
+//! foreground rights to pass to the app; the bar itself remains nonactivating.
 
 use std::time::Instant;
 

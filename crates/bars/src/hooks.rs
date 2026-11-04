@@ -4,7 +4,11 @@
 //! Events arrive through the installing thread's message loop; the callback only sets bits that
 //! the main loop takes with [`Hooks::take`].
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::{
+    cell::RefCell,
+    collections::HashSet,
+    sync::atomic::{AtomicBool, AtomicU32, Ordering},
+};
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
@@ -27,6 +31,11 @@ pub const MOVED: u32 = 4;
 /// hid, or building a new one).
 pub const TASKBAR_SHOWN: u32 = 8;
 
+thread_local! {
+    // WinEvent callbacks run on the installing thread. A dead child/control window must not
+    // trigger an enumeration of every application; only known app windows affect that list.
+    static WINDOWS_SEEN: RefCell<HashSet<isize>> = RefCell::default();
+}
 static PENDING: AtomicU32 = AtomicU32::new(0);
 /// Whether taskbar moves count as [`TASKBAR_SHOWN`]: only while the taskbar should be hidden, so
 /// other moves cost no class lookup.
@@ -63,6 +72,11 @@ impl Hooks {
         Self { hooks }
     }
 
+    /// The app snapshot identifies destroyed handles after Windows can no longer classify them.
+    pub fn track(&self, windows: impl IntoIterator<Item = isize>) {
+        WINDOWS_SEEN.with(|seen| *seen.borrow_mut() = windows.into_iter().collect());
+    }
+
     /// What happened since the last call (a set of the constants above).
     pub fn take(&self) -> u32 {
         PENDING.swap(0, Ordering::Relaxed)
@@ -88,8 +102,8 @@ fn top_level(hwnd: HWND) -> bool {
 fn classify(event: u32, top: bool, watching: bool, taskbar: impl Fn() -> bool) -> u32 {
     match event {
         EVENT_SYSTEM_FOREGROUND => FOREGROUND,
-        // A destroyed window can't be asked whether it was top-level any more.
-        EVENT_OBJECT_DESTROY => WINDOWS,
+        // For a dead window, `top` means it belonged to the last app snapshot.
+        EVENT_OBJECT_DESTROY if top => WINDOWS,
         EVENT_OBJECT_LOCATIONCHANGE if top && watching && taskbar() => MOVED | TASKBAR_SHOWN,
         EVENT_OBJECT_LOCATIONCHANGE if top => MOVED,
         // A new taskbar (a monitor came back, Explorer restarted) is born visible and unveiled.
@@ -123,7 +137,11 @@ unsafe extern "system" fn on_event(
     if object != OBJID_WINDOW.0 || child != CHILDID_SELF as i32 {
         return;
     }
-    let top = event != EVENT_OBJECT_DESTROY && event != EVENT_SYSTEM_FOREGROUND && top_level(hwnd);
+    let top = if event == EVENT_OBJECT_DESTROY {
+        WINDOWS_SEEN.with(|seen| seen.borrow_mut().remove(&(hwnd.0 as isize)))
+    } else {
+        event != EVENT_SYSTEM_FOREGROUND && top_level(hwnd)
+    };
     let taskbar = || crate::taskbar::is_taskbar_class(&crate::apps::class_name(hwnd));
     let watching = WATCH_TASKBAR.load(Ordering::Relaxed);
     let bits = classify(event, top, watching, taskbar);
@@ -143,7 +161,12 @@ mod tests {
             classify(EVENT_SYSTEM_FOREGROUND, false, false, no),
             FOREGROUND
         );
-        assert_eq!(classify(EVENT_OBJECT_DESTROY, false, false, no), WINDOWS);
+        assert_eq!(classify(EVENT_OBJECT_DESTROY, true, false, no), WINDOWS);
+        assert_eq!(
+            classify(EVENT_OBJECT_DESTROY, false, false, no),
+            0,
+            "destroyed controls/tooltips outside the app snapshot don't rebuild the window list"
+        );
         assert_eq!(classify(EVENT_OBJECT_NAMECHANGE, true, false, no), WINDOWS);
         assert_eq!(
             classify(EVENT_OBJECT_NAMECHANGE, false, false, no),
