@@ -1,7 +1,10 @@
 // Edit mode: scrim and grid, per-widget chrome (drag, resize handles, ⋯ menu), toolbar, palette,
-// settings panel, keyboard. All geometry and the no-overlap rule live in grid.ts; this file only
-// turns pointer and key input into calls to it. The host's `state` stays authoritative.
+// settings and appearance panels, keyboard. All geometry and the no-overlap rule live in grid.ts,
+// the appearance layering in appearance.ts; this file only turns pointer and key input into calls
+// to them. The host's `state` stays authoritative.
 
+import { below, preview, type PreviewContext, type Scope } from "./appearance";
+import { buildAppearanceForm } from "./appearance-form";
 import { clamp, h } from "./dom";
 import {
   deltaToCells,
@@ -11,6 +14,7 @@ import {
   resizeBy,
   resolve,
   sizeLimits,
+  toolbarEdge,
   type Handle,
   type Item,
   type PxRect,
@@ -20,7 +24,7 @@ import {
   type Vec2,
 } from "./grid";
 import type { Frames, Slot } from "./frames";
-import type { ShellState, ShellToHost } from "./protocol";
+import type { Layer, ShellState, ShellToHost } from "./protocol";
 import { buildSettingsForm, type SettingsForm } from "./settings-form";
 
 export interface Editor {
@@ -86,11 +90,12 @@ export function createEditor({ root, frames, send }: Options): Editor {
   const gridmap = h("div", "gridmap edit-only");
   const ghost = h("div", "ghost");
   const addButton = h("button", "btn", "+ Add widget");
+  const appearanceButton = h("button", "btn", "Appearance");
   const doneButton = h("button", "btn primary", "Done");
-  const toolbar = h("div", "toolbar edit-only", addButton, doneButton);
+  const toolbar = h("div", "toolbar edit-only", addButton, appearanceButton, doneButton);
   const banner = h("div", "banner edit-only");
   const toastEl = h("div", "toast");
-  for (const button of [addButton, doneButton]) button.type = "button";
+  for (const button of [addButton, appearanceButton, doneButton]) button.type = "button";
   root.prepend(scrim, gridmap);
   root.append(ghost, toolbar, banner, toastEl);
 
@@ -225,6 +230,62 @@ export function createEditor({ root, frames, send }: Options): Editor {
     openPopover(`settings:${slot.instance}`, panel, slot.el.getBoundingClientRect(), "side", undefined, form.flush);
   }
 
+  // ---- appearance: the user layer (toolbar) and an instance's own layer (⋯ menu) ----
+
+  let previewContext: { context: PreviewContext; scope: Scope; layer: Layer } | undefined;
+  let previewFrame = 0;
+
+  /** Shows `layer` on the affected widgets, at most once per frame, without saving anything. */
+  function previewLayer(context: PreviewContext, scope: Scope, layer: Layer) {
+    previewContext = { context, scope, layer };
+    if (previewFrame) return;
+    previewFrame = requestAnimationFrame(() => {
+      previewFrame = 0;
+      if (!previewContext) return;
+      for (const [instance, look] of preview(previewContext.context, previewContext.scope, previewContext.layer)) {
+        frames.looks.set(instance, look);
+      }
+      frames.applyLooks();
+    });
+  }
+
+  function openAppearance(slot?: Slot) {
+    if (!state) return;
+    const key = `appearance:${slot?.instance ?? ""}`;
+    if (popover?.key === key) return closePopover();
+    const own = slot && state.instances.find((i) => i.instance === slot.instance)?.own;
+    if (slot && !own) return;
+
+    const scope: Scope = slot ? { kind: "instance", instance: slot.instance } : { kind: "user" };
+    const { base, user, accent } = state.appearance;
+    const context: PreviewContext = {
+      base,
+      user,
+      autoAccent: accent,
+      instances: state.instances.map((i) => ({ instance: i.instance, own: i.own })),
+    };
+    const form = buildAppearanceForm({
+      below: below(scope, base, user),
+      layer: own ?? user,
+      autoAccent: accent,
+      onPreview: (layer) => previewLayer(context, scope, layer),
+      onCommit: (values) => send({ type: "appearance", ...(slot && { instance: slot.instance }), values }),
+    });
+    const close = h("button", "icon-btn close");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close");
+    close.addEventListener("click", closePopover);
+    const title = slot ? `Appearance · ${slot.manifest.name}` : "Appearance · all widgets";
+    const panel = h("div", "panel wide", h("div", "popover-title row", h("span", "", title), close), form.el);
+    const anchor = slot ? slot.el.getBoundingClientRect() : appearanceButton.getBoundingClientRect();
+    openPopover(key, panel, anchor, slot ? "side" : "below-start", slot ? undefined : appearanceButton, () => {
+      form.flush();
+      cancelAnimationFrame(previewFrame);
+      previewFrame = 0;
+      previewContext = undefined;
+    });
+  }
+
   function openMenu(slot: Slot, anchorEl: HTMLElement) {
     if (popover?.key === `menu:${slot.instance}`) return closePopover();
     const item = (label: string, action: () => void, disabled = false) => {
@@ -241,6 +302,7 @@ export function createEditor({ root, frames, send }: Options): Editor {
       "div",
       "menu",
       item("Settings", () => openSettings(slot), (slot.manifest.settings?.length ?? 0) === 0),
+      item("Appearance", () => openAppearance(slot)),
       item("Duplicate", () => duplicate(slot.instance)),
       item("Remove", () => remove(slot.instance)),
     );
@@ -276,6 +338,7 @@ export function createEditor({ root, frames, send }: Options): Editor {
   }
 
   addButton.addEventListener("click", openPalette);
+  appearanceButton.addEventListener("click", () => openAppearance());
   doneButton.addEventListener("click", () => send({ type: "edit", on: false }));
   scrim.addEventListener("pointerdown", () => select(undefined));
 
@@ -477,12 +540,12 @@ export function createEditor({ root, frames, send }: Options): Editor {
     renderGridMap(next.grid);
 
     // The toolbar sits at the top of the work area, or at the bottom when a widget is up there.
-    const bar = { x: work.x + work.width / 2 - 130, y: work.y, width: 260, height: 60 };
-    const under = next.instances.some((inst) => {
-      const r = rectToPx(next.grid, inst);
-      return r.x < bar.x + bar.width && bar.x < r.x + r.width && r.y < bar.y + bar.height && bar.y < r.y + r.height;
-    });
-    toolbar.classList.toggle("bottom", under);
+    const edge = toolbarEdge(
+      work,
+      { width: toolbar.offsetWidth, height: toolbar.offsetHeight },
+      next.instances.map((inst) => rectToPx(next.grid, inst)),
+    );
+    toolbar.classList.toggle("bottom", edge === "bottom");
 
     banner.textContent = next.error ?? "";
     banner.classList.toggle("on", Boolean(next.error));
@@ -499,6 +562,7 @@ export function createEditor({ root, frames, send }: Options): Editor {
     decorate,
     reset: () => {
       if (!drag) frames.overrides.clear();
+      frames.looks.clear(); // the host's answer carries what was saved
     },
     sync,
   };

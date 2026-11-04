@@ -26,7 +26,8 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
                                  │              origin https://<widget-id>.widget.mypaper/
                                  ├─ bridge: shell ⇄ host (WebView2 postMessage), permission checks in Rust
                                  ├─ plugin manager: spawns plugins, JSON-RPC 2.0 over stdio
-                                 └─ hold logic: the same reasons as the wallpaper (config + fullscreen + lock …)
+                                 └─ hold logic: pause, battery, lock, display off (global) and a window
+                                    covering a monitor (that monitor only), see Pausing
 ```
 
 - **Window placement.** Each monitor gets a window that's a child of the desktop host
@@ -41,8 +42,13 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   plus the whole monitor while edit mode is on. Clicks outside widgets go to the desktop (icons,
   right-click menu, rubber-band selection).
 - **Transparency.** WebView2 `DefaultBackgroundColor` is fully transparent, and the shell page's
-  background is transparent. Chromium paints an opaque backdrop behind an iframe whose
-  `color-scheme` differs from its embedder's, so widgets should leave `color-scheme` at its default.
+  background is transparent. Chromium paints an **opaque** backdrop behind an iframe whose
+  `color-scheme` differs from the one its embedding page resolves for the `<iframe>` element, which
+  shows as a dark (or white) rectangle in the corners outside a rounded card. So the shell pins
+  `color-scheme: dark` on its root and on every widget iframe, and **every widget document must pin
+  `:root { color-scheme: dark }` too**, whatever its text tone (the widget kit's `base.css` does; the
+  tone is `data-text`, not the color scheme). A widget on the default scheme gets an opaque white
+  backdrop. Keep `html` and `body` transparent and paint only your own card.
 - **Isolation.** Each widget has its own origin, `https://<id>.widget.mypaper/`, served from its
   folder by the host's network filter (see [Network](#network)), with a Content-Security-Policy on
   every response. (Not with `SetVirtualHostNameToFolderMapping`: mapped hosts bypass
@@ -52,9 +58,22 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
   `shell.mypaper` → `widgets/shell/dist` (`DENY`). Popups, top-level navigation away from the shell,
   script dialogs and every permission prompt (camera, location, notifications, clipboard read, …)
   are refused.
-- **Pausing.** On hold, every WebView2 gets `put_IsVisible(false)` and `TrySuspend`. On release,
-  `Resume` and `put_IsVisible(true)`. Widgets see `visibility` events (below). A monitor that is
-  completely covered by a maximized or fullscreen window is paused the same way, on its own.
+- **Pausing is per monitor.** What pauses a layer:
+  - **A window covering that monitor** (a maximized or fullscreen app or game): that monitor's
+    layer is hidden (`put_IsVisible(false)`, `TrySuspend`) and nothing else changes: widgets on
+    every other monitor keep showing and animating. (A fullscreen app on monitor 1 no longer touches
+    monitor 2. `pause_on_fullscreen` in `config.json` governs the wallpaper, not widgets.) Edit mode
+    shows a covered monitor anyway.
+  - **A global hold with the desktop still on screen**: the user pauses from the tray or Studio, or
+    the machine is on battery with `pause_on_battery`. Layers *freeze*: they stay up showing their
+    last frame, widgets get `visibility: false` (so they stop animating), `system` and `media`
+    subscriptions, plugins and the stats timer stop. Layers are not hidden or released.
+  - **Nothing on screen** (session locked, display off): every layer is hidden and suspended.
+
+  A hidden layer is *parked* after 30 s: its window and WebView are released (a suspended WebView
+  still holds hundreds of MB) and rebuilt, about a second, when its monitor shows again. Only that
+  monitor's layer is released; when every monitor with widgets is parked, WebView2 itself is
+  released. On release, `Resume` and `put_IsVisible(true)`. Widgets see `visibility` events (below).
 
 ## Folders
 
@@ -149,11 +168,19 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
       "monitor": "\\\\.\\DISPLAY1",
       "cell": [0, 0],
       "size": [2, 1],
-      "settings": { "format24": true }
+      "settings": { "format24": true },
+      "appearance": { "text": "dark" }
     }
-  ]
+  ],
+  "appearance": { "surface": "glass", "opacity": 0.5 }
 }
 ```
+
+- `appearance` (top level: the user's look for every widget; per instance: that widget's own) holds
+  only the fields it sets, with the names and values of [Appearance](#appearance). Both are
+  optional and validated when the file loads (ranges, `#rrggbb`, unknown fields are errors, so the
+  file never silently loses a setting). The host writes only the fields a layer sets, and drops an
+  empty layer.
 
 - **The grid.**
   - `cell` is the **nominal** cell size: as many whole cells as fit are laid out, then every
@@ -164,9 +191,16 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
     values fall back to 96 DIPs. Cells may therefore be rectangular.
   - A positive `cell` is a fixed size in DIPs.
   - `gap` and `margin` are in DIPs. The grid starts at the monitor's **work area** (excluding the
-    taskbar) plus `margin`. A cell `[c, r]` sits at `origin + [c, r] × (cell + gap)`, and a widget
-    `[w, h]` cells wide is `w × cell + (w − 1) × gap`. The grid has as many whole cells as fit in
-    the work area minus the margins.
+    taskbar and any app bar, such as mypaper's own top bar and dock) plus `margin`. A cell `[c, r]`
+    sits at `origin + [c, r] × (cell + gap)`, and a widget `[w, h]` cells wide is
+    `w × cell + (w − 1) × gap`. The grid has as many whole cells as fit in the work area minus the
+    margins.
+  - **The work area changes** (an app bar appears or goes, a display is added, resized or changes
+    scale, the icon spacing changes): the host hears it through `WM_SETTINGCHANGE`
+    (`SPI_SETWORKAREA`, icon metrics) and `WM_DISPLAYCHANGE`, a few hundred milliseconds after the
+    last one, and re-lays out: the grid is recomputed (the stretch included) and every widget is
+    placed on it again, clamped, so none sits under a bar. Saved cells are not rewritten; they
+    clamp again if the bar goes.
 - `instance` ids are `[a-z0-9-]`, unique; the host names new ones `<widget>-<n>`.
 - `monitor` is the device name (`MONITORINFOEXW.szDevice`). If that monitor is missing, the
   instance is shown on the primary monitor at its cell, clamped, and its saved monitor isn't
@@ -187,16 +221,23 @@ so users and themes can restyle every widget without editing widget code.
 | Field | Values | Default |
 |---|---|---|
 | `surface` | `none` (no background: text sits on the wallpaper), `glass` (tinted and blurred), `solid` | **`none`** |
-| `tint` | `"#rrggbb"`: the surface color | `#101010` |
-| `opacity` | 0–1: surface opacity | 0.55 |
+| `tint` | `"#rrggbb"`: the surface color | `#101010` (`#f2f2f2` with dark text, see below) |
+| `opacity` | 0–1: opacity of a `glass` surface (a `solid` surface is always opaque) | 0.55 |
 | `blur` | 0–64 px: background blur (glass only) | 24 |
 | `radius` | 0–48 px: corner radius | 18 |
 | `border` | bool: hairline border | true |
 | `text` | `light` (for dark wallpapers) or `dark` | `light` |
-| `accent` | `"#rrggbb"` or `auto` (the wallpaper palette's accent) | `#ffffff` |
+| `accent` | `"#rrggbb"` or `auto` (the wallpaper palette's accent) | `#ffffff` (`#0a0a0c` with dark text, see below) |
 | `font` | a CSS font-family list | Segoe UI Variable |
 | `scale` | 0.5–2: content scale | 1 |
 | `shadow` | bool: soft text shadow, for legibility with `surface: none` | true |
+
+**Tone-aware defaults.** A near-black tint is dark on dark text, and a white accent vanishes on a
+light surface, so with `text: dark` the built-in defaults flip: a `tint` that is still `#101010`
+becomes `#f2f2f2`, and an `accent` that is still `#ffffff` becomes the ink, `#0a0a0c`. **The host
+does this, once, in the merge**, and sends the final values (any color a theme or the user chose
+stays; picking exactly the default color counts as the default). So the SDK has nothing to flip: it
+applies what it gets. The shell's live preview applies the same rule.
 
 **Layers**, lowest to highest (each set field wins over the layers below it):
 
@@ -207,9 +248,12 @@ so users and themes can restyle every widget without editing widget code.
 
 **Resolution is done by the host.** It sends the merged result as plain JSON values: `accent: auto`
 is resolved to a color from `palette.json`, falling back to `#ffffff`. It also sends the theme CSS as
-text. Both arrive in the `hello` result as `appearance` (an object with every field set) and
-`themeCss` (string or null). Changes arrive as the pushed event `appearance` with
-`{ appearance, themeCss }`, whenever any layer, the theme or the palette changes.
+text (read from the theme's `widgets.css` path, 512 KB at most). Both arrive in the `hello` result
+as `appearance` (an object with every field set) and `themeCss` (string or null). Changes arrive as
+the pushed event `appearance` with `{ appearance, themeCss }`, whenever any layer, the theme or the
+palette changes: an edit of `widgets.json`, a theme switch in `config.json`, an edit of the active
+theme's `theme.json` or `.css` files, or a new `palette.json`. (On the wire between host and shell
+the same data travels in `state`, see [Host ⇄ shell](#host--shell); the shell relays it.)
 
 **What the SDK does with it.** `packages/widget-sdk`'s kit applies the appearance on `<html>`:
 
@@ -218,22 +262,39 @@ text. Both arrive in the `hello` result as `appearance` (an object with every fi
 | `data-surface="none\|glass\|solid"` | `surface` |
 | `data-text="light\|dark"` | `text` |
 | `data-shadow="on\|off"` | `shadow` |
-| `--surface` | `tint` at `opacity` |
+| `--surface` | `tint` at `opacity` (always opaque for `solid`) |
 | `--blur`, `--radius` | `blur`, `radius` (px) |
-| `--line` | the border color, or transparent if `border` is false |
+| `--line` | the border color, or **transparent if `border` is false** |
 | `--t0`…`--t3` | text steps from `text` |
 | `--fill-1`…`--fill-3` | fills from `text` |
+| `--ink`, `--halo`, `--on-accent` | the ink (as a channel triple), its opposite, the ink that reads on the accent |
 | `--accent`, `--font`, `--scale` | `accent`, `font`, `scale` |
 
 It also inserts `themeCss` as the last `<style>`. Widgets should use these variables and never
 hard-code a background, so a theme can restyle them. The widget's own CSS still works, and theme CSS
 can target `[data-widget="<id>"]` (set by the kit on `<html>`).
 
+Rules for widget authors that follow from this:
+
+- **`surface: solid` is always opaque**; `opacity` and `blur` only apply to `glass`.
+- **Dividers and hairlines inside a widget use `--fill-2`, not `--line`**: `--line` disappears when
+  the user turns the border off.
+- **Measure content with a `ResizeObserver`, not `size.onChange`.** `size` reports the widget's box
+  in CSS px, which does not follow `scale` (the kit applies `--scale` inside the page) and can be
+  re-sent after an appearance change. Use the size for the grid, and observe your own elements for
+  anything you lay out by pixels.
+
 **The CSP** allows `style-src 'self' 'unsafe-inline'`, so the kit can inject theme CSS.
 
 **Editing.** In edit mode, the toolbar's **Appearance** button edits the user layer (all widgets).
-Each widget's ⋯ menu has **Appearance** for the instance layer, with "Use default" to clear a field.
-Each change is written to `widgets.json` and applied live.
+Each widget's ⋯ menu has **Appearance** for the instance layer. Controls: surface (segmented:
+none / glass / solid), tint (color), opacity, blur and radius (sliders), border and text shadow
+(toggles), text (light / dark), accent (Auto, or a color), font (text field with presets) and scale
+(slider). A field the edited layer sets shows **Use default**, which clears it so the layer below
+shows through (an unset field shows that inherited value). Sliders and color pickers preview live on
+the affected widgets while they move (nothing is written) and save once on release; the other
+controls save at once. A user-layer change reaches every widget that doesn't set the field itself;
+an instance change reaches only that widget.
 
 ## Edit mode
 
@@ -245,9 +306,12 @@ Each change is written to `widgets.json` and applied live.
     with `wParam` 1 (on), 0 (off) or 2 (toggle) to the host's message-only window, whose class is
     `mypaper.widgets.host`. `mypaper-widgets --edit on|off|toggle` does exactly that and exits.
 - **What it shows**: the grid (subtle dots or lines on the work area), each widget with a frame,
-  a drag area, resize handles (edges and corners) and a ⋯ menu (Settings, Duplicate, Remove), plus
-  a **+ Add widget** palette listing every installed widget. The window region covers the whole
-  monitor while editing, on every monitor.
+  a drag area, resize handles (edges and corners) and a ⋯ menu (Settings, Appearance, Duplicate,
+  Remove), plus a toolbar with **+ Add widget** (a palette listing every installed widget),
+  **Appearance** (the user layer, see [Appearance](#appearance)) and **Done**. The toolbar sits
+  centred at the top of the work area, or at the bottom when a widget is under the top spot and the
+  bottom is clear (it is always drawn above widgets). The window region covers the whole monitor
+  while editing, on every monitor.
 - **Moving and resizing**: live, with the pointer. Positions snap to cells. Sizes are clamped to the
   manifest's `min`/`max`. Widgets can't overlap: a move that would overlap swaps or shifts the
   other widgets (they move down, then right; never off-grid), or the move is refused with a shake
@@ -258,8 +322,9 @@ Each change is written to `widgets.json` and applied live.
 - **Keyboard**: arrows move the selected widget one cell, and Shift+arrows resize it (right and
   down grow, left and up shrink). Esc closes an open menu first. The shell needs keyboard focus for
   this, which it gets when you click it (the host never takes focus by itself).
-- Edit mode never takes effect while a fullscreen app is in front (the host is held then anyway).
-  Requests to turn it on while held are ignored, and becoming held leaves edit mode.
+- Edit mode never takes effect while the host is held (paused by the user, on battery with
+  `pause_on_battery`, locked, display off): requests to turn it on are ignored, and becoming held
+  leaves edit mode. A fullscreen app on one monitor doesn't block editing the others.
 
 ## Widget JS API (`mypaper`)
 
@@ -273,7 +338,7 @@ interface Mypaper {
   readonly ready: Promise<void>;    // resolves once the shell answers the handshake; every call waits for it
   readonly instance: string;        // "clock-1" (after ready)
   readonly widget: WidgetManifest;  // the parsed manifest (after ready)
-  readonly visible: boolean;        // false while the host is held
+  readonly visible: boolean;        // false while paused, or while a window covers this monitor
   readonly editing: boolean;        // edit mode is on
   settings: {
     get(): Promise<Record<string, unknown>>;
@@ -319,10 +384,18 @@ interface Mypaper {
   track changes, not every second, so advance it locally while `playing`. `artwork` is a
   `data:image/…;base64,` URL (omitted above 256 KB). `app` is a readable app name (`Spotify`, not
   `Spotify.exe`). Colors are `#rrggbb`.
+- **Battery, uptime, network**: `battery.percent` is 0–100; `battery` is absent on machines without
+  a battery (or when Windows can't tell). `uptime` is seconds since boot. `network.kind` is
+  `ethernet` when a wired adapter has a link (Windows routes over it first), else `wifi` with the
+  network's name (`name`, the SSID) and `signal` (0–100), else `none`. All of it is read only while
+  something subscribes or asks: one sample for every subscriber, the Wi-Fi service queried at most
+  every 5 s, nothing while the host is held.
 - **Errors**: `PermissionDenied`, `NotFound`, `InvalidParams`, `PluginUnavailable`, `Internal`.
-- **Visibility**: when the host is held, widgets get `visibility:false` and then the WebView is
-  suspended. Widgets should stop their animations. Subscriptions are paused automatically. A
-  monitor covered by a maximized or fullscreen window is paused the same way, on its own.
+- **Visibility**: when the host is paused (by the user, on battery) or a maximized or fullscreen
+  window covers the widget's monitor, the widget gets `visibility:false`. Widgets should stop their
+  animations. Subscriptions are paused automatically. A covered monitor's WebView is then
+  suspended; a paused one stays on screen showing the last frame. A game on another monitor changes
+  nothing (see [Pausing](#architecture)).
 
 ### Wire protocol (iframe ⇄ shell)
 
@@ -336,7 +409,8 @@ the manifest on disk, never from the message.
 
 **Handshake.** On load the widget sends `hello` (`params: { sdk: 1 }`). The shell answers with
 everything a widget needs synchronously afterwards:
-`{ instance, widget /* the manifest */, settings, size, visible, editing }`. `mypaper.ready`
+`{ instance, widget /* the manifest */, settings, size, visible, editing, appearance, themeCss }`
+(see [Appearance](#appearance)). `mypaper.ready`
 resolves with that, and every other call waits for it. (A widget that gets no answer within
 10 s fails `ready`: it is not inside mypaper.)
 
@@ -366,12 +440,12 @@ as `{ mypaper: 1, event: "sub", data: { sub, value } }`:
 - `media`, `theme`: on change only (read the current value with `media.current` / `theme.current`).
 - `plugin`: each matching plugin event's `data`.
 
-While the host is held (`visibility: false`) nothing is delivered; `system` sends a sample as soon
-as the widget is visible again.
+While a widget is not visible (`visibility: false`) nothing is delivered to it; `system` sends a
+sample as soon as it is visible again.
 
 **Pushed events** (shell → widget, always on, no subscription): `visibility` (`boolean`),
-`editmode` (`boolean`), `settings` (the full settings object) and `size`
-(`{ cells, px, dpi }`).
+`editmode` (`boolean`), `settings` (the full settings object), `size`
+(`{ cells, px, dpi }`) and `appearance` (`{ appearance, themeCss }`).
 
 **Plugin errors.** A JSON-RPC `error` from a plugin becomes a wire error as follows: if
 `error.data.code` is one of the five names above it is used; otherwise `-32601` is `NotFound`,
@@ -392,8 +466,14 @@ type HostToShell =
       work: { x: number; y: number; width: number; height: number };   // the work area
       grid: { origin: [number, number]; cell: [number, number]; gap: number; cols: number; rows: number };
       instances: { instance: string; widget: string; cell: [number, number]; size: [number, number];
-                   settings: Record<string, unknown> }[];  // resolved: defaults plus saved values
+                   settings: Record<string, unknown>;      // resolved: defaults plus saved values
+                   appearance: Appearance;                  // resolved: every layer merged, every field set
+                   own: Partial<Appearance> }[];            // only what the instance sets (the top layer)
       widgets: WidgetManifest[];                           // every installed widget (the palette)
+      appearance: { base: Appearance;                      // built-in defaults < theme skin (accent may be "auto")
+                    user: Partial<Appearance>;             // the user's layer (widgets.json "appearance")
+                    accent: string };                      // the color "auto" stands for (palette.json, else #ffffff)
+      themeCss: string | null;                             // the theme's widgets style sheet, as text
       editing: boolean; visible: boolean;
       error?: string }                                     // widgets.json doesn't parse
   | { type: "reply"; instance: string; id: number | string; result?: unknown;
@@ -410,6 +490,8 @@ type ShellToHost =
   | { type: "duplicate"; instance: string; cell: [number, number] }
   | { type: "remove"; instance: string }
   | { type: "settings"; instance: string; values: Record<string, unknown> }
+  | { type: "appearance"; instance?: string;                // the user's layer, or an instance's own
+      values: { [K in keyof Appearance]?: Appearance[K] | null } }  // null clears a field ("Use default")
   | { type: "edit"; on: boolean };                         // Done / Esc
 ```
 
@@ -419,9 +501,15 @@ type ShellToHost =
   to widgets when those change in the state.
 - `call` carries every other wire request unchanged; the host answers with `reply`, and delivers
   subscription values as `event` (`sub`). While a monitor is hidden its widgets get nothing.
-- Layout edits (`layout`, `add`, `duplicate`, `remove`, `settings`) are applied, clamped, saved, and
-  answered with a fresh `state`, which is authoritative: a refused edit just gets the old state back.
-  The shell resolves overlaps and finds free cells before sending.
+- Layout edits (`layout`, `add`, `duplicate`, `remove`, `settings`, `appearance`) are applied,
+  clamped, saved, and answered with a fresh `state`, which is authoritative: a refused edit just gets
+  the old state back. The shell resolves overlaps and finds free cells before sending. An
+  `appearance` edit is merged into its layer (a `null` value deletes the field), validated, and
+  refused whole if anything is out of range.
+- Appearance reaches widgets through the shell: its `hello` answer and its `appearance` event carry
+  `state`'s resolved `appearance` and `themeCss` for that instance. While the Appearance panel is
+  open the shell previews edits by sending the `appearance` event itself, merged locally from the
+  same layers (`base`, `user`, `own`, `accent`), and drops the preview at the next `state`.
 - The host also injects a small hardening script (`widgets/shell/dist/harden.js`) into every frame
   at document creation (`AddScriptToExecuteOnDocumentCreated`); see [Network](#network).
 
@@ -433,8 +521,12 @@ Two layers, so a widget reaches exactly the origins its manifest lists.
 
 ```text
 Content-Security-Policy: default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: <each network: origin>;
+                         style-src 'self' 'unsafe-inline' data: blob: <each network: origin>;
                          object-src 'none'; base-uri 'self'
 ```
+
+(`style-src` repeats the default on purpose: inline styles must stay allowed so the widget kit can
+insert the theme's style sheet.)
 
 Chromium enforces it on every connection the widget's documents and workers make (`fetch`, XHR,
 WebSockets, EventSource, beacons, images, fonts, media, frames), including about:blank and srcdoc
@@ -510,14 +602,19 @@ is held.
 
 ## Bundled examples
 
-- **Widgets**:
-  - `clock`: time and date.
-  - `system-monitor`: CPU, RAM, GPU and network sparkline.
-  - `now-playing`: media with artwork and controls.
-  - `weather`: uses the weather plugin.
-  - `notes`: a sticky note, using storage.
-  - `launcher`: a grid of shortcuts, using launch.
-- **Plugins**: `weather` (Rust, open-meteo, no API key).
+- **Widgets** (21, all on the widget kit, so every one follows the [Appearance](#appearance)):
+  - Time: `clock`, `analog-clock`, `world-clock`, `calendar`, `timer` (pomodoro and countdown),
+    `countdown`.
+  - System (`system.stats`): `system-monitor` (CPU, RAM, GPU and network sparklines), `disk`,
+    `battery`, `network` (connection name, signal and rates), `system-info` (uptime, CPU, memory,
+    GPU, disk, network and battery).
+  - Media and web: `now-playing` (`media`), `weather` (the weather plugin), `rss` (the rss plugin,
+    `launch`), `crypto` (`network:` to CoinGecko), `quote`, `photo` (a folder of images).
+  - Personal: `notes` (a sticky note, storage), `todo`, `launcher` (`launch`), `search` (`launch`).
+- **Plugins**: `weather` (Rust, open-meteo, no API key) and `rss` (Rust, fetches and parses feeds).
+  Each is built once and its exe copied next to its `plugin.json`:
+  `cargo build --release -p mypaper-plugin-weather` and `-p mypaper-plugin-rss`, then copy
+  `weather.exe` / `rss.exe` into `plugins/weather/` / `plugins/rss/`.
 - **Tooling**: `packages/widget-sdk` has the typed SDK, the `mypaper.js` drop-in, the JSON
   Schemas and a mock host for developing widgets in a browser. Tutorials:
   [writing-widgets.md](writing-widgets.md) and [writing-plugins.md](writing-plugins.md).
@@ -527,7 +624,11 @@ is held.
 - **Host idle (no widgets)**: no WebView created and 0% CPU.
 - **With widgets, visible**: one WebView2 per monitor that has widgets. `system.subscribe` is
   driven by one host timer for all subscribers.
-- **Held**: WebViews suspended, plugins suspended, and the host waiting on its message queue at 0%
+- **A monitor covered by a window**: its WebView suspended, then released after 30 s; the other
+  monitors' layers are unaffected.
+- **Paused by the user or on battery**: layers frozen (no widget animation, no sampling, plugins
+  suspended); the host waits on its message queue.
+- **Locked or display off**: WebViews suspended, then released, plugins suspended, the host at 0%
   CPU.
 
 ## How to run
@@ -550,7 +651,11 @@ target\debug\mypaper-widgets.exe --edit toggle   # or Ctrl+Alt+Shift+W
   "save". The shell itself reloads on `pnpm -C widgets/shell build`.
 - To try it without touching your real setup, point `APPDATA` (and `LOCALAPPDATA`) at a temporary
   folder holding `mypaper\widgets.json` and your test widgets in `mypaper\widgets\<id>\`.
+- `MYPAPER_WIDGETS_PARK_SECS=<n>` changes how long a hidden layer waits before it is released
+  (default 30), for testing.
 - `MYPAPER_WIDGETS_IGNORE_COVERED=1` keeps monitors awake while a maximized window covers them,
   for capturing the widget layer in tests (`PrintWindow(GetShellWindow(), PW_RENDERFULLCONTENT)`
   renders the desktop, widgets included, without touching the windows in front).
-- `pnpm -C widgets/shell test` runs the grid math tests (vitest).
+- `pnpm -C widgets/shell test` runs the grid math, permission and appearance-layer tests (vitest).
+- To drive the shell page from a script, set `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`
+  before starting the host and attach over the DevTools protocol (`http://127.0.0.1:9333/json/list`).

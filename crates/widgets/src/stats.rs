@@ -1,15 +1,20 @@
-//! `system.stats`: CPU, memory, GPU, network and disk usage, sampled by one
-//! shared timer for every subscriber, and not at all while nobody listens or
-//! the host is held.
+//! `system.stats`: CPU, memory, GPU, network and disk usage, battery, uptime and the
+//! connection, sampled by one shared timer for every subscriber, and not at all while
+//! nobody listens or the host is held.
 
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use windows::Win32::Foundation::{ERROR_SUCCESS, FILETIME};
+use windows::Win32::Foundation::{ERROR_SUCCESS, FILETIME, HANDLE};
 use windows::Win32::NetworkManagement::IpHelper::{
-    FreeMibTable, GetIfTable2, IF_TYPE_SOFTWARE_LOOPBACK, MIB_IF_TABLE2,
+    FreeMibTable, GetIfTable2, IF_TYPE_ETHERNET_CSMACD, IF_TYPE_SOFTWARE_LOOPBACK, MIB_IF_TABLE2,
 };
-use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
+use windows::Win32::NetworkManagement::Ndis::{IfOperStatusUp, MediaConnectStateConnected};
+use windows::Win32::NetworkManagement::WiFi::{
+    WLAN_CONNECTION_ATTRIBUTES, WLAN_INTERFACE_INFO_LIST, WlanCloseHandle, WlanEnumInterfaces,
+    WlanFreeMemory, WlanOpenHandle, WlanQueryInterface, wlan_interface_state_connected,
+    wlan_intf_opcode_current_connection,
+};
 use windows::Win32::Storage::FileSystem::{
     GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDriveStringsW,
 };
@@ -18,7 +23,10 @@ use windows::Win32::System::Performance::{
     PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterArrayW,
     PdhOpenQueryW,
 };
-use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+use windows::Win32::System::SystemInformation::{
+    GetTickCount64, GlobalMemoryStatusEx, MEMORYSTATUSEX,
+};
 use windows::Win32::System::Threading::GetSystemTimes;
 use windows::core::{PCWSTR, w};
 
@@ -30,6 +38,10 @@ const WARMUP: Duration = Duration::from_millis(500);
 const COALESCE: Duration = Duration::from_millis(150);
 /// Free space barely moves; don't ask the file system every second.
 const DISK_REFRESH: Duration = Duration::from_secs(10);
+/// Nor does the Wi-Fi connection; asking the WLAN service costs an RPC round trip.
+const WIFI_REFRESH: Duration = Duration::from_secs(5);
+/// With no WLAN service (or no Wi-Fi adapter) opening it fails; don't retry every sample.
+const WLAN_RETRY: Duration = Duration::from_secs(60);
 const DRIVE_FIXED: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -44,6 +56,47 @@ pub struct SystemStats {
     pub net: Option<Net>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disks: Option<Vec<Disk>>,
+    /// Absent on machines without a battery.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub battery: Option<Battery>,
+    /// Seconds since boot.
+    pub uptime: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network: Option<Network>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Battery {
+    /// 0–100.
+    pub percent: u8,
+    pub charging: bool,
+}
+
+/// How the machine is connected.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Network {
+    pub kind: LinkKind,
+    /// The Wi-Fi network's name (SSID).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Wi-Fi signal quality, 0–100.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signal: Option<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LinkKind {
+    Wifi,
+    Ethernet,
+    None,
+}
+
+/// A Wi-Fi connection as the WLAN service reports it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Wifi {
+    ssid: String,
+    signal: u8,
 }
 
 /// Bytes.
@@ -76,6 +129,8 @@ struct Counters {
     total: u64,
     /// Received and sent bytes, if the interface table could be read.
     net: Option<(u64, u64)>,
+    /// A wired adapter is connected (from the same interface table).
+    ethernet: bool,
 }
 
 fn cpu_percent(before: &Counters, after: &Counters) -> f64 {
@@ -128,15 +183,26 @@ fn read_counters() -> Counters {
     let (mut idle, mut kernel, mut user) = Default::default();
     // SAFETY: the out-pointers are valid FILETIMEs for the call.
     let _ = unsafe { GetSystemTimes(Some(&mut idle), Some(&mut kernel), Some(&mut user)) };
+    let table = interface_table();
     Counters {
         at: Instant::now(),
         idle: ticks(idle),
         total: ticks(kernel) + ticks(user),
-        net: net_totals(),
+        net: table.map(|t| (t.rx, t.tx)),
+        ethernet: table.is_some_and(|t| t.ethernet),
     }
 }
 
-fn net_totals() -> Option<(u64, u64)> {
+/// What one pass over the interface table yields.
+#[derive(Debug, Clone, Copy)]
+struct Interfaces {
+    rx: u64,
+    tx: u64,
+    ethernet: bool,
+}
+
+/// Bytes over the physical interfaces that are up, and whether a wired one has a link.
+fn interface_table() -> Option<Interfaces> {
     let mut table: *mut MIB_IF_TABLE2 = std::ptr::null_mut();
     // SAFETY: GetIfTable2 allocates the table, which FreeMibTable releases
     // below; rows are read only while it is alive.
@@ -146,22 +212,174 @@ fn net_totals() -> Option<(u64, u64)> {
         }
         let rows =
             std::slice::from_raw_parts((*table).Table.as_ptr(), (*table).NumEntries as usize);
-        let totals = rows
-            .iter()
-            .filter(|row| {
-                let flags = row.InterfaceAndOperStatusFlags._bitfield;
-                let hardware = flags & 1 != 0;
-                let filter = flags & 2 != 0;
-                hardware
-                    && !filter
-                    && row.OperStatus == IfOperStatusUp
-                    && row.Type != IF_TYPE_SOFTWARE_LOOPBACK
-            })
-            .fold((0, 0), |(rx, tx), row| {
-                (rx + row.InOctets, tx + row.OutOctets)
-            });
+        let mut found = Interfaces {
+            rx: 0,
+            tx: 0,
+            ethernet: false,
+        };
+        for row in rows.iter().filter(|row| {
+            let flags = row.InterfaceAndOperStatusFlags._bitfield;
+            let hardware = flags & 1 != 0;
+            let filter = flags & 2 != 0;
+            hardware
+                && !filter
+                && row.OperStatus == IfOperStatusUp
+                && row.Type != IF_TYPE_SOFTWARE_LOOPBACK
+        }) {
+            found.rx += row.InOctets;
+            found.tx += row.OutOctets;
+            found.ethernet |= row.Type == IF_TYPE_ETHERNET_CSMACD
+                && row.MediaConnectState == MediaConnectStateConnected;
+        }
         FreeMibTable(table.cast());
-        Some(totals)
+        Some(found)
+    }
+}
+
+/// The battery from `GetSystemPowerStatus` fields: `None` when there isn't one (flag 128) or
+/// the system can't tell (flag 255, percent 255).
+fn battery_from(flag: u8, percent: u8) -> Option<Battery> {
+    if flag & 128 != 0 || flag == 255 || percent > 100 {
+        return None;
+    }
+    Some(Battery {
+        percent,
+        charging: flag & 8 != 0,
+    })
+}
+
+fn battery() -> Option<Battery> {
+    let mut status = SYSTEM_POWER_STATUS::default();
+    // SAFETY: `status` is a valid out-parameter for the call.
+    unsafe { GetSystemPowerStatus(&mut status) }.ok()?;
+    battery_from(status.BatteryFlag, status.BatteryLifePercent)
+}
+
+/// Seconds since boot.
+fn uptime() -> f64 {
+    // SAFETY: no preconditions.
+    (unsafe { GetTickCount64() }) as f64 / 1000.0
+}
+
+/// The connection to report: a wired link wins (Windows routes over it first), then Wi-Fi.
+fn classify(wifi: Option<&Wifi>, ethernet: bool) -> Network {
+    match (ethernet, wifi) {
+        (true, _) => Network {
+            kind: LinkKind::Ethernet,
+            name: None,
+            signal: None,
+        },
+        (false, Some(wifi)) => Network {
+            kind: LinkKind::Wifi,
+            name: Some(wifi.ssid.clone()),
+            signal: Some(wifi.signal),
+        },
+        (false, None) => Network {
+            kind: LinkKind::None,
+            name: None,
+            signal: None,
+        },
+    }
+}
+
+/// An SSID is up to 32 bytes, usually UTF-8.
+fn ssid_text(length: u32, bytes: &[u8; 32]) -> String {
+    let len = (length as usize).min(bytes.len());
+    String::from_utf8_lossy(&bytes[..len]).into_owned()
+}
+
+/// The WLAN service, open only while someone is sampling.
+struct Wlan {
+    client: Option<HANDLE>,
+    /// When opening last failed (no service, no adapter).
+    failed_at: Option<Instant>,
+}
+
+impl Wlan {
+    fn new() -> Self {
+        Self {
+            client: None,
+            failed_at: None,
+        }
+    }
+
+    fn open(&mut self) -> Option<HANDLE> {
+        if self.client.is_none() && self.failed_at.is_none_or(|at| at.elapsed() >= WLAN_RETRY) {
+            let (mut version, mut client) = (0u32, HANDLE::default());
+            // SAFETY: valid out-pointers; the handle is closed in `drop`.
+            let status = unsafe { WlanOpenHandle(2, None, &mut version, &mut client) };
+            if status == 0 {
+                self.client = Some(client);
+                self.failed_at = None;
+            } else {
+                self.failed_at = Some(Instant::now());
+            }
+        }
+        self.client
+    }
+
+    /// The first connected Wi-Fi interface, if any.
+    fn connection(&mut self) -> Option<Wifi> {
+        let client = self.open()?;
+        let mut list: *mut WLAN_INTERFACE_INFO_LIST = std::ptr::null_mut();
+        // SAFETY: `client` is an open WLAN handle; the list WLAN allocates is read while alive
+        // and freed with WlanFreeMemory below.
+        unsafe {
+            if WlanEnumInterfaces(client, None, &mut list) != 0 || list.is_null() {
+                // The service went away (or the adapter was removed): reopen next time.
+                self.close();
+                return None;
+            }
+            let interfaces = std::slice::from_raw_parts(
+                (*list).InterfaceInfo.as_ptr(),
+                (*list).dwNumberOfItems as usize,
+            );
+            let mut found = None;
+            for interface in interfaces
+                .iter()
+                .filter(|i| i.isState == wlan_interface_state_connected)
+            {
+                let (mut size, mut data) = (0u32, std::ptr::null_mut());
+                let status = WlanQueryInterface(
+                    client,
+                    &interface.InterfaceGuid,
+                    wlan_intf_opcode_current_connection,
+                    None,
+                    &mut size,
+                    &mut data,
+                    None,
+                );
+                if status != 0 || data.is_null() {
+                    continue;
+                }
+                let attributes = &*data.cast::<WLAN_CONNECTION_ATTRIBUTES>();
+                let association = &attributes.wlanAssociationAttributes;
+                found = Some(Wifi {
+                    ssid: ssid_text(
+                        association.dot11Ssid.uSSIDLength,
+                        &association.dot11Ssid.ucSSID,
+                    ),
+                    signal: association.wlanSignalQuality.min(100) as u8,
+                });
+                WlanFreeMemory(data.cast_const());
+                break;
+            }
+            WlanFreeMemory(list.cast_const().cast());
+            found
+        }
+    }
+
+    fn close(&mut self) {
+        if let Some(client) = self.client.take() {
+            // SAFETY: a handle WlanOpenHandle gave us, closed once.
+            unsafe { WlanCloseHandle(client, None) };
+        }
+    }
+}
+
+impl Drop for Wlan {
+    fn drop(&mut self) {
+        self.close();
     }
 }
 
@@ -286,6 +504,8 @@ struct Sampler {
     last: Counters,
     gpu: Option<GpuCounters>,
     disks: Option<(Instant, Vec<Disk>)>,
+    wlan: Wlan,
+    wifi: Option<(Instant, Option<Wifi>)>,
 }
 
 impl Sampler {
@@ -294,6 +514,8 @@ impl Sampler {
             last: read_counters(),
             gpu: GpuCounters::open(),
             disks: None,
+            wlan: Wlan::new(),
+            wifi: None,
         }
     }
 
@@ -305,9 +527,28 @@ impl Sampler {
             gpu: self.gpu.as_mut().and_then(GpuCounters::read),
             net: net_rates(&self.last, &now),
             disks: Some(self.disks().to_vec()),
+            battery: battery(),
+            uptime: uptime(),
+            network: Some(self.network(now.ethernet)),
         };
         self.last = now;
         stats
+    }
+
+    /// The connection. A wired link needs no Wi-Fi query at all.
+    fn network(&mut self, ethernet: bool) -> Network {
+        if ethernet {
+            return classify(None, true);
+        }
+        let fresh = self
+            .wifi
+            .as_ref()
+            .is_some_and(|(at, _)| at.elapsed() < WIFI_REFRESH);
+        if !fresh {
+            self.wifi = Some((Instant::now(), self.wlan.connection()));
+        }
+        let wifi = self.wifi.as_ref().and_then(|(_, wifi)| wifi.as_ref());
+        classify(wifi, false)
     }
 
     fn disks(&mut self) -> &[Disk] {
@@ -461,7 +702,62 @@ mod tests {
             idle,
             total,
             net,
+            ethernet: false,
         }
+    }
+
+    #[test]
+    fn battery_is_absent_without_one_and_reads_the_charging_flag() {
+        assert_eq!(battery_from(128, 255), None, "no system battery");
+        assert_eq!(battery_from(255, 255), None, "unknown status");
+        assert_eq!(battery_from(1, 255), None, "unknown charge");
+        assert_eq!(
+            battery_from(1, 80),
+            Some(Battery {
+                percent: 80,
+                charging: false
+            })
+        );
+        assert_eq!(
+            battery_from(1 | 8, 42),
+            Some(Battery {
+                percent: 42,
+                charging: true
+            })
+        );
+    }
+
+    #[test]
+    fn the_connection_prefers_a_wired_link_then_wifi() {
+        let home = Wifi {
+            ssid: "Home".into(),
+            signal: 71,
+        };
+        assert_eq!(classify(Some(&home), true).kind, LinkKind::Ethernet);
+        assert_eq!(classify(None, true).name, None);
+        let wifi = classify(Some(&home), false);
+        assert_eq!(
+            (wifi.kind, wifi.name.as_deref(), wifi.signal),
+            (LinkKind::Wifi, Some("Home"), Some(71))
+        );
+        assert_eq!(classify(None, false).kind, LinkKind::None);
+        // On the wire: kind is lowercase, and unset fields are absent.
+        let json = serde_json::to_value(classify(None, false)).unwrap();
+        assert_eq!(json, serde_json::json!({ "kind": "none" }));
+    }
+
+    #[test]
+    fn ssids_are_length_prefixed_and_may_be_unicode() {
+        let mut bytes = [0u8; 32];
+        let name = "Café".as_bytes(); // 5 bytes
+        bytes[..name.len()].copy_from_slice(name);
+        assert_eq!(ssid_text(5, &bytes), "Café");
+        assert_eq!(ssid_text(0, &bytes), "");
+        assert_eq!(
+            ssid_text(99, &bytes).len(),
+            32,
+            "a bad length is clamped to the buffer"
+        );
     }
 
     #[test]

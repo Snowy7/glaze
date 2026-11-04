@@ -25,10 +25,14 @@ pub struct WidgetNet {
 /// origin plus its declared ones, for everything (`'unsafe-inline'` and
 /// `'unsafe-eval'` are fine: this is about where a widget may connect, not
 /// about XSS). An `https` origin also admits `wss` to the same host, as CSP does.
+///
+/// `style-src` says the same as `default-src` on purpose: inline styles must stay allowed so
+/// the widget kit can insert the theme's style sheet (docs/widgets.md, "Appearance").
 pub fn csp(origins: &[Origin]) -> String {
     let declared: String = origins.iter().map(|o| format!(" {o}")).collect();
     format!(
-        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:{declared}; object-src 'none'; base-uri 'self'"
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:{declared}; \
+         style-src 'self' 'unsafe-inline' data: blob:{declared}; object-src 'none'; base-uri 'self'"
     )
 }
 
@@ -252,11 +256,12 @@ mod tests {
                 origin("wss://feed.example.com:8443")
             ]),
             "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://api.open-meteo.com \
+             wss://feed.example.com:8443; \
+             style-src 'self' 'unsafe-inline' data: blob: https://api.open-meteo.com \
              wss://feed.example.com:8443; object-src 'none'; base-uri 'self'"
         );
-        assert!(
-            csp(&[]).starts_with("default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:;")
-        );
+        // Inline styles stay allowed (the kit inserts the theme's CSS as a <style>).
+        assert!(csp(&[]).contains("style-src 'self' 'unsafe-inline'"));
     }
 
     #[test]

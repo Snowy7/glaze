@@ -16,8 +16,9 @@ use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, HoldReasons, Holds, Reason};
 use mypaper_desktop::{
     ControlWindow, DesktopHost, Monitor, Rect, WM_FACT, WindowEvents, covered_monitors,
-    fullscreen_app_in_front, monitor_infos,
+    monitor_infos,
 };
+use mypaper_theme::Color;
 use notify::Watcher;
 use serde_json::{Value, json};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -42,7 +43,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{HSTRING, PCWSTR, w};
 
 use crate::bridge::{ErrorCode, FromShell, Method, Out, Reply, Target, Topic, WidgetError};
+use crate::display::{DisplayWatcher, WM_DISPLAY};
 use crate::layout::{self, Grid, Layout, Placed, RectF};
+use crate::look;
 use crate::manifest::WidgetManifest;
 use crate::media::Media;
 use crate::net::WidgetNet;
@@ -68,11 +71,44 @@ const SETTLE_CONFIG: Duration = Duration::from_millis(100);
 const SETTLE_LAYOUT: Duration = Duration::from_millis(150);
 const SETTLE_WIDGETS: Duration = Duration::from_millis(250);
 const SETTLE_SHELL: Duration = Duration::from_millis(500);
+/// App bars announce a work-area change in bursts (one per bar, per edge).
+const SETTLE_DISPLAY: Duration = Duration::from_millis(200);
 const RETRY_WEBVIEW: Duration = Duration::from_secs(30);
-/// After this long held (a game session, a locked PC), the widget layers and
-/// WebView2 are released entirely: a suspended WebView still holds hundreds
-/// of MB. They are rebuilt (about a second) when the hold ends.
+/// After a monitor's layer has been hidden this long (a game or maximized window
+/// over it, a locked PC), that layer and its WebView are released entirely: a
+/// suspended WebView still holds hundreds of MB. It is rebuilt (about a second)
+/// when the monitor shows again. Layers on other monitors stay live.
 const PARK_AFTER: Duration = Duration::from_secs(30);
+
+/// Nothing is on screen: layers hide and sleep. Any other hold (paused, on battery) leaves the
+/// desktop visible, so layers stay up showing their last frame.
+fn nothing_visible(reasons: HoldReasons) -> bool {
+    reasons.contains(Reason::DisplayOff) || reasons.contains(Reason::Locked)
+}
+
+/// What one monitor's widget layer does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LayerState {
+    /// Shown and running.
+    Live,
+    /// Shown, but widgets are told to stop (a global hold with the desktop on screen).
+    Frozen,
+    /// Hidden and suspended (and released later): nothing to see.
+    Hidden,
+}
+
+/// The rule for a monitor's layer. Only a window covering *that* monitor (a maximized or
+/// fullscreen app) hides it, so a game on another monitor changes nothing here. Edit mode
+/// shows a covered monitor regardless.
+fn layer_state(reasons: HoldReasons, covered: bool, editing: bool) -> LayerState {
+    if nothing_visible(reasons) || (covered && !editing) {
+        LayerState::Hidden
+    } else if !reasons.is_empty() {
+        LayerState::Frozen
+    } else {
+        LayerState::Live
+    }
+}
 
 /// The built shell: its folder and the hardening script injected into every frame.
 struct Shell {
@@ -110,6 +146,7 @@ struct Timers {
     shell: Option<Instant>,
     webview: Option<Instant>,
     park: Option<Instant>,
+    display: Option<Instant>,
 }
 
 impl Timers {
@@ -122,6 +159,7 @@ impl Timers {
             self.shell,
             self.webview,
             self.park,
+            self.display,
         ]
         .into_iter()
         .flatten()
@@ -160,8 +198,13 @@ pub struct App {
     reasons: HoldReasons,
     covered: HashMap<String, bool>,
     editing: bool,
-    /// Held long enough that the layers and WebView2 were released.
-    parked: bool,
+    /// Monitors (by device) whose layer was hidden long enough to be released.
+    parked: BTreeSet<String>,
+    /// Since when each monitor's layer has been hidden.
+    hidden_since: HashMap<String, Instant>,
+    /// How long a layer stays hidden before it is parked ([`PARK_AFTER`], or
+    /// `MYPAPER_WIDGETS_PARK_SECS` for tests).
+    park_after: Duration,
     devtools: bool,
     /// `MYPAPER_WIDGETS_IGNORE_COVERED=1`: keep covered monitors awake (for
     /// capturing them in tests).
@@ -171,6 +214,9 @@ pub struct App {
     media: Media,
     plugins: Plugins,
     theme: ThemeInfo,
+    /// The active theme's folder, and the widget skin read from it.
+    theme_dir: Option<PathBuf>,
+    skin: look::Skin,
     /// `(instance, sub)` of every `theme` subscription.
     theme_subs: BTreeSet<(String, String)>,
     /// Window-change hooks: only while a widget layer exists (they wake us on
@@ -179,7 +225,11 @@ pub struct App {
     timers: Timers,
     changed_widgets: BTreeSet<String>,
     watchers: Vec<notify::RecommendedWatcher>,
+    /// Watches the active theme's `theme.json` and style sheets; replaced when the theme changes.
+    theme_watch: Option<notify::RecommendedWatcher>,
     palette_watch: Option<mypaper_desktop::ConfigWatcher>,
+    /// Hears about work-area and display changes (see `display.rs`); held for its window.
+    _display_watch: Option<DisplayWatcher>,
 }
 
 impl App {
@@ -244,6 +294,11 @@ impl App {
             layout.instances.len()
         );
         let devtools = std::env::var_os("MYPAPER_WIDGETS_DEVTOOLS").is_some_and(|v| v == "1");
+        let theme_dir = theme::dir();
+        let skin = look::load_skin(theme_dir.as_deref());
+        let display_watch = DisplayWatcher::new()
+            .inspect_err(|e| log::warn!("work-area changes won't be noticed: {e:#}"))
+            .ok();
         let mut app = Self {
             host,
             control,
@@ -268,21 +323,30 @@ impl App {
             reasons: HoldReasons::default(),
             covered: HashMap::new(),
             editing: false,
-            parked: false,
+            parked: BTreeSet::new(),
+            hidden_since: HashMap::new(),
             devtools,
             ignore_covered: std::env::var_os("MYPAPER_WIDGETS_IGNORE_COVERED")
                 .is_some_and(|v| v == "1"),
+            park_after: std::env::var("MYPAPER_WIDGETS_PARK_SECS")
+                .ok()
+                .and_then(|secs| secs.parse().ok())
+                .map_or(PARK_AFTER, Duration::from_secs),
             storage: Storage::new(crate::files::user("widget-data")?),
             stats: Stats::default(),
             media: Media::new(waker.clone()),
             plugins: Plugins::new(waker.clone()),
             theme: theme::current(),
+            theme_dir,
+            skin,
             theme_subs: BTreeSet::new(),
             window_events: None,
             timers: Timers::default(),
             changed_widgets: BTreeSet::new(),
             watchers: Vec::new(),
+            theme_watch: None,
             palette_watch: None,
+            _display_watch: display_watch,
             waker,
         };
         if layout_missing {
@@ -290,7 +354,6 @@ impl App {
         }
         app.watch();
         app.update_policy();
-        app.refresh_fullscreen();
         app.sync_hold();
         app.reconcile();
         Ok(app)
@@ -350,6 +413,11 @@ impl App {
                         }
                     }
                     WM_WAKE => {}
+                    WM_DISPLAY => {
+                        self.timers
+                            .display
+                            .get_or_insert(Instant::now() + SETTLE_DISPLAY);
+                    }
                     m if m == self.edit_message && msg.hwnd == self.control.hwnd() => {
                         match msg.wParam.0 {
                             0 => self.set_editing(false),
@@ -371,7 +439,7 @@ impl App {
     fn handle(&mut self, msg: Msg) {
         let now = Instant::now();
         match msg {
-            Msg::Config | Msg::Palette => {
+            Msg::Config | Msg::Palette | Msg::Theme => {
                 self.timers.config.get_or_insert(now + SETTLE_CONFIG);
             }
             Msg::Layout => {
@@ -414,6 +482,9 @@ impl App {
         if due(&mut self.timers.recheck, now) {
             self.recheck();
         }
+        if due(&mut self.timers.display, now) {
+            self.relayout_for_display();
+        }
         if due(&mut self.timers.config, now) {
             self.reload_config();
         }
@@ -429,10 +500,8 @@ impl App {
         if due(&mut self.timers.webview, now) {
             self.reconcile();
         }
-        if due(&mut self.timers.park, now) && self.held() && !self.parked {
-            log::info!("held for {PARK_AFTER:?}: releasing the widget layers and WebView2");
-            self.parked = true;
-            self.reconcile();
+        if due(&mut self.timers.park, now) {
+            self.park_hidden(now);
         }
         for delivery in self.stats.tick(now) {
             match delivery {
@@ -450,23 +519,35 @@ impl App {
         self.deliver(out);
     }
 
+    /// A global hold: the user paused, or we're on battery with that setting, or the display
+    /// is off or the session locked. (A fullscreen app is not one: it only pauses the monitor
+    /// it covers, see [`hides`](Self::hides).)
     fn held(&self) -> bool {
         !self.reasons.is_empty()
     }
 
-    // --- Hold -------------------------------------------------------------
-
-    fn refresh_fullscreen(&mut self) {
-        let fullscreen = self.holds.wants_fullscreen() && fullscreen_app_in_front();
-        self.holds.set_fullscreen(fullscreen);
+    /// Nothing is on screen (display off, locked).
+    fn nothing_visible(&self) -> bool {
+        nothing_visible(self.reasons)
     }
 
-    /// Combines every hold reason, logging changes, and puts everything to
+    /// Held, but the desktop is visible: widgets are told they're not visible (so they stop
+    /// animating) while their layers keep showing what they last drew.
+    fn frozen(&self) -> bool {
+        self.held() && !self.nothing_visible()
+    }
+
+    /// Whether the layer on `device` is hidden (see [`layer_state`]).
+    fn hides(&self, device: &str) -> bool {
+        let covered = self.covered.get(device).copied().unwrap_or(false);
+        layer_state(self.reasons, covered, self.editing) == LayerState::Hidden
+    }
+
+    // --- Hold -------------------------------------------------------------
+
+    /// Combines every global hold reason, logging changes, and puts what needs it to
     /// sleep (or wakes it).
     fn sync_hold(&mut self) {
-        if self.window_events.is_none() {
-            self.refresh_fullscreen(); // unwatched: look now
-        }
         let reasons = self.holds.reasons();
         if reasons == self.reasons {
             return;
@@ -478,44 +559,51 @@ impl App {
         }
         self.reasons = reasons;
         let held = !reasons.is_empty();
-        self.timers.park = held.then(|| Instant::now() + PARK_AFTER);
-        if !held && self.parked {
-            self.parked = false;
-            self.reconcile(); // rebuild the layers
-        }
         self.plugins.set_held(held);
         self.stats.set_held(held, Instant::now());
         self.media.set_held(held);
         if held && self.editing {
             log::info!("leaving edit mode");
             self.editing = false;
-            self.reconcile();
-        } else {
-            self.sync_hooks();
-            self.apply_visibility();
         }
+        // Un-parks what may show again, hides or freezes the rest, and tells every shell.
+        self.reconcile();
     }
 
     fn reload_config(&mut self) {
         match Config::load() {
             Ok(config) => {
                 self.holds.apply(&config);
-                self.refresh_fullscreen();
                 self.sync_hold();
             }
             Err(e) => log::error!("{e:#}\n(keeping the current settings)"),
         }
         let theme = theme::current();
-        if theme != self.theme {
+        let theme_changed = theme != self.theme;
+        if theme_changed {
             self.theme = theme;
             for (instance, sub) in &self.theme_subs {
                 self.emit_sub(instance, sub, json!(self.theme));
             }
         }
+        // The theme's widget skin (appearance and style sheet), and so what `accent: auto`
+        // means, may have changed with the theme, its files or the palette: the state carries it.
+        let dir = theme::dir();
+        let skin = look::load_skin(dir.as_deref());
+        if dir != self.theme_dir {
+            self.theme_dir = dir;
+            self.watch_theme();
+        }
+        if skin != self.skin || theme_changed {
+            self.skin = skin;
+            self.push_all();
+        }
     }
 
-    /// After window events: monitors, coverage, a fullscreen app, z-order.
-    fn recheck(&mut self) {
+    /// Re-reads the monitors (position, size, DPI and work area) and re-lays out if any changed:
+    /// the surfaces follow, the grid is recomputed (it stretches to the work area) and every
+    /// widget is placed again, clamped so none sits under an app bar.
+    fn refresh_monitors(&mut self) {
         let monitors = monitor_infos();
         if monitors != self.monitors {
             log::info!("monitors changed");
@@ -523,6 +611,25 @@ impl App {
             self.icon_cell = icon_cell();
             self.reconcile();
         }
+    }
+
+    /// After `WM_DISPLAYCHANGE` or `WM_SETTINGCHANGE` for the work area (see `display.rs`).
+    /// Unlike window events these arrive even when no window moved, e.g. an app bar that
+    /// reserves screen space.
+    fn relayout_for_display(&mut self) {
+        log::debug!("display or work-area change announced");
+        let icon_cell = icon_cell();
+        if icon_cell != self.icon_cell {
+            self.icon_cell = icon_cell; // icon spacing sets the grid's cell size
+            self.reconcile();
+        }
+        self.refresh_monitors();
+    }
+
+    /// After window events: monitors, which are covered by a maximized or fullscreen window,
+    /// z-order.
+    fn recheck(&mut self) {
+        self.refresh_monitors();
         if !self.ignore_covered {
             let rects: Vec<Rect> = self.monitors.iter().map(|m| m.rect).collect();
             self.covered = self
@@ -535,23 +642,63 @@ impl App {
         for surface in &self.surfaces {
             self.host.keep_above_icons(surface.hwnd());
         }
-        self.refresh_fullscreen();
         self.sync_hold();
-        self.apply_visibility();
+        if self.parked.iter().any(|device| !self.hides(device)) {
+            self.reconcile(); // a covered monitor was uncovered: rebuild its layer
+        } else {
+            self.apply_visibility();
+        }
     }
 
-    /// Hides (and suspends) surfaces while held or covered, shows the rest.
-    /// Widgets hear `visibility:false` before the suspend and `true` after the resume.
+    /// Releases the layers (and so their WebViews) of monitors that have been hidden for
+    /// [`PARK_AFTER`]. When that was every monitor with widgets, WebView2 itself goes.
+    fn park_hidden(&mut self, now: Instant) {
+        let due: Vec<String> = self
+            .hidden_since
+            .iter()
+            .filter(|(device, since)| {
+                now >= **since + self.park_after
+                    && !self.parked.contains(*device)
+                    && self.hides(device)
+            })
+            .map(|(device, _)| device.clone())
+            .collect();
+        if due.is_empty() {
+            return self.arm_park();
+        }
+        log::info!(
+            "hidden for {:?}: releasing the widget layer and WebView on {}",
+            self.park_after,
+            due.join(", ")
+        );
+        self.parked.extend(due);
+        self.reconcile();
+    }
+
+    /// Wakes us when the next hidden layer is due to be parked.
+    fn arm_park(&mut self) {
+        self.timers.park = self
+            .hidden_since
+            .iter()
+            .filter(|(device, _)| !self.parked.contains(*device))
+            .map(|(_, since)| *since + self.park_after)
+            .min();
+    }
+
+    /// Hides (and suspends) layers of monitors that are covered, or everywhere while nothing
+    /// is on screen; shows the rest. Widgets hear `visibility:false` before the suspend and
+    /// `true` after the resume. Notes since when each layer is hidden, for parking.
     fn apply_visibility(&mut self) {
-        let held = self.held();
+        let now = Instant::now();
         for index in 0..self.surfaces.len() {
+            let device = self.surfaces[index].monitor.device.clone();
+            let hidden = self.hides(&device);
+            if hidden {
+                self.hidden_since.entry(device).or_insert(now);
+            } else {
+                self.hidden_since.remove(&device);
+            }
             let surface = &self.surfaces[index];
-            let covered = self
-                .covered
-                .get(&surface.monitor.device)
-                .copied()
-                .unwrap_or(false);
-            let hidden = held || (covered && !self.editing);
             if hidden == surface.hidden {
                 continue;
             }
@@ -573,14 +720,20 @@ impl App {
                 }
             }
         }
+        // Layers that no longer exist (parked, or gone) aren't timed.
+        let live: BTreeSet<&str> = self
+            .surfaces
+            .iter()
+            .map(|s| s.monitor.device.as_str())
+            .collect();
+        self.hidden_since
+            .retain(|device, _| live.contains(device.as_str()));
+        self.arm_park();
     }
 
     // --- Edit mode and surfaces ---------------------------------------------
 
     fn set_editing(&mut self, on: bool) {
-        if on {
-            self.sync_hold(); // without hooks, nothing watched for a fullscreen app
-        }
         if on && self.held() {
             log::info!("not entering edit mode while held ({})", self.reasons);
             return;
@@ -625,11 +778,20 @@ impl App {
             // Unwatched while no layer was up: the monitors may have changed.
             self.monitors = monitor_infos();
         }
+        // A parked monitor stays parked while it is still hidden, and not otherwise. Monitors
+        // that went away are forgotten.
+        let hidden: BTreeSet<String> = self
+            .monitors
+            .iter()
+            .filter(|m| self.hides(&m.device))
+            .map(|m| m.device.clone())
+            .collect();
+        self.parked.retain(|device| hidden.contains(device));
         let wanted: Vec<Monitor> = self
             .monitors
             .iter()
             .filter(|monitor| {
-                !self.parked
+                !self.parked.contains(&monitor.device)
                     && (self.editing
                         || self.layout.instances.iter().any(|instance| {
                             self.registry.get(&instance.widget).is_some()
@@ -676,14 +838,12 @@ impl App {
     }
 
     /// The window-change hooks wake us on every window move anywhere, so they
-    /// run only while they matter: a layer is up and we're not held, or held
-    /// by a fullscreen app (to see it leave). Pause, battery, lock and display
-    /// arrive as notifications without them.
+    /// run only while they matter: a layer is up (or parked, and must see the
+    /// window over its monitor leave) and the desktop is on screen. Pause,
+    /// battery, lock and display arrive as notifications without them.
     fn sync_hooks(&mut self) {
-        let fullscreen = self.reasons.contains(Reason::Fullscreen);
-        // Parked layers are gone, but a fullscreen hold must still see the app leave.
-        let layer = !self.surfaces.is_empty() || self.parked;
-        let wanted = layer && (self.reasons.is_empty() || fullscreen);
+        let layer = !self.surfaces.is_empty() || !self.parked.is_empty();
+        let wanted = layer && !self.nothing_visible();
         match (wanted, self.window_events.is_some()) {
             (true, false) => {
                 self.window_events = Some(WindowEvents::install());
@@ -868,15 +1028,25 @@ impl App {
         Grid::new(&self.layout.grid, self.icon_cell, work)
     }
 
-    /// The instances shown on `monitor`, placed on its grid.
+    /// What `accent: auto` means right now: the wallpaper palette's accent, else white.
+    fn auto_accent(&self) -> Color {
+        look::accent(self.theme.palette.as_ref().map(|p| p.accent.as_str()))
+    }
+
+    /// The instances shown on `monitor`, placed on its grid, each with its look merged from
+    /// the layers (defaults < theme < user < instance).
     fn placed_on(&self, monitor: &Monitor, grid: &Grid) -> Vec<Placed> {
+        let base = look::base(&self.skin);
+        let accent = self.auto_accent();
         self.layout
             .instances
             .iter()
             .filter(|instance| self.shown_on(instance).as_deref() == Some(monitor.device.as_str()))
             .filter_map(|instance| {
                 let installed = self.registry.get(&instance.widget)?;
-                Some(layout::place(instance, &installed.manifest, grid))
+                let look =
+                    look::resolve(&instance.appearance, &self.layout.appearance, &base, accent);
+                Some(layout::place(instance, &installed.manifest, grid, &look))
             })
             .collect()
     }
@@ -924,8 +1094,17 @@ impl App {
             "grid": grid,
             "instances": placed,
             "widgets": widgets,
+            // The look: the layers below an instance's own (for the Appearance panel), the
+            // color `auto` stands for, and the theme's style sheet.
+            "appearance": {
+                "base": look::json_of(&look::base(&self.skin)),
+                "user": look::json_of(&self.layout.appearance),
+                "accent": self.auto_accent().hex(),
+            },
+            "themeCss": self.skin.css,
             "editing": self.editing,
-            "visible": !surface.hidden,
+            // Frozen (paused, on battery) layers stay on screen but tell widgets to stop.
+            "visible": !surface.hidden && !self.frozen(),
             "error": self.layout_error,
         });
         surface.post(&state.to_string());
@@ -1204,6 +1383,9 @@ impl App {
                     let values = manifest.check_settings(values)?;
                     next.set_settings(&instance, values)
                 }
+                FromShell::Appearance { instance, values } => {
+                    next.set_appearance(instance.as_deref(), &values)
+                }
                 FromShell::Ready
                 | FromShell::Hello { .. }
                 | FromShell::Call { .. }
@@ -1332,6 +1514,22 @@ impl App {
                     .inspect_err(|e| log::warn!("not watching the palette: {e:#}"))
                     .ok();
         }
+        self.watch_theme();
+    }
+
+    /// (Re)watches the active theme's folder for edits to `theme.json` and style sheets, which
+    /// restyle the widgets live.
+    fn watch_theme(&mut self) {
+        self.theme_watch = None;
+        let Some(dir) = self.theme_dir.clone() else {
+            return;
+        };
+        let root = dir.clone();
+        let classify = move |path: &Path| -> Option<Msg> {
+            let name = path.strip_prefix(&root).ok()?.file_name()?.to_str()?;
+            (name == mypaper_theme::MANIFEST || name.ends_with(".css")).then_some(Msg::Theme)
+        };
+        self.theme_watch = start_watch(&dir, classify, self.waker.clone());
     }
 
     fn watch_dir(
@@ -1340,20 +1538,32 @@ impl App {
         classify: impl Fn(&Path) -> Option<Msg> + Send + 'static,
         waker: Waker,
     ) {
-        let path = dir.to_owned();
-        let watcher =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
-                Ok(event) if !event.kind.is_access() => {
-                    for msg in event.paths.iter().filter_map(|p| classify(p)) {
-                        waker.send(msg);
-                    }
+        self.watchers.extend(start_watch(dir, classify, waker));
+    }
+}
+
+/// Watches `dir` recursively; every changed path `classify` recognizes becomes a [`Msg`].
+fn start_watch(
+    dir: &Path,
+    classify: impl Fn(&Path) -> Option<Msg> + Send + 'static,
+    waker: Waker,
+) -> Option<notify::RecommendedWatcher> {
+    let path = dir.to_owned();
+    let watcher =
+        notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
+            Ok(event) if !event.kind.is_access() => {
+                for msg in event.paths.iter().filter_map(|p| classify(p)) {
+                    waker.send(msg);
                 }
-                Ok(_) => {}
-                Err(e) => waker.send(Msg::WatchError(path.clone(), e.to_string())),
-            });
-        match watcher.and_then(|mut w| w.watch(dir, notify::RecursiveMode::Recursive).map(|()| w)) {
-            Ok(watcher) => self.watchers.push(watcher),
-            Err(e) => log::warn!("not watching {}: {e}", dir.display()),
+            }
+            Ok(_) => {}
+            Err(e) => waker.send(Msg::WatchError(path.clone(), e.to_string())),
+        });
+    match watcher.and_then(|mut w| w.watch(dir, notify::RecursiveMode::Recursive).map(|()| w)) {
+        Ok(watcher) => Some(watcher),
+        Err(e) => {
+            log::warn!("not watching {}: {e}", dir.display());
+            None
         }
     }
 }
@@ -1429,4 +1639,57 @@ fn icon_cell() -> [f64; 2] {
         layout::icon_spacing_dip(read(w!("IconSpacing"))),
         layout::icon_spacing_dip(read(w!("IconVerticalSpacing"))),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reasons(paused: bool, on_battery: bool, display_off: bool, locked: bool) -> HoldReasons {
+        let mut holds = Holds::default();
+        holds.apply(&Config {
+            paused,
+            pause_on_battery: true,
+            pause_on_fullscreen: true,
+            ..Config::default()
+        });
+        holds.set(Fact::OnBattery, on_battery);
+        holds.set(Fact::DisplayOff, display_off);
+        holds.set(Fact::SessionLocked, locked);
+        holds.reasons()
+    }
+
+    #[test]
+    fn only_the_covered_monitor_pauses() {
+        let none = reasons(false, false, false, false);
+        // A game on another monitor: this monitor is not covered, so it keeps running.
+        assert_eq!(layer_state(none, false, false), LayerState::Live);
+        assert_eq!(layer_state(none, true, false), LayerState::Hidden);
+        // Edit mode shows a covered monitor anyway.
+        assert_eq!(layer_state(none, true, true), LayerState::Live);
+    }
+
+    #[test]
+    fn a_global_pause_freezes_visible_layers_and_hides_the_rest() {
+        let paused = reasons(true, false, false, false);
+        assert_eq!(
+            layer_state(paused, false, false),
+            LayerState::Frozen,
+            "still on screen"
+        );
+        assert_eq!(
+            layer_state(paused, true, false),
+            LayerState::Hidden,
+            "covered: nothing to see"
+        );
+        let battery = reasons(false, true, false, false);
+        assert_eq!(layer_state(battery, false, false), LayerState::Frozen);
+        // Nothing is on screen at all: everything hides, covered or not.
+        for off in [
+            reasons(false, false, true, false),
+            reasons(false, false, false, true),
+        ] {
+            assert_eq!(layer_state(off, false, false), LayerState::Hidden);
+        }
+    }
 }

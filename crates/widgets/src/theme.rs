@@ -1,6 +1,8 @@
 //! `theme`: the active theme's name and, when Studio has extracted one, the
 //! wallpaper palette (`%LOCALAPPDATA%\mypaper\palette.json`).
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -15,6 +17,12 @@ pub struct ThemeInfo {
 pub struct Palette {
     pub dominant: String,
     pub accent: String,
+}
+
+/// The active theme's folder: the configured theme, located like the wallpaper does.
+pub fn dir() -> Option<PathBuf> {
+    let configured = mypaper_config::Config::load().map(|c| c.theme).ok()?;
+    mypaper_theme::locate(Some(&configured)).ok()
 }
 
 /// Reads the config, the theme's `theme.json` and the palette file now.
