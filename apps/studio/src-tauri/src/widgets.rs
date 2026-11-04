@@ -4,8 +4,7 @@
 //! edits go through `serde_json::Value` and touch only what they mean to:
 //! the grid, the instances' cells, settings and everything unknown survive.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -21,7 +20,6 @@ use crate::fsio;
 use crate::look::Look;
 
 pub const LAYOUT_FILE: &str = "widgets.json";
-const MANIFEST: &str = "widget.json";
 
 // --- installed widgets ---
 
@@ -29,7 +27,6 @@ const MANIFEST: &str = "widget.json";
 #[serde(rename_all = "lowercase")]
 pub enum Origin {
     Bundled,
-    User,
 }
 
 #[derive(Debug, Serialize)]
@@ -52,14 +49,13 @@ pub struct WidgetInfo {
     pub size: WidgetSize,
     pub resizable: bool,
     pub permissions: Vec<String>,
-    /// Where it lives: `desktop` (below windows), `overlay` (always on top) or `popup` (a bar opens it).
+    /// Placement metadata; native widgets are hosted in the desktop band.
     pub preset: String,
     pub origin: Origin,
     pub dir: String,
-    /// The page to load, relative to `dir` (`entry`, default `index.html`).
+    /// Empty for native widgets; retained for the Studio IPC shape.
     pub entry: String,
-    /// The whole manifest as written, for Studio's live preview (the widget's handshake and its
-    /// settings form). Null when it doesn't load.
+    /// The compiled schema, including the existing per-widget settings form.
     pub manifest: Value,
     /// The manifest doesn't load; the other fields are placeholders.
     pub error: Option<String>,
@@ -80,12 +76,6 @@ struct Manifest {
     permissions: Vec<String>,
     #[serde(default = "desktop")]
     preset: String,
-    #[serde(default = "index_html")]
-    entry: String,
-}
-
-fn index_html() -> String {
-    "index.html".to_owned()
 }
 
 fn desktop() -> String {
@@ -103,105 +93,58 @@ fn yes() -> bool {
     true
 }
 
-fn read_widget(dir: &Path, origin: Origin) -> WidgetInfo {
-    let folder = dir
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let path = dir.join(MANIFEST);
-    let parsed = std::fs::read_to_string(&path)
-        .with_context(|| format!("reading {}", path.display()))
-        .and_then(|text| {
-            let raw: Value =
-                serde_json::from_str(&text).with_context(|| format!("in {}", path.display()))?;
-            let manifest =
-                Manifest::deserialize(&raw).with_context(|| format!("in {}", path.display()))?;
-            Ok((manifest, raw))
-        });
-    match parsed {
-        Ok((m, raw)) => WidgetInfo {
-            size: WidgetSize {
-                default: m.size.default,
-                min: m.size.min.unwrap_or([1, 1]),
-                max: m.size.max,
-            },
-            id: m.id,
-            name: m.name,
-            version: m.version,
-            author: m.author,
-            description: m.description,
-            resizable: m.resizable,
-            permissions: m.permissions,
-            preset: m.preset,
-            origin,
-            dir: dir.display().to_string(),
-            entry: m.entry,
-            manifest: raw,
-            error: None,
-        },
-        Err(e) => WidgetInfo {
-            id: folder.clone(),
-            name: folder,
-            version: None,
-            author: None,
-            description: None,
-            size: WidgetSize {
-                default: [1, 1],
-                min: [1, 1],
-                max: None,
-            },
-            resizable: true,
-            permissions: Vec::new(),
-            preset: desktop(),
-            origin,
-            dir: dir.display().to_string(),
-            entry: index_html(),
-            manifest: Value::Null,
-            error: Some(format!("{e:#}")),
-        },
-    }
-}
-
-/// Subfolders of `root` that have a `widget.json` (`widgets/shell` has none).
-fn widget_dirs(root: &Path) -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
+/// Native widget schemas stay available to the existing settings inspector. There are no HTML
+/// entry points; N7 supplies native previews in Studio.
+pub fn list() -> Vec<WidgetInfo> {
+    let schemas = [
+        include_str!("../../../../crates/widgets/src/catalog/calendar.json"),
+        include_str!("../../../../crates/widgets/src/catalog/clock.json"),
+        include_str!("../../../../crates/widgets/src/catalog/countdown.json"),
+        include_str!("../../../../crates/widgets/src/catalog/crypto.json"),
+        include_str!("../../../../crates/widgets/src/catalog/heatmap.json"),
+        include_str!("../../../../crates/widgets/src/catalog/launcher.json"),
+        include_str!("../../../../crates/widgets/src/catalog/media-pill.json"),
+        include_str!("../../../../crates/widgets/src/catalog/notes.json"),
+        include_str!("../../../../crates/widgets/src/catalog/now-playing.json"),
+        include_str!("../../../../crates/widgets/src/catalog/photo.json"),
+        include_str!("../../../../crates/widgets/src/catalog/quick-toggles.json"),
+        include_str!("../../../../crates/widgets/src/catalog/quote.json"),
+        include_str!("../../../../crates/widgets/src/catalog/rss.json"),
+        include_str!("../../../../crates/widgets/src/catalog/system-monitor.json"),
+        include_str!("../../../../crates/widgets/src/catalog/timer.json"),
+        include_str!("../../../../crates/widgets/src/catalog/todo.json"),
+        include_str!("../../../../crates/widgets/src/catalog/weather.json"),
+    ];
+    let mut widgets: Vec<_> = schemas
         .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.join(MANIFEST).is_file())
+        .map(|schema| {
+            let mut raw: Value = serde_json::from_str(schema).expect("compiled widget schema");
+            let m = Manifest::deserialize(&raw).expect("compiled widget metadata");
+            raw["native"] = Value::Bool(true);
+            WidgetInfo {
+                size: WidgetSize {
+                    default: m.size.default,
+                    min: m.size.min.unwrap_or([1, 1]),
+                    max: m.size.max,
+                },
+                id: m.id,
+                name: m.name,
+                version: m.version,
+                author: m.author,
+                description: m.description,
+                resizable: m.resizable,
+                permissions: m.permissions,
+                preset: m.preset,
+                origin: Origin::Bundled,
+                dir: String::new(),
+                entry: String::new(),
+                manifest: raw,
+                error: None,
+            }
+        })
         .collect();
-    dirs.sort();
-    dirs
-}
-
-/// The `widgets/` folder beside the exe or any parent, like the themes folder.
-pub fn bundled_root() -> Option<PathBuf> {
-    std::env::current_exe()
-        .ok()?
-        .ancestors()
-        .skip(1)
-        .map(|dir| dir.join("widgets"))
-        .find(|dir| dir.is_dir())
-}
-
-/// Bundled widgets plus the user's; a user widget wins over a bundled one with the same id.
-pub fn list_from(bundled: Option<&Path>, user: Option<&Path>) -> Vec<WidgetInfo> {
-    let mut by_id: HashMap<String, WidgetInfo> = HashMap::new();
-    for (root, origin) in [(bundled, Origin::Bundled), (user, Origin::User)] {
-        for dir in root.map(widget_dirs).unwrap_or_default() {
-            let info = read_widget(&dir, origin);
-            by_id.insert(info.id.clone(), info);
-        }
-    }
-    let mut widgets: Vec<WidgetInfo> = by_id.into_values().collect();
     widgets.sort_by_key(|w| w.name.to_lowercase());
     widgets
-}
-
-pub fn list() -> Vec<WidgetInfo> {
-    let user = mypaper_config::dir().ok().map(|dir| dir.join("widgets"));
-    list_from(bundled_root().as_deref(), user.as_deref())
 }
 
 // --- the layout file ---
@@ -603,7 +546,6 @@ pub fn toggle_edit_mode() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::tests::temp_dir;
 
     const LAYOUT: &str = r##"{
   "version": 1,
@@ -835,61 +777,13 @@ mod tests {
         );
     }
 
-    fn write_widget(root: &Path, folder: &str, manifest: &str) {
-        let dir = root.join(folder);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join(MANIFEST), manifest).unwrap();
-    }
-
     #[test]
-    fn installed_widgets_merge_bundled_and_user_with_user_winning() {
-        let work = temp_dir("widgets-list");
-        let (bundled, user) = (work.join("bundled"), work.join("user"));
-        write_widget(
-            &bundled,
-            "clock",
-            r#"{ "id": "clock", "name": "Clock", "size": { "default": [2, 1], "max": [4, 2] }, "permissions": ["launch"], "settings": [] }"#,
-        );
-        write_widget(
-            &bundled,
-            "notes",
-            r#"{ "id": "notes", "name": "Notes", "size": { "default": [2, 2] }, "resizable": false }"#,
-        );
-        write_widget(&bundled, "broken", r#"{ "id": "broken" }"#);
-        std::fs::create_dir_all(bundled.join("shell")).unwrap(); // not a widget
-        write_widget(
-            &user,
-            "clock",
-            r#"{ "id": "clock", "name": "My Clock", "size": { "default": [1, 1] } }"#,
-        );
-
-        let widgets = list_from(Some(&bundled), Some(&user));
-        let names: Vec<_> = widgets.iter().map(|w| w.name.as_str()).collect();
-        assert_eq!(names, ["broken", "My Clock", "Notes"]);
-        let clock = &widgets[1];
-        assert_eq!(clock.origin, Origin::User);
-        assert_eq!(clock.size.min, [1, 1]);
-        let notes = &widgets[2];
-        assert!(!notes.resizable && notes.size.max.is_none() && notes.origin == Origin::Bundled);
-        assert!(
-            widgets[0].error.is_some() && widgets[0].manifest.is_null(),
-            "a broken manifest is listed with its error"
-        );
-        assert_eq!(
-            (clock.entry.as_str(), clock.manifest["name"].as_str()),
-            ("index.html", Some("My Clock"))
-        );
-
-        let bundled_clock = list_from(Some(&bundled), None);
-        let clock = bundled_clock.iter().find(|w| w.id == "clock").unwrap();
-        assert_eq!(
-            (
-                clock.size.default,
-                clock.size.max,
-                clock.permissions.as_slice()
-            ),
-            ([2, 1], Some([4, 2]), ["launch".to_string()].as_slice())
-        );
-        std::fs::remove_dir_all(&work).unwrap();
+    fn compiled_widget_schemas_keep_the_existing_settings_contract() {
+        let widgets = list();
+        assert_eq!(widgets.len(), 17);
+        let clock = widgets.iter().find(|w| w.id == "clock").unwrap();
+        assert_eq!(clock.manifest["native"], true);
+        assert!(clock.manifest["settings"].is_array());
+        assert!(clock.dir.is_empty() && clock.entry.is_empty());
     }
 }
