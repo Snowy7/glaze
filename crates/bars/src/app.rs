@@ -1124,29 +1124,43 @@ impl App {
             system::open(item.path.clone());
             return Ok(Value::Null);
         }
+        // Asked now, not from the window list, which trails the hooks by a few milliseconds.
+        // SAFETY: a read-only query; a stale handle reads as not minimized.
+        let minimized = |hwnd: isize| unsafe { IsIconic(system::hwnd(hwnd)) }.as_bool();
         let front = item
             .windows
             .iter()
-            .find(|w| Some(w.hwnd) == self.foreground && !w.minimized);
+            .map(|w| w.hwnd)
+            .find(|&hwnd| Some(hwnd) == self.foreground && !minimized(hwnd));
         log::debug!(
-            "activate {key}: in front {:?}; windows {:?}",
+            "activate {key}: in front {:?}, the app's windows {:?}",
             self.foreground,
-            item.windows
-                .iter()
-                .map(|w| (w.hwnd, w.minimized))
-                .collect::<Vec<_>>()
+            item.windows.iter().map(|w| w.hwnd).collect::<Vec<_>>()
         );
         match front {
             Some(window) => {
-                system::minimize(system::hwnd(window.hwnd));
+                system::minimize(system::hwnd(window));
                 // Like the taskbar: the next window comes to the front, not the bar.
-                self.hand_back(Some(window.hwnd));
+                self.hand_back(Some(window));
             }
             None => {
-                system::activate(system::hwnd(item.windows[0].hwnd));
+                let window = item.windows[0].hwnd;
+                if system::activate(system::hwnd(window)) {
+                    self.moved_foreground(Some(window));
+                }
             }
         }
         Ok(Value::Null)
+    }
+
+    /// We moved the foreground ourselves. The hooks skip our own process's events, so this is
+    /// how the dock learns which app is in front now.
+    fn moved_foreground(&mut self, to: Option<isize>) {
+        if self.foreground != to {
+            self.foreground = to;
+            self.emit(Topic::Apps);
+            self.emit(Topic::Foreground);
+        }
     }
 
     /// Gives the foreground back to the app window that had it (or the top one, or the desktop).
@@ -1168,9 +1182,12 @@ impl App {
             .filter(|&hwnd| Some(hwnd) != except && usable(hwnd))
             .or_else(|| apps::front_window(except));
         // SAFETY: plain calls; we hold the foreground, so Windows lets us pass it on.
-        unsafe {
+        let moved = unsafe {
             let window = target.map_or_else(|| GetShellWindow(), system::hwnd);
-            let _ = SetForegroundWindow(window);
+            SetForegroundWindow(window).as_bool()
+        };
+        if moved {
+            self.moved_foreground(target);
         }
     }
 
@@ -1254,7 +1271,9 @@ impl App {
             }
             Method::Activate(Activate::App { app }) => self.activate_app(&app),
             Method::Activate(Activate::Window { hwnd }) => {
-                system::activate(system::hwnd(hwnd));
+                if system::activate(system::hwnd(hwnd)) {
+                    self.moved_foreground(Some(hwnd));
+                }
                 done
             }
             Method::Launch { path, .. } => {

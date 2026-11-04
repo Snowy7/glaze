@@ -23,6 +23,9 @@ entries, and the Studio settings. Change it deliberately, in the same commit as 
     screen.
   - While a fullscreen app is in front, that monitor's bars hide, and the bars elsewhere stop
     their periodic work (stats); the clock and event-driven modules keep going.
+  - Measured (debug build, two 1440p monitors, two top bars and a dock): 0.03% of the machine's
+    CPU at idle; about 520 MB working set for the host and WebView2's processes (one browser, one
+    GPU process, one renderer per bar).
 
 ## Process
 
