@@ -2,6 +2,7 @@
 //! page. Docked bars register as app bars and reserve their band; an auto-hiding dock reserves
 //! nothing and gets a 1 px edge trigger instead. The window is the band plus [`ROOM`] toward the
 //! middle of the screen for popovers and menus; the page's region keeps the rest click-through.
+//! Under the WebView sits a composition target for live blur (`crate::blur`), where Windows can.
 //!
 //! The window procedures hold no state: they forward what the main loop cares about as thread
 //! messages (`WM_BARS_*`).

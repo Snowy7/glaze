@@ -111,12 +111,16 @@ Widgets keep running on any monitor you can see, and pause only where they're co
   </tr>
 </table>
 
-Six presets: monochrome, macOS, Windows 11, islands, neon glass and floating.
+Each bar has its own design, look and motion, so any top bar goes with any dock. Top bars: macOS
+(Tahoe), Windows 11, a floating capsule, minimal, monochrome, islands, neon and floating. Docks: the
+macOS dock, the Windows 11 and Windows 10 taskbars, the ChromeOS shelf, a floating Fluent dock,
+monochrome, islands, neon and floating. Presets pair them.
 
 **Everything about the bars is configurable:**
 - **Layout:** floating, islands, full-width or strip; any screen edge; per-monitor overrides.
-- **Backgrounds:** solid, gradient, image, or **wallpaper glass**, a blurred copy of your *live*
-  wallpaper behind the bars.
+- **Glass:** **Liquid Glass** (what's behind, bent by a lens along the rim, with one thin specular
+  edge), Windows' own **live blur** of whatever is behind (windows too), or **wallpaper glass**, a
+  blurred copy of your *live* wallpaper; or solid, gradient, image.
 - **Edges:** tint, grain, squircle corners, and border, glow and shadow for each state.
 - **Motion:** named curves, custom cubic-béziers and springs.
 - **Dock:** magnify with falloff, launch bounce, attention pulse, five indicator styles, and live
@@ -125,11 +129,12 @@ Six presets: monochrome, macOS, Windows 11, islands, neon glass and floating.
   an interval), and icon packs.
 
 **Our own menus replace Windows':**
+- menus and panels drawn after the bar's family: Windows 11, macOS, ChromeOS or mypaper's own;
 - a Start menu with four layouts (Windows 11, launchpad grid, a compact search bar, or a dashboard),
   optionally opened with the Win key;
 - quick settings (brightness, radios, power mode);
 - a Wi-Fi list, a per-app volume mixer, a language switcher and a calendar;
-- notifications;
+- a notification center: stacks per app with their icons, swipe to dismiss, the month under it;
 - a real **tray host** that shows your tray icons with no injection, the same approach ManagedShell
   uses.
 
