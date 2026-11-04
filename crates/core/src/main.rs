@@ -16,6 +16,7 @@
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod autostart;
 mod bars;
 mod child;
 mod restart;
@@ -49,6 +50,10 @@ const MANUAL_RESTART_DELAY: Duration = Duration::from_millis(250);
 const PANIC_HOTKEY: i32 = 1;
 
 fn main() -> ExitCode {
+    // `--autostart on|off|status` configures "Start with Windows" and exits (see autostart.rs).
+    if let Some(code) = autostart::cli(std::env::args().skip(1)) {
+        return code;
+    }
     mypaper_desktop::init_logging();
     mypaper_desktop::quit_on_ctrl_c();
     match run() {
