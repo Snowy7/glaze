@@ -24,7 +24,7 @@ const DESKTOP_WAIT: Duration = Duration::from_millis(1500);
 const DESKTOP_POLL: Duration = Duration::from_millis(100);
 
 /// Where wallpaper windows go so they render *behind the desktop icons*.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DesktopHost {
     /// Windows 11 24H2+: icons (`SHELLDLL_DefView`) and the static wallpaper
     /// (`WorkerW`) are both children of Progman. We slot in between them.
@@ -140,7 +140,8 @@ impl DesktopHost {
         let _ = unsafe { SetWindowPos(child, Some(defview), 0, 0, 0, 0, flags) };
     }
 
-    fn find_once() -> Result<Self> {
+    /// Resolves the current desktop once. Recovery callers wait for shell events instead of polling.
+    pub fn find_once() -> Result<Self> {
         // SAFETY: plain Win32 calls with valid arguments.
         unsafe {
             let mut progman = GetShellWindow();
@@ -178,6 +179,14 @@ impl DesktopHost {
         match *self {
             Self::Layered { progman, .. } => progman,
             Self::Legacy { workerw, .. } => workerw,
+        }
+    }
+
+    /// Whether a shell window belongs to this desktop generation.
+    pub(crate) fn contains_window(&self, window: HWND) -> bool {
+        match *self {
+            Self::Layered { progman, defview } => window == progman || window == defview,
+            Self::Legacy { workerw, icons } => window == workerw || window == icons,
         }
     }
 

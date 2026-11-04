@@ -28,12 +28,13 @@ mod trim;
 mod window;
 
 use std::process::ExitCode;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
 use mypaper_config::Config;
 use mypaper_desktop::{
-    ControlWindow, DesktopHost, EXIT_CONFIG, WindowEvents, hold, monitors, startup,
+    ControlWindow, DesktopEvents, DesktopHost, EXIT_CONFIG, EXIT_RESTART, WindowEvents, hold,
+    monitors, startup,
 };
 use mypaper_theme::LoadedTheme;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -142,6 +143,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
             None,
         ),
     };
+    let desktop_events = host.map(DesktopEvents::new).transpose()?;
 
     let _control = ControlWindow::new(CONTROL_CLASS)?;
     startup::ready("wallpaper", "windows_ms");
@@ -156,16 +158,46 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
 
     let mut trimmer = Trimmer::new(engine.theme_dir());
     startup::ready("wallpaper", "loop_ms");
+    let mut desktop_lost = false;
+    let mut desktop_at = None;
     let code = loop {
         if let Some(code) = pump(&mut engine, &mut live) {
             break code;
         }
+        if let Some(events) = &desktop_events {
+            desktop_lost |= events.take_lost();
+            if events.take_ready() {
+                desktop_at = Some(Instant::now() + Duration::from_millis(250));
+            }
+            if desktop_at.is_some_and(|at| at <= Instant::now()) {
+                desktop_at = None;
+                match DesktopHost::find_once() {
+                    Ok(current) if desktop_lost || Some(current) != host => {
+                        log::info!(
+                            "Explorer restarted: restarting wallpaper to reattach to {current:?}"
+                        );
+                        break EXIT_RESTART;
+                    }
+                    Ok(_) => {}
+                    Err(_) => {
+                        desktop_lost = true;
+                        events.set_host(None);
+                    }
+                }
+            }
+            if desktop_lost {
+                // Keep the GPU away from orphaned HWNDs until the replacement shell is ready.
+                waiter.wait(desktop_at);
+                continue;
+            }
+        }
         live.apply_due(&mut engine);
         let trim_at = trimmer.poll(engine.theme_dir());
         match tick(&mut engine, events.as_ref()) {
-            Flow::Wait(deadline) => {
-                waiter.wait(earliest(earliest(deadline, trim_at), live.deadline()))
-            }
+            Flow::Wait(deadline) => waiter.wait(earliest(
+                desktop_at,
+                earliest(earliest(deadline, trim_at), live.deadline()),
+            )),
             Flow::Exit(code) => break code,
         }
     };

@@ -38,6 +38,13 @@ mypaper-core ── supervises ──► mypaper-widgets (crates/widgets, Rust)
 - **Which monitors.** A monitor gets a window and a WebView only while it has widget instances, or
   while edit mode is on (so widgets can be added to any monitor). With no instances and edit mode
   off, the host creates no WebView at all.
+- **Explorer restarts.** A hidden top-level window receives `TaskbarCreated`; a WinEvent hook
+  also watches the desktop host's destruction and replacement windows, even with every layer
+  parked. Dead desktop layers and controllers are released immediately. After a 250 ms quiet
+  period, the host resolves the new desktop once and recreates the required layers in process,
+  keeping layout, settings, storage and edit mode. Further shell creation events wake recovery
+  if the desktop was not ready; there is no polling. Repeated broadcasts for the same desktop
+  do not rebuild it. Recreated shells restore subscriptions and publish their glass plates again.
 - **Click-through.** The window's region (`SetWindowRgn`) is the union of the widget rectangles,
   plus the whole monitor while edit mode is on. Clicks outside widgets go to the desktop (icons,
   right-click menu, rubber-band selection).
