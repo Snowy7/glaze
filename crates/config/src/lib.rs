@@ -25,7 +25,7 @@ pub struct Config {
     /// Pause every screen while a fullscreen app or game is in front, so
     /// games get the whole GPU.
     pub pause_on_fullscreen: bool,
-    /// mypaper's own right-click menu for the bare desktop (opt-in). Left out
+    /// mypaper's own right-click menu for the bare desktop (on by default). Left out
     /// of the file while it is all defaults, so saving settings never freezes them.
     #[serde(skip_serializing_if = "DesktopMenu::is_default")]
     pub desktop_menu: DesktopMenu,
@@ -115,9 +115,15 @@ mod tests {
     }
 
     #[test]
-    fn the_desktop_menu_and_classic_menu_are_opt_in_and_checked() {
+    fn the_desktop_menu_is_on_by_default_the_classic_menu_is_opt_in_and_both_are_checked() {
         let config = Config::default();
-        assert!(!config.desktop_menu.enabled && !config.classic_context_menu);
+        assert!(config.desktop_menu.enabled && !config.classic_context_menu);
+        assert!(Config::parse("{}").unwrap().desktop_menu.enabled);
+        // Off stays off: an explicit `false` is written (it isn't the default) and read back.
+        let off = Config::parse(r#"{ "desktop_menu": { "enabled": false } }"#).unwrap();
+        assert!(!off.desktop_menu.enabled);
+        let written = serde_json::to_string(&off).unwrap();
+        assert!(!Config::parse(&written).unwrap().desktop_menu.enabled);
 
         let on = Config::parse(
             r#"{ "desktop_menu": { "enabled": true, "items": ["refresh"] }, "classic_context_menu": true }"#,

@@ -124,8 +124,8 @@ export function Settings() {
         <Group title="Desktop extras">
           <ToggleRow
             title="mypaper's right-click menu on the desktop"
-            detail="Right-clicking the bare desktop opens a themed menu instead of Explorer's. Icons, windows, the taskbar and Shift+right-click always get the native menu. It uses a mouse hook inside mypaper-core's own process, switched off while a fullscreen app is in front and removed when mypaper quits. Off by default; off installs nothing."
-            checked={config?.desktop_menu.enabled ?? false}
+            detail="Right-clicking the bare desktop opens a themed menu instead of Explorer's. Icons, windows, the taskbar and Shift+right-click always get the native menu. It uses a mouse hook inside mypaper-core's own process, switched off while a fullscreen app is in front and removed when mypaper quits. On by default; off installs nothing."
+            checked={config?.desktop_menu.enabled ?? true}
             disabled={!config}
             onChange={(enabled) => void updateConfig({ desktop_menu: { enabled } })}
           />
