@@ -8,10 +8,10 @@ use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWi
 use windows::Win32::UI::WindowsAndMessaging::{
     CHILDID_SELF, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
     EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND,
-    EVENT_SYSTEM_MINIMIZEEND, EnumWindows, GWL_EXSTYLE, GetClassNameW, GetWindowLongPtrW,
-    GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed, OBJID_WINDOW,
-    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    WS_EX_TRANSPARENT,
+    EVENT_SYSTEM_MINIMIZEEND, EnumWindows, GA_PARENT, GWL_EXSTYLE, GetAncestor, GetClassNameW,
+    GetDesktopWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
+    IsWindowVisible, IsZoomed, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 use windows::core::BOOL;
 
@@ -63,8 +63,8 @@ impl Drop for WindowEvents {
 
 unsafe extern "system" fn on_event(
     _: HWINEVENTHOOK,
-    _: u32,
-    _: HWND,
+    event: u32,
+    hwnd: HWND,
     object: i32,
     child: i32,
     _: u32,
@@ -72,7 +72,20 @@ unsafe extern "system" fn on_event(
 ) {
     // Ignore carets, cursors and other sub-objects; they fire constantly.
     if object == OBJID_WINDOW.0 && child == CHILDID_SELF as i32 {
-        CHANGED.store(true, Ordering::Relaxed);
+        // Child HWND animations also use OBJID_WINDOW. They cannot cover a monitor, and must
+        // not make the widget host enumerate/restack every desktop surface. A destroyed HWND
+        // cannot be classified anymore, so keep its wake (a maximized app may have closed).
+        // SAFETY: read-only hierarchy queries; a stale HWND simply has no desktop parent.
+        let top = unsafe { GetAncestor(hwnd, GA_PARENT) == GetDesktopWindow() };
+        // Use the same overlay exclusion as opaque_frame: wallpaper/glass/HUD windows cannot
+        // cover widgets, so their location updates must not repeatedly scan/restack the desktop.
+        // SAFETY: read-only style query; a stale handle returns zero and its destroy wake is kept.
+        let overlay = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 }
+            & (WS_EX_TOOLWINDOW.0 | WS_EX_TRANSPARENT.0 | WS_EX_NOACTIVATE.0)
+            != 0;
+        if (top && !overlay) || event == EVENT_OBJECT_DESTROY || event == EVENT_SYSTEM_FOREGROUND {
+            CHANGED.store(true, Ordering::Relaxed);
+        }
     }
 }
 
@@ -165,5 +178,114 @@ pub(crate) unsafe fn opaque_frame(hwnd: HWND, our_pid: u32) -> Option<Rect> {
             GetWindowRect(hwnd, &mut rect).ok()?;
         }
         Some(rect.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, WS_CHILD, WS_POPUP,
+    };
+    use windows::core::w;
+
+    #[test]
+    fn child_moves_do_not_invalidate_coverage_but_root_lifecycle_does() {
+        // SAFETY: hidden test windows on this thread, destroyed before returning; STATIC is a
+        // system class and neither creation nor the callback borrows application state.
+        unsafe {
+            let root = CreateWindowExW(
+                Default::default(),
+                w!("STATIC"),
+                w!("coverage root"),
+                WS_POPUP,
+                0,
+                0,
+                1,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let child = CreateWindowExW(
+                Default::default(),
+                w!("STATIC"),
+                w!("coverage child"),
+                WS_CHILD,
+                0,
+                0,
+                1,
+                1,
+                Some(root),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            CHANGED.store(false, Ordering::Relaxed);
+            on_event(
+                Default::default(),
+                EVENT_OBJECT_LOCATIONCHANGE,
+                child,
+                OBJID_WINDOW.0,
+                CHILDID_SELF as i32,
+                0,
+                0,
+            );
+            assert!(!CHANGED.load(Ordering::Relaxed));
+            on_event(
+                Default::default(),
+                EVENT_OBJECT_LOCATIONCHANGE,
+                root,
+                OBJID_WINDOW.0,
+                CHILDID_SELF as i32,
+                0,
+                0,
+            );
+            assert!(CHANGED.swap(false, Ordering::Relaxed));
+            let overlay = CreateWindowExW(
+                WS_EX_NOACTIVATE,
+                w!("STATIC"),
+                w!("coverage overlay"),
+                WS_POPUP,
+                0,
+                0,
+                1,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            on_event(
+                Default::default(),
+                EVENT_OBJECT_LOCATIONCHANGE,
+                overlay,
+                OBJID_WINDOW.0,
+                CHILDID_SELF as i32,
+                0,
+                0,
+            );
+            assert!(!CHANGED.load(Ordering::Relaxed));
+            DestroyWindow(overlay).unwrap();
+            DestroyWindow(child).unwrap();
+            DestroyWindow(root).unwrap();
+            on_event(
+                Default::default(),
+                EVENT_OBJECT_DESTROY,
+                root,
+                OBJID_WINDOW.0,
+                CHILDID_SELF as i32,
+                0,
+                0,
+            );
+            assert!(
+                CHANGED.swap(false, Ordering::Relaxed),
+                "closing a covered app still resumes its monitor"
+            );
+        }
     }
 }

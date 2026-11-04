@@ -16,8 +16,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CHILDID_SELF, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_CREATE, EVENT_OBJECT_DESTROY,
     EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_SHOW,
     EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
-    EVENT_SYSTEM_MINIMIZESTART, GA_PARENT, GetAncestor, GetDesktopWindow, OBJID_WINDOW,
-    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
+    EVENT_SYSTEM_MINIMIZESTART, GA_PARENT, GetAncestor, GetDesktopWindow, GetForegroundWindow,
+    GetShellWindow, GetWindowThreadProcessId, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT,
+    WINEVENT_SKIPOWNPROCESS,
 };
 
 /// The window list may have changed (created, destroyed, shown, hidden, cloaked, renamed,
@@ -48,6 +49,10 @@ pub fn watch_taskbar(on: bool) {
 
 pub struct Hooks {
     hooks: Vec<HWINEVENTHOOK>,
+    location: Option<HWINEVENTHOOK>,
+    foreground_pid: u32,
+    explorer_location: Option<HWINEVENTHOOK>,
+    explorer_pid: u32,
 }
 
 impl Hooks {
@@ -56,11 +61,11 @@ impl Hooks {
             (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
             (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
             (EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE),
-            (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE),
+            (EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE),
             (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
         ];
         let flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
-        let hooks = ranges
+        let hooks: Vec<_> = ranges
             .into_iter()
             // SAFETY: out-of-context hooks with a 'static callback, removed on drop.
             .map(|(min, max)| unsafe {
@@ -68,28 +73,92 @@ impl Hooks {
             })
             .filter(|hook| !hook.is_invalid())
             .collect();
+        // Fullscreen detection only follows the foreground app. Other applications' animation
+        // must not deliver location callbacks to this UI thread. Explorer still owns taskbar moves.
         PENDING.fetch_or(WINDOWS | FOREGROUND | MOVED, Ordering::Relaxed);
-        Self { hooks }
+        let mut hooks = Self {
+            hooks,
+            location: None,
+            foreground_pid: 0,
+            explorer_location: None,
+            explorer_pid: 0,
+        };
+        hooks.follow_foreground();
+        hooks
     }
 
     /// The app snapshot identifies destroyed handles after Windows can no longer classify them.
-    pub fn track(&self, windows: impl IntoIterator<Item = isize>) {
+    pub fn track(&mut self, windows: impl IntoIterator<Item = isize>) {
         WINDOWS_SEEN.with(|seen| *seen.borrow_mut() = windows.into_iter().collect());
+        let mut explorer = 0;
+        // SAFETY: read-only query; follows a new Explorer PID after its restart.
+        unsafe { GetWindowThreadProcessId(GetShellWindow(), Some(&mut explorer)) };
+        if explorer != self.explorer_pid {
+            if let Some(hook) = self.explorer_location.take() {
+                // SAFETY: this object owns the hook on this thread.
+                let _ = unsafe { UnhookWinEvent(hook) };
+            }
+            self.explorer_location = location_hook(explorer);
+            self.explorer_pid = explorer;
+        }
     }
 
     /// What happened since the last call (a set of the constants above).
-    pub fn take(&self) -> u32 {
-        PENDING.swap(0, Ordering::Relaxed)
+    pub fn take(&mut self) -> u32 {
+        let bits = PENDING.swap(0, Ordering::Relaxed);
+        if bits & FOREGROUND != 0 {
+            self.follow_foreground();
+        }
+        bits
+    }
+
+    fn follow_foreground(&mut self) {
+        let mut pid = 0;
+        // SAFETY: read-only process-id query; a vanished window leaves zero.
+        unsafe { GetWindowThreadProcessId(GetForegroundWindow(), Some(&mut pid)) };
+        if pid == self.foreground_pid {
+            return;
+        }
+        if let Some(hook) = self.location.take() {
+            // SAFETY: this object owns the hook, on its installing thread.
+            let _ = unsafe { UnhookWinEvent(hook) };
+        }
+        self.location = location_hook(pid);
+        self.foreground_pid = pid;
     }
 }
 
 impl Drop for Hooks {
     fn drop(&mut self) {
-        for hook in self.hooks.drain(..) {
+        for hook in self
+            .hooks
+            .drain(..)
+            .chain(self.location.take())
+            .chain(self.explorer_location.take())
+        {
             // SAFETY: a hook from SetWinEventHook.
             let _ = unsafe { UnhookWinEvent(hook) };
         }
     }
+}
+
+fn location_hook(pid: u32) -> Option<HWINEVENTHOOK> {
+    if pid == 0 || pid == std::process::id() {
+        return None;
+    }
+    // SAFETY: out-of-context callback scoped to this process, unhooked by Hooks.
+    let hook = unsafe {
+        SetWinEventHook(
+            EVENT_OBJECT_LOCATIONCHANGE,
+            EVENT_OBJECT_LOCATIONCHANGE,
+            None,
+            Some(on_event),
+            pid,
+            0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+        )
+    };
+    (!hook.is_invalid()).then_some(hook)
 }
 
 fn top_level(hwnd: HWND) -> bool {

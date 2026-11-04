@@ -213,6 +213,16 @@ pub struct Surface {
 impl Surface {
     /// A hidden, empty window. `name` and `role` describe it to assistive technology.
     pub fn new(kind: Kind, name: &str, role: Role) -> Result<Self> {
+        Self::create(kind, name, role, false)
+    }
+
+    /// A startup surface whose UI Automation adapter is created on its first WM_GETOBJECT.
+    /// Its latest hit snapshot is retained from the first present, including before activation.
+    pub fn new_deferred_accessibility(kind: Kind, name: &str, role: Role) -> Result<Self> {
+        Self::create(kind, name, role, true)
+    }
+
+    fn create(kind: Kind, name: &str, role: Role, deferred: bool) -> Result<Self> {
         register_class()?;
         let (style, ex, parent) = match kind {
             Kind::Popup { activate } => {
@@ -264,7 +274,11 @@ impl Surface {
             restacking: Cell::new(false),
             field: RefCell::new(None),
             origin: Cell::new((0, 0)),
-            a11y: RefCell::new(Some(A11y::new(hwnd, role, name.into()))),
+            a11y: RefCell::new(Some(if deferred {
+                A11y::deferred(hwnd, role, name.into())
+            } else {
+                A11y::new(hwnd, role, name.into())
+            })),
         });
         // The window holds a strong reference, released in WM_NCDESTROY.
         let raw = Rc::into_raw(shared.clone());

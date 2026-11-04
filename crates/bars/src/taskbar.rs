@@ -16,14 +16,16 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use windows::Win32::Foundation::{
-    COLORREF, CloseHandle, ERROR_FILE_NOT_FOUND, HWND, LPARAM, WPARAM,
+    COLORREF, CloseHandle, ERROR_FILE_NOT_FOUND, HANDLE, HWND, LPARAM, WAIT_ABANDONED,
+    WAIT_OBJECT_0, WPARAM,
 };
 use windows::Win32::System::Registry::{
     HKEY_CURRENT_USER, REG_DWORD, RRF_RT_REG_DWORD, RegDeleteKeyValueW, RegGetValueW,
     RegSetKeyValueW,
 };
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    CreateMutexW, INFINITE, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    QueryFullProcessImageNameW, ReleaseMutex, WaitForSingleObject,
 };
 use windows::Win32::UI::Shell::{
     ABM_GETSTATE, ABM_SETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage,
@@ -39,6 +41,43 @@ use windows::core::{PCWSTR, PWSTR, w};
 use crate::config::{Alignment, TaskbarMode};
 
 pub const JOURNAL: &str = "taskbar.json";
+
+/// Serializes journal access across shell startup and core crash recovery. A replacement shell
+/// can paint while core restores Explorer, then wait here before touching any taskbar state.
+pub struct JournalLease {
+    handle: HANDLE,
+    _thread: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+impl JournalLease {
+    pub fn acquire() -> Result<Self> {
+        Self::named(w!("Local\\mypaper.taskbar.journal"))
+    }
+
+    fn named(name: PCWSTR) -> Result<Self> {
+        // SAFETY: owned session-local mutex, held and released on this thread only.
+        let handle = unsafe { CreateMutexW(None, false, name)? };
+        // SAFETY: valid owned mutex; abandoned ownership is safe after a crashed shell.
+        let status = unsafe { WaitForSingleObject(handle, INFINITE) };
+        if status != WAIT_OBJECT_0 && status != WAIT_ABANDONED {
+            // SAFETY: handle is owned, but the mutex was not acquired.
+            let _ = unsafe { CloseHandle(handle) };
+            bail!("acquiring taskbar journal: {status:?}");
+        }
+        Ok(Self {
+            handle,
+            _thread: std::marker::PhantomData,
+        })
+    }
+}
+impl Drop for JournalLease {
+    fn drop(&mut self) {
+        // SAFETY: this thread owns the mutex for this guard's lifetime.
+        unsafe {
+            let _ = ReleaseMutex(self.handle);
+            let _ = CloseHandle(self.handle);
+        }
+    }
+}
 
 const ADVANCED: PCWSTR = w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced");
 const TASKBAR_AL: PCWSTR = w!("TaskbarAl");
@@ -199,6 +238,21 @@ impl<S: Shell> Taskbar<S> {
             self.apply(Wanted::default())?;
         }
         Ok(pending)
+    }
+
+    /// Unveil/show Explorer immediately after a crash, before restoring its synchronous app-bar
+    /// settings. Keep the remaining undo entries for `restore`, under the same journal lease.
+    pub fn restore_visibility(&mut self) -> Result<bool> {
+        let Some(mut journal) = self.load()? else {
+            return Ok(false);
+        };
+        if !journal.hidden {
+            return Ok(false);
+        }
+        self.shell.set_hidden(false)?;
+        journal.hidden = false;
+        self.save(&journal)?;
+        Ok(true)
     }
 
     /// `None` if there is no journal. An unreadable one is set aside as `taskbar.json.bad`
@@ -498,6 +552,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn journal_lease_holds_replacement_writes_until_recovery_finishes() {
+        let name = format!("Local\\mypaper.journal.test.{}", std::process::id());
+        let wide = windows::core::HSTRING::from(name.clone());
+        let recovery = JournalLease::named(PCWSTR(wide.as_ptr())).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let replacement = std::thread::spawn(move || {
+            let name = windows::core::HSTRING::from(name);
+            let _lease = JournalLease::named(PCWSTR(name.as_ptr())).unwrap();
+            tx.send(()).unwrap();
+        });
+        assert!(
+            rx.recv_timeout(std::time::Duration::from_millis(30))
+                .is_err()
+        );
+        drop(recovery);
+        rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap();
+        replacement.join().unwrap();
+    }
+
+    #[test]
     fn knows_explorer_by_its_image() {
         assert!(is_explorer_path(r"C:\Windows\explorer.exe"));
         assert!(is_explorer_path(r"C:\WINDOWS\EXPLORER.EXE"));
@@ -625,6 +699,28 @@ mod tests {
         assert!(bar.pending());
 
         bar.apply(Wanted::default()).unwrap();
+        assert!(same_state(&bar.shell, &user_taskbar()));
+        assert!(!bar.pending());
+    }
+
+    #[test]
+    fn recovery_reveals_first_and_preserves_the_rest_of_the_undo() {
+        let mut bar = taskbar("reveal-first");
+        bar.apply(wanted(TaskbarMode::Hide, Some(Alignment::Left)))
+            .unwrap();
+        let writes = bar.shell.writes;
+        assert!(bar.restore_visibility().unwrap());
+        assert!(!bar.shell.hidden);
+        assert_eq!(
+            bar.shell.writes, writes,
+            "revealing does not wait on app-bar/alignment changes"
+        );
+        assert_eq!(
+            bar.load().unwrap().unwrap().appbar,
+            Some(Was { was: ALWAYS_ON_TOP })
+        );
+        assert!(!bar.restore_visibility().unwrap());
+        bar.restore().unwrap();
         assert!(same_state(&bar.shell, &user_taskbar()));
         assert!(!bar.pending());
     }
