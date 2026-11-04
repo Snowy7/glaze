@@ -18,6 +18,11 @@ so the slices are build order, not releases.
   adjustable.
 - **The top bar and dock float over the wallpaper**, as the widgets do.
 - **Web and app wallpapers stay**, with live glass over them (D-W).
+- **GPU and frame rate:**
+  - The default is the integrated GPU, made to fit by optimization only; visual quality is never
+    lowered.
+  - Settings let the user choose the GPU (integrated / high-performance / auto) and the frame rate
+    (Hz / fps cap), per wallpaper or globally.
 - **Standalone:** no third-party tools. Restyling the inside of Explorer and Settings is a later,
   separate project.
 - **Keep:** the panic hotkey (which restores the stock desktop) and the undo journal for Windows
