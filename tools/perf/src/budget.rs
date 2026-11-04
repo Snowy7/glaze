@@ -77,6 +77,23 @@ pub struct Measured<'a> {
     pub metrics: &'a BTreeMap<String, f64>,
 }
 
+/// How many limits apply to the scenarios (the denominator of "N of M limits broken").
+pub fn applicable(budget: &Budget, measured: &[Measured]) -> usize {
+    measured
+        .iter()
+        .map(|run| {
+            budget
+                .limits(run.scenario)
+                .keys()
+                .filter(|metric| {
+                    run.components
+                        .contains(metric.split('.').next().unwrap_or(""))
+                })
+                .count()
+        })
+        .sum()
+}
+
 /// Every limit the scenarios break, in scenario then metric order.
 pub fn evaluate(budget: &Budget, measured: &[Measured]) -> Vec<Violation> {
     let mut broken = Vec::new();

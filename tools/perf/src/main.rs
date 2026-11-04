@@ -3,7 +3,8 @@
 //!
 //! ```text
 //! mypaper-perf [--build DIR] [--content DIR] [--runs N] [--seconds N] [--label TEXT]
-//!              [--restart EXE] [--no-write] [SCENARIO...]
+//!              [--restart EXE] [--hold SECONDS] [--no-write] [SCENARIO...]
+//! mypaper-perf --check perf/results/<report>.json     # a saved run against today's budget
 //! mypaper-perf --list
 //! ```
 //!
@@ -21,6 +22,7 @@ mod run;
 mod scenario;
 mod session;
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
@@ -40,7 +42,7 @@ use crate::session::Session;
 
 const USAGE: &str = "usage: mypaper-perf [--build DIR] [--content DIR] [--runs N] [--seconds N] \
                      [--label TEXT] [--restart EXE] [--hold SECONDS] [--no-write] [SCENARIO...] \
-                     | --list";
+                     | --check REPORT.json | --list";
 /// Sessions stop the user's mypaper; each stays under this (the lock protocol's 5 minutes,
 /// with room for stopping and restarting).
 const SESSION_BUDGET: Duration = Duration::from_secs(4 * 60);
@@ -54,6 +56,8 @@ struct Args {
     restart: Option<PathBuf>,
     hold: u64,
     write: bool,
+    /// `--check REPORT.json`: evaluate a saved report against the budget instead of running.
+    check: Option<PathBuf>,
     scenarios: Vec<&'static Scenario>,
 }
 
@@ -82,6 +86,9 @@ fn real_main() -> Result<bool> {
         if !scenario::ALL.iter().any(|s| s.name == name) {
             bail!("perf/budget.toml names an unknown scenario {name:?}");
         }
+    }
+    if let Some(report) = &args.check {
+        return check_report(&budget, report);
     }
     for page in [
         "widgets/shell/dist/index.html",
@@ -156,16 +163,7 @@ fn real_main() -> Result<bool> {
         })
         .collect();
     let violations = budget::evaluate(&budget, &measured);
-    let checked = outcomes
-        .iter()
-        .map(|o| {
-            budget
-                .limits(&o.scenario)
-                .keys()
-                .filter(|k| o.components.contains(k.split('.').next().unwrap_or(k)))
-                .count()
-        })
-        .sum();
+    let checked = budget::applicable(&budget, &measured);
     let (date, when) = now();
     let report = Report {
         when,
@@ -220,6 +218,7 @@ fn parse_args() -> Result<Option<Args>> {
         restart: None,
         hold: 0,
         write: true,
+        check: None,
         scenarios: Vec::new(),
     };
     let mut iter = std::env::args().skip(1);
@@ -237,6 +236,7 @@ fn parse_args() -> Result<Option<Args>> {
             "--restart" => args.restart = Some(PathBuf::from(value()?)),
             "--hold" => args.hold = value()?.parse()?,
             "--no-write" => args.write = false,
+            "--check" => args.check = Some(PathBuf::from(value()?)),
             "--list" => {
                 for s in scenario::ALL {
                     println!("{:<10} {}", s.name, s.about);
@@ -262,6 +262,45 @@ fn parse_args() -> Result<Option<Args>> {
     args.content = std::path::absolute(&args.content)?;
     args.build = std::path::absolute(&args.build)?;
     Ok(Some(args))
+}
+
+/// `--check`: evaluates a saved report (`perf/results/*.json`) against the budget, without
+/// running anything: what a tightened budget says about an earlier run.
+fn check_report(budget: &Budget, path: &Path) -> Result<bool> {
+    #[derive(serde::Deserialize)]
+    struct Saved {
+        scenarios: Vec<SavedScenario>,
+    }
+    #[derive(serde::Deserialize)]
+    struct SavedScenario {
+        scenario: String,
+        components: BTreeSet<String>,
+        metrics: BTreeMap<String, f64>,
+    }
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let saved: Saved =
+        serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+    let measured: Vec<Measured> = saved
+        .scenarios
+        .iter()
+        .map(|s| Measured {
+            scenario: &s.scenario,
+            components: &s.components,
+            metrics: &s.metrics,
+        })
+        .collect();
+    let violations = budget::evaluate(budget, &measured);
+    let checked = budget::applicable(budget, &measured);
+    if violations.is_empty() {
+        println!("all {checked} limits are met by {}", path.display());
+        return Ok(true);
+    }
+    println!("{} of {checked} limits broken:", violations.len());
+    for violation in &violations {
+        println!("  {violation}");
+    }
+    Ok(false)
 }
 
 /// Makes the harness's own stdin, stdout and stderr non-inheritable. Children are spawned with
@@ -291,13 +330,30 @@ fn stage_dir(stage: &Path, scenario: &Scenario) -> PathBuf {
 /// Copies the scenario's executables into its own folder under the repo, so they find the
 /// bundled content (themes, widgets, shell pages) by walking up, and so a missing widget host
 /// or bars binary means "off" to core.
+///
+/// Each copy is run once with an argument that only prints and exits: the antivirus scans a new
+/// executable on its first launch (1 to 7 s here), which would otherwise land in the first
+/// "cold" start. Cold means a fresh profile and caches, not an unscanned binary.
 fn stage_exes(build: &Path, stage: &Path, scenario: &Scenario) -> Result<()> {
     let _ = std::fs::remove_dir_all(stage);
     std::fs::create_dir_all(stage)?;
     for exe in scenario.exes() {
         let from = build.join(exe);
-        std::fs::copy(&from, stage.join(exe))
+        let to = stage.join(exe);
+        std::fs::copy(&from, &to)
             .with_context(|| format!("copying {} (build it first)", from.display()))?;
+        // Core's `--autostart` without a command only prints its usage.
+        let probe = if exe == "mypaper-core.exe" {
+            "--autostart"
+        } else {
+            "--help"
+        };
+        let _ = std::process::Command::new(&to)
+            .arg(probe)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
     }
     Ok(())
 }

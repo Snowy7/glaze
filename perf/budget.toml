@@ -2,13 +2,79 @@
 #
 # Keys are `<component>.<measure>`; a limit binds a scenario only when that component runs in
 # it. Startup times are milliseconds from core's process creation (`.cold`: first start on a
-# fresh profile; `.warm`: median of the later starts). CPU is percent of the whole machine
-# (`_core_pct`: of one core). Memory is MB.
+# fresh profile; `.warm`: median of the later starts). CPU is percent of the whole machine.
+# Memory is MB (private bytes, every process of the tree, WebView2 included).
 #
-# Provisional limits; tightened from measurements.
+# Set from the measured numbers (docs/performance.md, "Results") with room for the noise of a
+# busy machine. Tighten them as things get faster; never loosen one to make a change pass.
 
 [default]
-"core.spawn_ms.warm" = 100
-"wallpaper.first_frame_ms.cold" = 1000
-"wallpaper.first_frame_ms.warm" = 500
+"core.spawn_ms.cold" = 500
+"core.spawn_ms.warm" = 90
+"wallpaper.first_frame_ms.cold" = 1400
+"wallpaper.first_frame_ms.warm" = 1000
+"widgets.first_paint_ms.warm" = 1600
+# The bar's native stand-in is the promise for the bars; the page follows.
+"bars.native_paint_ms.warm" = 300
+"bars.first_paint_ms.warm" = 1800
+"taskbar.hidden_ms.cold" = 150
+"taskbar.hidden_ms.warm" = 80
+# Paused from the tray: the wallpaper and core do nothing, and nothing else when the wallpaper
+# is alone. The bars are the user's taskbar and keep running when paused, and a paused widget
+# layer stays on screen (frozen) for 30 s before it lets its WebView go: scenarios with either
+# have their own total below.
+"wallpaper.cpu_held_pct" = 0.02
+"core.cpu_held_pct" = 0.02
+"total.cpu_held_pct" = 0.05
+
+[scenario.shader]
+"total.cpu_steady_pct" = 0.3
+"total.private_mb" = 300
+
+[scenario.image]
+"total.cpu_steady_pct" = 0.05
+"total.private_mb" = 290
+"wallpaper.working_set_mb" = 25
+
+[scenario.slideshow]
+"total.cpu_steady_pct" = 0.05
+"total.private_mb" = 330
+"wallpaper.working_set_mb" = 25
+
+[scenario.video]
+"total.cpu_steady_pct" = 0.4
+"total.private_mb" = 410
+
+[scenario.scene]
+"total.cpu_steady_pct" = 0.3
+"total.private_mb" = 440
+
+[scenario.web]
+"total.cpu_steady_pct" = 0.8
+"total.private_mb" = 400
+
+[scenario.widgets]
 "total.cpu_held_pct" = 0.1
+"total.cpu_steady_pct" = 0.15
+"total.private_mb" = 560
+
+[scenario.bars]
+"total.cpu_held_pct" = 0.1
+# Idle bars (the wallpaper is a still photo).
+"total.cpu_steady_pct" = 0.2
+"total.private_mb" = 590
+
+[scenario.bars-hide]
+"total.cpu_held_pct" = 0.1
+# Core hides the taskbar before it starts anything.
+"core.spawn_ms.warm" = 130
+"total.cpu_steady_pct" = 0.2
+"total.private_mb" = 590
+# Three processes start at once and Explorer applies the taskbar mode meanwhile.
+"wallpaper.first_frame_ms.warm" = 1200
+
+[scenario.full]
+"total.cpu_held_pct" = 0.15
+"total.cpu_steady_pct" = 0.6
+"total.private_mb" = 740
+"wallpaper.first_frame_ms.warm" = 1250

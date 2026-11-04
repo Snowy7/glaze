@@ -48,10 +48,11 @@ pub struct Plan {
 impl Plan {
     /// A rough upper bound of one scenario's duration, for splitting sessions.
     pub fn estimate(&self) -> Duration {
-        Duration::from_secs(6) * self.runs as u32
+        Duration::from_secs(8) * self.runs as u32
             + self.settle
             + self.pause_settle
-            + self.window * 2
+            + self.window * 3
+            + self.hold
     }
 }
 
@@ -207,7 +208,9 @@ fn steady_and_held(
 
     env.set_paused(true)?;
     std::thread::sleep(plan.pause_settle);
-    let (held, _) = sample_window(core.pid, plan.window);
+    // Twice as long: a paused tree uses next to nothing, and process times only move in 15.6 ms
+    // ticks (about 0.01% of this machine per 10 s).
+    let (held, _) = sample_window(core.pid, plan.window * 2);
     record(&mut outcome.metrics, "held", &held);
     Ok(())
 }
@@ -490,12 +493,12 @@ impl Launched {
             note = Some(format!("core didn't quit within {QUIT_TIMEOUT:?}; killed"));
         }
         // Children (WebView2 included) follow their hosts out.
-        let gone = procs::wait_until(Duration::from_secs(5), || {
+        let gone = procs::wait_until(Duration::from_secs(15), || {
             let alive: Vec<u32> = procs::list().iter().map(|p| p.pid).collect();
             !tree.iter().any(|pid| alive.contains(pid))
         });
         if !gone {
-            note.get_or_insert_with(|| "some child processes outlived core by 5 s".into());
+            note.get_or_insert_with(|| "some child processes outlived core by 15 s".into());
         }
         note
     }
