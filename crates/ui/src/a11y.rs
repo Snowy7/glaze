@@ -71,17 +71,29 @@ impl Snapshot {
 
 /// A surface's accessibility: the adapter and the latest snapshot.
 pub(crate) struct A11y {
-    adapter: Adapter,
+    adapter: Option<Adapter>,
+    hwnd: HWND,
     snapshot: Rc<Snapshot>,
 }
 
 impl A11y {
     pub(crate) fn new(hwnd: HWND, role: Role, name: Arc<str>) -> Self {
-        let actions = Actions {
-            hwnd: hwnd.0 as isize,
-        };
+        let mut a11y = Self::deferred(hwnd, role, name);
+        a11y.adapter = Some(Adapter::new(
+            hwnd,
+            false,
+            Actions {
+                hwnd: hwnd.0 as isize,
+            },
+        ));
+        a11y
+    }
+
+    /// Keep the initial snapshot without loading UI Automation before a surface's first paint.
+    pub(crate) fn deferred(hwnd: HWND, role: Role, name: Arc<str>) -> Self {
         Self {
-            adapter: Adapter::new(hwnd, false, actions),
+            adapter: None,
+            hwnd,
             snapshot: Rc::new(Snapshot {
                 role,
                 name,
@@ -103,11 +115,11 @@ impl A11y {
             ..(*self.snapshot).clone()
         });
         self.snapshot = next.clone();
-        self.adapter.update_if_active(|| next.tree())
+        self.adapter.as_mut()?.update_if_active(|| next.tree())
     }
 
     pub(crate) fn focus_changed(&mut self, focused: bool) -> Option<QueuedEvents> {
-        self.adapter.update_window_focus_state(focused)
+        self.adapter.as_mut()?.update_window_focus_state(focused)
     }
 
     /// Answers `WM_GETOBJECT`, building the tree on the first request. The result must be
@@ -118,7 +130,17 @@ impl A11y {
         lparam: LPARAM,
     ) -> Option<impl Into<LRESULT> + use<>> {
         let mut initial = Initial(self.snapshot.clone());
+        let hwnd = self.hwnd;
         self.adapter
+            .get_or_insert_with(|| {
+                Adapter::new(
+                    hwnd,
+                    false,
+                    Actions {
+                        hwnd: hwnd.0 as isize,
+                    },
+                )
+            })
             .handle_wm_getobject(wparam, lparam, &mut initial)
     }
 }
@@ -163,6 +185,31 @@ impl ActionHandler for Actions {
 mod tests {
     use super::*;
     use crate::geom::Rect;
+
+    #[test]
+    fn deferred_adapter_keeps_the_latest_hits_before_activation() {
+        let mut a11y = A11y::deferred(HWND::default(), Role::Toolbar, "bar".into());
+        let mut hits = vec![Hit {
+            id: 7,
+            rect: Rect::new(0.0, 0.0, 40.0, 24.0),
+            role: Role::Button,
+            label: "before".into(),
+            enabled: true,
+            checked: None,
+        }];
+        assert!(a11y.update(&hits, None).is_none());
+        hits[0].label = "latest".into();
+        assert!(a11y.update(&hits, Some(7)).is_none());
+        assert!(
+            a11y.adapter.is_none(),
+            "updates must not initialize UI Automation"
+        );
+        let tree = Initial(a11y.snapshot.clone())
+            .request_initial_tree()
+            .unwrap();
+        assert_eq!(tree.nodes[1].1.label(), Some("latest"));
+        assert_eq!(tree.focus, node_id(7));
+    }
 
     #[test]
     fn hits_become_nodes_with_their_state_and_focus() {

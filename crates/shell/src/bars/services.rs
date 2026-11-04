@@ -64,7 +64,7 @@ pub struct Services {
     pub waker: Waker,
     pub attention: HashSet<isize>,
     rx: Receiver<Msg>,
-    hooks: Hooks,
+    hooks: Option<Hooks>,
     network: Option<NetworkWatch>,
     desktops: Option<Desktops>,
     language: Option<LanguageWatch>,
@@ -78,6 +78,14 @@ pub struct Services {
     custom_due: Option<Instant>,
     windows_due: Option<Instant>,
     seconds: bool,
+}
+
+pub struct Changes {
+    pub data: bool,
+    pub config: bool,
+    pub theme: bool,
+    pub moved: bool,
+    pub taskbar: bool,
 }
 
 impl Services {
@@ -95,7 +103,7 @@ impl Services {
                 media: None,
                 volume: None,
                 network: None,
-                battery: system::battery(),
+                battery: None,
                 stats: None,
                 workspaces: Workspaces {
                     count: 1,
@@ -117,7 +125,7 @@ impl Services {
             tray_host: TrayHost::new(waker.clone()),
             waker,
             rx,
-            hooks: Hooks::install(),
+            hooks: None,
             network: None,
             desktops: None,
             language: None,
@@ -135,6 +143,11 @@ impl Services {
         })
     }
 
+    /// WinEvent delivery and provider workers are unnecessary for the first software frame.
+    pub fn start(&mut self) {
+        self.hooks = Some(Hooks::install());
+    }
+
     /// Reconciles services with the union of the visible bars' topics.
     pub fn subscribe(
         &mut self,
@@ -146,6 +159,7 @@ impl Services {
         let now = Instant::now();
         let on = |t| topics.contains(&t);
         if topics != self.topics {
+            self.model.battery = on(Topic::Battery).then(system::battery).flatten();
             self.media.set_active(on(Topic::Media));
             if on(Topic::Volume) != self.audio.is_some() {
                 self.audio = on(Topic::Volume)
@@ -226,7 +240,7 @@ impl Services {
     }
 
     /// Drains typed worker messages; returns config/appearance changes separately.
-    pub fn tick(&mut self, now: Instant) -> (bool, bool, bool) {
+    pub fn tick(&mut self, now: Instant) -> Changes {
         let (mut changed, mut config, mut theme) = (false, false, false);
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
@@ -273,7 +287,7 @@ impl Services {
                 _ => {}
             }
         }
-        let bits = self.hooks.take();
+        let bits = self.hooks.as_mut().map_or(0, Hooks::take);
         if bits & (hooks::WINDOWS | hooks::FOREGROUND) != 0 {
             self.windows_due
                 .get_or_insert(now + Duration::from_millis(50));
@@ -319,17 +333,25 @@ impl Services {
                 self.notification_pending = true;
             }
         }
-        (changed || bits & hooks::MOVED != 0, config, theme)
+        Changes {
+            data: changed,
+            config,
+            theme,
+            moved: bits & hooks::MOVED != 0,
+            taskbar: bits & hooks::TASKBAR_SHOWN != 0,
+        }
     }
 
     pub fn refresh_apps(&mut self) {
         self.apps.refresh();
-        self.hooks.track(
-            self.apps
-                .groups
-                .iter()
-                .flat_map(|g| g.windows.iter().map(|w| w.hwnd)),
-        );
+        if let Some(hooks) = &mut self.hooks {
+            hooks.track(
+                self.apps
+                    .groups
+                    .iter()
+                    .flat_map(|g| g.windows.iter().map(|w| w.hwnd)),
+            );
+        }
         // SAFETY: read-only window/process queries; ignore shell-owned windows.
         unsafe {
             let front = GetForegroundWindow();
@@ -392,8 +414,9 @@ impl Services {
             .flatten()
             .map(|p| {
                 let d = self
-                    .icons
-                    .get(&Source::Path(p.path.clone()))
+                    .hooks
+                    .as_ref()
+                    .and_then(|_| self.icons.get(&Source::Path(p.path.clone())))
                     .cloned()
                     .unwrap_or_default();
                 let exe = p

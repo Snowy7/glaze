@@ -6,6 +6,27 @@ use mypaper_bars::{
 };
 use mypaper_ui::{Image, Op, Rgba, render};
 
+#[test]
+fn liquid_material_uses_the_resolved_style_controls() {
+    let config = BarsConfig::parse(r##"{"look":{"style":"liquid","glass":{"clarity":0.91,"tint":0.17,"blur":8,"refraction":0.3,"highlight":0.4}},"appearance":{"tint":"#123456"}}"##).unwrap();
+    let tokens = look::Tokens::resolve(
+        &config.top.look,
+        &config.appearance,
+        &providers::accent::read(),
+    );
+    let material = tokens.material.unwrap();
+    assert_eq!(
+        (
+            material.clarity,
+            material.blur,
+            material.refraction,
+            material.highlight
+        ),
+        (0.91, 8.0, 0.3, 0.4)
+    );
+    assert_eq!(material.tint, Rgba::rgb8([0x12, 0x34, 0x56], 0.17));
+}
+
 fn model() -> services::Model {
     let (tx, _) = std::sync::mpsc::channel();
     services::Model {
