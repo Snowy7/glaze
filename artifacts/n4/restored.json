@@ -1,0 +1,18 @@
+{
+    "processes":  [
+                      {
+                          "Name":  "mypaper-core",
+                          "Id":  85680
+                      },
+                      {
+                          "Name":  "mypaper-shell",
+                          "Id":  76396
+                      },
+                      {
+                          "Name":  "mypaper-wallpaper",
+                          "Id":  78588
+                      }
+                  ],
+    "stock_taskbar_visible":  false,
+    "at":  "2026-11-05T00:43:09"
+}

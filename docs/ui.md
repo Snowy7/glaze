@@ -253,3 +253,16 @@ This branch's core, wallpaper and shell, in place of the user's mypaper (no bars
   60 clicks over two runs had no other miss. The hook's decision logic is unchanged from core's.
 - Golden PNGs of the default menu and its View submenu match the live menu's content; the only
   visible change is the submenu, which now touches the root instead of overlapping it by 4 px.
+
+
+### N4: top-level desktop widget fixture (2026-11-05)
+
+Six production widgets and a warmed closed menu, both 1440p monitors visible at 96 DPI. Three
+60-second official samples: private memory 21/22/22 MB (median 22 MB), CPU 0.18/0.21/0.18% of one core
+(median 0.18%, **above the 0.1% gate**). Actual-wall-time harness CPU median was 0.15623%. No vendor
+GPU drivers or widget WebViews loaded. Consecutive minute samples added exactly 30 visible stats
+presents and one clock present. The locked interaction fixture passed 12 app activations, a real
+widget click, Show Desktop/restore, six new HWNDs after Explorer restart, grid drag/resize, and saved
+Arabic/CJK Unicode keyboard input. The glass publisher is a stub and these are not merged-shell or
+whole-product numbers. Mixed DPI and actual language-IME composition remain unmeasured. Full evidence
+and remaining gates: [N4 report](../artifacts/n4/report.md).

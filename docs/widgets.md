@@ -83,7 +83,8 @@ Invalid live reloads retain the last valid layout.
 
 `widget-data/<instance>.json` stays a JSON object (1 MB limit), with the existing keys: notes `text`,
 todo `items`, timer `state`, calendar `events`, and feed/crypto/weather caches. Shared activity lives
-under `widget-data/_shared/`. Unknown fields and instances survive layout writes. Picked local URLs
+under `widget-data/_shared/`. Unknown settings keys and unrecognized widget instances survive layout writes; unknown structural
+fields are rejected by the existing layout validator. Picked local URLs
 and existing crypto cache shapes are read without rewriting the user's data. Notes/todo changes
 save after 400 ms or on blur, hide and exit. Goldens and migration tests use old-format data.
 

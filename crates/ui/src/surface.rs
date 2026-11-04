@@ -727,8 +727,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         use windows::Win32::UI::Input::KeyboardAndMouse::{GetCapture, GetFocus};
         use windows::Win32::UI::WindowsAndMessaging::{
             WM_CHAR, WM_IME_COMPOSITION, WM_IME_ENDCOMPOSITION, WM_IME_KEYUP, WM_IME_SETCONTEXT,
-            WM_IME_STARTCOMPOSITION, WM_KEYFIRST, WM_KEYLAST, WM_MOUSEWHEEL, WM_TIMER,
+            WM_IME_STARTCOMPOSITION, WM_INPUTLANGCHANGE, WM_INPUTLANGCHANGEREQUEST, WM_KEYFIRST,
+            WM_KEYLAST, WM_MOUSEWHEEL, WM_TIMER,
         };
+        if matches!(msg, WM_INPUTLANGCHANGE | WM_INPUTLANGCHANGEREQUEST) {
+            field.send(msg, wparam, lparam);
+            // SAFETY: preserve the normal HWND language/IME-context update after notifying
+            // the windowless services. The original message's data is still valid.
+            return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
+        }
         if msg == crate::text_field::WM_TEXT_INVALIDATED {
             field.invalidated();
             push(id, Event::TextChanged);

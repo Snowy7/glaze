@@ -1,0 +1,26 @@
+﻿{
+    "label":  "n4-widgets-2",
+    "at":  "2026-11-05T00:29:15",
+    "rows":  {
+                 "part":  "mypaper-widget-fixture",
+                 "pid":  53568,
+                 "cpu_core_pct":  0.21,
+                 "gpu3d_pct":  0.01,
+                 "gpu_copy_pct":  0,
+                 "gpu_video_pct":  0,
+                 "gpu_mem_mb":  0,
+                 "private_mb":  22,
+                 "ws_mb":  54
+             },
+    "total":  {
+                  "part":  "TOTAL",
+                  "procs":  1,
+                  "cpu_core_pct":  0.21,
+                  "gpu3d_pct":  0.01,
+                  "gpu_video_pct":  0,
+                  "gpu_mem_mb":  0,
+                  "private_mb":  22,
+                  "ws_mb":  54
+              },
+    "theme":  "rain-city"
+}

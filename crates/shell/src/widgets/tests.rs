@@ -21,7 +21,11 @@ fn fixture(id: &str, root: PathBuf) -> Model {
     let placed = layout::place(layout.get(&instance).unwrap(), manifest, &grid, &appearance);
     let mut m = Model::new(placed, &mut Storage::new(root), now()).unwrap();
     m.visible = true;
-    if m.kind == Widget::Calendar { m.placed.settings.insert("weekStart".into(), json!("monday")); }
+    if m.kind == Widget::Calendar {
+        m.placed
+            .settings
+            .insert("weekStart".into(), json!("monday"));
+    }
     m.note =
         "# A quiet place\nIdeas, reminders and things to build.\n\nمرحبا بالعالم\n日本語のメモ"
             .into();
@@ -256,6 +260,20 @@ fn widget_actions_have_click_targets_and_edit_controls_cover_their_shapes() {
     let mut ui = Ui::new().unwrap();
     let instant = Instant::now();
     for (id, targets) in [
+        ("clock", vec![view::BODY]),
+        ("calendar", vec![view::PREVIOUS, view::NEXT, view::PRIMARY]),
+        ("countdown", vec![view::BODY]),
+        ("system-monitor", vec![view::BODY]),
+        (
+            "media-pill",
+            vec![view::PRIMARY, view::PREVIOUS, view::NEXT],
+        ),
+        ("weather", vec![view::PRIMARY]),
+        ("photo", vec![view::PRIMARY]),
+        ("notes", vec![view::FIELD]),
+        ("rss", vec![view::ITEM]),
+        ("crypto", vec![view::ITEM]),
+        ("heatmap", vec![view::ITEM]),
         (
             "now-playing",
             vec![view::PRIMARY, view::PREVIOUS, view::NEXT],
@@ -375,4 +393,37 @@ fn desktop_kind_is_a_top_level_layered_tool_window() {
         !child.present(&mut ui, (0, 0), (40, 40), frame).unwrap(),
         "identical child content never presents"
     );
+}
+
+#[test]
+#[ignore = "read-only compatibility check against this user's actual layout and data"]
+fn existing_user_layout_and_data_load_read_only() {
+    let layout = Layout::load(&files::layout().unwrap()).unwrap();
+    let registry = registry::builtins();
+    let monitors = monitor_infos();
+    let primary = monitors.iter().find(|m| m.primary).unwrap();
+    let mut storage = Storage::new(files::user("widget-data").unwrap());
+    let mut loaded = 0;
+    for instance in &layout.instances {
+        let Some(installed) = registry.get(&instance.widget) else {
+            continue;
+        };
+        let monitor = monitors
+            .iter()
+            .find(|m| m.device == instance.monitor)
+            .unwrap_or(primary);
+        let placed = layout::place(
+            instance,
+            &installed.manifest,
+            &grid_for(&layout, monitor),
+            &look::defaults(),
+        );
+        Model::new(placed, &mut storage, Stamp::now()).unwrap();
+        loaded += 1;
+    }
+    println!(
+        "read-only existing layout: {loaded}/{} native instances loaded",
+        layout.instances.len()
+    );
+    assert_eq!(loaded, layout.instances.len());
 }
