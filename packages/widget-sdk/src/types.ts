@@ -23,6 +23,8 @@ export type Permission =
   | "media"
   | "launch"
   | "theme"
+  | "audio"
+  | "user"
   | "clipboard.write"
   | `network:${string}`;
 
@@ -31,19 +33,39 @@ interface SettingBase<K extends string, V> {
   type: K;
   label: string;
   default: V;
+  /** A section heading in the settings form; shown when it changes from one setting to the next. */
+  group?: string;
 }
 
-export type ScalarSetting =
+/** A `select` option: a plain value, or an object with a label and an icon glyph (an emoji or symbol). */
+export type SelectOption = string | { value: string; label?: string; icon?: string };
+
+/** The value of a select option. */
+export const optionValue = (option: SelectOption): string => (typeof option === "string" ? option : option.value);
+
+/** Settings that can also be a column of a `list`. */
+export type ListableSetting =
   | SettingBase<"boolean", boolean>
   | SettingBase<"string", string>
-  | (SettingBase<"color", string>)
-  | (SettingBase<"select", string> & { options: readonly string[] })
-  | (SettingBase<"number", number> & { min?: number; max?: number; step?: number });
+  /** `#rrggbb`, or `#rrggbbaa` with `alpha`. */
+  | (SettingBase<"color", string> & { alpha?: boolean })
+  | (SettingBase<"select", string> & { options: readonly SelectOption[] })
+  | (SettingBase<"number", number> & { min?: number; max?: number; step?: number })
+  /** A number shown as a slider with a live preview; `min` and `max` are required. */
+  | (SettingBase<"slider", number> & { min: number; max: number; step?: number; unit?: string })
+  /** A CSS font-family name. */
+  | SettingBase<"font", string>;
+
+export type ScalarSetting =
+  | ListableSetting
+  /** `""`, or the served URL of a file the host copied into the widget's data folder. */
+  | (SettingBase<"file", string> & { extensions?: readonly string[] })
+  | (SettingBase<"image", string> & { extensions?: readonly string[] });
 
 type OmitEach<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
-/** A column of a `list` setting: any scalar setting, with an optional default. */
-export type ListField = OmitEach<ScalarSetting, "default"> & {
+/** A column of a `list` setting: any listable setting, with an optional default and no group. */
+export type ListField = OmitEach<ListableSetting, "default" | "group"> & {
   default?: string | number | boolean;
 };
 
@@ -57,6 +79,12 @@ export interface ListSetting
 export type SettingDef = ScalarSetting | ListSetting;
 export type SettingType = SettingDef["type"];
 
+/** Where a widget lives: the desktop layer, an always-on-top overlay, or a bar's popup. */
+export type Preset = "desktop" | "overlay" | "popup";
+
+/** How many instances the user may add: one in total, any number, or one per monitor. */
+export type InstanceRule = "single" | "multiple" | "per-monitor";
+
 export interface WidgetManifest {
   $schema?: string;
   id: string;
@@ -67,6 +95,10 @@ export interface WidgetManifest {
   entry: string;
   size: { default: Cells; min: Cells; max: Cells };
   resizable?: boolean;
+  /** Default `desktop`. */
+  preset?: Preset;
+  /** Default `multiple`. */
+  instances?: InstanceRule;
   permissions?: readonly Permission[];
   plugins?: readonly string[];
   settings?: readonly SettingDef[];
@@ -135,6 +167,31 @@ export interface ThemeInfo {
   palette?: { dominant: string; accent: string };
 }
 
+export interface UserInfo {
+  /** The display name ("Alex K."), else the account name. */
+  name: string;
+  /** The account name ("you"). */
+  account: string;
+}
+
+/** The result of a file pick: where the host copied the file to, and its name. */
+export interface PickedFile {
+  /** Served from the widget's own origin. */
+  url: string;
+  name: string;
+}
+
+export interface PickFileOptions {
+  /** Allowed extensions, without dots: `["jpg", "png"]`. */
+  extensions?: string[];
+  title?: string;
+}
+
+/** Smallest and largest number of audio bins a widget can ask for. */
+export const AUDIO_BINS = { min: 64, max: 128, default: 64 } as const;
+
+export type WidgetStyle = "minimal" | "depth" | "neon" | "paper" | "aero";
+
 /**
  * How a widget should look, resolved by the host (docs/widgets.md, "Appearance"). Every field is
  * set. The SDK applies it to <html> for you; read it only for what CSS can't do.
@@ -161,6 +218,8 @@ export interface Appearance {
   scale: number;
   /** A soft shadow under the text, for legibility with `surface: none`. */
   shadow: boolean;
+  /** The design language; see docs/widgets.md, "Styles". Hosts older than v2 send none (`minimal`). */
+  style: WidgetStyle;
 }
 
 /** The appearance plus the theme's widget CSS (null when the theme has none). */
@@ -230,6 +289,20 @@ export interface Mypaper {
   /** The plugin id must be in the manifest's "plugins". */
   plugin<T = unknown>(id: string, method: string, params?: unknown): Promise<T>;
   onPlugin(id: string, event: string, cb: (data: unknown) => void): () => void;
+  /** Needs "audio". */
+  audio: {
+    /**
+     * `bins` floats in 0..1 (64 to 128, default 64), lowest frequency first, about 30 times a
+     * second while the widget is visible. The host captures only while someone listens.
+     */
+    spectrum(cb: (bins: number[]) => void, opts?: { bins?: number }): () => void;
+  };
+  /** Needs "user". */
+  user: { info(): Promise<UserInfo> };
+  /** The system file dialog; the file is copied into the widget's data folder. `null` if cancelled. */
+  pickFile(opts?: PickFileOptions): Promise<PickedFile | null>;
+  /** Needs "launch". The icon of an exe, file, folder or `shell:AppsFolder\<AUMID>`, as a PNG data URL. */
+  appIcon(target: string, size?: number): Promise<string | null>;
 }
 
 // ---------------------------------------------------------------- wire
@@ -254,6 +327,7 @@ export type SubscribeParams =
   | { sub: string; topic: "system"; intervalMs: number }
   | { sub: string; topic: "media" }
   | { sub: string; topic: "theme" }
+  | { sub: string; topic: "audio"; bins?: number }
   | { sub: string; topic: "plugin"; plugin: string; event: string };
 
 /** Everything the widget can ask the shell, as `method -> [params, result]`. */
@@ -267,6 +341,9 @@ export interface WireMethods {
   launch: [{ target: string }, null];
   "theme.current": [undefined, ThemeInfo];
   plugin: [{ plugin: string; method: string; params?: unknown }, unknown];
+  "user.info": [undefined, UserInfo];
+  pickFile: [PickFileOptions, PickedFile | null];
+  appIcon: [{ target: string; size?: number }, string | null];
   subscribe: [SubscribeParams, null];
   unsubscribe: [{ sub: string }, null];
 }

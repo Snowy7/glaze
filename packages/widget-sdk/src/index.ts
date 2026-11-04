@@ -8,11 +8,13 @@ export {
   appearanceRule,
   appearanceVars,
   applyAppearance,
+  WIDGET_STYLES,
   normalizeAppearance,
+  sparkColors,
   withToneDefaults,
 } from "./appearance";
 export { MypaperError, isMypaperError } from "./errors";
-export { createMypaper, type RuntimeOptions, type Transport } from "./runtime";
+export { audioBins, createMypaper, type RuntimeOptions, type Transport } from "./runtime";
 
 /** postMessage to the shell page that frames this widget. */
 export function windowTransport(): Transport {

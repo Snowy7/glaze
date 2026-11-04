@@ -125,6 +125,20 @@ pub struct Appearance {
     pub scale: Option<f32>,
     /// A soft text shadow, for legibility without a surface.
     pub shadow: Option<bool>,
+    /// The widget design language (depth, glow, gloss). Widgets only; bars ignore it.
+    pub style: Option<WidgetStyle>,
+}
+
+/// The design language of a widget (the kit's `data-style`): how its surface, borders and
+/// highlights are lit. `Minimal` is the flat look every widget started with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WidgetStyle {
+    Minimal,
+    Depth,
+    Neon,
+    Paper,
+    Aero,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -157,6 +171,7 @@ impl Appearance {
             font: self.font.clone().or_else(|| base.font.clone()),
             scale: self.scale.or(base.scale),
             shadow: self.shadow.or(base.shadow),
+            style: self.style.or(base.style),
         }
     }
 
@@ -625,6 +640,47 @@ mod tests {
 
         assert!(parse(&json.replace("0.4", "1.5")).is_err()); // opacity out of range
         assert!(parse(&json.replace("w.css", "../w.css")).is_err());
+    }
+
+    #[test]
+    fn widget_style_is_lowercase_layers_and_rejects_unknown_variants() {
+        let appearance = |json: &str| serde_json::from_str::<Appearance>(json);
+        for (name, style) in [
+            ("minimal", WidgetStyle::Minimal),
+            ("depth", WidgetStyle::Depth),
+            ("neon", WidgetStyle::Neon),
+            ("paper", WidgetStyle::Paper),
+            ("aero", WidgetStyle::Aero),
+        ] {
+            let parsed = appearance(&format!(r#"{{ "style": "{name}" }}"#)).unwrap();
+            assert_eq!(parsed.style, Some(style));
+            assert_eq!(serde_json::to_value(&parsed).unwrap()["style"], name);
+        }
+        assert!(
+            appearance(r#"{ "style": "Neon" }"#).is_err(),
+            "case matters"
+        );
+        assert!(appearance(r#"{ "style": "glossy" }"#).is_err());
+
+        let theme = Appearance {
+            style: Some(WidgetStyle::Depth),
+            ..Default::default()
+        };
+        let none = Appearance::default();
+        assert_eq!(
+            none.over(&theme).style,
+            Some(WidgetStyle::Depth),
+            "unset keeps the layer below"
+        );
+        let user = Appearance {
+            style: Some(WidgetStyle::Aero),
+            ..Default::default()
+        };
+        assert_eq!(
+            user.over(&theme).style,
+            Some(WidgetStyle::Aero),
+            "the upper layer wins"
+        );
     }
 
     #[test]
