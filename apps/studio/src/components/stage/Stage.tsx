@@ -1,8 +1,11 @@
 // The stage: a monitor-shaped frame showing the desktop at its real geometry. Layers are laid out
 // in DIPs (the units the hosts use) inside a box the size of the screen, and the whole box is
 // scaled to fit, so a widget 3 cells wide is exactly where and as big as it is on the desktop.
+// Pages about things too small to read at that scale (the bars) can ask for a narrower screen
+// instead (`readable`): the things on it keep their real size, only the room between them
+// shrinks. The stage never scrolls.
 
-import { createContext, use, useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, use, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import type { Box } from "../../lib/desktopGrid";
 
@@ -11,10 +14,10 @@ const ScaleContext = createContext(1);
 
 export const useStageScale = () => use(ScaleContext);
 
-/** Scrolls a zoomed stage so a box (in DIPs) is in view (its start, when it's wider than the view). */
-const RevealContext = createContext<(box: Box) => void>(() => {});
+/** The screen the stage draws, in DIPs: the real one, or a narrower one (see `readable`). */
+const ScreenContext = createContext({ width: 1920, height: 1080 });
 
-export const useStageReveal = () => use(RevealContext);
+export const useStageScreen = () => use(ScreenContext);
 
 type StageProps = {
   /** The screen, in DIPs. */
@@ -28,16 +31,16 @@ type StageProps = {
   footer?: ReactNode;
   label: string;
   /**
-   * The least scale to draw at. When the screen doesn't fit at it, the stage keeps its size and
-   * scrolls (see `useStageReveal`), so small things stay big enough to point at.
+   * Draw at least at `scale`: where the real screen would come out smaller, the stage shows a
+   * narrower screen (never under `minWidth` DIPs wide or `minHeight` tall, nor over the real
+   * one), so its contents stay readable and what stands on a side edge still fits.
    */
-  zoom?: number;
+  readable?: { scale: number; minWidth: number; minHeight: number };
 };
 
-export function Stage({ screen, children, onBackground, tools, footer, label, zoom }: StageProps) {
+export function Stage({ screen, children, onBackground, tools, footer, label, readable }: StageProps) {
   const area = useRef<HTMLDivElement>(null);
   const strip = useRef<HTMLDivElement>(null);
-  const view = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState({ width: 0, height: 0, footer: 0 });
 
   useLayoutEffect(() => {
@@ -52,25 +55,10 @@ export function Stage({ screen, children, onBackground, tools, footer, label, zo
 
   // The screen and the strip under it are one column, centered, as wide as the screen.
   const room = fit.height - (footer ? fit.footer + FOOTER_GAP : 0);
-  const fitted = Math.max(0.05, Math.min(fit.width / screen.width, room / screen.height));
-  const k = zoom !== undefined && zoom > fitted ? zoom : fitted;
-  const zoomed = k > fitted;
-  const size: CSSProperties = { width: screen.width * fitted, height: screen.height * fitted };
-  const inner: CSSProperties & Record<"--k", string> = { width: screen.width, height: screen.height, transform: `scale(${k})`, "--k": String(k) };
-
-  const scale = useRef(k);
-  scale.current = k;
-  const reveal = useCallback((box: Box) => {
-    const element = view.current;
-    if (!element) return;
-    const s = scale.current;
-    const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value));
-    element.scrollTo({
-      left: clamp(box.width * s > element.clientWidth ? box.x * s - 16 : (box.x + box.width / 2) * s - element.clientWidth / 2, element.scrollWidth - element.clientWidth),
-      top: clamp((box.y + box.height / 2) * s - element.clientHeight / 2, element.scrollHeight - element.clientHeight),
-      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
-    });
-  }, []);
+  const shown = readable ? narrowed(screen, readable, Math.min(fit.width, (room * screen.width) / screen.height)) : screen;
+  const k = Math.max(0.05, Math.min(fit.width / shown.width, room / shown.height));
+  const size: CSSProperties = { width: shown.width * k, height: shown.height * k };
+  const inner: CSSProperties & Record<"--k", string> = { width: shown.width, height: shown.height, transform: `scale(${k})`, "--k": String(k) };
 
   return (
     <div className="stage-backdrop relative flex min-h-0 flex-1 flex-col">
@@ -78,10 +66,9 @@ export function Stage({ screen, children, onBackground, tools, footer, label, zo
       <div ref={area} className="mx-(--gutter) my-4 min-h-0 flex-1">
         <div className="flex size-full flex-col items-center justify-center" style={{ gap: FOOTER_GAP }}>
           <div
-            ref={view}
             role="group"
             aria-label={label}
-            className={`relative shrink-0 rounded-lg bg-black shadow-[0_0_0_1px_var(--line-hi),0_16px_40px_-16px_rgb(0_0_0/0.8)] ${zoomed ? "overflow-auto [scrollbar-width:thin]" : "overflow-hidden"}`}
+            className="relative shrink-0 overflow-hidden rounded-lg bg-black shadow-[0_0_0_1px_var(--line-hi),0_16px_40px_-16px_rgb(0_0_0/0.8)]"
             style={size}
             onPointerDown={(event) => {
               const target = event.target;
@@ -89,14 +76,11 @@ export function Stage({ screen, children, onBackground, tools, footer, label, zo
             }}
           >
             <ScaleContext value={k}>
-              <RevealContext value={reveal}>
-                {/* As big as the scaled screen, so a zoomed stage scrolls over all of it. */}
-                <div className="relative" style={{ width: screen.width * k, height: screen.height * k }}>
-                  <div className="absolute top-0 left-0 origin-top-left" style={inner}>
-                    {children}
-                  </div>
+              <ScreenContext value={shown}>
+                <div className="absolute top-0 left-0 origin-top-left" style={inner}>
+                  {children}
                 </div>
-              </RevealContext>
+              </ScreenContext>
             </ScaleContext>
           </div>
           {footer && (
@@ -108,6 +92,17 @@ export function Stage({ screen, children, onBackground, tools, footer, label, zo
       </div>
     </div>
   );
+}
+
+/**
+ * The screen `readable` asks for, given how wide the real one could be drawn: as wide as draws at
+ * its scale, keeping the real shape unless that would make it shorter than `minHeight`.
+ */
+function narrowed(screen: { width: number; height: number }, readable: NonNullable<StageProps["readable"]>, frameWidth: number) {
+  const width = Math.round(Math.min(screen.width, Math.max(readable.minWidth, frameWidth / readable.scale)));
+  if (width === screen.width) return screen;
+  const height = Math.round(Math.min(screen.height, Math.max(readable.minHeight, (width * screen.height) / screen.width)));
+  return { width, height };
 }
 
 /** Between the screen and the strip under it. */
@@ -136,6 +131,7 @@ export function Outline({
   inset = false,
   below = false,
   end = false,
+  beside,
 }: {
   box: Box | null;
   selected: boolean;
@@ -147,6 +143,8 @@ export function Outline({
   below?: boolean;
   /** The name tag at the frame's right end (for things near the screen's right edge). */
   end?: boolean;
+  /** The name tag beside the frame, at its top (for things that stand upright, a dock on a side edge). */
+  beside?: "left" | "right";
 }) {
   const k = useStageScale();
   if (!selected && !hovered) return null;
@@ -165,8 +163,8 @@ export function Outline({
       />
       {selected && label && (
         <span
-          className={`absolute ${end ? "right-0" : "left-0"} rounded bg-white font-sans font-semibold whitespace-nowrap text-black shadow`}
-          style={{ [below ? "top" : "bottom"]: `calc(100% + ${6 / k}px)`, fontSize: 11 / k, lineHeight: 1, padding: `${4 / k}px ${6 / k}px`, borderRadius: 4 / k }}
+          className={`absolute ${beside ? "top-0" : end ? "right-0" : "left-0"} rounded bg-white font-sans font-semibold whitespace-nowrap text-black shadow`}
+          style={{ ...(beside ? { [beside === "right" ? "left" : "right"]: `calc(100% + ${6 / k}px)` } : { [below ? "top" : "bottom"]: `calc(100% + ${6 / k}px)` }), fontSize: 11 / k, lineHeight: 1, padding: `${4 / k}px ${6 / k}px`, borderRadius: 4 / k }}
         >
           {label}
         </span>

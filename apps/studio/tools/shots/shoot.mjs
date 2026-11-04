@@ -62,6 +62,9 @@ const SHOTS = {
   "bars-module": [`nav("Bars")`, settle, `clickLabel("Top bar")`, `await clickIn("aside", "Clock")`],
   "bars-add": [`nav("Bars")`, settle, `clickLabel("Top bar")`, `await clickIn("aside", "Add")`],
   "bars-drag": [`nav("Bars")`, settle, "drag:[...moduleAt('Top bar', 'clock'), ...moduleAt('Top bar', 'start', -12)]"],
+  "bars-taskbar": [`nav("Bars")`, settle, `clickText("Windows 11")`, `await sleep(1200)`, `clickLabel("Bottom bar")`, `await sleep(1200)`],
+  "bars-taskbar-module": [`nav("Bars")`, settle, `clickText("Windows 11")`, `await sleep(1200)`, `clickLabel("Bottom bar")`, `await sleep(800)`, `await clickIn("aside", "Clock")`, `await sleep(800)`],
+  "bars-dock-left": [`nav("Bars")`, settle, `clickLabel("Bottom bar")`, `await clickIn("aside", "Left")`, `await sleep(1500)`],
   "bars-overview-more": [`nav("Bars")`, settle, `openMore()`, `document.querySelector("aside[aria-label=Inspector]").scrollTop = 900; await sleep(400)`],
   settings: [`nav("Settings")`],
   "settings-details": [`nav("Settings")`, `document.querySelector("details summary")?.click(); await sleep(300)`],
@@ -103,7 +106,7 @@ async function clickLabel(label) {
   await sleep(700);
 }
 async function clickIn(scope, text) {
-  const el = [...document.querySelectorAll(scope + " button")].filter(visible).find((b) => b.textContent.trim() === text);
+  const el = [...document.querySelectorAll(scope + " button, " + scope + " label")].filter(visible).find((b) => b.textContent.trim() === text);
   if (!el) throw new Error("no " + text + " in " + scope);
   el.click();
   await sleep(700);

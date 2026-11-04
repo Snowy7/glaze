@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { BarsCatalog } from "../../lib/api";
 import { contains, dropTarget, union, type BarGeometry, type ModuleSpot, type ZoneId } from "../../lib/barsGeometry";
@@ -8,7 +8,7 @@ import type { Box } from "../../lib/desktopGrid";
 import { describeModule } from "../../lib/modules";
 import { BarFrame, useBarsShell } from "../bars/BarFrame";
 import { BarsSilhouette } from "./BarsSilhouette";
-import { Outline, useStageReveal, useStageScale } from "./Stage";
+import { Outline, useStageScale, useStageScreen } from "./Stage";
 
 // The top bar and the bottom bar on the stage: the real bars page, live, one frame each. Studio
 // reads where their surfaces and modules are, so a click picks a bar or a module and a drag moves
@@ -24,7 +24,6 @@ type Props = {
   doc: BarsDoc;
   config: Resolved;
   catalog: BarsCatalog;
-  screen: { width: number; height: number };
   wallpaper: string | null;
   /** `show`: just the bars; `bars`: a bar can be picked; `modules`: bars and modules, and modules drag. */
   mode: "show" | "bars" | "modules";
@@ -42,24 +41,15 @@ export function zonesOf(config: Resolved, bar: BarKind): readonly ZoneId[] {
 const DRAG_THRESHOLD = 4;
 const BARS: readonly BarKind[] = ["top", "dock"];
 
-export function BarsLayer({ doc, config, catalog, screen, wallpaper, mode, selection = null, onSelect, onMove }: Props) {
+/** The bars on the stage's screen (`useStageScreen`: the real one, or the narrower one the Bars page draws). */
+export function BarsLayer({ doc, config, catalog, wallpaper, mode, selection = null, onSelect, onMove }: Props) {
+  const screen = useStageScreen();
   const shell = useBarsShell();
   const k = useStageScale();
   const layer = useRef<HTMLDivElement>(null);
   const [geometry, setGeometry] = useState<Partial<Record<BarKind, BarGeometry>>>({});
   const [hover, setHover] = useState<BarPick | null>(null);
   const [drag, setDrag] = useState<{ spot: ModuleSpot; x: number; y: number; moved: boolean } | null>(null);
-
-  // A zoomed stage follows the selection: the module, or the bar.
-  const reveal = useStageReveal();
-  const picked = selection && geometry[selection.bar];
-  const pickedBox = picked ? (selection.module ? picked.modules.find((m) => m.ref === selection.module?.ref && m.zone === selection.module.zone)?.box : union(picked.bands)) : null;
-  const revealKey = pickedBox ? `${selection?.bar}:${selection?.module?.ref ?? ""}:${k}` : "";
-  const revealBox = useRef(pickedBox);
-  revealBox.current = pickedBox;
-  useEffect(() => {
-    if (revealBox.current) reveal(revealBox.current);
-  }, [revealKey, reveal]);
 
   if (shell === false) return <BarsSilhouette config={config} catalog={catalog} screen={screen} selected={selection?.bar ?? null} onSelect={mode === "show" ? null : (bar) => onSelect?.({ bar })} />;
   if (shell === null) return null;
@@ -163,18 +153,21 @@ const boxStyle = (box: Box): CSSProperties => ({ left: box.x, top: box.y, width:
 
 /** The hover and selection frames on one bar and its modules. */
 function Marks({ geometry, selection, hover, dragging }: { geometry: BarGeometry; selection: BarPick | null; hover: BarPick | null; dragging: ModuleSpot | null }) {
+  const screen = useStageScreen();
   const band = union(geometry.bands);
   if (!band) return null;
   const name = geometry.bar === "top" ? "Top bar" : "Bottom bar";
   const isBar = (p: BarPick | null) => p?.bar === geometry.bar && !p.module;
   const isModule = (p: BarPick | null, spot: ModuleSpot) => p?.bar === geometry.bar && p.module?.ref === spot.ref && p.module.zone === spot.zone;
+  // Name tags go where there's room: beside a bar that stands upright, else above it, or below one at the top.
+  const beside = band.height > band.width ? (band.x + band.width / 2 < screen.width / 2 ? "right" : "left") : undefined;
   const below = band.y < 48;
   return (
     <>
-      <Outline box={band} selected={isBar(selection)} hovered={isBar(hover)} label={name} radius={8} below={below} />
+      <Outline box={band} selected={isBar(selection)} hovered={isBar(hover)} label={name} radius={8} below={below} beside={beside} />
       {geometry.modules.map((spot) => (
         <div key={`${spot.zone}:${spot.ref}`} className={dragging?.ref === spot.ref && dragging.zone === spot.zone ? "opacity-40" : ""}>
-          <Outline box={spot.box} selected={isModule(selection, spot)} hovered={isModule(hover, spot)} label={describeModule(spot.ref).label} radius={6} below={below} end={spot.box.x > band.x + band.width / 2} />
+          <Outline box={spot.box} selected={isModule(selection, spot)} hovered={isModule(hover, spot)} label={describeModule(spot.ref).label} radius={6} below={below} beside={beside} end={spot.box.x > band.x + band.width / 2} />
         </div>
       ))}
     </>
