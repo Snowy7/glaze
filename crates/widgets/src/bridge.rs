@@ -68,10 +68,13 @@ pub enum FromShell {
         #[allow(dead_code)]
         extensions: Option<Vec<String>>,
     },
-    /// The cards of the liquid widgets this shell shows, as they are on screen now (sent when
-    /// they change, every frame of a drag at most). See `plates.rs`.
+    /// Accepted from older shells; current shells draw snapshot plates locally.
     Plates {
         plates: Vec<crate::plates::Card>,
+    },
+    /// A snapshot decoded and its plates were drawn (zero retains the visible tile).
+    Glass {
+        drawn: u16,
     },
 }
 
@@ -533,6 +536,10 @@ mod tests {
             }
         );
         assert!(serde_json::from_value::<FromShell>(json!({ "type": "hack" })).is_err());
+        assert_eq!(
+            serde_json::from_value::<FromShell>(json!({ "type": "glass", "drawn": 2 })).unwrap(),
+            FromShell::Glass { drawn: 2 }
+        );
         let plates: FromShell = serde_json::from_value(json!({
             "type": "plates", "plates": [{ "instance": "a-1", "rect": [1, 2, 30, 40], "radius": 9 }]
         }))

@@ -403,9 +403,11 @@ items (module buttons, task buttons):
   (scales the whole effect), `refraction` (how far the rim bends), `highlight` (the specular edge),
   `tint` (the tint over liquid glass; missing: 0.06), `blur` (DIPs 0–32, light), and `sheen` and
   `depth` (a soft top light and an inner shadow; off unless a design asks). A string is the style
-  alone: `"glass": "liquid"`. Missing `style`: `liquid` when the theme's appearance style is
-  `liquid` (the widgets' Liquid Glass), else `frosted`, so one theme switch makes the whole desktop
-  liquid. The macOS designs default to liquid; the Windows designs to frosted.
+  alone: `"glass": "liquid"`. Missing `style`: `liquid` when the theme's appearance style or the
+  shared widget appearance in `widgets.json` is `liquid`, else `frosted`. Changes apply live;
+  an explicit per-bar material still wins. Translucent solid design fills (including islands)
+  can become lenses; opaque solids, gradients and images retain their fill. The macOS designs
+  default to liquid; the Windows designs to frosted.
   The theme's `bars.glass` knobs (`intensity`, `refraction`, `highlight`, shared with the
   widgets) fill in what a bar's `look.glass` leaves out.
 - **`flyouts`**: `{ blur, tint }`: whether this bar's flyouts are glass (default on; off: solid)
@@ -433,10 +435,12 @@ content. But mypaper owns the wallpaper's pixels, so the engine publishes them:
   publish waits for its frame.
   - Published **once per theme load** per screen, on its first drawn frame.
   - While the wallpaper is **animated**, again every `interval` seconds, but only while
-    `backdrop\request.json` (`{ "interval": N }`) exists; the file is read at most once per
+    `backdrop\request.json` or `widgets-request.json` (`{ "interval": N }`) exists; the shortest
+    request wins and the files are read at most once per
     interval and only on frames drawn anyway, so publishing never wakes the engine.
   - **Never while held** (fullscreen, paused, locked, display off) or for a covered screen; never
-    for web and app wallpapers, which draw their own windows (their stale snapshot is deleted).
+    for native app wallpapers. Web wallpapers publish a wallpaper-only `CapturePreview` snapshot
+    every ten seconds while visible and requested; stale native snapshots are deleted on load.
   - A static wallpaper's GPU textures are freed after its one publish.
 - **Bars side** (`crates/bars/src/glass.rs`). While a visible bar uses `background.type: wallpaper`
   and performance mode is off, the bars write `request.json` with the shortest interval asked
@@ -469,6 +473,15 @@ Windows can (`crates/bars/src/blur.rs`):
   behind it changes. `examples/glass-spike.rs` is the spike that proved it.
 
 ### Liquid glass
+
+The bar, dock and flyouts share the live DWM host-backdrop compositor
+(`DWMWA_USE_HOSTBACKDROPBRUSH`, `CreateHostBackdropBrush`, clipped and blurred under WebView2).
+The captured SVG lens blurs the whole plate and bends pixels at the rim, with the live backdrop
+remaining underneath while a capture loads or fails.
+Translucent design fills request this same backdrop. Captures wait for window exclusion to take
+effect before copying. In-page layers stack above earlier layers, retain room for one soft
+shadow, and stay unclipped. A tray action removes the web flyout immediately before handing
+control to the native application's menu, which is owned by another process.
 
 Liquid Glass (macOS Tahoe, iOS 26) is clear: what's behind bends along a thick rim, the middle is
 nearly clear, and one thin specular edge catches the light. That needs the pixels behind, and a page

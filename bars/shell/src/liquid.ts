@@ -24,84 +24,8 @@ const FRINGE = [1, 1.045, 1.09] as const;
 /** Map pixels at most; a bigger pane's map is drawn smaller and stretched (it's smooth). */
 const MAP_PIXELS = 160_000;
 
-export interface LensShape {
-  /** The pane's size (DIPs). */
-  width: number;
-  height: number;
-  radius: number;
-  /** How far the lens reaches in from the rim (DIPs). */
-  bezel: number;
-  /** Edges flush with the screen: no rim there (a strip along the top, a taskbar along the bottom). */
-  flush: { top: boolean; right: boolean; bottom: boolean; left: boolean };
-  /** Room around the pane in the map, so displaced pixels come from outside it (DIPs). */
-  margin: number;
-}
-
-/**
- * The displacement map for `shape` at `scale` (map pixels per DIP): RGBA, red and green the x
- * and y offset (128 is none), pointing out of the pane, strongest at the rim and fading to none
- * across the bezel with a convex lens's profile. Pure, so it can be tested.
- */
-export function lensMap(shape: LensShape, scale: number): { width: number; height: number; data: Uint8ClampedArray<ArrayBuffer> } {
-  const { width, height, radius, bezel, flush, margin } = shape;
-  const mw = Math.max(1, Math.round((width + 2 * margin) * scale));
-  const mh = Math.max(1, Math.round((height + 2 * margin) * scale));
-  const data = new Uint8ClampedArray(new ArrayBuffer(mw * mh * 4));
-  // A flush edge is pushed far out, so its distance never counts.
-  const far = 1e5;
-  const left = flush.left ? -far : 0;
-  const right = flush.right ? width + far : width;
-  const top = flush.top ? -far : 0;
-  const bottom = flush.bottom ? height + far : height;
-  const hw = (right - left) / 2;
-  const hh = (bottom - top) / 2;
-  const cx = (left + right) / 2;
-  const cy = (top + bottom) / 2;
-  const r = Math.min(radius, width / 2, height / 2);
-  for (let j = 0; j < mh; j++) {
-    for (let i = 0; i < mw; i++) {
-      const x = (i + 0.5) / scale - margin;
-      const y = (j + 0.5) / scale - margin;
-      let dx = 0;
-      let dy = 0;
-      if (x >= 0 && y >= 0 && x <= width && y <= height) {
-        // Signed distance to the rounded rect, and the outward normal.
-        const px = x - cx;
-        const py = y - cy;
-        const qx = Math.abs(px) - (hw - r);
-        const qy = Math.abs(py) - (hh - r);
-        let distance: number;
-        let nx: number;
-        let ny: number;
-        if (qx > 0 && qy > 0) {
-          const len = Math.hypot(qx, qy) || 1;
-          distance = r - len;
-          nx = (qx / len) * Math.sign(px);
-          ny = (qy / len) * Math.sign(py);
-        } else if (qx > qy) {
-          distance = r - qx;
-          nx = Math.sign(px);
-          ny = 0;
-        } else {
-          distance = r - qy;
-          nx = 0;
-          ny = Math.sign(py);
-        }
-        const t = Math.min(1, Math.max(0, distance / bezel));
-        // A convex bezel: steepest at the rim, flat by the time it reaches the clear middle.
-        const strength = (1 - t) ** 1.5;
-        dx = nx * strength;
-        dy = ny * strength;
-      }
-      const at = (j * mw + i) * 4;
-      data[at] = 128 + dx * 127;
-      data[at + 1] = 128 + dy * 127;
-      data[at + 2] = 128;
-      data[at + 3] = 255;
-    }
-  }
-  return { width: mw, height: mh, data };
-}
+import { lensMap, flushEdges, type LensShape } from "../../../packages/widget-sdk/src/lens";
+export { lensMap, flushEdges, type LensShape } from "../../../packages/widget-sdk/src/lens";
 
 /** The material knobs, read from the pane's computed style (style/look.ts sets them). */
 interface Material {
@@ -113,6 +37,7 @@ interface Material {
 interface Pane {
   el: HTMLElement;
   lens: HTMLElement;
+  clip: HTMLElement;
   shine: HTMLElement;
   filter: SVGFilterElement;
   /** What the map was drawn for. */
@@ -173,6 +98,7 @@ export function createLiquid(): Liquid {
         image.src = url;
         await image.decode();
         pane.captured = { box, url, rect };
+        draw(pane, getComputedStyle(pane.el));
         place(pane);
         pane.el.classList.add("lensed");
       })
@@ -214,18 +140,13 @@ export function createLiquid(): Liquid {
     const short = Math.min(width, height);
     const bezel = Math.max(6, Math.min(radius * 1.3 + 10, short / 2));
     const reach = material.refraction * material.intensity * bezel * 1.6;
-    // An edge closer to the window's (the screen's, for a bar) than the lens reaches would bend in
-    // pixels nobody has: it gets no rim, like an edge flush with the screen.
-    const edges = {
-      top: by < reach,
-      left: bx < reach,
-      right: bx + width > window.innerWidth - reach,
-      bottom: by + height > window.innerHeight - reach,
-    };
+    // Captures extend beyond a bar's small HWND. Only the actual monitor clips them.
+    const edges = flushEdges([bx, by, width, height], pane.captured?.rect, reach);
     const margin = Math.ceil(reach * 1.2 + material.blur * 3 + 4);
     const key = JSON.stringify([width, height, radius, edges, reach, material.blur]);
     if (key === pane.key) return;
     pane.key = key;
+    if (pane.margin !== margin) pane.captured = undefined;
     pane.margin = margin;
     const shape: LensShape = { width, height, radius, bezel, flush: edges, margin };
     const total = (width + 2 * margin) * (height + 2 * margin);
@@ -276,15 +197,18 @@ export function createLiquid(): Liquid {
     const lens = document.createElement("div");
     lens.className = "lens";
     lens.style.setProperty("--lens", `url(#${id})`);
+    const clip = document.createElement("div");
+    clip.className = "lens-clip";
+    clip.append(lens);
     const shine = document.createElement("div");
     shine.className = "shine";
     // Under the content, over the surface's own fill (wallpaper glass stays as the fallback).
     const bg = el.querySelector(":scope > .bg");
-    if (bg) bg.after(lens);
-    else el.prepend(lens);
+    if (bg) bg.after(clip);
+    else el.prepend(clip);
     el.append(shine);
     resize.observe(el);
-    const pane: Pane = { el, lens, shine, filter, key: "", capturing: false, again: false, margin: 0 };
+    const pane: Pane = { el, lens, clip, shine, filter, key: "", capturing: false, again: false, margin: 0 };
     panes.set(el, pane);
     return pane;
   };
@@ -293,7 +217,7 @@ export function createLiquid(): Liquid {
     panes.delete(pane.el);
     resize.unobserve(pane.el);
     pane.filter.remove();
-    pane.lens.remove();
+    pane.clip.remove();
     pane.shine.remove();
     pane.el.classList.remove("lensed");
   };

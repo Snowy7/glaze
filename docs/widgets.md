@@ -330,7 +330,7 @@ the same data travels in `state`, see [Host ⇄ shell](#host--shell); the shell 
 | `data-text="light\|dark"` | `text` |
 | `data-shadow="on\|off"` | `shadow` |
 | `data-style="minimal\|depth\|neon\|paper\|aero\|liquid"` | `style` |
-| `data-plate="on\|off"` | whether the wallpaper draws this widget's liquid glass (the state's `plate`) |
+| `data-plate="on\|off"` | whether the shell has drawn this widget's wallpaper lens (the state's `plate`) |
 | `--surface` | `tint` at `opacity` (always opaque for `solid`) |
 | `--blur`, `--radius` | `blur`, `radius` (px) |
 | `--line` | the border color, or **transparent if `border` is false** |
@@ -371,7 +371,7 @@ widget that sticks to the kit looks right in all five without knowing about them
 | `neon` | A dark card with a glowing gradient outline, glow on accent elements and bright tracks. | solid or glass |
 | `paper` | Soft matte: warm low-contrast fills, a grain, shallow inset shadows, no gloss. | solid |
 | `aero` | Glossy glass: a specular sheen across the top, a bright rim, saturated blur. | glass |
-| `liquid` | Calm like minimal; with a glass surface the card is a clear lens the wallpaper draws (refraction at the rim, one thin specular edge). | glass |
+| `liquid` | Calm like minimal; a blurred wallpaper plate with refraction at the rim and a thin specular edge. Without a snapshot, the visible tinted tile and rim remain. | glass |
 
 Every style also works with `surface: none`: the building blocks then keep their own light
 (a glow, a rim, a sheen) without painting a card.
@@ -392,34 +392,29 @@ widget may retint a bar locally by setting those two). `data-style` is also on `
 
 ### Liquid glass
 
-With `style: liquid` and `surface: glass`, the wallpaper engine draws the widget's glass into its
-own frame, under the widget's window, so it is exactly as live as the wallpaper: a clear lens whose
-rim pulls in what is just outside the edge (with a slight chromatic split), one thin specular edge
-lit from the top left, nearly no tint and no blur. The page draws only its content.
+With `style: liquid` and `surface: glass`, the shell draws a blurred, refracting wallpaper
+plate beneath the widget's transparent iframe. Its quiet tint, hairline and radius come from the
+resolved appearance (defaults: `#343a42`, 0.46 and 22). One light specular rim makes the edge read
+on a dark wallpaper too.
 
-- **Where the card is.** The drop-in (`plate.ts`) reports the `.card`'s box and corner radius with
-  the wire request `plate` (`{ rect: [x, y, w, h], radius }` in page px, or `null`) whenever they
-  change, at most once a frame; `mypaper.plate(shape)` puts the glass elsewhere. The shell adds the
-  slot's position on the monitor (also while a slot is dragged in edit mode), clips it to the slot
-  and sends the host `plates` once a frame when they change (see [Host ⇄ shell](#host--shell)).
-- **The host** keeps only cards of instances shown on that monitor's desktop layer whose resolved
-  look is still `liquid` with `glass`, turns them into physical virtual-screen plates with the
-  glass knobs, and writes `%LOCALAPPDATA%\mypaper\glass\widgets.json` (`mypaper_theme::glass`, a
-  format any writer can use) at most every 33 ms, always ending on the latest, then posts
-  `mypaper.glass` to the wallpaper's control window. While no widget is liquid nothing is written
-  and the engine allocates and draws nothing; the file goes when the host stops.
-- **The knobs** are the theme's `widgets.glass`, with the bars' `look.glass` names and ranges:
-  `intensity` (0–1, the whole effect), `refraction` (0–1, how far the rim reaches out),
-  `highlight` (0–1, the specular edge), `tint` (0–1, how much of the appearance's `tint` color
-  washes over the lens) and `blur` (DIPs, 0–32). Built in: 1, 0.6, 0.55, 0.06 and 0.
-- **The engine** (`crates/wallpaper/src/glass_pass.rs`, see [engine-notes.md](engine-notes.md))
-  springs a plate to new rects (the liquid morph when a widget appears, moves or resizes), redraws a
-  still wallpaper while a plate moves and once when it settles, and copies only the frame around
-  the rims.
-- **Where it can't draw**, the state's `plate` is false and the kit draws a light stand-in (a
-  whisper of the tint and the specular edge): the overlay layer (it floats over windows), the dev
-  harness and Studio's previews. A `web`, `app` or `video` wallpaper that draws natively shows
-  no plate either; liquid widgets are then their content over the wallpaper, with the text shadow.
+- **Geometry.** The SDK's `plate` report measures the card; the shell clips it to the slot and
+  follows its position during dragging. The page paints content only once the shell has decoded
+  its backdrop and drawn a plate. A missing or failed image keeps the normal glass tile and CSS
+  rim visible. Overlay widgets and previews use that same visible fallback.
+- **Pixels.** The engine publishes each monitor's wallpaper to
+  `%LOCALAPPDATA%\mypaper\backdrop\DISPLAYn.bmp`. Shader, image and video sources copy their
+  frame; web wallpapers use WebView2 `CapturePreview`, which excludes widgets by construction.
+  Live sources refresh every ten seconds while visible and requested. The host watches atomic
+  replacements and sends each monitor's shell its own URL and DIP dimensions; feedback is driven
+  by file events. The shell applies blur and the same lens geometry as the bars, aligned to the
+  monitor, then a tint and specular rim. No capture includes widget content.
+- **Knobs.** `widgets.glass` supplies `intensity`, `refraction`, `highlight`, `tint` (0-1)
+  and extra `blur` (DIPs, 0-32), layered over 1, 0.6, 0.55, 0.06 and 0. The appearance's blur
+  and opacity supply the base material.
+- **Why a snapshot.** The desktop widget HWND is a child of Explorer. Windows rejects its DWM
+  host backdrop attribute (`0x80070006` on the tested desktop), so it cannot use the top-level
+  bars' live DWM compositor. A snapshot gives all wallpaper kinds the same visible material.
+  The older engine plate pass remains available for other writers; widgets retire its old file.
 
 **The CSP** allows `style-src 'self' 'unsafe-inline'`, so the kit can inject theme CSS.
 
@@ -744,6 +739,8 @@ type HostToShell =
                     user: Partial<Appearance>;             // the user's layer (widgets.json "appearance")
                     accent: string };                      // the color "auto" stands for (palette.json, else #ffffff)
       themeCss: string | null;                             // the theme's widgets style sheet, as text
+      backdrop: { url: string; width: number; height: number } | null; // monitor-aligned wallpaper snapshot (DIPs)
+      glass: { intensity: number; refraction: number; highlight: number; tint: number; blur: number };
       layer: "desktop" | "overlay";                        // which window this shell page lives in; `instances`
                                                            // holds only what that layer shows (overlay: the
                                                            // overlay-preset instances, outside edit mode)
@@ -770,9 +767,7 @@ type ShellToHost =
   | { type: "appearance"; instance?: string;                // the user's layer, or an instance's own
       values: { [K in keyof Appearance]?: Appearance[K] | null } }  // null clears a field ("Use default")
   | { type: "edit"; on: boolean }                          // Done / Esc
-  | { type: "plates"; plates: { instance: string;          // the liquid widgets' cards as shown now,
-      rect: [number, number, number, number];              // DIPs from the monitor's top-left
-      radius: number }[] };                                // (on change, once a frame at most)
+  | { type: "glass"; drawn: number };                      // decoded snapshot plates; on count changes, for diagnostics
 ```
 
 - The host sends `state` after `ready` and whenever anything in it changes. The shell reconciles by

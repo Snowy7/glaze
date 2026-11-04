@@ -261,7 +261,7 @@ export interface AppearanceState {
   appearance: Appearance;
   themeCss: string | null;
   /**
-   * The wallpaper draws this widget's liquid glass plate (`style: "liquid"` on a desktop layer).
+   * The shell has drawn this widget's blurred wallpaper lens beneath its content.
    * Without it (the overlay layer, the dev harness, older hosts) the kit draws its own rim.
    */
   plate?: boolean;
@@ -360,7 +360,7 @@ export interface Mypaper {
   /** Needs "launch". The icon of an exe, file, folder or `shell:AppsFolder\<AUMID>`, as a PNG data URL. */
   appIcon(target: string, size?: number): Promise<string | null>;
   /**
-   * Where the wallpaper should draw this widget's liquid glass (`null`: nowhere). The drop-in
+   * Where the shell should draw this widget's liquid glass (`null`: nowhere). The drop-in
    * reports the `.card`'s box by itself while the look is liquid glass; call it only to put the
    * glass somewhere else.
    */

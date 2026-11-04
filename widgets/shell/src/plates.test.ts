@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { plateShape, platesOf } from "./plates";
+import { drawsPlate, plateShape, platesOf } from "./plates";
+
+it("keeps a surface until this monitor has a snapshot, and restores it when that goes away", () => {
+  const backdrop = { url: "https://shell.mypaper/backdrop/DISPLAY2.bmp", width: 2560, height: 1440 };
+  expect(drawsPlate(undefined)).toBe(false);
+  expect(drawsPlate({ layer: "desktop" })).toBe(false);
+  expect(drawsPlate({ layer: "desktop", backdrop: null })).toBe(false);
+  expect(drawsPlate({ layer: "desktop", backdrop })).toBe(true);
+  expect(drawsPlate({ layer: "overlay", backdrop })).toBe(false);
+  expect(drawsPlate({ layer: "desktop", backdrop: null })).toBe(false);
+  expect(drawsPlate({ layer: "desktop", backdrop })).toBe(true);
+});
 
 describe("plateShape", () => {
   it("takes a box and a radius, and nothing else", () => {

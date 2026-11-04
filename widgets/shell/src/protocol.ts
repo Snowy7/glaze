@@ -168,6 +168,9 @@ export interface ShellState {
   /** Which window this page lives in; `instances` holds only what that layer shows. Absent from
    *  older hosts: `desktop`. */
   layer?: "desktop" | "overlay";
+  /** A wallpaper-only snapshot, aligned to this monitor in DIPs. */
+  backdrop?: { url: string; width: number; height: number } | null;
+  glass?: { intensity: number; refraction: number; highlight: number; tint: number; blur: number };
   /** Widget id -> instances on ALL monitors (the palette's `instances` rule). Absent from older hosts. */
   counts?: Record<string, number>;
   editing: boolean;
@@ -206,6 +209,7 @@ export interface LayoutChange {
 }
 
 export type ShellToHost =
+  | { type: "glass"; drawn: number }
   | { type: "ready" }
   | { type: "hello"; instance: string }
   | { type: "call"; instance: string; id: number | string; method: string; params?: unknown }
@@ -244,7 +248,7 @@ export interface HelloResult {
   editing: boolean;
   appearance: AppearanceValues;
   themeCss: string | null;
-  /** The wallpaper draws liquid glass here (the desktop layer); the kit draws its own rim otherwise. */
+  /** The shell drew this widget's glass; otherwise the kit keeps its visible tile and rim. */
   plate: boolean;
 }
 

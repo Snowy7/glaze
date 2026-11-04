@@ -124,8 +124,17 @@ export function glassStyleOf(look: Look, appearance: Appearance): GlassStyle {
   return look.glass.style ?? (appearance.style === "liquid" ? "liquid" : "frosted");
 }
 
-/** Fills liquid glass can stand in for (a solid, gradient or picture fill stays as it is). */
+/** Fills liquid glass can stand in for; translucent design colors are glass tints too. */
 const LIQUID_FILLS = new Set(["tint", "wallpaper", "blur"]);
+
+function lensFill(background: Look["background"]): boolean {
+  if (LIQUID_FILLS.has(background?.type ?? "tint")) return true;
+  if (background?.type !== "solid") return false;
+  // Keep opaque solid fills, gradients and pictures. Islands uses #141416eb.
+  const hex = /^#(?:[\da-f]{3}([\da-f])|[\da-f]{6}([\da-f]{2}))$/i.exec(background.color);
+  const alpha = hex?.[1] ?? hex?.[2];
+  return alpha !== undefined && Number.parseInt(alpha, 16) < (alpha.length === 1 ? 15 : 255);
+}
 
 /** Glass highlights, the liquid knobs, the bar's type, and its flyouts' tint. */
 function materialTokens(look: Look): Record<string, string> {
@@ -279,7 +288,6 @@ export function lookTokens(
 ): LookTokens {
   const style = glassStyleOf(look, appearance);
   const liquid = liquidOn && style === "liquid";
-  const fill = look.background?.type ?? "tint";
   const [base, light1, light2, light3, dark1, dark2, dark3] = system.accent;
   const glow = states(look.glow);
   const shadow = states(look.shadow);
@@ -321,7 +329,8 @@ export function lookTokens(
       // Flyouts get live blur unless the look says no (and live blur is on at all).
       "data-fly-blur": live && look.flyouts.blur !== false ? "on" : "off",
       "data-glass-style": style,
-      "data-liquid": liquid && LIQUID_FILLS.has(fill) ? "on" : "off",
+      "data-native-glass": live && style !== "none" && lensFill(look.background) ? "on" : "off",
+      "data-liquid": liquid && lensFill(look.background) ? "on" : "off",
       "data-fly-liquid": liquid && look.flyouts.blur !== false ? "on" : "off",
     },
     vars: liquid ? { ...vars, "--s-tint": tintOver(appearance.tint, look.glass.tint ?? 0.06) } : vars,

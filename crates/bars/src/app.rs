@@ -108,6 +108,7 @@ enum Env {
 #[derive(Default)]
 struct Timers {
     windows: Option<Instant>,
+    behind: Option<Instant>,
     fullscreen: Option<Instant>,
     config: Option<Instant>,
     theme: Option<Instant>,
@@ -129,6 +130,7 @@ impl Timers {
     fn earliest(&self) -> Option<Instant> {
         [
             self.windows,
+            self.behind,
             self.fullscreen,
             self.config,
             self.theme,
@@ -581,6 +583,10 @@ impl App {
         self.first_paint.expire(now);
         if let Some(hooks) = &self.hooks {
             let happened = hooks.take();
+            if happened & (hooks::WINDOWS | hooks::FOREGROUND | hooks::MOVED) != 0 {
+                // Re-capture after the window storm settles, without a polling timer.
+                self.timers.behind = Some(now + SETTLE_FULLSCREEN);
+            }
             if happened & hooks::WINDOWS != 0 {
                 soon(&mut self.timers.windows, SETTLE_WINDOWS);
             }
@@ -596,6 +602,9 @@ impl App {
         }
         if due(&mut self.timers.windows, now) && self.apps.refresh() {
             self.emit(Topic::Apps);
+        }
+        if due(&mut self.timers.behind, now) {
+            self.recapture_glass();
         }
         if due(&mut self.timers.fullscreen, now) {
             self.refresh_fullscreen();
@@ -1456,12 +1465,16 @@ impl App {
     }
 
     fn look(&self, kind: BarKind) -> look::Look {
-        look::resolve(
+        let mut look = look::resolve(
             kind,
             self.skin.appearance.as_ref(),
             &self.config.appearance,
             self.palette,
-        )
+        );
+        if self.skin.liquid_widgets {
+            look.style = Some("liquid".into());
+        }
+        look
     }
 
     fn call(&mut self, index: usize, method: Method) -> Result<Value, BarError> {
@@ -1764,7 +1777,7 @@ impl App {
             let classify = move |path: &Path| -> Option<Msg> {
                 if path.parent() == Some(root.as_path()) {
                     return match path.file_name()?.to_str()? {
-                        "bars.json" | "config.json" => Some(Msg::Config),
+                        "bars.json" | "config.json" | "widgets.json" => Some(Msg::Config),
                         _ => None,
                     };
                 }

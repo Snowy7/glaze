@@ -1,12 +1,16 @@
 // Liquid glass plates (docs/widgets.md, "Liquid glass"). A liquid widget reports where its card is
-// on its page (`plate`); the shell adds where the widget's slot is on the monitor and tells the host
-// (`plates`), which publishes them to the wallpaper. Pure: no DOM.
+// on its page (`plate`); the shell maps that card to the monitor's wallpaper snapshot. Pure: no DOM.
 
-import type { PlateCard, PlateShape } from "./protocol";
+import type { PlateCard, PlateShape, ShellState } from "./protocol";
 import type { PxRect } from "./grid";
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isBox = (v: unknown): v is PlateShape["rect"] => Array.isArray(v) && v.length === 4 && v.every(finite);
+
+/** Only an available desktop snapshot can replace the page's fallback with a shell lens. */
+export function drawsPlate(state: Pick<ShellState, "layer" | "backdrop"> | undefined): boolean {
+  return state?.layer !== "overlay" && state?.backdrop != null;
+}
 
 /** A widget's `plate` params, if they are a plate (anything else, `null` included, is none). */
 export function plateShape(params: unknown): PlateShape | null {

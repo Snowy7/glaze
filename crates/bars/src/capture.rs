@@ -1,8 +1,8 @@
 //! What's behind a bar (docs/bars.md, "Liquid glass"): Liquid Glass bends the pixels behind it,
 //! and a WebView can't see those. So the page asks (`capture`), and the host copies that part of
 //! the screen with GDI (`BitBlt` from the screen DC) while every bar window is excluded from
-//! capture (`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, a documented API; it takes effect
-//! at once, no flush needed). The copy is the wallpaper's current frame over the bare desktop, or
+//! capture (`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, followed by `DwmFlush`). The copy is
+//! the wallpaper's current frame over the bare desktop, or
 //! the windows behind a flyout. It's written as a 24-bit BMP under `backdrop\behind\` (served from
 //! `backdrop.bars.mypaper`), and the page lenses it.
 //!
@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use mypaper_desktop::Rect;
 use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Dwm::DwmFlush;
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CAPTUREBLT, CreateCompatibleDC, CreateDIBSection,
     DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, ReleaseDC, SRCCOPY, SelectObject,
@@ -61,6 +62,9 @@ impl Behind {
         let path = self.dir.join(&name);
         std::fs::write(&path, bmp(rect.width, rect.height, &pixels))
             .with_context(|| format!("writing {}", path.display()))?;
+        if !self.files.contains_key(&bar) {
+            log::info!("liquid glass: first capture for bar {bar}, {rect:?}");
+        }
         log::debug!(
             "liquid glass: captured {}x{} for bar {bar} in {copied:?} (+{:?} to write)",
             rect.width,
@@ -89,11 +93,16 @@ fn copy_screen(windows: &[HWND], rect: Rect) -> Result<Vec<u8>> {
     if width <= 0 || height <= 0 || i64::from(width) * i64::from(height) > MAX_PIXELS {
         bail!("can't capture a {width}×{height} area");
     }
-    for &hwnd in windows {
-        // SAFETY: our own windows; restored below whatever the copy does.
-        let _ = unsafe { SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) };
-    }
-    let copied = blit(x, y, width, height);
+    let copied = (|| {
+        for &hwnd in windows {
+            // SAFETY: our own windows; restored below whatever the copy does.
+            unsafe { SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) }
+                .context("excluding bar windows from liquid capture")?;
+        }
+        // SAFETY: apply exclusion before copying, so a lens cannot capture its own shadows.
+        unsafe { DwmFlush() }.context("applying capture exclusion")?;
+        blit(x, y, width, height)
+    })();
     for &hwnd in windows {
         // SAFETY: as above.
         let _ = unsafe { SetWindowDisplayAffinity(hwnd, WDA_NONE) };

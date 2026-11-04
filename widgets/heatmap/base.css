@@ -754,7 +754,7 @@ html[data-style="neon"][data-surface="none"] .gfx {
    its rim, one thin specular edge; docs/widgets.md, "Liquid glass") and the page draws only the
    content, transparently. The drop-in tells the shell where the card is (plate.ts). Where the
    wallpaper can't draw it (`data-plate="off"`: the overlay layer, the harness, Studio's preview)
-   the kit draws a light stand-in: a whisper of the tint and the specular edge. */
+   the kit draws the calm default tile with a light specular rim. */
 html[data-style="liquid"][data-surface="glass"] .card {
   background: none;
   box-shadow: none;
@@ -762,7 +762,7 @@ html[data-style="liquid"][data-surface="glass"] .card {
   backdrop-filter: none;
 }
 html[data-style="liquid"][data-surface="glass"]:not([data-plate="on"]) .card {
-  background: color-mix(in srgb, var(--surface) 40%, transparent);
+  background: var(--surface);
   box-shadow:
     inset 0 0 0 1px rgb(var(--lit) / 0.1),
     inset 1px 1.5px 0 -0.5px rgb(var(--lit) / 0.42),

@@ -1,5 +1,5 @@
 //! Wallpaper glass: publishes a blurred, low-res snapshot of each monitor's
-//! wallpaper for the bars (another process) to use as a frosted-glass backdrop.
+//! wallpaper for the bars and widget shell to use as a frosted-glass backdrop.
 //!
 //! Only this process owns the wallpaper pixels. For a screen that is due, the
 //! engine copies the finished swapchain image, shrinks it on the GPU through a
@@ -12,11 +12,12 @@
 //!
 //! A screen is published once on its first drawn frame after each theme load,
 //! and then, while the source is animated, every N seconds, but only while
-//! `backdrop\request.json` (`{ "interval": N }`, clamped to 2..=600, default
-//! 10) exists. That file is checked at most once per interval and only on
+//! `backdrop\request.json` or `widgets-request.json` (`{ "interval": N }`, clamped to
+//! 2..=600, default 10) exists. The shortest request wins. Files are checked once per interval on
 //! frames drawn anyway: this module never wakes the engine. Nothing is
 //! published while held or paused, and never for native (web/app) screens,
-//! whose stale file is deleted on load so the bars fall back to their tint.
+//! whose stale file is deleted on load. Web sources publish their own CapturePreview snapshots;
+//! app sources retain the visible CSS fallback.
 
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -575,11 +576,14 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 /// The request file's interval, or `None` if the file is absent. A file that
 /// exists but cannot be read still counts as a request.
 fn read_request(path: &Path) -> Option<Duration> {
-    match std::fs::read_to_string(path) {
-        Ok(json) => Some(parse_interval(&json)),
-        Err(e) if e.kind() == ErrorKind::NotFound => None,
-        Err(_) => Some(DEFAULT_INTERVAL),
-    }
+    [path.to_owned(), path.with_file_name("widgets-request.json")]
+        .into_iter()
+        .filter_map(|path| match std::fs::read_to_string(path) {
+            Ok(json) => Some(parse_interval(&json)),
+            Err(e) if e.kind() == ErrorKind::NotFound => None,
+            Err(_) => Some(DEFAULT_INTERVAL),
+        })
+        .min()
 }
 
 /// The `"interval"` (seconds) of a request file's JSON, clamped to 2..=600;
@@ -604,7 +608,13 @@ fn parse_interval(json: &str) -> Duration {
 
 /// An uncompressed 24-bit top-down BMP of `width x height` pixels, from rows
 /// of 4-byte pixels `stride` bytes apart (`bgra`: blue first, else red first).
-fn encode_bmp(width: u32, height: u32, stride: usize, pixels: &[u8], bgra: bool) -> Vec<u8> {
+pub(crate) fn encode_bmp(
+    width: u32,
+    height: u32,
+    stride: usize,
+    pixels: &[u8],
+    bgra: bool,
+) -> Vec<u8> {
     let row = (width as usize * 3).next_multiple_of(4);
     let image = row * height as usize;
     let mut out = Vec::with_capacity(BMP_HEADERS + image);
@@ -692,6 +702,23 @@ mod tests {
         assert_eq!(secs(r#"{ "interval": "fast" }"#), 10.0);
         assert_eq!(secs(r#"{ "interval": null }"#), 10.0);
         assert_eq!(secs("not json at all"), 10.0);
+    }
+
+    #[test]
+    fn widget_snapshots_work_without_bars_and_keep_the_shortest_request() {
+        let dir =
+            std::env::temp_dir().join(format!("mypaper-backdrop-requests-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bars = dir.join(REQUEST_FILE);
+        let widgets = dir.join("widgets-request.json");
+        assert_eq!(read_request(&bars), None);
+        std::fs::write(&widgets, r#"{"interval":10}"#).unwrap();
+        assert_eq!(read_request(&bars), Some(Duration::from_secs(10)));
+        std::fs::write(&bars, r#"{"interval":60}"#).unwrap();
+        assert_eq!(read_request(&bars), Some(Duration::from_secs(10)));
+        std::fs::write(&bars, r#"{"interval":2}"#).unwrap();
+        assert_eq!(read_request(&bars), Some(Duration::from_secs(2)));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

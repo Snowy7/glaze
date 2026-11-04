@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lensMap, type LensShape } from "./liquid";
+import { flushEdges, lensMap, type LensShape } from "./liquid";
 import { glassStyleOf, lookTokens } from "./style/look";
 import type { Appearance, Look, SystemLook } from "./protocol";
 
@@ -17,6 +17,10 @@ const at = (map: ReturnType<typeof lensMap>, x: number, y: number) => {
 };
 
 describe("the lens map", () => {
+  it("keeps the inward rim of a floating bar even beyond the HWND's bounds", () => {
+    expect(flushEdges([500, 8, 400, 36], [468, 0, 464, 76], 18)).toEqual({ top: true, left: false, right: false, bottom: false });
+    expect(flushEdges([500, 14, 400, 56], [468, -18, 464, 98], 24)).toEqual({ top: false, left: false, right: false, bottom: true });
+  });
   it("is neutral in the clear middle and outside the pane", () => {
     const map = lensMap({ ...shape, height: 80, radius: 12 }, 1);
     expect(map.width).toBe(120);
@@ -66,5 +70,10 @@ describe("the glass style", () => {
     expect(lookTokens(liquid, appearance, "dark", system, {}, true, false).attrs["data-liquid"]).toBe("off");
     const solid = { ...liquid, background: { type: "solid" as const, color: "#000" } };
     expect(lookTokens(solid, appearance, "dark", system, {}, true, true).attrs).toMatchObject({ "data-liquid": "off", "data-fly-liquid": "on" });
+    const islands = { ...look, background: { type: "solid" as const, color: "#141416eb" } };
+    const desktop = { ...appearance, style: "liquid" };
+    expect(lookTokens(islands, desktop, "dark", system, {}, true, true).attrs["data-liquid"]).toBe("on");
+    expect(lookTokens({ ...islands, glass: { style: "frosted" } }, desktop, "dark", system, {}, true, true).attrs["data-liquid"]).toBe("off");
+    expect(lookTokens({ ...islands, glass: { style: "none" } }, desktop, "dark", system, {}, true, true).attrs["data-liquid"]).toBe("off");
   });
 });

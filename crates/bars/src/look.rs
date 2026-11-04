@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 use mypaper_bars::icon_pack::{self, IconPack};
 use mypaper_bars::vars::VarDecl;
-use mypaper_theme::{Appearance, Color, Liquid, LoadedTheme, Paint, Surface, TextTone};
+use mypaper_theme::{
+    Appearance, Color, Liquid, LoadedTheme, Paint, Surface, TextTone, WidgetStyle,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::bridge::BarKind;
@@ -100,11 +102,45 @@ pub struct ThemeSkin {
     pub vars: BTreeMap<String, VarDecl>,
     /// Its liquid-glass knobs (`bars.glass`): what a bar's `look.glass` leaves out.
     pub glass: Option<Liquid>,
+    /// The desktop's widget choice also selects the bars' default glass material.
+    pub liquid_widgets: bool,
+}
+
+/// Only the shared widget appearance is relevant; instance-specific choices stay local.
+fn widget_appearance() -> Appearance {
+    #[derive(Default, Deserialize)]
+    #[serde(default)]
+    struct Widgets {
+        appearance: Appearance,
+    }
+    mypaper_config::dir()
+        .ok()
+        .and_then(|dir| std::fs::read(dir.join("widgets.json")).ok())
+        .and_then(|bytes| serde_json::from_slice::<Widgets>(&bytes).ok())
+        .unwrap_or_default()
+        .appearance
+}
+
+fn liquid_widgets(user: &Appearance, theme: Option<&Appearance>) -> bool {
+    user.style.or_else(|| theme.and_then(|a| a.style)) == Some(WidgetStyle::Liquid)
+}
+
+/// An explicit per-bar material always wins over the desktop's default.
+pub fn glass_kind(
+    explicit: Option<mypaper_bars::style::GlassKind>,
+    appearance: &Look,
+) -> mypaper_bars::style::GlassKind {
+    explicit.unwrap_or(if appearance.style.as_deref() == Some("liquid") {
+        mypaper_bars::style::GlassKind::Liquid
+    } else {
+        mypaper_bars::style::GlassKind::Frosted
+    })
 }
 
 impl ThemeSkin {
     /// The theme `config.json` names. A theme that fails to load styles nothing (logged).
     pub fn load() -> Self {
+        let widgets = widget_appearance();
         let name = mypaper_config::Config::load()
             .map(|c| c.theme)
             .unwrap_or_default();
@@ -133,11 +169,22 @@ impl ThemeSkin {
                     css,
                     vars,
                     glass: skin.glass,
+                    liquid_widgets: liquid_widgets(
+                        &widgets,
+                        loaded
+                            .theme
+                            .widgets
+                            .as_ref()
+                            .and_then(|skin| skin.appearance.as_ref()),
+                    ),
                 }
             }
             Err(e) => {
                 log::warn!("no theme look for the bars: {e:#}");
-                Self::default()
+                Self {
+                    liquid_widgets: liquid_widgets(&widgets, None),
+                    ..Self::default()
+                }
             }
         }
     }
@@ -200,6 +247,29 @@ pub fn palette_accent() -> Option<Color> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_liquid_is_shared_but_an_explicit_bar_material_wins() {
+        use mypaper_bars::style::GlassKind;
+        let chosen = Appearance {
+            style: Some(WidgetStyle::Liquid),
+            ..Appearance::default()
+        };
+        assert!(liquid_widgets(&chosen, None));
+        assert!(liquid_widgets(&Appearance::default(), Some(&chosen)));
+        let minimal = Appearance {
+            style: Some(WidgetStyle::Minimal),
+            ..Appearance::default()
+        };
+        assert!(!liquid_widgets(&minimal, Some(&chosen)));
+        let look = resolve(BarKind::Top, Some(&chosen), &Appearance::default(), None);
+        assert_eq!(glass_kind(None, &look), GlassKind::Liquid);
+        assert_eq!(
+            glass_kind(Some(GlassKind::Frosted), &look),
+            GlassKind::Frosted
+        );
+        assert_eq!(glass_kind(Some(GlassKind::None), &look), GlassKind::None);
+    }
 
     #[test]
     fn layers_resolve_per_bar() {

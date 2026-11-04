@@ -1,12 +1,13 @@
 // One sandboxed iframe per widget instance, and the message relay between the iframes and the host.
 // Reconciles by instance id: an iframe is only recreated when its widget id changes, and never
-// reloaded while it stays (except on the host's `reload`). Liquid widgets' cards go to the host as
-// `plates` wherever they are shown, dragged ones included (plates.ts).
+// reloaded while it stays (except on the host's `reload`). Liquid cards are drawn under their
+// iframes from wallpaper snapshots; their geometry follows dragging too.
 
 import { h } from "./dom";
+import { createWidgetGlass } from "./glass";
 import { rectToPx, sizeToPx, type PxRect, type Rect } from "./grid";
 import { denial } from "./permissions";
-import { plateShape, platesOf } from "./plates";
+import { drawsPlate, plateShape } from "./plates";
 import type {
   AppearanceValues,
   HelloResult,
@@ -87,28 +88,33 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
   const looks = new Map<string, AppearanceValues>();
   let state: ShellState | undefined;
   let byInstance = new Map<string, InstanceState>();
+  const glass = createWidgetGlass(() => { render(); applyLooks(); });
 
-  /** The wallpaper draws liquid glass under the desktop layer only (the overlay floats over windows). */
+  /** Overlay widgets draw their own visible surface. */
   const onDesktop = () => (state?.layer ?? "desktop") === "desktop";
 
   /** What an instance's widget is told about its look: the previewed or the host's, the theme CSS,
-   *  and whether the wallpaper draws its liquid glass. */
+   *  and whether the shell has drawn its liquid glass. */
   function lookOf(inst: InstanceState): { appearance: AppearanceValues; themeCss: string | null; plate: boolean } {
-    return { appearance: looks.get(inst.instance) ?? inst.appearance, themeCss: state?.themeCss ?? null, plate: onDesktop() };
+    return { appearance: looks.get(inst.instance) ?? inst.appearance, themeCss: state?.themeCss ?? null, plate: drawsPlate(state) && glass.has(inst.instance) };
   }
 
   let platesFrame = 0;
-  let platesSent = "[]";
-  /** Sends the liquid cards once this frame is done moving slots, when they changed. */
+  let glassCount = -1;
+  function reportGlass() {
+    const drawn = glass.count();
+    if (drawn === glassCount) return;
+    glassCount = drawn;
+    send({ type: "glass", drawn });
+  }
+  /** Refreshes the shell's plates after slots move. */
   function schedulePlates() {
     if (platesFrame || !onDesktop()) return;
     platesFrame = requestAnimationFrame(() => {
       platesFrame = 0;
-      const plates = platesOf(slots.values());
-      const key = JSON.stringify(plates);
-      if (key === platesSent) return;
-      platesSent = key;
-      send({ type: "plates", plates });
+      glass.render(slots.values(), state, looks);
+      applyLooks();
+      reportGlass();
     });
   }
 
@@ -163,6 +169,8 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
     live.delete(slot.instance);
     looks.delete(slot.instance);
     schedulePlates();
+    glass.render(slots.values(), state, looks);
+    reportGlass();
   }
 
   function applyLooks() {

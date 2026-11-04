@@ -211,6 +211,12 @@ README-ready text: replace the "Rust hot-patching (experimental, not working yet
 
 ## Liquid glass pass (`crates/wallpaper/src/glass_pass.rs`)
 
+Widgets now use the monitor's wallpaper snapshot, blurred and lensed in the shell (see
+`docs/widgets.md`, "Liquid glass"). The pass below remains available to plate writers, but the
+widget host no longer publishes engine plates. Web wallpapers publish a low-resolution snapshot
+through WebView2 `CapturePreview`; shader/image/video backdrops retain the GPU copy path. Their
+ten-second refresh requests come from the bars or `backdrop/widgets-request.json`.
+
 UI processes publish glass plates (`mypaper_theme::glass`: `%LOCALAPPDATA%\mypaper\glass\<source>.json`
 plus the registered `mypaper.glass` message to the control window; the widget host writes
 `widgets.json`, see docs/widgets.md, "Liquid glass"); the engine draws them into its own frame after

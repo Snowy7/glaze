@@ -19,7 +19,7 @@ import { leafDuration } from "./style/motion";
 
 export interface FlyoutContext {
   /** Closes this flyout. */
-  close(): void;
+  close(immediate?: boolean): void;
   /** Re-measures and re-places it (after its content changed size). */
   reposition(): void;
   /** Subscriptions and cleanups that end when it closes. */
@@ -49,16 +49,18 @@ export interface Flyout<P> {
 interface Open {
   id: string;
   anchor: HTMLElement;
-  close(): void;
+  close(immediate?: boolean): void;
 }
 
 let current: Open | undefined;
 /** A press on the anchor closes the flyout first; the click that follows must not reopen it. */
 let dismissedBy: { anchor: HTMLElement; at: number } | undefined;
 const ids = new Set<string>();
+const leaving = new Set<Layer>();
 
-export function closeFlyout(): void {
-  current?.close();
+export function closeFlyout(immediate = false): void {
+  current?.close(immediate);
+  if (immediate) { for (const layer of leaving) layer.remove(); leaving.clear(); }
 }
 
 /** Whether a flyout (any, or `id`) is open. */
@@ -80,7 +82,7 @@ export function defineFlyout<P>(id: string, render: FlyoutRender<P>): Flyout<P> 
     // `reposition` may run while rendering (a subscription replaying its latest value): before the
     // layer exists there's nothing to place yet.
     let layer: Layer | undefined;
-    const ctx: FlyoutContext = { close: () => close(), reposition: () => layer?.reposition(), scope };
+    const ctx: FlyoutContext = { close: (immediate) => close(immediate), reposition: () => layer?.reposition(), scope };
     el.append(render(props, ctx));
     const mounted = mountLayer(el, options.place);
     layer = mounted;
@@ -95,18 +97,20 @@ export function defineFlyout<P>(id: string, render: FlyoutRender<P>): Flyout<P> 
       if (options.anchor.contains(event.target)) dismissedBy = { anchor: options.anchor, at: performance.now() };
       close();
     };
-    function close() {
+    const onBlur = () => close();
+    function close(immediate = false) {
       if (current?.close !== close) return;
       current = undefined;
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("pointerdown", onDown, true);
-      window.removeEventListener("blur", close);
+      window.removeEventListener("blur", onBlur);
       scope.dispose();
       // It plays its exit (`.leaving`, the `open` animation's length), then goes.
-      const exit = leafDuration("open");
+      const exit = immediate ? 0 : leafDuration("open");
       if (exit > 0) {
         el.classList.add("leaving");
-        window.setTimeout(() => mounted.remove(), exit);
+        leaving.add(mounted);
+        window.setTimeout(() => { mounted.remove(); leaving.delete(mounted); }, exit);
       } else {
         mounted.remove();
       }
@@ -116,7 +120,7 @@ export function defineFlyout<P>(id: string, render: FlyoutRender<P>): Flyout<P> 
     current = { id, anchor: options.anchor, close };
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", onDown, true);
-    window.addEventListener("blur", close);
+    window.addEventListener("blur", onBlur);
     el.focus({ preventScroll: true });
   };
 

@@ -292,7 +292,7 @@ const power: Factory = () => {
       anchor: el,
       entries,
       origin: anchor.origin,
-      place: (size) => placePopover(anchor.rect, size, viewport(), anchor.side, "end", 4),
+      place: (size) => placePopover(anchor.rect, size, viewport(), anchor.side, "end", 12),
     });
   });
   return el;

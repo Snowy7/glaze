@@ -20,6 +20,8 @@ pub enum Msg {
     Layout,
     /// `palette.json` changed.
     Palette,
+    /// The wallpaper snapshot was replaced or removed.
+    Backdrop,
     /// `theme.json` or a style sheet in the active theme's folder changed.
     Theme,
     /// Files changed in these widget folders.
