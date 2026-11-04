@@ -115,7 +115,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         {groups.length === 0 && <p className="px-3 py-8 text-center text-[13px] text-ink-3">Nothing called “{query.trim()}”.</p>}
         {groups.map((group) => (
           <div key={group.title} role="group" aria-label={group.title} className="pb-1">
-            <div className="px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-[0.06em] text-ink-4 uppercase">{group.title}</div>
+            <div className="ui-eyebrow px-2.5 pt-2.5 pb-1">{group.title}</div>
             {group.items.map((item) => {
               index += 1;
               const at = index;
@@ -132,8 +132,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                   className={`flex h-10 cursor-default items-center gap-3 rounded-lg px-2.5 ${selected ? "bg-surface-top text-ink" : "text-ink-2"}`}
                 >
                   <item.icon className="size-4 shrink-0 text-ink-3" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate text-[13.5px]">{item.title}</span>
-                  <span className="shrink-0 truncate text-[12px] text-ink-4">{item.section}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px]">{item.title}</span>
+                  <span className="shrink-0 truncate text-[12px] text-ink-3">{item.section}</span>
                   {selected && <CornerDownLeft className="size-3.5 shrink-0 text-ink-3" aria-hidden />}
                 </div>
               );

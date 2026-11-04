@@ -70,7 +70,7 @@ function Gallery() {
         />
         {newTheme}
       </PageBar>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-6 pb-12 [scrollbar-gutter:stable] lg:px-8 2xl:px-10">
+      <div className="min-h-0 flex-1 overflow-y-auto px-(--gutter) pt-6 pb-12 [scrollbar-gutter:stable]">
         <div className="mx-auto max-w-[120rem]">
           {configError && (
             <Banner>

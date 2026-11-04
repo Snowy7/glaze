@@ -105,7 +105,7 @@ export function WallpaperInspector({ theme, onBack }: { theme: ThemeEntry; onBac
       {(theme.kind === "web" || theme.kind === "scene") && <InteractiveSetting theme={theme} />}
       {theme.kind !== "web" && theme.kind !== "scene" && !onBack && (
         <InspectorSection>
-          <p className="text-[12.5px] leading-snug text-ink-3">{theme.kind ? `${KINDS[theme.kind].hint}.` : ""} The picture and its options come from the theme's source.</p>
+          <p className="text-[12px] leading-snug text-ink-3">{theme.kind ? `${KINDS[theme.kind].hint}.` : ""} The picture and its options come from the theme's source.</p>
         </InspectorSection>
       )}
       {onBack && (
@@ -181,7 +181,7 @@ export function BarSummary({ bar, config, onBack }: { bar: "top" | "dock"; confi
         <dl className="divide-y divide-line rounded-lg bg-canvas ring-1 ring-line-strong ring-inset">
           {facts.map(([label, value]) => (
             <div key={label} className="flex items-center justify-between px-3 py-2">
-              <dt className="text-[12.5px] text-ink-3">{label}</dt>
+              <dt className="text-[12px] text-ink-3">{label}</dt>
               <dd className="text-[13px] font-medium text-ink">{value}</dd>
             </div>
           ))}

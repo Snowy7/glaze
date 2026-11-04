@@ -50,7 +50,7 @@ function Shell() {
       <main
         // Re-keyed per visit, so each page starts fresh (and fades in) from its route.
         key={visit}
-        className="flex min-w-0 flex-1 animate-fade-in flex-col overflow-hidden rounded-tl-xl border-t border-l border-line-strong bg-canvas"
+        className="flex min-w-0 flex-1 animate-fade-in flex-col overflow-hidden rounded-tl-xl border-t border-l border-line-strong bg-canvas [--gutter:1.25rem] lg:[--gutter:1.75rem] 2xl:[--gutter:2.5rem]"
       >
         <ErrorBoundary inline>
           {route.page === "desktop" && <Desktop />}
@@ -70,7 +70,7 @@ function Shell() {
 /** A scrolling page with the side gutter, for the Bars page until it moves to the stage (docs/studio-ux.md, "Bars"). */
 function LegacyPage({ children }: { children: ReactNode }) {
   return (
-    <div data-scroll-root className="min-h-0 flex-1 overflow-y-auto px-(--page-px) pb-12 [--page-px:1.5rem] [scrollbar-gutter:stable] lg:[--page-px:2rem] 2xl:[--page-px:2.75rem]">
+    <div data-scroll-root className="min-h-0 flex-1 overflow-y-auto px-(--page-px) pb-12 [--page-px:var(--gutter)] [scrollbar-gutter:stable]">
       {children}
     </div>
   );
@@ -129,7 +129,7 @@ class ErrorBoundary extends Component<BoundaryProps, { error: Error | null }> {
           <span className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-surface-hi text-ink-2">
             <TriangleAlert className="size-6" strokeWidth={1.5} aria-hidden />
           </span>
-          <p className="font-display text-lg font-semibold text-ink">Something went wrong</p>
+          <p className="font-display text-[15px] font-semibold text-ink">Something went wrong</p>
           <p className="selectable mt-1 text-[13px] text-ink-3">{error.message}</p>
           <Button variant="primary" icon={RotateCw} className="mt-5" onClick={() => this.setState({ error: null })}>
             Try again

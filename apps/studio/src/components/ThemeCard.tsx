@@ -56,7 +56,7 @@ export function ThemeCard({ theme, index, onEdit }: Props) {
 
       <div className="flex items-center gap-1.5 pt-2.5 pr-0.5 pl-1">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[13.5px] font-semibold tracking-tight text-ink">{theme.name}</h3>
+          <h3 className="truncate text-[14px] font-semibold tracking-tight text-ink">{theme.name}</h3>
           <p className="truncate text-[12px] text-ink-3" title={theme.dir}>
             {meta.join(" · ")}
           </p>
@@ -64,7 +64,7 @@ export function ThemeCard({ theme, index, onEdit }: Props) {
         <IconButton icon={Pencil} size="sm" variant="ghost" label={theme.origin === "user" ? `Edit ${theme.name}` : `Copy and edit ${theme.name}`} disabled={broken} onClick={() => onEdit(theme)} />
       </div>
       {theme.error && (
-        <p className="selectable mx-2 mb-1.5 flex items-start gap-1.5 text-xs text-ink-2" title={theme.error}>
+        <p className="selectable mx-2 mb-1.5 flex items-start gap-1.5 text-[12px] text-ink-2" title={theme.error}>
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           <span className="line-clamp-2">{errorSummary(theme.error)}</span>
         </p>

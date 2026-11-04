@@ -50,7 +50,7 @@ export function MenuFields({ config }: { config: Config }) {
                   ) : (
                     <span className="min-w-0 flex-1 truncate px-1 text-[13px] text-ink">
                       {labelOf(entry)}
-                      {typeof entry === "object" && <span className="ml-2 font-mono text-[11.5px] text-ink-3">{entry.command}</span>}
+                      {typeof entry === "object" && <span className="ml-2 font-mono text-[12px] text-ink-3">{entry.command}</span>}
                     </span>
                   )}
                   <IconButton icon={X} variant="ghost" size="sm" label={`Remove ${labelOf(entry)}`} className="opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100" onClick={() => setItems(items.toSpliced(index, 1), `Remove ${labelOf(entry)}`)} />

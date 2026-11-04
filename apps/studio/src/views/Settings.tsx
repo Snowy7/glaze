@@ -20,7 +20,7 @@ export function Settings() {
   return (
     <>
       <PageBar title="Settings" />
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-8 pb-14 [scrollbar-gutter:stable] lg:px-8">
+      <div className="min-h-0 flex-1 overflow-y-auto px-(--gutter) pt-8 pb-14 [scrollbar-gutter:stable]">
         <div className="mx-auto flex max-w-[46rem] flex-col gap-9">
           <Group title="Startup">
             <div data-setting="settings.autostart" className="setting-anchor">
@@ -71,7 +71,7 @@ export function Settings() {
               </Row>
             </div>
             <details data-setting="settings.parts" className="setting-anchor group/parts">
-              <summary className="flex h-12 cursor-default list-none items-center gap-2 px-4 text-[13.5px] font-medium text-ink-2 hover:bg-surface-hi/50 hover:text-ink [&::-webkit-details-marker]:hidden">
+              <summary className="flex h-12 cursor-default list-none items-center gap-2 px-4 text-[13px] font-medium text-ink-2 hover:bg-surface-hi/50 hover:text-ink [&::-webkit-details-marker]:hidden">
                 <ChevronRight className="size-4 text-ink-3 transition-transform group-open/parts:rotate-90" aria-hidden />
                 Details
               </summary>

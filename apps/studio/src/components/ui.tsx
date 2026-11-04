@@ -2,7 +2,6 @@ import { Check, ChevronDown, ChevronLeft, ChevronRight, GripVertical, LoaderCirc
 import {
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -137,7 +136,7 @@ export function Segmented<T extends string>({ label, value, options, onChange, h
             key={option.value}
             title={option.hint}
             className={`relative flex flex-1 cursor-default items-center justify-center gap-1.5 rounded-md text-center font-medium whitespace-nowrap text-ink-3 transition-[color,background-color,box-shadow] duration-150 hover:bg-surface-hi hover:text-ink has-checked:bg-surface-top has-checked:text-ink has-checked:shadow-[inset_0_0_0_1px_var(--line-hi),0_1px_2px_rgb(0_0_0/0.4)] has-focus-visible:outline-2 has-focus-visible:outline-offset-1 has-focus-visible:outline-ink ${
-              size === "sm" ? "h-6 px-2 text-[11.5px]" : "h-7 px-3 text-[12.5px]"
+              size === "sm" ? "h-[26px] px-2.5 text-[12px]" : "h-[calc(var(--control-h,2.25rem)-4px)] px-3 text-[13px]"
             } ${option.disabled ? "pointer-events-none opacity-35" : ""}`}
           >
             <input
@@ -155,73 +154,6 @@ export function Segmented<T extends string>({ label, value, options, onChange, h
         ))}
       </div>
     </fieldset>
-  );
-}
-
-type TabOption<T extends string> = { value: T; label: string; count?: number; icon?: LucideIcon };
-
-/**
- * Page-level tabs: text with an underline under the current one. Arrow keys, Home and End move
- * between them (and select, like the platform's tabs). Put them on a bottom border.
- */
-export function Tabs<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-  className = "",
-}: {
-  label: string;
-  value: T;
-  options: readonly TabOption<T>[];
-  onChange: (value: T) => void;
-  className?: string;
-}) {
-  const list = useRef<HTMLDivElement>(null);
-
-  function onKeyDown(event: KeyboardEvent) {
-    const index = options.findIndex((o) => o.value === value);
-    const next = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: options.length - 1 }[event.key];
-    if (next === undefined) return;
-    event.preventDefault();
-    const target = options[(next + options.length) % options.length];
-    if (!target) return;
-    onChange(target.value);
-    list.current?.querySelector<HTMLElement>(`[data-tab="${target.value}"]`)?.focus();
-  }
-
-  return (
-    <div ref={list} role="tablist" aria-label={label} onKeyDown={onKeyDown} className={`flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] ${className}`}>
-      {options.map(({ value: tab, label: text, count, icon: Icon }) => {
-        const selected = tab === value;
-        return (
-          <button
-            key={tab}
-            type="button"
-            role="tab"
-            data-tab={tab}
-            aria-selected={selected}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onChange(tab)}
-            className={`group relative flex h-10 shrink-0 cursor-default items-center pb-px text-[13px] font-medium transition-colors focus-visible:outline-offset-[-2px] ${
-              selected ? "text-ink" : "text-ink-3 hover:text-ink"
-            }`}
-          >
-            <span className="flex items-center gap-2 rounded-md px-2.5 py-1 transition-colors group-hover:bg-surface-hi">
-              {Icon && <Icon className="size-4" aria-hidden />}
-              {text}
-              {count !== undefined && (
-                <span className={`rounded-[5px] px-1.5 text-[11px] leading-[18px] tabular-nums transition-colors ${selected ? "bg-surface-top text-ink" : "bg-surface-hi text-ink-3"}`}>{count}</span>
-              )}
-            </span>
-            <span
-              aria-hidden
-              className={`absolute inset-x-1.5 -bottom-px h-0.5 rounded-full bg-ink transition-[opacity,transform] duration-200 ${selected ? "scale-x-100 opacity-100" : "scale-x-50 opacity-0"}`}
-            />
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -253,7 +185,7 @@ export function Select<T extends string>({
           const picked = options.find((o) => o.value === e.currentTarget.value);
           if (picked) onChange(picked.value);
         }}
-        className={`ui-input w-full cursor-default truncate bg-surface-hi pl-3 hover:bg-surface-top ${size === "sm" ? "h-[30px] text-[12.5px]" : "text-[13px]"}`}
+        className={`ui-input w-full cursor-default truncate bg-surface-hi pl-3 hover:bg-surface-top ${size === "sm" ? "ui-input-sm text-[12px]" : ""}`}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value} disabled={o.disabled}>
@@ -275,7 +207,7 @@ export const INPUT_CLASS = `w-full ${INPUT_BASE}`;
 type TextInputProps = Omit<ComponentProps<"input">, "size"> & {
   /** Paths, commands, ids: monospace, no spell check. */
   mono?: boolean;
-  /** 32 px tall instead of 36. */
+  /** The small control size (30 px), as in the inspector. */
   compact?: boolean;
 };
 
@@ -284,29 +216,9 @@ export function TextInput({ mono = false, compact = false, className = "", ...re
   return (
     <input
       spellCheck={mono ? false : undefined}
-      className={`${INPUT_BASE} ${compact ? "h-8 px-2.5 text-[13px]" : ""} ${mono ? "font-mono text-[12.5px]" : ""} ${className}`}
+      className={`${INPUT_BASE} ${compact ? "ui-input-sm" : ""} ${mono ? "font-mono text-[12px]" : ""} ${className}`}
       {...rest}
     />
-  );
-}
-
-/** A label over one control, with an optional description under it. */
-export function Field({ label, description, children, className = "" }: { label: string; description?: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <label className={`block min-w-0 ${className}`}>
-      <span className="mb-1.5 block text-[13px] font-medium text-ink">{label}</span>
-      {children}
-      {description && <span className="mt-1.5 block text-[12px] leading-snug text-ink-3">{description}</span>}
-    </label>
-  );
-}
-
-/** `Field` around a full-width `TextInput`. */
-export function TextField({ label, description, className = "", ...input }: TextInputProps & { label: string; description?: ReactNode }) {
-  return (
-    <Field label={label} description={description} className={className}>
-      <TextInput className="w-full" {...input} />
-    </Field>
   );
 }
 
@@ -409,10 +321,10 @@ export function Slider({ label, value, min, max, step = 1, format, parse, onChan
           inputMode="decimal"
           disabled={disabled}
           {...draft}
-          className="ui-input h-7 w-[4.25rem] shrink-0 rounded-md px-2 text-right font-mono text-[12px] tabular-nums"
+          className="ui-input h-[26px] w-16 shrink-0 rounded-md px-2 text-right font-mono text-[12px] tabular-nums"
         />
       ) : (
-        <output className="w-[4.25rem] shrink-0 pr-2 text-right font-mono text-[12px] text-ink-2 tabular-nums">{show(value)}</output>
+        <output className="w-16 shrink-0 pr-2 text-right font-mono text-[12px] text-ink-2 tabular-nums">{show(value)}</output>
       )}
     </div>
   );
@@ -449,7 +361,7 @@ export function NumberField({
       <button type="button" tabIndex={-1} aria-label={`Decrease ${label}`} disabled={disabled || value <= min} onClick={() => commit(value - step)} className={stepButton}>
         <Minus className="size-3.5" aria-hidden />
       </button>
-      <input aria-label={label} inputMode="decimal" disabled={disabled} {...draft} className="h-full w-full flex-1 text-center font-mono text-[12.5px] tabular-nums" />
+      <input aria-label={label} inputMode="decimal" disabled={disabled} {...draft} className="h-full w-full flex-1 text-center font-mono text-[12px] tabular-nums" />
       {unit && <span className="pr-1 text-[12px] text-ink-3">{unit}</span>}
       <button type="button" tabIndex={-1} aria-label={`Increase ${label}`} disabled={disabled || value >= max} onClick={() => commit(value + step)} className={stepButton}>
         <Plus className="size-3.5" aria-hidden />
@@ -473,7 +385,7 @@ export function ColorField({ label, value, onChange, className = "" }: { label: 
   const hex = normalizeHex(value);
   return (
     <div className={`ui-input ui-color inline-flex shrink-0 items-center gap-2 pr-2 pl-1 ${className}`}>
-      <label className="relative size-7 shrink-0 cursor-default overflow-hidden rounded-md shadow-[inset_0_0_0_1px_rgb(255_255_255/0.12),0_0_0_1px_rgb(0_0_0/0.3)]" style={{ background: hex ?? "repeating-conic-gradient(#777 0 25%, #444 0 50%) 0 0 / 8px 8px" }}>
+      <label className="relative size-[calc(var(--control-h,2.25rem)-10px)] shrink-0 cursor-default overflow-hidden rounded-[5px] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.12),0_0_0_1px_rgb(0_0_0/0.3)]" style={{ background: hex ?? "repeating-conic-gradient(#777 0 25%, #444 0 50%) 0 0 / 8px 8px" }}>
         <input type="color" aria-label={`${label}: pick a color`} value={hex ?? "#000000"} onChange={(e) => onChange(e.currentTarget.value)} className="absolute inset-0 size-full cursor-default opacity-0" />
       </label>
       <input
@@ -602,7 +514,7 @@ export function Combobox({
         }}
         onKeyDown={onKeyDown}
         onBlur={close}
-        className={`selectable h-full flex-1 ${mono ? "font-mono text-[12.5px]" : "text-[13px]"}`}
+        className={`selectable h-full flex-1 ${mono ? "font-mono text-[12px]" : "text-[13px]"}`}
       />
       <button
         type="button"
@@ -615,7 +527,7 @@ export function Combobox({
           setActive(Math.max(0, options.findIndex((o) => o.value === value)));
           setOpen((was) => !was);
         }}
-        className="grid size-7 shrink-0 cursor-default place-items-center rounded-md text-ink-3 hover:bg-surface-hi hover:text-ink"
+        className="grid size-6 shrink-0 cursor-default place-items-center rounded-md text-ink-3 hover:bg-surface-hi hover:text-ink"
       >
         <ChevronDown className={`size-4 transition-transform ${visible ? "rotate-180" : ""}`} aria-hidden />
       </button>
@@ -641,7 +553,7 @@ export function Combobox({
           >
             <Check className={`size-3.5 shrink-0 ${option.value === value ? "" : "invisible"}`} aria-hidden />
             <span className="min-w-0 flex-1 truncate">{option.label ?? option.value}</span>
-            {option.hint && <span className="shrink-0 truncate text-xs text-ink-3">{option.hint}</span>}
+            {option.hint && <span className="shrink-0 truncate text-[12px] text-ink-3">{option.hint}</span>}
           </div>
         ))}
       </div>
@@ -651,7 +563,7 @@ export function Combobox({
 
 /** A short explanation under a control, in the muted tone. */
 export function Note({ children }: { children: ReactNode }) {
-  return <p className="mt-2 text-[12.5px] leading-snug text-ink-3">{children}</p>;
+  return <p className="mt-2 text-[12px] leading-snug text-ink-3">{children}</p>;
 }
 
 /** A callout for things that replace native behavior or need a restart: bordered, not colored. */
@@ -682,85 +594,22 @@ export function Badge({ children, icon: Icon, tone = "neutral", title, className
   );
 }
 
-const HEADER_TITLE = "font-display text-[22px] leading-tight font-semibold tracking-tight text-ink";
-
-/** A page title with its actions, in the page's flow. Inside `Page`, use its props instead. */
+/** A page's title bar inside a scrolling page (the Bars page): the same as `PageBar`, reaching across the page's gutter. */
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pt-7">
-      <div className="min-w-0">
-        <h1 className={HEADER_TITLE}>{title}</h1>
-        {subtitle && <p className="mt-1 truncate text-[13px] text-ink-3">{subtitle}</p>}
+    <header className="-mx-(--page-px) mb-6 flex h-[3.25rem] items-center gap-3 border-b border-line px-(--page-px)">
+      <div className="flex min-w-0 flex-1 items-baseline gap-3">
+        <h1 className="shrink-0 font-display text-[15px] font-semibold tracking-tight text-ink">{title}</h1>
+        {subtitle && <p className="min-w-0 truncate text-[13px] text-ink-3">{subtitle}</p>}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </header>
-  );
-}
-
-const PAGE_WIDTHS = { full: "", wide: "max-w-[100rem]", narrow: "max-w-[68rem]" } as const;
-
-type PageProps = {
-  title: string;
-  subtitle?: ReactNode;
-  actions?: ReactNode;
-  /** `Tabs`, shown on the header's bottom edge. */
-  tabs?: ReactNode;
-  /** `full` fills the window (grids); `wide` and `narrow` center a block. Header and content share it. */
-  width?: keyof typeof PAGE_WIDTHS;
-  children: ReactNode;
-};
-
-/**
- * A page: a sticky header (title, actions, tabs) over its content. The header's height is
- * `--header-h` for anything else that sticks (`top-[calc(var(--header-h)+1rem)]`).
- * Expects the shell's scroller, which sets `--page-px`.
- */
-export function Page({ title, subtitle, actions, tabs, width = "full", children }: PageProps) {
-  const header = useRef<HTMLElement>(null);
-  const [height, setHeight] = useState(0);
-  useLayoutEffect(() => {
-    const element = header.current;
-    if (!element) return;
-    const observer = new ResizeObserver(([entry]) => entry && setHeight(entry.borderBoxSize[0]?.blockSize ?? element.offsetHeight));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  const max = PAGE_WIDTHS[width];
-  const vars: CSSProperties & Record<"--header-h", string> = { "--header-h": `${height}px` };
-  return (
-    <div style={vars}>
-      <header
-        ref={header}
-        className={`page-header sticky top-0 z-20 -mx-(--page-px) border-b bg-canvas px-(--page-px) backdrop-blur-xl ${tabs ? "border-line" : "border-transparent"}`}
-      >
-        <div className={`mx-auto ${max}`}>
-          <div className={`flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pt-6 ${tabs ? "pb-2" : "pb-4"}`}>
-            <div className="min-w-0">
-              <h1 className={HEADER_TITLE}>{title}</h1>
-              {subtitle && <p className="mt-1 truncate text-[13px] text-ink-3">{subtitle}</p>}
-            </div>
-            {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
-          </div>
-          {tabs && <div className="-mx-2.5">{tabs}</div>}
-        </div>
-      </header>
-      <div className={`mx-auto pt-6 ${max}`}>{children}</div>
-    </div>
-  );
-}
-
-/** A heading for a run of content inside a page. */
-export function SectionLabel({ children, id }: { children: ReactNode; id?: string }) {
-  return (
-    <h2 id={id} className="mb-3 text-[13.5px] font-semibold text-ink">
-      {children}
-    </h2>
   );
 }
 
 export function Keycap({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-surface-hi px-1.5 font-sans text-[11.5px] font-medium text-ink-2 shadow-[inset_0_-1px_0_var(--line-hi),inset_0_0_0_1px_var(--line-strong)]">
+    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-[5px] bg-surface-hi px-1.5 font-sans text-[11px] font-medium text-ink-2 shadow-[inset_0_-1px_0_var(--line-hi),inset_0_0_0_1px_var(--line-strong)]">
       {children}
     </kbd>
   );
@@ -796,7 +645,7 @@ export function EmptyState({
       <span className="mb-4 grid size-11 place-items-center rounded-xl bg-surface-hi text-ink-2 ring-1 ring-line-strong">
         <Icon className="size-5" strokeWidth={1.6} aria-hidden />
       </span>
-      <p className="font-display text-base font-semibold text-ink">{title}</p>
+      <p className="font-display text-[15px] font-semibold text-ink">{title}</p>
       {children && <div className="selectable mt-1 max-w-md text-[13px] leading-relaxed text-ink-3">{children}</div>}
       {action && <div className="mt-5">{action}</div>}
     </div>
@@ -826,16 +675,11 @@ export function StatusDot({ state }: { state: "on" | "off" | "unknown" }) {
 /** "Saving" while an edit is on its way to disk, otherwise a calm confirmation. */
 export function SaveStatus({ saving }: { saving: boolean }) {
   return (
-    <span className="flex items-center gap-1.5 text-xs text-ink-3" aria-live="polite">
+    <span className="flex items-center gap-1.5 text-[12px] text-ink-3" aria-live="polite">
       {saving ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
       {saving ? "Saving" : "Saved as you go"}
     </span>
   );
-}
-
-/** A plain card: the surface, its edge and padding (`flush`: none, for cards with their own sections). */
-export function Card({ children, className = "", flush = false }: { children: ReactNode; className?: string; flush?: boolean }) {
-  return <div className={`rounded-xl bg-surface shadow-card ring-1 ring-line-strong ${flush ? "" : "p-5"} ${className}`}>{children}</div>;
 }
 
 /** A section card of rows (settings-style): a title and description over it, an action beside them. */
@@ -857,8 +701,8 @@ export function Group({
       {(title || action) && (
         <div className="mb-2.5 flex items-end justify-between gap-3 px-0.5">
           <div className="min-w-0">
-            {title && <h2 className="text-[13.5px] font-semibold text-ink">{title}</h2>}
-            {description && <p className="mt-0.5 text-[12.5px] text-ink-3">{description}</p>}
+            {title && <h2 className="ui-eyebrow">{title}</h2>}
+            {description && <p className="mt-1 text-[12px] text-ink-3">{description}</p>}
           </div>
           {action}
         </div>
@@ -881,7 +725,7 @@ type RowProps = {
 
 /** A setting row: title and detail on the left, the control on the right (under them when the row is narrow). */
 export function Row({ title, detail, mono, children, htmlFor, detailId }: RowProps) {
-  const titleClass = "block text-[13.5px] font-medium text-ink";
+  const titleClass = "block text-[13px] font-medium text-ink";
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5">
       <div className="min-w-0 flex-[1_1_15rem]">
@@ -895,7 +739,7 @@ export function Row({ title, detail, mono, children, htmlFor, detailId }: RowPro
         {detail && (
           <div
             id={detailId}
-            className={`mt-0.5 max-w-[72ch] text-[12.5px] leading-relaxed text-ink-3 ${mono ? "selectable truncate font-mono text-xs" : ""}`}
+            className={`mt-0.5 max-w-[72ch] text-[12px] leading-relaxed text-ink-3 ${mono ? "selectable truncate font-mono" : ""}`}
             title={mono && typeof detail === "string" ? detail : undefined}
           >
             {detail}
@@ -911,8 +755,8 @@ export function Row({ title, detail, mono, children, htmlFor, detailId }: RowPro
 export function Block({ title, detail, children }: { title: string; detail?: ReactNode; children: ReactNode }) {
   return (
     <div className="px-4 py-3.5">
-      <div className="text-[13.5px] font-medium text-ink">{title}</div>
-      {detail && <div className="mt-0.5 max-w-[72ch] text-[12.5px] leading-relaxed text-ink-3">{detail}</div>}
+      <div className="text-[13px] font-medium text-ink">{title}</div>
+      {detail && <div className="mt-0.5 max-w-[72ch] text-[12px] leading-relaxed text-ink-3">{detail}</div>}
       <div className="mt-3">{children}</div>
     </div>
   );
@@ -991,14 +835,14 @@ export function ConfirmButton({
  */
 export function PageBar({ title, back, detail, children }: { title: string; back?: { label: string; onClick: () => void }; detail?: ReactNode; children?: ReactNode }) {
   return (
-    <header className="flex h-[3.25rem] shrink-0 items-center gap-3 border-b border-line px-4 lg:px-5">
+    <header className="flex h-[3.25rem] shrink-0 items-center gap-3 border-b border-line px-(--gutter)">
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
         {back && (
           <>
             <button
               type="button"
               onClick={back.onClick}
-              className="-ml-1.5 flex h-8 cursor-default items-center gap-1 rounded-md pr-2 pl-1.5 text-[13.5px] font-medium text-ink-3 transition-colors hover:bg-surface-hi hover:text-ink"
+              className="-ml-1.5 flex h-8 cursor-default items-center gap-1 rounded-md pr-2 pl-1 text-[13px] font-medium text-ink-3 transition-colors hover:bg-surface-hi hover:text-ink"
             >
               <ChevronLeft className="size-4" aria-hidden />
               {back.label}
@@ -1048,7 +892,7 @@ export function Inspector({ label, children }: { label: string; children: ReactN
   return (
     <aside
       aria-label={label}
-      className="flex w-[22rem] shrink-0 flex-col overflow-y-auto border-l border-line bg-sidebar [scrollbar-gutter:stable] max-[1100px]:w-full max-[1100px]:overflow-visible max-[1100px]:border-t max-[1100px]:border-l-0 2xl:w-[25rem]"
+      className="flex w-[21rem] shrink-0 flex-col overflow-y-auto border-l border-line bg-sidebar [--control-h:1.875rem] [scrollbar-gutter:stable] max-[1100px]:w-full max-[1100px]:overflow-visible max-[1100px]:border-t max-[1100px]:border-l-0 2xl:w-[25rem]"
     >
       {children}
     </aside>
@@ -1070,7 +914,7 @@ export function InspectorHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="border-b border-line px-4 pt-3 pb-3.5">
+    <div className="border-b border-line px-4 py-3.5">
       {back && (
         <button
           type="button"
@@ -1083,7 +927,7 @@ export function InspectorHeader({
       )}
       <div className="flex items-center gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-hi text-ink ring-1 ring-line-strong">
-          <Icon className="size-[18px]" strokeWidth={1.7} aria-hidden />
+          <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[14px] font-semibold tracking-tight text-ink">{title}</h2>
@@ -1101,7 +945,7 @@ export function InspectorSection({ title, action, children }: { title?: string; 
     <section aria-label={title} className="border-b border-line px-4 py-4 last:border-b-0">
       {(title || action) && (
         <div className="mb-3 flex min-h-6 items-center justify-between gap-2">
-          {title && <h3 className="text-[11.5px] font-semibold tracking-[0.06em] text-ink-3 uppercase">{title}</h3>}
+          {title && <h3 className="ui-eyebrow">{title}</h3>}
           {action}
         </div>
       )}
@@ -1133,17 +977,17 @@ type PropProps = {
 export function Prop({ id, label, hint, inherited, onReset, stacked = false, children }: PropProps) {
   const own = inherited === undefined && onReset !== undefined;
   const labelRow = (
-    <div className="flex min-h-7 min-w-0 items-center gap-1.5">
+    <div className="group/prop flex min-h-7 min-w-0 items-center gap-1.5">
       <span className={`truncate text-[13px] ${own ? "font-medium text-ink" : "text-ink-2"}`}>{label}</span>
       {own && <span title="Changed" className="size-1.5 shrink-0 rounded-full bg-ink" />}
-      {inherited && <span className="shrink-0 text-[11px] text-ink-4">{inherited}</span>}
+      {inherited && <span className="shrink-0 text-[11px] text-ink-3">{inherited}</span>}
       {own && (
         <button
           type="button"
           aria-label={`Reset ${lower(label)}`}
           title="Reset"
           onClick={onReset}
-          className="ml-auto grid size-6 shrink-0 cursor-default place-items-center rounded-md text-ink-4 transition-colors hover:bg-surface-hi hover:text-ink"
+          className={`grid size-6 shrink-0 cursor-default place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-hi hover:text-ink ${stacked ? "ml-auto" : ""}`}
         >
           <RotateCcw className="size-3.5" aria-hidden />
         </button>
@@ -1158,9 +1002,9 @@ export function Prop({ id, label, hint, inherited, onReset, stacked = false, chi
           <div className="mt-1.5 min-w-0">{children}</div>
         </>
       ) : (
-        <div className="grid grid-cols-[minmax(0,7.25rem)_minmax(0,1fr)] items-center gap-3 2xl:grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)]">
-          {labelRow}
-          <div className="flex min-w-0 justify-end">{children}</div>
+        <div className="flex min-h-8 items-center gap-3">
+          <div className="min-w-0 flex-1">{labelRow}</div>
+          <div className="flex shrink-0 items-center justify-end">{children}</div>
         </div>
       )}
       {hint && <p className="mt-1.5 text-[12px] leading-snug text-ink-3">{hint}</p>}
@@ -1186,7 +1030,7 @@ export function NavRow({ icon: Icon, title, detail, trailing, onClick }: { icon:
   return (
     <button type="button" onClick={onClick} className="group -mx-2 flex min-h-11 cursor-default items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-hi">
       <span className="grid size-8 shrink-0 place-items-center rounded-md bg-surface-hi text-ink-2 ring-1 ring-line-strong transition-colors group-hover:bg-surface-top group-hover:text-ink">
-        <Icon className="size-4" strokeWidth={1.7} aria-hidden />
+        <Icon className="size-4" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-medium text-ink">{title}</span>
@@ -1210,6 +1054,7 @@ export function TilePicker<T extends string>({
   options,
   onChange,
   min = "5.25rem",
+  columns,
   aspect = "aspect-[4/3]",
 }: {
   label: string;
@@ -1219,6 +1064,8 @@ export function TilePicker<T extends string>({
   onChange: (value: T) => void;
   /** The smallest tile width; tiles fill the row. */
   min?: string;
+  /** A fixed number of tiles per row instead (so a set of five stays one row). */
+  columns?: number;
   /** The preview's shape. */
   aspect?: string;
 }) {
@@ -1236,9 +1083,9 @@ export function TilePicker<T extends string>({
     group.current?.querySelector<HTMLElement>(`[data-tile="${CSS.escape(next.value)}"]`)?.focus();
   }
 
-  const columns: CSSProperties = { gridTemplateColumns: `repeat(auto-fill, minmax(${min}, 1fr))` };
+  const grid: CSSProperties = { gridTemplateColumns: columns ? `repeat(${columns}, minmax(0, 1fr))` : `repeat(auto-fill, minmax(${min}, 1fr))` };
   return (
-    <div ref={group} role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className="grid gap-2" style={columns}>
+    <div ref={group} role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className="grid gap-2" style={grid}>
       {options.map((option) => {
         const on = option.value === value;
         return (

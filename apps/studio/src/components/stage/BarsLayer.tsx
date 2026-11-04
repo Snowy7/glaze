@@ -56,7 +56,7 @@ export function BarsLayer({ config, catalog, screen, selected, onSelect }: Props
           onClick={() => onSelect(bar)}
         />
       )}
-      <Outline box={{ x: 0, y: 0, width: rect.width, height: rect.height }} selected={selected === bar} hovered={hovered === bar && !!onSelect} label={bar === "top" ? "Top bar" : "Dock"} radius={round} />
+      <Outline box={{ x: 0, y: 0, width: rect.width, height: rect.height }} selected={selected === bar} hovered={hovered === bar && !!onSelect} label={bar === "top" ? "Top bar" : "Dock"} radius={round} below={rect.y < 48} />
     </div>
   );
 

@@ -77,8 +77,8 @@ function EngineChip() {
       <button type="button" onClick={() => go({ page: "settings" })} title={`${label}. Settings`} className="flex min-w-0 flex-1 cursor-default items-center gap-2.5 text-left max-lg:hidden">
         {state === "paused" ? <Pause className="size-2.5 shrink-0 fill-current text-ink" aria-hidden /> : <StatusDot state={state === "running" ? "on" : state === "stopped" ? "off" : "unknown"} />}
         <span className="min-w-0">
-          <span className="block truncate text-[12.5px] font-medium text-ink">{label}</span>
-          {active && state !== "stopped" && <span className="block truncate text-[11.5px] text-ink-3">{active.name}</span>}
+          <span className="block truncate text-[12px] font-medium text-ink">{label}</span>
+          {active && state !== "stopped" && <span className="block truncate text-[12px] text-ink-3">{active.name}</span>}
         </span>
       </button>
       {canPause && config && (

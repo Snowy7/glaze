@@ -126,7 +126,7 @@ function SkinFields({ skin, kind, theme, editable, userSets }: { skin: Autosaved
   return (
     <>
       {userSets > 0 && (
-        <p className="mx-4 mt-4 rounded-lg bg-surface px-3 py-2.5 text-[12.5px] leading-snug text-ink-3 ring-1 ring-line-strong">
+        <p className="mx-4 mt-4 rounded-lg bg-surface px-3 py-2.5 text-[12px] leading-snug text-ink-3 ring-1 ring-line-strong">
           Your own widget look changes {userSets} of these on your desktop, and wins over the theme.
         </p>
       )}

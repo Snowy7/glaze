@@ -42,7 +42,7 @@ export function WidgetCatalog({ installed, counts, onAdd, onBack }: Props) {
                 <li key={widget.id}>
                   <button type="button" onClick={() => onAdd(widget)} className="group flex w-full cursor-default items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface-hi">
                     <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-hi text-ink ring-1 ring-line-strong transition-colors group-hover:bg-surface-top">
-                      <Icon className="size-[18px]" strokeWidth={1.7} aria-hidden />
+                      <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">

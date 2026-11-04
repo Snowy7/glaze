@@ -45,8 +45,8 @@ export function Stage({ screen, children, onBackground, tools, footer, label }: 
 
   return (
     <div className="stage-backdrop relative flex min-h-0 flex-1 flex-col">
-      {tools && <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-2 px-4 pt-3">{tools}</div>}
-      <div ref={area} className={`min-h-0 flex-1 ${tools ? "mt-14" : "mt-6"} mx-6 ${footer ? "mb-3" : "mb-6"} lg:mx-8`}>
+      {tools && <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-2 px-(--gutter) pt-3">{tools}</div>}
+      <div ref={area} className={`mx-(--gutter) min-h-0 flex-1 ${tools ? "mt-14" : "mt-5"} ${footer ? "mb-3" : "mb-5"}`}>
         <div className="grid size-full place-items-center">
           <div
             role="group"
@@ -65,7 +65,7 @@ export function Stage({ screen, children, onBackground, tools, footer, label }: 
           </div>
         </div>
       </div>
-      {footer && <div className="shrink-0 px-6 pb-5 lg:px-8">{footer}</div>}
+      {footer && <div className="shrink-0 px-(--gutter) pb-4">{footer}</div>}
     </div>
   );
 }
@@ -84,7 +84,24 @@ export function WallpaperLayer({ children, selected = false, onSelect }: { child
  * The hover and selection frame around a selectable thing, drawn at a constant screen width
  * whatever the stage's scale. `box` null: the whole stage.
  */
-export function Outline({ box, selected, hovered = false, label, radius = 0, inset = false }: { box: Box | null; selected: boolean; hovered?: boolean; label?: string; radius?: number; inset?: boolean }) {
+export function Outline({
+  box,
+  selected,
+  hovered = false,
+  label,
+  radius = 0,
+  inset = false,
+  below = false,
+}: {
+  box: Box | null;
+  selected: boolean;
+  hovered?: boolean;
+  label?: string;
+  radius?: number;
+  inset?: boolean;
+  /** The name tag under the frame instead of over it (for things at the screen's top edge). */
+  below?: boolean;
+}) {
   const k = useStageScale();
   if (!selected && !hovered) return null;
   const pad = inset ? 0 : 3 / k;
@@ -103,7 +120,7 @@ export function Outline({ box, selected, hovered = false, label, radius = 0, ins
       {selected && label && (
         <span
           className="absolute left-0 rounded bg-white font-sans font-semibold whitespace-nowrap text-black shadow"
-          style={{ bottom: `calc(100% + ${6 / k}px)`, fontSize: 11 / k, lineHeight: 1, padding: `${4 / k}px ${6 / k}px`, borderRadius: 4 / k }}
+          style={{ [below ? "top" : "bottom"]: `calc(100% + ${6 / k}px)`, fontSize: 11 / k, lineHeight: 1, padding: `${4 / k}px ${6 / k}px`, borderRadius: 4 / k }}
         >
           {label}
         </span>

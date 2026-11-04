@@ -62,9 +62,9 @@ function SourcePicker({ error, onChoose }: { error: string | null; onChoose: (fi
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-12 lg:py-16">
+    <div className="min-h-0 flex-1 overflow-y-auto px-(--gutter) py-12 lg:py-16">
       <div className="mx-auto max-w-3xl">
-        <h2 className="font-display text-[26px] leading-tight font-semibold tracking-tight text-ink">What should be on your desktop?</h2>
+        <h2 className="font-display text-[24px] leading-tight font-semibold tracking-tight text-ink">What should be on your desktop?</h2>
         <p className="mt-1.5 text-[14px] text-ink-3">Anything below becomes a theme you can use, edit and share.</p>
         <div className="mt-8 grid gap-3 sm:grid-cols-2">
           <SourceTile icon={File} title="A picture or video" detail="Also shaders (.wgsl) and 3D scenes (.glb, .gltf)" onClick={() => onChoose(picked(pickMedia))} />
@@ -80,7 +80,7 @@ function SourcePicker({ error, onChoose }: { error: string | null; onChoose: (fi
                 Use this page
               </Button>
             </div>
-            <p className="mt-2.5 text-[12.5px] text-ink-3">
+            <p className="mt-2.5 text-[12px] text-ink-3">
               Or{" "}
               <button type="button" onClick={() => onChoose(picked(pickHtml))} className="cursor-default text-ink underline decoration-line-hi underline-offset-2 hover:decoration-ink">
                 choose an .html file
@@ -95,7 +95,7 @@ function SourcePicker({ error, onChoose }: { error: string | null; onChoose: (fi
             {error}
           </p>
         )}
-        <ul className="mt-10 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-5 text-[12.5px] text-ink-3">
+        <ul className="mt-10 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-5 text-[12px] text-ink-3">
           {Object.values(KINDS).map(({ label, icon: Icon }) => (
             <li key={label} className="flex items-center gap-1.5">
               <Icon className="size-3.5" aria-hidden />
@@ -117,11 +117,11 @@ function SourceTile({ icon: Icon, title, detail, expanded, onClick }: { icon: Lu
       className="group flex cursor-default items-center gap-4 rounded-xl bg-surface p-5 text-left ring-1 ring-line-strong transition duration-150 hover:bg-surface-hi hover:ring-line-hi active:scale-[0.99] aria-expanded:bg-surface-hi aria-expanded:ring-line-hi"
     >
       <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-surface-hi text-ink-2 ring-1 ring-line-strong transition-colors group-hover:bg-surface-top group-hover:text-ink">
-        <Icon className="size-[22px]" strokeWidth={1.6} aria-hidden />
+        <Icon className="size-[22px]" strokeWidth={1.75} aria-hidden />
       </span>
       <span className="min-w-0">
-        <span className="block text-[14.5px] font-semibold text-ink">{title}</span>
-        <span className="mt-0.5 block text-[12.5px] leading-snug text-ink-3">{detail}</span>
+        <span className="block text-[14px] font-semibold text-ink">{title}</span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-ink-3">{detail}</span>
       </span>
     </button>
   );
@@ -156,14 +156,14 @@ function Details({ source, onChangeSource }: { source: SourceInfo; onChangeSourc
       }
       inspector={
         <Inspector label="New theme">
-          <InspectorHeader icon={kind.icon} title={`${kind.label} theme`} detail={<span className="selectable font-mono text-[11.5px]">{source.source}</span>} />
+          <InspectorHeader icon={kind.icon} title={`${kind.label} theme`} detail={<span className="selectable font-mono text-[12px]">{source.source}</span>} />
           <InspectorSection>
             <Prop label="Name" stacked>
               <TextInput compact aria-label="Name" value={name} maxLength={60} onChange={(e) => setName(e.currentTarget.value)} className="w-full" />
             </Prop>
             {source.usesFit && (
               <Prop label="On the screen" stacked hint={FITS.find((f) => f.value === fit)?.hint}>
-                <TilePicker<Fit> label="How it fills the screen" value={fit} options={fitTiles} onChange={setFit} min="4.5rem" />
+                <TilePicker<Fit> label="How it fills the screen" value={fit} options={fitTiles} onChange={setFit} columns={4} />
               </Prop>
             )}
             {source.kind === "app" && (

@@ -129,7 +129,7 @@ export function WidgetInspector({ item, widget, grid, placements, model, themeLo
       )}
       {elsewhere.length > 0 && (
         <InspectorSection title="On the desktop">
-          <p className="text-[12.5px] leading-relaxed text-ink-3">{elsewhere.map((s) => s.label).join(", ")}: set these on the desktop, where you can pick files and edit lists.</p>
+          <p className="text-[12px] leading-relaxed text-ink-3">{elsewhere.map((s) => s.label).join(", ")}: set these on the desktop, where you can pick files and edit lists.</p>
           <Button size="sm" icon={MousePointerClick} className="self-start" onClick={onEditOnDesktop}>
             Edit on desktop
           </Button>

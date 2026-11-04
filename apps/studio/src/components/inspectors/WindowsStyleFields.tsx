@@ -9,7 +9,7 @@ import { ColorField, IconButton, InspectorSection, More, Prop, Segmented, Select
 
 export const NO_STYLE: WindowsStyle = { accent: null, border: null, caption: null, caption_text: null, corners: null, backdrop: null, dark_mode: null, cursors: null };
 
-const LOOK_IDS = ["as-is", "wallpaper", "dark", "light", "sharp"] as const;
+const LOOK_IDS = ["as-is", "wallpaper", "dark", "light", "glass", "sharp"] as const;
 type LookId = (typeof LOOK_IDS)[number];
 
 /** One-click looks. Each sets the fields it names and leaves the pointer alone. */
@@ -18,6 +18,7 @@ const LOOKS: Record<LookId, { label: string; hint: string; style: Omit<WindowsSt
   wallpaper: { label: "Wallpaper", hint: "Accent and borders from the wallpaper", style: { ...NO_STYLE, accent: "auto", border: "auto" } },
   dark: { label: "Dark", hint: "Dark apps, Mica, round corners", style: { ...NO_STYLE, accent: "auto", dark_mode: true, backdrop: "mica", corners: "round" } },
   light: { label: "Light", hint: "Light apps, Mica, round corners", style: { ...NO_STYLE, accent: "auto", dark_mode: false, backdrop: "mica", corners: "round" } },
+  glass: { label: "Glass", hint: "Dark apps, Acrylic, wallpaper borders", style: { ...NO_STYLE, accent: "auto", border: "auto", dark_mode: true, backdrop: "acrylic", corners: "round" } },
   sharp: { label: "Sharp", hint: "Square corners, no material, wallpaper borders", style: { ...NO_STYLE, dark_mode: true, corners: "square", backdrop: "none", border: "auto" } },
 };
 
@@ -60,7 +61,7 @@ export function WindowsStyleFields({ style, onChange, disabled = false }: Props)
           value={lookOf(style)}
           options={LOOK_IDS.map((id): Tile<LookId> => ({ value: id, label: LOOKS[id].label, hint: LOOKS[id].hint, preview: <MiniWindow style={{ ...LOOKS[id].style, cursors: null }} /> }))}
           onChange={(id) => !disabled && onChange({ ...LOOKS[id].style, cursors: style.cursors }, `Use the ${LOOKS[id].label.toLowerCase()} look`)}
-          min="4.4rem"
+          columns={3}
         />
         <Prop id="windows.accent" label="Accent color" onReset={reset("accent", "accent color")} stacked>
           <PaintChoice label="Accent color" value={style.accent} auto onChange={(v) => set("accent", v, "Change accent color")} />
@@ -79,11 +80,12 @@ export function WindowsStyleFields({ style, onChange, disabled = false }: Props)
             onChange={(v) => set("dark_mode", v === "as-is" ? null : v === "dark", "Change light or dark")}
           />
         </Prop>
-        <Prop id="windows.corners" label="Corners" onReset={reset("corners", "corners")}>
+        <Prop id="windows.corners" label="Corners" onReset={reset("corners", "corners")} stacked>
           <Segmented<Corners | "as-is">
             label="Window corners"
             hideLabel
             size="sm"
+            className="w-full"
             value={style.corners === null || style.corners === "default" ? "as-is" : style.corners}
             options={CORNER_OPTIONS}
             onChange={(v) => set("corners", v === "as-is" ? null : v, "Change corners")}
@@ -163,7 +165,7 @@ function PointerPicker({ value, onChange }: { value: string | null; onChange: (v
         value={chosen}
         options={[tile("as-is", "As is", "Windows' own pointer"), tile("mypaper-dark", "Dark", "A dark pointer with a white edge"), tile("mypaper-light", "Light", "A light pointer with a dark edge"), tile("other", "Other", "A set of your own")]}
         onChange={(next) => void pick(next)}
-        min="4.4rem"
+        columns={4}
         aspect="aspect-square"
       />
       {chosen === "other" && value !== null && (

@@ -73,7 +73,7 @@ export function Widgets() {
         </Button>
       </PageBar>
       {model.error && (
-        <div className="px-5 pt-4">
+        <div className="px-(--gutter) pt-4">
           <Banner>
             <span>Your widget layout can't be read: {model.error}. Studio won't change it until it's fixed.</span>
           </Banner>

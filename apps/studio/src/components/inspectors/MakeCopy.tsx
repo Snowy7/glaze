@@ -13,7 +13,7 @@ export function MakeCopy({ theme, apply, onCopied }: { theme: ThemeEntry; apply:
   return (
     <div className="mx-4 mt-4 rounded-lg bg-surface p-3.5 ring-1 ring-line-strong">
       <p className="text-[13px] font-medium text-ink">{theme.origin === "bundled" ? `${theme.name} is built in` : `${theme.name} is outside your themes`}</p>
-      <p className="mt-0.5 text-[12.5px] leading-snug text-ink-3">Make your own copy to change it. The original stays as it is.</p>
+      <p className="mt-0.5 text-[12px] leading-snug text-ink-3">Make your own copy to change it. The original stays as it is.</p>
       <Button
         size="sm"
         variant="primary"

@@ -20,6 +20,9 @@ const SURFACES: readonly { value: Surface; label: string; hint: string }[] = [
   { value: "solid", label: "Solid", hint: "A flat color" },
 ];
 
+/** Sliders sit beside their label, at one width so their tracks line up. */
+const SLIDER = "w-[10.5rem] 2xl:w-[13rem]";
+
 const TONES: readonly { value: TextTone; label: string }[] = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
@@ -60,7 +63,8 @@ export function LookFields({ target, value, below = [], belowLabel = "Theme", on
               value={shown.style}
               options={WIDGET_STYLES.map((style) => ({ value: style, label: STYLE_INFO[style].label, hint: STYLE_INFO[style].hint, preview: <Sample look={{ ...shown, style, surface: shown.surface === "none" ? "glass" : shown.surface }} /> }))}
               onChange={(style) => set("style", style, "Change style")}
-              min="4.6rem"
+              columns={5}
+              aspect="aspect-square"
             />
           </Prop>
         )}
@@ -70,7 +74,7 @@ export function LookFields({ target, value, below = [], belowLabel = "Theme", on
             value={shown.surface}
             options={SURFACES.map((surface): Tile<Surface> => ({ value: surface.value, label: surface.label, hint: surface.hint, preview: <Sample look={{ ...shown, surface: surface.value }} /> }))}
             onChange={(surface) => set("surface", surface, "Change surface")}
-            min="5rem"
+            columns={3}
             aspect="aspect-[5/3]"
           />
         </Prop>
@@ -82,15 +86,15 @@ export function LookFields({ target, value, below = [], belowLabel = "Theme", on
         {shown.surface === "glass" && (
           <>
             <Prop {...prop("opacity")} label="Opacity">
-              <Slider className="w-full" label="Opacity" value={shown.opacity} min={0} max={1} step={0.01} {...units.percent} onChange={(v) => set("opacity", v, "Change opacity")} />
+              <Slider className={SLIDER} label="Opacity" value={shown.opacity} min={0} max={1} step={0.01} {...units.percent} onChange={(v) => set("opacity", v, "Change opacity")} />
             </Prop>
             <Prop {...prop("blur")} label="Blur">
-              <Slider className="w-full" label="Blur" value={shown.blur} min={0} max={64} {...units.px} onChange={(v) => set("blur", v, "Change blur")} />
+              <Slider className={SLIDER} label="Blur" value={shown.blur} min={0} max={64} {...units.px} onChange={(v) => set("blur", v, "Change blur")} />
             </Prop>
           </>
         )}
         <Prop {...prop("radius")} label="Corners">
-          <Slider className="w-full" label="Corner radius" value={shown.radius} min={0} max={48} {...units.px} onChange={(v) => set("radius", v, "Change corners")} />
+          <Slider className={SLIDER} label="Corner radius" value={shown.radius} min={0} max={48} {...units.px} onChange={(v) => set("radius", v, "Change corners")} />
         </Prop>
       </InspectorSection>
       <More>
@@ -104,7 +108,7 @@ export function LookFields({ target, value, below = [], belowLabel = "Theme", on
           <Combobox label="Font" className="w-full" value={shown.font} options={FONT_PRESETS.map((p) => ({ value: p.value, label: p.label }))} placeholder="Segoe UI Variable" onChange={(v) => set("font", v, "Change font")} />
         </Prop>
         <Prop {...prop("scale")} label="Size">
-          <Slider className="w-full" label="Size" value={shown.scale} min={0.5} max={2} step={0.05} {...units.times} onChange={(v) => set("scale", v, "Change size")} />
+          <Slider className={SLIDER} label="Size" value={shown.scale} min={0.5} max={2} step={0.05} {...units.times} onChange={(v) => set("scale", v, "Change size")} />
         </Prop>
         {shown.surface !== "none" && (
           <Prop {...prop("border")} label="Edge line">
@@ -144,9 +148,9 @@ export function Sample({ look }: { look: Resolved }) {
   return (
     <span className="ap-stage absolute inset-0" data-wallpaper="dark">
       <span className="ap-root absolute inset-0 grid place-items-center" {...appearanceData(look)} style={appearanceVars(look)}>
-        <span className="ap-surface block w-[74%] px-2 py-1.5">
-          <span className="block text-[14px] leading-none font-light tabular-nums">10:42</span>
-          <span className="mt-1.5 block h-1 overflow-hidden rounded-full" style={{ background: "var(--fill-2)" }}>
+        <span className="ap-surface block w-[78%] px-1.5 py-1.5">
+          <span className="block text-[12px] leading-none font-light tabular-nums">10:42</span>
+          <span className="mt-1 block h-[3px] overflow-hidden rounded-full" style={{ background: "var(--fill-2)" }}>
             <span className="block h-full w-3/5 rounded-full" style={{ background: "var(--accent)" }} />
           </span>
         </span>

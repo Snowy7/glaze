@@ -158,7 +158,7 @@ export function WidgetsLayer({ grid, items, installed, below, theme, selected, o
                 onClick={(e) => e.detail === 0 && onSelect(item.instance)}
               />
             )}
-            <Outline box={{ x: 0, y: 0, width: box.width, height: box.height }} selected={isSelected && !own} hovered={hovered === item.instance && !drag && !!onSelect} label={widget?.name ?? item.widget} radius={look.radius} />
+            <Outline box={{ x: 0, y: 0, width: box.width, height: box.height }} selected={isSelected && !own} hovered={hovered === item.instance && !drag && !!onSelect} label={widget?.name ?? item.widget} radius={look.radius} below={box.y < 48} />
             {isSelected && onPlace && widget?.resizable !== false && !own && (
               <span
                 role="presentation"
