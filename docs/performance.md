@@ -131,7 +131,11 @@ start a layered window paints those parts in the bar's current look (the page's 
 the tint at its opacity, rounded like the page) over the wallpaper backdrop
 (`%LOCALAPPDATA%\mypaper\backdrop\<DISPLAYn>.bmp`) when one exists. It goes up as soon as the host
 knows the look, before the bars reserve their space, and goes away once the page has painted
-(the paint probe) and set its region, or after 15 s. A stand-in only appears where the bar will
+(the paint probe) and set its region, or after 15 s. Paint and layout are tracked separately for
+each bar on each monitor, in either arrival order. An empty region is a completed layout too:
+auto-hiding docks initially draw nothing, so their stand-ins must go when those pages paint.
+The empty initial shape is cached, so the next start does not show a dock that starts hidden.
+A stand-in only appears where the bar will
 land (same monitor, scale and window rect) and never on a monitor with a fullscreen app.
 Bars on screen, warm: **1455 → 152–173 ms** (`bars`), **1590 → 207–224 ms** (`full`). The
 first version
