@@ -151,8 +151,8 @@ impl Art {
                 let mut pixel = [0u8; 4];
                 if alpha > 0.0 {
                     for c in 0..3 {
-                        let premultiplied =
-                            f32::from(fill[c]) * fill_a + f32::from(edge[c]) * edge_a * (1.0 - fill_a);
+                        let premultiplied = f32::from(fill[c]) * fill_a
+                            + f32::from(edge[c]) * edge_a * (1.0 - fill_a);
                         pixel[2 - c] = (premultiplied / alpha).round().clamp(0.0, 255.0) as u8;
                     }
                     pixel[3] = (alpha * 255.0).round() as u8;
@@ -185,7 +185,10 @@ fn rotate(p: P, degrees: f32) -> P {
 }
 
 fn rotated(shapes: &[Prim], degrees: f32) -> Vec<Prim> {
-    shapes.iter().map(|s| s.map(|p| rotate(p, degrees))).collect()
+    shapes
+        .iter()
+        .map(|s| s.map(|p| rotate(p, degrees)))
+        .collect()
 }
 
 /// The pointer, `scale` times its size around the tip at (3, 2).
@@ -263,11 +266,15 @@ fn pin_badge() -> Vec<Prim> {
 fn spinner(center: P, radius: f32, count: usize, head: usize, big: f32, small: f32) -> Vec<Prim> {
     (0..count)
         .map(|i| {
-            let angle = (i as f32 / count as f32) * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
+            let angle =
+                (i as f32 / count as f32) * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
             let age = (head + count - i) % count;
             let r = big - (big - small) * age as f32 / (count - 1) as f32;
             Prim::Disc(
-                (center.0 + radius * angle.cos(), center.1 + radius * angle.sin()),
+                (
+                    center.0 + radius * angle.cos(),
+                    center.1 + radius * angle.sin(),
+                ),
                 r,
             )
         })
@@ -576,9 +583,22 @@ mod tests {
                 file
             };
             for (size, (hx, hy), image) in read_cur(&first_cur) {
-                assert!(u32::from(hx) < size && u32::from(hy) < size, "{}", role.value);
-                let visible = image.as_chunks::<4>().0.iter().filter(|px| px[3] > 0).count();
-                assert!(visible > 40, "{} draws almost nothing at {size}px", role.value);
+                assert!(
+                    u32::from(hx) < size && u32::from(hy) < size,
+                    "{}",
+                    role.value
+                );
+                let visible = image
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .filter(|px| px[3] > 0)
+                    .count();
+                assert!(
+                    visible > 40,
+                    "{} draws almost nothing at {size}px",
+                    role.value
+                );
             }
         }
     }

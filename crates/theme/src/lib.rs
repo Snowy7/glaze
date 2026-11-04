@@ -408,8 +408,8 @@ pub struct SceneWallpaper {
     /// Background / clear color, as linear RGB 0..1.
     #[serde(default = "default_background")]
     pub background: [f32; 3],
-    /// Drag with the left button over the bare desktop to orbit the camera,
-    /// scroll to zoom. Off by default: no input is read at all.
+    /// Drag with the left button over the bare desktop to orbit the camera.
+    /// Off by default: no input is read at all.
     #[serde(default)]
     pub interactive: bool,
 }
@@ -668,12 +668,20 @@ mod tests {
             Wallpaper::Scene(s) => s.interactive,
             other => panic!("unexpected {other:?}"),
         };
-        assert!(!interactive(r#"{ "kind": "web", "url": "https://example.com" }"#));
-        assert!(interactive(r#"{ "kind": "web", "url": "a.html", "interactive": true }"#));
+        assert!(!interactive(
+            r#"{ "kind": "web", "url": "https://example.com" }"#
+        ));
+        assert!(interactive(
+            r#"{ "kind": "web", "url": "a.html", "interactive": true }"#
+        ));
         assert!(!interactive(r#"{ "kind": "scene", "source": "a.glb" }"#));
-        assert!(interactive(r#"{ "kind": "scene", "source": "a.glb", "interactive": true }"#));
+        assert!(interactive(
+            r#"{ "kind": "scene", "source": "a.glb", "interactive": true }"#
+        ));
         // Kinds that cannot use input reject the field, like any other typo.
-        assert!(wallpaper(r#"{ "kind": "shader", "source": "a.wgsl", "interactive": true }"#).is_err());
+        assert!(
+            wallpaper(r#"{ "kind": "shader", "source": "a.wgsl", "interactive": true }"#).is_err()
+        );
         assert!(wallpaper(r#"{ "kind": "web", "url": "a.html", "interactive": "yes" }"#).is_err());
     }
 
@@ -686,8 +694,14 @@ mod tests {
             );
             parse(&json).map(|t| t.theme.windows.unwrap().cursors)
         };
-        assert_eq!(cursors(r#""mypaper-dark""#).unwrap().as_deref(), Some("mypaper-dark"));
-        assert_eq!(cursors(r#""cursors\\mine""#).unwrap().as_deref(), Some(r"cursors\mine"));
+        assert_eq!(
+            cursors(r#""mypaper-dark""#).unwrap().as_deref(),
+            Some("mypaper-dark")
+        );
+        assert_eq!(
+            cursors(r#""cursors\\mine""#).unwrap().as_deref(),
+            Some(r"cursors\mine")
+        );
         assert!(cursors(r#""""#).is_err());
         assert!(cursors("3").is_err());
         let unset = r#"{ "name": "A", "wallpaper": { "kind": "image", "source": "x.jpg" }, "windows": {} }"#;

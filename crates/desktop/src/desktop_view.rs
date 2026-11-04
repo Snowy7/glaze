@@ -16,22 +16,22 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use windows::Win32::Foundation::{HWND, POINT, PROPERTYKEY};
+use windows::Win32::Storage::EnhancedStorage::{
+    PKEY_DateModified, PKEY_ItemNameDisplay, PKEY_ItemTypeText, PKEY_Size,
+};
 use windows::Win32::System::Com::{
     CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemFree,
     CoUninitialize, IServiceProvider,
 };
-use windows::Win32::UI::Shell::Common::ITEMIDLIST;
-use windows::Win32::Storage::EnhancedStorage::{
-    PKEY_DateModified, PKEY_ItemNameDisplay, PKEY_ItemTypeText, PKEY_Size,
-};
 use windows::Win32::System::Variant::{VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_I4};
+use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
-    CMF_NORMAL, CMINVOKECOMMANDINFO, FOLDERID_Desktop, FVM_ICON, FWF_NOICONS,
-    IContextMenu, IFolderView2, IShellBrowser, IShellView, IShellWindows, ILFindLastID,
-    KF_FLAG_DEFAULT, SHChangeNotify, SHCNE_CREATE, SHCNE_MKDIR, SHCNF_FLUSH, SHCNF_PATHW,
-    SHGetKnownFolderPath, SHParseDisplayName, SID_STopLevelBrowser, SORT_ASCENDING,
-    SORT_DESCENDING, SORTCOLUMN, SVGIO_ALLVIEW, SVGIO_BACKGROUND, SVSI_DESELECTOTHERS, SVSI_EDIT,
-    SVSI_ENSUREVISIBLE, SVSI_FOCUSED, SVSI_SELECT, ShellWindows, SWC_DESKTOP, SWFO_NEEDDISPATCH,
+    CMF_NORMAL, CMINVOKECOMMANDINFO, FOLDERID_Desktop, FVM_ICON, FWF_NOICONS, IContextMenu,
+    IFolderView2, ILFindLastID, IShellBrowser, IShellView, IShellWindows, KF_FLAG_DEFAULT,
+    SHCNE_CREATE, SHCNE_MKDIR, SHCNF_FLUSH, SHCNF_PATHW, SHChangeNotify, SHGetKnownFolderPath,
+    SHParseDisplayName, SID_STopLevelBrowser, SORT_ASCENDING, SORT_DESCENDING, SORTCOLUMN,
+    SVGIO_ALLVIEW, SVGIO_BACKGROUND, SVSI_DESELECTOTHERS, SVSI_EDIT, SVSI_ENSUREVISIBLE,
+    SVSI_FOCUSED, SVSI_SELECT, SWC_DESKTOP, SWFO_NEEDDISPATCH, ShellWindows,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreatePopupMenu, DestroyMenu, GetDesktopWindow, SW_SHOWNORMAL,
@@ -178,8 +178,8 @@ impl DesktopView {
         let com = Com::init();
         // SAFETY: documented COM calls on interfaces we own, in the apartment `Com` set up.
         unsafe {
-            let windows: IShellWindows = CoCreateInstance(&ShellWindows, None, CLSCTX_ALL)
-                .context("IShellWindows")?;
+            let windows: IShellWindows =
+                CoCreateInstance(&ShellWindows, None, CLSCTX_ALL).context("IShellWindows")?;
             let mut hwnd = 0i32;
             let desktop = windows
                 .FindWindowSW(
@@ -194,7 +194,9 @@ impl DesktopView {
             let browser: IShellBrowser = provider
                 .QueryService(&SID_STopLevelBrowser)
                 .context("the desktop's IShellBrowser")?;
-            let view = browser.QueryActiveShellView().context("the desktop's shell view")?;
+            let view = browser
+                .QueryActiveShellView()
+                .context("the desktop's shell view")?;
             let folder: IFolderView2 = view.cast().context("IFolderView2")?;
             Ok(Self {
                 view,
@@ -226,14 +228,19 @@ impl DesktopView {
             }
             let mut column = [SORTCOLUMN::default()];
             self.folder.GetSortColumns(&mut column)?;
-            Ok(SortKey::of(&column[0].propkey).map(|key| (key, column[0].direction == SORT_ASCENDING)))
+            Ok(SortKey::of(&column[0].propkey)
+                .map(|key| (key, column[0].direction == SORT_ASCENDING)))
         }
     }
 
     pub fn set_sort(&self, key: SortKey, ascending: bool) -> Result<()> {
         let column = SORTCOLUMN {
             propkey: key.property(),
-            direction: if ascending { SORT_ASCENDING } else { SORT_DESCENDING },
+            direction: if ascending {
+                SORT_ASCENDING
+            } else {
+                SORT_DESCENDING
+            },
         };
         // SAFETY: plain COM call with a one-element slice.
         Ok(unsafe { self.folder.SetSortColumns(&[column]) }?)
@@ -273,7 +280,9 @@ impl DesktopView {
             let _ = windows::Win32::Graphics::Gdi::ClientToScreen(hwnd, &mut origin);
             let mut rects = Vec::with_capacity(count.max(0) as usize);
             for index in 0..count {
-                let Ok(id) = self.folder.Item(index) else { continue };
+                let Ok(id) = self.folder.Item(index) else {
+                    continue;
+                };
                 let position = self.folder.GetItemPosition(id);
                 CoTaskMemFree(Some(id.cast()));
                 if let Ok(p) = position {
@@ -310,12 +319,23 @@ impl DesktopView {
         // SAFETY: `wide` is a NUL-terminated path that outlives the calls; the flush makes the
         // view learn of the item before we select it. The ID list is freed after use.
         unsafe {
-            SHChangeNotify(event, SHCNF_PATHW | SHCNF_FLUSH, Some(wide.as_ptr().cast()), None);
+            SHChangeNotify(
+                event,
+                SHCNF_PATHW | SHCNF_FLUSH,
+                Some(wide.as_ptr().cast()),
+                None,
+            );
             let mut id: *mut ITEMIDLIST = std::ptr::null_mut();
             SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &mut id, 0, None)?;
-            let flags = [SVSI_EDIT, SVSI_SELECT, SVSI_ENSUREVISIBLE, SVSI_FOCUSED, SVSI_DESELECTOTHERS]
-                .iter()
-                .fold(0u32, |all, flag| all | flag.0 as u32);
+            let flags = [
+                SVSI_EDIT,
+                SVSI_SELECT,
+                SVSI_ENSUREVISIBLE,
+                SVSI_FOCUSED,
+                SVSI_DESELECTOTHERS,
+            ]
+            .iter()
+            .fold(0u32, |all, flag| all | flag.0 as u32);
             let selected = self.view.SelectItem(ILFindLastID(id), flags);
             CoTaskMemFree(Some(id.cast()));
             selected?;
@@ -335,7 +355,8 @@ impl DesktopView {
                 .context("the desktop's background menu")?;
             let hmenu = CreatePopupMenu()?;
             let result = (|| -> Result<()> {
-                menu.QueryContextMenu(hmenu, 0, 1, 0x7FFF, CMF_NORMAL).ok()?;
+                menu.QueryContextMenu(hmenu, 0, 1, 0x7FFF, CMF_NORMAL)
+                    .ok()?;
                 let verb = c"paste";
                 let info = CMINVOKECOMMANDINFO {
                     cbSize: size_of::<CMINVOKECOMMANDINFO>() as u32,
@@ -358,6 +379,15 @@ impl DesktopView {
         // SAFETY: plain COM call.
         Ok(unsafe { self.view.GetWindow() }?)
     }
+}
+
+/// Is a desktop icon at the screen point? Reads the icons from the desktop's folder view (a COM
+/// call to Explorer: milliseconds, so ask on a button press, not on every move). `false` when
+/// Explorer does not say.
+pub fn on_icon(at: (i32, i32)) -> bool {
+    DesktopView::open()
+        .and_then(|view| view.icon_rects())
+        .is_ok_and(|rects| crate::desktop_hit::IconMap::new(rects).hit(at.0, at.1))
 }
 
 /// The user's Desktop folder (honours OneDrive redirection).
@@ -398,7 +428,10 @@ mod tests {
         for key in SortKey::ALL {
             assert_eq!(SortKey::of(&key.property()), Some(key));
         }
-        let unknown = PROPERTYKEY { fmtid: windows::core::GUID::zeroed(), pid: 1 };
+        let unknown = PROPERTYKEY {
+            fmtid: windows::core::GUID::zeroed(),
+            pid: 1,
+        };
         assert_eq!(SortKey::of(&unknown), None);
     }
 
@@ -406,13 +439,20 @@ mod tests {
     fn new_items_get_the_first_free_name_like_explorer() {
         let taken = |names: &'static [&'static str]| move |n: &str| names.contains(&n);
         assert_eq!(unique_name("New folder", "", taken(&[])), "New folder");
-        assert_eq!(unique_name("New folder", "", taken(&["New folder"])), "New folder (2)");
+        assert_eq!(
+            unique_name("New folder", "", taken(&["New folder"])),
+            "New folder (2)"
+        );
         assert_eq!(
             unique_name("New folder", "", taken(&["New folder", "New folder (2)"])),
             "New folder (3)"
         );
         assert_eq!(
-            unique_name("New Text Document", ".txt", taken(&["New Text Document.txt"])),
+            unique_name(
+                "New Text Document",
+                ".txt",
+                taken(&["New Text Document.txt"])
+            ),
             "New Text Document (2).txt"
         );
     }

@@ -30,6 +30,7 @@ use std::thread::JoinHandle;
 use anyhow::{Context, Result, anyhow};
 use mypaper_config::DesktopMenu as MenuConfig;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
@@ -48,24 +49,23 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEINPUT, SendInput, VK_SHIFT,
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
-use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, GetMessageW,
-    HHOOK, KillTimer, LLMHF_INJECTED, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE, PeekMessageW,
-    PostThreadMessageW, SW_SHOWNORMAL, SetCursorPos, SetTimer, SetWindowsHookExW,
-    TranslateMessage, UnhookWindowsHookEx, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT,
-    WINEVENT_SKIPOWNPROCESS, WM_APP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MOUSEMOVE,
-    WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_TIMER, WM_XBUTTONDOWN,
+    CallNextHookEx, DispatchMessageW, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
+    GetMessageW, HHOOK, KillTimer, LLMHF_INJECTED, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE, PeekMessageW,
+    PostThreadMessageW, SW_SHOWNORMAL, SetCursorPos, SetTimer, SetWindowsHookExW, TranslateMessage,
+    UnhookWindowsHookEx, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_APP,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MOUSEMOVE, WM_QUIT, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_TIMER, WM_XBUTTONDOWN,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
-pub use crate::menu_ui::Look;
 use crate::control::ControlWindow;
 use crate::desktop_hit::{self, Click, Edge, IconMap, Swallower, Under, Verdict};
 use crate::desktop_view::{self, Com, DesktopView, SortKey};
 use crate::fullscreen_app_in_front;
 use crate::hold::Fact;
 use crate::menu_model::{self, Command, ViewState};
+pub use crate::menu_ui::Look;
 use crate::{menu_ui, monitors};
 
 /// Everything the menu takes from the config and the theme. Replaced as a whole
@@ -264,7 +264,9 @@ impl HookThread {
             .name("desktop-menu-hook".into())
             .spawn(move || hook_main(tx))
             .context("spawning the mouse hook thread")?;
-        let thread_id = rx.recv().context("the mouse hook thread died while starting")?;
+        let thread_id = rx
+            .recv()
+            .context("the mouse hook thread died while starting")?;
         Ok(Self {
             thread_id,
             thread: Some(thread),
@@ -275,7 +277,12 @@ impl HookThread {
     fn set(&self, installed: bool) {
         // SAFETY: posting to a thread id is always safe.
         let _ = unsafe {
-            PostThreadMessageW(self.thread_id, WM_HOOK_SET, WPARAM(usize::from(installed)), LPARAM(0))
+            PostThreadMessageW(
+                self.thread_id,
+                WM_HOOK_SET,
+                WPARAM(usize::from(installed)),
+                LPARAM(0),
+            )
         };
     }
 }
@@ -351,7 +358,9 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                 kind = 2;
                 swallow = on_right_button(message == WM_RBUTTONDOWN, lparam);
             }
-            WM_LBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN if MENU_OPEN.load(Ordering::Relaxed) => {
+            WM_LBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+                if MENU_OPEN.load(Ordering::Relaxed) =>
+            {
                 // SAFETY: for a low-level mouse hook, lparam points at an MSLLHOOKSTRUCT.
                 let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
                 post(WM_OUTSIDE, pack(info.pt.x, info.pt.y));
@@ -434,7 +443,10 @@ fn pack(x: i32, y: i32) -> isize {
 }
 
 fn unpack(lparam: LPARAM) -> (i32, i32) {
-    (i32::from(lparam.0 as i16), i32::from((lparam.0 >> 16) as i16))
+    (
+        i32::from(lparam.0 as i16),
+        i32::from((lparam.0 >> 16) as i16),
+    )
 }
 
 // --- the menu thread ------------------------------------------------------------------------
@@ -509,12 +521,32 @@ fn watch_foreground() -> Vec<HWINEVENTHOOK> {
     let flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
     // SAFETY: out-of-context hook with a 'static callback; events arrive through this thread's loop.
     let hook = unsafe {
-        SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, None, Some(on_foreground), 0, 0, flags)
+        SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_MINIMIZEEND,
+            None,
+            Some(on_foreground),
+            0,
+            0,
+            flags,
+        )
     };
-    if hook.is_invalid() { Vec::new() } else { vec![hook] }
+    if hook.is_invalid() {
+        Vec::new()
+    } else {
+        vec![hook]
+    }
 }
 
-unsafe extern "system" fn on_foreground(_: HWINEVENTHOOK, _: u32, _: HWND, object: i32, child: i32, _: u32, _: u32) {
+unsafe extern "system" fn on_foreground(
+    _: HWINEVENTHOOK,
+    _: u32,
+    _: HWND,
+    object: i32,
+    child: i32,
+    _: u32,
+    _: u32,
+) {
     // Only whole windows count; carets and cursors fire constantly.
     if object == 0 && child == 0 && !RECHECK_QUEUED.swap(true, Ordering::Relaxed) {
         post(WM_RECHECK, 0);
@@ -524,7 +556,9 @@ unsafe extern "system" fn on_foreground(_: HWINEVENTHOOK, _: u32, _: HWND, objec
 impl Host {
     fn new(settings: Arc<Mutex<Settings>>, on_app: Box<dyn Fn(AppAction)>) -> Result<Self> {
         let uia = create_uia()
-            .inspect_err(|e| log::warn!("desktop menu: no UI Automation, trusting the icon cache: {e:#}"))
+            .inspect_err(|e| {
+                log::warn!("desktop menu: no UI Automation, trusting the icon cache: {e:#}")
+            })
             .ok();
         menu_ui::install(command_sink())?;
         Ok(Self {
@@ -554,7 +588,9 @@ impl Host {
                     if pending.bare {
                         self.show(pending.at);
                     } else {
-                        log::debug!("desktop menu: stale icon cache; replaying the click to the desktop");
+                        log::debug!(
+                            "desktop menu: stale icon cache; replaying the click to the desktop"
+                        );
                         replay_right_click(pending.at);
                         self.refresh_icons();
                     }
@@ -653,7 +689,10 @@ impl Host {
             uia.ElementFromPoint(POINT { x: at.0, y: at.1 })
                 .and_then(|element| element.CurrentControlType())
         };
-        log::debug!("desktop menu: UI Automation answered in {:?}", started.elapsed());
+        log::debug!(
+            "desktop menu: UI Automation answered in {:?}",
+            started.elapsed()
+        );
         match verdict {
             Ok(kind) => kind != UIA_ListItemControlTypeId,
             Err(e) => {
@@ -766,9 +805,17 @@ fn monitor_at(at: (i32, i32)) -> (menu_model::Edges, u32) {
     let work = monitors::monitor_infos()
         .into_iter()
         .find(|m| m.rect.contains_point(at.0, at.1))
-        .map_or((i32::MIN / 2, i32::MIN / 2, i32::MAX / 2, i32::MAX / 2), |m| {
-            (m.work.x, m.work.y, m.work.x + m.work.width, m.work.y + m.work.height)
-        });
+        .map_or(
+            (i32::MIN / 2, i32::MIN / 2, i32::MAX / 2, i32::MAX / 2),
+            |m| {
+                (
+                    m.work.x,
+                    m.work.y,
+                    m.work.x + m.work.width,
+                    m.work.y + m.work.height,
+                )
+            },
+        );
     // SAFETY: plain queries.
     let dpi = unsafe {
         let monitor = MonitorFromPoint(POINT { x: at.0, y: at.1 }, MONITOR_DEFAULTTONEAREST);
@@ -817,7 +864,9 @@ fn shell_open(file: &str, params: Option<&str>) -> Result<()> {
             None,
             w!("open"),
             &file,
-            params.as_ref().map_or(PCWSTR::null(), |p| PCWSTR(p.as_ptr())),
+            params
+                .as_ref()
+                .map_or(PCWSTR::null(), |p| PCWSTR(p.as_ptr())),
             PCWSTR::null(),
             SW_SHOWNORMAL,
         )
@@ -843,7 +892,11 @@ fn run_custom(command: &str, args: &[String]) -> Result<()> {
     match Process::new(command).args(args).spawn() {
         Ok(_) => Ok(()),
         Err(direct) => {
-            let joined = args.iter().map(|a| format!("\"{a}\"")).collect::<Vec<_>>().join(" ");
+            let joined = args
+                .iter()
+                .map(|a| format!("\"{a}\""))
+                .collect::<Vec<_>>()
+                .join(" ");
             shell_open(command, (!joined.is_empty()).then_some(joined.as_str()))
                 .with_context(|| format!("starting {command}: {direct}"))
         }
@@ -856,7 +909,14 @@ mod tests {
 
     #[test]
     fn screen_points_survive_the_message_round_trip_including_negative_monitors() {
-        for point in [(0, 0), (1280, 700), (-1280, 700), (-2560, -10), (4479, 1439), (-1, -1)] {
+        for point in [
+            (0, 0),
+            (1280, 700),
+            (-1280, 700),
+            (-2560, -10),
+            (4479, 1439),
+            (-1, -1),
+        ] {
             let packed = pack(point.0, point.1);
             assert_eq!(unpack(LPARAM(packed)), point);
         }

@@ -13,7 +13,9 @@ pub enum Command {
     IconSize(IconSize),
     ToggleIcons,
     SortBy(SortKey),
-    SortOrder { ascending: bool },
+    SortOrder {
+        ascending: bool,
+    },
     Refresh,
     New(NewItem),
     Paste,
@@ -24,7 +26,10 @@ pub enum Command {
     Terminal,
     /// Hand the right-click to the native Windows menu.
     MoreOptions,
-    Custom { command: String, args: Vec<String> },
+    Custom {
+        command: String,
+        args: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -119,7 +124,13 @@ fn builtin_item(builtin: Builtin, state: ViewState) -> Item {
     match builtin {
         Builtin::Separator => Item::Separator,
         Builtin::View => {
-            let size = |label, size| checked(label, Command::IconSize(size), state.icon_size == Some(size));
+            let size = |label, size| {
+                checked(
+                    label,
+                    Command::IconSize(size),
+                    state.icon_size == Some(size),
+                )
+            };
             Item::Submenu {
                 label: "View".into(),
                 items: vec![
@@ -127,7 +138,11 @@ fn builtin_item(builtin: Builtin, state: ViewState) -> Item {
                     size("Medium icons", IconSize::Medium),
                     size("Small icons", IconSize::Small),
                     Item::Separator,
-                    checked("Show desktop icons", Command::ToggleIcons, state.icons_visible),
+                    checked(
+                        "Show desktop icons",
+                        Command::ToggleIcons,
+                        state.icons_visible,
+                    ),
                 ],
             }
         }
@@ -142,8 +157,16 @@ fn builtin_item(builtin: Builtin, state: ViewState) -> Item {
                 .collect();
             items.push(Item::Separator);
             let ascending = current.is_none_or(|(_, up)| up);
-            items.push(checked("Ascending", Command::SortOrder { ascending: true }, ascending));
-            items.push(checked("Descending", Command::SortOrder { ascending: false }, !ascending));
+            items.push(checked(
+                "Ascending",
+                Command::SortOrder { ascending: true },
+                ascending,
+            ));
+            items.push(checked(
+                "Descending",
+                Command::SortOrder { ascending: false },
+                !ascending,
+            ));
             Item::Submenu {
                 label: "Sort by".into(),
                 items,
@@ -224,7 +247,11 @@ pub fn layout(items: &[Item], m: &Metrics, text_width: impl Fn(&str) -> f32) -> 
     let rows = items
         .iter()
         .map(|item| {
-            let height = if matches!(item, Item::Separator) { m.separator } else { m.row };
+            let height = if matches!(item, Item::Separator) {
+                m.separator
+            } else {
+                m.row
+            };
             let row = Row { top, height };
             top += height;
             if !matches!(item, Item::Separator) {
@@ -243,7 +270,10 @@ pub fn layout(items: &[Item], m: &Metrics, text_width: impl Fn(&str) -> f32) -> 
 impl Layout {
     /// The selectable item at panel-relative `y`, if any.
     pub fn item_at(&self, items: &[Item], y: f32) -> Option<usize> {
-        let index = self.rows.iter().position(|r| y >= r.top && y < r.top + r.height)?;
+        let index = self
+            .rows
+            .iter()
+            .position(|r| y >= r.top && y < r.top + r.height)?;
         items[index].selectable().then_some(index)
     }
 }
@@ -268,9 +298,20 @@ pub type Edges = (i32, i32, i32, i32);
 /// leftward/upward where it would run off `work`, then kept inside it.
 pub fn place(size: (i32, i32), anchor: (i32, i32), work: Edges) -> (i32, i32) {
     let (w, h) = size;
-    let x = if anchor.0 + w > work.2 { anchor.0 - w } else { anchor.0 };
-    let y = if anchor.1 + h > work.3 { anchor.1 - h } else { anchor.1 };
-    (x.clamp(work.0, (work.2 - w).max(work.0)), y.clamp(work.1, (work.3 - h).max(work.1)))
+    let x = if anchor.0 + w > work.2 {
+        anchor.0 - w
+    } else {
+        anchor.0
+    };
+    let y = if anchor.1 + h > work.3 {
+        anchor.1 - h
+    } else {
+        anchor.1
+    };
+    (
+        x.clamp(work.0, (work.2 - w).max(work.0)),
+        y.clamp(work.1, (work.3 - h).max(work.1)),
+    )
 }
 
 /// Where a submenu goes: against the right edge of its parent (`parent` is
@@ -310,8 +351,20 @@ mod tests {
         assert_eq!(
             labels(&items),
             [
-                "View", "Sort by", "Refresh", "", "New", "Paste", "", "Change wallpaper", "Edit widgets",
-                "Display settings", "Personalize", "", "Open terminal here", "Show more options",
+                "View",
+                "Sort by",
+                "Refresh",
+                "",
+                "New",
+                "Paste",
+                "",
+                "Change wallpaper",
+                "Edit widgets",
+                "Display settings",
+                "Personalize",
+                "",
+                "Open terminal here",
+                "Show more options",
             ]
         );
     }
@@ -350,7 +403,9 @@ mod tests {
         };
         let items = build(&DesktopMenu::default(), state);
         let marks = |item: &Item| -> Vec<(String, bool)> {
-            let Item::Submenu { items, .. } = item else { panic!("a submenu") };
+            let Item::Submenu { items, .. } = item else {
+                panic!("a submenu")
+            };
             items
                 .iter()
                 .filter_map(|i| match i {
@@ -383,15 +438,27 @@ mod tests {
     #[test]
     fn layout_stacks_rows_and_sizes_to_the_widest_label() {
         let m = Metrics::scaled(1.0);
-        let items = build(&DesktopMenu::default(), ViewState { can_paste: true, ..Default::default() });
+        let items = build(
+            &DesktopMenu::default(),
+            ViewState {
+                can_paste: true,
+                ..Default::default()
+            },
+        );
         let wide = layout(&items, &m, |t| t.len() as f32 * 20.0);
         let narrow = layout(&items, &m, |t| t.len() as f32);
         assert_eq!(narrow.width, m.min_width, "never narrower than the minimum");
         assert!(wide.width > narrow.width);
         assert_eq!(wide.rows.len(), items.len());
-        let separators = items.iter().filter(|i| matches!(i, Item::Separator)).count() as f32;
+        let separators = items
+            .iter()
+            .filter(|i| matches!(i, Item::Separator))
+            .count() as f32;
         let rows = items.len() as f32 - separators;
-        assert_eq!(wide.height, m.pad * 2.0 + rows * m.row + separators * m.separator);
+        assert_eq!(
+            wide.height,
+            m.pad * 2.0 + rows * m.row + separators * m.separator
+        );
         // Rows touch and are in order.
         for pair in wide.rows.windows(2) {
             assert_eq!(pair[0].top + pair[0].height, pair[1].top);
@@ -423,7 +490,11 @@ mod tests {
         assert_eq!(step(&items, Some(2), 1), Some(4));
         assert_eq!(step(&items, Some(4), 1), Some(7));
         assert_eq!(step(&items, Some(4), -1), Some(2));
-        assert_eq!(step(&items, Some(items.len() - 1), 1), Some(0), "wraps down");
+        assert_eq!(
+            step(&items, Some(items.len() - 1), 1),
+            Some(0),
+            "wraps down"
+        );
         assert_eq!(step(&items, Some(0), -1), Some(items.len() - 1), "wraps up");
         assert_eq!(step(&[], None, 1), None);
         assert_eq!(step(&[Item::Separator], None, 1), None);
@@ -434,8 +505,16 @@ mod tests {
         let work = (0, 0, 1920, 1040);
         let size = (240, 400);
         assert_eq!(place(size, (100, 100), work), (100, 100));
-        assert_eq!(place(size, (1800, 100), work), (1560, 100), "no room right: opens left");
-        assert_eq!(place(size, (100, 900), work), (100, 500), "no room below: opens up");
+        assert_eq!(
+            place(size, (1800, 100), work),
+            (1560, 100),
+            "no room right: opens left"
+        );
+        assert_eq!(
+            place(size, (100, 900), work),
+            (100, 500),
+            "no room below: opens up"
+        );
         assert_eq!(place(size, (1800, 900), work), (1560, 500));
         // A menu taller than the screen still starts on screen.
         assert_eq!(place((240, 2000), (100, 500), work), (100, 0));

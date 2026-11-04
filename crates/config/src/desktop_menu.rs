@@ -89,8 +89,20 @@ impl Default for DesktopMenu {
 pub fn default_items() -> Vec<Entry> {
     use Builtin::*;
     [
-        View, Sort, Refresh, Separator, New, Paste, Separator, Wallpaper, Widgets, Display,
-        Personalize, Separator, Terminal, More,
+        View,
+        Sort,
+        Refresh,
+        Separator,
+        New,
+        Paste,
+        Separator,
+        Wallpaper,
+        Widgets,
+        Display,
+        Personalize,
+        Separator,
+        Terminal,
+        More,
     ]
     .into_iter()
     .map(Entry::Builtin)
@@ -186,8 +198,14 @@ mod tests {
 
     #[test]
     fn typos_and_empty_commands_are_rejected() {
-        assert!(parse(r#"{ "items": ["vew"] }"#).is_err(), "unknown built-in");
-        assert!(parse(r#"{ "enabled": true, "item": [] }"#).is_err(), "unknown field");
+        assert!(
+            parse(r#"{ "items": ["vew"] }"#).is_err(),
+            "unknown built-in"
+        );
+        assert!(
+            parse(r#"{ "enabled": true, "item": [] }"#).is_err(),
+            "unknown field"
+        );
         assert!(parse(r#"{ "items": [{ "label": "x", "comand": "y" }] }"#).is_err());
         assert!(parse(r#"{ "items": [{ "label": " ", "command": "y" }] }"#).is_err());
         assert!(parse(r#"{ "items": [{ "label": "x", "command": "" }] }"#).is_err());
@@ -199,24 +217,36 @@ mod tests {
         use Builtin::*;
         let menu = DesktopMenu {
             enabled: true,
-            items: [Separator, Separator, Refresh, Separator, Separator, Paste, Separator]
-                .into_iter()
-                .map(Entry::Builtin)
-                .collect(),
+            items: [
+                Separator, Separator, Refresh, Separator, Separator, Paste, Separator,
+            ]
+            .into_iter()
+            .map(Entry::Builtin)
+            .collect(),
         };
         let tidy: Vec<_> = menu.tidy_items().into_iter().cloned().collect();
         assert_eq!(
             tidy,
             [Refresh, Separator, Paste].map(Entry::Builtin).to_vec()
         );
-        assert!(DesktopMenu { enabled: true, items: vec![] }.tidy_items().is_empty());
+        assert!(
+            DesktopMenu {
+                enabled: true,
+                items: vec![]
+            }
+            .tidy_items()
+            .is_empty()
+        );
     }
 
     #[test]
     fn defaults_are_not_written_back_to_the_file() {
         let untouched = serde_json::to_value(DesktopMenu::default()).unwrap();
         assert_eq!(untouched, serde_json::json!({ "enabled": false }));
-        let custom = DesktopMenu { enabled: true, items: vec![Entry::Builtin(Builtin::Sort)] };
+        let custom = DesktopMenu {
+            enabled: true,
+            items: vec![Entry::Builtin(Builtin::Sort)],
+        };
         assert_eq!(
             serde_json::to_value(&custom).unwrap(),
             serde_json::json!({ "enabled": true, "items": ["sort"] })
@@ -230,7 +260,8 @@ mod tests {
             r#"{ "enabled": true, "items": ["sort", { "label": "A", "command": "b.exe", "args": ["c"] }] }"#,
         )
         .unwrap();
-        let again: DesktopMenu = serde_json::from_str(&serde_json::to_string(&menu).unwrap()).unwrap();
+        let again: DesktopMenu =
+            serde_json::from_str(&serde_json::to_string(&menu).unwrap()).unwrap();
         assert_eq!(again, menu);
     }
 }

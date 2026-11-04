@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mypaper interactive demo</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07080d; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud {
+    position: fixed; left: 3vw; bottom: 4vh; color: rgba(255, 255, 255, .55);
+    font: 400 14px/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    letter-spacing: .06em; user-select: none; pointer-events: none;
+  }
+  #hud b { color: rgba(255, 255, 255, .9); font-weight: 600; }
+</style>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div>An <b>interactive</b> wallpaper: move, click and scroll over the empty desktop.</div>
+  <div>moves <b id="m">0</b> &middot; clicks <b id="k">0</b> &middot; wheel <b id="w">0</b> &middot; buttons <b id="b">-</b></div>
+</div>
+<script>
+  "use strict";
+  // Self-contained. Draws only while something is moving (requestAnimationFrame stops when idle).
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  const hud = { m: 0, k: 0, w: 0 };
+  const el = (id) => document.getElementById(id);
+  let dpr = 1, W = 0, H = 0;
+  let hue = 210;
+  let target = { x: -1000, y: -1000 }, orb = { x: -1000, y: -1000 };
+  let down = new Set();
+  const rings = [];
+  let running = false;
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    W = canvas.width = Math.round(innerWidth * dpr);
+    H = canvas.height = Math.round(innerHeight * dpr);
+  }
+  addEventListener("resize", resize); resize();
+
+  function kick() { if (!running) { running = true; requestAnimationFrame(frame); } }
+
+  addEventListener("mousemove", (e) => {
+    target = { x: e.clientX * dpr, y: e.clientY * dpr };
+    if (orb.x < -500) orb = { ...target };
+    el("m").textContent = ++hud.m;
+    kick();
+  });
+  addEventListener("mousedown", (e) => {
+    down.add(e.button); el("b").textContent = [...down].join("+");
+    rings.push({ x: e.clientX * dpr, y: e.clientY * dpr, r: 0, a: 1, h: hue });
+    el("k").textContent = ++hud.k;
+    kick();
+  });
+  addEventListener("mouseup", (e) => {
+    down.delete(e.button); el("b").textContent = down.size ? [...down].join("+") : "-";
+  });
+  addEventListener("wheel", (e) => {
+    hue = (hue + Math.sign(e.deltaY) * 18 + 360) % 360;
+    el("w").textContent = ++hud.w;
+    kick();
+  });
+  document.addEventListener("mouseleave", () => { target = { x: -1000, y: -1000 }; kick(); });
+
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    orb.x += (target.x - orb.x) * 0.22; orb.y += (target.y - orb.y) * 0.22;
+    const g = ctx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, 160 * dpr);
+    g.addColorStop(0, `hsla(${hue}, 90%, 70%, .9)`);
+    g.addColorStop(1, `hsla(${hue}, 90%, 60%, 0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(orb.x, orb.y, 160 * dpr, 0, 7); ctx.fill();
+    for (const ring of rings) {
+      ring.r += 14 * dpr; ring.a *= 0.94;
+      ctx.strokeStyle = `hsla(${ring.h}, 90%, 75%, ${ring.a})`;
+      ctx.lineWidth = 3 * dpr; ctx.beginPath(); ctx.arc(ring.x, ring.y, ring.r, 0, 7); ctx.stroke();
+    }
+    while (rings.length && rings[0].a < 0.02) rings.shift();
+    const settling = Math.hypot(target.x - orb.x, target.y - orb.y) > 0.5 || rings.length;
+    if (settling) requestAnimationFrame(frame); else running = false;
+  }
+</script>

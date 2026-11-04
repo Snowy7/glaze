@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
 use anyhow::{Context, Result};
 use mypaper_bars::{BarsConfig, TaskbarMode};
 use mypaper_config::Config;
+use mypaper_desktop::desktop_view::IconSize;
 use mypaper_desktop::{ConfigWatcher, watch_config};
 use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
@@ -32,6 +33,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WS_EX_TOOLWINDOW, WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
+
+use crate::desktop_extras;
 
 /// Tray icon callback (mouse and keyboard events on the icon).
 const WM_TRAY: u32 = WM_APP + 1;
@@ -54,6 +57,12 @@ const ID_DOCK: usize = 7;
 const ID_TASKBAR_KEEP: usize = 8;
 const ID_TASKBAR_AUTOHIDE: usize = 9;
 const ID_TASKBAR_HIDE: usize = 10;
+const ID_DESKTOP_ICONS: usize = 11;
+const ID_ICONS_LARGE: usize = 12;
+const ID_ICONS_MEDIUM: usize = 13;
+const ID_ICONS_SMALL: usize = 14;
+const ID_DESKTOP_MENU: usize = 15;
+const ID_CLASSIC_MENU: usize = 16;
 /// Theme `i` in the Themes submenu has id `ID_THEME + i`.
 const ID_THEME: usize = 100;
 
@@ -275,6 +284,13 @@ enum Command {
     ToggleTopBar,
     ToggleDock,
     SetTaskbar(TaskbarMode),
+    /// Show or hide the desktop icons.
+    ToggleDesktopIcons,
+    SetIconSize(IconSize),
+    /// mypaper's own desktop right-click menu on or off (`desktop_menu.enabled`).
+    ToggleDesktopMenu,
+    /// The Win11 classic context menu on or off (`classic_context_menu`).
+    ToggleClassicMenu,
     Quit,
 }
 
@@ -291,6 +307,12 @@ fn decode(id: usize, themes: &[String]) -> Option<Command> {
         ID_TASKBAR_KEEP => Some(Command::SetTaskbar(TaskbarMode::Keep)),
         ID_TASKBAR_AUTOHIDE => Some(Command::SetTaskbar(TaskbarMode::Autohide)),
         ID_TASKBAR_HIDE => Some(Command::SetTaskbar(TaskbarMode::Hide)),
+        ID_DESKTOP_ICONS => Some(Command::ToggleDesktopIcons),
+        ID_ICONS_LARGE => Some(Command::SetIconSize(IconSize::Large)),
+        ID_ICONS_MEDIUM => Some(Command::SetIconSize(IconSize::Medium)),
+        ID_ICONS_SMALL => Some(Command::SetIconSize(IconSize::Small)),
+        ID_DESKTOP_MENU => Some(Command::ToggleDesktopMenu),
+        ID_CLASSIC_MENU => Some(Command::ToggleClassicMenu),
         id if id >= ID_THEME => themes.get(id - ID_THEME).cloned().map(Command::SetTheme),
         _ => None,
     }
@@ -315,9 +337,12 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
     // SAFETY: menus are created, shown and destroyed within this call, on our thread.
     let chosen = unsafe {
         let Ok(menu) = CreatePopupMenu() else { return };
-        let (Ok(submenu), Ok(bars_menu), Ok(taskbar_menu)) =
-            (CreatePopupMenu(), CreatePopupMenu(), CreatePopupMenu())
-        else {
+        let (Ok(submenu), Ok(bars_menu), Ok(taskbar_menu), Ok(desktop_menu)) = (
+            CreatePopupMenu(),
+            CreatePopupMenu(),
+            CreatePopupMenu(),
+            CreatePopupMenu(),
+        ) else {
             let _ = DestroyMenu(menu);
             return;
         };
@@ -367,6 +392,38 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
         };
         append(menu, MF_STRING, ID_EDIT_WIDGETS, "Edit widgets");
         append(menu, MF_POPUP, bars_menu.0 as usize, "Bars");
+        // Desktop: what Explorer's own View menu offers, and mypaper's menu switches. The state
+        // comes from Explorer over COM (with a timeout); without it the marks are left off.
+        let desktop = desktop_extras::desktop_state();
+        let size_mark = |size| check(desktop.is_some_and(|(current, _)| current == size));
+        append(
+            desktop_menu,
+            MF_STRING | check(desktop.is_none_or(|(_, visible)| visible)),
+            ID_DESKTOP_ICONS,
+            "Show desktop icons",
+        );
+        append(desktop_menu, MF_SEPARATOR, 0, "");
+        for (id, size, label) in [
+            (ID_ICONS_LARGE, IconSize::Large, "Large icons"),
+            (ID_ICONS_MEDIUM, IconSize::Medium, "Medium icons"),
+            (ID_ICONS_SMALL, IconSize::Small, "Small icons"),
+        ] {
+            append(desktop_menu, MF_STRING | size_mark(size), id, label);
+        }
+        append(desktop_menu, MF_SEPARATOR, 0, "");
+        append(
+            desktop_menu,
+            MF_STRING | check(config.desktop_menu.enabled),
+            ID_DESKTOP_MENU,
+            "mypaper right-click menu",
+        );
+        append(
+            desktop_menu,
+            MF_STRING | check(config.classic_context_menu),
+            ID_CLASSIC_MENU,
+            "Classic Windows 11 menu",
+        );
+        append(menu, MF_POPUP, desktop_menu.0 as usize, "Desktop");
         append(menu, MF_STRING | studio_flags, ID_STUDIO, "Open Studio");
         append(menu, MF_STRING, ID_RESTART, "Restart wallpaper");
         append(menu, MF_SEPARATOR, 0, "");
@@ -415,6 +472,18 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
         Some(Command::ToggleTopBar) => edit_bars("top", "enabled", !bars.top.enabled),
         Some(Command::ToggleDock) => edit_bars("dock", "enabled", !bars.dock.enabled),
         Some(Command::SetTaskbar(mode)) => edit_bars("taskbar", "mode", mode),
+        Some(Command::ToggleDesktopIcons) => {
+            // The icons are shown unless Explorer says otherwise.
+            let visible = desktop_extras::desktop_state().is_none_or(|(_, visible)| visible);
+            desktop_extras::set_icons_visible(!visible);
+        }
+        Some(Command::SetIconSize(size)) => desktop_extras::set_icon_size(size),
+        Some(Command::ToggleDesktopMenu) => {
+            update_config(hwnd, |c| c.desktop_menu.enabled = !c.desktop_menu.enabled);
+        }
+        Some(Command::ToggleClassicMenu) => {
+            update_config(hwnd, |c| c.classic_context_menu = !c.classic_context_menu);
+        }
         // SAFETY: posts WM_QUIT to this thread's queue; the supervisor loop cleans up.
         Some(Command::Quit) => unsafe { PostQuitMessage(0) },
         None => {}
@@ -424,7 +493,7 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
 /// Toggles the widget host's edit mode by posting its registered
 /// `mypaper.widgets.edit` message (wParam 2 = toggle) to its message-only
 /// window (see docs/widgets.md).
-fn toggle_widget_edit_mode() {
+pub(crate) fn toggle_widget_edit_mode() {
     // SAFETY: plain lookups and a post; a missing host is just logged.
     unsafe {
         let message = RegisterWindowMessageW(w!("mypaper.widgets.edit"));
@@ -439,6 +508,21 @@ fn toggle_widget_edit_mode() {
             }
             _ => log::warn!("widget host is not running; cannot toggle edit mode"),
         }
+    }
+}
+
+/// Starts Studio (like the tray's "Open Studio"; Studio focuses itself if it is already running).
+pub(crate) fn open_studio() {
+    let studio = std::env::current_exe()
+        .ok()
+        .and_then(|exe| find_studio(&exe));
+    match studio {
+        Some(path) => {
+            if let Err(e) = Process::new(&path).spawn() {
+                log::error!("could not start {}: {e}", path.display());
+            }
+        }
+        None => log::warn!("{STUDIO_EXE} not found"),
     }
 }
 
@@ -592,6 +676,37 @@ mod tests {
         );
         assert_eq!(decode(ID_THEME + 2, &themes), None);
         assert_eq!(decode(0, &themes), None); // menu dismissed
+    }
+
+    #[test]
+    fn desktop_menu_ids_decode_and_stay_clear_of_the_theme_range() {
+        let none: [String; 0] = [];
+        assert_eq!(
+            decode(ID_DESKTOP_ICONS, &none),
+            Some(Command::ToggleDesktopIcons)
+        );
+        assert_eq!(
+            decode(ID_ICONS_LARGE, &none),
+            Some(Command::SetIconSize(IconSize::Large))
+        );
+        assert_eq!(
+            decode(ID_ICONS_MEDIUM, &none),
+            Some(Command::SetIconSize(IconSize::Medium))
+        );
+        assert_eq!(
+            decode(ID_ICONS_SMALL, &none),
+            Some(Command::SetIconSize(IconSize::Small))
+        );
+        assert_eq!(
+            decode(ID_DESKTOP_MENU, &none),
+            Some(Command::ToggleDesktopMenu)
+        );
+        assert_eq!(
+            decode(ID_CLASSIC_MENU, &none),
+            Some(Command::ToggleClassicMenu)
+        );
+        // Themes start at ID_THEME; no fixed id may reach it.
+        const { assert!(ID_CLASSIC_MENU < ID_THEME) };
     }
 
     #[test]

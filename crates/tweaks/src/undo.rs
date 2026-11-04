@@ -330,7 +330,10 @@ pub(crate) mod tests {
         fn delete_if_empty(&mut self, key: &str) -> Result<()> {
             let mut data = self.0.borrow_mut();
             let below = format!("{key}\\");
-            let in_use = data.values.keys().any(|(k, _)| k == key || k.starts_with(&below))
+            let in_use = data
+                .values
+                .keys()
+                .any(|(k, _)| k == key || k.starts_with(&below))
                 || data.keys.iter().any(|k| k.starts_with(&below));
             if !in_use {
                 data.keys.remove(key);
@@ -445,9 +448,15 @@ pub(crate) mod tests {
         let scratch = Scratch::new("undo-strings");
         let mut store = Memory::default();
         store
-            .write("C", "Arrow", &Value::ExpandString(r"%SystemRoot%\a.cur".into()))
+            .write(
+                "C",
+                "Arrow",
+                &Value::ExpandString(r"%SystemRoot%\a.cur".into()),
+            )
             .unwrap();
-        store.write("C", "", &Value::String("Old scheme".into())).unwrap();
+        store
+            .write("C", "", &Value::String("Old scheme".into()))
+            .unwrap();
         let mut undo = Undo::new(store, scratch.journal(), Duration::ZERO);
 
         undo.apply(&[
@@ -478,7 +487,8 @@ pub(crate) mod tests {
         let mut undo = Undo::new(store.clone(), scratch.journal(), Duration::ZERO);
 
         let deep = "Software\\Classes\\CLSID\\{x}\\Inproc";
-        undo.apply(&[put(deep, "", Value::String(String::new()))]).unwrap();
+        undo.apply(&[put(deep, "", Value::String(String::new()))])
+            .unwrap();
         assert!(store.has_key("Software\\Classes\\CLSID\\{x}"));
         // Someone else adds a value to the key we created: it is theirs, so it stays.
         store
@@ -488,13 +498,20 @@ pub(crate) mod tests {
 
         undo.restore(|| {}).unwrap();
         assert!(!store.has_key(deep), "our own leaf key is gone");
-        assert!(store.has_key("Software\\Classes\\CLSID\\{x}"), "a key with foreign content stays");
-        assert!(store.has_key("Software\\Classes\\CLSID"), "pre-existing keys stay");
+        assert!(
+            store.has_key("Software\\Classes\\CLSID\\{x}"),
+            "a key with foreign content stays"
+        );
+        assert!(
+            store.has_key("Software\\Classes\\CLSID"),
+            "pre-existing keys stay"
+        );
 
         // Without interference the whole created chain disappears.
         let mut undo = Undo::new(store.clone(), scratch.journal(), Duration::ZERO);
         let fresh = "Software\\Classes\\CLSID\\{y}\\Inproc";
-        undo.apply(&[put(fresh, "", Value::String(String::new()))]).unwrap();
+        undo.apply(&[put(fresh, "", Value::String(String::new()))])
+            .unwrap();
         undo.restore(|| {}).unwrap();
         assert!(!store.has_key("Software\\Classes\\CLSID\\{y}"));
         assert!(store.has_key("Software\\Classes\\CLSID"));

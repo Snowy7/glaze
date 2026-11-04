@@ -10,7 +10,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use windows::Win32::UI::WindowsAndMessaging::{SPI_SETCURSORS, SPIF_SENDCHANGE, SystemParametersInfoW};
+use windows::Win32::UI::WindowsAndMessaging::{
+    SPI_SETCURSORS, SPIF_SENDCHANGE, SystemParametersInfoW,
+};
 
 use crate::cursor_art::{self, Look};
 use crate::undo::{Value, Write};
@@ -101,7 +103,9 @@ pub fn writes(scheme: &Scheme) -> Vec<Write> {
 fn match_files(names: &[String]) -> Vec<(&'static str, String)> {
     let find = |stem: &str, ext: &str| {
         names.iter().find(|name| {
-            Path::new(name.as_str()).extension().is_some_and(|e| e.eq_ignore_ascii_case(ext))
+            Path::new(name.as_str())
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case(ext))
                 && Path::new(name.as_str())
                     .file_stem()
                     .is_some_and(|s| s.eq_ignore_ascii_case(stem))
@@ -110,7 +114,11 @@ fn match_files(names: &[String]) -> Vec<(&'static str, String)> {
     ROLES
         .iter()
         .filter_map(|role| {
-            let order = if role.animated { ["ani", "cur"] } else { ["cur", "ani"] };
+            let order = if role.animated {
+                ["ani", "cur"]
+            } else {
+                ["cur", "ani"]
+            };
             role.stems
                 .iter()
                 .flat_map(|stem| order.map(|ext| (stem, ext)))
@@ -168,7 +176,9 @@ pub fn resolve(spec: &str, theme_dir: &Path, user_dir: &Path, local_dir: &Path) 
         .into_iter()
         .find(|dir| dir.is_dir())
         .with_context(|| format!("cursor set {spec:?} not found"))?;
-    let name = dir.file_name().map_or_else(|| spec.to_owned(), |n| n.to_string_lossy().into_owned());
+    let name = dir
+        .file_name()
+        .map_or_else(|| spec.to_owned(), |n| n.to_string_lossy().into_owned());
     scan(&name, &dir)
 }
 
@@ -183,7 +193,8 @@ pub fn resolve_default(spec: &str, theme_dir: &Path) -> Result<Scheme> {
 /// Writes a built-in set to `root\<name>` unless a current copy is there.
 fn install_builtin(look: Look, root: &Path) -> Result<PathBuf> {
     let dir = root.join(look.name());
-    let complete = std::fs::read_to_string(dir.join(VERSION_FILE)).is_ok_and(|v| v.trim() == ART_VERSION)
+    let complete = std::fs::read_to_string(dir.join(VERSION_FILE))
+        .is_ok_and(|v| v.trim() == ART_VERSION)
         && ROLES.iter().all(|role| dir.join(file_name(role)).is_file());
     if complete {
         return Ok(dir);
@@ -200,7 +211,11 @@ fn install_builtin(look: Look, root: &Path) -> Result<PathBuf> {
 
 /// The generated file for a role: its first stem, `.ani` or `.cur`.
 fn file_name(role: &Role) -> String {
-    format!("{}.{}", role.stems[0], if role.animated { "ani" } else { "cur" })
+    format!(
+        "{}.{}",
+        role.stems[0],
+        if role.animated { "ani" } else { "cur" }
+    )
 }
 
 /// Writes every built-in set into `root` (`cargo run -p mypaper-tweaks --example export_cursors`).
@@ -222,9 +237,9 @@ pub fn reload() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::undo::Store;
     use crate::undo::Undo;
     use crate::undo::tests::{Memory, Scratch};
-    use crate::undo::Store;
     use std::time::Duration;
 
     fn names(list: &[&str]) -> Vec<String> {
@@ -234,9 +249,21 @@ mod tests {
     #[test]
     fn files_match_roles_by_stem_ignoring_case_and_prefer_ani_for_busy_cursors() {
         let found = match_files(&names(&[
-            "Arrow.CUR", "hand.cur", "vert.cur", "dgn1.cur", "wait.cur", "wait.ani", "readme.txt", "ibeam.png",
+            "Arrow.CUR",
+            "hand.cur",
+            "vert.cur",
+            "dgn1.cur",
+            "wait.cur",
+            "wait.ani",
+            "readme.txt",
+            "ibeam.png",
         ]));
-        let get = |value: &str| found.iter().find(|(v, _)| *v == value).map(|(_, f)| f.as_str());
+        let get = |value: &str| {
+            found
+                .iter()
+                .find(|(v, _)| *v == value)
+                .map(|(_, f)| f.as_str())
+        };
         assert_eq!(get("Arrow"), Some("Arrow.CUR"));
         assert_eq!(get("Hand"), Some("hand.cur"));
         assert_eq!(get("SizeNS"), Some("vert.cur"), "inf-style names count");
@@ -260,24 +287,46 @@ mod tests {
 
     #[test]
     fn a_spec_resolves_absolute_then_theme_relative_then_by_name() {
-        let (theme, user) = (Path::new(r"C:\themes\t"), Path::new(r"C:\Users\me\mypaper\cursors"));
-        assert_eq!(candidates(r"D:\sets\mine", theme, user), [PathBuf::from(r"D:\sets\mine")]);
-        assert_eq!(candidates(r"cursors\mine", theme, user), [theme.join(r"cursors\mine")]);
-        assert_eq!(candidates("mine", theme, user), [user.join("mine"), theme.join("mine")]);
+        let (theme, user) = (
+            Path::new(r"C:\themes\t"),
+            Path::new(r"C:\Users\me\mypaper\cursors"),
+        );
+        assert_eq!(
+            candidates(r"D:\sets\mine", theme, user),
+            [PathBuf::from(r"D:\sets\mine")]
+        );
+        assert_eq!(
+            candidates(r"cursors\mine", theme, user),
+            [theme.join(r"cursors\mine")]
+        );
+        assert_eq!(
+            candidates("mine", theme, user),
+            [user.join("mine"), theme.join("mine")]
+        );
     }
 
     #[test]
     fn writes_select_the_scheme_and_keep_registry_types() {
         let scheme = Scheme {
             name: "mypaper-dark".into(),
-            files: vec![("Arrow", PathBuf::from(r"C:\c\arrow.cur")), ("Wait", PathBuf::from(r"C:\c\wait.ani"))],
+            files: vec![
+                ("Arrow", PathBuf::from(r"C:\c\arrow.cur")),
+                ("Wait", PathBuf::from(r"C:\c\wait.ani")),
+            ],
         };
         let plan = writes(&scheme);
         let by_name = |name: &str| plan.iter().find(|w| w.name == name).map(|w| &w.value);
-        assert_eq!(by_name("Arrow"), Some(&Value::ExpandString(r"C:\c\arrow.cur".into())));
+        assert_eq!(
+            by_name("Arrow"),
+            Some(&Value::ExpandString(r"C:\c\arrow.cur".into()))
+        );
         assert_eq!(by_name(""), Some(&Value::String("mypaper-dark".into())));
         assert_eq!(by_name("Scheme Source"), Some(&Value::Dword(1)));
-        assert_eq!(by_name("Hand"), None, "cursors the set lacks stay as they are");
+        assert_eq!(
+            by_name("Hand"),
+            None,
+            "cursors the set lacks stay as they are"
+        );
         assert!(plan.iter().all(|w| w.key == CURSORS_KEY));
     }
 
@@ -286,7 +335,10 @@ mod tests {
         let scratch = Scratch::new("cursor-journal");
         let mut registry = Memory::default();
         let originals = [
-            ("Arrow", Value::ExpandString(r"C:\WINDOWS\Cursors\old\arrow.cur".into())),
+            (
+                "Arrow",
+                Value::ExpandString(r"C:\WINDOWS\Cursors\old\arrow.cur".into()),
+            ),
             ("", Value::String("Old scheme".into())),
             ("Scheme Source", Value::Dword(1)),
             ("CursorBaseSize", Value::Dword(32)), // not ours: must never change
@@ -303,15 +355,25 @@ mod tests {
         };
         let mut undo = Undo::new(registry.clone(), scratch.journal(), Duration::ZERO);
         assert!(undo.apply(&writes(&scheme)).unwrap());
-        assert_eq!(registry.read(CURSORS_KEY, "").unwrap(), Some(Value::String("mypaper-light".into())));
+        assert_eq!(
+            registry.read(CURSORS_KEY, "").unwrap(),
+            Some(Value::String("mypaper-light".into()))
+        );
         assert!(undo.journaled_key(CURSORS_KEY));
 
         assert!(undo.restore(|| {}).unwrap());
         for (name, value) in &originals {
-            assert_eq!(registry.read(CURSORS_KEY, name).unwrap().as_ref(), Some(value), "{name}");
+            assert_eq!(
+                registry.read(CURSORS_KEY, name).unwrap().as_ref(),
+                Some(value),
+                "{name}"
+            );
         }
         assert_eq!(registry.read(CURSORS_KEY, "Hand").unwrap(), None);
-        assert!(registry.has_key(r"Control Panel"), "the scheme key itself is never removed");
+        assert!(
+            registry.has_key(r"Control Panel"),
+            "the scheme key itself is never removed"
+        );
     }
 
     #[test]

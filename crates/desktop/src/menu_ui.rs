@@ -41,12 +41,11 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_DOWN, VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GWLP_USERDATA, HICON,
-    IDC_ARROW, LoadCursorW, RegisterClassExW, SW_SHOWNOACTIVATE, SetForegroundWindow,
-    SetWindowLongPtrW, ShowWindow, ULW_ALPHA, UpdateLayeredWindow, WA_INACTIVE, WM_ACTIVATE,
-    WM_KEYDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_NCDESTROY, WM_RBUTTONUP,
-    WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
-    MA_NOACTIVATE,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GWLP_USERDATA, HICON, IDC_ARROW, LoadCursorW,
+    MA_NOACTIVATE, RegisterClassExW, SW_SHOWNOACTIVATE, SetForegroundWindow, SetWindowLongPtrW,
+    ShowWindow, ULW_ALPHA, UpdateLayeredWindow, WA_INACTIVE, WM_ACTIVATE, WM_KEYDOWN, WM_LBUTTONUP,
+    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_NCDESTROY, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{PCWSTR, w};
 use windows_numerics::Vector2;
@@ -93,7 +92,14 @@ impl Default for Look {
 
 /// The first usable family of a CSS `font-family` list.
 pub fn font_family(css: &str) -> String {
-    const GENERIC: [&str; 6] = ["system-ui", "sans-serif", "serif", "monospace", "ui-sans-serif", "cursive"];
+    const GENERIC: [&str; 6] = [
+        "system-ui",
+        "sans-serif",
+        "serif",
+        "monospace",
+        "ui-sans-serif",
+        "cursive",
+    ];
     css.split(',')
         .map(|f| f.trim().trim_matches(['"', '\'']).trim())
         .find(|f| !f.is_empty() && !GENERIC.iter().any(|g| g.eq_ignore_ascii_case(f)))
@@ -111,8 +117,8 @@ impl Gfx {
     fn new() -> Result<Self> {
         // SAFETY: documented factory calls; the objects are owned by this struct.
         unsafe {
-            let d2d: ID2D1Factory = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)
-                .context("Direct2D")?;
+            let d2d: ID2D1Factory =
+                D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None).context("Direct2D")?;
             let dwrite: IDWriteFactory =
                 DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED).context("DirectWrite")?;
             let properties = D2D1_RENDER_TARGET_PROPERTIES {
@@ -126,7 +132,9 @@ impl Gfx {
                 usage: D2D1_RENDER_TARGET_USAGE_NONE,
                 minLevel: D2D1_FEATURE_LEVEL_DEFAULT,
             };
-            let target = d2d.CreateDCRenderTarget(&properties).context("Direct2D DC target")?;
+            let target = d2d
+                .CreateDCRenderTarget(&properties)
+                .context("Direct2D DC target")?;
             target.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             Ok(Self { dwrite, target })
         }
@@ -250,7 +258,8 @@ pub fn show(items: Vec<Item>, anchor: (i32, i32), work: menu_model::Edges, dpi: 
 
 /// Closes every panel.
 pub fn close() {
-    let hwnds: Vec<HWND> = with_ui(|ui| ui.panels.drain(..).map(|p| p.hwnd).collect()).unwrap_or_default();
+    let hwnds: Vec<HWND> =
+        with_ui(|ui| ui.panels.drain(..).map(|p| p.hwnd).collect()).unwrap_or_default();
     for hwnd in hwnds {
         // SAFETY: our own windows, destroyed on their creating thread.
         let _ = unsafe { DestroyWindow(hwnd) };
@@ -297,7 +306,8 @@ impl MenuUi {
         self.close_panels();
         self.look = look.clone();
         self.scale = dpi.max(96) as f32 / 96.0 * look.scale.clamp(0.5, 2.0);
-        let (origin, panel) = self.make_panel(items, None, |size| menu_model::place(size, anchor, work))?;
+        let (origin, panel) =
+            self.make_panel(items, None, |size| menu_model::place(size, anchor, work))?;
         let hwnd = panel.hwnd;
         self.panels.push(Panel { origin, ..panel });
         self.draw(0)?;
@@ -326,7 +336,9 @@ impl MenuUi {
         place: impl FnOnce((i32, i32)) -> (i32, i32),
     ) -> Result<((i32, i32), Panel)> {
         let metrics = Metrics::scaled(self.scale);
-        let format = self.gfx.format(&font_family(&self.look.font), 14.0 * self.scale)?;
+        let format = self
+            .gfx
+            .format(&font_family(&self.look.font), 14.0 * self.scale)?;
         let labels: Vec<Option<IDWriteTextLayout>> = items
             .iter()
             .map(|item| match item {
@@ -334,7 +346,10 @@ impl MenuUi {
                 other => self.gfx.text(other.label(), &format),
             })
             .collect();
-        let widths: Vec<f32> = labels.iter().map(|l| l.as_ref().map_or(0.0, width_of)).collect();
+        let widths: Vec<f32> = labels
+            .iter()
+            .map(|l| l.as_ref().map_or(0.0, width_of))
+            .collect();
         let layout = menu_model::layout(&items, &metrics, |text| {
             items
                 .iter()
@@ -392,10 +407,25 @@ impl MenuUi {
         let [ar, ag, ab] = self.look.accent;
         Colors {
             panel: rgba(tr, tg, tb, self.look.opacity.clamp(0.7, 1.0)),
-            text: D2D1_COLOR_F { r: text[0], g: text[1], b: text[2], a: 1.0 },
-            dim: D2D1_COLOR_F { r: text[0], g: text[1], b: text[2], a: 0.38 },
+            text: D2D1_COLOR_F {
+                r: text[0],
+                g: text[1],
+                b: text[2],
+                a: 1.0,
+            },
+            dim: D2D1_COLOR_F {
+                r: text[0],
+                g: text[1],
+                b: text[2],
+                a: 0.38,
+            },
             hover: rgba(ar, ag, ab, if self.look.dark { 0.20 } else { 0.16 }),
-            line: D2D1_COLOR_F { r: edge[0], g: edge[1], b: edge[2], a: 0.14 },
+            line: D2D1_COLOR_F {
+                r: edge[0],
+                g: edge[1],
+                b: edge[2],
+                a: 0.14,
+            },
         }
     }
 
@@ -403,7 +433,11 @@ impl MenuUi {
     fn draw(&self, index: usize) -> Result<()> {
         let panel = &self.panels[index];
         let colors = self.colors();
-        let margin = if self.look.shadow { (SHADOW * self.scale).ceil() as i32 } else { 0 };
+        let margin = if self.look.shadow {
+            (SHADOW * self.scale).ceil() as i32
+        } else {
+            0
+        };
         let (w, h) = (
             panel.layout.width.ceil() as i32 + 2 * margin,
             panel.layout.height.ceil() as i32 + 2 * margin,
@@ -430,9 +464,22 @@ impl MenuUi {
             let dib = CreateDIBSection(Some(hdc), &info, DIB_RGB_COLORS, &mut bits, None, 0)?;
             let previous = SelectObject(hdc, dib.into());
             let drawn = (|| -> Result<()> {
-                rt.BindDC(hdc, &RECT { left: 0, top: 0, right: w, bottom: h })?;
+                rt.BindDC(
+                    hdc,
+                    &RECT {
+                        left: 0,
+                        top: 0,
+                        right: w,
+                        bottom: h,
+                    },
+                )?;
                 rt.BeginDraw();
-                rt.Clear(Some(&D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }));
+                rt.Clear(Some(&D2D1_COLOR_F {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                }));
                 let brush = rt.CreateSolidColorBrush(&colors.panel, None)?;
                 let m = margin as f32;
                 let body = D2D_RECT_F {
@@ -445,8 +492,18 @@ impl MenuUi {
                     for i in 0..margin / 2 {
                         let grow = (i * 2) as f32;
                         let alpha = 0.05 * (1.0 - i as f32 / (margin / 2) as f32);
-                        brush.SetColor(&D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: alpha });
-                        fill_round(rt, &brush, grow_rect(body, grow, 2.0 * self.scale), radius + grow);
+                        brush.SetColor(&D2D1_COLOR_F {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: alpha,
+                        });
+                        fill_round(
+                            rt,
+                            &brush,
+                            grow_rect(body, grow, 2.0 * self.scale),
+                            radius + grow,
+                        );
                     }
                 }
                 brush.SetColor(&colors.panel);
@@ -454,7 +511,11 @@ impl MenuUi {
                 if self.look.border {
                     brush.SetColor(&colors.line);
                     let inset = grow_rect(body, -0.5, 0.0);
-                    let rounded = D2D1_ROUNDED_RECT { rect: inset, radiusX: radius, radiusY: radius };
+                    let rounded = D2D1_ROUNDED_RECT {
+                        rect: inset,
+                        radiusX: radius,
+                        radiusY: radius,
+                    };
                     rt.DrawRoundedRectangle(&rounded, &brush, 1.0, None);
                 }
                 self.draw_rows(panel, &brush, &colors, m, radius)?;
@@ -471,7 +532,10 @@ impl MenuUi {
                 UpdateLayeredWindow(
                     panel.hwnd,
                     None,
-                    Some(&POINT { x: panel.origin.0 - margin, y: panel.origin.1 - margin }),
+                    Some(&POINT {
+                        x: panel.origin.0 - margin,
+                        y: panel.origin.1 - margin,
+                    }),
                     Some(&SIZE { cx: w, cy: h }),
                     Some(hdc),
                     Some(&POINT { x: 0, y: 0 }),
@@ -530,7 +594,11 @@ impl MenuUi {
                     };
                     fill_round(rt, brush, cell, (radius * 0.6).max(2.0));
                 }
-                brush.SetColor(if item.selectable() { &colors.text } else { &colors.dim });
+                brush.SetColor(if item.selectable() {
+                    &colors.text
+                } else {
+                    &colors.dim
+                });
                 let center_y = top + row.height / 2.0;
                 if let Item::Action { checked: true, .. } = item {
                     let s = self.scale;
@@ -538,8 +606,14 @@ impl MenuUi {
                     let stroke = 1.6 * s;
                     for (a, b) in [((-4.0, 0.5), (-1.5, 3.0)), ((-1.5, 3.0), (4.0, -3.5))] {
                         rt.DrawLine(
-                            Vector2 { X: x + a.0 * s, Y: center_y + a.1 * s },
-                            Vector2 { X: x + b.0 * s, Y: center_y + b.1 * s },
+                            Vector2 {
+                                X: x + a.0 * s,
+                                Y: center_y + a.1 * s,
+                            },
+                            Vector2 {
+                                X: x + b.0 * s,
+                                Y: center_y + b.1 * s,
+                            },
                             brush,
                             stroke,
                             None,
@@ -557,11 +631,18 @@ impl MenuUi {
                 }
                 if let Item::Submenu { .. } = item {
                     let s = self.scale;
-                    let x = margin + panel.layout.width - metrics.pad - metrics.arrow / 2.0 - 1.0 * s;
+                    let x =
+                        margin + panel.layout.width - metrics.pad - metrics.arrow / 2.0 - 1.0 * s;
                     for (a, b) in [((-2.0, -4.0), (2.0, 0.0)), ((2.0, 0.0), (-2.0, 4.0))] {
                         rt.DrawLine(
-                            Vector2 { X: x + a.0 * s, Y: center_y + a.1 * s },
-                            Vector2 { X: x + b.0 * s, Y: center_y + b.1 * s },
+                            Vector2 {
+                                X: x + a.0 * s,
+                                Y: center_y + a.1 * s,
+                            },
+                            Vector2 {
+                                X: x + b.0 * s,
+                                Y: center_y + b.1 * s,
+                            },
                             brush,
                             1.4 * s,
                             None,
@@ -579,7 +660,11 @@ impl MenuUi {
 
     /// The pointer moved over `panel` at panel-relative `y` (device pixels).
     fn hover(&mut self, panel: usize, y: f32) {
-        let margin = if self.look.shadow { SHADOW * self.scale } else { 0.0 };
+        let margin = if self.look.shadow {
+            SHADOW * self.scale
+        } else {
+            0.0
+        };
         let target = {
             let p = &self.panels[panel];
             p.layout.item_at(&p.items, y - margin)
@@ -618,7 +703,9 @@ impl MenuUi {
     }
 
     fn open_submenu(&mut self, parent: usize, row: usize) {
-        let Item::Submenu { items, .. } = self.panels[parent].items[row].clone() else { return };
+        let Item::Submenu { items, .. } = self.panels[parent].items[row].clone() else {
+            return;
+        };
         let (parent_rect, row_top) = {
             let p = &self.panels[parent];
             (p.rect(), p.origin.1 + p.layout.rows[row].top.round() as i32)
@@ -647,7 +734,12 @@ impl MenuUi {
             .into_iter()
             .find(|m| m.rect.contains_point(rect.0, rect.1))
             .map_or((0, 0, i32::MAX, i32::MAX), |m| {
-                (m.work.x, m.work.y, m.work.x + m.work.width, m.work.y + m.work.height)
+                (
+                    m.work.x,
+                    m.work.y,
+                    m.work.x + m.work.width,
+                    m.work.y + m.work.height,
+                )
             })
     }
 
@@ -655,7 +747,11 @@ impl MenuUi {
     fn chosen(&self, panel: usize) -> Option<Command> {
         let p = &self.panels[panel];
         match p.items.get(p.hover?)? {
-            Item::Action { command, enabled: true, .. } => Some(command.clone()),
+            Item::Action {
+                command,
+                enabled: true,
+                ..
+            } => Some(command.clone()),
             _ => None,
         }
     }
@@ -760,8 +856,17 @@ fn grow_rect(r: D2D_RECT_F, by: f32, drop: f32) -> D2D_RECT_F {
 
 /// # Safety
 /// Must run between `BeginDraw` and `EndDraw` of `rt`.
-unsafe fn fill_round(rt: &ID2D1DCRenderTarget, brush: &ID2D1SolidColorBrush, rect: D2D_RECT_F, radius: f32) {
-    let rounded = D2D1_ROUNDED_RECT { rect, radiusX: radius, radiusY: radius };
+unsafe fn fill_round(
+    rt: &ID2D1DCRenderTarget,
+    brush: &ID2D1SolidColorBrush,
+    rect: D2D_RECT_F,
+    radius: f32,
+) {
+    let rounded = D2D1_ROUNDED_RECT {
+        rect,
+        radiusX: radius,
+        radiusY: radius,
+    };
     // SAFETY: per this function's contract.
     unsafe { rt.FillRoundedRectangle(&rounded, brush) };
 }
@@ -770,7 +875,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     match msg {
         // Submenus never take the focus, whoever clicks them.
         WM_MOUSEACTIVATE => {
-            let is_cascade = with_ui(|ui| ui.panel_at(hwnd).is_some_and(|i| i > 0)).unwrap_or(false);
+            let is_cascade =
+                with_ui(|ui| ui.panel_at(hwnd).is_some_and(|i| i > 0)).unwrap_or(false);
             if is_cascade {
                 return LRESULT(MA_NOACTIVATE as isize);
             }
@@ -843,7 +949,10 @@ mod tests {
 
     #[test]
     fn the_first_concrete_font_family_wins() {
-        assert_eq!(font_family(r#""Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif"#), "Segoe UI Variable Text");
+        assert_eq!(
+            font_family(r#""Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif"#),
+            "Segoe UI Variable Text"
+        );
         assert_eq!(font_family("system-ui, 'Cascadia Code'"), "Cascadia Code");
         assert_eq!(font_family("sans-serif"), "Segoe UI");
         assert_eq!(font_family(""), "Segoe UI");

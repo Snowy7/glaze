@@ -22,7 +22,8 @@ use crate::registry::Registry;
 use crate::undo::{Store, Undo, Value, Write};
 
 /// The Win11 menu handler's registration, overridden for the current user.
-pub const KEY: &str = r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32";
+pub const KEY: &str =
+    r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32";
 
 const JOURNAL: &str = "undo-shell.json";
 
@@ -106,7 +107,11 @@ mod tests {
         let write = &plan[0];
         assert_eq!(write.name, "", "the default value");
         assert_eq!(write.value, Value::String(String::new()));
-        assert!(write.key.starts_with(r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"));
+        assert!(
+            write
+                .key
+                .starts_with(r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}")
+        );
         assert!(write.key.ends_with(r"\InprocServer32"));
     }
 
@@ -117,14 +122,23 @@ mod tests {
 
         assert_eq!(menu.set(true).unwrap(), Change::Applied);
         assert!(menu.is_on());
-        assert_eq!(registry.read(KEY, "").unwrap(), Some(Value::String(String::new())));
-        assert_eq!(menu.set(true).unwrap(), Change::Unchanged, "asking twice changes nothing");
+        assert_eq!(
+            registry.read(KEY, "").unwrap(),
+            Some(Value::String(String::new()))
+        );
+        assert_eq!(
+            menu.set(true).unwrap(),
+            Change::Unchanged,
+            "asking twice changes nothing"
+        );
 
         assert_eq!(menu.set(false).unwrap(), Change::Applied);
         assert!(!menu.is_on());
         assert_eq!(registry.read(KEY, "").unwrap(), None);
         // The keys we created are gone, the ones that were there stay.
-        assert!(!registry.has_key(r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"));
+        assert!(
+            !registry.has_key(r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}")
+        );
         assert!(registry.has_key(CLSID_PARENT));
         assert_eq!(menu.set(false).unwrap(), Change::Unchanged);
     }
@@ -144,10 +158,19 @@ mod tests {
     #[test]
     fn a_value_the_user_added_by_hand_is_not_touched_when_we_turn_it_off() {
         let (mut registry, mut menu, _scratch) = shell("by-hand");
-        registry.write(KEY, "", &Value::String(String::new())).unwrap();
+        registry
+            .write(KEY, "", &Value::String(String::new()))
+            .unwrap();
 
-        assert_eq!(menu.set(true).unwrap(), Change::Unchanged, "nothing to change, no restart needed");
+        assert_eq!(
+            menu.set(true).unwrap(),
+            Change::Unchanged,
+            "nothing to change, no restart needed"
+        );
         assert_eq!(menu.set(false).unwrap(), Change::Unchanged);
-        assert_eq!(registry.read(KEY, "").unwrap(), Some(Value::String(String::new())));
+        assert_eq!(
+            registry.read(KEY, "").unwrap(),
+            Some(Value::String(String::new()))
+        );
     }
 }

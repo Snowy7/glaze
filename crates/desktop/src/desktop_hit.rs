@@ -13,7 +13,9 @@
 //! [`Swallower`] is the pure decision logic of the right-click hook.
 
 use windows::Win32::Foundation::POINT;
-use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, GetClassNameW, WindowFromPoint};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GA_ROOT, GetAncestor, GetClassNameW, WindowFromPoint,
+};
 
 use crate::Rect;
 
@@ -42,9 +44,9 @@ pub enum Under {
 
 /// ASCII class names against UTF-16 buffers, without allocating.
 fn is_one_of(units: &[u16], names: &[&str]) -> bool {
-    names
-        .iter()
-        .any(|n| n.len() == units.len() && units.iter().zip(n.bytes()).all(|(u, b)| *u == u16::from(b)))
+    names.iter().any(|n| {
+        n.len() == units.len() && units.iter().zip(n.bytes()).all(|(u, b)| *u == u16::from(b))
+    })
 }
 
 /// The class decision of [`under`], on already fetched names.
@@ -193,8 +195,18 @@ mod tests {
 
     fn icons() -> IconMap {
         IconMap::new(vec![
-            Rect { x: 0, y: 0, width: 80, height: 100 },
-            Rect { x: 0, y: 100, width: 80, height: 100 },
+            Rect {
+                x: 0,
+                y: 0,
+                width: 80,
+                height: 100,
+            },
+            Rect {
+                x: 0,
+                y: 100,
+                width: 80,
+                height: 100,
+            },
         ])
     }
 
@@ -202,12 +214,20 @@ mod tests {
     fn the_desktop_layer_is_the_icon_view_under_the_shell_not_a_folder_window() {
         assert_eq!(class("SysListView32", "Progman"), Under::Desktop);
         assert_eq!(class("SHELLDLL_DefView", "Progman"), Under::Desktop);
-        assert_eq!(class("SysListView32", "WorkerW"), Under::Desktop, "legacy layout");
+        assert_eq!(
+            class("SysListView32", "WorkerW"),
+            Under::Desktop,
+            "legacy layout"
+        );
         assert_eq!(class("mypaper.wallpaper", "Progman"), Under::Desktop);
         assert_eq!(class("Progman", "Progman"), Under::Desktop);
         // An Explorer folder window has the same inner classes.
         assert_eq!(class("SysListView32", "CabinetWClass"), Under::Other);
-        assert_eq!(class("Chrome_RenderWidgetHostHWND", "Progman"), Under::Other, "a widget");
+        assert_eq!(
+            class("Chrome_RenderWidgetHostHWND", "Progman"),
+            Under::Other,
+            "a widget"
+        );
         assert_eq!(class("Shell_TrayWnd", "Shell_TrayWnd"), Under::Other);
         assert_eq!(class("", ""), Under::Other);
     }
@@ -235,7 +255,9 @@ mod tests {
     fn a_right_click_on_empty_desktop_is_swallowed_as_a_pair() {
         let mut s = Swallower::default();
         let map = icons();
-        let down = s.decide(click(Edge::Down, (500, 500), 1_000), &map, || Under::Desktop);
+        let down = s.decide(click(Edge::Down, (500, 500), 1_000), &map, || {
+            Under::Desktop
+        });
         assert_eq!(down, Verdict::SwallowDown);
         let up = s.decide(click(Edge::Up, (500, 500), 1_090), &map, || unreachable!());
         assert_eq!(up, Verdict::SwallowUp);

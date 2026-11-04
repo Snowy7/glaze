@@ -19,7 +19,9 @@
 use std::cell::{Cell, RefCell};
 
 use anyhow::{Context, Result};
-use windows::Win32::Foundation::{ERROR_CLASS_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Foundation::{
+    ERROR_CLASS_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, POINT, WPARAM,
+};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::{
     GetRawInputData, HRAWINPUT, RAWINPUT, RAWINPUTDEVICE, RAWINPUTDEVICE_FLAGS, RAWINPUTHEADER,
@@ -143,7 +145,10 @@ impl Gate {
                     self.inside = true;
                     Some(event)
                 } else if std::mem::take(&mut self.inside) {
-                    Some(Event { kind: Kind::Leave, ..event })
+                    Some(Event {
+                        kind: Kind::Leave,
+                        ..event
+                    })
                 } else {
                     None
                 }
@@ -321,7 +326,9 @@ impl Inner {
 
     /// Decodes one `WM_INPUT` and queues what it carries.
     fn on_input(&self, lparam: LPARAM) {
-        let Some(raw) = read_mouse(lparam) else { return };
+        let Some(raw) = read_mouse(lparam) else {
+            return;
+        };
         let mut cursor = POINT::default();
         // SAFETY: `cursor` outlives the call.
         if unsafe { GetCursorPos(&mut cursor) }.is_err() {
@@ -331,7 +338,10 @@ impl Inner {
         let urgent = {
             let mut queue = self.queue.borrow_mut();
             if raw.moved {
-                queue.push(Event { kind: Kind::Move, at });
+                queue.push(Event {
+                    kind: Kind::Move,
+                    at,
+                });
             }
             for kind in raw.kinds() {
                 queue.push(Event { kind, at });
@@ -486,7 +496,11 @@ mod tests {
                 Kind::Up(Button::Left),
             ]
         );
-        let idle = RawReport { moved: true, buttons: 0, wheel: 0 };
+        let idle = RawReport {
+            moved: true,
+            buttons: 0,
+            wheel: 0,
+        };
         assert_eq!(idle.kinds().count(), 0);
     }
 
@@ -495,20 +509,51 @@ mod tests {
         let mut gate = Gate::default();
         let desktop = |on| move || on;
         let never = || unreachable!();
-        assert_eq!(gate.filter(ev(Kind::Move, 1), desktop(true), never), Some(ev(Kind::Move, 1)));
-        assert_eq!(gate.filter(ev(Kind::Move, 2), desktop(false), never), Some(ev(Kind::Leave, 2)));
-        assert_eq!(gate.filter(ev(Kind::Move, 3), desktop(false), never), None, "already outside");
-        assert_eq!(gate.filter(ev(Kind::Wheel(120), 3), desktop(false), never), None);
-        assert_eq!(gate.filter(ev(Kind::Wheel(120), 4), desktop(true), never), Some(ev(Kind::Wheel(120), 4)));
+        assert_eq!(
+            gate.filter(ev(Kind::Move, 1), desktop(true), never),
+            Some(ev(Kind::Move, 1))
+        );
+        assert_eq!(
+            gate.filter(ev(Kind::Move, 2), desktop(false), never),
+            Some(ev(Kind::Leave, 2))
+        );
+        assert_eq!(
+            gate.filter(ev(Kind::Move, 3), desktop(false), never),
+            None,
+            "already outside"
+        );
+        assert_eq!(
+            gate.filter(ev(Kind::Wheel(120), 3), desktop(false), never),
+            None
+        );
+        assert_eq!(
+            gate.filter(ev(Kind::Wheel(120), 4), desktop(true), never),
+            Some(ev(Kind::Wheel(120), 4))
+        );
     }
 
     #[test]
     fn clicks_on_icons_never_reach_the_page() {
         let mut gate = Gate::default();
         let press = ev(Kind::Down(Button::Left), 1);
-        assert_eq!(gate.filter(press, || true, || true), None, "an icon is the desktop's");
-        assert_eq!(gate.filter(ev(Kind::Up(Button::Left), 1), || unreachable!(), || unreachable!()), None);
-        assert_eq!(gate.filter(press, || false, || unreachable!()), None, "an app window");
+        assert_eq!(
+            gate.filter(press, || true, || true),
+            None,
+            "an icon is the desktop's"
+        );
+        assert_eq!(
+            gate.filter(
+                ev(Kind::Up(Button::Left), 1),
+                || unreachable!(),
+                || unreachable!()
+            ),
+            None
+        );
+        assert_eq!(
+            gate.filter(press, || false, || unreachable!()),
+            None,
+            "an app window"
+        );
     }
 
     #[test]
@@ -518,14 +563,29 @@ mod tests {
         assert_eq!(gate.filter(press, || true, || false), Some(press));
         // Dragged onto an app window: still the page's drag.
         let away = ev(Kind::Move, 50);
-        assert_eq!(gate.filter(away, || unreachable!(), || unreachable!()), Some(away));
+        assert_eq!(
+            gate.filter(away, || unreachable!(), || unreachable!()),
+            Some(away)
+        );
         // The release is delivered even over an app, exactly once.
         let release = ev(Kind::Up(Button::Left), 50);
-        assert_eq!(gate.filter(release, || unreachable!(), || unreachable!()), Some(release));
-        assert_eq!(gate.filter(release, || unreachable!(), || unreachable!()), None);
+        assert_eq!(
+            gate.filter(release, || unreachable!(), || unreachable!()),
+            Some(release)
+        );
+        assert_eq!(
+            gate.filter(release, || unreachable!(), || unreachable!()),
+            None
+        );
         // And the pointer is no longer tracked outside.
-        assert_eq!(gate.filter(ev(Kind::Move, 60), || false, || unreachable!()), Some(ev(Kind::Leave, 60)));
-        assert_eq!(gate.filter(ev(Kind::Move, 61), || false, || unreachable!()), None);
+        assert_eq!(
+            gate.filter(ev(Kind::Move, 60), || false, || unreachable!()),
+            Some(ev(Kind::Leave, 60))
+        );
+        assert_eq!(
+            gate.filter(ev(Kind::Move, 61), || false, || unreachable!()),
+            None
+        );
     }
 
     #[test]
@@ -533,6 +593,13 @@ mod tests {
         let mut gate = Gate::default();
         gate.filter(ev(Kind::Down(Button::Right), 1), || true, || false);
         gate.reset();
-        assert_eq!(gate.filter(ev(Kind::Up(Button::Right), 1), || unreachable!(), || unreachable!()), None);
+        assert_eq!(
+            gate.filter(
+                ev(Kind::Up(Button::Right), 1),
+                || unreachable!(),
+                || unreachable!()
+            ),
+            None
+        );
     }
 }
