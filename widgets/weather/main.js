@@ -34,7 +34,7 @@ const els = {
 };
 const layers = [...els.art.querySelectorAll("[data-layer]")].filter((g) => g instanceof SVGElement);
 
-const defaults = { variant: "card", city: "London", lat: "", lon: "", units: "metric", animate: true };
+const defaults = { variant: "card", city: "", lat: "", lon: "", units: "metric", animate: true };
 let settings = defaults;
 /** @type {Variant} */
 let variant = "card";
@@ -48,13 +48,13 @@ let settingsKnown = false;
 let data;
 let hourKey = "";
 
-/** `lat`/`lon` win when both parse; otherwise the city. */
+/** `lat`/`lon` win when both parse, then the city; otherwise the plugin locates the PC. */
 function placeParams() {
   const lat = Number.parseFloat(settings.lat);
   const lon = Number.parseFloat(settings.lon);
   if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
   const city = settings.city.trim();
-  return city ? { city } : undefined;
+  return city ? { city } : { auto: true };
 }
 
 /** @param {string} icon */
@@ -187,10 +187,6 @@ function showError(title, hint) {
 
 async function load() {
   const params = placeParams();
-  if (!params) {
-    showError("Set a city", "Add a city (or a latitude and longitude) in this widget's settings.");
-    return;
-  }
   const mine = ++generation;
   lastTry = Date.now();
   try {

@@ -23,7 +23,7 @@
       ],
       "default": "card"
     },
-    { "key": "city", "type": "string", "label": "City", "group": "Location", "default": "London" },
+    { "key": "city", "type": "string", "label": "City (empty: automatic)", "group": "Location", "default": "" },
     { "key": "lat", "type": "string", "label": "Latitude (overrides city)", "group": "Location", "default": "" },
     { "key": "lon", "type": "string", "label": "Longitude (overrides city)", "group": "Location", "default": "" },
     {
