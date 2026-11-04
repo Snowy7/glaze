@@ -21,6 +21,7 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use crate::gpu::{Gpu, Opening, Screen};
 use crate::hold::{Fact, HoldReasons, Holds};
 use crate::palette;
+use crate::snapshot::{Snapshot, Target};
 use crate::sources::{self, Frame, Redraw, Source, Visibility};
 use crate::window::Window;
 
@@ -66,6 +67,8 @@ pub struct Engine {
     reasons: HoldReasons,
     /// The loaded theme's palette has not been written yet (once per load).
     palette_due: bool,
+    /// Sets a still of the theme as the Windows wallpaper (desktop mode, `static_snapshot`).
+    snapshot: Snapshot,
 }
 
 impl Engine {
@@ -84,8 +87,10 @@ impl Engine {
             .map(|(surface, window)| Screen::new(&gpu, surface, window))
             .collect::<Result<_>>()?;
         let hwnds: Vec<HWND> = screens.iter().map(|s| s.window.0).collect();
-        let source = load_or_broken(&gpu, &theme, &hwnds);
+        let (source, loaded) = load_or_broken(&gpu, &theme, &hwnds);
         startup::ready("wallpaper", "source_ms");
+        let mut snapshot = Snapshot::new();
+        snapshot.theme_loaded(loaded);
         Ok(Self {
             theme,
             gpu,
@@ -104,7 +109,17 @@ impl Engine {
             holds: Holds::default(),
             reasons: HoldReasons::default(),
             palette_due: true,
+            snapshot,
         })
+    }
+
+    /// Follows `static_snapshot`: on, the theme's first frame becomes the Windows wallpaper;
+    /// off, the user's own wallpaper is put back. Does nothing in the dev window, which must
+    /// not touch the real desktop.
+    pub fn set_static_snapshot(&mut self, on: bool) {
+        if self.monitors.is_some() && self.snapshot.set_enabled(on) {
+            self.mark_dirty();
+        }
     }
 
     pub fn schedule_reload(&mut self) {
@@ -276,6 +291,7 @@ impl Engine {
         // SAFETY: `cursor` outlives the call.
         let _ = unsafe { GetCursorPos(&mut cursor) };
         let mut drew = false;
+        let mut native = false;
         for (index, screen) in self.screens.iter_mut().enumerate() {
             if screen.paused || !(due || screen.dirty) {
                 continue;
@@ -283,6 +299,7 @@ impl Engine {
             if self.source.native(index) {
                 // The source owns what is on screen: nothing to acquire or present.
                 screen.dirty = false;
+                native = true;
                 self.source.layout(index, screen.window.0, screen.size());
                 if self.palette_due {
                     startup::ready("wallpaper", "first_frame_ms");
@@ -330,6 +347,28 @@ impl Engine {
                 self.frame,
             );
         }
+
+        // Once per theme load, too: the same frame, full size, for the Windows wallpaper (a
+        // native source has none to give, which the snapshot answers by restoring the original).
+        if (drew || native) && self.snapshot.due() {
+            let monitors = self.monitors.iter().flatten();
+            let targets: Vec<Target> = monitors
+                .zip(&self.screens)
+                .map(|(rect, screen)| Target {
+                    rect: *rect,
+                    size: screen.size(),
+                    mouse: [(cursor.x - rect.x) as f32, (cursor.y - rect.y) as f32],
+                })
+                .collect();
+            self.snapshot.capture(
+                &self.gpu,
+                self.source.as_mut(),
+                &self.theme.dir,
+                &targets,
+                self.clock,
+                self.frame,
+            );
+        }
     }
 
     /// Reloads the current theme after its files changed.
@@ -351,6 +390,7 @@ impl Engine {
         self.source = source;
         self.theme = theme;
         self.palette_due = true;
+        self.snapshot.theme_loaded(true);
         self.next_frame = Instant::now();
         // A new source starts with every screen visible.
         self.shown.fill(Visibility::Live);
@@ -367,17 +407,17 @@ impl Engine {
 }
 
 /// A theme that fails at startup shows the red "broken" screen and keeps
-/// watching for a fix, instead of exiting.
-fn load_or_broken(gpu: &Gpu, theme: &LoadedTheme, screens: &[HWND]) -> Box<dyn Source> {
+/// watching for a fix, instead of exiting. Also says whether the theme loaded.
+fn load_or_broken(gpu: &Gpu, theme: &LoadedTheme, screens: &[HWND]) -> (Box<dyn Source>, bool) {
     let started = Instant::now();
     match sources::load(gpu, theme, screens) {
         Ok(source) => {
             log::info!("{} ready in {:.1?}", theme.theme.name, started.elapsed());
-            source
+            (source, true)
         }
         Err(e) => {
             log::error!("{e:#}");
-            Box::new(sources::Broken)
+            (Box::new(sources::Broken), false)
         }
     }
 }

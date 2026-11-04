@@ -13,11 +13,14 @@
 
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Proving that wgpu's buffers can move to the snapshot thread (`Send`) walks a deep type graph.
+#![recursion_limit = "256"]
 
 mod control;
 mod engine;
 mod gpu;
 mod palette;
+mod snapshot;
 mod sources;
 mod trim;
 mod window;
@@ -144,6 +147,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
     // Facts first, so the initial hold is logged once.
     engine.set_fact(Fact::OnBattery, mypaper_desktop::on_battery());
     engine.apply_config(&config);
+    engine.set_static_snapshot(config.static_snapshot);
     let mut live = Live::new(config, engine.theme_dir())?;
     let events = host.is_some().then(WindowEvents::install);
     let waiter = Waiter::new()?;
