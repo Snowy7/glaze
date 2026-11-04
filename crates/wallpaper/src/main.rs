@@ -21,6 +21,10 @@ mod control;
 mod engine;
 mod glass_pass;
 mod gpu;
+// Glass overlays: built and measured in N0.2 (examples/overlay_spike.rs); the engine loop drives
+// them from N3.
+#[allow(dead_code)]
+mod overlay;
 mod palette;
 mod snapshot;
 mod sources;

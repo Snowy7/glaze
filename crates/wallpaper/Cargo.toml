@@ -26,6 +26,11 @@ glam.workspace = true
 gltf.workspace = true
 # WebView2 bindings for `web` wallpapers (0.39 is the line built on windows 0.62).
 webview2-com = "0.39"
+# Glass overlays (src/overlay): the window-exclusion ABI the windows crate lacks (`interface`),
+# WinRT collections and async results for Windows.Graphics.Capture.
+windows-core = "0.62"
+windows-collections = "0.3"
+windows-future = "0.3"
 
 subsecond = { workspace = true, optional = true }
 dioxus-devtools = { workspace = true, optional = true }
@@ -33,6 +38,21 @@ dioxus-devtools = { workspace = true, optional = true }
 [dependencies.windows]
 workspace = true
 features = [
+  # Glass overlays (src/overlay): Windows.Graphics.Capture and DirectComposition.
+  "Foundation_Collections",
+  "Graphics_Capture",
+  "Graphics_DirectX_Direct3D11",
+  "Security_Authorization_AppCapabilityAccess",
+  "UI",
+  "Win32_Graphics_DirectComposition",
+  "Win32_System_DataExchange",
+  "Win32_System_WinRT_Direct3D11",
+  "Win32_System_WinRT_Graphics_Capture",
+  # The overlay spike examples only: D3D11On12 (the device comparison), DWM timing, QPC, input.
+  "Win32_Graphics_Direct3D11on12",
+  "Win32_Graphics_Dwm",
+  "Win32_System_Performance",
+  "Win32_UI_Input_KeyboardAndMouse",
   "Win32_Foundation",
   "Win32_Graphics_Direct3D",
   "Win32_Graphics_Direct3D11",
