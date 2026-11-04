@@ -289,6 +289,7 @@ export function createDock(root: HTMLElement, config: BarsConfig, ctx: BarContex
       slot.icon.style.transform = "";
     }
     divider.style.transform = "";
+    extras.style.transform = "";
     face.style.removeProperty("--ga");
     face.style.removeProperty("--gb");
   }
@@ -351,6 +352,17 @@ export function createDock(root: HTMLElement, config: BarsConfig, ctx: BarContex
       const spreadEnd = (result.shifts[last] ?? 0) + (((result.scales[last] ?? 1) - 1) * size) / 2;
       face.style.setProperty("--ga", `${Math.max(0, spreadStart)}px`);
       face.style.setProperty("--gb", `${Math.max(0, spreadEnd)}px`);
+      // The extras (trash, show desktop) move over with the last icon, and the divider stays in
+      // the middle of the gap between its magnified neighbors.
+      extras.style.transform = shiftBy(Math.max(0, spreadEnd));
+      const at = dividerIndex(items);
+      if (at !== null) {
+        const [before, after] = [at - 1, at];
+        const middle =
+          ((result.shifts[before] ?? 0) + (result.shifts[after] ?? 0)) / 2 +
+          (((result.scales[before] ?? 1) - (result.scales[after] ?? 1)) * size) / 4;
+        divider.style.transform = shiftBy(middle);
+      }
     }
     const nearest = centers.reduce((best, c, i) => (Math.abs(c - p) < Math.abs((centers[best] ?? 0) - p) ? i : best), 0);
     const item = items[nearest];

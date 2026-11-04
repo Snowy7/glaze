@@ -34,6 +34,12 @@ commit as the code.
   - Measured (debug build, two 1440p monitors, two top bars and a dock): 0.03% of the machine's
     CPU at idle; about 520 MB working set for the host and WebView2's processes (one browser, one
     GPU process, one renderer per bar).
+  - Measured with phase 2 (release build, two 1440p monitors, a top bar and a dock on each, the
+    `monochrome` preset with wallpaper glass over an animated shader): 0.05% of the machine's CPU
+    at idle over 15 s for the bars host and its WebView2 processes; 685 MB working set (4 bars).
+    Each wallpaper snapshot costs the engine's frame thread 0.04–0.08 ms (copying the read-back
+    pixels); encoding and writing it takes 1.7–2.2 ms on a side thread; the GPU pyramid and
+    readback took about 1 ms on the integrated GPU in a headless test. Nothing runs while held.
 
 ## Process
 
