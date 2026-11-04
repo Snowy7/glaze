@@ -127,9 +127,12 @@ impl<S: Shell> Taskbar<S> {
         // Write-ahead: the originals are on disk before anything changes.
         let before = journal.clone();
         if autohide && journal.appbar.is_none() {
-            journal.appbar = Some(Was {
-                was: self.shell.appbar_state(),
-            });
+            let was = self.shell.appbar_state();
+            // Already auto-hidden is the user's setting, not a change for us to undo. Besides
+            // preserving later user edits, this avoids an unnecessary Explorer call on replay.
+            if was & ABS_AUTOHIDE == 0 {
+                journal.appbar = Some(Was { was });
+            }
         }
         journal.hidden |= hide;
         if wanted.alignment.is_some() && journal.alignment.is_none() {
@@ -647,6 +650,25 @@ mod tests {
         let mut bar = taskbar("keep");
         bar.apply(Wanted::default()).unwrap();
         bar.apply(Wanted::default()).unwrap();
+        assert_eq!(bar.shell.writes, 0);
+        assert!(!bar.pending());
+    }
+
+    #[test]
+    fn hiding_an_already_auto_hidden_taskbar_owns_only_the_window_visibility() {
+        let mut bar = taskbar("already-autohide");
+        bar.shell.state |= ABS_AUTOHIDE;
+        bar.apply(wanted(TaskbarMode::Hide, None)).unwrap();
+        assert!(bar.shell.hidden);
+        assert!(bar.load().unwrap().unwrap().appbar.is_none());
+        assert_eq!(bar.shell.writes, 0);
+
+        // The user changes this setting while our windows are hidden. We didn't change it,
+        // so recovery must leave the new preference alone and only show the windows again.
+        bar.shell.state = ALWAYS_ON_TOP;
+        bar.restore().unwrap();
+        assert!(!bar.shell.hidden);
+        assert_eq!(bar.shell.state, ALWAYS_ON_TOP);
         assert_eq!(bar.shell.writes, 0);
         assert!(!bar.pending());
     }
