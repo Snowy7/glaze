@@ -139,6 +139,17 @@ fn load_shell() -> Option<Shell> {
     }
 }
 
+/// Moves instances of replaced widgets onto their replacements (`Layout::migrate`) and saves
+/// when that changed anything, so the file, and Studio which reads it, names installed widgets.
+/// Never call it while the file doesn't parse: it would overwrite the user's file.
+fn migrate_layout(registry: &Registry, path: &Path, layout: &mut Layout) {
+    if layout.migrate(|old| registry.replacement(old))
+        && let Err(e) = layout.save(path)
+    {
+        log::warn!("saving the migrated widgets.json: {e:#}");
+    }
+}
+
 enum Env {
     None,
     Creating(u64),
@@ -391,6 +402,9 @@ impl App {
         };
         if layout_missing {
             app.seed_starter_layout();
+        }
+        if app.layout_error.is_none() {
+            migrate_layout(&app.registry, &app.layout_path, &mut app.layout);
         }
         app.watch();
         app.update_policy();
@@ -1701,7 +1715,8 @@ impl App {
     /// `widgets.json` changed on disk (Studio, an editor, or our own save).
     fn reload_layout(&mut self) {
         match Layout::load(&self.layout_path) {
-            Ok(layout) => {
+            Ok(mut layout) => {
+                migrate_layout(&self.registry, &self.layout_path, &mut layout);
                 let was_broken = self.layout_error.take().is_some();
                 if layout == self.layout && !was_broken {
                     return; // our own save coming back
@@ -1757,6 +1772,9 @@ impl App {
     fn rescan_widgets(&mut self) {
         self.roots = registry::widget_roots();
         self.registry = Registry::scan(&self.roots);
+        if self.layout_error.is_none() {
+            migrate_layout(&self.registry, &self.layout_path, &mut self.layout);
+        }
         self.update_policy(); // the network filter serves widget files from this
         // Fresh manifests first, so reloaded frames get them.
         self.reconcile();

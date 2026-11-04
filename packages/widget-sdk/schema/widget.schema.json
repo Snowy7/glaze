@@ -91,6 +91,12 @@
         "$ref": "#/definitions/setting"
       }
     },
+    "replaces": {
+      "type": "object",
+      "description": "Widget ids this one took over, each with the settings an instance of the old widget gets. The host moves such instances onto this widget when widgets.json loads.",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 64 },
+      "additionalProperties": { "type": "object" }
+    },
     "preset": {
       "type": "string",
       "enum": [

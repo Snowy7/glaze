@@ -103,6 +103,8 @@ export interface WidgetManifest {
   permissions?: readonly Permission[];
   plugins?: readonly string[];
   settings?: readonly SettingDef[];
+  /** Ids this widget took over, with the settings their instances get. The host reads it; widgets never see it. */
+  replaces?: Readonly<Record<string, Settings>>;
 }
 
 export interface PluginManifest {

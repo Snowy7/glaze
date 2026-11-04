@@ -723,6 +723,10 @@ pub struct WidgetManifest {
     pub plugins: Vec<String>,
     #[serde(default)]
     pub settings: Vec<Setting>,
+    /// Widget ids this one took over, each with the settings an instance of the old widget gets
+    /// (docs/widgets.md, "Replaced widgets"). Host-only: not sent to the shell.
+    #[serde(default, skip_serializing)]
+    pub replaces: std::collections::BTreeMap<String, Map<String, Value>>,
 }
 
 impl WidgetManifest {
@@ -783,6 +787,14 @@ impl WidgetManifest {
                 "setting {:?} appears twice",
                 setting.key()
             );
+        }
+        for (old, settings) in &self.replaces {
+            ensure!(
+                valid_id(old) && *old != self.id,
+                "replaces: {old:?} must be another widget's id"
+            );
+            self.check_settings(settings.clone())
+                .with_context(|| format!("in replaces.{old}"))?;
         }
         Ok(())
     }
@@ -998,6 +1010,31 @@ mod tests {
             WidgetManifest::parse(CLOCK, "other").is_err(),
             "folder name must match"
         );
+    }
+
+    #[test]
+    fn replaces_needs_other_ids_and_valid_settings() {
+        let with =
+            |replaces: &str| CLOCK.replacen('{', &format!("{{ \"replaces\": {replaces},"), 1);
+        let ok = WidgetManifest::parse(
+            &with(r#"{ "analog-clock": { "density": "compact" } }"#),
+            "clock",
+        )
+        .unwrap();
+        assert_eq!(ok.replaces["analog-clock"]["density"], "compact");
+        // Not sent to the shell: it is the host's business.
+        assert!(serde_json::to_value(&ok).unwrap().get("replaces").is_none());
+        for (bad, why) in [
+            (r#"{ "clock": {} }"#, "itself"),
+            (r#"{ "Analog": {} }"#, "invalid id"),
+            (r#"{ "analog-clock": { "nope": 1 } }"#, "undeclared setting"),
+            (
+                r#"{ "analog-clock": { "density": "roomy" } }"#,
+                "invalid value",
+            ),
+        ] {
+            assert!(WidgetManifest::parse(&with(bad), "clock").is_err(), "{why}");
+        }
     }
 
     #[test]
