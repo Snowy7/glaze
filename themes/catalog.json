@@ -610,10 +610,10 @@
           "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
           "license": "CC-BY-NC-SA-3.0",
           "source": "https://github.com/rocksdanister/rain",
-          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size.",
+          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 6881,
-          "sha256": "a00c9fd77475f1052acee12929a9e0a7c46c019c6ba86b0decf6610de936b8fd"
+          "bytes": 7637,
+          "sha256": "a5f288cb2edb34f9e47937bed2ed231c51ec0d3671406349f505eca45d3fadba"
         },
         {
           "path": "rain-city/profile.wgsl",
@@ -693,10 +693,10 @@
           "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
           "license": "CC-BY-NC-SA-3.0",
           "source": "https://github.com/rocksdanister/rain",
-          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size.",
+          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 6887,
-          "sha256": "1c34f0ab5fa18f4a1f9c97b435780460f950648e84344931c0c128614fd6e832"
+          "bytes": 7643,
+          "sha256": "d748f11f26a07eb525129ec4189e3ac6fdd49772a12f0fa457495b8b5085d437"
         },
         {
           "path": "rain-city-amber/profile.wgsl",
@@ -776,10 +776,10 @@
           "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
           "license": "CC-BY-NC-SA-3.0",
           "source": "https://github.com/rocksdanister/rain",
-          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size.",
+          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 6887,
-          "sha256": "bf6756436294d8dd6b13a2266c7671cab2b6b8a69cd6af31bd929d83a91b1823"
+          "bytes": 7643,
+          "sha256": "7379f7f4010ee95724434301278de7fe3a8dca94c0f6abfd142c2bd0863f24b8"
         },
         {
           "path": "rain-city-midnight/profile.wgsl",
