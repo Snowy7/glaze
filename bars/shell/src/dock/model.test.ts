@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { DockItem } from "../protocol";
-import { applyDrop, dividerIndex, indicator, orderItems } from "./model";
+import { applyDrop, dividerIndex, indicator, itemTitle, orderItems, splitItems, wantsAttention } from "./model";
 
-const win = (hwnd: number, active = false) => ({ hwnd, title: `w${hwnd}`, active, minimized: false });
+const win = (hwnd: number, active = false, attention = false) => ({
+  hwnd,
+  title: `w${hwnd}`,
+  active,
+  minimized: false,
+  attention,
+});
 const item = (key: string, pinned: boolean, windows: DockItem["windows"] = []): DockItem => ({
   key,
   name: key,
@@ -25,10 +31,31 @@ describe("grouping", () => {
     expect(dividerIndex([])).toBeNull();
   });
 
-  it("tells running from active", () => {
+  it("tells running from active, and attention", () => {
     expect(indicator(item("a", true))).toBe("none");
     expect(indicator(item("a", true, [win(1)]))).toBe("running");
     expect(indicator(item("a", true, [win(1), win(2, true)]))).toBe("active");
+    expect(wantsAttention(item("a", true, [win(1), win(2, false, true)]))).toBe(true);
+    expect(wantsAttention(item("a", true, [win(1)]))).toBe(false);
+  });
+});
+
+describe("splitItems", () => {
+  it("gives each window of an app its own item, right after the app's", () => {
+    const shown = splitItems([item("a", true, [win(1), win(2, true)]), item("b", false, [win(3)])]);
+    expect(keys(shown)).toEqual(["a", "a#2", "b"]);
+    expect(shown[0]?.windows.map((w) => w.hwnd)).toEqual([1]);
+    const split = shown[1];
+    expect(split?.name).toBe("w2");
+    expect(split?.pinned).toBe(true);
+    expect(split?.of?.path).toBe("a.exe");
+    expect(split?.path).not.toBe("a.exe"); // dragging it reorders no pin
+  });
+
+  it("titles a task button by its window", () => {
+    expect(itemTitle(item("a", true, [win(1)]))).toBe("w1");
+    expect(itemTitle(item("a", true, [win(1), win(2)]))).toBe("a");
+    expect(itemTitle(item("a", true))).toBe("a");
   });
 });
 

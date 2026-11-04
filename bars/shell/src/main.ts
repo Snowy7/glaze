@@ -1,11 +1,12 @@
-import { applyAppearance } from "./appearance";
 import type { Bar } from "./bar";
 import { dockStyles } from "./dock/styles";
 import { connect, fire, on } from "./host";
 import { initOverlay } from "./overlay";
 import type { BarsConfig } from "./protocol";
 import { createRegion } from "./region";
+import { applyLook, type PageLook } from "./style/apply";
 import "./style.css";
+import "./presets/presets.css";
 import { createTop } from "./top/top";
 
 async function main(): Promise<void> {
@@ -15,32 +16,67 @@ async function main(): Promise<void> {
   const overlay = document.getElementById("overlay");
   if (!app || !overlay) throw new Error("index.html is missing #app or #overlay");
 
-  html.setAttribute("data-bar", hello.bar);
-  applyAppearance(hello.appearance, hello.themeCss);
+  const state: PageLook = {
+    kind: hello.bar,
+    config: hello.config,
+    look: hello.look,
+    mode: hello.mode,
+    backdrop: hello.backdrop,
+  };
+  applyLook(state);
 
   const region = createRegion((rects) => fire("region", { rects }));
   initOverlay(overlay, region.invalidate);
 
   let bar: Bar | undefined;
+  let pack = JSON.stringify(state.look.iconPack);
   region.provide(() => bar?.rects() ?? []);
-  const build = (config: BarsConfig) => {
+  const build = () => {
     bar?.destroy();
-    if (hello.bar === "top") {
-      html.removeAttribute("data-position");
-      html.removeAttribute("data-style");
-      bar = createTop(app, config);
-    } else {
-      html.setAttribute("data-style", config.dock.style);
-      bar = dockStyles[config.dock.style](app, config, { invalidateRegion: region.invalidate });
-    }
+    const ctx = { invalidateRegion: region.invalidate, iconPack: state.look.iconPack };
+    bar =
+      state.kind === "top" ? createTop(app, state.config) : dockStyles[state.config.dock.style](app, state.config, ctx);
     region.invalidate();
   };
-  build(hello.config);
+  build();
+  // The bar comes in with its `show` animation (data-m-show), once.
+  html.classList.add("entering");
+  window.setTimeout(() => html.classList.remove("entering"), 2000);
 
-  on("config", build);
-  on("appearance", ({ appearance, themeCss }) => applyAppearance(appearance, themeCss));
-  // Hidden or suspended: stop animations (style.css).
-  on("visibility", (visible) => html.classList.toggle("paused", !visible));
+  on("config", (config: BarsConfig) => {
+    state.config = config;
+    applyLook(state);
+    build();
+  });
+  on("appearance", (look) => {
+    state.look = look;
+    applyLook(state);
+    const next = JSON.stringify(look.iconPack);
+    if (next !== pack) {
+      pack = next;
+      build(); // app icons come from the pack
+    }
+  });
+  on("mode", (mode) => {
+    state.mode = mode;
+    applyLook(state);
+  });
+  on("backdrop", (backdrop) => {
+    state.backdrop = backdrop;
+    applyLook(state);
+  });
+  // Hidden or suspended: stop animations (style.css); coming back plays the show animation.
+  on("visibility", (visible) => {
+    html.classList.toggle("paused", !visible);
+    if (visible) {
+      html.classList.remove("entering");
+      void html.offsetWidth;
+      html.classList.add("entering");
+    }
+  });
+  html.addEventListener("animationend", (event) => {
+    if (event.animationName.startsWith("bar-in")) html.classList.remove("entering");
+  });
   window.addEventListener("pagehide", () => bar?.destroy());
 }
 

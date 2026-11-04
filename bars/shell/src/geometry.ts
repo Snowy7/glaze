@@ -91,6 +91,8 @@ export function hoverExtent(pill: Rect, position: DockPosition, headroom: number
   switch (position) {
     case "bottom":
       return [x - spread, y - headroom, w + 2 * spread, h + headroom];
+    case "top":
+      return [x - spread, y, w + 2 * spread, h + headroom];
     case "left":
       return [x, y - spread, w + headroom, h + 2 * spread];
     case "right":

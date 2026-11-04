@@ -1,5 +1,6 @@
-// Applies the host's resolved appearance to <html> (docs/widgets.md, "Appearance"): data-*
-// attributes, CSS variables, and the theme CSS as the last <style>.
+// The resolved appearance (docs/widgets.md, "Appearance") as the base tokens: `data-*` attributes
+// and CSS variables for text steps, fills, lines and the tint. The look (style/look.ts) builds its
+// surfaces on these; style/apply.ts puts both on <html>.
 
 import type { Appearance } from "./protocol";
 
@@ -42,19 +43,4 @@ export function appearanceTokens(a: Appearance): { attrs: Record<string, string>
       "--scale": String(a.scale),
     },
   };
-}
-
-export function applyAppearance(a: Appearance, themeCss: string | null): void {
-  const root = document.documentElement;
-  const { attrs, vars } = appearanceTokens(a);
-  for (const [name, value] of Object.entries(attrs)) root.setAttribute(name, value);
-  for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
-
-  document.getElementById("theme-css")?.remove();
-  if (themeCss) {
-    const style = document.createElement("style");
-    style.id = "theme-css";
-    style.textContent = themeCss;
-    document.head.append(style);
-  }
 }

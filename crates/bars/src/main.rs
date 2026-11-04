@@ -11,19 +11,25 @@
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod accent;
 mod app;
 mod appbar;
 mod apps;
+mod assets;
 mod audio;
 mod bar;
 mod bridge;
+mod custom;
 mod desktops;
+mod glass;
 mod hooks;
 mod icons;
 mod look;
 mod media;
 mod network;
+mod preview;
 mod system;
+mod trash;
 mod tray;
 mod wake;
 mod web;

@@ -7,13 +7,15 @@
 // the window region (it shows and takes the pointer). It must fit in the window: the bar's band
 // plus the room the host gives it (`ROOM` in protocol.ts).
 //
-// Styling: the element is `.flyout[data-flyout="<id>"]`, inside `.layer`; it pops in from
-// `--origin` (the side toward its anchor).
+// Styling: the element is `.flyout[data-flyout="<id>"]`, inside `.layer`; it enters from
+// `--origin` (the side toward its anchor) with the `open` animation's style (`data-m-open`), and
+// plays it backwards as `.leaving` when it closes.
 
 import { h } from "./dom";
 import type { Point, Size } from "./geometry";
 import { createScope, type Scope } from "./host";
 import { mountLayer } from "./overlay";
+import { leafDuration } from "./style/motion";
 
 export interface FlyoutContext {
   /** Closes this flyout. */
@@ -96,7 +98,14 @@ export function defineFlyout<P>(id: string, render: FlyoutRender<P>): Flyout<P> 
       document.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("blur", close);
       scope.dispose();
-      layer.remove();
+      // It plays its exit (`.leaving`, the `open` animation's length), then goes.
+      const exit = leafDuration("open");
+      if (exit > 0) {
+        el.classList.add("leaving");
+        window.setTimeout(() => layer.remove(), exit);
+      } else {
+        layer.remove();
+      }
       options.onClose?.();
     }
 
