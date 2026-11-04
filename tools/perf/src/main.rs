@@ -35,7 +35,8 @@ use crate::scenario::Scenario;
 use crate::session::Session;
 
 const USAGE: &str = "usage: mypaper-perf [--build DIR] [--content DIR] [--runs N] [--seconds N] \
-                     [--label TEXT] [--restart EXE] [--no-write] [SCENARIO...] | --list";
+                     [--label TEXT] [--restart EXE] [--hold SECONDS] [--no-write] [SCENARIO...] \
+                     | --list";
 /// Sessions stop the user's mypaper; each stays under this (the lock protocol's 5 minutes,
 /// with room for stopping and restarting).
 const SESSION_BUDGET: Duration = Duration::from_secs(4 * 60);
@@ -47,6 +48,7 @@ struct Args {
     seconds: u64,
     label: Option<String>,
     restart: Option<PathBuf>,
+    hold: u64,
     write: bool,
     scenarios: Vec<&'static Scenario>,
 }
@@ -97,6 +99,7 @@ fn real_main() -> Result<bool> {
         settle: Duration::from_secs(5),
         window: Duration::from_secs(args.seconds),
         pause_settle: Duration::from_secs(3),
+        hold: Duration::from_secs(args.hold),
     };
     for scenario in &args.scenarios {
         stage_exes(&args.build, &stage_dir(&stage, scenario), scenario)?;
@@ -201,6 +204,7 @@ fn parse_args() -> Result<Option<Args>> {
         seconds: 10,
         label: None,
         restart: None,
+        hold: 0,
         write: true,
         scenarios: Vec::new(),
     };
@@ -217,6 +221,7 @@ fn parse_args() -> Result<Option<Args>> {
             "--seconds" => args.seconds = value()?.parse::<u64>()?.max(1),
             "--label" => args.label = Some(value()?),
             "--restart" => args.restart = Some(PathBuf::from(value()?)),
+            "--hold" => args.hold = value()?.parse()?,
             "--no-write" => args.write = false,
             "--list" => {
                 for s in scenario::ALL {

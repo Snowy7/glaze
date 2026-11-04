@@ -40,6 +40,9 @@ pub struct Plan {
     pub window: Duration,
     /// After pausing, before sampling.
     pub pause_settle: Duration,
+    /// Keeps the last start running this long before sampling, for poking at it by hand (e.g.
+    /// killing one WebView2 host to see the other survive).
+    pub hold: Duration,
 }
 
 impl Plan {
@@ -157,6 +160,15 @@ pub fn scenario(
         outcome.starts.push(start);
 
         if last {
+            if !plan.hold.is_zero() {
+                eprintln!(
+                    "holding core {} for {:?}; log: {}",
+                    core.pid,
+                    plan.hold,
+                    env.log().display()
+                );
+                std::thread::sleep(plan.hold);
+            }
             steady_and_held(&mut core, &env, plan, &mut outcome)?;
         }
         if let Some(note) = core.quit(stage) {

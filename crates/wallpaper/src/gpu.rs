@@ -23,26 +23,80 @@ pub struct Gpu {
     pub blit: Blitter,
 }
 
-impl Gpu {
-    /// Creates the device and a surface for each window (in order).
-    pub fn new(windows: &[Window]) -> Result<(Self, Vec<wgpu::Surface<'static>>)> {
-        let instance = instance();
+/// The device being opened on its own thread, from the first moment of the process.
+///
+/// Opening the device is the slowest part of starting: wgpu creates a D3D12 device on every
+/// adapter to see what it supports before picking one, about 350 ms on a machine with an
+/// integrated and a discrete GPU (docs/performance.md). Nothing in it needs a window, so it runs
+/// while the main thread loads the theme and makes the windows.
+pub struct Opening(std::thread::JoinHandle<Result<Opened>>);
 
+/// What [`Opening`] produces.
+pub struct Opened {
+    instance: wgpu::Instance,
+    adapter: wgpu::Adapter,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+}
+
+impl Opening {
+    pub fn start() -> Self {
+        Self(std::thread::spawn(|| {
+            let instance = instance();
+            let adapter = pollster::block_on(instance.request_adapter(&low_power(None)))?;
+            let (device, queue) = open_device(&adapter)?;
+            Ok(Opened {
+                instance,
+                adapter,
+                device,
+                queue,
+            })
+        }))
+    }
+
+    fn wait(self) -> Result<Opened> {
+        self.0
+            .join()
+            .map_err(|_| anyhow!("opening the GPU panicked"))?
+    }
+}
+
+/// Integrated GPU on laptops: a wallpaper should never wake the dGPU.
+fn low_power(surface: Option<&wgpu::Surface<'_>>) -> wgpu::RequestAdapterOptions<'_, '_> {
+    wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::LowPower,
+        compatible_surface: surface,
+        force_fallback_adapter: false,
+        apply_limit_buckets: false,
+    }
+}
+
+impl Gpu {
+    /// Takes the device `opening` made and creates a surface for each window (in order).
+    pub fn new(
+        opening: Opening,
+        windows: &[Window],
+    ) -> Result<(Self, Vec<wgpu::Surface<'static>>)> {
+        let Opened {
+            instance,
+            mut adapter,
+            mut device,
+            mut queue,
+        } = opening.wait()?;
         let surfaces = windows
             .iter()
             .map(|w| create_surface(&instance, w))
             .collect::<Result<Vec<_>>>()?;
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            // Integrated GPU on laptops: a wallpaper should never wake the dGPU.
-            power_preference: wgpu::PowerPreference::LowPower,
-            compatible_surface: surfaces.first(),
-            force_fallback_adapter: false,
-            apply_limit_buckets: false,
-        }))?;
+        // Picked without a surface: on DX12 every adapter presents to windows, but if this one
+        // can't, pick again the slow way, with the screen to show on.
+        if let Some(first) = surfaces.first()
+            && !adapter.is_surface_supported(first)
+        {
+            adapter = pollster::block_on(instance.request_adapter(&low_power(Some(first))))?;
+            (device, queue) = open_device(&adapter)?;
+        }
         let info = adapter.get_info();
         log::info!("GPU: {} ({:?})", info.name, info.backend);
-
-        let (device, queue) = open_device(&adapter)?;
 
         // Non-sRGB target: shader output is used as-is, matching Shadertoy-style code.
         let caps = surfaces
@@ -74,13 +128,7 @@ impl Gpu {
     #[cfg(test)]
     pub fn headless() -> Option<Self> {
         let instance = instance();
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::LowPower,
-            compatible_surface: None,
-            force_fallback_adapter: false,
-            apply_limit_buckets: false,
-        }))
-        .ok()?;
+        let adapter = pollster::block_on(instance.request_adapter(&low_power(None))).ok()?;
         let (device, queue) = open_device(&adapter).ok()?;
         let format = wgpu::TextureFormat::Bgra8Unorm;
         let blit = Blitter::new(&device, format);

@@ -18,7 +18,7 @@ use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
-use crate::gpu::{Gpu, Screen};
+use crate::gpu::{Gpu, Opening, Screen};
 use crate::hold::{Fact, HoldReasons, Holds};
 use crate::palette;
 use crate::sources::{self, Frame, Redraw, Source, Visibility};
@@ -69,12 +69,14 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// Takes the device `gpu` is opening (see [`Opening`]) and shows `theme` in `windows`.
     pub fn new(
         theme: LoadedTheme,
+        gpu: Opening,
         windows: Vec<Window>,
         monitors: Option<Vec<Rect>>,
     ) -> Result<Self> {
-        let (gpu, surfaces) = Gpu::new(&windows)?;
+        let (gpu, surfaces) = Gpu::new(gpu, &windows)?;
         startup::ready("wallpaper", "device_ms");
         let screens: Vec<Screen> = surfaces
             .into_iter()
