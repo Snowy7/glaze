@@ -58,6 +58,11 @@ pub enum Method {
     ActionCenter {
         panel: Panel,
     },
+    /// A flyout could not open: log it and open the native panel instead (`FlyoutName::native`).
+    FlyoutFailed {
+        flyout: FlyoutName,
+        error: String,
+    },
     Volume {
         #[serde(default)]
         set: Option<f32>,
@@ -141,6 +146,40 @@ pub enum Activate {
 pub enum Panel {
     Notifications,
     Quick,
+}
+
+/// The flyouts the page opens for module clicks and built-in actions
+/// (`bars/shell/src/flyouts/protocol.ts` → `FlyoutName`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FlyoutName {
+    Launcher,
+    Quick,
+    Network,
+    Mixer,
+    Calendar,
+    Notifications,
+}
+
+/// The native Windows panel that stands in for a flyout that could not open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Native {
+    StartMenu,
+    ActionCenter(Panel),
+    Settings(&'static str),
+}
+
+impl FlyoutName {
+    pub fn native(self) -> Native {
+        match self {
+            Self::Launcher => Native::StartMenu,
+            Self::Quick => Native::ActionCenter(Panel::Quick),
+            // The notification center holds the calendar.
+            Self::Notifications | Self::Calendar => Native::ActionCenter(Panel::Notifications),
+            Self::Network => Native::Settings("ms-settings:network"),
+            Self::Mixer => Native::Settings("ms-settings:sound"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -366,6 +405,33 @@ mod tests {
     fn parse(json: &str) -> Result<Method, BarError> {
         let envelope: Envelope = serde_json::from_str(json).unwrap();
         Method::parse(&envelope.method, envelope.params)
+    }
+
+    #[test]
+    fn a_failed_flyout_falls_back_to_its_native_panel() {
+        let fallback = |flyout: &str| match parse(&format!(
+            r#"{{ "id": 1, "method": "flyoutFailed", "params": {{ "flyout": "{flyout}", "error": "boom" }} }}"#
+        )) {
+            Ok(Method::FlyoutFailed { flyout, .. }) => flyout.native(),
+            other => panic!("{flyout}: {other:?}"),
+        };
+        assert_eq!(fallback("launcher"), Native::StartMenu);
+        assert_eq!(fallback("quick"), Native::ActionCenter(Panel::Quick));
+        assert_eq!(
+            fallback("notifications"),
+            Native::ActionCenter(Panel::Notifications)
+        );
+        assert_eq!(
+            fallback("calendar"),
+            Native::ActionCenter(Panel::Notifications)
+        );
+        assert_eq!(fallback("network"), Native::Settings("ms-settings:network"));
+        assert_eq!(fallback("mixer"), Native::Settings("ms-settings:sound"));
+        assert!(
+            parse(r#"{ "id": 1, "method": "flyoutFailed", "params": { "flyout": "tray", "error": "" } }"#)
+                .is_err(),
+            "only the flyouts a module or action opens have a native panel"
+        );
     }
 
     #[test]

@@ -4,17 +4,37 @@
 // module's own behavior: the binding listens in the capture phase on the module and only stops
 // the inputs it takes over.
 
+import {
+  openCalendar,
+  openMixer,
+  openNetwork,
+  openNotifications,
+  openQuick,
+  toggleLauncher,
+} from "./flyouts";
 import { fire, request } from "./host";
 import type { Action, BuiltinAction, ModuleName, ModuleOptions, Trigger } from "./protocol";
 
 const VOLUME_STEP = 0.04;
 
-export const BUILTIN: Record<Exclude<BuiltinAction, "default">, () => void> = {
+/**
+ * What each built-in action does, given the module it's bound on (where a flyout opens from).
+ * `start`, `notifications` and `quick-settings` open our flyouts, the same ones the `start`,
+ * `notifications` and `quick` modules open and the Windows key opens (a flyout that can't open
+ * falls back to the native panel: flyouts/index.ts); the `native-*` variants open Windows' own.
+ */
+export const BUILTIN: Record<Exclude<BuiltinAction, "default">, (anchor: HTMLElement) => void> = {
   none: () => undefined,
-  start: () => fire("start"),
+  start: toggleLauncher,
   search: () => fire("search"),
-  notifications: () => fire("actionCenter", { panel: "notifications" }),
-  "quick-settings": () => fire("actionCenter", { panel: "quick" }),
+  notifications: openNotifications,
+  "quick-settings": openQuick,
+  calendar: openCalendar,
+  network: openNetwork,
+  mixer: openMixer,
+  "native-start": () => fire("start"),
+  "native-notifications": () => fire("actionCenter", { panel: "notifications" }),
+  "native-quick-settings": () => fire("actionCenter", { panel: "quick" }),
   "task-manager": () => fire("launch", { path: "taskmgr.exe" }),
   settings: () => fire("openSettings", { uri: "ms-settings:" }),
   "show-desktop": () => fire("showDesktop"),
@@ -45,9 +65,9 @@ export function wheelTrigger(deltaY: number): Trigger | undefined {
   return deltaY < 0 ? "wheelUp" : deltaY > 0 ? "wheelDown" : undefined;
 }
 
-export function runAction(module: ModuleName, trigger: Trigger, action: Action): void {
+export function runAction(module: ModuleName, trigger: Trigger, action: Action, anchor: HTMLElement): void {
   if (typeof action === "string") {
-    if (action !== "default") BUILTIN[action]();
+    if (action !== "default") BUILTIN[action](anchor);
   } else {
     fire("run", { module, trigger });
   }
@@ -70,7 +90,7 @@ export function bindActions(el: HTMLElement, module: ModuleName, options: Module
       if (now - lastWheel < WHEEL_SPACING) return;
       lastWheel = now;
     }
-    runAction(module, trigger, action);
+    runAction(module, trigger, action, el);
   };
   const onClick = (e: MouseEvent) => take(e, e.button === 0 ? "left" : undefined);
   const onAux = (e: MouseEvent) => take(e, e.button === 1 ? "middle" : undefined);

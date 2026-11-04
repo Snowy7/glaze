@@ -33,7 +33,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
-use crate::bridge::{Direction, Panel, PowerAction};
+use crate::bridge::{Direction, Native, Panel, PowerAction};
 
 pub fn hwnd(raw: isize) -> HWND {
     HWND(raw as _)
@@ -134,6 +134,15 @@ pub fn start_menu() {
             }
             None => keys(&[VK_LWIN]),
         }
+    }
+}
+
+/// Opens the native panel that stands in for a flyout.
+pub fn native(panel: Native) {
+    match panel {
+        Native::StartMenu => start_menu(),
+        Native::ActionCenter(panel) => action_center(panel),
+        Native::Settings(uri) => open(uri.into()),
     }
 }
 

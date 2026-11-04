@@ -431,7 +431,7 @@ These are the items of the top bar and of a `taskbar` dock. Each is a small comp
 
 | Module | Shows | Click |
 |---|---|---|
-| `start` | a mypaper mark | opens the launcher (see "Flyouts"); the `start` action opens the native Start menu |
+| `start` | a mypaper mark | opens the launcher (see "Flyouts"); the `native-start` action opens the native Start menu |
 | `search` | a search glyph (a search box in `windows11`) | Windows Search (Win+S, on the user's click) |
 | `workspaces` | virtual desktops: count and current (`VirtualDesktopIDs` / `CurrentVirtualDesktop` under `HKCU\…\Explorer\VirtualDesktops`, watched with `RegNotifyChangeKeyValue`; absent values mean one desktop) | switch desktop: Win+Ctrl+arrow, sent only on the user's click (once per step) |
 | `app` | the foreground app's name and icon (the last app window in front: clicking a bar doesn't change it) | — |
@@ -465,12 +465,32 @@ These are the items of the top bar and of a `taskbar` dock. Each is a small comp
 
 - **`click`** binds `left`, `middle`, `right`, `wheelUp`, `wheelDown` to a **built-in action**
   (`default` (the module's own), `none`, `start`, `search`, `notifications`, `quick-settings`,
+  `calendar`, `network`, `mixer`, `native-start`, `native-notifications`, `native-quick-settings`,
   `task-manager`, `settings`, `show-desktop`, `media-toggle`, `media-next`, `media-previous`,
   `volume-up`, `volume-down`, `volume-mute`, `workspace-next`, `workspace-previous`, `lock`,
   `explorer`), to `{ "exec": program, "args": [...] }` (run as the user, detached) or to
   `{ "open": path-or-URI }`. Unbound inputs keep the module's behavior. The page binds them in the
   capture phase on the module, so only the bound inputs are taken over; wheel notches closer than
   120 ms count once.
+  **Flyout actions and native actions.** The actions that open a panel open ours by default; each
+  module's own click is the same action (`start` → launcher, `clock` → calendar, `network` →
+  network, `volume` → mixer, `quick` → quick settings, `notifications` → notifications), and the
+  flyout opens from the module the action is bound on:
+
+  | Action | Opens | If the flyout can't open, the host logs it and opens |
+  |---|---|---|
+  | `start` | the launcher (the one the Windows key opens: from the `start` module if the bar has one, else from the bound module; pressing again closes it) | the native Start menu |
+  | `notifications` | the notifications flyout | the notification center (`ms-actioncenter:`) |
+  | `quick-settings` | quick settings | the control center (`ms-actioncenter:controlcenter/`) |
+  | `calendar` | the calendar | the notification center |
+  | `network` | the network flyout | `ms-settings:network` |
+  | `mixer` | the volume mixer | `ms-settings:sound` |
+  | `native-start` | Windows' Start menu | |
+  | `native-notifications` | Windows' notification center (`ms-actioncenter:`) | |
+  | `native-quick-settings` | Windows' control center (`ms-actioncenter:controlcenter/`) | |
+
+  Use a `native-*` action to keep Windows' own panel on a module, e.g.
+  `"quick": { "click": { "left": "native-quick-settings" } }`.
   **`exec` and `open` run from the host's own copy of the config**: the page asks `run { module,
   trigger }` and never sends a command line.
 - **`style`**: `color`, `background` (paint), `border`, `padding` (horizontal, 0–32), `radius`
@@ -724,7 +744,10 @@ loaded anywhere else.
   injected input counts like a keyboard's (on-screen keyboards, remote desktop).
 - The launcher opens on the monitor of the app in front, on a bar there with the `start` module
   (else its top bar). The host makes the bar the foreground window: our replayed input is the last
-  input, so Windows allows it.
+  input, so Windows allows it. The page opens it with the same function as the `start` action
+  (`toggleLauncher`, `flyouts/index.ts`), so both open the same launcher, from the `start` module
+  when the bar has one; if it can't open, the page falls back to the native Start menu like any
+  flyout (see "Modules" → "Flyout actions and native actions").
 
 ### Quick settings
 
@@ -915,10 +938,11 @@ events to a bar only after it said `hello`.
 | `launch` | `{ path, newInstance? }` | — |
 | `minimize` / `close` | `{ hwnd }` | — |
 | `pin` / `unpin` / `reorder` | `{ path, name?, index? }` / `{ path }` / `{ paths }` | — |
-| `start` | — | — |
+| `start` | — (Windows' own Start menu: the `native-start` action) | — |
 | `search` | — | — |
 | `showDesktop` | — | — |
-| `actionCenter` | `{ panel: "notifications"\|"quick" }` | — |
+| `actionCenter` | `{ panel: "notifications"\|"quick" }` (Windows' own panel: the `native-*` actions) | — |
+| `flyoutFailed` | `{ flyout: "launcher"\|"quick"\|"network"\|"mixer"\|"calendar"\|"notifications", error }` | — (the host logs a warning and opens the flyout's native panel, as in "Flyout actions and native actions") |
 | `volume` | `{ set?: 0..1, mute?: bool, delta?: -1..1 }` | `{ level, muted }` |
 | `media` | `{ action: "toggle"\|"next"\|"previous" }` | — |
 | `tray` | `{ id, button: "left"\|"right"\|"middle"\|"double", rect? }` (`rect`: the icon in DIPs from the window's top-left) | — |

@@ -167,6 +167,9 @@ export type WatchTopic =
   | "language"
   | "notifications";
 
+/** The flyouts a module click or a built-in action opens (each falls back to a native panel). */
+export type FlyoutName = "launcher" | "quick" | "network" | "mixer" | "calendar" | "notifications";
+
 export interface FlyoutMethods {
   watch: { params: { topic: WatchTopic }; result: null };
   unwatch: { params: { topic: WatchTopic }; result: null };

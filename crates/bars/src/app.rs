@@ -1522,6 +1522,13 @@ impl App {
                 system::action_center(panel);
                 done
             }
+            Method::FlyoutFailed { flyout, error } => {
+                log::warn!(
+                    "the {flyout:?} flyout failed to open ({error:?}); opening the native panel"
+                );
+                system::native(flyout.native());
+                done
+            }
             Method::Volume { set, mute, delta } => {
                 let audio = self
                     .audio

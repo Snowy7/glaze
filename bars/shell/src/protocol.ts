@@ -1,7 +1,7 @@
 // The page ⇄ host wire protocol (docs/bars.md, "Bridge"). The Rust host (crates/bars) speaks the
 // other side. Every message is one JSON object through WebView2 `postMessage`.
 
-import type { CalendarConfig, FlyoutEvents, FlyoutMethods, LauncherConfig } from "./flyouts/protocol";
+import type { CalendarConfig, FlyoutEvents, FlyoutMethods, FlyoutName, LauncherConfig } from "./flyouts/protocol";
 
 /** Built-in modules, in the order they are documented. */
 export const MODULES = [
@@ -157,6 +157,12 @@ export const BUILTIN_ACTIONS = [
   "search",
   "notifications",
   "quick-settings",
+  "calendar",
+  "network",
+  "mixer",
+  "native-start",
+  "native-notifications",
+  "native-quick-settings",
   "task-manager",
   "settings",
   "show-desktop",
@@ -457,6 +463,8 @@ export interface MethodMap extends FlyoutMethods {
   reorder: { params: { paths: string[] }; result: null };
   start: { params: undefined; result: null };
   actionCenter: { params: { panel: "notifications" | "quick" }; result: null };
+  /** A flyout failed to open: the host logs it and opens the native panel in its place. */
+  flyoutFailed: { params: { flyout: FlyoutName; error: string }; result: null };
   volume: {
     params: { set?: number; mute?: boolean; delta?: number };
     result: { level: number; muted: boolean };

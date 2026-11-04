@@ -728,10 +728,21 @@ pub enum BuiltinAction {
     /// The module's own behavior (to undo a preset's choice).
     Default,
     None,
+    /// The launcher (what the Windows key opens too).
     Start,
     Search,
+    /// The notifications flyout.
     Notifications,
+    /// The quick settings flyout.
     QuickSettings,
+    Calendar,
+    Network,
+    /// The volume mixer flyout.
+    Mixer,
+    /// The native Start menu, notification center and quick settings (Windows' own panels).
+    NativeStart,
+    NativeNotifications,
+    NativeQuickSettings,
     TaskManager,
     Settings,
     ShowDesktop,
@@ -1477,5 +1488,81 @@ mod tests {
         assert!(edit(&path, |root| set(root, "dock", "size", Value::from(1))).is_err());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{}");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The page runs the built-in actions (`bars/shell/src/actions.ts`): both sides must name the
+    /// same ones, or a valid `bars.json` would bind an action the page can't run (or the reverse).
+    #[test]
+    fn builtin_actions_are_the_pages() {
+        use BuiltinAction::*;
+        let host = [
+            Default,
+            None,
+            Start,
+            Search,
+            Notifications,
+            QuickSettings,
+            Calendar,
+            Network,
+            Mixer,
+            NativeStart,
+            NativeNotifications,
+            NativeQuickSettings,
+            TaskManager,
+            Settings,
+            ShowDesktop,
+            MediaToggle,
+            MediaNext,
+            MediaPrevious,
+            VolumeUp,
+            VolumeDown,
+            VolumeMute,
+            WorkspaceNext,
+            WorkspacePrevious,
+            Lock,
+            Explorer,
+        ]
+        .map(|action| serde_json::to_value(action).unwrap());
+
+        let protocol = include_str!("../../../bars/shell/src/protocol.ts");
+        let list = protocol
+            .split("BUILTIN_ACTIONS = [")
+            .nth(1)
+            .and_then(|rest| rest.split("] as const").next())
+            .expect("protocol.ts lists BUILTIN_ACTIONS");
+        let page: Vec<Value> = list
+            .split(',')
+            .map(|name| name.trim().trim_matches('"'))
+            .filter(|name| !name.is_empty())
+            .map(Value::from)
+            .collect();
+        assert_eq!(page, host);
+    }
+
+    #[test]
+    fn native_actions_are_bindable() {
+        let config = BarsConfig::parse(
+            r#"{ "modules": { "start": { "click": { "left": "native-start", "right": "start" } },
+                              "quick": { "click": { "left": "native-quick-settings" } },
+                              "notifications": { "click": { "left": "native-notifications" } } } }"#,
+        )
+        .unwrap();
+        let click = |module| &config.modules[&ModuleRef::Builtin(module)].click;
+        assert_eq!(
+            click(Module::Start).get(Trigger::Left),
+            Some(&Action::Builtin(BuiltinAction::NativeStart))
+        );
+        assert_eq!(
+            click(Module::Start).get(Trigger::Right),
+            Some(&Action::Builtin(BuiltinAction::Start))
+        );
+        assert_eq!(
+            click(Module::Quick).get(Trigger::Left),
+            Some(&Action::Builtin(BuiltinAction::NativeQuickSettings))
+        );
+        assert_eq!(
+            click(Module::Notifications).get(Trigger::Left),
+            Some(&Action::Builtin(BuiltinAction::NativeNotifications))
+        );
     }
 }

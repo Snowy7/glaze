@@ -5,8 +5,9 @@
 
 import "./flyouts.css";
 import { closeFlyout, flyoutOpen } from "../flyout";
-import { on } from "../host";
+import { fire, on } from "../host";
 import { bellModule, type ModuleCtx } from "./modules";
+import type { FlyoutName } from "./protocol";
 
 export { initSurfaces, setSurfaceConfig } from "./surface";
 export { languageModule, trayModule } from "./modules";
@@ -24,32 +25,47 @@ const mixer = lazy(() => import("./mixer"));
 const calendar = lazy(() => import("./calendar"));
 const notifications = lazy(() => import("./notifications"));
 
+/**
+ * Opens a flyout from `anchor`. If it can't (its chunk or its content failed), the host logs that
+ * and opens the matching native Windows panel instead, so the click still does something.
+ */
 const opener =
-  (load: () => Promise<{ open(anchor: HTMLElement): Promise<void> }>) =>
+  (name: FlyoutName, load: () => Promise<{ open(anchor: HTMLElement): Promise<void> }>) =>
   (anchor: HTMLElement): void => {
     load()
       .then((m) => m.open(anchor))
-      .catch((error: unknown) => console.error("[bars] a flyout failed to open", error));
+      .catch((error: unknown) => {
+        console.error(`[bars] the ${name} flyout failed to open`, error);
+        fire("flyoutFailed", { flyout: name, error: String(error).slice(0, 200) });
+      });
   };
 
-export const openLauncher = opener(launcher);
-export const openQuick = opener(quick);
-export const openNetwork = opener(network);
-export const openMixer = opener(mixer);
-export const openCalendar = opener(calendar);
-export const openNotifications = opener(notifications);
+export const openLauncher = opener("launcher", launcher);
+export const openQuick = opener("quick", quick);
+export const openNetwork = opener("network", network);
+export const openMixer = opener("mixer", mixer);
+export const openCalendar = opener("calendar", calendar);
+export const openNotifications = opener("notifications", notifications);
 
 /** The `notifications` module: a bell with the count, opening the notifications flyout. */
 export const notificationsModule = (ctx: ModuleCtx): HTMLElement => bellModule(ctx, openNotifications);
 
-// The Windows key: the host made this bar the foreground window; open (or close) the launcher
-// from the start module, else from the bar itself.
-on("open", ({ flyout }) => {
-  if (flyout !== "launcher") return;
+/**
+ * Opens the launcher, or closes it when it's open: from the start module if this bar has one, else
+ * from `from` (the module an action was bound on), else from the bar itself. The Windows key and
+ * the `start` action both come here, so they open the same launcher in the same place.
+ */
+export function toggleLauncher(from?: HTMLElement): void {
   if (flyoutOpen("launcher")) return closeFlyout();
-  const anchor =
+  openLauncher(
     document.querySelector<HTMLElement>('[data-module="start"]') ??
-    document.querySelector<HTMLElement>(".pill") ??
-    document.body;
-  openLauncher(anchor);
+      from ??
+      document.querySelector<HTMLElement>(".pill") ??
+      document.body,
+  );
+}
+
+// The Windows key: the host made this bar the foreground window.
+on("open", ({ flyout }) => {
+  if (flyout === "launcher") toggleLauncher();
 });
