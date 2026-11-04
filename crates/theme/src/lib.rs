@@ -13,8 +13,6 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-pub mod glass;
-
 pub const MANIFEST: &str = "theme.json";
 
 /// Used when no theme is given on the command line.
@@ -91,6 +89,9 @@ fn locate_from(name: &str, user: Option<&Path>, exe: &Path) -> Result<PathBuf> {
 #[serde(deny_unknown_fields)]
 pub struct Theme {
     pub name: String,
+    /// Per-wallpaper renderer preferences; user config overrides this layer.
+    #[serde(default)]
+    pub engine: mypaper_config::RenderOptions,
     /// Exclude from discovery while still allowing an existing selection to resolve.
     #[serde(default)]
     pub hidden: bool,
@@ -435,6 +436,9 @@ pub enum Fit {
 #[serde(deny_unknown_fields)]
 pub struct ShaderWallpaper {
     pub source: PathBuf,
+    /// Texture at `binding`, filtering sampler at `binding + 1`, in group 0 (0 is paper).
+    #[serde(default)]
+    pub images: Vec<ShaderImage>,
     /// Frame cap. Lower = lighter; slow shaders look identical at 30.
     #[serde(default = "default_fps")]
     pub fps: u32,
@@ -442,6 +446,40 @@ pub struct ShaderWallpaper {
     /// Smooth shaders look the same at 0.5 for a quarter of the GPU work.
     #[serde(default = "one")]
     pub scale: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShaderImage {
+    /// Omit for a generated static texture (prefilter is then required).
+    #[serde(default)]
+    pub source: Option<PathBuf>,
+    /// Odd bindings 1..=29 reserve one texture/sampler pair each.
+    pub binding: u32,
+    /// Optional theme-owned static image pass (compiled and drawn only at load).
+    #[serde(default)]
+    pub prefilter: Option<ShaderPrefilter>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShaderPrefilter {
+    pub source: PathBuf,
+    /// Defaults to the input dimensions.
+    #[serde(default)]
+    pub size: Option<[u32; 2]>,
+    #[serde(default)]
+    pub format: ShaderImageFormat,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+pub enum ShaderImageFormat {
+    #[default]
+    #[serde(rename = "bgra8unorm")]
+    Bgra8Unorm,
+    /// Data cache accessed with textureLoad (no filtering or mip chain).
+    #[serde(rename = "rgba32float")]
+    Rgba32Float,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -550,9 +588,35 @@ impl LoadedTheme {
 
     pub fn parse(dir: PathBuf, json: &str) -> Result<Self> {
         let theme: Theme = serde_json::from_str(json)?;
+        theme.engine.validate()?;
         match &theme.wallpaper {
             Wallpaper::Shader(s) => {
                 check_path(&s.source)?;
+                for (i, image) in s.images.iter().enumerate() {
+                    if let Some(source) = &image.source {
+                        check_path(source)?;
+                    }
+                    if image.source.is_none() && image.prefilter.is_none() {
+                        bail!("shader image needs a source or prefilter");
+                    }
+                    if let Some(effect) = &image.prefilter {
+                        check_path(&effect.source)?;
+                        if let Some(size) = effect.size
+                            && !size.into_iter().all(|n| (1..=16384).contains(&n))
+                        {
+                            bail!("prefilter dimensions must be between 1 and 16384");
+                        }
+                    }
+                    if image.binding == 0
+                        || image.binding > 29
+                        || image.binding % 2 == 0
+                        || s.images[..i]
+                            .iter()
+                            .any(|other| other.binding == image.binding)
+                    {
+                        bail!("shader image bindings must be unique odd numbers from 1 to 29");
+                    }
+                }
                 check_fps(s.fps)?;
                 check_scale(s.scale)?;
             }
@@ -652,6 +716,7 @@ mod tests {
             wallpaper(r#"{ "kind": "shader", "source": "a.wgsl" }"#).unwrap(),
             Wallpaper::Shader(ShaderWallpaper {
                 source: "a.wgsl".into(),
+                images: Vec::new(),
                 fps: 60,
                 scale: 1.0
             })
@@ -700,6 +765,47 @@ mod tests {
                 .is_err()
         );
         assert!(wallpaper(r#"{ "kind": "image", "source": "a.jpg", "fit": "zoom" }"#).is_err());
+    }
+
+    #[test]
+    fn shader_images_reserve_valid_texture_sampler_pairs() {
+        let image = r#"{"kind":"shader","source":"rain.wgsl","scale":0.65,"images":[{"source":"media/city.jpg","binding":1}]}"#;
+        let Wallpaper::Shader(shader) = wallpaper(image).unwrap() else {
+            panic!("shader");
+        };
+        assert_eq!(shader.scale, 0.65);
+        assert_eq!(
+            shader.images[0].source.as_deref(),
+            Some(Path::new("media/city.jpg"))
+        );
+        for binding in [0, 2, 30] {
+            assert!(
+                wallpaper(&image.replace("\"binding\":1", &format!("\"binding\":{binding}")))
+                    .is_err()
+            );
+        }
+        assert!(wallpaper(&image.replace("media/city.jpg", "../city.jpg")).is_err());
+        assert!(
+            wallpaper(&image.replace(
+                "\"binding\":1}",
+                "\"binding\":1},{\"source\":\"b.jpg\",\"binding\":1}"
+            ))
+            .is_err()
+        );
+        let generated = r#"{"kind":"shader","source":"rain.wgsl","images":[{"binding":3,"prefilter":{"source":"profile.wgsl","size":[8192,1],"format":"rgba32float"}}]}"#;
+        assert!(wallpaper(generated).is_ok());
+        for invalid in [
+            generated.replace("8192,1", "8192,0"),
+            generated.replace("8192,1", "16385,1"),
+            generated.replace("rgba32float", "rgba16float"),
+            generated.replace("profile.wgsl", "../profile.wgsl"),
+        ] {
+            assert!(wallpaper(&invalid).is_err());
+        }
+        assert!(
+            wallpaper(r#"{"kind":"shader","source":"rain.wgsl","images":[{"binding":1}]}"#)
+                .is_err()
+        );
     }
 
     #[test]
@@ -944,7 +1050,17 @@ mod tests {
                 );
             };
             match &loaded.theme.wallpaper {
-                Wallpaper::Shader(w) => exists(&w.source),
+                Wallpaper::Shader(w) => {
+                    exists(&w.source);
+                    for image in &w.images {
+                        if let Some(source) = &image.source {
+                            exists(source);
+                        }
+                        if let Some(effect) = &image.prefilter {
+                            exists(&effect.source);
+                        }
+                    }
+                }
                 Wallpaper::Image(w) => exists(&w.source),
                 Wallpaper::Video(w) => exists(&w.source),
                 Wallpaper::Scene(w) => exists(&w.source),

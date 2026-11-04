@@ -10,6 +10,7 @@ license.workspace = true
 hotpatch = ["dep:subsecond", "dep:dioxus-devtools"]
 
 [dependencies]
+mypaper-glass-ipc.workspace = true
 mypaper-config.workspace = true
 mypaper-desktop.workspace = true
 mypaper-theme.workspace = true
@@ -38,6 +39,7 @@ features = [
   "Win32_Graphics_Direct3D11",
   "Win32_Graphics_Direct3D12",
   "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dwm",
   "Win32_Graphics_Dxgi_Common",
   "Win32_Graphics_Gdi",
   "Win32_Graphics_Imaging",

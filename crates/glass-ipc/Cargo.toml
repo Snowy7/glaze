@@ -1,0 +1,16 @@
+[package]
+name = "mypaper-glass-ipc"
+description = "Single-writer glass plate snapshots over session-local shared memory."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+
+[dependencies.windows]
+workspace = true
+features = ["Win32_Foundation", "Win32_Security", "Win32_System_Memory", "Win32_System_Performance", "Win32_System_Threading"]
+
+[lints]
+workspace = true

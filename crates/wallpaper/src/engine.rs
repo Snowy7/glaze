@@ -9,7 +9,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use mypaper_config::Config;
+use mypaper_config::{Config, EngineConfig, RenderSettings};
 use mypaper_desktop::{
     EXIT_RESTART, Rect, WindowEvents, covered_monitors, fullscreen_app_in_front, monitors, startup,
 };
@@ -20,7 +20,7 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use crate::backdrop::{Backdrop, Draw};
 use crate::glass_pass::GlassPass;
-use crate::gpu::{Gpu, Opening, Screen};
+use crate::gpu::{Gpu, KeptFrame, Opening, Screen};
 use crate::hold::{Fact, HoldReasons, Holds};
 use crate::palette;
 use crate::snapshot::{Snapshot, Target};
@@ -75,6 +75,10 @@ pub struct Engine {
     snapshot: Snapshot,
     /// Liquid glass under the widgets' (and bars') plates, when they ask for it.
     glass: GlassPass,
+    timing: Option<crate::timing::Timing>,
+    renderer_config: EngineConfig,
+    render_settings: RenderSettings,
+    restart_due: bool,
 }
 
 impl Engine {
@@ -84,6 +88,7 @@ impl Engine {
         gpu: Opening,
         windows: Vec<Window>,
         monitors: Option<Vec<Rect>>,
+        renderer_config: EngineConfig,
     ) -> Result<Self> {
         let (gpu, surfaces) = Gpu::new(gpu, &windows)?;
         startup::ready("wallpaper", "device_ms");
@@ -112,7 +117,14 @@ impl Engine {
         let backdrop = Backdrop::new(monitors.as_deref(), |i| {
             source.native(i) || !screens[i].copy_src
         });
-        let glass = GlassPass::new(monitors.as_deref());
+        let glass = GlassPass::new(monitors.as_deref())?;
+        let timing = crate::timing::Timing::new(&gpu)?;
+        let id = theme
+            .dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        let render_settings = renderer_config.resolve(id, theme.theme.engine);
         Ok(Self {
             theme,
             gpu,
@@ -134,17 +146,16 @@ impl Engine {
             backdrop,
             snapshot,
             glass,
+            timing,
+            renderer_config,
+            render_settings,
+            restart_due: false,
         })
     }
 
-    /// The registered message that says a glass plates file changed.
-    pub fn glass_message(&self) -> u32 {
-        self.glass.message
-    }
-
-    /// Re-reads the glass plates (their writer posted `mypaper.glass`).
-    pub fn glass_changed(&mut self) {
-        self.glass.reload();
+    /// Named plate event plus the current writer's exit handle, both owned by GlassPass.
+    pub fn glass_handles(&self) -> Vec<windows::Win32::Foundation::HANDLE> {
+        self.glass.wait_handles()
     }
 
     /// Follows `static_snapshot`: on, the theme's first frame becomes the Windows wallpaper;
@@ -167,9 +178,35 @@ impl Engine {
 
     /// Takes the pause settings from `config` and re-evaluates the hold.
     pub fn apply_config(&mut self, config: &Config) {
+        self.apply_renderer_config(&config.engine);
         self.holds.apply(config);
         self.refresh_fullscreen();
         self.sync_hold();
+    }
+
+    /// FPS caps change in process. A GPU preference change asks the core supervisor to restart
+    /// just this engine, releasing the old device before the new one is opened.
+    pub fn apply_renderer_config(&mut self, config: &EngineConfig) {
+        self.renderer_config = config.clone();
+        self.refresh_renderer();
+    }
+    fn refresh_renderer(&mut self) {
+        let id = self
+            .theme
+            .dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        let next = self.renderer_config.resolve(id, self.theme.theme.engine);
+        if next != self.render_settings {
+            log::info!("renderer settings: {next:?}");
+            self.next_frame = Instant::now();
+        }
+        self.render_settings = next;
+        self.restart_due = next.gpu != self.gpu.preference;
+    }
+    fn redraw(&self) -> Redraw {
+        cap_redraw(self.source.redraw(self.clock), self.render_settings.fps)
     }
 
     /// Records a system condition (battery, display, lock) and re-evaluates the hold.
@@ -212,7 +249,13 @@ impl Engine {
     /// One turn of the loop: react to changes, draw what is due, and say
     /// how long the thread may sleep.
     pub fn tick(&mut self, events: Option<&WindowEvents>) -> Flow {
+        if self.restart_due {
+            return Flow::Exit(EXIT_RESTART);
+        }
         let now = Instant::now();
+        if let Some(timing) = &mut self.timing {
+            timing.collect(&self.gpu);
+        }
 
         if events.is_some_and(WindowEvents::take_changed) {
             self.recheck_at.get_or_insert(now + COVER_DEBOUNCE);
@@ -252,10 +295,10 @@ impl Engine {
         }
 
         self.sync_visibility();
-        self.glass.advance(now);
+        self.glass.reload();
         for (index, screen) in self.screens.iter_mut().enumerate() {
             screen.dirty |= self.source.take_dirty(index);
-            screen.dirty |= self.glass.take_dirty(index);
+            screen.glass_dirty |= self.glass.take_dirty(index);
         }
         let active = !self.held && self.screens.iter().any(|s| !s.paused);
         if !active {
@@ -263,7 +306,11 @@ impl Engine {
             // Held, but an uncovered screen is still seen (e.g. the second
             // monitor while a game is fullscreen): give it one still frame of
             // the current wallpaper rather than whatever was there before.
-            if self.screens.iter().any(|s| s.dirty && !s.paused) {
+            if self
+                .screens
+                .iter()
+                .any(|s| (s.dirty || s.glass_dirty) && !s.paused)
+            {
                 self.render(false);
             }
             return Flow::Wait(self.deadline(None));
@@ -274,13 +321,18 @@ impl Engine {
         self.last_tick = Some(now);
 
         self.source.update(&self.gpu, self.clock);
-        let redraw = self.source.redraw(self.clock);
+        let redraw = self.redraw();
         let due = match redraw {
             Redraw::Every(_) => now >= self.next_frame,
             Redraw::At(t) => self.clock >= t,
             Redraw::OnChange => false,
         };
-        if due || self.screens.iter().any(|s| s.dirty && !s.paused) {
+        if due
+            || self
+                .screens
+                .iter()
+                .any(|s| (s.dirty || s.glass_dirty) && !s.paused)
+        {
             self.render(due);
         }
 
@@ -317,7 +369,10 @@ impl Engine {
             frame,
             self.reload_at,
             self.recheck_at,
-            self.glass.deadline(),
+            self.timing
+                .as_ref()
+                .filter(|t| t.pending())
+                .map(|_| Instant::now() + Duration::from_millis(2)),
         ]
         .into_iter()
         .flatten()
@@ -332,15 +387,17 @@ impl Engine {
         // SAFETY: `cursor` outlives the call.
         let _ = unsafe { GetCursorPos(&mut cursor) };
         let mut drew = false;
-        let animated = !matches!(self.source.redraw(self.clock), Redraw::OnChange);
+        let animated = !matches!(self.redraw(), Redraw::OnChange);
         let mut native = false;
         for (index, screen) in self.screens.iter_mut().enumerate() {
-            if screen.paused || !(due || screen.dirty) {
+            if screen.paused || !(due || screen.dirty || screen.glass_dirty) {
                 continue;
             }
             if self.source.native(index) {
                 // The source owns what is on screen: nothing to acquire or present.
                 screen.dirty = false;
+                screen.glass_dirty = false;
+                screen.kept = None;
                 native = true;
                 self.source.layout(index, screen.window.0, screen.size());
                 if self.palette_due {
@@ -351,53 +408,108 @@ impl Engine {
             let Some(texture) = screen.acquire(&self.gpu) else {
                 continue;
             };
+            // Acquisition can wait for DWM/GPU availability. Late-latch the newest shell
+            // snapshot after that wait, so a display-rate plate does not inherit its delay.
+            self.glass.reload();
+            self.glass.take_dirty(index);
+            let wallpaper_due = due || screen.dirty || screen.kept.is_none();
             screen.dirty = false;
+            screen.glass_dirty = false;
             let mut mouse = cursor;
             // SAFETY: valid window; `mouse` outlives the call.
             let _ = unsafe { ScreenToClient(screen.window.0, &mut mouse) };
 
             let view = texture.texture.create_view(&Default::default());
             let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
-            self.source.render(
-                &self.gpu,
-                Frame {
-                    screen: index,
-                    size: screen.size(),
-                    mouse: [mouse.x as f32, mouse.y as f32],
-                    clock: self.clock,
-                    frame: self.frame,
-                    view: &view,
-                    encoder: &mut encoder,
-                },
-            );
-            let publish = self.backdrop.encode(
-                &self.gpu,
-                Draw {
-                    screen: index,
-                    size: screen.size(),
-                    texture: &texture.texture,
-                    copy_src: screen.copy_src,
-                    held: self.held,
-                    animated,
-                },
-                &mut encoder,
-            );
+            let size = self.source.render_size(screen.size());
+            if screen
+                .kept
+                .as_ref()
+                .is_none_or(|k| (k.texture.width(), k.texture.height()) != size)
+            {
+                screen.kept = Some(KeptFrame::new(&self.gpu, size));
+            }
+            let kept = screen.kept.as_ref().expect("kept frame allocated");
+            let timing_slot = self.timing.as_mut().and_then(|timing| {
+                timing.begin(
+                    &self.gpu,
+                    &mut encoder,
+                    crate::timing::Meta {
+                        screen: index,
+                        frame: self.frame,
+                        wallpaper: wallpaper_due,
+                        sequence: self.glass.sequence,
+                        published_qpc: self.glass.published_qpc,
+                        ..Default::default()
+                    },
+                )
+            });
+            if wallpaper_due {
+                self.source.render(
+                    &self.gpu,
+                    Frame {
+                        screen: index,
+                        size,
+                        mouse: [
+                            mouse.x as f32 * size.0 as f32 / screen.size().0 as f32,
+                            mouse.y as f32 * size.1 as f32 / screen.size().1 as f32,
+                        ],
+                        clock: self.clock,
+                        frame: self.frame,
+                        view: &kept.view,
+                        encoder: &mut encoder,
+                    },
+                );
+            }
+            if let (Some(timing), Some(slot)) = (&self.timing, timing_slot) {
+                timing.stamp(slot, 1, &mut encoder);
+            }
+            kept.restore(&self.gpu, &texture.texture, &view, &mut encoder);
+            let publish = wallpaper_due
+                && self.backdrop.encode(
+                    &self.gpu,
+                    Draw {
+                        screen: index,
+                        size: screen.size(),
+                        texture: &texture.texture,
+                        copy_src: screen.copy_src,
+                        held: self.held,
+                        animated,
+                    },
+                    &mut encoder,
+                );
             // After the backdrop's copy, so the bars' blurred wallpaper has no plates in it.
-            self.glass.encode(
+            if let (Some(timing), Some(slot)) = (&self.timing, timing_slot) {
+                timing.stamp(slot, 2, &mut encoder);
+            }
+            let glass_drawn = self.glass.encode(
                 &self.gpu,
                 index,
                 screen.size(),
-                &texture.texture,
-                screen.copy_src,
+                &kept.texture,
+                &view,
                 &mut encoder,
             );
+            if let (Some(timing), Some(slot)) = (&self.timing, timing_slot) {
+                timing.stamp(slot, 3, &mut encoder);
+                timing.resolve(slot, &mut encoder);
+            }
             self.gpu.queue.submit([encoder.finish()]);
+            if let (Some(timing), Some(slot)) = (&mut self.timing, timing_slot) {
+                timing.submitted(slot, glass_drawn);
+            }
             self.gpu.queue.present(texture);
             if publish {
                 self.backdrop.finish(&self.gpu, index);
             }
-            self.source.presented(index);
+            if wallpaper_due {
+                self.source.presented(index);
+            }
             drew = true;
+        }
+
+        if drew && let Some(timing) = &mut self.timing {
+            timing.presented(self.frame);
         }
 
         // First frame of a newly loaded theme: publish its palette, once.
@@ -449,12 +561,27 @@ impl Engine {
     /// nothing changes and the current theme keeps running.
     pub fn switch_theme(&mut self, dir: &Path) -> Result<()> {
         let theme = LoadedTheme::load(dir)?;
+        let id = theme
+            .dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        if self.renderer_config.resolve(id, theme.theme.engine).gpu != self.gpu.preference {
+            self.theme = theme;
+            self.refresh_renderer();
+            return Ok(());
+        }
         let started = Instant::now();
         let hwnds: Vec<HWND> = self.screens.iter().map(|s| s.window.0).collect();
         let source = sources::load(&self.gpu, &theme, &hwnds)?;
         log::info!("{} loaded in {:.1?}", theme.theme.name, started.elapsed());
+        self.glass.reset();
+        for screen in &mut self.screens {
+            screen.kept = None;
+        }
         self.source = source;
         self.theme = theme;
+        self.refresh_renderer();
         self.palette_due = true;
         self.backdrop
             .reset(|i| self.source.native(i) || !self.screens[i].copy_src);
@@ -487,5 +614,36 @@ fn load_or_broken(gpu: &Gpu, theme: &LoadedTheme, screens: &[HWND]) -> (Box<dyn 
             log::error!("{e:#}");
             (Box::new(sources::Broken), false)
         }
+    }
+}
+
+/// A wallpaper cap never throttles plate geometry. Timed/static sources keep their own policy.
+fn cap_redraw(redraw: Redraw, fps: Option<u32>) -> Redraw {
+    match (redraw, fps) {
+        (Redraw::Every(interval), Some(fps)) => {
+            Redraw::Every(interval.max(Duration::from_secs(1) / fps))
+        }
+        (other, _) => other,
+    }
+}
+#[cfg(test)]
+mod renderer_tests {
+    use super::*;
+    #[test]
+    fn caps_only_slow_animated_wallpaper_frames() {
+        let frame = Duration::from_secs(1) / 60;
+        assert_eq!(
+            cap_redraw(Redraw::Every(frame), Some(30)),
+            Redraw::Every(Duration::from_secs(1) / 30)
+        );
+        assert_eq!(
+            cap_redraw(Redraw::Every(frame), Some(240)),
+            Redraw::Every(frame)
+        );
+        assert_eq!(cap_redraw(Redraw::OnChange, Some(30)), Redraw::OnChange);
+        assert_eq!(
+            cap_redraw(Redraw::At(Duration::from_secs(5)), Some(30)),
+            Redraw::At(Duration::from_secs(5))
+        );
     }
 }

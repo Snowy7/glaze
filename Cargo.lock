@@ -1164,6 +1164,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-glass-ipc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "windows",
+]
+
+[[package]]
 name = "mypaper-inject"
 version = "0.1.0"
 dependencies = [
@@ -1239,6 +1247,7 @@ dependencies = [
  "log",
  "mypaper-config",
  "mypaper-desktop",
+ "mypaper-glass-ipc",
  "mypaper-theme",
  "mypaper-tweaks",
  "notify",

@@ -24,6 +24,7 @@ mod gpu;
 mod palette;
 mod snapshot;
 mod sources;
+mod timing;
 mod trim;
 mod window;
 
@@ -71,9 +72,6 @@ fn main() -> ExitCode {
             return ExitCode::from(EXIT_CONFIG);
         }
     };
-    // The slowest part of starting, so it starts first and runs while the theme loads and the
-    // windows are made.
-    let gpu = gpu::Opening::start();
     let (config, theme) = match load(&args) {
         Ok(loaded) => loaded,
         Err(e) => {
@@ -81,6 +79,14 @@ fn main() -> ExitCode {
             return ExitCode::from(EXIT_CONFIG);
         }
     };
+    let id = theme
+        .dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let settings = config.engine.resolve(id, theme.theme.engine);
+    // Settings select the one device; opening still overlaps creation of the desktop windows.
+    let gpu = gpu::Opening::start(settings.gpu);
     match run(args, config, theme, gpu) {
         Ok(code) => ExitCode::from(code),
         Err(e) => {
@@ -147,7 +153,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
 
     let _control = ControlWindow::new(CONTROL_CLASS)?;
     startup::ready("wallpaper", "windows_ms");
-    let mut engine = Engine::new(theme, gpu, windows, monitors)?;
+    let mut engine = Engine::new(theme, gpu, windows, monitors, config.engine.clone())?;
     // Facts first, so the initial hold is logged once.
     engine.set_fact(Fact::OnBattery, mypaper_desktop::on_battery());
     engine.apply_config(&config);
@@ -187,17 +193,20 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
             }
             if desktop_lost {
                 // Keep the GPU away from orphaned HWNDs until the replacement shell is ready.
-                waiter.wait(desktop_at);
+                waiter.wait(desktop_at, &[]);
                 continue;
             }
         }
         live.apply_due(&mut engine);
         let trim_at = trimmer.poll(engine.theme_dir());
         match tick(&mut engine, events.as_ref()) {
-            Flow::Wait(deadline) => waiter.wait(earliest(
-                desktop_at,
-                earliest(earliest(deadline, trim_at), live.deadline()),
-            )),
+            Flow::Wait(deadline) => waiter.wait(
+                earliest(
+                    desktop_at,
+                    earliest(earliest(deadline, trim_at), live.deadline()),
+                ),
+                &engine.glass_handles(),
+            ),
             Flow::Exit(code) => break code,
         }
     };
@@ -223,7 +232,6 @@ fn pump(engine: &mut Engine, live: &mut Live) -> Option<u8> {
                 WM_QUIT => return Some(msg.wParam.0 as u8),
                 WM_RELOAD => engine.schedule_reload(),
                 WM_CONFIG => live.schedule(),
-                m if m == engine.glass_message() => engine.glass_changed(),
                 WM_FACT => {
                     if let Some(fact) = Fact::from_wparam(msg.wParam.0) {
                         engine.set_fact(fact, msg.lParam.0 != 0);

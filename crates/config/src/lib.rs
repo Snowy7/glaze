@@ -5,6 +5,8 @@
 //! Missing fields take their defaults, so older files keep working.
 
 pub mod desktop_menu;
+mod engine;
+pub use engine::{EngineConfig, GpuPreference, RenderOptions, RenderSettings};
 
 use std::path::PathBuf;
 
@@ -16,6 +18,8 @@ pub use desktop_menu::DesktopMenu;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    /// Wallpaper GPU preference and frame cap, with optional overrides keyed by theme folder ID.
+    pub engine: EngineConfig,
     /// Theme name (looked up like `mypaper_theme::locate`) or folder path.
     pub theme: String,
     /// Paused by the user (tray or studio).
@@ -41,6 +45,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            engine: EngineConfig::default(),
             theme: "aurora".into(),
             paused: false,
             pause_on_battery: true,
@@ -82,6 +87,7 @@ impl Config {
     pub fn parse(json: &str) -> Result<Self> {
         let config: Self = serde_json::from_str(json)?;
         config.desktop_menu.validate()?;
+        config.engine.validate()?;
         Ok(config)
     }
 
@@ -146,5 +152,19 @@ mod tests {
         };
         let json = serde_json::to_string(&config).unwrap();
         assert_eq!(Config::parse(&json).unwrap(), config);
+    }
+
+    #[test]
+    fn renderer_keys_parse_round_trip_and_reject_bad_caps_and_choices() {
+        let config=Config::parse(r#"{"engine":{"gpu":"high-performance","fps":60,"wallpapers":{"rain-city":{"gpu":"integrated","fps":30}}}}"#).unwrap();
+        let chosen = config.engine.resolve("rain-city", RenderOptions::default());
+        assert_eq!(chosen.gpu, GpuPreference::Integrated);
+        assert_eq!(chosen.fps, Some(30));
+        assert_eq!(
+            Config::parse(&serde_json::to_string(&config).unwrap()).unwrap(),
+            config
+        );
+        assert!(Config::parse(r#"{"engine":{"fps":0}}"#).is_err());
+        assert!(Config::parse(r#"{"engine":{"gpu":"fastest"}}"#).is_err());
     }
 }
