@@ -437,6 +437,34 @@ impl Bars {
         Ok(())
     }
 
+    /// The tray icons, pinned or not (the tray overflow flyout lists the unpinned ones).
+    pub fn tray(&self) -> &[providers::tray_data::TrayItem] {
+        &self.services.model.tray
+    }
+
+    /// Clicks tray icon `id` from outside a bar (the overflow flyout) as a bar click would;
+    /// `anchor` is the icon's screen rectangle.
+    pub fn click_tray(&self, id: &str, button: Button, point: (i32, i32), anchor: Rect) {
+        if self.services.tray_host.active() {
+            let click = match button {
+                Button::Right => Click::Right,
+                Button::Middle => Click::Middle,
+                Button::Left => Click::Left,
+            };
+            let rect = [anchor.left, anchor.top, anchor.width(), anchor.height()].map(|v| v as i32);
+            self.services
+                .tray_host
+                .click(id.into(), click, point, Some(rect));
+        } else {
+            let button = match button {
+                Button::Right => TrayButton::Right,
+                Button::Middle => TrayButton::Middle,
+                Button::Left => TrayButton::Left,
+            };
+            self.services.tray.click(id.into(), button);
+        }
+    }
+
     /// Current bar plates for the shell compositor. N4 can combine this with widget plates
     /// before calling the single monitor-replacement publisher.
     pub fn plates(&self, monitor: &Monitor) -> Vec<glass::Plate> {

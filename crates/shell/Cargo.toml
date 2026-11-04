@@ -13,6 +13,7 @@ mypaper-tweaks.workspace = true
 mypaper-ui.workspace = true
 mypaper-glass-ipc.workspace = true
 mypaper-bars.workspace = true
+bytemuck.workspace = true
 notify.workspace = true
 serde_json.workspace = true
 resvg = { version = "0.45", default-features = false }
