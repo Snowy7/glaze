@@ -8,47 +8,45 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- Fill for the down series' area. -->
-    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
-      <defs>
-        <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="var(--accent)" stop-opacity="0.28" />
-          <stop offset="1" stop-color="var(--accent)" stop-opacity="0" />
-        </linearGradient>
-      </defs>
-    </svg>
     <main class="card" id="card" data-kind="unknown" data-spark="on" data-bars="4">
       <header class="id">
         <!-- One glyph, three faces (data-kind): wifi arcs lit by signal, an ethernet plug, a struck-out wifi. -->
-        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-          <g class="wifi">
-            <path class="a3" d="M2.81 10.01A13 13 0 0 1 21.19 10.01" />
-            <path class="a2" d="M5.64 12.84A9 9 0 0 1 18.36 12.84" />
-            <path class="a1" d="M8.46 15.66A5 5 0 0 1 15.54 15.66" />
-            <circle class="dot" cx="12" cy="19.2" r="1.3" />
-          </g>
-          <g class="ethernet">
-            <path d="M6 4h12v9h-3v3H9v-3H6zM9 7v3M12 7v3M15 7v3M12 16v4" />
-          </g>
-          <path class="slash" d="M4.5 4.5 19.5 19.5" />
-        </svg>
+        <span class="badge tile">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <g class="wifi">
+              <path class="a3" d="M2.81 10.01A13 13 0 0 1 21.19 10.01" />
+              <path class="a2" d="M5.64 12.84A9 9 0 0 1 18.36 12.84" />
+              <path class="a1" d="M8.46 15.66A5 5 0 0 1 15.54 15.66" />
+              <circle class="dot" cx="12" cy="19.2" r="1.3" />
+            </g>
+            <g class="ethernet">
+              <path d="M6 4h12v9h-3v3H9v-3H6zM9 7v3M12 7v3M15 7v3M12 16v4" />
+            </g>
+            <path class="slash" d="M4.5 4.5 19.5 19.5" />
+          </svg>
+        </span>
         <div class="who">
           <span class="name ellipsis" id="name"></span>
           <span class="sub caps ellipsis" id="sub"></span>
         </div>
       </header>
 
-      <svg class="spark" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
-        <path class="area" id="area"></path>
-        <path class="line down" id="down-line"></path>
-        <path class="line up" id="up-line"></path>
-      </svg>
+      <!-- Two minutes of traffic, newest on the right; `peak` is the scale (never below 256 KB/s). -->
+      <div class="graph tile">
+        <svg class="spark" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+          <path class="area down" id="area"></path>
+          <path class="area up" id="area-up"></path>
+          <path class="line down" id="down-line"></path>
+          <path class="line up" id="up-line"></path>
+        </svg>
+        <span class="peak caps num" id="peak"></span>
+      </div>
 
       <div class="rates">
         <div class="rate down">
           <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6.5 13.5 12 19l5.5-5.5" /></svg>
           <span class="lab caps">Down</span>
-          <span class="val num"><b id="down-n">-</b><small id="down-u"></small></span>
+          <span class="val num"><b class="hero" id="down-n">-</b><small id="down-u"></small></span>
         </div>
         <div class="rate up">
           <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>

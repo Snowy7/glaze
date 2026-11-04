@@ -29,17 +29,22 @@ export function pickDrives(disks, setting) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** From this share of used space a drive is "nearly full" (the widget warns, whatever it prints). */
+export const NEARLY_FULL = 0.9;
+
 /**
- * What to draw for a drive: the bytes to print (used, or free), and the matching share 0..1.
+ * What to draw for a drive: the bytes to print (used, or free), the matching share 0..1, and
+ * whether the drive is nearly full (judged on the used share, also when free space is shown).
  * @param {Disk} disk
  * @param {boolean} showFree
- * @returns {{ name: string; bytes: number; total: number; fraction: number }}
+ * @returns {{ name: string; bytes: number; total: number; fraction: number; full: boolean }}
  */
 export function driveUsage(disk, showFree) {
   const total = Math.max(0, disk.total);
   const used = Math.min(total, Math.max(0, disk.used));
   const usedFraction = total > 0 ? used / total : 0;
+  const full = usedFraction >= NEARLY_FULL;
   return showFree
-    ? { name: disk.name, bytes: total - used, total, fraction: total > 0 ? 1 - usedFraction : 0 }
-    : { name: disk.name, bytes: used, total, fraction: usedFraction };
+    ? { name: disk.name, bytes: total - used, total, fraction: total > 0 ? 1 - usedFraction : 0, full }
+    : { name: disk.name, bytes: used, total, fraction: usedFraction, full };
 }

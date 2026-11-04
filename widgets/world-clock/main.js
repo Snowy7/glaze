@@ -161,8 +161,8 @@ function fit(width, height, count) {
  */
 function rowEl(c) {
   const el = document.createElement("div");
-  el.className = "row";
-  el.innerHTML = `${c.glyph}<div class="who"><span class="name ellipsis"></span><span class="sub caps ellipsis"></span></div><div class="time num"><span class="hm"></span><span class="ap"></span></div>`;
+  el.className = "row tile";
+  el.innerHTML = `<span class="badge">${c.glyph}</span><div class="who"><span class="name ellipsis"></span><span class="sub caps ellipsis"></span></div><div class="time hero num"><span class="hm"></span><span class="ap"></span></div>`;
   const text = { ".name": c.name, ".sub": c.sub, ".hm": c.hm, ".ap": c.period };
   for (const [selector, value] of Object.entries(text)) {
     const node = el.querySelector(selector);

@@ -2,15 +2,28 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "now-playing",
   "name": "Now playing",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "mypaper",
-  "description": "What's playing, with artwork, progress and transport controls.",
+  "description": "What's playing: big artwork, a progress scrubber and transport controls, tinted by the cover.",
   "entry": "index.html",
-  "size": { "default": [3, 1], "min": [2, 1], "max": [4, 2] },
+  "size": { "default": [4, 2], "min": [2, 1], "max": [4, 4] },
   "resizable": true,
   "permissions": ["media"],
   "plugins": [],
   "settings": [
-    { "key": "blurArtwork", "type": "boolean", "label": "Artwork backdrop (with a surface)", "default": true }
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Look",
+      "group": "Layout",
+      "default": "card",
+      "options": [
+        { "value": "card", "label": "Card", "icon": "▣" },
+        { "value": "blur", "label": "Backdrop", "icon": "◍" },
+        { "value": "strip", "label": "Strip", "icon": "▬" }
+      ]
+    },
+    { "key": "tint", "type": "boolean", "label": "Tint from the artwork", "group": "Color", "default": true },
+    { "key": "glow", "type": "slider", "label": "Artwork glow", "group": "Color", "min": 0, "max": 100, "step": 5, "unit": "%", "default": 55 }
   ]
 }

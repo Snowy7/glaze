@@ -2,7 +2,7 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "quote",
   "name": "Quote",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "mypaper",
   "description": "A short quote, new every day. Click for another.",
   "entry": "index.html",

@@ -137,7 +137,7 @@ html[data-shadow="on"][data-surface="none"] body {
     0 2px 10px rgb(var(--halo) / 0.28),
     0 4px 28px rgb(var(--halo) / 0.2);
 }
-html[data-shadow="on"][data-surface="none"] svg,
+html[data-shadow="on"][data-surface="none"] svg:not(.flat),
 html[data-shadow="on"][data-surface="none"] .gfx {
   filter: drop-shadow(0 1px 1.5px rgb(var(--halo) / 0.35)) drop-shadow(0 2px 10px rgb(var(--halo) / 0.25));
 }
@@ -324,6 +324,7 @@ button:focus-visible {
   --grain: none;
   --glow: transparent;
   --glow-size: 0px;
+  /* Kept for custom CSS; the kit itself builds its gradient from --hi/--hi-2 on the element, so a widget can retint a bar locally. */
   --flow: linear-gradient(90deg, var(--accent), var(--accent));
 }
 
@@ -505,6 +506,21 @@ html[data-style="aero"] .tile {
   backdrop-filter: blur(10px) saturate(1.5);
 }
 
+/* Dark text means a light card: the tiles' dark washes would read as dirty grey, so they go light. */
+html[data-style="depth"][data-text="dark"] .tile {
+  background: linear-gradient(160deg, rgb(var(--lit) / 0.7), rgb(var(--lit) / 0.28) 60%), rgb(var(--shade) / 0.03);
+}
+html[data-style="depth"][data-text="dark"]:is([data-surface="glass"], [data-surface="solid"]) .panel {
+  background: linear-gradient(160deg, rgb(var(--lit) / 0.6), rgb(var(--lit) / 0.2) 60%), rgb(var(--shade) / 0.02);
+}
+html[data-style="paper"][data-text="dark"] .tile,
+html[data-style="paper"][data-text="dark"]:is([data-surface="glass"], [data-surface="solid"]) .panel {
+  background: rgb(var(--shade) / 0.05);
+}
+html[data-style="neon"][data-text="dark"] .tile {
+  background: radial-gradient(120% 100% at 0% 0%, rgb(var(--spark-rgb) / 0.16), transparent 70%), rgb(var(--lit) / 0.55);
+}
+
 /* Pills and fields get the style's edge. */
 html[data-style="depth"] :is(.chip, .field) {
   box-shadow: var(--bevel), var(--elev-1);
@@ -525,7 +541,7 @@ html[data-style="neon"] .field:focus {
 
 /* Progress: a trough, and a fill made of the highlight pair (drifting while visible). */
 html[data-style]:not([data-style="minimal"]) .track > i {
-  background: var(--flow);
+  background: linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
   background-size: 200% 100%;
   box-shadow: 0 0 var(--glow-size) -3px var(--glow);
 }
@@ -546,7 +562,7 @@ html[data-style="aero"] .track {
   box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.35), 0 1px 0 rgb(var(--lit) / 0.35);
 }
 html[data-style="aero"] .track > i {
-  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.5), transparent 55%), var(--flow);
+  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.5), transparent 55%), linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
 }
 html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .track > i {
   animation: kit-flow 12s steps(120) infinite;
@@ -554,7 +570,7 @@ html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .track > 
 
 /* The drifting accent gradient, for anything: a bar, an underline, a pill. */
 .flow {
-  background-image: var(--flow);
+  background-image: linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
   background-size: 200% 100%;
 }
 html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .flow {
@@ -618,18 +634,18 @@ html[data-style="aero"] .btn {
   box-shadow: var(--bevel), var(--elev-1);
 }
 html[data-style]:not([data-style="minimal"]) .btn.primary {
-  background: var(--flow);
+  background: linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
   background-size: 200% 100%;
   color: var(--on-spark);
   box-shadow: var(--bevel), 0 0 var(--glow-size) -3px var(--glow), var(--elev-1);
 }
 html[data-style="aero"] .btn.primary {
-  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.5), transparent 55%), var(--flow);
+  background-image: linear-gradient(180deg, rgb(var(--lit) / 0.5), transparent 55%), linear-gradient(90deg, var(--hi), var(--hi-2), var(--hi));
 }
 
 /* Big display text: the numbers and words a widget is about. */
 html[data-style="depth"] .hero {
-  background: linear-gradient(180deg, var(--t0) 20%, rgb(var(--ink) / 0.55));
+  background: linear-gradient(180deg, var(--t0) 45%, rgb(var(--ink) / 0.78));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -666,7 +682,7 @@ html[data-style="aero"][data-text="dark"] .hero {
 }
 
 /* Glow: on an element (a dot, a ring, a badge) or on text, in the style's glow color. */
-html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .glow {
+html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .glow:not(svg) {
   box-shadow: 0 0 var(--glow-size) var(--glow);
 }
 html[data-style]:not([data-style="minimal"]):not([data-style="paper"]) .glow-text {
@@ -678,7 +694,7 @@ html[data-style]:not([data-style="minimal"]) svg.glow {
 }
 
 /* Neon makes bare graphics glow too. */
-html[data-style="neon"][data-surface="none"] svg,
+html[data-style="neon"][data-surface="none"] svg:not(.flat),
 html[data-style="neon"][data-surface="none"] .gfx {
   filter: drop-shadow(0 0 1.5px rgb(var(--spark-rgb) / 0.55)) drop-shadow(0 0 7px rgb(var(--spark-rgb) / 0.4));
 }

@@ -1,0 +1,38 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "photo-frame",
+  "name": "Photo frame",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "Your pictures in a frame, with a slow Ken Burns pan and zoom and soft crossfades.",
+  "entry": "index.html",
+  "size": { "default": [3, 2], "min": [1, 1], "max": [6, 4] },
+  "resizable": true,
+  "permissions": [],
+  "plugins": [],
+  "settings": [
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Frame",
+      "group": "Layout",
+      "options": [
+        { "value": "matte", "label": "Matte", "icon": "▣" },
+        { "value": "bleed", "label": "Full bleed", "icon": "▇" },
+        { "value": "polaroid", "label": "Polaroid", "icon": "▢" }
+      ],
+      "default": "matte"
+    },
+    { "key": "image1", "type": "image", "label": "Photo 1", "group": "Photos", "default": "" },
+    { "key": "image2", "type": "image", "label": "Photo 2", "group": "Photos", "default": "" },
+    { "key": "image3", "type": "image", "label": "Photo 3", "group": "Photos", "default": "" },
+    { "key": "image4", "type": "image", "label": "Photo 4", "group": "Photos", "default": "" },
+    { "key": "image5", "type": "image", "label": "Photo 5", "group": "Photos", "default": "" },
+    { "key": "image6", "type": "image", "label": "Photo 6", "group": "Photos", "default": "" },
+    { "key": "interval", "type": "slider", "label": "Change every", "group": "Playback", "min": 5, "max": 120, "step": 5, "unit": "s", "default": 15 },
+    { "key": "motion", "type": "slider", "label": "Motion", "group": "Playback", "min": 0, "max": 100, "step": 5, "unit": "%", "default": 40 },
+    { "key": "shuffle", "type": "boolean", "label": "Shuffle", "group": "Playback", "default": false },
+    { "key": "fit", "type": "select", "label": "Fit", "group": "Look", "options": ["cover", "contain"], "default": "cover" },
+    { "key": "caption", "type": "string", "label": "Polaroid caption", "group": "Look", "default": "" }
+  ]
+}

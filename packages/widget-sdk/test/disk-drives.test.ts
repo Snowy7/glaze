@@ -28,4 +28,11 @@ describe("disk drives", () => {
     expect(driveUsage({ name: "X:", used: 5, total: 0 }, false).fraction).toBe(0);
     expect(driveUsage({ name: "X:", used: 50, total: 10 }, false).fraction).toBe(1);
   });
+
+  it("flags a nearly full drive by its used share, also when showing free space", () => {
+    expect(driveUsage(disks[2]!, false).full).toBe(true);
+    expect(driveUsage(disks[2]!, true).full).toBe(true);
+    expect(driveUsage(disks[1]!, false).full).toBe(false);
+    expect(driveUsage({ name: "X:", used: 0, total: 0 }, false).full).toBe(false);
+  });
 });

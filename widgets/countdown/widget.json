@@ -2,7 +2,7 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "countdown",
   "name": "Countdown",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "mypaper",
   "description": "Days, hours and minutes until a date that matters.",
   "entry": "index.html",

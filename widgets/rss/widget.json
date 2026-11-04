@@ -2,7 +2,7 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "rss",
   "name": "RSS",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "mypaper",
   "description": "Headlines from your favourite feeds; click one to open the article.",
   "entry": "index.html",
@@ -18,6 +18,17 @@
       "fields": [{ "key": "url", "type": "string", "label": "Feed URL" }],
       "maxItems": 8,
       "default": [{ "url": "https://hnrss.org/frontpage" }, { "url": "https://feeds.bbci.co.uk/news/rss.xml" }]
+    },
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Display",
+      "group": "Layout",
+      "options": [
+        { "value": "list", "label": "List", "icon": "☰" },
+        { "value": "cards", "label": "Cards", "icon": "▤" }
+      ],
+      "default": "list"
     },
     { "key": "maxItems", "type": "number", "label": "Headlines", "min": 3, "max": 30, "step": 1, "default": 12 },
     { "key": "showSource", "type": "boolean", "label": "Show source", "default": true },

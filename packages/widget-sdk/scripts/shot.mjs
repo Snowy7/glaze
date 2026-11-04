@@ -54,5 +54,9 @@ if (result.status !== 0 || !existsSync(out)) {
   console.error(`screenshot failed (exit ${result.status})`);
   process.exit(1);
 }
-rmSync(profile, { recursive: true, force: true });
+try {
+  rmSync(profile, { recursive: true, force: true });
+} catch {
+  /* Edge may still hold the profile (EPERM); the next shot of this name clears it. */
+}
 console.log(out);

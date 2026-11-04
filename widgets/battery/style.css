@@ -1,6 +1,32 @@
-/* Three styles (data-style on .card: ring, bar, number) and four states (data-state: charging,
-   full, discharging, low, none). Layout follows the widget's box with container queries; the
-   page is the container, the dial is a named one (`dial`) for what lives inside it. */
+/* Three views (data-view on .card: ring, bar, number) and four states (data-state: charging, full,
+   discharging, low, none). Layout follows the widget's box with container queries; the page is the
+   container, the dial is a named one (`dial`) for what lives inside it.
+   The arc and the bar use the kit's highlight pair (--hi to --hi-2); a low battery swaps in a
+   warning pair, which is data and so artwork. Charging glows (main.js adds .lit to the ring) and
+   breathes, with opacity only. */
+
+:root {
+  --warn: rgb(255 168 64); /* art */
+  --warn-2: rgb(255 92 92); /* art */
+}
+html[data-text="dark"] {
+  --warn: rgb(196 92 4); /* art */
+  --warn-2: rgb(196 32 48); /* art */
+}
+
+/* Gradient stops (the defs live outside .card, so they read the variables from <html>). */
+.hi {
+  stop-color: var(--hi);
+}
+.hi-2 {
+  stop-color: var(--hi-2);
+}
+.warn {
+  stop-color: var(--warn);
+}
+.warn-2 {
+  stop-color: var(--warn-2);
+}
 
 .card {
   --w: calc(100cqw - 2 * var(--pad));
@@ -8,6 +34,8 @@
   --d: min(var(--w), var(--h)); /* the ring's diameter */
   --sub: flex; /* the status line inside the ring; roomier layouts turn it off */
   display: grid;
+  /* One track exactly as big as the card, so a too-wide row shrinks instead of widening it. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
 }
 
@@ -20,7 +48,7 @@
   justify-content: center;
 }
 
-/* ---------------------------------------------------------------- the dial (ring style) */
+/* ---------------------------------------------------------------- the dial (ring view) */
 
 .dial {
   container: dial / size;
@@ -40,7 +68,7 @@
   transform: rotate(-90deg); /* the arc starts at 12 o'clock */
 }
 .ring circle {
-  --sw: clamp(2px, 2.8cqmin, 5px);
+  --sw: clamp(3px, 4.4cqmin, 8px);
   cx: 50%;
   cy: 50%;
   r: calc(50% - var(--sw));
@@ -55,8 +83,24 @@ html[data-surface="none"] .back {
   stroke: rgb(var(--ink) / 0.24);
 }
 .arc {
-  stroke: var(--accent);
+  stroke: url(#g-hi);
   transition: stroke-dasharray 0.6s ease;
+}
+[data-state="charging"] .arc {
+  animation: breathe 3.4s ease-in-out infinite;
+}
+/* The kit's .glow would also box-shadow the svg's square; a drop-shadow follows the arc. */
+html[data-style]:not([data-style="minimal"]) svg.ring.lit {
+  filter: drop-shadow(0 0 4px var(--glow));
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.72;
+  }
+}
+/* Low (<= 20%, not charging): the warning pair and short dashes. */
+[data-state="low"] .arc {
+  stroke: url(#g-warn);
 }
 
 .read {
@@ -83,6 +127,15 @@ html[data-surface="none"] .back {
   letter-spacing: 0;
   color: var(--t2);
 }
+/* A flat warning number: the hero gradients and glows are for healthy batteries. */
+[data-state="low"] .pct b {
+  color: var(--warn);
+  -webkit-text-fill-color: var(--warn);
+  background: none;
+  filter: none;
+  text-shadow: none;
+  font-weight: 500;
+}
 .sub {
   display: var(--sub);
   align-items: center;
@@ -96,6 +149,9 @@ html[data-surface="none"] .back {
     display: none;
   }
 }
+[data-state="low"] .sub {
+  color: var(--warn);
+}
 
 /* ---------------------------------------------------------------- status line */
 
@@ -104,6 +160,7 @@ html[data-surface="none"] .back {
   flex: none;
   width: 1.05em;
   height: 1.05em;
+  color: var(--t0);
   fill: currentColor;
   stroke: currentColor;
   stroke-width: 1.6;
@@ -112,39 +169,45 @@ html[data-surface="none"] .back {
 :is([data-state="charging"], [data-state="full"]) .bolt {
   display: block;
 }
+:is([data-state="charging"], [data-state="full"]) .sub .bolt {
+  animation: breathe 3.4s ease-in-out infinite;
+}
 
+/* The chip under (or beside) the dial. */
 .meta {
   display: none;
   align-items: center;
   justify-content: center;
   gap: 0.5em;
-  color: var(--t1);
+  color: var(--t0);
   font-size: clamp(11px, 0.085 * var(--h), 14px);
   font-weight: 500;
   white-space: nowrap;
+  min-width: 0;
+}
+.status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .low-chip {
   display: none;
-  padding: 0.15em 0.6em;
-  color: var(--t0);
+  padding: 0.12em 0.55em;
+  border-radius: 999px;
+  background: var(--warn);
+  color: rgb(var(--shade));
 }
 [data-state="low"] .low-chip {
   display: inline-flex;
 }
 
-/* Low (<= 20%, not charging): stronger ink and a dashed arc, no color and no motion. */
-[data-state="low"] .arc {
-  stroke: var(--t0);
-}
-[data-state="low"] .pct {
-  font-weight: 500;
-}
-[data-state="low"] .meta {
-  color: var(--t0);
-}
-
-/* A 1x1 has no room for "On battery" next to the chip. */
+/* A 1x1, or a 2x1 with the ring beside the chip, has no room for "On battery" next to "Low". */
 @container (max-width: 130px) {
+  [data-state="low"] .meta .status {
+    display: none;
+  }
+}
+@container (min-aspect-ratio: 3/2) and (max-width: 260px) {
   [data-state="low"] .meta .status {
     display: none;
   }
@@ -154,109 +217,142 @@ html[data-surface="none"] .back {
 
 /* Tall enough (2x2 and up): the status moves under the ring. */
 @container (min-height: 140px) {
-  .card[data-style="ring"] {
+  .card[data-view="ring"] {
     --d: min(var(--w), calc(var(--h) - 44px));
     --sub: none;
   }
-  .card[data-style="ring"] .live {
+  .card[data-view="ring"] .live {
     gap: clamp(8px, 4cqmin, 16px);
   }
-  .card[data-style="ring"] .meta {
+  .card[data-view="ring"] .meta {
     display: flex;
   }
 }
 /* Wide (2x1, 3x1, 3x2): the ring on the left, the status beside it. */
 @container (min-aspect-ratio: 3/2) {
-  .card[data-style="ring"] {
-    --d: min(var(--h), calc(var(--w) * 0.62));
+  .card[data-view="ring"] {
+    --d: min(var(--h), calc(var(--w) * 0.46));
     --sub: none;
   }
-  .card[data-style="ring"] .live {
+  .card[data-view="ring"] .live {
     flex-direction: row;
     gap: clamp(10px, 8cqh, 22px);
   }
-  .card[data-style="ring"] .meta {
+  .card[data-view="ring"] .meta {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.4em;
     font-size: clamp(12px, 0.1 * var(--h), 18px);
-  }
-  .card[data-style="ring"] .low-chip {
-    margin-top: 0.1em;
   }
 }
 
 /* ---------------------------------------------------------------- bar and number */
 
-.card:is([data-style="bar"], [data-style="number"]) {
+.card:is([data-view="bar"], [data-view="number"]) {
   --f: clamp(20px, min(30cqh, 28cqw), 80px); /* the number's size */
   --sub: none;
 }
-.card[data-style="number"] {
+.card[data-view="number"] {
   --f: clamp(24px, min(48cqh, 36cqw), 120px);
 }
-.card:is([data-style="bar"], [data-style="number"]) .ring {
+.card:is([data-view="bar"], [data-view="number"]) .ring {
   display: none;
 }
-.card:is([data-style="bar"], [data-style="number"]) .dial {
+.card:is([data-view="bar"], [data-view="number"]) .dial {
   container-type: normal;
   width: auto;
   height: auto;
 }
-.card:is([data-style="bar"], [data-style="number"]) .pct {
+.card:is([data-view="bar"], [data-view="number"]) .pct {
   font-size: var(--f);
 }
-.card:is([data-style="bar"], [data-style="number"]) .meta {
+.card:is([data-view="bar"], [data-view="number"]) .meta {
   display: flex;
 }
-.card[data-style="number"] .live {
-  gap: clamp(2px, 2cqh, 8px);
+.card[data-view="number"] .live {
+  gap: clamp(4px, 4cqh, 10px);
 }
 
-.bar {
+/* The bar is a battery: a rounded body, a nub, a fill that sweeps while charging. */
+.batt {
   display: none;
+  position: relative;
   width: 100%;
-  height: clamp(4px, 3cqmin, 7px);
+  padding-right: 5px;
 }
-.card[data-style="bar"] .bar {
+.card[data-view="bar"] .batt {
   display: block;
 }
+.batt::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 3px;
+  height: 40%;
+  transform: translateY(-50%);
+  border-radius: 0 3px 3px 0;
+  background: var(--fill-3);
+}
+html[data-surface="none"] .batt::after {
+  background: rgb(var(--ink) / 0.5);
+}
+.bar {
+  height: clamp(10px, 9cqh, 20px);
+}
 .bar > i {
+  position: relative;
+  overflow: hidden;
   transition: width 0.6s ease;
 }
-[data-state="low"] .bar > i {
-  background: var(--t0);
+[data-state="charging"] .bar > i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(var(--lit) / 0.5), transparent);
+  transform: translateX(-100%);
+  animation: sweep 2.6s ease-in-out infinite;
+}
+@keyframes sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+/* (The kit's styled .track > i is more specific, so this repeats the selector with html[data-style].) */
+[data-state="low"] .bar > i,
+html[data-style] [data-state="low"] .bar > i {
+  background: linear-gradient(90deg, var(--warn), var(--warn-2));
+  background-size: 100% 100%;
+  box-shadow: none;
+  animation: none;
 }
 
-.card[data-style="bar"] .live {
+.card[data-view="bar"] .live {
   display: grid;
-  grid-template-areas: "pct" "bar" "meta";
+  grid-template-areas: "pct" "batt" "meta";
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto auto;
   align-content: center;
   justify-items: stretch;
-  gap: clamp(4px, 4cqh, 10px);
+  gap: clamp(5px, 5cqh, 12px);
 }
-.card[data-style="bar"] .dial {
+.card[data-view="bar"] .dial {
   grid-area: pct;
   justify-self: start;
 }
-.card[data-style="bar"] .bar {
-  grid-area: bar;
+.card[data-view="bar"] .batt {
+  grid-area: batt;
 }
-.card[data-style="bar"] .meta {
+.card[data-view="bar"] .meta {
   grid-area: meta;
-  justify-content: flex-start;
+  justify-self: start;
 }
 @container (min-aspect-ratio: 2/1) {
-  .card[data-style="bar"] .live {
-    grid-template-areas: "pct bar" "pct meta";
+  .card[data-view="bar"] .live {
+    grid-template-areas: "pct batt" "pct meta";
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     column-gap: clamp(10px, 8cqh, 20px);
   }
-  .card[data-style="bar"] .dial {
+  .card[data-view="bar"] .dial {
     align-self: center;
   }
 }
@@ -267,7 +363,7 @@ html[data-surface="none"] .back {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.7em;
+  gap: 0.8em;
   color: var(--t3);
 }
 .none .caps {
@@ -277,12 +373,19 @@ html[data-surface="none"] .back {
   text-align: center;
   white-space: nowrap;
 }
+.plug-wrap {
+  display: grid;
+  place-items: center;
+  width: clamp(32px, 40cqmin, 54px);
+  aspect-ratio: 1;
+  border-radius: 32%;
+}
 .plug {
-  width: clamp(20px, 30cqmin, 44px);
-  height: clamp(20px, 30cqmin, 44px);
+  width: 58%;
+  height: 58%;
   fill: none;
-  stroke: var(--t3);
-  stroke-width: 1.5;
+  stroke: var(--t2);
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }

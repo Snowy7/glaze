@@ -106,11 +106,18 @@ const SIGNATURE: Record<Appearance["style"], readonly [Rgb, Rgb]> = {
  * both (the accent and the same color turned 48 degrees); a white, grey or ink accent, which has no
  * hue to turn, falls back to the style's signature pair. `minimal` always follows the accent.
  */
-export function sparkColors(accent: Rgb, style: Appearance["style"]): [Rgb, Rgb] {
+export function sparkColors(accent: Rgb, style: Appearance["style"], text: Appearance["text"] = "light"): [Rgb, Rgb] {
   const [h, s, l] = toHsl(accent);
   if (s >= 0.18 && l > 0.12 && l < 0.92) return [accent, fromHsl((h + 48) % 360, Math.max(s, 0.55), Math.min(Math.max(l, 0.5), 0.7))];
   const [a, b] = SIGNATURE[style];
-  return [a, b];
+  if (text !== "dark") return [a, b];
+  // Dark text sits on light surfaces and wallpapers: the bright signature colors lose contrast
+  // there, so they are taken down to a mid lightness (same hue, a little more saturated).
+  const deepen = (color: Rgb): Rgb => {
+    const [ch, cs, cl] = toHsl(color);
+    return fromHsl(ch, Math.min(1, cs * 1.05), Math.min(cl, 0.42));
+  };
+  return [deepen(a), deepen(b)];
 }
 
 /** Keeps a font list from breaking out of its declaration. */
@@ -177,7 +184,7 @@ export function appearanceVars(a: Appearance): Record<string, string> {
   const accentRgb = rgb(a.accent, DEFAULT_APPEARANCE.accent);
   const accent = `rgb(${accentRgb.join(" ")})`;
   const onAccent = luminance(accentRgb) > 0.4 ? "#0a0a0c" : "#ffffff";
-  const [spark, spark2] = sparkColors(accentRgb, a.style);
+  const [spark, spark2] = sparkColors(accentRgb, a.style, a.text);
 
   const step = (alphas: readonly number[], prefix: string) =>
     Object.fromEntries(alphas.map((al, i) => [`${prefix}${i}`, `rgb(${ink} / ${al})`]));

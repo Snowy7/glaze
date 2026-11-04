@@ -2,7 +2,7 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "launcher",
   "name": "Launcher",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "mypaper",
   "description": "A grid of your favourite apps, folders and links.",
   "entry": "index.html",
@@ -28,6 +28,17 @@
         { "label": "GitHub", "target": "https://github.com" }
       ]
     },
-    { "key": "labels", "type": "select", "label": "Labels", "options": ["auto", "always", "never"], "default": "auto" }
+    {
+      "key": "labels",
+      "type": "select",
+      "label": "Labels",
+      "group": "Layout",
+      "options": [
+        { "value": "auto", "label": "Auto", "icon": "✦" },
+        { "value": "always", "label": "Always", "icon": "Aa" },
+        { "value": "never", "label": "Icons only", "icon": "▫" }
+      ],
+      "default": "auto"
+    }
   ]
 }

@@ -1,0 +1,49 @@
+{
+  "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
+  "id": "heatmap",
+  "name": "Activity heatmap",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "A contribution-style heatmap of the tasks you finish and the focus sessions you complete.",
+  "entry": "index.html",
+  "size": { "default": [4, 2], "min": [2, 1], "max": [8, 3] },
+  "resizable": true,
+  "permissions": ["storage.shared:activity"],
+  "plugins": [],
+  "settings": [
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Style",
+      "group": "Layout",
+      "options": [
+        { "value": "weeks", "label": "Weeks", "icon": "▦" },
+        { "value": "month", "label": "Month", "icon": "▣" },
+        { "value": "streak", "label": "Streak", "icon": "↯" }
+      ],
+      "default": "weeks"
+    },
+    {
+      "key": "source",
+      "type": "select",
+      "label": "Count",
+      "group": "Content",
+      "options": [
+        { "value": "all", "label": "Everything", "icon": "∑" },
+        { "value": "todo", "label": "Tasks", "icon": "☑" },
+        { "value": "timer", "label": "Focus sessions", "icon": "◷" }
+      ],
+      "default": "all"
+    },
+    {
+      "key": "weekStart",
+      "type": "select",
+      "label": "Week starts on",
+      "group": "Look",
+      "options": ["monday", "sunday"],
+      "default": "monday"
+    },
+    { "key": "labels", "type": "boolean", "label": "Month and weekday labels", "group": "Look", "default": true },
+    { "key": "legend", "type": "boolean", "label": "Legend", "group": "Look", "default": true }
+  ]
+}

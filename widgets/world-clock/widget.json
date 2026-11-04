@@ -2,7 +2,7 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "world-clock",
   "name": "World Clock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "mypaper",
   "description": "The time in several cities at a glance, with day or night, day offset and hour difference.",
   "entry": "index.html",

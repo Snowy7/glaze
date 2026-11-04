@@ -2,22 +2,35 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "calendar",
   "name": "Calendar",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "mypaper",
-  "description": "A quiet month view with today highlighted; a week strip when wide and short, a date tile when small.",
+  "description": "A month, an agenda of your own events, or a week strip. Events are kept on this computer; there is no calendar account.",
   "entry": "index.html",
-  "size": { "default": [2, 2], "min": [1, 1], "max": [4, 4] },
+  "size": { "default": [3, 3], "min": [2, 1], "max": [5, 4] },
   "resizable": true,
   "permissions": [],
   "plugins": [],
   "settings": [
     {
+      "key": "variant",
+      "type": "select",
+      "label": "Layout",
+      "group": "Layout",
+      "options": [
+        { "value": "month", "label": "Month", "icon": "▦" },
+        { "value": "agenda", "label": "Agenda", "icon": "☰" },
+        { "value": "strip", "label": "Week", "icon": "▬" }
+      ],
+      "default": "month"
+    },
+    {
       "key": "weekStart",
       "type": "select",
       "label": "Week starts on",
+      "group": "Calendar",
       "options": ["auto", "monday", "sunday", "saturday"],
       "default": "auto"
     },
-    { "key": "weekNumbers", "type": "boolean", "label": "Week numbers", "default": false }
+    { "key": "weekNumbers", "type": "boolean", "label": "Week numbers", "group": "Calendar", "default": false }
   ]
 }

@@ -1,6 +1,7 @@
 /* Header, a scrolling list with soft fades at the clipped edges, and the add field.
    main.js sets data-add (top|bottom) on the card, data-compact / data-narrow for small boxes, and
-   --ft / --fb (the fade heights) on the scroller. */
+   --ft / --fb (the fade heights) on the scroller. The list is a kit `.tile`: a body for the tasks on
+   a bare wallpaper in the styled looks; with a surface the card is the body already. */
 
 .card {
   --fs: clamp(12px, calc(9px + 1.5cqmin), 16px);
@@ -19,7 +20,7 @@
 
 .head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.6em;
   padding: 0 0.15em;
@@ -33,15 +34,29 @@
 }
 .count {
   margin-left: auto;
+  padding: 0.12em 0.7em;
   white-space: nowrap;
-  font-size: 0.92em;
-  font-weight: 500;
-  color: var(--t1);
+  font-size: 0.8em;
+  font-weight: 600;
+}
+.count:empty {
+  display: none;
+}
+/* "All done" is the good news: it takes the highlight. */
+.count[data-all] {
+  background: linear-gradient(135deg, var(--hi), var(--hi-2));
+  color: var(--on-spark);
+  text-shadow: none;
+}
+html[data-style="minimal"] .count[data-all],
+html:not([data-style]) .count[data-all] {
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 /* Done / total, as the one progress fill. */
 .bar {
-  height: 2px;
+  height: 4px;
   flex: none;
 }
 .bar > i {
@@ -58,6 +73,9 @@
   /* A mask, not a color: it fades the rows out where they are clipped. */
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ft), #000 calc(100% - var(--fb)), transparent 100%); /* art */
   mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ft), #000 calc(100% - var(--fb)), transparent 100%); /* art */
+  /* Room for the tile's shadow and glow. */
+  padding: 2px;
+  margin: -2px;
 }
 
 .list {
@@ -65,8 +83,25 @@
   padding: 0;
   list-style: none;
 }
+.list:empty {
+  display: none;
+}
+/* Only a bare wallpaper in a styled look gets the body; with a surface the list is plain rows. */
+html:not([data-surface="none"]) .list.tile {
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+html[data-surface="none"] .list.tile {
+  padding: 0.1em 0.7em;
+}
+html[data-style="minimal"][data-surface="none"] .list.tile,
+html:not([data-style])[data-surface="none"] .list.tile {
+  padding: 0;
+}
 
 .row {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 0.65em;
@@ -77,7 +112,7 @@
   border-top: 1px solid var(--fill-2);
 }
 
-/* A round check; done rows fill it with the accent. */
+/* A round check; done rows fill it with the highlight. */
 .check {
   flex: none;
   width: 1.25em;
@@ -97,7 +132,8 @@
   stroke-linejoin: round;
 }
 /* The button itself carries the soft shadow on a bare wallpaper (.gfx); not the glyph inside it. */
-html[data-shadow][data-surface] .check svg {
+html[data-shadow][data-surface] .check svg,
+html[data-style="neon"][data-surface="none"] .check svg {
   filter: none;
 }
 .row:not([data-done]) .check:hover {
@@ -105,11 +141,19 @@ html[data-shadow][data-surface] .check svg {
   color: var(--t2);
   box-shadow: inset 0 0 0 1.5px var(--t0);
 }
+html[data-style="neon"] .row:not([data-done]) .check:hover {
+  box-shadow: inset 0 0 0 1.5px var(--hi), 0 0 8px -1px var(--glow);
+}
 .row[data-done] .check,
 .row[data-done] .check:hover {
   background: var(--accent);
   color: var(--on-accent);
   box-shadow: none;
+}
+html[data-style]:not([data-style="minimal"]) .row[data-done] :is(.check, .check:hover) {
+  background: linear-gradient(135deg, var(--hi), var(--hi-2));
+  color: var(--on-spark);
+  box-shadow: var(--bevel), 0 0 var(--glow-size) -4px var(--glow);
 }
 
 .text {
@@ -131,7 +175,7 @@ html[data-shadow][data-surface] .check svg {
   text-decoration-color: var(--t2);
 }
 
-/* Inline editor: looks like the text, with an underline. */
+/* Inline editor: looks like the text, with an underline in the highlight. */
 .edit {
   all: unset;
   display: block;
@@ -141,16 +185,13 @@ html[data-shadow][data-surface] .check svg {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--t0);
-  caret-color: var(--t0);
+  caret-color: var(--hi);
   user-select: text;
   cursor: text;
-  box-shadow: 0 1px 0 0 var(--t2);
+  box-shadow: 0 1px 0 0 var(--hi);
 }
 
 /* Floats over the end of the row on hover or focus, so the text keeps the full width. */
-.row {
-  position: relative;
-}
 .del {
   position: absolute;
   top: 0.32em;
@@ -184,17 +225,65 @@ html[data-shadow][data-surface] .check svg {
   display: none;
 }
 
+/* Nothing here: a quiet check mark and a line. */
 .empty {
-  margin: 0;
-  padding: 0.5em 0.15em;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.45em;
+  height: 100%;
+  min-height: 3em;
   color: var(--t2);
 }
+.empty svg {
+  width: 2.2em;
+  height: 2.2em;
+  fill: none;
+  stroke: var(--hi);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+.empty p {
+  margin: 0;
+}
 
+/* The add field: a plus, then the input. */
 .add {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.5em 0.95em;
   font-size: 0.95em;
+  color: var(--t2);
 }
-.add:disabled {
+.add:focus-within {
+  color: var(--hi);
+}
+.add svg {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.add input {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  color: var(--t0);
+  caret-color: var(--hi);
+  user-select: text;
+  cursor: text;
+}
+.add input::placeholder {
+  color: var(--t2);
+}
+.add:has(input:disabled) {
   opacity: 0.5;
 }
 
@@ -222,6 +311,14 @@ html[data-shadow][data-surface] .check svg {
 .card[data-compact][data-narrow] .check {
   width: 1.05em;
   height: 1.05em;
+}
+.card[data-compact] .empty svg {
+  width: 1.5em;
+  height: 1.5em;
+}
+.card[data-compact] .empty {
+  grid-auto-flow: column;
+  gap: 0.6em;
 }
 /* Narrow: the count alone, no title. */
 .card[data-narrow] .title {

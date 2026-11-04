@@ -20,7 +20,7 @@ const msgTitle = $("#msg-title");
 const msgHint = $("#msg-hint");
 const foot = $("#foot");
 
-const defaults = { feeds: /** @type {unknown} */ ([]), maxItems: 12, showSource: true, showTime: true, refreshMinutes: 20 };
+const defaults = { feeds: /** @type {unknown} */ ([]), maxItems: 12, showSource: true, showTime: true, refreshMinutes: 20, variant: "list" };
 let settings = defaults;
 /** @type {string[]} */
 let urls = [];
@@ -115,12 +115,18 @@ function span(className, text) {
  * One headline. A button when it has a link to open, a plain block otherwise.
  * @param {Item} item
  * @param {number} nowSec
+ * @param {boolean} lead the first one: it gets the accent bar (shown when it is large)
  */
-function itemElement(item, nowSec) {
+function itemElement(item, nowSec, lead) {
   const el = document.createElement(isWebLink(item.link) ? "button" : "div");
-  el.className = "item";
+  el.className = settings.variant === "cards" ? "item tile" : "item";
   el.setAttribute("role", "listitem");
 
+  if (lead) {
+    const bar = document.createElement("i");
+    bar.className = "lead-bar flow";
+    el.append(bar);
+  }
   const title = document.createElement("div");
   title.className = "title";
   title.textContent = item.title;
@@ -176,7 +182,8 @@ function render() {
 
   msg.hidden = true;
   const nowSec = Date.now() / 1000;
-  list.replaceChildren(...cache.items.slice(0, clamp(Math.round(settings.maxItems), 3, 30)).map((item) => itemElement(item, nowSec)));
+  list.dataset.variant = settings.variant === "cards" ? "cards" : "list";
+  list.replaceChildren(...cache.items.slice(0, clamp(Math.round(settings.maxItems), 3, 30)).map((item, i) => itemElement(item, nowSec, i === 0)));
 
   // One quiet line for anything the reader should know: a stale list, or feeds that failed.
   const failed = cache.errors.length;

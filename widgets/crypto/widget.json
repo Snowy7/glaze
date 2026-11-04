@@ -2,7 +2,7 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "crypto",
   "name": "Crypto",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "mypaper",
   "description": "Prices and 24h change for the coins you follow (CoinGecko, no API key).",
   "entry": "index.html",
@@ -19,7 +19,18 @@
       "maxItems": 6,
       "default": [{ "id": "bitcoin" }, { "id": "ethereum" }, { "id": "solana" }]
     },
-    { "key": "currency", "type": "select", "label": "Currency", "options": ["usd", "eur", "gbp", "jpy"], "default": "usd" },
+    {
+      "key": "currency",
+      "type": "select",
+      "label": "Currency",
+      "options": [
+        { "value": "usd", "label": "US dollar", "icon": "$" },
+        { "value": "eur", "label": "Euro", "icon": "€" },
+        { "value": "gbp", "label": "Pound", "icon": "£" },
+        { "value": "jpy", "label": "Yen", "icon": "¥" }
+      ],
+      "default": "usd"
+    },
     { "key": "showChange", "type": "boolean", "label": "Show 24h change", "default": true },
     {
       "key": "refreshMinutes",

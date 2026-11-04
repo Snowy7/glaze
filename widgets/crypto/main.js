@@ -1,6 +1,6 @@
 // @ts-check
 import { $, onVisible, trackSettings, trackSize } from "./kit.js";
-import { formatChange, formatPrice, nameOf, nextDelayMs, padFor, parsePrices, pickLayout, readCoins, symbolOf } from "./logic.js";
+import { formatChange, formatPrice, glyphOf, nameOf, nextDelayMs, padFor, parsePrices, pickLayout, readCoins, symbolOf } from "./logic.js";
 
 /**
  * @typedef {{ price: number, change?: number }} Quote
@@ -16,6 +16,7 @@ const SVG = "http://www.w3.org/2000/svg";
 
 const rows = $("#rows");
 const msg = $("#msg");
+const msgText = $("#msg-text");
 const foot = $("#foot");
 
 const defaults = { coins: /** @type {unknown} */ ([]), currency: "usd", showChange: true, refreshMinutes: 5 };
@@ -105,11 +106,13 @@ function rowElement(id, quote, first) {
 
   if (settings.showChange && quote?.change !== undefined) {
     const { text, up } = formatChange(quote.change);
-    const change = span("chg num", text);
+    const change = span("chg chip num", text);
     change.prepend(triangle(up));
     change.dataset.dir = up ? "up" : "down";
     value.append(change);
   }
+  // A coin badge (its sign on a tile) when the row is wide enough for one.
+  if (!layout.narrow) row.append(span("badge tile", glyphOf(id)));
   row.append(label, value);
   return row;
 }
@@ -119,7 +122,7 @@ function showMessage(text) {
   rows.replaceChildren();
   foot.hidden = true;
   msg.hidden = false;
-  msg.textContent = text;
+  msgText.textContent = text;
 }
 
 function render() {
@@ -136,6 +139,7 @@ function render() {
 
   const time = new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   foot.hidden = !layout.footer;
+  foot.toggleAttribute("data-offline", offline); // the live dot goes quiet
   // Narrow: just the time (and a dot when offline); there is no room for words.
   foot.textContent = layout.narrow ? `${offline ? "· " : ""}${time}` : `${offline ? "offline · " : ""}updated ${time}`;
 }

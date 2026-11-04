@@ -17,7 +17,9 @@ const els = {
   downU: $("#down-u"),
   upN: $("#up-n"),
   upU: $("#up-u"),
+  peak: $("#peak"),
   area: $("#area", SVGPathElement),
+  areaUp: $("#area-up", SVGPathElement),
   downLine: $("#down-line", SVGPathElement),
   upLine: $("#up-line", SVGPathElement),
 };
@@ -73,9 +75,15 @@ function render(s) {
   if (card.dataset.spark === "off") return;
   const max = Math.max(FLOOR, ...down, ...up);
   const line = linePath(down, max);
+  const upLine = linePath(up, max);
   els.downLine.setAttribute("d", line);
-  els.upLine.setAttribute("d", linePath(up, max));
-  els.area.setAttribute("d", `${line}L100 40L${((POINTS - down.length) / (POINTS - 1)) * 100} 40Z`);
+  els.upLine.setAttribute("d", upLine);
+  // An area is its line closed down to the baseline.
+  const close = `L100 40L${((POINTS - down.length) / (POINTS - 1)) * 100} 40Z`;
+  els.area.setAttribute("d", line + close);
+  els.areaUp.setAttribute("d", upLine + close);
+  const scale = formatRate(max);
+  setText(els.peak, `${scale.n} ${scale.unit}`);
 }
 
 trackSettings(defaults, (settings) => {

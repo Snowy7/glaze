@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::net::Origin;
+use crate::pick;
 
 pub const WIDGET_MANIFEST: &str = "widget.json";
 pub const PLUGIN_MANIFEST: &str = "plugin.json";
@@ -40,8 +41,14 @@ pub enum Permission {
     Launch,
     Theme,
     ClipboardWrite,
+    /// The audio spectrum of the default output device.
+    Audio,
+    /// The signed-in user's name.
+    User,
     /// `fetch` to one origin.
     Network(Origin),
+    /// Read and write one shared storage namespace (`storage.shared:<namespace>`).
+    StorageShared(String),
 }
 
 impl TryFrom<String> for Permission {
@@ -54,12 +61,22 @@ impl TryFrom<String> for Permission {
             "launch" => Self::Launch,
             "theme" => Self::Theme,
             "clipboard.write" => Self::ClipboardWrite,
+            "audio" => Self::Audio,
+            "user" => Self::User,
             other => match other.strip_prefix("network:").map(Origin::parse) {
                 Some(Some(origin)) => Self::Network(origin),
                 Some(None) => {
                     return Err(format!("{other:?}: expected network:scheme://host[:port]"));
                 }
-                None => return Err(format!("unknown permission {other:?}")),
+                None => match other.strip_prefix("storage.shared:") {
+                    Some(namespace) if valid_id(namespace) => {
+                        Self::StorageShared(namespace.to_owned())
+                    }
+                    Some(_) => {
+                        return Err(format!("{other:?}: expected storage.shared:<[a-z0-9-]+>"));
+                    }
+                    None => return Err(format!("unknown permission {other:?}")),
+                },
             },
         })
     }
@@ -73,23 +90,108 @@ impl From<Permission> for String {
             Permission::Launch => "launch".into(),
             Permission::Theme => "theme".into(),
             Permission::ClipboardWrite => "clipboard.write".into(),
+            Permission::Audio => "audio".into(),
+            Permission::User => "user".into(),
             Permission::Network(origin) => format!("network:{origin}"),
+            Permission::StorageShared(namespace) => format!("storage.shared:{namespace}"),
         }
     }
 }
 
-/// One entry of a manifest's `settings`, rendered as a form by the shell.
+/// Where a widget lives (docs/widgets.md, "Placement presets").
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Preset {
+    /// On the desktop layer, below app windows, on the grid.
+    #[default]
+    Desktop,
+    /// A small always-on-top widget in the topmost layer.
+    Overlay,
+    /// Opened from a bar module; the bars host places it, not this one.
+    Popup,
+}
+
+/// How many instances of a widget the user may add.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InstanceRule {
+    /// One in total, on any monitor.
+    Single,
+    #[default]
+    Multiple,
+    /// At most one per monitor.
+    PerMonitor,
+}
+
+impl InstanceRule {
+    /// Whether one more instance may be added, given how many exist in total and on the
+    /// monitor it would go to.
+    pub fn allows(self, total: usize, on_monitor: usize) -> bool {
+        match self {
+            Self::Single => total == 0,
+            Self::Multiple => true,
+            Self::PerMonitor => on_monitor == 0,
+        }
+    }
+}
+
+/// A `select` option: a plain value, or an object with a label and an icon glyph. The wire
+/// shape is the one the manifest was written in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SelectOption {
+    Plain(String),
+    Detailed(SelectChoice),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectChoice {
+    pub value: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// A short glyph: an emoji or a symbol.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
+impl SelectOption {
+    pub fn value(&self) -> &str {
+        match self {
+            Self::Plain(value) => value,
+            Self::Detailed(choice) => &choice.value,
+        }
+    }
+}
+
+/// What the `image` setting offers in the file dialog unless the manifest says otherwise.
+const IMAGE_EXTENSIONS: [&str; 8] = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif", "svg"];
+/// The longest `group` heading.
+const MAX_GROUP: usize = 64;
+/// The longest `font` value.
+const MAX_FONT: usize = 200;
+
+fn is_false(flag: &bool) -> bool {
+    !*flag
+}
+
+/// One entry of a manifest's `settings`, rendered as a form by the shell. Every entry may carry
+/// a `group` (a section heading in the form).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Setting {
     Boolean {
         key: String,
         label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
         default: bool,
     },
     Number {
         key: String,
         label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         min: Option<f64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -98,26 +200,81 @@ pub enum Setting {
         step: Option<f64>,
         default: f64,
     },
+    /// A number shown as a slider; `min` and `max` are required.
+    Slider {
+        key: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
+        min: f64,
+        max: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<f64>,
+        /// A suffix for the readout, such as `"px"`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        unit: Option<String>,
+        default: f64,
+    },
     String {
         key: String,
         label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
         default: String,
     },
     Select {
         key: String,
         label: String,
-        options: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
+        options: Vec<SelectOption>,
         default: String,
     },
+    /// `#rrggbb`, or `#rrggbbaa` as well when `alpha` is set.
     Color {
         key: String,
         label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        alpha: bool,
+        default: String,
+    },
+    /// `""`, or the served URL of a file the host copied into the widget's data folder.
+    File {
+        key: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
+        /// Allowed extensions, without dots.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        extensions: Option<Vec<String>>,
+        default: String,
+    },
+    /// A `file` that shows a thumbnail; the extensions default to the common image formats.
+    Image {
+        key: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        extensions: Option<Vec<String>>,
+        default: String,
+    },
+    /// A CSS font-family name.
+    Font {
+        key: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
         default: String,
     },
     /// An editable list of records, one value per field.
     List {
         key: String,
         label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        group: Option<String>,
         fields: Vec<ListField>,
         #[serde(rename = "maxItems", default, skip_serializing_if = "Option::is_none")]
         max_items: Option<usize>,
@@ -125,7 +282,8 @@ pub enum Setting {
     },
 }
 
-/// A column of a `list` setting: a scalar setting whose default is optional.
+/// A column of a `list` setting: a listable scalar setting (everything but `file` and `image`)
+/// whose default is optional and which has no group.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum ListField {
@@ -147,6 +305,18 @@ pub enum ListField {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         default: Option<f64>,
     },
+    Slider {
+        key: String,
+        label: String,
+        min: f64,
+        max: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        unit: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<f64>,
+    },
     String {
         key: String,
         label: String,
@@ -156,11 +326,19 @@ pub enum ListField {
     Select {
         key: String,
         label: String,
-        options: Vec<String>,
+        options: Vec<SelectOption>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         default: Option<String>,
     },
     Color {
+        key: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "is_false")]
+        alpha: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<String>,
+    },
+    Font {
         key: String,
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -180,6 +358,7 @@ impl ListField {
             } => Setting::Boolean {
                 key,
                 label,
+                group: None,
                 default: default.unwrap_or(false),
             },
             Self::Number {
@@ -192,10 +371,29 @@ impl ListField {
             } => Setting::Number {
                 key,
                 label,
+                group: None,
                 min,
                 max,
                 step,
                 default: default.or(min).unwrap_or(0.0),
+            },
+            Self::Slider {
+                key,
+                label,
+                min,
+                max,
+                step,
+                unit,
+                default,
+            } => Setting::Slider {
+                key,
+                label,
+                group: None,
+                min,
+                max,
+                step,
+                unit,
+                default: default.unwrap_or(min),
             },
             Self::String {
                 key,
@@ -204,6 +402,7 @@ impl ListField {
             } => Setting::String {
                 key,
                 label,
+                group: None,
                 default: default.unwrap_or_default(),
             },
             Self::Select {
@@ -214,28 +413,58 @@ impl ListField {
             } => Setting::Select {
                 key,
                 label,
+                group: None,
                 default: default
-                    .or_else(|| options.first().cloned())
+                    .or_else(|| options.first().map(|o| o.value().to_owned()))
                     .unwrap_or_default(),
                 options,
             },
             Self::Color {
                 key,
                 label,
+                alpha,
                 default,
             } => Setting::Color {
                 key,
                 label,
+                group: None,
+                alpha,
                 default: default.unwrap_or_else(|| "#ffffff".into()),
+            },
+            Self::Font {
+                key,
+                label,
+                default,
+            } => Setting::Font {
+                key,
+                label,
+                group: None,
+                default: default.unwrap_or_default(),
             },
         }
     }
 }
 
-/// `#rrggbb`.
-fn is_color(text: &str) -> bool {
+/// `#rrggbb` or, with `alpha`, `#rrggbbaa`.
+fn is_color_with(text: &str, alpha: bool) -> bool {
+    is_hex(text, 6) || (alpha && is_hex(text, 8))
+}
+
+fn is_hex(text: &str, digits: usize) -> bool {
     text.strip_prefix('#')
-        .is_some_and(|hex| hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()))
+        .is_some_and(|hex| hex.len() == digits && hex.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// A font-family value: short, and nothing that could end a CSS declaration or open markup.
+fn is_font(text: &str) -> bool {
+    text.chars().count() <= MAX_FONT && !text.contains([';', '{', '}', '<', '>', '\\'])
+}
+
+/// A number in `min..=max` (either may be absent).
+fn in_range(value: &Value, min: Option<f64>, max: Option<f64>) -> bool {
+    value.as_f64().is_some_and(|n| {
+        n.is_finite() && min.is_none_or(|min| n >= min) && max.is_none_or(|max| n <= max)
+    })
 }
 
 impl Setting {
@@ -243,21 +472,61 @@ impl Setting {
         match self {
             Self::Boolean { key, .. }
             | Self::Number { key, .. }
+            | Self::Slider { key, .. }
             | Self::String { key, .. }
             | Self::Select { key, .. }
             | Self::Color { key, .. }
+            | Self::File { key, .. }
+            | Self::Image { key, .. }
+            | Self::Font { key, .. }
             | Self::List { key, .. } => key,
         }
+    }
+
+    fn group(&self) -> Option<&str> {
+        match self {
+            Self::Boolean { group, .. }
+            | Self::Number { group, .. }
+            | Self::Slider { group, .. }
+            | Self::String { group, .. }
+            | Self::Select { group, .. }
+            | Self::Color { group, .. }
+            | Self::File { group, .. }
+            | Self::Image { group, .. }
+            | Self::Font { group, .. }
+            | Self::List { group, .. } => group.as_deref(),
+        }
+    }
+
+    /// The extensions the file dialog offers for a `file` or `image` setting: what the manifest
+    /// lists, else (for images only) the common image formats. Empty means any file.
+    pub fn extensions(&self) -> Vec<String> {
+        let listed = |extensions: &Option<Vec<String>>| extensions.clone().unwrap_or_default();
+        match self {
+            Self::File { extensions, .. } => listed(extensions),
+            Self::Image { extensions, .. } => extensions
+                .clone()
+                .unwrap_or_else(|| IMAGE_EXTENSIONS.iter().map(|e| (*e).to_owned()).collect()),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Whether this is a `file` or `image` setting (its value is a served URL).
+    pub fn is_file(&self) -> bool {
+        matches!(self, Self::File { .. } | Self::Image { .. })
     }
 
     /// The default, as stored (a list's items get their missing fields).
     pub fn default_value(&self) -> Value {
         match self {
             Self::Boolean { default, .. } => (*default).into(),
-            Self::Number { default, .. } => (*default).into(),
+            Self::Number { default, .. } | Self::Slider { default, .. } => (*default).into(),
             Self::String { default, .. }
             | Self::Select { default, .. }
-            | Self::Color { default, .. } => default.clone().into(),
+            | Self::Color { default, .. }
+            | Self::File { default, .. }
+            | Self::Image { default, .. }
+            | Self::Font { default, .. } => default.clone().into(),
             Self::List { default, .. } => {
                 let raw: Value = default.iter().cloned().map(Value::Object).collect();
                 self.fit(&raw).unwrap_or(raw)
@@ -267,15 +536,25 @@ impl Setting {
 
     /// `value` as this setting stores it, or `None` if it isn't valid. Only
     /// lists change: missing fields get their defaults and unknown ones go.
+    ///
+    /// A `file` or `image` value must be `""` or *a* widget data URL; that it is this widget's
+    /// own is checked by [`WidgetManifest`], which knows the id.
     pub fn fit(&self, value: &Value) -> Option<Value> {
         let ok = match (self, value) {
             (Self::Boolean { .. }, Value::Bool(_)) => true,
-            (Self::Number { min, max, .. }, Value::Number(n)) => n.as_f64().is_some_and(|n| {
-                n.is_finite() && min.is_none_or(|min| n >= min) && max.is_none_or(|max| n <= max)
-            }),
+            (Self::Number { min, max, .. }, Value::Number(_)) => in_range(value, *min, *max),
+            (Self::Slider { min, max, .. }, Value::Number(_)) => {
+                in_range(value, Some(*min), Some(*max))
+            }
             (Self::String { .. }, Value::String(s)) => s.len() <= 4096,
-            (Self::Select { options, .. }, Value::String(s)) => options.contains(s),
-            (Self::Color { .. }, Value::String(s)) => is_color(s),
+            (Self::Select { options, .. }, Value::String(s)) => {
+                options.iter().any(|o| o.value() == s)
+            }
+            (Self::Color { alpha, .. }, Value::String(s)) => is_color_with(s, *alpha),
+            (Self::File { .. } | Self::Image { .. }, Value::String(s)) => {
+                s.is_empty() || pick::parse_data_url(s).is_some()
+            }
+            (Self::Font { .. }, Value::String(s)) => is_font(s),
             (
                 Self::List {
                     fields, max_items, ..
@@ -311,6 +590,10 @@ impl Setting {
     fn validate(&self) -> Result<()> {
         let key = self.key();
         ensure!(!key.is_empty(), "a setting has an empty key");
+        ensure!(
+            self.group().is_none_or(|g| g.chars().count() <= MAX_GROUP),
+            "setting {key:?}: group is longer than {MAX_GROUP} characters"
+        );
         match self {
             Self::Number { min, max, step, .. } => {
                 ensure!(
@@ -322,8 +605,41 @@ impl Setting {
                     "setting {key:?}: step must be positive"
                 );
             }
+            Self::Slider { min, max, step, .. } => {
+                ensure!(min < max, "setting {key:?}: min must be below max");
+                ensure!(
+                    step.is_none_or(|step| step > 0.0),
+                    "setting {key:?}: step must be positive"
+                );
+            }
             Self::Select { options, .. } => {
                 ensure!(!options.is_empty(), "setting {key:?} has no options");
+            }
+            Self::File {
+                extensions,
+                default,
+                ..
+            }
+            | Self::Image {
+                extensions,
+                default,
+                ..
+            } => {
+                if let Some(extensions) = extensions {
+                    ensure!(
+                        !extensions.is_empty(),
+                        "setting {key:?}: extensions is empty"
+                    );
+                    if let Some(bad) = extensions.iter().find(|e| !pick::valid_extension(e)) {
+                        bail!(
+                            "setting {key:?}: extension {bad:?} must be letters and digits, no dot"
+                        );
+                    }
+                }
+                ensure!(
+                    default.is_empty(),
+                    "setting {key:?}: the default of a file or image must be \"\""
+                );
             }
             Self::List {
                 fields, max_items, ..
@@ -397,6 +713,10 @@ pub struct WidgetManifest {
     pub size: SizeSpec,
     #[serde(default = "yes")]
     pub resizable: bool,
+    #[serde(default)]
+    pub preset: Preset,
+    #[serde(default)]
+    pub instances: InstanceRule,
     #[serde(default)]
     pub permissions: Vec<Permission>,
     #[serde(default)]
@@ -489,6 +809,22 @@ impl WidgetManifest {
         [0, 1].map(|i| size[i].clamp(self.size.min[i], max[i]))
     }
 
+    pub fn setting(&self, key: &str) -> Option<&Setting> {
+        self.settings.iter().find(|s| s.key() == key)
+    }
+
+    /// [`Setting::fit`], plus: a `file` or `image` value must be one of *this* widget's data
+    /// URLs (or `""`), never another widget's.
+    fn fit(&self, setting: &Setting, value: &Value) -> Option<Value> {
+        let fitted = setting.fit(value)?;
+        let own = !setting.is_file()
+            || fitted
+                .as_str()
+                .and_then(pick::parse_data_url)
+                .is_none_or(|url| url.widget == self.id);
+        own.then_some(fitted)
+    }
+
     /// Every declared setting with its value: the saved one if it's valid,
     /// else the default. Unknown saved keys are dropped.
     pub fn resolve_settings(&self, saved: &Map<String, Value>) -> Map<String, Value> {
@@ -497,7 +833,7 @@ impl WidgetManifest {
             .map(|setting| {
                 let value = saved
                     .get(setting.key())
-                    .and_then(|v| setting.fit(v))
+                    .and_then(|v| self.fit(setting, v))
                     .unwrap_or_else(|| setting.default_value());
                 (setting.key().to_owned(), value)
             })
@@ -510,11 +846,11 @@ impl WidgetManifest {
         values
             .into_iter()
             .map(|(key, value)| {
-                let Some(setting) = self.settings.iter().find(|s| s.key() == key) else {
+                let Some(setting) = self.setting(&key) else {
                     bail!("{:?} has no setting {key:?}", self.id);
                 };
-                let fitted = setting
-                    .fit(&value)
+                let fitted = self
+                    .fit(setting, &value)
                     .with_context(|| format!("{value} isn't a valid value for {key:?}"))?;
                 Ok((key, fitted))
             })
@@ -621,6 +957,8 @@ mod tests {
         let clock = clock();
         assert_eq!(clock.entry, "index.html");
         assert!(clock.resizable && clock.plugins.is_empty());
+        assert_eq!(clock.preset, Preset::Desktop);
+        assert_eq!(clock.instances, InstanceRule::Multiple);
         assert!(clock.has(&Permission::SystemStats) && !clock.has(&Permission::Media));
         let origins: Vec<&Origin> = clock.network_origins().collect();
         assert_eq!(
@@ -669,6 +1007,74 @@ mod tests {
             json,
             json!(["system.stats", "network:https://api.open-meteo.com"])
         );
+        let new: Vec<Permission> =
+            serde_json::from_value(json!(["audio", "user", "storage.shared:pins"])).unwrap();
+        assert_eq!(
+            new,
+            [
+                Permission::Audio,
+                Permission::User,
+                Permission::StorageShared("pins".into())
+            ]
+        );
+        assert_eq!(
+            serde_json::to_value(&new).unwrap(),
+            json!(["audio", "user", "storage.shared:pins"])
+        );
+        for bad in [
+            "storage.shared:",
+            "storage.shared:Pins",
+            "storage.shared:a/b",
+            "storage.shared",
+        ] {
+            assert!(
+                serde_json::from_value::<Permission>(json!(bad)).is_err(),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn presets_and_instance_rules_parse() {
+        let with = |extra: &str| {
+            let json = CLOCK.replacen("\"version\"", &format!("{extra}, \"version\""), 1);
+            WidgetManifest::parse(&json, "clock")
+        };
+        let m = with("\"preset\": \"overlay\", \"instances\": \"per-monitor\"").unwrap();
+        assert_eq!(
+            (m.preset, m.instances),
+            (Preset::Overlay, InstanceRule::PerMonitor)
+        );
+        let m = with("\"preset\": \"popup\", \"instances\": \"single\"").unwrap();
+        assert_eq!(
+            (m.preset, m.instances),
+            (Preset::Popup, InstanceRule::Single)
+        );
+        for bad in [
+            "\"preset\": \"floating\"",
+            "\"preset\": \"Overlay\"",
+            "\"instances\": \"many\"",
+            "\"instances\": \"perMonitor\"",
+        ] {
+            assert!(with(bad).is_err(), "{bad}");
+        }
+        // The shell gets both, spelled as in the manifest.
+        let json = serde_json::to_value(
+            with("\"preset\": \"overlay\", \"instances\": \"per-monitor\"").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            (&json["preset"], &json["instances"]),
+            (&json!("overlay"), &json!("per-monitor"))
+        );
+    }
+
+    #[test]
+    fn the_instance_rule_limits_adding() {
+        use InstanceRule::*;
+        assert!(Multiple.allows(9, 9));
+        assert!(Single.allows(0, 0) && !Single.allows(1, 0) && !Single.allows(1, 1));
+        assert!(PerMonitor.allows(3, 0) && !PerMonitor.allows(3, 1));
     }
 
     #[test]
@@ -748,6 +1154,293 @@ mod tests {
             WidgetManifest::parse(&nested, "launcher").is_err(),
             "fields are scalar"
         );
+    }
+
+    /// A manifest whose settings are `settings` (a JSON array body).
+    fn with_settings(settings: &str) -> Result<WidgetManifest> {
+        let json = format!(
+            r#"{{ "id": "viz", "name": "Viz", "size": {{ "default": [2, 1] }}, "settings": [{settings}] }}"#
+        );
+        WidgetManifest::parse(&json, "viz")
+    }
+
+    #[test]
+    fn every_new_setting_type_is_accepted() {
+        let manifest = with_settings(
+            r##"
+            { "key": "gain", "type": "slider", "label": "Gain", "min": 0, "max": 10, "step": 0.5, "unit": "px", "default": 2, "group": "Audio" },
+            { "key": "glow", "type": "color", "label": "Glow", "alpha": true, "default": "#ff008080" },
+            { "key": "tint", "type": "color", "label": "Tint", "alpha": true, "default": "#ff0080" },
+            { "key": "photo", "type": "image", "label": "Photo", "default": "" },
+            { "key": "sound", "type": "file", "label": "Sound", "extensions": ["wav", "mp3"], "default": "" },
+            { "key": "face", "type": "font", "label": "Font", "default": "Cascadia Code" },
+            { "key": "mode", "type": "select", "label": "Mode", "default": "bars",
+              "options": ["bars", { "value": "wave", "label": "Wave", "icon": "~" }, { "value": "dots", "icon": "." }] }
+        "##,
+        )
+        .unwrap();
+        let resolved = manifest.resolve_settings(&Map::new());
+        assert_eq!(
+            Value::Object(resolved),
+            json!({ "gain": 2.0, "glow": "#ff008080", "tint": "#ff0080", "photo": "", "sound": "",
+                    "face": "Cascadia Code", "mode": "bars" })
+        );
+        assert_eq!(
+            manifest.setting("photo").unwrap().extensions().len(),
+            IMAGE_EXTENSIONS.len()
+        );
+        assert_eq!(
+            manifest.setting("sound").unwrap().extensions(),
+            ["wav", "mp3"]
+        );
+        assert!(manifest.setting("gain").unwrap().extensions().is_empty());
+    }
+
+    #[test]
+    fn invalid_new_settings_are_rejected() {
+        for (json, why) in [
+            (
+                r#"{ "key": "a", "type": "slider", "label": "A", "min": 0, "default": 0 }"#,
+                "slider needs max",
+            ),
+            (
+                r#"{ "key": "a", "type": "slider", "label": "A", "max": 1, "default": 0 }"#,
+                "slider needs min",
+            ),
+            (
+                r#"{ "key": "a", "type": "slider", "label": "A", "min": 1, "max": 1, "default": 1 }"#,
+                "min = max",
+            ),
+            (
+                r#"{ "key": "a", "type": "slider", "label": "A", "min": 0, "max": 1, "step": 0, "default": 0 }"#,
+                "step 0",
+            ),
+            (
+                r#"{ "key": "a", "type": "slider", "label": "A", "min": 0, "max": 1, "default": 2 }"#,
+                "default out of range",
+            ),
+            (
+                r##"{ "key": "a", "type": "color", "label": "A", "default": "#ff008080" }"##,
+                "8 hex without alpha",
+            ),
+            (
+                r##"{ "key": "a", "type": "color", "label": "A", "alpha": true, "default": "#ff00" }"##,
+                "4 hex",
+            ),
+            (
+                r#"{ "key": "a", "type": "image", "label": "A", "default": "x.png" }"#,
+                "image default not empty",
+            ),
+            (
+                r#"{ "key": "a", "type": "file", "label": "A", "extensions": [".png"], "default": "" }"#,
+                "dotted extension",
+            ),
+            (
+                r#"{ "key": "a", "type": "file", "label": "A", "extensions": ["p/g"], "default": "" }"#,
+                "bad extension",
+            ),
+            (
+                r#"{ "key": "a", "type": "file", "label": "A", "extensions": [], "default": "" }"#,
+                "empty extensions",
+            ),
+            (
+                r#"{ "key": "a", "type": "font", "label": "A", "default": "A; color: red" }"#,
+                "font with ;",
+            ),
+            (
+                r#"{ "key": "a", "type": "font", "label": "A", "default": "A{}" }"#,
+                "font with braces",
+            ),
+            (
+                r#"{ "key": "a", "type": "boolean", "label": "A", "default": true, "group": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }"#,
+                "group over 64",
+            ),
+            (
+                r#"{ "key": "a", "type": "select", "label": "A", "default": "x", "options": [{ "value": "x", "color": "red" }] }"#,
+                "unknown option field",
+            ),
+            (
+                r#"{ "key": "a", "type": "select", "label": "A", "default": "y", "options": [{ "value": "x" }] }"#,
+                "default not in object options",
+            ),
+            (
+                r#"{ "key": "a", "type": "select", "label": "A", "default": "x", "options": [{ "label": "X" }] }"#,
+                "option without value",
+            ),
+            (
+                r#"{ "key": "a", "type": "slider", "label": "A", "min": 0, "max": 1, "default": 0, "unit": "px", "extra": 1 }"#,
+                "unknown field",
+            ),
+        ] {
+            assert!(with_settings(json).is_err(), "{why}");
+        }
+        let too_long_font = format!(
+            r#"{{ "key": "a", "type": "font", "label": "A", "default": "{}" }}"#,
+            "x".repeat(201)
+        );
+        assert!(with_settings(&too_long_font).is_err(), "font over 200");
+        let exactly = too_long_font.replace(&"x".repeat(201), &"x".repeat(200));
+        assert!(with_settings(&exactly).is_ok());
+    }
+
+    #[test]
+    fn values_are_fitted_per_type() {
+        let manifest = with_settings(
+            r##"
+            { "key": "gain", "type": "slider", "label": "Gain", "min": 0, "max": 10, "default": 2 },
+            { "key": "glow", "type": "color", "label": "Glow", "alpha": true, "default": "#ff008080" },
+            { "key": "flat", "type": "color", "label": "Flat", "default": "#ff0080" },
+            { "key": "face", "type": "font", "label": "Font", "default": "" },
+            { "key": "mode", "type": "select", "label": "Mode", "default": "a",
+              "options": [{ "value": "a" }, { "value": "b", "icon": "b" }] }
+        "##,
+        )
+        .unwrap();
+        let fit = |key: &str, value: Value| manifest.setting(key).unwrap().fit(&value);
+        assert_eq!(fit("gain", json!(10)), Some(json!(10)));
+        assert_eq!(fit("gain", json!(10.5)), None, "above max");
+        assert_eq!(fit("gain", json!(-1)), None, "below min");
+        assert_eq!(fit("gain", json!("5")), None, "not a number");
+        assert_eq!(fit("glow", json!("#ff008080")), Some(json!("#ff008080")));
+        assert_eq!(
+            fit("glow", json!("#ff0080")),
+            Some(json!("#ff0080")),
+            "plain also fine"
+        );
+        assert_eq!(fit("glow", json!("#ff00808")), None, "7 digits");
+        assert_eq!(fit("flat", json!("#ff008080")), None, "alpha not enabled");
+        assert_eq!(fit("face", json!("Segoe UI")), Some(json!("Segoe UI")));
+        assert_eq!(fit("face", json!("a;b")), None);
+        assert_eq!(fit("face", json!("a\\b")), None);
+        assert_eq!(fit("face", json!("<b>")), None);
+        assert_eq!(fit("mode", json!("b")), Some(json!("b")));
+        assert_eq!(fit("mode", json!("c")), None);
+    }
+
+    #[test]
+    fn file_values_are_this_widgets_data_urls_or_empty() {
+        let manifest = with_settings(
+            r#"{ "key": "photo", "type": "image", "label": "Photo", "default": "" }"#,
+        )
+        .unwrap();
+        let own = pick::data_url("viz", "viz-1", "My Photo.png");
+        let other = pick::data_url("clock", "clock-1", "a.png");
+        let saved = |value: &str| {
+            let saved = json!({ "photo": value });
+            manifest.resolve_settings(saved.as_object().unwrap())["photo"].clone()
+        };
+        assert_eq!(saved(&own), json!(own));
+        assert_eq!(saved(""), json!(""));
+        for bad in [other.as_str(), "https://evil.com/a.png", "C:\\a.png", "x"] {
+            assert_eq!(saved(bad), json!(""), "{bad}");
+        }
+        let edit = |value: &str| {
+            let values = json!({ "photo": value });
+            manifest.check_settings(values.as_object().unwrap().clone())
+        };
+        assert!(edit(&own).is_ok() && edit("").is_ok());
+        assert!(edit(&other).is_err() && edit("https://evil.com/a.png").is_err());
+    }
+
+    #[test]
+    fn select_options_keep_their_wire_shape() {
+        let manifest = with_settings(
+            r#"{ "key": "m", "type": "select", "label": "M", "default": "a",
+                 "options": ["a", { "value": "b", "label": "Bee" }, { "value": "c", "icon": "c" }] }"#,
+        )
+        .unwrap();
+        let json = serde_json::to_value(&manifest).unwrap();
+        assert_eq!(
+            json["settings"][0]["options"],
+            json!(["a", { "value": "b", "label": "Bee" }, { "value": "c", "icon": "c" }])
+        );
+        let again = WidgetManifest::parse(&json.to_string(), "viz").unwrap();
+        assert_eq!(again, manifest, "serde round trip");
+    }
+
+    #[test]
+    fn new_settings_round_trip_through_json() {
+        let manifest = with_settings(
+            r##"
+            { "key": "gain", "type": "slider", "label": "Gain", "min": 0, "max": 10, "step": 1, "unit": "%", "default": 2, "group": "G" },
+            { "key": "glow", "type": "color", "label": "Glow", "alpha": true, "default": "#ff008080" },
+            { "key": "flat", "type": "color", "label": "Flat", "default": "#ff0080" },
+            { "key": "photo", "type": "image", "label": "Photo", "extensions": ["png"], "default": "" },
+            { "key": "face", "type": "font", "label": "Font", "default": "x" }
+        "##,
+        )
+        .unwrap();
+        let json = serde_json::to_value(&manifest).unwrap();
+        // Unset optionals and a false `alpha` are not written.
+        assert_eq!(
+            json["settings"][2],
+            json!({ "type": "color", "key": "flat", "label": "Flat", "default": "#ff0080" })
+        );
+        assert_eq!(json["settings"][0]["group"], json!("G"));
+        assert_eq!(
+            WidgetManifest::parse(&json.to_string(), "viz").unwrap(),
+            manifest
+        );
+    }
+
+    #[test]
+    fn lists_take_the_listable_types_but_not_files() {
+        let list = |field: &str| {
+            with_settings(&format!(
+                r#"{{ "key": "l", "type": "list", "label": "L", "default": [],
+                      "fields": [{field}] }}"#
+            ))
+        };
+        for ok in [
+            r#"{ "key": "n", "type": "slider", "label": "N", "min": 1, "max": 5 }"#,
+            r##"{ "key": "c", "type": "color", "label": "C", "alpha": true }"##,
+            r#"{ "key": "f", "type": "font", "label": "F" }"#,
+            r#"{ "key": "s", "type": "select", "label": "S", "options": [{ "value": "a", "icon": "a" }] }"#,
+        ] {
+            assert!(list(ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            r#"{ "key": "p", "type": "image", "label": "P" }"#,
+            r#"{ "key": "p", "type": "file", "label": "P" }"#,
+            r#"{ "key": "p", "type": "string", "label": "P", "group": "G" }"#,
+        ] {
+            assert!(list(bad).is_err(), "{bad}");
+        }
+        // Missing fields get slider's min, the first object option, and so on.
+        let manifest = with_settings(
+            r#"{ "key": "l", "type": "list", "label": "L", "default": [{}],
+                 "fields": [{ "key": "n", "type": "slider", "label": "N", "min": 1, "max": 5 },
+                            { "key": "s", "type": "select", "label": "S", "options": [{ "value": "a" }, "b"] },
+                            { "key": "f", "type": "font", "label": "F" }] }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            manifest.resolve_settings(&Map::new())["l"],
+            json!([{ "n": 1.0, "s": "a", "f": "" }])
+        );
+        let edit = |value: Value| {
+            let values = json!({ "l": value });
+            manifest.check_settings(values.as_object().unwrap().clone())
+        };
+        assert!(
+            edit(json!([{ "n": 9 }])).is_err(),
+            "slider range applies in lists"
+        );
+        assert!(edit(json!([{ "n": 3, "s": "b" }])).is_ok());
+    }
+
+    #[test]
+    fn groups_are_presentation_only() {
+        let manifest = with_settings(
+            r#"{ "key": "a", "type": "boolean", "label": "A", "default": true, "group": "Look" },
+               { "key": "b", "type": "string", "label": "B", "default": "" }"#,
+        )
+        .unwrap();
+        let resolved = manifest.resolve_settings(&Map::new());
+        assert_eq!(Value::Object(resolved), json!({ "a": true, "b": "" }));
+        let json = serde_json::to_value(&manifest).unwrap();
+        assert_eq!(json["settings"][0]["group"], json!("Look"));
+        assert!(json["settings"][1].get("group").is_none());
     }
 
     #[test]

@@ -1,6 +1,7 @@
 /* The picture is the card. With no surface it fills the widget (rounded, with a hairline ring);
    with glass or solid it sits inset in the surface, so it reads as a print on the material.
-   main.js sets data-fit, data-rounded, data-multi (more than one image) and data-empty. */
+   main.js sets data-fit, data-motion (still or kenburns), data-rounded, data-multi (more than one
+   image) and data-empty, and --kb (how long one slow zoom lasts). */
 
 .card {
   --inset: clamp(4px, 3.2cqmin, 8px);
@@ -8,6 +9,10 @@
 }
 html[data-surface="none"] .card {
   --inset: 0px;
+}
+/* A styled look with no surface: the picture floats, so keep a margin for its shadow or glow. */
+html[data-style]:not([data-style="minimal"])[data-surface="none"] .card {
+  --inset: var(--bleed);
 }
 
 .frame {
@@ -33,6 +38,10 @@ html[data-surface="none"] .card:has(.frame[data-rounded="false"]) {
 /* Letterbox bars read as a mat, not as a hole. */
 .frame[data-fit="contain"] {
   background: var(--chip);
+}
+/* The styles lift a bare picture off the wallpaper (a glow in neon). */
+html[data-style]:not([data-style="minimal"])[data-surface="none"] .frame {
+  box-shadow: var(--elev-2), 0 0 var(--glow-size) -3px var(--glow);
 }
 
 /* Two stacked images: the incoming one (`top`) fades in over the outgoing one (`under`), which
@@ -63,6 +72,32 @@ html[data-surface="none"] .card:has(.frame[data-rounded="false"]) {
   opacity: 1;
 }
 
+/* Slow zoom (cover only: a letterboxed picture would show its edges): one of the two layers
+   drifts in, the other out, so consecutive pictures don't move alike. A layer's animation starts
+   when it becomes `top` and keeps running while it is `under`; resting layers have none. */
+.frame[data-motion="kenburns"][data-fit="cover"] .layer:is(.top, .under) {
+  animation: drift-in var(--kb, 32s) ease-in-out forwards;
+}
+.frame[data-motion="kenburns"][data-fit="cover"] #b:is(.top, .under) {
+  animation-name: drift-out;
+}
+@keyframes drift-in {
+  from {
+    transform: scale(1.02);
+  }
+  to {
+    transform: scale(1.13) translate(-1.6%, -1.2%);
+  }
+}
+@keyframes drift-out {
+  from {
+    transform: scale(1.13) translate(1.4%, 1%);
+  }
+  to {
+    transform: scale(1.02);
+  }
+}
+
 /* The hairline ring, above the picture. */
 .frame::after {
   content: "";
@@ -75,38 +110,85 @@ html[data-surface="none"] .card:has(.frame[data-rounded="false"]) {
     inset 0 0 0 1px var(--line),
     inset 0 0 0 1px rgb(var(--halo) / 0.1);
 }
+html[data-style="neon"] .frame::after {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--spark-rgb) / 0.7),
+    inset 0 0 12px -4px rgb(var(--spark-rgb) / 0.6);
+}
+html:is([data-style="depth"], [data-style="aero"]) .frame::after {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--lit) / 0.28),
+    inset 0 1px 0 rgb(var(--lit) / 0.35);
+}
 
 .caption {
   position: absolute;
-  inset: auto 0 0;
+  left: 8px;
+  bottom: 8px;
   z-index: 3;
-  padding: 26px 12px 9px;
-  background: linear-gradient(to top, rgb(var(--halo) / 0.5), transparent);
+  max-width: calc(100% - 16px);
+  padding: 0.3em 0.85em;
+  border-radius: 999px;
+  /* A real wash: the picture is the backdrop, whatever the surface. */
+  background: rgb(var(--halo) / 0.42);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
   color: var(--t0);
+  text-shadow: none;
   pointer-events: none;
 }
 
-/* No images, or none that load. */
+/* No images, or none that load: a soft wash of the highlight pair, a glyph, two lines. */
 .frame[data-empty] {
-  background: var(--chip);
+  background:
+    radial-gradient(120% 90% at 8% 0%, color-mix(in srgb, var(--hi) 42%, transparent), transparent 62%),
+    radial-gradient(110% 90% at 100% 100%, color-mix(in srgb, var(--hi-2) 36%, transparent), transparent 64%),
+    var(--chip);
 }
 .hint {
   position: absolute;
   inset: 0;
   z-index: 3;
-  display: grid;
-  place-content: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 10px;
   text-align: center;
 }
+.hint-icon {
+  display: grid;
+  place-items: center;
+  width: clamp(30px, 30cqmin, 52px);
+  aspect-ratio: 1;
+  margin-bottom: 4px;
+  border-radius: 32%;
+}
+html .hint-icon.tile {
+  background-color: color-mix(in srgb, var(--hi) 24%, transparent);
+}
+.hint-icon svg {
+  width: 58%;
+  height: 58%;
+  fill: none;
+  stroke: var(--t0);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hint-icon circle {
+  fill: var(--t0);
+  stroke: none;
+}
 .hint-title {
   font-size: 13px;
   font-weight: 500;
-  color: var(--t1);
+  color: var(--t0);
 }
 .hint-sub {
-  color: var(--t2);
+  max-width: 100%;
+  color: var(--t1);
   letter-spacing: 0.04em;
   text-transform: none;
   font-weight: 500;
@@ -117,5 +199,16 @@ html[data-surface="none"] .card:has(.frame[data-rounded="false"]) {
 @container (max-width: 120px) {
   .hint-sub {
     font-size: 9.5px;
+  }
+}
+/* Too small for the glyph and the words: words only; a 1x1 has room for the title alone. */
+@container (max-height: 110px) {
+  .hint-icon {
+    display: none;
+  }
+}
+@container (max-height: 110px) and (max-width: 140px) {
+  .hint-sub {
+    display: none;
   }
 }

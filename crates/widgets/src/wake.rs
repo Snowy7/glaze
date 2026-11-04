@@ -37,8 +37,15 @@ pub enum Msg {
         token: Option<u64>,
         result: Result<Value, String>,
     },
-    /// A launch finished.
-    Launched(Target, Reply),
+    /// A worker thread finished a call (a launch, `user.info`, `appIcon`).
+    Answered(Target, Reply),
+    /// The audio capture thread made a spectrum frame.
+    Audio {
+        generation: u64,
+        frame: Box<crate::audio::Frame>,
+    },
+    /// A file dialog finished.
+    Picked(crate::pick::Done),
     /// A file watcher failed and stopped (logged).
     WatchError(PathBuf, String),
 }

@@ -2,13 +2,43 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "system-monitor",
   "name": "System monitor",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "author": "mypaper",
-  "description": "CPU, memory, GPU and network as live sparklines.",
+  "description": "CPU, memory, GPU and network as glowing rings, labelled bars or live sparklines.",
   "entry": "index.html",
-  "size": { "default": [2, 2], "min": [2, 1], "max": [4, 3] },
+  "size": { "default": [3, 2], "min": [1, 1], "max": [4, 3] },
   "resizable": true,
   "permissions": ["system.stats"],
   "plugins": [],
-  "settings": []
+  "settings": [
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Look",
+      "group": "Layout",
+      "default": "rings",
+      "options": [
+        { "value": "rings", "label": "Rings", "icon": "◎" },
+        { "value": "bars", "label": "Bars", "icon": "☰" },
+        { "value": "spark", "label": "Spark", "icon": "〰" }
+      ]
+    },
+    { "key": "cpu", "type": "boolean", "label": "CPU", "group": "Show", "default": true },
+    { "key": "ram", "type": "boolean", "label": "Memory", "group": "Show", "default": true },
+    { "key": "gpu", "type": "boolean", "label": "GPU", "group": "Show", "default": true },
+    { "key": "net", "type": "boolean", "label": "Network", "group": "Show", "default": true },
+    {
+      "key": "interval",
+      "type": "select",
+      "label": "Update every",
+      "group": "Update",
+      "default": "2000",
+      "options": [
+        { "value": "1000", "label": "1 s" },
+        { "value": "2000", "label": "2 s" },
+        { "value": "5000", "label": "5 s" }
+      ]
+    },
+    { "key": "vary", "type": "boolean", "label": "A color per metric", "group": "Color", "default": true }
+  ]
 }

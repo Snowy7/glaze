@@ -175,6 +175,16 @@ describe("style colors", () => {
   });
 });
 
+describe("style colors on light surfaces", () => {
+  it("deepens the signature pair for dark text, but never a chromatic accent", () => {
+    const light = appearanceVars(look({ style: "neon" }));
+    const dark = appearanceVars(look({ style: "neon", text: "dark", accent: "#0a0a0c" }));
+    const lightness = (rgb: string | undefined) => Math.max(...(rgb ?? "").split(" ").map(Number));
+    expect(lightness(dark["--spark-rgb"])).toBeLessThan(lightness(light["--spark-rgb"]));
+    expect(appearanceVars(look({ style: "neon", text: "dark", accent: "#14d17f" }))["--spark-rgb"]).toBe("20 209 127");
+  });
+});
+
 describe("audioBins", () => {
   it("defaults to 64 and keeps requests inside the host's 64 to 128", () => {
     expect(audioBins(undefined)).toBe(64);

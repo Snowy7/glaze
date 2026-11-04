@@ -235,6 +235,7 @@ mod tests {
                     location: place.clone(),
                     units: unit_labels,
                     days: (0..7).map(day).collect(),
+                    hourly: Vec::new(),
                 },
             })
         }

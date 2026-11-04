@@ -48,6 +48,8 @@ pub struct Request {
 
 pub const MAX_DAYS: usize = 7;
 const DEFAULT_DAYS: usize = 5;
+/// How many hourly entries `forecast` returns.
+pub const HOURS: usize = 24;
 
 /// `{ lat, lon }` or `{ city }`, plus optional `units` ("metric" | "imperial") and `days` (1 to 7).
 /// Coordinates win when both are given.
@@ -166,11 +168,28 @@ pub struct Day {
     pub precipitation_probability: Option<f64>,
 }
 
+/// One hour of the forecast.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Hour {
+    /// "2026-11-03T22:00", local to the place.
+    pub time: String,
+    pub temperature: f64,
+    pub code: u8,
+    pub condition: &'static str,
+    /// Day or night variants of the icons that have them, from the hour's own `is_day`.
+    pub icon: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precipitation_probability: Option<f64>,
+    pub is_day: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Forecast {
     pub location: Place,
     pub units: Units,
     pub days: Vec<Day>,
+    /// The next [`HOURS`] hours, starting with the current one.
+    pub hourly: Vec<Hour>,
 }
 
 /// Everything one open-meteo call gives: serves both `current` and `forecast`.
@@ -224,6 +243,7 @@ pub fn describe(code: u8, is_day: bool) -> (&'static str, &'static str) {
 pub struct RawForecast {
     current: RawCurrent,
     daily: RawDaily,
+    hourly: RawHourly,
 }
 
 #[derive(Debug, Deserialize)]
@@ -249,8 +269,53 @@ struct RawDaily {
     precipitation_probability_max: Vec<Option<f64>>,
 }
 
-/// Maps a raw forecast response to a [`Bundle`]. Daily arrays of different lengths are an error
-/// (open-meteo always returns them aligned, so that means the format changed).
+#[derive(Debug, Deserialize)]
+struct RawHourly {
+    time: Vec<String>,
+    temperature_2m: Vec<f64>,
+    weather_code: Vec<u8>,
+    is_day: Vec<u8>,
+    #[serde(default)]
+    precipitation_probability: Vec<Option<f64>>,
+}
+
+/// The [`HOURS`] entries starting at the hour of `now` ("2026-11-03T21:00" matches the 21:00 slot;
+/// ISO local times compare as strings). Hourly arrays of different lengths are an error.
+fn next_hours(h: RawHourly, now: &str) -> Result<Vec<Hour>, RpcError> {
+    let n = h.time.len();
+    if [h.temperature_2m.len(), h.weather_code.len(), h.is_day.len()]
+        .iter()
+        .any(|&len| len != n)
+    {
+        return Err(RpcError::internal(
+            "open-meteo returned misaligned hourly data",
+        ));
+    }
+    let this_hour = now.get(..13).unwrap_or(now);
+    let first = h
+        .time
+        .iter()
+        .position(|t| t.as_str() >= this_hour)
+        .unwrap_or(n);
+    Ok((first..n.min(first + HOURS))
+        .map(|i| {
+            let is_day = h.is_day[i] != 0;
+            let (condition, icon) = describe(h.weather_code[i], is_day);
+            Hour {
+                time: h.time[i].clone(),
+                temperature: h.temperature_2m[i],
+                code: h.weather_code[i],
+                condition,
+                icon,
+                precipitation_probability: h.precipitation_probability.get(i).copied().flatten(),
+                is_day,
+            }
+        })
+        .collect())
+}
+
+/// Maps a raw forecast response to a [`Bundle`]. Daily or hourly arrays of different lengths are
+/// an error (open-meteo always returns them aligned, so that means the format changed).
 pub fn map_forecast(
     place: &Place,
     units: UnitSystem,
@@ -259,6 +324,7 @@ pub fn map_forecast(
     let RawForecast {
         current: c,
         daily: d,
+        hourly: h,
     } = raw;
     let n = d.time.len();
     if [
@@ -273,6 +339,7 @@ pub fn map_forecast(
             "open-meteo returned misaligned daily data",
         ));
     }
+    let hourly = next_hours(h, &c.time)?;
 
     let is_day = c.is_day != 0;
     let (condition, icon) = describe(c.weather_code, is_day);
@@ -318,6 +385,7 @@ pub fn map_forecast(
             location: place.clone(),
             units: labels,
             days,
+            hourly,
         },
     })
 }
@@ -434,6 +502,13 @@ mod tests {
             "temperature_2m_max": [13.1, 12.0, 9.5],
             "temperature_2m_min": [7.0, 8.2, 3.1],
             "precipitation_probability_max": [10, null, 5]
+        },
+        "hourly": {
+            "time": ["2026-11-03T20:00", "2026-11-03T21:00", "2026-11-03T22:00", "2026-11-03T23:00", "2026-11-04T00:00"],
+            "temperature_2m": [11.6, 11.2, 10.9, 10.5, 10.1],
+            "weather_code": [3, 3, 0, 61, 61],
+            "is_day": [0, 0, 0, 0, 0],
+            "precipitation_probability": [5, 10, null, 60, 80]
         }
     }"#;
 
@@ -484,6 +559,50 @@ mod tests {
     }
 
     #[test]
+    fn hourly_starts_at_the_current_hour_and_is_capped() {
+        let raw: RawForecast = serde_json::from_str(FORECAST).unwrap();
+        let hourly = map_forecast(&london(), UnitSystem::Metric, raw)
+            .unwrap()
+            .forecast
+            .hourly;
+        // The 20:00 slot is in the past; the current 21:00 one comes first.
+        let times: Vec<_> = hourly.iter().map(|h| h.time.as_str()).collect();
+        assert_eq!(
+            times,
+            [
+                "2026-11-03T21:00",
+                "2026-11-03T22:00",
+                "2026-11-03T23:00",
+                "2026-11-04T00:00"
+            ]
+        );
+        assert_eq!((hourly[1].icon, hourly[1].is_day), ("clear-night", false));
+        assert_eq!(hourly[2].precipitation_probability, Some(60.0));
+        assert_eq!(hourly[1].precipitation_probability, None);
+        let json = serde_json::to_value(&hourly[1]).unwrap();
+        assert!(json.get("precipitation_probability").is_none());
+        assert_eq!(json["temperature"], 10.9);
+
+        // A long response is cut to HOURS entries.
+        let mut long: Value = serde_json::from_str(FORECAST).unwrap();
+        let n = 3 * HOURS;
+        long["hourly"] = json!({
+            "time": (0..n).map(|i| format!("2026-11-{:02}T{:02}:00", 3 + i / 24, i % 24)).collect::<Vec<_>>(),
+            "temperature_2m": vec![1.0; n],
+            "weather_code": vec![0; n],
+            "is_day": vec![1; n],
+        });
+        let raw: RawForecast = serde_json::from_value(long).unwrap();
+        let hourly = map_forecast(&london(), UnitSystem::Metric, raw)
+            .unwrap()
+            .forecast
+            .hourly;
+        assert_eq!(hourly.len(), HOURS);
+        assert_eq!(hourly[0].time, "2026-11-03T21:00");
+        assert!(hourly[0].precipitation_probability.is_none());
+    }
+
+    #[test]
     fn imperial_labels_and_misaligned_data() {
         let raw: RawForecast = serde_json::from_str(FORECAST).unwrap();
         let bundle = map_forecast(&london(), UnitSystem::Imperial, raw).unwrap();
@@ -491,6 +610,16 @@ mod tests {
 
         let mut broken: Value = serde_json::from_str(FORECAST).unwrap();
         broken["daily"]["temperature_2m_min"] = json!([1.0]);
+        let raw: RawForecast = serde_json::from_value(broken).unwrap();
+        assert_eq!(
+            map_forecast(&london(), UnitSystem::Metric, raw)
+                .unwrap_err()
+                .code,
+            -32603
+        );
+
+        let mut broken: Value = serde_json::from_str(FORECAST).unwrap();
+        broken["hourly"]["is_day"] = json!([0]);
         let raw: RawForecast = serde_json::from_value(broken).unwrap();
         assert_eq!(
             map_forecast(&london(), UnitSystem::Metric, raw)

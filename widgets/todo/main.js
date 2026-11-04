@@ -1,5 +1,6 @@
 // @ts-check
 import { $, trackSettings, trackSize } from "./kit.js";
+import { dayKey, recordActivity } from "./activity.js";
 
 /** @typedef {{ id: number, text: string, done: boolean }} Item */
 
@@ -20,6 +21,7 @@ const barFill = $("#bar-fill");
 const scroller = $("#scroller");
 const list = $("#list");
 const emptyEl = $("#empty");
+const emptyText = $("#empty-text");
 const add = $("#add", HTMLInputElement);
 
 const defaults = { title: "To do", addPosition: "bottom", hideDone: false };
@@ -160,12 +162,13 @@ function render() {
   const shown = settings.hideDone || compact ? items.filter((i) => !i.done) : items;
 
   countEl.textContent = total === 0 ? "" : open === 0 ? "All done" : `${open} left`;
+  countEl.toggleAttribute("data-all", total > 0 && open === 0);
   bar.hidden = total === 0;
   barFill.style.width = total === 0 ? "0%" : `${((total - open) / total) * 100}%`;
 
   list.replaceChildren(...shown.map(rowNode));
   emptyEl.hidden = !loaded || shown.length > 0;
-  emptyEl.textContent = total === 0 ? "Nothing to do" : "All done";
+  emptyText.textContent = total === 0 ? "Nothing to do" : "All done";
 
   const editor = list.querySelector(".edit");
   if (editor instanceof HTMLTextAreaElement) {
@@ -222,9 +225,28 @@ function addItem(raw) {
   updateFade();
 }
 
+/**
+ * Tasks completed during this session and the day each was counted on, so un-checking one of them
+ * takes the count back (a task that was already done when the widget loaded is history).
+ * @type {Map<number, string>}
+ */
+const counted = new Map();
+
 /** @param {number} id */
 function toggle(id) {
-  items = items.map((i) => (i.id === id ? { ...i, done: !i.done } : i));
+  const item = items.find((i) => i.id === id);
+  if (!item) return;
+  const done = !item.done;
+  items = items.map((i) => (i.id === id ? { ...i, done } : i));
+  if (done) {
+    const day = dayKey(new Date());
+    counted.set(id, day);
+    recordActivity("todo", day, 1);
+  } else {
+    const day = counted.get(id);
+    if (day !== undefined) recordActivity("todo", day, -1);
+    counted.delete(id);
+  }
   changed();
   render();
 }

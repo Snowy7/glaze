@@ -18,6 +18,8 @@ const titleEl = $("#title");
 const unitsEl = $("#units");
 const msgEl = $("#msg");
 const footEl = $("#foot");
+const barEl = $("#bar");
+const barFill = $("#bar-fill");
 
 const defaults = {
   title: "New Year",
@@ -39,7 +41,7 @@ const unitNodes = Array.from({ length: 4 }, () => {
   const root = document.createElement("div");
   root.className = "unit";
   const value = document.createElement("span");
-  value.className = "v";
+  value.className = "v hero";
   const label = document.createElement("span");
   label.className = "l caps";
   root.append(value, label);
@@ -125,6 +127,8 @@ function render(now) {
   card.style.setProperty("--kc", String(message ? message.length * MESSAGE_EM * 0.9 : Math.max(2, (leader?.text.length ?? 2) * DIGIT_EM)));
   const fraction = phase === "before" ? progress(start, target, now) : 1;
   arc.setAttribute("stroke-dasharray", `${fraction < 0.004 ? 0 : fraction * 100} 100`);
+  barEl.hidden = phase !== "before";
+  barFill.style.width = `${fraction * 100}%`;
 
   card.setAttribute(
     "aria-label",

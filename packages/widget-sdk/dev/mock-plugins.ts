@@ -123,7 +123,9 @@ const mocks: Record<string, (method: string, params: unknown) => unknown> = { we
 export type FolderMocks = Record<string, Record<string, unknown>>;
 
 export async function mockPlugin(id: string, method: string, params: unknown, folder: FolderMocks = {}): Promise<unknown> {
-  await new Promise((r) => setTimeout(r, 120)); // feel like a process
+  // Feel like a process; the weather city "slow" never answers (to look at loading states).
+  const slow = id === "weather" && asParams(params)["city"] === "slow";
+  await new Promise((r) => setTimeout(r, slow ? 600_000 : 120));
   const fromFolder = folder[id]?.[method];
   if (fromFolder !== undefined) return fromFolder;
   const builtin = mocks[id];

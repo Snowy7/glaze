@@ -35,6 +35,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{BOOL, HSTRING, Interface, PCWSTR, PWSTR, w};
 
 use crate::net::{self, Origin, Party, Verdict, WidgetNet};
+use crate::overlay::{self, Layer};
+use crate::pick;
 
 pub const SHELL_URL: &str = "https://shell.mypaper/index.html";
 const SHELL_PREFIX: &str = "https://shell.mypaper/";
@@ -225,7 +227,17 @@ fn widget_file(
     let policy = policy.borrow();
     let found = policy.get(widget).and_then(|net| {
         let path = net::widget_path(url)?;
-        let body = std::fs::read(net.dir.join(&path)).ok()?;
+        // `__data/<instance>/<name>` is a file the user picked for one of this widget's
+        // instances (see `pick.rs`); everything else is in the widget's folder.
+        let file = match path.strip_prefix("__data/") {
+            Some(rest) => pick::served_file(
+                &net.data_dir,
+                |i| net.instances.iter().any(|x| x == i),
+                rest,
+            )?,
+            None => net.dir.join(&path),
+        };
+        let body = std::fs::read(file).ok()?;
         Some((net, path, body))
     });
     let Some((net, path, body)) = found else {
@@ -253,6 +265,8 @@ struct Web {
 pub struct Surface {
     pub id: u32,
     pub monitor: Monitor,
+    /// The desktop layer's window, or the topmost overlay one.
+    pub layer: Layer,
     hwnd: HWND,
     web: Option<Web>,
     /// Asked the environment for a controller and waiting for it.
@@ -284,9 +298,27 @@ impl Surface {
                 None,
             )?
         };
-        let surface = Self {
+        let surface = Self::with_window(id, hwnd, monitor, Layer::Desktop);
+        surface.set_region(&[]);
+        host.place_above_icons(hwnd, surface.monitor.rect)?;
+        Ok(surface)
+    }
+
+    /// Creates the (still empty and click-through) topmost window of the overlay layer over
+    /// `monitor` (see `overlay.rs`).
+    pub fn new_overlay(id: u32, monitor: Monitor) -> Result<Self> {
+        let hwnd = overlay::create_window(CLASS, &monitor)?;
+        let surface = Self::with_window(id, hwnd, monitor, Layer::Overlay);
+        surface.set_region(&[]);
+        overlay::place(hwnd, surface.monitor.rect)?;
+        Ok(surface)
+    }
+
+    fn with_window(id: u32, hwnd: HWND, monitor: Monitor, layer: Layer) -> Self {
+        Self {
             id,
             monitor,
+            layer,
             hwnd,
             web: None,
             creating: false,
@@ -294,10 +326,7 @@ impl Surface {
             hidden: false,
             script: None,
             navigated: false,
-        };
-        surface.set_region(&[]);
-        host.place_above_icons(hwnd, surface.monitor.rect)?;
-        Ok(surface)
+        }
     }
 
     pub fn hwnd(&self) -> HWND {
@@ -642,7 +671,10 @@ impl Surface {
     /// Follows a monitor that moved, resized or changed scale.
     pub fn set_monitor(&mut self, host: &DesktopHost, monitor: Monitor) -> Result<()> {
         self.monitor = monitor;
-        host.place_above_icons(self.hwnd, self.monitor.rect)?;
+        match self.layer {
+            Layer::Desktop => host.place_above_icons(self.hwnd, self.monitor.rect)?,
+            Layer::Overlay => overlay::place(self.hwnd, self.monitor.rect)?,
+        }
         if self.hidden {
             // place_above_icons shows the window; keep it hidden.
             // SAFETY: our window.

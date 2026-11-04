@@ -26,8 +26,24 @@
 }
 
 .title {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
   margin: 0;
   font-size: clamp(10px, calc(var(--fs) * 0.26), 12px);
+}
+/* A small lit dot in front of the title. */
+.title::before {
+  content: "";
+  flex: none;
+  width: 0.65em;
+  height: 0.65em;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--hi), var(--hi-2));
+  box-shadow: 0 0 8px -1px var(--glow);
+}
+.title[hidden] {
+  display: none;
 }
 .foot {
   margin: 0;
@@ -103,21 +119,45 @@
   height: 100%;
   overflow: visible;
   fill: none;
-  stroke-width: 2.6px;
 }
-.ring circle {
-  vector-effect: non-scaling-stroke;
+/* Stroke widths are in viewBox units: the dash lengths are in pathLength units. */
+.g0 {
+  stop-color: var(--hi);
+}
+.g1 {
+  stop-color: var(--hi-2);
 }
 .trk {
   stroke: var(--fill-3);
+  stroke-width: 1.3;
 }
 html[data-surface="none"] .trk {
   stroke: rgb(var(--ink) / 0.3);
 }
 .arc {
-  stroke: var(--accent);
+  stroke: url(#arc-grad);
+  stroke-width: 2.8;
   stroke-linecap: round;
   transition: stroke-dasharray 0.8s ease;
+}
+/* The body inside the ring: a kit tile turned into a disc. */
+.disc {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+}
+
+/* How far along: under the numerals, when there is room. */
+.bar {
+  display: none;
+  height: 4px;
+  width: 100%;
+}
+@container (min-height: 118px) {
+  .card[data-layout="digits"] .bar { display: block; }
+}
+.bar[hidden] {
+  display: none !important;
 }
 
 .center {

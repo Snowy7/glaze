@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatChange,
   formatPrice,
+  glyphOf,
   nextDelayMs,
   parsePrices,
   pickLayout,
@@ -22,6 +23,14 @@ describe("crypto formatPrice", () => {
     expect(formatPrice(10_085_174.6, "jpy", 7, "en-US")).toBe("¥10.1M");
     expect(formatPrice(67234.5, "usd", 7, "en-US")).toBe("$67,235"); // fits: stays exact
     expect(formatPrice(0.00001234, "usd", 3, "en-US")).toBe("$0.000012"); // only thousands compact
+  });
+});
+
+describe("crypto glyphOf", () => {
+  it("uses a coin's sign, else the first letter of its ticker", () => {
+    expect(glyphOf("bitcoin")).toBe("₿");
+    expect(glyphOf("tron")).toBe("T");
+    expect(glyphOf("some-new-coin")).toBe("S");
   });
 });
 
