@@ -324,6 +324,19 @@ are preserved.
 - **N7 Studio native, last and deferrable,** on `crates/ui`, so previews use the real renderer.
   Delete Tauri, `apps/studio`'s web code and pnpm. ✅ ≤60 MB while open, 0 when closed.
 
+## Findings during the build (these override the text above)
+From N0.2, measured; see `docs/engine-notes.md`, "Glass overlays":
+- **Widgets:** layered (`UpdateLayeredWindow`) and GDI children of Progman render nothing, and WGC
+  exclusion ignores child windows. So widgets are **top-level windows kept just above Progman**, and
+  the desktop-layer overlay is a top-level window directly under each widget.
+- **The overlay draws through a DComp surface,** not a swapchain (~3 MB, against ~32 MB). The
+  capture device is a separate D3D11 device (+16 MB; D3D11On12 cost +92 MB). No sparse package is
+  needed: unpackaged borderless capture returns `Allowed`.
+- **Cold open-to-glass is about 260 ms,** because WGC's first frame arrives late. N3 keeps the session
+  warm for a few seconds after a close, and the shell hints on pointer-down.
+- **CPU is about 3.4% at ~59 updates/s** with a video behind. N3 tunes `MIN_INTERVAL` (30 Hz halves
+  it), or uses cheaper compares.
+
 ## Losses taken on purpose
 - **Only if N0.2's per-session exclusion fails:** open flyouts and menus vanish from screenshots
   (`WDA_EXCLUDEFROMCAPTURE`). The user then chooses between that and a "visible in screenshots"
