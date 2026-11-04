@@ -9,14 +9,8 @@
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod apps;
-mod bars;
-mod desktop_menu;
-mod flyouts;
-mod glass;
-mod inbox;
-mod look;
-mod widgets;
+// The shell's modules are a library (`lib.rs`) so Studio can draw previews with them.
+use mypaper_shell::{bars, desktop_menu, inbox, look, widgets};
 
 use std::process::ExitCode;
 

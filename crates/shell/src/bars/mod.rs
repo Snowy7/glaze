@@ -1,13 +1,13 @@
 //! Native top bar and dock. Windows services live in `mypaper-bars`; UI and motion live here.
 mod bar;
-mod icons;
-mod look;
+pub(crate) mod icons;
+pub(crate) mod look;
 mod motion;
 mod preview;
-mod services;
+pub(crate) mod services;
 #[cfg(test)]
 mod tests;
-mod view;
+pub(crate) mod view;
 
 use crate::{flyouts, glass};
 use anyhow::Result;
