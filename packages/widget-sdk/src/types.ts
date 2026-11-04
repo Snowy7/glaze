@@ -224,7 +224,7 @@ export interface PickFileOptions {
 /** Smallest and largest number of audio bins a widget can ask for. */
 export const AUDIO_BINS = { min: 64, max: 128, default: 64 } as const;
 
-export type WidgetStyle = "minimal" | "depth" | "neon" | "paper" | "aero";
+export type WidgetStyle = "minimal" | "depth" | "neon" | "paper" | "aero" | "liquid";
 
 /**
  * How a widget should look, resolved by the host (docs/widgets.md, "Appearance"). Every field is
@@ -260,6 +260,17 @@ export interface Appearance {
 export interface AppearanceState {
   appearance: Appearance;
   themeCss: string | null;
+  /**
+   * The wallpaper draws this widget's liquid glass plate (`style: "liquid"` on a desktop layer).
+   * Without it (the overlay layer, the dev harness, older hosts) the kit draws its own rim.
+   */
+  plate?: boolean;
+}
+
+/** Where a liquid widget's glass goes: `[x, y, width, height]` in the page's CSS px, and its radius. */
+export interface PlateShape {
+  rect: [number, number, number, number];
+  radius: number;
 }
 
 // ---------------------------------------------------------------- api
@@ -348,6 +359,12 @@ export interface Mypaper {
   pickFile(opts?: PickFileOptions): Promise<PickedFile | null>;
   /** Needs "launch". The icon of an exe, file, folder or `shell:AppsFolder\<AUMID>`, as a PNG data URL. */
   appIcon(target: string, size?: number): Promise<string | null>;
+  /**
+   * Where the wallpaper should draw this widget's liquid glass (`null`: nowhere). The drop-in
+   * reports the `.card`'s box by itself while the look is liquid glass; call it only to put the
+   * glass somewhere else.
+   */
+  plate(shape: PlateShape | null): void;
 }
 
 // ---------------------------------------------------------------- wire
@@ -365,6 +382,7 @@ export interface HelloResult {
   /** Older hosts send neither; the SDK then keeps the default look. */
   appearance?: Appearance;
   themeCss?: string | null;
+  plate?: boolean;
 }
 
 /** Subscription topics, with their `subscribe` params. */
@@ -390,6 +408,7 @@ export interface WireMethods {
   "settings.set": [{ values: Settings }, null];
   pickFile: [PickFileOptions, PickedFile | null];
   appIcon: [{ target: string; size?: number }, string | null];
+  plate: [PlateShape | null, null];
   subscribe: [SubscribeParams, null];
   unsubscribe: [{ sub: string }, null];
 }

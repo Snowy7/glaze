@@ -157,6 +157,8 @@ export class BridgeHost {
       this.stopSub(sub);
       return null;
     },
+    // No wallpaper here to draw it: the kit's own rim shows instead (`plate` stays unset).
+    plate: () => null,
   };
 
   private need(permission: Permission): void {

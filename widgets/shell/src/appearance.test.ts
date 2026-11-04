@@ -5,7 +5,7 @@ import type { AppearanceValues } from "./protocol";
 // Built-in defaults under a theme that has a glass surface and an `auto` accent.
 const base: AppearanceValues = {
   surface: "glass",
-  tint: "#101010",
+  tint: "#343a42",
   opacity: 0.4,
   blur: 24,
   radius: 18,
@@ -42,14 +42,14 @@ describe("layers", () => {
   });
 
   it("dark text flips a default tint and accent, like the host does, but not chosen ones", () => {
-    const plain: AppearanceValues = { ...base, tint: "#101010", accent: "#ffffff" };
+    const plain: AppearanceValues = { ...base, tint: "#343a42", accent: "#ffffff" };
     const dark = resolve(plain, { text: "dark" }, {}, "#14d17f");
     expect(dark.tint).toBe("#f2f2f2");
     expect(dark.accent).toBe("#0a0a0c");
     const chosen = resolve(plain, { text: "dark", tint: "#303040", accent: "#ff0000" }, {}, "#14d17f");
     expect([chosen.tint, chosen.accent]).toEqual(["#303040", "#ff0000"]);
     expect(resolve(plain, { text: "dark", accent: "auto" }, {}, "#14d17f").accent).toBe("#14d17f");
-    expect(resolve(plain, {}, {}, "#14d17f").tint).toBe("#101010"); // light text: unchanged
+    expect(resolve(plain, {}, {}, "#14d17f").tint).toBe("#343a42"); // light text: unchanged
   });
 
   it("clears a field with null and keeps the rest", () => {

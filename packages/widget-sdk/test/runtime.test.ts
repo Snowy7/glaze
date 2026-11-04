@@ -275,8 +275,8 @@ describe("appearance", () => {
 
   it("reads appearance and themeCss from the handshake", async () => {
     const { mypaper, shell } = setup({ answerHello: false });
-    shell.result(1, { ...hello, appearance: look, themeCss: "html { --x: 1 }" });
-    expect(await mypaper.appearance.get()).toEqual({ appearance: look, themeCss: "html { --x: 1 }" });
+    shell.result(1, { ...hello, appearance: look, themeCss: "html { --x: 1 }", plate: true });
+    expect(await mypaper.appearance.get()).toEqual({ appearance: look, themeCss: "html { --x: 1 }", plate: true });
   });
 
   it("pushes the appearance event to listeners and keeps get() current", async () => {

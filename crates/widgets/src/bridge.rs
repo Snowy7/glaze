@@ -68,6 +68,11 @@ pub enum FromShell {
         #[allow(dead_code)]
         extensions: Option<Vec<String>>,
     },
+    /// The cards of the liquid widgets this shell shows, as they are on screen now (sent when
+    /// they change, every frame of a drag at most). See `plates.rs`.
+    Plates {
+        plates: Vec<crate::plates::Card>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -528,6 +533,11 @@ mod tests {
             }
         );
         assert!(serde_json::from_value::<FromShell>(json!({ "type": "hack" })).is_err());
+        let plates: FromShell = serde_json::from_value(json!({
+            "type": "plates", "plates": [{ "instance": "a-1", "rect": [1, 2, 30, 40], "radius": 9 }]
+        }))
+        .unwrap();
+        assert!(matches!(plates, FromShell::Plates { ref plates } if plates[0].rect == [1.0, 2.0, 30.0, 40.0]));
 
         // Appearance edits: the user's layer has no instance; null clears a field.
         let user: FromShell = serde_json::from_value(

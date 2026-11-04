@@ -18,7 +18,7 @@ use mypaper_desktop::{
     ControlWindow, DesktopHost, Monitor, Rect, WM_FACT, WindowEvents, covered_monitors,
     monitor_infos,
 };
-use mypaper_theme::Color;
+use mypaper_theme::{Color, Surface as SurfaceKind, WidgetStyle};
 use notify::Watcher;
 use serde_json::{Map, Value, json};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -53,6 +53,7 @@ use crate::media::Media;
 use crate::net::WidgetNet;
 use crate::overlay::{self, Layer};
 use crate::pick;
+use crate::plates::{self, Plates};
 use crate::plugins::Plugins;
 use crate::registry::{self, Registry};
 use crate::stats::{Delivery, Stats};
@@ -245,6 +246,8 @@ pub struct App {
     /// The active theme's folder, and the widget skin read from it.
     theme_dir: Option<PathBuf>,
     skin: look::Skin,
+    /// The liquid widgets' cards, and the glass plates published for them.
+    plates: Plates,
     /// `(instance, sub)` of every `theme` subscription.
     theme_subs: BTreeSet<(String, String)>,
     /// Window-change hooks: only while a widget layer exists (they wake us on
@@ -390,6 +393,7 @@ impl App {
             theme: theme::current(),
             theme_dir,
             skin,
+            plates: Plates::default(),
             theme_subs: BTreeSet::new(),
             window_events: None,
             timers: Timers::default(),
@@ -432,6 +436,7 @@ impl App {
     fn wait(&self) {
         let deadline = [
             self.timers.earliest(),
+            self.plates.deadline(),
             self.stats.deadline(),
             self.plugins.deadline(),
         ]
@@ -589,6 +594,9 @@ impl App {
         }
         let out = self.plugins.tick(now);
         self.deliver(out);
+        if let Some(due) = self.plates.take_due(now) {
+            plates::publish(due);
+        }
     }
 
     /// A global hold: the user paused, or we're on battery with that setting, or the display
@@ -1032,6 +1040,12 @@ impl App {
                 .iter()
                 .any(|(m, layer)| m.device == s.monitor.device && *layer == s.layer)
         });
+        let surfaces = &self.surfaces;
+        self.plates.retain(|device| {
+            surfaces
+                .iter()
+                .any(|s| s.layer == Layer::Desktop && s.monitor.device == device)
+        });
         for (monitor, layer) in wanted {
             match self
                 .surfaces
@@ -1350,10 +1364,46 @@ impl App {
         surface.post(&state.to_string());
     }
 
-    fn push_all(&self) {
+    fn push_all(&mut self) {
         for index in 0..self.surfaces.len() {
             self.push_state(index);
         }
+        // Whatever changed the state (a layout or appearance edit, the theme, a monitor) may
+        // change the plates too.
+        self.offer_plates();
+    }
+
+    /// The plates under every liquid card the shells reported: only for instances shown on that
+    /// monitor's desktop layer whose look is still liquid glass, in the current glass knobs.
+    fn offer_plates(&mut self) {
+        let knobs = look::liquid(&self.skin);
+        let base = look::base(&self.skin);
+        let accent = self.auto_accent();
+        let mut out = Vec::new();
+        for (device, cards) in self.plates.cards() {
+            let Some(monitor) = self.monitors.iter().find(|m| m.device == device) else {
+                continue;
+            };
+            let scale = f64::from(monitor.dpi) / 96.0;
+            for card in cards {
+                let Some(instance) = self.layout.instances.iter().find(|i| {
+                    i.instance == card.instance
+                        && self.layer_of(i) == Some(Layer::Desktop)
+                        && self.shown_on(i).as_deref() == Some(device)
+                }) else {
+                    continue;
+                };
+                let look =
+                    look::resolve(&instance.appearance, &self.layout.appearance, &base, accent);
+                if look.style != Some(WidgetStyle::Liquid) || look.surface != Some(SurfaceKind::Glass) {
+                    continue;
+                }
+                let tint = look.tint.unwrap_or(look::DEFAULT_TINT);
+                let origin = (monitor.rect.x, monitor.rect.y);
+                out.push(plates::plate(card, origin, scale, &knobs, tint));
+            }
+        }
+        self.plates.offer(out, Instant::now());
     }
 
     // --- Messages from the shell ----------------------------------------------
@@ -1386,6 +1436,14 @@ impl App {
             }
             FromShell::Edit { on } => self.set_editing(on),
             FromShell::PickFile { instance, key, .. } => self.pick_setting(index, instance, key),
+            FromShell::Plates { plates } => {
+                // The overlay floats over windows, where the wallpaper can't draw.
+                if self.surfaces[index].layer == Layer::Desktop {
+                    let device = self.surfaces[index].monitor.device.clone();
+                    self.plates.set_cards(&device, plates);
+                    self.offer_plates();
+                }
+            }
             edit => self.edit(index, edit),
         }
     }
@@ -1708,7 +1766,8 @@ impl App {
                 | FromShell::Hello { .. }
                 | FromShell::Call { .. }
                 | FromShell::Edit { .. }
-                | FromShell::PickFile { .. } => Ok(()),
+                | FromShell::PickFile { .. }
+                | FromShell::Plates { .. } => Ok(()),
             }
         })();
         if let Err(e) = applied.and_then(|()| next.save(&self.layout_path)) {
@@ -1915,6 +1974,9 @@ fn start_watch(
 
 impl Drop for App {
     fn drop(&mut self) {
+        if self.plates.published() {
+            plates::publish(Vec::new());
+        }
         self.plugins.shutdown();
         self.surfaces.clear();
         self.env = Env::None;

@@ -58,6 +58,18 @@ pub fn write(source: &str, plates: &Plates) -> Result<()> {
     std::fs::rename(&temp, &path).with_context(|| format!("writing {}", path.display()))
 }
 
+/// Deletes `source`'s file, for a writer that stops (a crashed writer's file is ignored anyway,
+/// by its pid). A missing file is fine.
+pub fn remove(source: &str) -> Result<()> {
+    let path = dir()?.join(format!("{source}.json"));
+    match std::fs::remove_file(&path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            Err(e).with_context(|| format!("removing {}", path.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Every plate of every writer for whom `alive(pid)` holds; unreadable files are skipped.
 pub fn read_all(alive: impl Fn(u32) -> bool) -> Vec<Plate> {
     let Ok(entries) = dir().and_then(|d| Ok(std::fs::read_dir(d)?)) else {

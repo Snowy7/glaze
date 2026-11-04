@@ -10,7 +10,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use mypaper_theme::{Appearance, Color, LoadedTheme, Paint, Surface, TextTone, WidgetStyle};
+use mypaper_theme::{Appearance, Color, Liquid, LoadedTheme, Paint, Surface, TextTone, WidgetStyle};
 use serde_json::{Map, Value};
 
 /// A style sheet bigger than this is ignored (it is sent to every widget on every change).
@@ -19,14 +19,19 @@ const MAX_CSS_BYTES: u64 = 512 * 1024;
 /// The accent when the palette is missing.
 const FALLBACK_ACCENT: Color = Color([0xff, 0xff, 0xff]);
 
-/// The built-in layer: every field set.
+/// The built-in tint: a calm slate, a little lighter than most dark wallpapers so the tile reads
+/// as frosted glass rather than a hole.
+pub const DEFAULT_TINT: Color = Color([0x34, 0x3a, 0x42]);
+
+/// The built-in layer, every field set: the calm desktop-widget look (a quiet translucent tile,
+/// a hairline, generous radius).
 pub fn defaults() -> Appearance {
     Appearance {
-        surface: Some(Surface::None),
-        tint: Some(Color([0x10, 0x10, 0x10])),
-        opacity: Some(0.55),
+        surface: Some(Surface::Glass),
+        tint: Some(DEFAULT_TINT),
+        opacity: Some(0.46),
         blur: Some(24.0),
-        radius: Some(18.0),
+        radius: Some(22.0),
         border: Some(true),
         text: Some(TextTone::Light),
         accent: Some(Paint::Color(FALLBACK_ACCENT)),
@@ -37,11 +42,29 @@ pub fn defaults() -> Appearance {
     }
 }
 
-/// The active theme's widget skin: its appearance layer and style sheet text.
+/// The built-in liquid glass knobs, under the theme's `widgets.glass`: a clear lens bent at its
+/// rim, one thin specular edge, a whisper of tint and no blur.
+pub fn liquid_defaults() -> Liquid {
+    Liquid {
+        intensity: Some(1.0),
+        refraction: Some(0.6),
+        highlight: Some(0.55),
+        tint: Some(0.06),
+        blur: Some(0.0),
+    }
+}
+
+/// The active theme's widget skin: its appearance layer, style sheet text and glass knobs.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Skin {
     pub appearance: Appearance,
     pub css: Option<String>,
+    pub glass: Liquid,
+}
+
+/// The liquid glass knobs in effect: the theme's over the built-in ones, every field set.
+pub fn liquid(skin: &Skin) -> Liquid {
+    skin.glass.over(&liquid_defaults())
 }
 
 /// Reads `widgets` from the theme in `dir`. Anything wrong (no theme, a broken
@@ -68,6 +91,7 @@ pub fn load_skin(dir: Option<&Path>) -> Skin {
     Skin {
         appearance: skin.appearance.clone().unwrap_or_default(),
         css,
+        glass: skin.glass.unwrap_or_default(),
     }
 }
 
@@ -183,9 +207,9 @@ mod tests {
         // `over` an empty layer keeps every field: nothing is None.
         let json = json_of(&all);
         assert_eq!(json.len(), 12, "{json:?}");
-        assert_eq!(json["surface"], "none");
+        assert_eq!(json["surface"], "glass");
         assert_eq!(json["style"], "minimal");
-        assert_eq!(json["opacity"], 0.55);
+        assert_eq!(json["opacity"], 0.46);
         assert_eq!(json["accent"], "#ffffff");
     }
 
@@ -200,6 +224,7 @@ mod tests {
                 ..Default::default()
             },
             css: None,
+            glass: Liquid::default(),
         };
         let user = Appearance {
             opacity: Some(0.9),
@@ -263,7 +288,7 @@ mod tests {
         assert_eq!(got.tint, Some(color("#303040")));
         assert_eq!(got.accent, Some(Paint::Color(color("#14d17f"))));
         let light = resolve(&none, &none, &defaults(), color("#14d17f"));
-        assert_eq!(light.tint, Some(color("#101010")));
+        assert_eq!(light.tint, Some(DEFAULT_TINT));
         assert_eq!(light.accent, Some(Paint::Color(color("#ffffff"))));
 
         // A theme that sets the tint keeps it under dark text too.
@@ -330,7 +355,8 @@ mod tests {
         std::fs::write(
             dir.join("theme.json"),
             r##"{ "name": "T", "wallpaper": { "kind": "image", "source": "x.jpg" },
-                  "widgets": { "appearance": { "surface": "glass", "accent": "auto" }, "css": "w.css" } }"##,
+                  "widgets": { "appearance": { "surface": "glass", "accent": "auto" }, "css": "w.css",
+                               "glass": { "refraction": 0.3 } } }"##,
         )
         .unwrap();
         std::fs::write(dir.join("w.css"), "html { --x: 1 }").unwrap();
@@ -338,6 +364,9 @@ mod tests {
         assert_eq!(skin.appearance.surface, Some(Surface::Glass));
         assert_eq!(skin.appearance.accent, Some(Paint::Auto));
         assert_eq!(skin.css.as_deref(), Some("html { --x: 1 }"));
+        let glass = liquid(&skin);
+        assert_eq!(glass.refraction, Some(0.3), "the theme's knob");
+        assert_eq!(glass.intensity, liquid_defaults().intensity, "the rest built in");
 
         // A style sheet that is missing costs only the sheet.
         std::fs::remove_file(dir.join("w.css")).unwrap();

@@ -115,7 +115,7 @@ export interface WidgetManifest {
 
 export type SurfaceKind = "none" | "glass" | "solid";
 export type TextTone = "light" | "dark";
-export type WidgetStyle = "minimal" | "depth" | "neon" | "paper" | "aero";
+export type WidgetStyle = "minimal" | "depth" | "neon" | "paper" | "aero" | "liquid";
 
 /** Every field of an appearance, set. `accent` is `#rrggbb`, or `auto` in an unresolved layer. */
 export interface AppearanceValues {
@@ -186,6 +186,19 @@ export type HostToShell =
   | { type: "event"; instance: string; event: string; data: unknown } // the host sends event "sub"
   | { type: "reload"; widget: string };
 
+/** Where a liquid widget's glass goes on its page: `[x, y, width, height]` in CSS px, and its radius. */
+export interface PlateShape {
+  rect: [number, number, number, number];
+  radius: number;
+}
+
+/** A liquid widget's card on the monitor (DIPs from its top-left), for the wallpaper's glass. */
+export interface PlateCard {
+  instance: string;
+  rect: [number, number, number, number];
+  radius: number;
+}
+
 export interface LayoutChange {
   instance: string;
   cell: Vec2;
@@ -205,7 +218,9 @@ export type ShellToHost =
   | { type: "pickFile"; instance: string; key: string; extensions?: readonly string[] }
   /** Edits the user's appearance layer, or an instance's own when `instance` is set. */
   | { type: "appearance"; instance?: string; values: LayerPatch }
-  | { type: "edit"; on: boolean };
+  | { type: "edit"; on: boolean }
+  /** The liquid widgets' cards as they are on screen now: whenever they change, at most once a frame. */
+  | { type: "plates"; plates: PlateCard[] };
 
 // ---- iframe ⇄ shell (the SDK's wire) ----
 
@@ -229,6 +244,8 @@ export interface HelloResult {
   editing: boolean;
   appearance: AppearanceValues;
   themeCss: string | null;
+  /** The wallpaper draws liquid glass here (the desktop layer); the kit draws its own rim otherwise. */
+  plate: boolean;
 }
 
 export type SubscribeParams =
@@ -252,6 +269,7 @@ export type WireMethod =
   | "user.info"
   | "pickFile"
   | "appIcon"
+  | "plate"
   | "subscribe"
   | "unsubscribe";
 
@@ -272,7 +290,7 @@ export interface WireEvents {
   editmode: boolean;
   settings: Settings;
   size: SizeInfo;
-  appearance: { appearance: AppearanceValues; themeCss: string | null };
+  appearance: { appearance: AppearanceValues; themeCss: string | null; plate: boolean };
   sub: { sub: string; value: unknown };
 }
 

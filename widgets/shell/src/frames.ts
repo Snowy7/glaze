@@ -1,15 +1,18 @@
 // One sandboxed iframe per widget instance, and the message relay between the iframes and the host.
 // Reconciles by instance id: an iframe is only recreated when its widget id changes, and never
-// reloaded while it stays (except on the host's `reload`).
+// reloaded while it stays (except on the host's `reload`). Liquid widgets' cards go to the host as
+// `plates` wherever they are shown, dragged ones included (plates.ts).
 
 import { h } from "./dom";
 import { rectToPx, sizeToPx, type PxRect, type Rect } from "./grid";
 import { denial } from "./permissions";
+import { plateShape, platesOf } from "./plates";
 import type {
   AppearanceValues,
   HelloResult,
   HostToShell,
   InstanceState,
+  PlateShape,
   ShellState,
   ShellToHost,
   SizeInfo,
@@ -27,6 +30,8 @@ export interface Slot {
   sizeKey: string; // JSON of the last size the widget was told about
   settingsKey: string; // JSON of the last settings the widget was told about
   appearanceKey: string; // JSON of the last appearance (and theme CSS) the widget was told about
+  plate: PlateShape | null; // where a liquid widget's card is on its page
+  rect: PxRect | undefined; // where the slot was last put
 }
 
 export interface Frames {
@@ -83,9 +88,28 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
   let state: ShellState | undefined;
   let byInstance = new Map<string, InstanceState>();
 
-  /** What an instance's widget is told about its look: the previewed or the host's, and the theme CSS. */
-  function lookOf(inst: InstanceState): { appearance: AppearanceValues; themeCss: string | null } {
-    return { appearance: looks.get(inst.instance) ?? inst.appearance, themeCss: state?.themeCss ?? null };
+  /** The wallpaper draws liquid glass under the desktop layer only (the overlay floats over windows). */
+  const onDesktop = () => (state?.layer ?? "desktop") === "desktop";
+
+  /** What an instance's widget is told about its look: the previewed or the host's, the theme CSS,
+   *  and whether the wallpaper draws its liquid glass. */
+  function lookOf(inst: InstanceState): { appearance: AppearanceValues; themeCss: string | null; plate: boolean } {
+    return { appearance: looks.get(inst.instance) ?? inst.appearance, themeCss: state?.themeCss ?? null, plate: onDesktop() };
+  }
+
+  let platesFrame = 0;
+  let platesSent = "[]";
+  /** Sends the liquid cards once this frame is done moving slots, when they changed. */
+  function schedulePlates() {
+    if (platesFrame || !onDesktop()) return;
+    platesFrame = requestAnimationFrame(() => {
+      platesFrame = 0;
+      const plates = platesOf(slots.values());
+      const key = JSON.stringify(plates);
+      if (key === platesSent) return;
+      platesSent = key;
+      send({ type: "plates", plates });
+    });
   }
 
   function sizeInfo(inst: InstanceState): SizeInfo {
@@ -123,6 +147,8 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
       sizeKey: JSON.stringify(sizeInfo(inst)),
       settingsKey: JSON.stringify(inst.settings),
       appearanceKey: JSON.stringify(lookOf(inst)),
+      plate: null,
+      rect: undefined,
     };
     slots.set(inst.instance, slot);
     layer.append(el);
@@ -136,6 +162,7 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
     overrides.delete(slot.instance);
     live.delete(slot.instance);
     looks.delete(slot.instance);
+    schedulePlates();
   }
 
   function applyLooks() {
@@ -166,7 +193,9 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
       slot.el.style.transform = `translate(${rect.x}px, ${rect.y}px)`;
       slot.el.style.width = `${rect.width}px`;
       slot.el.style.height = `${rect.height}px`;
+      slot.rect = rect;
     }
+    schedulePlates();
   }
 
   function sync(next: ShellState) {
@@ -243,6 +272,14 @@ export function createFrames({ layer, send, onCreate }: Options): Frames {
       slot.appearanceKey = JSON.stringify(look);
       postToFrame(slot, { id, result });
       send({ type: "hello", instance: slot.instance });
+      return;
+    }
+
+    // A liquid widget saying where its card is: the shell's to place on the monitor, never the host's.
+    if (method === "plate") {
+      slot.plate = plateShape(params);
+      postToFrame(slot, { id, result: null });
+      schedulePlates();
       return;
     }
 
