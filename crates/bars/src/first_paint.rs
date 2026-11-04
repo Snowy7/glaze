@@ -555,7 +555,7 @@ impl Backdrop {
         let name = device.trim_start_matches(r"\\.\");
         let path = mypaper_bars::files::local("backdrop")
             .ok()?
-            .join(format!("{name}.jpg"));
+            .join(format!("{name}.bmp"));
         if !path.is_file() {
             return None;
         }
