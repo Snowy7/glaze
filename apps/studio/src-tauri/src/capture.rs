@@ -22,6 +22,11 @@ fn parse_position(text: &str) -> Option<(i32, i32)> {
     Some((x.trim().parse().ok()?, y.trim().parse().ok()?))
 }
 
+/// Whether this is a capture session: a `dev-capture` build started with `MYPAPER_STUDIO_CAPTURE`.
+pub fn active() -> bool {
+    capture_position().is_some()
+}
+
 #[cfg(not(feature = "dev-capture"))]
 fn capture_position() -> Option<(i32, i32)> {
     None

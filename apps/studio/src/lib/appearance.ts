@@ -12,6 +12,7 @@ export type Resolved = Required<Appearance>;
 
 /** Built-in defaults for widgets (docs/widgets.md). */
 export const WIDGET_DEFAULTS: Resolved = {
+  style: "minimal",
   surface: "none",
   tint: "#101010",
   opacity: 0.55,
@@ -52,6 +53,7 @@ export function resolve(base: Resolved, ...layers: Appearance[]): Resolved {
 }
 
 export const APPEARANCE_KEYS = [
+  "style",
   "surface",
   "tint",
   "opacity",
@@ -97,6 +99,7 @@ type Vars = CSSProperties & Record<`--${string}`, string>;
 /** The data attributes the real pages put on `<html>`. */
 export function appearanceData(a: Resolved) {
   return {
+    "data-style": a.style,
     "data-surface": a.surface,
     "data-text": a.text,
     "data-shadow": a.shadow ? "on" : "off",

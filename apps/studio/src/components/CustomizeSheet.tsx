@@ -5,6 +5,7 @@ import type { ThemeEntry } from "../lib/api";
 import { useStudio } from "../lib/studio";
 import { SkinEditor } from "./SkinEditor";
 import { StyleEditor } from "./StyleEditor";
+import { WallpaperEditor } from "./WallpaperEditor";
 import { Button, IconButton, Segmented } from "./ui";
 
 type Props = {
@@ -14,7 +15,7 @@ type Props = {
   onDuplicated: (copy: ThemeEntry) => void;
 };
 
-type Tab = "windows" | "widgets" | "bars";
+type Tab = "windows" | "widgets" | "bars" | "wallpaper";
 
 const TABS: readonly { value: Tab; label: string }[] = [
   { value: "windows", label: "Windows" },
@@ -22,11 +23,15 @@ const TABS: readonly { value: Tab; label: string }[] = [
   { value: "bars", label: "Bars look" },
 ];
 
+/** Wallpaper kinds with options of their own here (they can take the mouse). */
+const TAKES_MOUSE = new Set(["web", "scene"]);
+
 /** A right-hand sheet (a native modal dialog: focus is trapped and Esc closes it). */
 export function CustomizeSheet({ theme, onClose, onDuplicated }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [tab, setTab] = useState<Tab>("windows");
+  const tabs: readonly { value: Tab; label: string }[] = theme.kind && TAKES_MOUSE.has(theme.kind) ? [...TABS, { value: "wallpaper", label: "Wallpaper" }] : TABS;
 
   useEffect(() => {
     const dialog = ref.current;
@@ -51,13 +56,15 @@ export function CustomizeSheet({ theme, onClose, onDuplicated }: Props) {
           </div>
           <IconButton icon={X} label="Close" onClick={() => ref.current?.close()} />
         </div>
-        <Segmented<Tab> label="Section" hideLabel className="mt-4" value={tab} options={TABS} onChange={setTab} />
+        <Segmented<Tab> label="Section" hideLabel className="mt-4" value={tab} options={tabs} onChange={setTab} />
       </header>
 
       {theme.origin !== "user" ? (
         <ReadOnly theme={theme} onDuplicated={onDuplicated} />
       ) : tab === "windows" ? (
         <StyleEditor key={theme.id} theme={theme} />
+      ) : tab === "wallpaper" ? (
+        <WallpaperEditor key={theme.id} theme={theme} />
       ) : (
         <SkinEditor key={`${theme.id}:${tab}`} theme={theme} kind={tab} />
       )}

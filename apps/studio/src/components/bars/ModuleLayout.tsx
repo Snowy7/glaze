@@ -1,82 +1,98 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
-import { BAR_MODULES, type BarModule, type BarsConfig } from "../../lib/api";
-import { MODULE_INFO } from "../../lib/modules";
+import { BREAK, BUILTIN_MODULES, type ModuleRef } from "../../lib/barsSchema";
+import { describeModule } from "../../lib/modules";
 
-export type Placement = Pick<BarsConfig["top"], "left" | "center" | "right">;
+/** Module lists by zone: the top bar's `left`, `center`, `right`; a taskbar dock's `left`, `right`. */
+export type Zones = Record<string, ModuleRef[]>;
+export type ZoneInfo = { zone: string; label: string; hint: string };
 
-type Zone = keyof Placement | "available";
-type ZoneInfo = { zone: Zone; label: string; hint: string };
+const AVAILABLE = "available";
+type Drag = { ref: ModuleRef; zone: string; index: number };
+type Target = { zone: string; index: number };
 
-const PLACED: readonly ZoneInfo[] = [
-  { zone: "left", label: "Left", hint: "Starts at the screen's left edge" },
-  { zone: "center", label: "Center", hint: "Middle of the bar" },
-  { zone: "right", label: "Right", hint: "Ends at the screen's right edge" },
-];
-const AVAILABLE: ZoneInfo = { zone: "available", label: "Available", hint: "Not shown. Drop a module here to remove it" };
-const ORDER: readonly Zone[] = [...PLACED.map((z) => z.zone), "available"];
-
-type Drag = { module: BarModule };
-type Target = { zone: Zone; index: number };
-
-/** The modules not placed anywhere, in their documented order. */
-function unplaced(placement: Placement): BarModule[] {
-  const placed = new Set([...placement.left, ...placement.center, ...placement.right]);
-  return BAR_MODULES.filter((module) => !placed.has(module));
-}
-
-/** `placement` with `module` taken out of wherever it is and put at `index` of `to`. */
-export function moveModule(placement: Placement, module: BarModule, to: Zone, index: number): Placement {
-  const without = (list: BarModule[]) => list.filter((m) => m !== module);
-  const next: Placement = { left: without(placement.left), center: without(placement.center), right: without(placement.right) };
-  if (to === "available") return next;
-  // Taking the module out of this same list first shifts everything after it.
-  const before = placement[to].indexOf(module);
-  const at = before !== -1 && before < index ? index - 1 : index;
-  next[to] = next[to].toSpliced(at, 0, module);
+/**
+ * `zones` with the item at (`from`, `index`) taken out and put at `to`/`at`. From the available pool
+ * (`from` is "available") a module is placed, and a break is copied; dropped on the pool, an item
+ * is removed.
+ */
+export function moveItem(zones: Zones, drag: Drag, to: string, at: number): Zones {
+  const next: Zones = Object.fromEntries(Object.entries(zones).map(([zone, list]) => [zone, [...list]]));
+  let target = at;
+  if (drag.zone !== AVAILABLE) {
+    next[drag.zone]?.splice(drag.index, 1);
+    // Taking the item out of this same list first shifts everything after it.
+    if (drag.zone === to && drag.index < at) target = at - 1;
+  }
+  if (to !== AVAILABLE) next[to]?.splice(target, 0, drag.ref);
   return next;
 }
 
+/** Every module a layout can offer that isn't placed yet: built-ins, then the custom ones defined. */
+function unplaced(zones: Zones, customs: readonly ModuleRef[]): ModuleRef[] {
+  const placed = new Set(Object.values(zones).flat());
+  return [...BUILTIN_MODULES, ...customs].filter((ref) => !placed.has(ref));
+}
+
+type Props = {
+  zones: Zones;
+  info: readonly ZoneInfo[];
+  /** `custom:<id>` of every custom module the file defines. */
+  customs: readonly ModuleRef[];
+  selected: ModuleRef | null;
+  onSelect: (ref: ModuleRef | null) => void;
+  onChange: (next: Zones) => void;
+};
+
 /**
- * Left, Center, Right and Available lists of top-bar modules. Drag a module
- * between them, or focus one and use the arrow keys (left/right reorder,
- * up/down change list).
+ * Lists of modules, separators included. Drag a module between them, or focus one and use the
+ * arrow keys (left/right reorder, up/down change list). Clicking a module selects it, to edit its
+ * options. The pool holds what isn't placed; its break chip adds a new one wherever it is dropped.
  */
-export function ModuleLayout({ value, onChange }: { value: Placement; onChange: (next: Placement) => void }) {
+export function ModuleLayout({ zones, info, customs, selected, onSelect, onChange }: Props) {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
-  const refocus = useRef<BarModule | null>(null);
+  const refocus = useRef<string | null>(null);
+  const order = [...info.map((z) => z.zone), AVAILABLE];
+  const pool = [BREAK, ...unplaced(zones, customs)];
 
   // A module that changed list was re-created, so give it focus back.
   useEffect(() => {
     if (!refocus.current) return;
-    document.querySelector<HTMLElement>(`[data-module="${refocus.current}"]`)?.focus();
+    document.querySelector<HTMLElement>(`[data-chip="${CSS.escape(refocus.current)}"]`)?.focus();
     refocus.current = null;
-  }, [value]);
+  }, [zones]);
 
-  const listOf = (zone: Zone): BarModule[] => (zone === "available" ? unplaced(value) : value[zone]);
+  const listOf = (zone: string): ModuleRef[] => (zone === AVAILABLE ? pool : (zones[zone] ?? []));
 
   function endDrag() {
     setDrag(null);
     setTarget(null);
   }
 
-  function onKey(event: KeyboardEvent, module: BarModule, zone: Zone, index: number) {
+  function onKey(event: KeyboardEvent, ref: ModuleRef, zone: string, index: number) {
     const list = listOf(zone);
-    let next: Placement | null = null;
-    if (event.key === "ArrowLeft" && zone !== "available" && index > 0) next = moveModule(value, module, zone, index - 1);
-    else if (event.key === "ArrowRight" && zone !== "available" && index < list.length - 1) next = moveModule(value, module, zone, index + 2);
-    else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      const to = ORDER[ORDER.indexOf(zone) + (event.key === "ArrowDown" ? 1 : -1)];
-      if (to) next = moveModule(value, module, to, listOf(to).length);
+    let next: Zones | null = null;
+    let landed: Target | null = null;
+    if (event.key === "ArrowLeft" && zone !== AVAILABLE && index > 0) {
+      next = moveItem(zones, { ref, zone, index }, zone, index - 1);
+      landed = { zone, index: index - 1 };
+    } else if (event.key === "ArrowRight" && zone !== AVAILABLE && index < list.length - 1) {
+      next = moveItem(zones, { ref, zone, index }, zone, index + 2);
+      landed = { zone, index: index + 1 };
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const to = order[order.indexOf(zone) + (event.key === "ArrowDown" ? 1 : -1)];
+      if (to) {
+        next = moveItem(zones, { ref, zone, index }, to, to === AVAILABLE ? 0 : listOf(to).length);
+        landed = { zone: to, index: to === AVAILABLE ? 0 : listOf(to).length };
+      }
     }
-    if (!next) return;
+    if (!next || !landed) return;
     event.preventDefault();
-    refocus.current = module;
+    refocus.current = `${landed.zone}:${landed.index}`;
     onChange(next);
   }
 
-  // A plain function, not a component: the chips must keep their identity while one is dragged.
   const renderZone = ({ zone, label, hint }: ZoneInfo) => {
     const list = listOf(zone);
     const hovered = drag !== null && target?.zone === zone ? target : null;
@@ -91,21 +107,19 @@ export function ModuleLayout({ value, onChange }: { value: Placement; onChange: 
         }}
         onDrop={(e) => {
           e.preventDefault();
-          if (drag && target) onChange(moveModule(value, drag.module, target.zone, target.index));
+          if (drag && target) onChange(moveItem(zones, drag, target.zone, target.index));
           endDrag();
         }}
-        className={`rounded-xl p-2.5 ring-1 transition-colors ${
-          zone === "available" ? "border border-dashed border-line-strong ring-0" : "bg-canvas ring-line"
-        } ${hovered ? "ring-2! ring-line-hi!" : ""}`}
+        className={`rounded-xl p-2.5 ring-1 transition-colors ${zone === AVAILABLE ? "border border-dashed border-line-strong ring-0" : "bg-canvas ring-line"} ${hovered ? "ring-2! ring-line-hi!" : ""}`}
       >
         <h3 className="mb-2 flex items-baseline gap-2 px-1 text-[11px] font-semibold tracking-[0.1em] text-ink-3 uppercase" title={hint}>
           {label}
-          <span className="font-normal tracking-normal normal-case">{list.length}</span>
+          {zone !== AVAILABLE && <span className="font-normal tracking-normal normal-case">{list.length}</span>}
         </h3>
         <ul className="flex min-h-9 flex-wrap items-center gap-y-1.5">
-          {list.map((module, index) => (
+          {list.map((ref, index) => (
             <li
-              key={module}
+              key={`${ref}:${index}`}
               className="flex items-center px-[3px]"
               onDragOver={(e) => {
                 if (!drag) return;
@@ -115,28 +129,32 @@ export function ModuleLayout({ value, onChange }: { value: Placement; onChange: 
                 setTarget({ zone, index: index + (e.clientX > box.left + box.width / 2 ? 1 : 0) });
               }}
             >
-              {hovered?.index === index && <DropMark />}
+              {hovered?.index === index && zone !== AVAILABLE && <DropMark />}
               <Chip
-                module={module}
-                dragging={drag?.module === module}
-                onKeyDown={(e) => onKey(e, module, zone, index)}
-                onDragStart={() => setDrag({ module })}
+                chip={`${zone}:${index}`}
+                moduleRef={ref}
+                selected={selected === ref && ref !== BREAK}
+                dragging={drag?.zone === zone && drag.index === index}
+                onSelect={() => onSelect(ref === BREAK ? null : ref)}
+                onKeyDown={(e) => onKey(e, ref, zone, index)}
+                onDragStart={() => setDrag({ ref, zone, index })}
                 onDragEnd={endDrag}
               />
             </li>
           ))}
-          {hovered && hovered.index >= list.length && <DropMark />}
-          {list.length === 0 && !hovered && <li className="px-1 text-xs text-ink-3">{zone === "available" ? "Every module is in use" : "Empty"}</li>}
+          {hovered && zone !== AVAILABLE && hovered.index >= list.length && <DropMark />}
+          {list.length === 0 && !hovered && <li className="px-1 text-xs text-ink-3">Empty</li>}
         </ul>
       </section>
     );
   };
 
+  const placedZones = info.slice();
   return (
     <div>
-      <div className="grid grid-cols-3 gap-3">{PLACED.map(renderZone)}</div>
-      <div className="mt-3">{renderZone(AVAILABLE)}</div>
-      <p className="mt-3 text-xs text-ink-3">Drag modules between the lists. With a module focused, use the arrow keys: left and right reorder, up and down change list.</p>
+      <div className={`grid gap-3 ${placedZones.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>{placedZones.map(renderZone)}</div>
+      <div className="mt-3">{renderZone({ zone: AVAILABLE, label: "Available", hint: "Not shown. Drop a module here to remove it. The break chip adds a new separator." })}</div>
+      <p className="mt-3 text-xs text-ink-3">Drag modules between the lists, or focus one and use the arrow keys: left and right reorder, up and down change list. Click a module to edit its options.</p>
     </div>
   );
 }
@@ -146,34 +164,40 @@ function DropMark() {
 }
 
 type ChipProps = {
-  module: BarModule;
+  chip: string;
+  moduleRef: ModuleRef;
+  selected: boolean;
   dragging: boolean;
+  onSelect: () => void;
   onKeyDown: (event: KeyboardEvent) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
 };
 
-function Chip({ module, dragging, onKeyDown, onDragStart, onDragEnd }: ChipProps) {
-  const { label, hint, icon: Icon } = MODULE_INFO[module];
+function Chip({ chip, moduleRef, selected, dragging, onSelect, onKeyDown, onDragStart, onDragEnd }: ChipProps) {
+  const { label, hint, icon: Icon } = describeModule(moduleRef);
+  const isBreak = moduleRef === BREAK;
   return (
     <button
       type="button"
       draggable
-      data-module={module}
+      data-chip={chip}
       title={hint}
+      aria-pressed={isBreak ? undefined : selected}
+      onClick={onSelect}
       onKeyDown={onKeyDown}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", module);
+        e.dataTransfer.setData("text/plain", moduleRef);
         onDragStart();
       }}
       onDragEnd={onDragEnd}
-      className={`flex h-8 cursor-grab items-center gap-1.5 rounded-lg bg-surface-hi px-2.5 text-[12.5px] font-medium text-ink ring-1 ring-line-strong transition hover:ring-line-hi active:cursor-grabbing ${
-        dragging ? "opacity-35" : ""
-      }`}
+      className={`flex h-8 cursor-grab items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium ring-1 transition active:cursor-grabbing ${
+        selected ? "bg-solid text-solid-ink ring-transparent" : "bg-surface-hi text-ink ring-line-strong hover:ring-line-hi"
+      } ${dragging ? "opacity-35" : ""} ${isBreak ? "border-dashed" : ""}`}
     >
-      <Icon className="size-3.5 text-ink-2" aria-hidden />
-      {label}
+      {isBreak ? <span className="font-mono text-sm leading-none">|</span> : <Icon className={`size-3.5 ${selected ? "" : "text-ink-2"}`} aria-hidden />}
+      {isBreak ? "Break" : label}
     </button>
   );
 }

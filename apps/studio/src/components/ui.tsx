@@ -92,7 +92,7 @@ export function Switch({ checked, onChange, label, disabled }: SwitchProps) {
 type SegmentedProps<T extends string> = {
   label: string;
   value: T;
-  options: readonly { value: T; label: string; hint?: string }[];
+  options: readonly { value: T; label: string; hint?: string; disabled?: boolean }[];
   onChange: (value: T) => void;
   /** Hide the legend visually (it stays for screen readers). */
   hideLabel?: boolean;
@@ -110,12 +110,13 @@ export function Segmented<T extends string>({ label, value, options, onChange, h
           <label
             key={option.value}
             title={option.hint}
-            className="relative flex-1 cursor-default rounded-lg px-3 py-1.5 text-center text-[13px] font-medium whitespace-nowrap text-ink-3 transition-colors hover:text-ink has-checked:bg-solid has-checked:text-solid-ink has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ink"
+            className={`relative flex-1 cursor-default rounded-lg px-3 py-1.5 text-center text-[13px] font-medium whitespace-nowrap text-ink-3 transition-colors hover:text-ink has-checked:bg-solid has-checked:text-solid-ink has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ink ${option.disabled ? "pointer-events-none line-through opacity-40" : ""}`}
           >
             <input
               type="radio"
               name={name}
               value={option.value}
+              disabled={option.disabled}
               checked={value === option.value}
               onChange={() => onChange(option.value)}
               className="sr-only"
@@ -128,9 +129,60 @@ export function Segmented<T extends string>({ label, value, options, onChange, h
   );
 }
 
-/** Text input styled for the monochrome surfaces. */
-export const INPUT_CLASS =
-  "selectable h-10 w-full rounded-lg bg-canvas px-3 text-[14px] text-ink ring-1 ring-line-strong transition placeholder:text-ink-3 hover:ring-line-hi focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none";
+/** A native dropdown styled like the text inputs. */
+export function Select<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  className = "",
+}: {
+  label: string;
+  value: T;
+  options: readonly { value: T; label: string; disabled?: boolean }[];
+  onChange: (value: T) => void;
+  className?: string;
+}) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => {
+        const picked = options.find((o) => o.value === e.currentTarget.value);
+        if (picked) onChange(picked.value);
+      }}
+      className={`h-10 cursor-default rounded-lg bg-canvas px-3 text-[13.5px] text-ink ring-1 ring-line-strong transition hover:ring-line-hi focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none ${className}`}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value} disabled={o.disabled}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** A short explanation under a control, in the muted tone. */
+export function Note({ children }: { children: ReactNode }) {
+  return <p className="mt-2 text-[12.5px] leading-snug text-ink-3">{children}</p>;
+}
+
+/** A callout for things that replace native behavior or need a restart: bordered, not colored. */
+export function Notice({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-line-hi bg-canvas px-4 py-3 text-[13px] text-ink-2">
+      <div className="mb-0.5 text-[13px] font-semibold text-ink">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+/** Text input styled for the monochrome surfaces, without a width: add `w-…` or `flex-1` yourself. */
+export const INPUT_BASE =
+  "selectable h-10 rounded-lg bg-canvas px-3 text-[14px] text-ink ring-1 ring-line-strong transition placeholder:text-ink-3 hover:ring-line-hi focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none";
+
+/** The same, as wide as its container. */
+export const INPUT_CLASS = `w-full ${INPUT_BASE}`;
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (

@@ -1,6 +1,7 @@
 import { Play, Square } from "lucide-react";
 
-import { Button, Group, Keycap, PageHeader, Row, StatusDot, ToggleRow } from "../components/ui";
+import { DesktopMenuEditor } from "../components/DesktopMenuEditor";
+import { Block, Button, Group, Keycap, PageHeader, Row, StatusDot, ToggleRow } from "../components/ui";
 import type { Component, ComponentId } from "../lib/api";
 import { useStudio } from "../lib/studio";
 
@@ -93,11 +94,52 @@ export function Settings() {
         <Group title="Startup">
           <ToggleRow
             title="Start with Windows"
-            detail={autostart?.command ?? "Launch mypaper when you sign in."}
-            mono={!!autostart?.command}
+            detail={autostart?.enabled ? (autostart.command ?? "Starts when you sign in.") : "Launch mypaper when you sign in."}
+            mono={!!autostart?.enabled && !!autostart.command}
             checked={autostart?.enabled ?? false}
-            disabled={!autostart || busy.has("autostart")}
+            disabled={!autostart || !engine?.corePath || busy.has("autostart")}
             onChange={(enabled) => void setAutostart(enabled)}
+          />
+          {autostart?.enabled && (
+            <Row
+              title="How it starts"
+              detail={
+                autostart.method === "task"
+                  ? "A Task Scheduler logon task for your account, with no elevation. Windows starts it at sign-in itself, so mypaper can be up before Explorer has drawn the desktop."
+                  : "The Run registry value (HKCU\\…\\Run). Explorer starts it after the desktop is up, which can be a few seconds later. A logon task couldn't be registered here."
+              }
+            >
+              <span className="rounded-full bg-surface-hi px-2.5 py-1 text-xs font-medium text-ink-2">{autostart.method === "task" ? "Logon task" : "Run key"}</span>
+            </Row>
+          )}
+          <ToggleRow
+            title="Show the theme's still at sign-in"
+            detail="Also sets a still of the theme as your Windows wallpaper, so Windows shows the theme's look before mypaper has started. Turning it off puts your own wallpaper back. So does turning off Start with Windows, and the panic hotkey."
+            checked={config?.static_snapshot ?? true}
+            disabled={!config}
+            onChange={(static_snapshot) => void updateConfig({ static_snapshot })}
+          />
+        </Group>
+
+        <Group title="Desktop extras">
+          <ToggleRow
+            title="mypaper's right-click menu on the desktop"
+            detail="Right-clicking the bare desktop opens a themed menu instead of Explorer's. Icons, windows, the taskbar and Shift+right-click always get the native menu. It uses a mouse hook inside mypaper-core's own process, switched off while a fullscreen app is in front and removed when mypaper quits. Off by default; off installs nothing."
+            checked={config?.desktop_menu.enabled ?? false}
+            disabled={!config}
+            onChange={(enabled) => void updateConfig({ desktop_menu: { enabled } })}
+          />
+          {config && (
+            <Block title="Menu items" detail="Top to bottom. Hide an item by removing it; use the arrows to reorder.">
+              <DesktopMenuEditor items={config.desktop_menu.items} defaults={config.desktop_menu_default} onChange={(items) => void updateConfig({ desktop_menu: { items } })} />
+            </Block>
+          )}
+          <ToggleRow
+            title="Classic Windows 11 context menu"
+            detail="Shows the full classic menu everywhere instead of Windows 11's short one with “Show more options”. This sets an undocumented registry value Microsoft doesn't promise to keep, and turning it off removes exactly what was added. Explorer reads it when it starts: restart Explorer or sign out and back in. mypaper never restarts Explorer for you."
+            checked={config?.classic_context_menu ?? false}
+            disabled={!config}
+            onChange={(classic_context_menu) => void updateConfig({ classic_context_menu })}
           />
         </Group>
       </div>

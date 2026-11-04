@@ -1,6 +1,6 @@
 import { Check, Monitor } from "lucide-react";
 
-import type { Monitors } from "../../lib/api";
+import type { Monitors } from "../../lib/barsSchema";
 import { useMonitors } from "../../lib/hooks";
 import { Segmented } from "../ui";
 

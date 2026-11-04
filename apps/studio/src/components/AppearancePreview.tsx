@@ -2,11 +2,12 @@ import { Folder, Globe, Music, Settings as SettingsIcon, Terminal } from "lucide
 import { useState } from "react";
 
 import { appearanceData, appearanceVars, DOCK_RADIUS, resolve, type Resolved } from "../lib/appearance";
-import type { Appearance, BarModule, SkinKind } from "../lib/api";
-import { MODULE_INFO } from "../lib/modules";
+import type { Appearance, SkinKind } from "../lib/api";
+import type { ModuleRef } from "../lib/barsSchema";
+import { describeModule } from "../lib/modules";
 import { Segmented } from "./ui";
 
-export type BarLayout = { left: readonly BarModule[]; center: readonly BarModule[]; right: readonly BarModule[] };
+export type BarLayout = { left: readonly ModuleRef[]; center: readonly ModuleRef[]; right: readonly ModuleRef[] };
 
 const SAMPLE_LAYOUT: BarLayout = {
   left: ["start", "workspaces", "app"],
@@ -112,11 +113,11 @@ function BarsSample({ look, layers, base, layout }: { look: Resolved } & Pick<Pr
   );
 }
 
-function ModuleRun({ modules }: { modules: readonly BarModule[] }) {
+function ModuleRun({ modules }: { modules: readonly ModuleRef[] }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       {modules.map((module) => {
-        const { icon: Icon, sample } = MODULE_INFO[module];
+        const { icon: Icon, sample } = describeModule(module);
         return (
           <span key={module} className="flex items-center gap-1 whitespace-nowrap">
             <Icon className="size-3.5 shrink-0" style={{ color: module === "start" ? "var(--accent)" : "var(--t1)" }} />

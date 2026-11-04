@@ -2086,6 +2086,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-bars-schema"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "mypaper-config",
+ "mypaper-theme",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "mypaper-config"
 version = "0.1.0"
 dependencies = [
@@ -2099,6 +2111,7 @@ name = "mypaper-studio"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "mypaper-bars-schema",
  "mypaper-config",
  "mypaper-theme",
  "notify",

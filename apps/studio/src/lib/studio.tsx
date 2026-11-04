@@ -21,6 +21,7 @@ import {
   type Autostart,
   type Component,
   type Config,
+  type ConfigPatch,
   type CreateThemeRequest,
   type EngineStatus,
   type ThemeEntry,
@@ -49,7 +50,7 @@ type Studio = {
   applyTheme: (theme: ThemeEntry) => Promise<void>;
   /** Copies a theme into the user's themes folder; resolves to the copy. */
   duplicateTheme: (theme: ThemeEntry) => Promise<ThemeEntry | undefined>;
-  updateConfig: (patch: Partial<Config>) => Promise<void>;
+  updateConfig: (patch: ConfigPatch) => Promise<void>;
   resetConfig: () => Promise<void>;
   startEngine: () => Promise<void>;
   stopEngine: () => Promise<void>;
@@ -188,8 +189,10 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, [refreshEngine, refreshAutostart]);
 
   const updateConfig = useCallback(
-    async (patch: Partial<Config>) => {
-      setConfig((current) => current && { ...current, ...patch });
+    async (patch: ConfigPatch) => {
+      const { desktop_menu, ...flat } = patch;
+      // Shown at once; the saved config replaces it when the write returns.
+      setConfig((current) => current && { ...current, ...flat, desktop_menu: { ...current.desktop_menu, ...desktop_menu } });
       const saved = await run("config", () => api.updateConfig(patch));
       if (saved) setConfig(saved);
       else await refreshConfig();

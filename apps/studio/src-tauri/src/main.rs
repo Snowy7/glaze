@@ -11,8 +11,10 @@ mod autostart;
 mod bars;
 mod capture;
 mod commands;
+mod config_edit;
 mod engine;
 mod fsio;
+mod iconpacks;
 mod icons;
 mod look;
 mod manifest;
@@ -26,15 +28,21 @@ mod widgets;
 use tauri::Manager;
 
 fn main() {
-    tauri::Builder::default()
-        // Must be the first plugin: a second launch exits here and focuses this one.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    let builder = tauri::Builder::default();
+    // Must be the first plugin: a second launch exits here and focuses this one. A capture
+    // session (dev builds only) skips it, so it can run beside the Studio the developer uses.
+    let builder = if capture::active() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
             }
         }))
+    };
+    builder
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let window = capture::build_main_window(app.handle())?;
@@ -61,14 +69,25 @@ fn main() {
             commands::set_skin,
             commands::import_skin_css,
             commands::active_skins,
+            commands::get_interactive,
+            commands::set_interactive,
+            commands::list_cursor_sets,
             commands::get_bars,
+            commands::bars_catalog,
             commands::set_bars,
             commands::reset_bars,
+            commands::theme_vars,
+            commands::list_icon_packs,
+            commands::icon_pack_apps,
+            commands::create_icon_pack,
+            commands::set_app_icon,
+            commands::remove_app_icon,
             commands::list_monitors,
             commands::dock_icon,
             commands::list_widgets,
             commands::get_layout,
             commands::set_widgets_appearance,
+            commands::set_widgets_overlay,
             commands::remove_instance,
             commands::reset_instance_look,
             commands::toggle_widget_edit,

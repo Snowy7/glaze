@@ -1,8 +1,8 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 
-import { api, errorText, type Backdrop, type Corners, type ThemeEntry, type WindowsStyle } from "../lib/api";
+import { api, errorText, pickFolder, type Backdrop, type Corners, type ThemeEntry, type WindowsStyle } from "../lib/api";
 import { SaveFooter } from "./SaveFooter";
-import { Segmented } from "./ui";
+import { Segmented, Select } from "./ui";
 
 const UNSET: WindowsStyle = {
   accent: null,
@@ -12,6 +12,7 @@ const UNSET: WindowsStyle = {
   corners: null,
   backdrop: null,
   dark_mode: null,
+  cursors: null,
 };
 
 const same = (a: WindowsStyle, b: WindowsStyle) => JSON.stringify(a) === JSON.stringify(b);
@@ -92,6 +93,9 @@ export function StyleEditor({ theme }: { theme: ThemeEntry }) {
           <Row label="Backdrop" hint="Material behind window content.">
             <Choice label="Backdrop" value={draft.backdrop} options={BACKDROPS} onChange={(v) => set("backdrop", v)} />
           </Row>
+          <Row label="Cursors" hint="The mouse pointer set. Restored with the theme.">
+            <CursorsPicker value={draft.cursors} onChange={(v) => set("cursors", v)} />
+          </Row>
           <Row label="Dark mode" hint="Force apps and Windows dark or light.">
             <Choice
               label="Dark mode"
@@ -152,6 +156,75 @@ function Choice<T extends string>({
       options={[{ value: "unset", label: "Don't change" }, ...options]}
       onChange={(v) => onChange(v === "unset" ? null : v)}
     />
+  );
+}
+
+type CursorMode = "unset" | "mypaper-dark" | "mypaper-light" | "other";
+
+const BUILT_IN_CURSORS = ["mypaper-dark", "mypaper-light"];
+
+/**
+ * Don't change, one of the two built-in sets (drawn in code: modern monochrome pointers), or
+ * another: a set from `%APPDATA%\mypaper\cursors`, or any folder of .cur / .ani files. While the
+ * theme is active they are written to the Mouse control panel's registry values; mypaper puts the
+ * originals back when the theme changes, on quit and after a crash.
+ */
+function CursorsPicker({ value, onChange }: { value: string | null; onChange: (value: string | null) => void }) {
+  const [sets, setSets] = useState<string[]>([]);
+  useEffect(() => {
+    let current = true;
+    void api.listCursorSets().then((list) => current && setSets(list), () => undefined);
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  const mode: CursorMode = value === null ? "unset" : BUILT_IN_CURSORS.includes(value) ? (value as CursorMode) : "other";
+
+  async function pick(next: CursorMode) {
+    if (next === "unset") return onChange(null);
+    if (next !== "other") return onChange(next);
+    if (mode === "other") return;
+    const first = sets[0];
+    if (first) return onChange(first);
+    const folder = await pickFolder();
+    if (folder) onChange(folder);
+  }
+
+  return (
+    <div className="space-y-2">
+      <Segmented<CursorMode>
+        label="Cursors"
+        hideLabel
+        value={mode}
+        onChange={(next) => void pick(next)}
+        options={[
+          { value: "unset", label: "Don't change" },
+          { value: "mypaper-dark", label: "mypaper dark", hint: "A dark pointer with a white edge" },
+          { value: "mypaper-light", label: "mypaper light", hint: "A light pointer with a dark edge" },
+          { value: "other", label: "Other…" },
+        ]}
+      />
+      {mode === "other" && value !== null && (
+        <div className="flex items-center gap-2">
+          <Select<string>
+            label="Cursor set"
+            className="w-48"
+            value={sets.includes(value) ? value : ""}
+            options={[...(sets.includes(value) ? [] : [{ value: "", label: "A folder" }]), ...sets.map((set) => ({ value: set, label: set }))]}
+            onChange={(next) => next !== "" && onChange(next)}
+          />
+          <button type="button" onClick={() => void pickFolder().then((folder) => folder && onChange(folder))} className="h-10 shrink-0 cursor-default rounded-lg px-3 text-[13px] font-medium text-ink ring-1 ring-line-strong hover:bg-surface-hi">
+            Folder…
+          </button>
+          {!sets.includes(value) && (
+            <span className="selectable min-w-0 truncate font-mono text-xs text-ink-3" title={value}>
+              {value}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
