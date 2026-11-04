@@ -16,7 +16,7 @@ const look = (over: Partial<Appearance> = {}): Appearance => ({ ...DEFAULT_APPEA
 describe("attributes", () => {
   it("maps surface, text and shadow", () => {
     expect(appearanceAttributes(look())).toEqual({
-      "data-surface": "none",
+      "data-surface": "glass",
       "data-text": "light",
       "data-shadow": "on",
       "data-style": "minimal",
@@ -41,7 +41,7 @@ describe("variables", () => {
   });
 
   it("makes a solid surface opaque whatever the opacity", () => {
-    expect(appearanceVars(look({ surface: "solid", opacity: 0.2 }))["--surface"]).toBe("rgb(16 16 16 / 1)");
+    expect(appearanceVars(look({ surface: "solid", opacity: 0.2 }))["--surface"]).toBe("rgb(52 58 66 / 1)");
   });
 
   it("flips the default near-black tint (host side) with dark text, but keeps a chosen tint", () => {
@@ -50,7 +50,7 @@ describe("variables", () => {
   });
 
   it("derives the border line from `border`, and drops it when off", () => {
-    expect(appearanceVars(look())["--line"]).toBe("rgb(255 255 255 / 0.14)");
+    expect(appearanceVars(look())["--line"]).toBe("rgb(255 255 255 / 0.1)");
     expect(appearanceVars(look({ border: false }))["--line"]).toBe("transparent");
   });
 
@@ -84,7 +84,7 @@ describe("variables", () => {
 
   it("uses tint and accent exactly as sent; tone-aware defaults are the host's job", () => {
     // An explicit near-black tint with dark text stays near-black (no double flip).
-    expect(appearanceVars(look({ text: "dark", surface: "solid" }))["--surface"]).toBe("rgb(16 16 16 / 1)");
+    expect(appearanceVars(look({ text: "dark", surface: "solid" }))["--surface"]).toBe("rgb(52 58 66 / 1)");
     const hosted = withToneDefaults(look({ text: "dark" }));
     expect(hosted.tint).toBe("#f2f2f2");
     expect(appearanceVars(hosted)["--accent"]).toBe("rgb(10 10 12)");
@@ -116,8 +116,8 @@ describe("normalizeAppearance", () => {
     expect(normalizeAppearance()).toEqual(DEFAULT_APPEARANCE);
   });
 
-  it("defaults the surface to none", () => {
-    expect(DEFAULT_APPEARANCE.surface).toBe("none");
+  it("defaults to the calm tile: glass, minimal", () => {
+    expect(DEFAULT_APPEARANCE).toMatchObject({ surface: "glass", style: "minimal", tint: "#343a42" });
   });
 
   it("clamps numbers into their ranges and replaces invalid values", () => {
@@ -135,7 +135,7 @@ describe("normalizeAppearance", () => {
       style: "glossy",
     });
     expect(a).toMatchObject({
-      surface: "none",
+      surface: "glass",
       tint: DEFAULT_APPEARANCE.tint,
       opacity: 1,
       blur: 0,
@@ -148,6 +148,7 @@ describe("normalizeAppearance", () => {
       style: "minimal",
     });
     expect(normalizeAppearance({ style: "aero" }).style).toBe("aero");
+    expect(normalizeAppearance({ style: "liquid" }).style).toBe("liquid");
     expect(normalizeAppearance({ scale: 9 }).scale).toBe(2);
     expect(normalizeAppearance({ opacity: Number.NaN }).opacity).toBe(DEFAULT_APPEARANCE.opacity);
   });

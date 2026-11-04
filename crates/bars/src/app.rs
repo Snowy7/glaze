@@ -517,6 +517,7 @@ impl App {
                     WM_BARS_SETTINGS => soon(&mut self.timers.settings, SETTLE_SETTINGS),
                     WM_BARS_TRASH => self.trash_changed(),
                     WM_BARS_TIME => {
+                        self.emit(Topic::Clock);
                         self.timers.clock = None;
                         self.sync_clock();
                     }
@@ -1104,7 +1105,7 @@ impl App {
         Some(match topic {
             Topic::Apps => json!(self.dock_items(index)),
             Topic::Foreground => self.foreground_info(),
-            Topic::Clock => json!({ "now": epoch_ms() }),
+            Topic::Clock => json!({ "now": epoch_ms(), "system": crate::clock::system() }),
             Topic::Media => json!(self.media_state),
             Topic::Volume => json!(self.audio.as_ref().and_then(Audio::read)),
             Topic::Network => json!(

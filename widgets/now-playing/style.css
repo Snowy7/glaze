@@ -25,7 +25,7 @@ html[data-text="dark"] .np {
   --glow: color-mix(in srgb, var(--hi) 75%, transparent);
   --glow-col: var(--hi);
 }
-html:not([data-style="minimal"]) .np {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .np {
   --glow-col: var(--hi);
 }
 
@@ -417,7 +417,7 @@ html[data-variant="blur"] .wash {
     inset 0 0 0 1px rgb(var(--ink) / 0.14),
     inset 0 1px 0 rgb(var(--ink) / 0.2);
 }
-html[data-variant="blur"][data-surface="none"]:not([data-style="minimal"]) .np {
+html[data-variant="blur"][data-surface="none"]:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .np {
   inset: var(--bleed);
   box-shadow: var(--elev-3);
 }
@@ -724,4 +724,58 @@ html[data-variant="viz"] .info .eyebrow {
 /* Nothing playing and no sound: the hint is the whole story. */
 html[data-variant="viz"] .np[data-state="empty"] .info {
   opacity: 0.9;
+}
+
+/* ---------------------------------------------------------------- the calm looks (minimal, liquid)
+   Like a desktop widget: the cover sits flat (no drop shadow, no colored glow, no breathing), the
+   controls are plain glyphs (the play glyph the biggest), the scrubber is a neutral line. The
+   cover's hue stays only in the Visualizer. */
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .np {
+  --glow-col: transparent;
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .art {
+  box-shadow: none;
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .np[data-playing] .art {
+  animation: none;
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .cover {
+  transform: none;
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .np:not([data-state="has-art"]) .art {
+  background: var(--fill-1);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .eq i {
+  background: var(--t2);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .title {
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+html:root:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .np .bar .track > i {
+  background: var(--t1);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .thumb {
+  box-shadow: none;
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .np .play.btn.primary {
+  background: transparent;
+  color: var(--t0);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .np .play.btn.primary:hover {
+  background: var(--fill-1);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .play svg {
+  width: 56%;
+  height: 56%;
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .skip {
+  color: var(--t1);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .wash {
+  background: var(--fill-1);
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .wash::after {
+  background: rgb(var(--halo) / 0.4);
+  box-shadow: inset 0 0 0 1px var(--line);
 }

@@ -3,8 +3,7 @@
 //
 // - Toasts are grouped by app, newest group first. A group of several is a stack (the newest card
 //   on top, the rest peeking under it) until it's opened.
-// - Every card carries its app's icon: the toast's own logo, else the Start menu's icon for an app
-//   of that name (the launcher's index), else a tinted monogram.
+// - Every card carries the host's icon resolved by app identity, else a tinted monogram.
 // - Dismissing is a swipe sideways or the × that shows on hover. A group clears with its ×, and
 //   everything with "Clear all".
 // - The header shows Do Not Disturb (it opens its setting: there's no API to change it), and the
@@ -30,6 +29,7 @@ export interface CenterActions {
 const SWIPE = 90;
 
 interface Group {
+  id: string;
   app: string;
   icon?: string;
   items: NotificationItem[];
@@ -39,10 +39,11 @@ interface Group {
 export function byApp(list: readonly NotificationItem[]): Group[] {
   const groups = new Map<string, Group>();
   for (const item of [...list].sort((a, b) => b.at - a.at)) {
-    const group = groups.get(item.app) ?? { app: item.app, items: [] };
+    const key = item.aumid ? `app:${item.aumid}` : item.packageFamilyName ? `package:${item.packageFamilyName}:${item.app}` : `name:${item.app}`;
+    const group = groups.get(key) ?? { id: key, app: item.app, items: [] };
     if (!group.icon && item.icon) group.icon = item.icon;
     group.items.push(item);
-    groups.set(item.app, group);
+    groups.set(key, group);
   }
   return [...groups.values()];
 }
@@ -54,21 +55,7 @@ export function hueOf(name: string): number {
   return hash % 360;
 }
 
-// The launcher's index knows every Start menu app's icon, for toasts without a logo. Its icons
-// are drawn after the index is built, so an answer without them is asked for again next time.
-let startIcons: Promise<Map<string, string>> | undefined;
-const startMenuIcons = (): Promise<Map<string, string>> => {
-  startIcons ??= request("apps")
-    .then(({ apps }) => new Map(apps.flatMap((app) => (app.icon ? [[app.name.toLowerCase(), app.icon] as const] : []))))
-    .catch(() => new Map<string, string>())
-    .then((icons) => {
-      if (icons.size === 0) startIcons = undefined;
-      return icons;
-    });
-  return startIcons;
-};
-
-/** The app's icon: its logo, else the Start menu's, else a monogram in the app's own hue. */
+/** The host resolves logos and Start Menu icons by identity; true misses keep the monogram. */
 function appBadge(group: Group, className: string): HTMLElement {
   const monogram = h("span", `${className} notif-monogram`, glyphLetter(group.app || "?"));
   monogram.style.setProperty("--hue", String(hueOf(group.app)));
@@ -80,13 +67,7 @@ function appBadge(group: Group, className: string): HTMLElement {
     return img;
   };
   if (group.icon) return picture(group.icon);
-  const slot = h("span", "notif-badge-slot", monogram);
-  void startMenuIcons().then((icons) => {
-    const name = group.app.toLowerCase();
-    const src = icons.get(name) ?? [...icons].find(([app]) => app.startsWith(name) || name.startsWith(app))?.[1];
-    if (src) slot.replaceChildren(picture(src));
-  });
-  return slot;
+  return monogram;
 }
 
 /** Swipe sideways to dismiss: the card follows the pointer and goes past `SWIPE`. */
@@ -211,7 +192,7 @@ export function notificationCenter(actions: CenterActions): { el: HTMLElement; u
 
   const groupView = (group: Group, now: number) => {
     const many = group.items.length > 1;
-    const open = !many || opened.has(group.app);
+    const open = !many || opened.has(group.id);
     const toggle = button("notif-group-toggle", h("span", "notif-count", many ? (open ? "Show less" : `${group.items.length}`) : ""));
     toggle.hidden = !many;
     toggle.title = open ? "Show less" : `Show all ${group.items.length}`;
@@ -226,13 +207,13 @@ export function notificationCenter(actions: CenterActions): { el: HTMLElement; u
       stack.title = `Show all ${group.items.length}`;
       stack.addEventListener("click", (event) => {
         if (event.target instanceof Element && event.target.closest("button")) return;
-        opened.add(group.app);
+        opened.add(group.id);
         render();
       });
     }
     toggle.addEventListener("click", () => {
-      if (opened.has(group.app)) opened.delete(group.app);
-      else opened.add(group.app);
+      if (opened.has(group.id)) opened.delete(group.id);
+      else opened.add(group.id);
       render();
     });
     const section = h(

@@ -6,11 +6,11 @@ import type { Appearance, AppearanceState } from "./types";
 
 /** The look a widget gets before the host answers (and from hosts that send none): the spec's defaults. */
 export const DEFAULT_APPEARANCE: Appearance = {
-  surface: "none",
-  tint: "#101010",
-  opacity: 0.55,
+  surface: "glass",
+  tint: "#343a42",
+  opacity: 0.46,
   blur: 24,
-  radius: 18,
+  radius: 22,
   border: true,
   text: "light",
   accent: "#ffffff",
@@ -45,7 +45,7 @@ export interface AppearanceAttributes {
 }
 
 /** Every `style`, in the order the Appearance panel lists them. */
-export const WIDGET_STYLES = ["minimal", "depth", "neon", "paper", "aero"] as const satisfies readonly Appearance["style"][];
+export const WIDGET_STYLES = ["minimal", "depth", "neon", "paper", "aero", "liquid"] as const satisfies readonly Appearance["style"][];
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -99,14 +99,17 @@ const SIGNATURE: Record<Appearance["style"], readonly [Rgb, Rgb]> = {
   neon: [[0, 229, 255], [255, 43, 214]],
   paper: [[217, 130, 91], [233, 184, 114]],
   aero: [[92, 200, 255], [122, 255, 200]],
+  liquid: [[255, 255, 255], [255, 255, 255]],
 };
 
 /**
  * The two colors a style's glow, rim and flowing gradient are made of. A chromatic accent gives
  * both (the accent and the same color turned 48 degrees); a white, grey or ink accent, which has no
- * hue to turn, falls back to the style's signature pair. `minimal` always follows the accent.
+ * hue to turn, falls back to the style's signature pair. `minimal` and `liquid`, the calm ones,
+ * always follow the accent.
  */
 export function sparkColors(accent: Rgb, style: Appearance["style"], text: Appearance["text"] = "light"): [Rgb, Rgb] {
+  if (style === "minimal" || style === "liquid") return [accent, accent];
   const [h, s, l] = toHsl(accent);
   if (s >= 0.18 && l > 0.12 && l < 0.92) return [accent, fromHsl((h + 48) % 360, Math.max(s, 0.55), Math.min(Math.max(l, 0.5), 0.7))];
   const [a, b] = SIGNATURE[style];
@@ -193,11 +196,11 @@ export function appearanceVars(a: Appearance): Record<string, string> {
     "--surface": `rgb(${tr} ${tg} ${tb} / ${alpha})`,
     "--blur": `${a.blur}px`,
     "--radius": `${a.radius}px`,
-    "--line": a.border ? `rgb(${ink} / 0.14)` : "transparent",
-    ...step([1, 0.82, 0.6, 0.38], "--t"),
-    "--fill-1": `rgb(${ink} / ${dark ? 0.07 : 0.08})`,
-    "--fill-2": `rgb(${ink} / ${dark ? 0.12 : 0.14})`,
-    "--fill-3": `rgb(${ink} / ${dark ? 0.2 : 0.24})`,
+    "--line": a.border ? `rgb(${ink} / ${dark ? 0.08 : 0.1})` : "transparent",
+    ...step([0.94, 0.78, 0.56, 0.36], "--t"),
+    "--fill-1": `rgb(${ink} / ${dark ? 0.06 : 0.07})`,
+    "--fill-2": `rgb(${ink} / ${dark ? 0.1 : 0.12})`,
+    "--fill-3": `rgb(${ink} / ${dark ? 0.17 : 0.2})`,
     "--ink": ink,
     "--halo": halo,
     "--accent": accent,
@@ -245,6 +248,7 @@ export function applyAppearance(
   const a = normalizeAppearance(state.appearance);
   const root = doc.documentElement;
   for (const [name, value] of Object.entries(appearanceAttributes(a))) root.setAttribute(name, value);
+  root.setAttribute("data-plate", state.plate ? "on" : "off");
   if (widgetId) root.setAttribute("data-widget", widgetId);
 
   const head = doc.head;

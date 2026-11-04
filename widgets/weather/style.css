@@ -855,3 +855,31 @@ button.place:hover {
   -webkit-line-clamp: 2;
   white-space: normal;
 }
+
+/* ---------------------------------------------------------------- the calm looks (minimal, liquid)
+   Flat symbols in their own colors, like a desktop weather widget: every gradient's ends are the
+   same color and nothing glows. The hours sit on the card without boxes; "Now" is the current one. */
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) {
+  --sun-1: #ffc83d; /* art */
+  --sun-2: #ffc83d; /* art */
+  --sun-glow: transparent;
+  --moon-1: #f3eed6; /* art */
+  --moon-2: #f3eed6; /* art */
+  --moon-glow: transparent;
+  --cl-2: var(--cl-1);
+  --clg-1: #dfe4ee; /* art */
+  --clg-2: #dfe4ee; /* art */
+  --cld-1: #98a2ba; /* art */
+  --cld-2: #98a2ba; /* art */
+  --bolt-1: #ffcc33; /* art */
+  --bolt-2: #ffcc33; /* art */
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .temp {
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .slot.tile,
+html:is(:not([data-style]), [data-style="minimal"], [data-style="liquid"]) .slot.cur {
+  background: none;
+  outline: none;
+}

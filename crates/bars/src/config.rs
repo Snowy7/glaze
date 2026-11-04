@@ -304,7 +304,8 @@ impl TopConfig {
 pub struct ClockConfig {
     /// Tick every second instead of every minute.
     pub seconds: bool,
-    /// See `bars/shell/src/clock-format.ts` for the tokens. Missing: [`ClockConfig::default_format`].
+    /// See `bars/shell/src/clock-format.ts` for tokens. Missing: the top bar's default format,
+    /// or Windows' short time and date on the dock.
     pub format: Option<String>,
 }
 
@@ -1158,11 +1159,10 @@ impl BarsConfig {
     /// Fills the defaults that depend on the machine or the layout: the clock format, layout
     /// geometry and, when `pinned` is missing, `default_pins` (the native taskbar's pins).
     pub fn resolve(&mut self, default_pins: impl FnOnce() -> Vec<Pinned>) {
-        for clock in [&mut self.top.clock, &mut self.dock.clock] {
-            clock
-                .format
-                .get_or_insert_with(|| ClockConfig::default_format(clock.seconds).to_owned());
-        }
+        self.top
+            .clock
+            .format
+            .get_or_insert_with(|| ClockConfig::default_format(self.top.clock.seconds).to_owned());
         self.dock.pinned.get_or_insert_with(default_pins);
         self.fill_defaults();
     }
@@ -1416,10 +1416,7 @@ mod tests {
         assert_eq!(config.top.look.family, Some(Family::Macos));
         assert_eq!(config.dock.style, DockStyle::Taskbar);
         assert_eq!(config.dock.look.family, Some(Family::Fluent));
-        assert_eq!(
-            config.dock.clock.format.as_deref(),
-            Some("HH:mm\ndd/MM/yyyy")
-        );
+        assert_eq!(config.dock.clock.format, None);
 
         // A bar's design beats the preset's choice for it; the other bar keeps the preset's.
         let config =
@@ -1591,6 +1588,7 @@ mod tests {
         let mut config = BarsConfig::default();
         config.resolve(pins);
         assert_eq!(config.top.clock.format.as_deref(), Some("ddd d MMM  HH:mm"));
+        assert_eq!(config.dock.clock.format, None, "dock uses Windows' format");
         assert_eq!(config.dock.pinned, Some(pins()));
         assert_eq!(config.top.margin, Some(0.0));
         assert_eq!(config.dock.size, Some(48.0));

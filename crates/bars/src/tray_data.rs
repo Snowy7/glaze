@@ -522,6 +522,51 @@ pub const APPBARDATA_SIZE: usize = 40;
 pub const ABM_QUERYPOS: u32 = 2;
 pub const ABM_SETPOS: u32 = 3;
 pub const ABM_GETTASKBARPOS: u32 = 5;
+pub const ABM_GETAUTOHIDEBAR: u32 = 7;
+pub const ABM_GETAUTOHIDEBAREX: u32 = 11;
+
+/// Auto-hide lookups ignore the caller HWND; EX selects a monitor by its rectangle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AutoHideQuery {
+    pub edge: u32,
+    pub monitor: Option<[i32; 4]>,
+}
+
+impl AutoHideQuery {
+    pub fn parse(bytes: &[u8]) -> Option<Self> {
+        let message = parse_appbar(bytes)?.message;
+        let edge = u32_at(bytes, APPBAR_EDGE);
+        if edge > 3 {
+            return None;
+        }
+        let monitor = match message {
+            ABM_GETAUTOHIDEBAR => None,
+            ABM_GETAUTOHIDEBAREX => Some(std::array::from_fn(|i| {
+                u32_at(bytes, APPBAR_RECT + i * 4) as i32
+            })),
+            _ => return None,
+        };
+        Some(Self { edge, monitor })
+    }
+
+    pub fn request(self, pid: u32) -> [u8; APPBAR_SIZE] {
+        let mut bytes = [0u8; APPBAR_SIZE];
+        bytes[..4].copy_from_slice(&(APPBARDATA_SIZE as u32).to_le_bytes());
+        bytes[APPBAR_EDGE..APPBAR_EDGE + 4].copy_from_slice(&self.edge.to_le_bytes());
+        let message = if let Some(rect) = self.monitor {
+            for (i, coordinate) in rect.into_iter().enumerate() {
+                bytes[APPBAR_RECT + i * 4..APPBAR_RECT + i * 4 + 4]
+                    .copy_from_slice(&coordinate.to_le_bytes());
+            }
+            ABM_GETAUTOHIDEBAREX
+        } else {
+            ABM_GETAUTOHIDEBAR
+        };
+        bytes[APPBAR_MESSAGE..APPBAR_MESSAGE + 4].copy_from_slice(&message.to_le_bytes());
+        bytes[APPBAR_PID..APPBAR_PID + 4].copy_from_slice(&pid.to_le_bytes());
+        bytes
+    }
+}
 
 /// The fields of an app-bar message the host looks at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -603,6 +648,28 @@ pub fn rect_reply(message: u32, [x, y, width, height]: [i32; 4]) -> isize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auto_hide_lookup_keys_preserve_the_edge_and_signed_monitor_coordinates() {
+        let query = AutoHideQuery {
+            edge: 3,
+            monitor: Some([-2560, 9, 0, 1449]),
+        };
+        let bytes = query.request(77);
+        assert_eq!(u32_at(&bytes, 0), 40);
+        assert_eq!(u32_at(&bytes, 4), 0, "the lookup carries no caller HWND");
+        assert_eq!(u32_at(&bytes, 12), 3);
+        assert_eq!(u32_at(&bytes, 16) as i32, -2560);
+        assert_eq!(u32_at(&bytes, 28), 1449);
+        assert_eq!(u32_at(&bytes, 40), ABM_GETAUTOHIDEBAREX);
+        assert_eq!(u32_at(&bytes, 56), 77);
+        assert_eq!(AutoHideQuery::parse(&bytes), Some(query));
+        let primary = AutoHideQuery {
+            monitor: None,
+            ..query
+        };
+        assert_eq!(AutoHideQuery::parse(&primary.request(77)), Some(primary));
+    }
 
     /// `NOTIFYICONDATA` as sent: 32-bit handles, `szTip[128]`, `szInfo[256]`, `szInfoTitle[64]`.
     const NID_SIZE: usize = 956;

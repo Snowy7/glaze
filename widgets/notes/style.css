@@ -65,7 +65,7 @@ html[data-surface="none"] #editor {
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
-html[data-style]:not([data-style="minimal"]) #editor {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) #editor {
   box-shadow: inset 0 0 0 1px var(--hi), 0 0 12px -2px var(--glow);
 }
 #editor::selection {
@@ -87,7 +87,7 @@ html[data-style]:not([data-style="minimal"]) #editor {
 .view h1 { font-size: 1.35em; }
 .view h2 { font-size: 1.15em; }
 .view h3 { font-size: 1em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--t2); }
-html[data-style]:not([data-style="minimal"]) .view h3 { color: var(--hi); }
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .view h3 { color: var(--hi); }
 .view b { color: var(--t0); font-weight: 650; }
 .view code {
   padding: 0.05em 0.35em;
@@ -104,7 +104,7 @@ hr {
   border: 0;
   background: var(--fill-3);
 }
-html[data-style]:not([data-style="minimal"]) hr {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) hr {
   background: linear-gradient(90deg, var(--hi), var(--hi-2) 60%, transparent);
 }
 blockquote {
@@ -112,7 +112,7 @@ blockquote {
   border-left: 2px solid var(--t3);
   color: var(--t2);
 }
-html[data-style]:not([data-style="minimal"]) blockquote {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) blockquote {
   border-image: linear-gradient(180deg, var(--hi), var(--hi-2)) 1;
 }
 
@@ -130,7 +130,7 @@ html[data-style]:not([data-style="minimal"]) blockquote {
   border-radius: 50%;
   background: var(--t2);
 }
-html[data-style]:not([data-style="minimal"]) .li::before {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .li::before {
   background: linear-gradient(135deg, var(--hi), var(--hi-2));
   box-shadow: 0 0 6px -1px var(--glow);
 }
@@ -162,12 +162,12 @@ html[data-surface="none"] .box {
   background: var(--t0);
   border-color: var(--t0);
 }
-html[data-style]:not([data-style="minimal"]) .task[data-checked] .box {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .task[data-checked] .box {
   background: linear-gradient(135deg, var(--hi), var(--hi-2));
   border-color: transparent;
   box-shadow: var(--bevel), 0 0 var(--glow-size) -4px var(--glow);
 }
-html[data-style]:not([data-style="minimal"]) .task[data-checked] .box::after {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .task[data-checked] .box::after {
   border-color: var(--on-spark);
 }
 .task[data-checked] .box::after {

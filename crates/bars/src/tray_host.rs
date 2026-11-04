@@ -66,7 +66,9 @@ use windows::Win32::System::Threading::{
     PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
-use windows::Win32::UI::Shell::{SHAllocShared, SHFreeShared, SHLockShared, SHUnlockShared};
+use windows::Win32::UI::Shell::{
+    ABM_SETSTATE, SHAllocShared, SHFreeShared, SHLockShared, SHUnlockShared,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     AllowSetForegroundWindow, CHILDID_SELF, CS_DBLCLKS, CopyIcon, CreateWindowExW, DefWindowProcW,
     DestroyIcon, DestroyWindow, DispatchMessageW, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
@@ -608,6 +610,7 @@ fn run(commands: &Receiver<Command>, own: Sender<Command>, waker: Waker, band: O
             }
         }
         forward_queued(FORWARD_TIMEOUT_MS);
+        refresh_auto_hide();
         if with_state(|s| std::mem::take(&mut s.step_aside)).unwrap_or(false) {
             session.leave();
         }
@@ -662,6 +665,9 @@ impl Session {
             return Join::Later(EXPLORER_SETTLE - age);
         }
         let band = with_state(|s| s.band).flatten();
+        let Some(auto_hide) = read_auto_hide(explorer) else {
+            return Join::Later(CHECK_EVERY);
+        };
         let Some(window) = create_window(band) else {
             return Join::NoExplorer;
         };
@@ -693,6 +699,7 @@ impl Session {
             s.window = Some(window);
             s.explorer = Some(explorer);
         });
+        AUTO_HIDE.with(|cell| *cell.borrow_mut() = Some(auto_hide));
         broadcast_taskbar_created();
         log::info!("tray: Shell_TrayWnd up; asked apps to add their icons");
         Join::Hosting
@@ -763,6 +770,7 @@ unsafe extern "system" fn on_explorer_event(
 }
 
 fn place(band: Option<Band>) {
+    invalidate_auto_hide();
     let window = with_state(|s| {
         s.band = band;
         s.window
@@ -878,12 +886,110 @@ unsafe extern "system" fn notify_proc(
 }
 
 fn explorer() -> Option<Explorer> {
-    with_state(|s| s.explorer).flatten()
+    let (explorer, ours) = with_state(|s| (s.explorer, s.window))?;
+    let explorer = explorer?;
+    let mut pid = 0;
+    // SAFETY: read-only validation of a cached handle, which Explorer can destroy or recycle.
+    unsafe { GetWindowThreadProcessId(explorer.tray, Some(&mut pid)) };
+    (Some(explorer.tray) != ours
+        && pid != std::process::id()
+        && pid == explorer.pid
+        && crate::apps::class_name(explorer.tray) == "Shell_TrayWnd")
+        .then_some(explorer)
+}
+
+/// Read-only lookups must not relay while Explorer is delivering app-bar callbacks: Chromium
+/// asks again for each edge from those callbacks, recursively nesting the same lookup.
+struct AutoHideBars {
+    values: HashMap<tray_data::AutoHideQuery, isize>,
+    updated: Instant,
+    refresh: bool,
+}
+
+fn read_auto_hide(explorer: Explorer) -> Option<AutoHideBars> {
+    let monitors = mypaper_desktop::monitors()
+        .into_iter()
+        .map(|r| Some([r.x, r.y, r.x + r.width, r.y + r.height]));
+    let queries = std::iter::once(None)
+        .chain(monitors)
+        .flat_map(|monitor| (0..4).map(move |edge| tray_data::AutoHideQuery { edge, monitor }));
+    let extra = AUTO_HIDE.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .map(|s| s.values.keys().copied().collect::<Vec<_>>())
+            .unwrap_or_default()
+    });
+    let mut values = HashMap::new();
+    for query in queries.chain(extra) {
+        if values.contains_key(&query) {
+            continue;
+        }
+        let result = copydata_to(
+            explorer.tray,
+            WPARAM(0),
+            COPYDATA_APPBAR,
+            &query.request(explorer.pid),
+            FORWARD_TIMEOUT_MS,
+        )?;
+        values.insert(query, result.0);
+    }
+    Some(AutoHideBars {
+        values,
+        updated: Instant::now(),
+        refresh: false,
+    })
+}
+
+fn auto_hide_answer(query: tray_data::AutoHideQuery) -> LRESULT {
+    AUTO_HIDE.with(|cell| {
+        let mut cache = cell.borrow_mut();
+        let Some(cache) = cache.as_mut() else {
+            return LRESULT(0);
+        };
+        if cache.updated.elapsed() >= CHECK_EVERY || !cache.values.contains_key(&query) {
+            cache.refresh = true;
+        }
+        let answer = *cache.values.entry(query).or_insert(0);
+        // SAFETY: a stale auto-hide owner is no longer a valid answer.
+        if answer != 0 && !unsafe { IsWindow(Some(HWND(answer as *mut c_void))) }.as_bool() {
+            cache.refresh = true;
+            return LRESULT(0);
+        }
+        LRESULT(answer)
+    })
+}
+
+fn invalidate_auto_hide() {
+    AUTO_HIDE.with(|cell| {
+        if let Some(cache) = cell.borrow_mut().as_mut() {
+            cache.refresh = true;
+        }
+    });
+}
+
+/// Refresh off the window-procedure stack. Callbacks during the read see the previous snapshot.
+fn refresh_auto_hide() {
+    let refresh = AUTO_HIDE.with(|cell| {
+        cell.borrow_mut().as_mut().is_some_and(|cache| {
+            let refresh = std::mem::take(&mut cache.refresh);
+            if refresh {
+                cache.updated = Instant::now();
+            }
+            refresh
+        })
+    });
+    if refresh
+        && let Some(explorer) = explorer()
+        && let Some(snapshot) = read_auto_hide(explorer)
+    {
+        AUTO_HIDE.with(|cell| *cell.borrow_mut() = Some(snapshot));
+    }
 }
 
 thread_local! {
     /// Synchronous forwards in progress on the host's thread (see [`MAX_DEPTH`]).
     static DEPTH: Cell<u32> = const { Cell::new(0) };
+    static AUTO_HIDE: RefCell<Option<AutoHideBars>> = const { RefCell::new(None) };
 }
 
 /// Runs a synchronous forward, or answers `refused` when too many are nested already.
@@ -948,6 +1054,12 @@ fn copydata_to(
     bytes: &[u8],
     timeout_ms: u32,
 ) -> Option<LRESULT> {
+    let mut pid = 0;
+    // SAFETY: a read-only query; no path may relay to our own process, even before STATE exists.
+    unsafe { GetWindowThreadProcessId(target, Some(&mut pid)) };
+    if pid == 0 || pid == std::process::id() {
+        return None;
+    }
     let data = COPYDATASTRUCT {
         dwData: kind,
         cbData: bytes.len() as u32,
@@ -1081,6 +1193,9 @@ fn on_appbar(wparam: WPARAM, mut bytes: Vec<u8>) -> LRESULT {
         return forward_copydata(wparam, COPYDATA_APPBAR, &bytes);
     };
     match message.message {
+        tray_data::ABM_GETAUTOHIDEBAR | tray_data::ABM_GETAUTOHIDEBAREX => {
+            tray_data::AutoHideQuery::parse(&bytes).map_or(LRESULT(0), auto_hide_answer)
+        }
         ABM_GETTASKBARPOS => {
             let Some(band) = with_state(|s| s.band).flatten() else {
                 return forward_copydata(wparam, COPYDATA_APPBAR, &bytes);
@@ -1104,7 +1219,14 @@ fn on_appbar(wparam: WPARAM, mut bytes: Vec<u8>) -> LRESULT {
             };
             rehomed_appbar(wparam, &mut bytes, message, explorer)
         }
-        _ => forward_copydata(wparam, COPYDATA_APPBAR, &bytes),
+        _ => {
+            let result = forward_copydata(wparam, COPYDATA_APPBAR, &bytes);
+            // State changes, registrations and removals may replace an auto-hide owner.
+            if matches!(message.message, ABM_SETSTATE | 1 | 8 | 12) {
+                invalidate_auto_hide();
+            }
+            result
+        }
     }
 }
 
@@ -1584,6 +1706,98 @@ pub fn base64(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auto_hide_queries_inside_callbacks_use_the_snapshot_for_every_edge_and_monitor() {
+        // SAFETY: an invisible test auto-hide owner, destroyed below.
+        let window = unsafe {
+            CreateWindowExW(
+                Default::default(),
+                w!("STATIC"),
+                w!("auto-hide owner"),
+                WS_POPUP,
+                0,
+                0,
+                1,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
+        }
+        .unwrap();
+        let queries: Vec<_> = [None, Some([0, 0, 2560, 1440]), Some([-2560, 9, 0, 1449])]
+            .into_iter()
+            .flat_map(|monitor| (0..4).map(move |edge| tray_data::AutoHideQuery { edge, monitor }))
+            .collect();
+        AUTO_HIDE.with(|cell| {
+            *cell.borrow_mut() = Some(AutoHideBars {
+                values: queries
+                    .iter()
+                    .map(|&query| {
+                        (
+                            query,
+                            if query.edge == 0 {
+                                window.0 as isize
+                            } else {
+                                0
+                            },
+                        )
+                    })
+                    .collect(),
+                updated: Instant::now(),
+                refresh: false,
+            })
+        });
+        nested((), || {
+            // The real burst repeats queries for different edges from within a prior relay.
+            for query in queries.iter().cycle().take(100) {
+                let answer = on_appbar(WPARAM(0x1234), query.request(42).to_vec());
+                assert_eq!(
+                    answer.0,
+                    if query.edge == 0 {
+                        window.0 as isize
+                    } else {
+                        0
+                    }
+                );
+                assert_eq!(DEPTH.get(), 1);
+            }
+        });
+        assert_eq!(DEPTH.get(), 0);
+        AUTO_HIDE.with(|cell| {
+            cell.borrow_mut().take();
+        });
+        // SAFETY: this test owns the window.
+        unsafe { DestroyWindow(window) }.unwrap();
+    }
+
+    #[test]
+    fn copydata_cannot_be_forwarded_into_our_own_process() {
+        // SAFETY: an invisible test window owned by this thread, destroyed below.
+        let window = unsafe {
+            CreateWindowExW(
+                Default::default(),
+                w!("STATIC"),
+                w!("relay test"),
+                WS_POPUP,
+                0,
+                0,
+                1,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
+        }
+        .unwrap();
+        let answer = copydata_to(window, WPARAM(0), COPYDATA_APPBAR, &[], 10);
+        // SAFETY: the window belongs to this test.
+        unsafe { DestroyWindow(window) }.unwrap();
+        assert_eq!(answer, None);
+    }
 
     #[test]
     fn base64_matches_the_rfc_vectors() {

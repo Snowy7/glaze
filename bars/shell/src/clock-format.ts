@@ -1,5 +1,15 @@
 // Formats the clock event's timestamp with `config.top.clock.format` (docs/bars.md, "Modules").
 
+import type { ClockConfig, SystemClock } from "./protocol";
+
+/** Explicit token formats win; the default taskbar clock uses Windows' regional settings. */
+export function clockText(config: ClockConfig, date: Date, system?: SystemClock | null, locale?: string): string {
+  if (config.format !== null) return formatClock(config.format, date, locale);
+  if (system) return `${config.seconds ? system.timeWithSeconds : system.time}\n${system.date}`;
+  // Browser preview (or unavailable NLS): Intl uses the browser's system locale.
+  return `${date.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", ...(config.seconds ? { second: "2-digit" } : {}) })}\n${date.toLocaleDateString(locale)}`;
+}
+
 // Longest first, so "dddd" wins over "ddd" and "d".
 const TOKENS = [
   "dddd", "MMMM", "yyyy", "ddd", "MMM", "dd", "MM", "yy", "HH", "hh", "mm", "ss", "tt", "d", "M", "H", "h",

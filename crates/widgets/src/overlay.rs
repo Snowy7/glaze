@@ -12,7 +12,7 @@ use serde::Serialize;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, HWND_TOPMOST, SWP_NOACTIVATE, SWP_SHOWWINDOW, SetWindowPos, WS_CLIPCHILDREN,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    WS_EX_NOACTIVATE, WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{PCWSTR, w};
 
@@ -71,10 +71,12 @@ pub fn requested(current: bool, wparam: usize) -> Option<bool> {
 /// surface window class.
 pub fn create_window(class: PCWSTR, monitor: &Monitor) -> Result<HWND> {
     // SAFETY: the class is registered by `surface::register_class`; a top-level window has no
-    // parent.
+    // parent. No redirection bitmap: the window has no surface of its own, so DWM composes the
+    // WebView's transparent pixels with what is behind (as the bars do), instead of over an
+    // opaque box the size of the widget.
     let hwnd = unsafe {
         CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
             class,
             w!("mypaper overlay"),
             WS_POPUP | WS_CLIPCHILDREN,

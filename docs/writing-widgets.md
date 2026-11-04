@@ -113,7 +113,8 @@ Handy URL parameters: `widget`, `cols`, `rows`, `cell`, `gap`, `dpi`, `bg` (`dar
 `hidden=1`, `edit=1`, `settings=<json>`, `storage=<json>` (seed the instance storage),
 `media=playing|paused|none`, `battery=none|discharging|charging`, `net=wifi|ethernet|none`,
 `shared=<json>` (seed shared storage: `{"activity":{"todo":{"2026-11-02":3}}}`), `batterypct=<0..100>`,
-`theme=<name>`, `plugin=mock|real`, the appearance (`style=minimal|depth|neon|paper|aero`,
+`theme=<name>`, `plugin=mock|real`, `bgimg=<url>` (any picture as the background, for example a
+theme's `/themes/photo/iss-aurora.jpg`), the appearance (`style=minimal|depth|neon|paper|aero|liquid`,
 `surface=none|glass|solid`, `text=light|dark`,
 `scale=<0.5..2>`, `shadow=0|1`, `opacity`, `blur`, `radius`, `accent=<rrggbb>`, `tint=<rrggbb>`, or
 `appearance=<json>` with any field), `themecss=<css>`, and `ui=0` (hide the panel, for screenshots).
@@ -272,7 +273,7 @@ a card and into legible text. You get:
 
 | On `<html>` | Values | Use |
 |---|---|---|
-| `data-surface` | `none` (the default), `glass`, `solid` | Rules like `html[data-surface="none"] .foo { ... }`. |
+| `data-surface` | `glass` (the default), `none`, `solid` | Rules like `html[data-surface="none"] .foo { ... }`. |
 | `data-text` | `light` (for dark wallpapers), `dark` | Rarely needed: the tokens already flip. |
 | `data-shadow` | `on`, `off` | `base.css` adds the text shadow; you don't. |
 | `data-widget` | your id | Theme CSS targets `[data-widget="clock"]`. |
@@ -289,8 +290,8 @@ a card and into legible text. You get:
 | `--chip` | A small pill's background: a soft dark wash on a bare wallpaper, a plain fill on a surface. |
 | `--font`, `--scale` | The font family list, and the scale. Both are applied for you. |
 
-The **surface is `none` by default**: no card, the text sits straight on the wallpaper. That is the
-case to design for first. Then `glass` and `solid` have to look just as good.
+The **surface is `glass` by default**: the calm tile, one translucent fill and a hairline. `none`
+(no card, the text sits on the wallpaper) and `solid` have to look just as good.
 
 The classes in `base.css` that do the work:
 
@@ -363,11 +364,12 @@ widgets do.
 
 ### Styles (design system v2)
 
-The user can also pick a **style** (`data-style` on `<html>`): `minimal` (today's flat look, the
-default), `depth` (raised cards under a key light, bevels, soft layered shadows), `neon` (glowing
-gradient outlines), `paper` (soft matte with a grain) and `aero` (glossy glass with a specular
-sheen). The kit does the work: stick to the kit's building blocks and your widget is right in all
-five. Concretely:
+The user can also pick a **style** (`data-style` on `<html>`): `minimal` (the default, a calm
+desktop widget: flat, quiet, monochrome), `depth` (the same tile raised a little: one soft shadow, a
+faint top edge), `neon` (glowing gradient outlines), `paper` (soft matte with a grain), `aero`
+(glossy glass with a specular sheen) and `liquid` (as calm as minimal, on a clear Liquid Glass lens
+the wallpaper draws; see widgets.md, "Liquid glass"). The kit does the work: stick to the kit's
+building blocks and your widget is right in all six. Concretely:
 
 | Use | For |
 |---|---|
@@ -376,11 +378,22 @@ five. Concretely:
 | `.tile` | a group that paints in every style except `minimal`, **even on a bare wallpaper** (hourly slots, stat cells); in `minimal` it is a `.panel` |
 | `.btn`, `.btn.primary` | a button with a body; primary is filled with the highlight gradient |
 | `.chip`, `.field`, `.track` | pills, inputs, progress, each styled per style |
-| `.hero` | the big display text or numbers: gradient and embossed in `depth`, glowing in `neon`, letterpress in `paper`, glossy in `aero` |
+| `.hero` | the big display text or numbers: plain in the calm styles, a soft shadow in `depth`, glowing in `neon`, letterpress in `paper`, glossy in `aero` |
 | `.glow`, `.glow-text` | the style's glow on an element or text (a dot, a ring, a badge) |
 | `.flow` | the slowly drifting accent gradient as a background (a bar, an underline) |
 | `var(--hi)`, `var(--hi-2)` | the highlight pair for strokes, fills and active states: the accent in `minimal`, the style's colors otherwise (the accent if it has a hue, else the style's signature pair: blue-violet `depth`, cyan-magenta `neon`, terracotta `paper`, sky-aqua `aero`) |
 | `var(--elev-1..3)`, `var(--bevel)`, `var(--sheen)`, `var(--rim)`, `var(--glow)` | the raw tokens, for your own raised or lit elements |
+
+The calm styles are `minimal` and `liquid`: a widget's own gradients, glows, bevels and shadows
+belong to the lit ones, so key them on `html:is([data-style="depth"], [data-style="neon"],
+[data-style="paper"], [data-style="aero"])`, never on "every style but minimal" (which would
+light up `liquid`). In the calm styles `--hi` and `--hi-2` are the accent, so a gradient built
+from them is flat anyway.
+
+With `liquid` and a glass surface the `.card` paints nothing: the wallpaper draws the glass under
+it, and the drop-in reports where the `.card` is (its box and radius) by itself. A widget whose
+glass is another shape (a capsule smaller than its box) makes that element the `.card`, as
+`media-pill` does; `mypaper.plate({ rect, radius })` reports anything else.
 
 Two small opt-outs and one trap: `.flat` on an `<svg>` removes the blanket drop-shadow bare
 wallpapers get (and neon's glow) for graphics that carry their own light; `.glow` on an `<svg>`
@@ -402,9 +415,13 @@ The bundled widgets share one look, and copying `packages/widget-sdk/widget-kit/
   `--hi`/`--hi-2`/`--accent`. `--accent` is white unless the user picks another color (or `auto`,
   the wallpaper's accent), so in `minimal` the widget is monochrome; the other styles put their own
   highlight pair in `--hi` (or the user's accent if it has a hue), without a setting of its own.
-- Segoe UI Variable (`--font`), tabular numbers (`.num`) for anything that changes, light weights
-  for big numbers, small caps labels (`.caps`).
-- Generous padding, soft shapes, one idea per widget.
+- Segoe UI Variable (`--font`), tabular numbers (`.num`) for anything that changes, medium weights
+  for big numbers (never hairline-thin, never edge to edge: sized to sit calmly in the card), small
+  caps labels (`.caps`), mostly 56 to 94% of the ink for text.
+- No gradients, gloss, glows or drop shadows in the calm styles; group with spacing and quiet fills,
+  not boxes in boxes. Controls are plain glyphs (the main one a little bigger), state shows in a
+  small accent badge rather than a bright slab.
+- Generous padding (`--pad`, `--gap`), soft shapes, one idea per widget.
 
 ## 6. Permissions
 

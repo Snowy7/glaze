@@ -14,6 +14,7 @@ export {
   withToneDefaults,
 } from "./appearance";
 export { MypaperError, isMypaperError } from "./errors";
+export { isLiquid, plateOf, trackPlate, type PlateTracker } from "./plate";
 export { audioBins, createMypaper, type RuntimeOptions, type Transport } from "./runtime";
 
 /** postMessage to the shell page that frames this widget. */

@@ -178,7 +178,7 @@
   font-weight: 700;
   box-shadow: 0 0 var(--glow-size) -2px var(--glow);
 }
-html[data-style]:not([data-style="minimal"]) .d.today i {
+html:is([data-style="depth"], [data-style="neon"], [data-style="paper"], [data-style="aero"]) .d.today i {
   color: var(--on-spark);
 }
 .d:has(.dots) i {
@@ -459,7 +459,7 @@ html[data-text="dark"] .form input::-webkit-calendar-picker-indicator {
 .t-num {
   grid-area: num;
   font-size: clamp(34px, min(46cqh, 40cqw), 72px);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 0.95;
   letter-spacing: -0.04em;
 }

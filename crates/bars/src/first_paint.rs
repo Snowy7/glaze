@@ -214,22 +214,38 @@ impl FirstPaint {
 
     /// Bar `id`'s page answered the paint probe.
     pub fn painted(&mut self, id: u32) {
-        self.painted.insert(id);
+        if self.painted.insert(id) {
+            log::debug!("bar {id} {:?}: page painted", self.keys.get(&id));
+        }
         self.reveal(id);
     }
 
     /// Bar `bar`'s page set its region: the first one after a load is its shape.
     pub fn region(&mut self, bar: &Bar, rects: &[[f64; 4]]) {
-        if rects.is_empty() || !self.laid_out.insert(bar.id) {
+        self.record_region(
+            bar.id,
+            Shape {
+                kind: kind_name(bar.kind).into(),
+                device: bar.monitor.device.clone(),
+                rect: rect_array(bar.rect),
+                scale: bar.scale(),
+                region: rects.to_vec(),
+            },
+        );
+    }
+
+    /// Records a page layout independently of native bar handles.
+    fn record_region(&mut self, id: u32, shape: Shape) {
+        // Empty is a completed layout too: auto-hiding docks initially draw nothing.
+        if !self.laid_out.insert(id) {
             return;
         }
-        let shape = Shape {
-            kind: kind_name(bar.kind).into(),
-            device: bar.monitor.device.clone(),
-            rect: rect_array(bar.rect),
-            scale: bar.scale(),
-            region: rects.to_vec(),
-        };
+        log::debug!(
+            "bar {id} ({}, {}): initial layout, {} rects",
+            shape.kind,
+            shape.device,
+            shape.region.len()
+        );
         let shapes = &mut self.cache.shapes;
         let same = |s: &Shape| s.kind == shape.kind && s.device == shape.device;
         if shapes.iter().find(|s| same(s)) != Some(&shape) {
@@ -237,7 +253,7 @@ impl FirstPaint {
             shapes.push(shape);
             self.save();
         }
-        self.reveal(bar.id);
+        self.reveal(id);
     }
 
     /// The stand-in goes once the page both painted and set its region (the window shows
@@ -246,8 +262,9 @@ impl FirstPaint {
         if self.painted.contains(&id)
             && self.laid_out.contains(&id)
             && let Some(key) = self.keys.get(&id)
+            && self.splashes.remove(key).is_some()
         {
-            self.splashes.remove(key);
+            log::debug!("bar {id} {key:?}: page painted and laid out; stand-in removed");
         }
     }
 
@@ -667,5 +684,103 @@ mod tests {
         assert_eq!(first.stand_in(Topic::Tray), None);
         first.sent(Topic::Tray, "live");
         assert_eq!(first.cache.values["tray"], "live");
+    }
+
+    #[test]
+    fn each_bar_reveals_after_paint_and_layout_even_when_its_region_is_empty() {
+        let mut first = FirstPaint {
+            path: None,
+            cache: Cache::default(),
+            splashes: HashMap::new(),
+            handled: HashSet::new(),
+            keys: HashMap::new(),
+            painted: HashSet::new(),
+            laid_out: HashSet::new(),
+            reported: HashSet::new(),
+            started: Instant::now(),
+        };
+        let mut windows = Vec::new();
+        for (id, kind, device) in [
+            (1, "top", "DISPLAY1"),
+            (2, "dock", "DISPLAY1"),
+            (3, "top", "DISPLAY2"),
+            (4, "dock", "DISPLAY2"),
+        ] {
+            // SAFETY: hidden test windows, owned and destroyed by this test's FirstPaint.
+            let window = unsafe {
+                CreateWindowExW(
+                    Default::default(),
+                    w!("STATIC"),
+                    w!("paint accounting test"),
+                    WS_POPUP,
+                    0,
+                    0,
+                    1,
+                    1,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+            }
+            .unwrap();
+            let key = (kind, device.to_owned());
+            first.keys.insert(id, key.clone());
+            first.splashes.insert(
+                key,
+                Splash {
+                    hwnd: window,
+                    rect: [0, 0, 1, 1],
+                },
+            );
+            windows.push(window);
+        }
+        let shape = |id| Shape {
+            kind: if id % 2 == 0 { "dock" } else { "top" }.into(),
+            device: if id <= 2 { "DISPLAY1" } else { "DISPLAY2" }.into(),
+            rect: [0, 0, 1, 1],
+            scale: 1.0,
+            region: if id % 2 == 0 {
+                vec![]
+            } else {
+                vec![[0.0, 0.0, 1.0, 1.0]]
+            },
+        };
+        // The two monitors report in different orders; auto-hiding docks draw nothing.
+        for id in [1, 2] {
+            first.record_region(id, shape(id));
+            assert_eq!(first.splashes.len(), 4);
+        }
+        for id in [3, 4] {
+            first.painted(id);
+            assert_eq!(first.splashes.len(), 4);
+        }
+        for (done, id) in [2, 3, 4, 1].into_iter().enumerate() {
+            if id <= 2 {
+                first.painted(id);
+            } else {
+                first.record_region(id, shape(id));
+            }
+            assert_eq!(
+                first.splashes.len(),
+                3 - done,
+                "only bar {id}'s stand-in goes"
+            );
+            // SAFETY: a read-only query on our test window.
+            let exists = unsafe {
+                windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(windows[id as usize - 1]))
+            }
+            .as_bool();
+            assert!(!exists);
+        }
+        first.expire(Instant::now() + EXPIRE + Duration::from_secs(1));
+        assert!(first.splashes.is_empty());
+        assert_eq!(
+            first.cache.shapes.len(),
+            4,
+            "empty initial layouts are cached too"
+        );
+        first.hello(2);
+        assert!(!first.painted.contains(&2) && !first.laid_out.contains(&2));
     }
 }

@@ -25,6 +25,7 @@ mod media;
 mod net;
 mod overlay;
 mod pick;
+mod plates;
 mod plugins;
 mod registry;
 mod rpc;
