@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use windows::Win32::Foundation::{
-    CloseHandle, COLORREF, ERROR_FILE_NOT_FOUND, HWND, LPARAM, WPARAM,
+    COLORREF, CloseHandle, ERROR_FILE_NOT_FOUND, HWND, LPARAM, WPARAM,
 };
 use windows::Win32::System::Registry::{
     HKEY_CURRENT_USER, REG_DWORD, RRF_RT_REG_DWORD, RegDeleteKeyValueW, RegGetValueW,
@@ -393,9 +393,8 @@ fn is_veiled(hwnd: HWND) -> bool {
     }
     let (mut alpha, mut flags) = (u8::MAX, LAYERED_WINDOW_ATTRIBUTES_FLAGS(0));
     // SAFETY: the out pointers outlive the call.
-    let read = unsafe {
-        GetLayeredWindowAttributes(hwnd, None, Some(&mut alpha), Some(&mut flags))
-    };
+    let read =
+        unsafe { GetLayeredWindowAttributes(hwnd, None, Some(&mut alpha), Some(&mut flags)) };
     read.is_ok() && alpha == 0 && flags.0 & LWA_ALPHA.0 != 0
 }
 
@@ -421,6 +420,7 @@ fn explorer_windows(class: PCWSTR) -> Vec<HWND> {
     while let Ok(hwnd) = unsafe { FindWindowExW(None, after, class, PCWSTR::null()) } {
         after = Some(hwnd);
         let mut pid = 0;
+        // SAFETY: a read-only query on the handle just found; `pid` outlives the call.
         unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
         if pid != std::process::id() && is_explorer(pid) {
             found.push(hwnd);
@@ -494,8 +494,21 @@ mod tests {
         };
         // SAFETY: a plain hidden window of a system class, destroyed below.
         let create = |ex: WINDOW_EX_STYLE| unsafe {
-            CreateWindowExW(ex, w!("STATIC"), w!(""), WS_POPUP, 0, 0, 10, 10, None, None, None, None)
-                .unwrap()
+            CreateWindowExW(
+                ex,
+                w!("STATIC"),
+                w!(""),
+                WS_POPUP,
+                0,
+                0,
+                10,
+                10,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap()
         };
 
         let plain = create(WINDOW_EX_STYLE(0x88)); // tool window, topmost: like a taskbar

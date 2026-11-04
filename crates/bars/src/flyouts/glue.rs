@@ -227,6 +227,10 @@ impl App {
                 Target::Quick => system::action_center(Panel::Quick),
             };
         };
+        log::debug!(
+            "Windows key: opening the {} flyout on bar {index}",
+            target.flyout()
+        );
         self.take_keyboard(index, true, false);
         self.post_event(index, "open", &json!({ "flyout": target.flyout() }));
     }

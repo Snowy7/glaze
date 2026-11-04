@@ -11,9 +11,11 @@
 //! - The release of a lone press is replayed as the unassigned key `vkE8`, then the release, and
 //!   swallowed only once the replay is in. Explorer sees a Windows key combination, so Start
 //!   stays closed (AutoHotkey's "menu mask key"), and the launcher opens.
-//! - For Win+N and Win+A the mask key goes in *before* the letter, which is then swallowed (its
-//!   press, repeats and release): Explorer sees only Win, `vkE8`, and Win's release, a
-//!   combination, so neither Start nor the native panel opens.
+//! - For Win+N and Win+A the letter is swallowed (its press, repeats and release) after the mask
+//!   key went in, so Explorer sees a combination and opens neither Start nor its own panel. The
+//!   flyout opens on Win's release, replayed exactly like a lone press's: our injected input is
+//!   then the last input, which is what lets the bar take the foreground (opening at the letter,
+//!   with the user's own Win key still down, Windows refused it: measured).
 //!
 //! Everything goes through and Explorer acts as usual when a fullscreen app is in front, no bar
 //! can open the flyout, the main loop is hung, or the replay failed (so a key never stays down).
@@ -83,10 +85,12 @@ impl Target {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Pass,
-    /// The release of a lone Windows key press: swallow it, mask it and open the launcher.
-    Open,
-    /// The letter of Win+N or Win+A: mask the combination, swallow the letter and open the flyout.
-    /// If the hook can't, [`Machine::cancel_swallow`] lets the letter through.
+    /// The release of the Windows key, alone or after Win+N / Win+A: swallow it, replay it
+    /// masked and open the flyout.
+    Open(Target),
+    /// The letter of Win+N or Win+A: mask the combination and swallow the letter (the flyout
+    /// opens on Win's release). If the hook can't, [`Machine::cancel_swallow`] lets the letter
+    /// through.
     Panel(Target),
     /// The rest of a swallowed letter (its repeats and its release).
     Swallow,
@@ -101,6 +105,8 @@ pub struct Machine {
     combo: bool,
     /// The letter of Win+N / Win+A being swallowed, until its release.
     swallowing: Option<u16>,
+    /// The flyout that letter asked for, opened when Win comes up.
+    panel: Option<Target>,
     /// The epoch this state belongs to (see [`Machine::sync`]).
     epoch: u32,
 }
@@ -137,6 +143,7 @@ impl Machine {
                 match panel {
                     Some(target) => {
                         self.swallowing = Some(vk);
+                        self.panel = Some(target);
                         Action::Panel(target)
                     }
                     None => Action::Pass,
@@ -144,9 +151,14 @@ impl Machine {
             }
             (Some(held), false) if vk == held => {
                 let lone = !self.combo;
+                let panel = self.panel.take();
                 self.held = None;
                 self.combo = false;
-                if lone { Action::Open } else { Action::Pass }
+                match (lone, panel) {
+                    (true, _) => Action::Open(Target::Launcher),
+                    (false, Some(target)) => Action::Open(target),
+                    (false, None) => Action::Pass,
+                }
             }
             (None, true) if is_win(vk) => {
                 self.held = Some(vk);
@@ -161,6 +173,7 @@ impl Machine {
     /// goes through to Explorer after all, with its repeats and release.
     pub fn cancel_swallow(&mut self) {
         self.swallowing = None;
+        self.panel = None;
     }
 
     /// Forgets what was seen in an earlier epoch: a press that went down before the session
@@ -287,16 +300,21 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
             }
             hook.0.on_key(key.vkCode as u16, down, ours)
         });
+        if action != Action::Pass || is_win(key.vkCode as u16) {
+            log::debug!(
+                "Windows key hook: vk {:#x} down={down} ours={ours}: {action:?}",
+                key.vkCode
+            );
+        }
         match action {
             // Swallowed; the replay carries the release.
-            Action::Open if launcher_can_open() && replay_masked(key) => {
-                open(Target::Launcher);
+            Action::Open(target) if launcher_can_open() && replay_masked(key) => {
+                open(target);
                 return LRESULT(1);
             }
-            Action::Panel(target) => {
+            Action::Panel(_) => {
                 // Shift+Win+N and the like are Explorer's, even though Win went down first.
                 if launcher_can_open() && !modifiers_held() && send_mask() {
-                    open(target);
                     return LRESULT(1);
                 }
                 HOOK.with(|hook| {
@@ -306,7 +324,7 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
                 });
             }
             Action::Swallow => return LRESULT(1),
-            Action::Open | Action::Pass => {}
+            Action::Open(_) | Action::Pass => {}
         }
     }
     // SAFETY: passes the event on, as every hook must.
@@ -326,10 +344,10 @@ fn open(target: Target) {
 
 /// Is Shift, Ctrl or Alt down?
 fn modifiers_held() -> bool {
-    [VK_SHIFT, VK_CONTROL, VK_MENU]
+    [VK_SHIFT, VK_CONTROL, VK_MENU].iter().any(|vk| {
         // SAFETY: no preconditions.
-        .iter()
-        .any(|vk| unsafe { GetAsyncKeyState(i32::from(vk.0)) } < 0)
+        unsafe { GetAsyncKeyState(i32::from(vk.0)) < 0 }
+    })
 }
 
 /// A key press or release of ours (`OURS` in its extra info).
@@ -390,6 +408,7 @@ mod tests {
     const RWIN: u16 = VK_RWIN.0;
     const E: u16 = 0x45;
     const SHIFT: u16 = 0x10;
+    const OPEN: Action = Action::Open(Target::Launcher);
 
     fn run(events: &[(u16, bool, bool)]) -> Vec<Action> {
         let mut machine = Machine::default();
@@ -403,7 +422,7 @@ mod tests {
     fn a_lone_press_opens_the_launcher() {
         assert_eq!(
             run(&[(LWIN, true, false), (LWIN, false, false)]),
-            [Action::Pass, Action::Open]
+            [Action::Pass, OPEN]
         );
         assert_eq!(
             run(&[
@@ -411,7 +430,7 @@ mod tests {
                 (RWIN, true, false),
                 (RWIN, false, false)
             ]),
-            [Action::Pass, Action::Pass, Action::Open],
+            [Action::Pass, Action::Pass, OPEN],
             "auto-repeat is still a lone press"
         );
     }
@@ -420,8 +439,8 @@ mod tests {
     const A: u16 = 0x41;
 
     #[test]
-    fn win_n_and_win_a_open_their_flyouts_and_swallow_the_letter() {
-        use Action::{Panel, Pass, Swallow};
+    fn win_n_and_win_a_swallow_the_letter_and_open_their_flyouts_on_the_release() {
+        use Action::{Open, Panel, Pass, Swallow};
         assert_eq!(
             run(&[
                 (LWIN, true, false),
@@ -430,8 +449,14 @@ mod tests {
                 (N, false, false),
                 (LWIN, false, false)
             ]),
-            [Pass, Panel(Target::Notifications), Swallow, Swallow, Pass],
-            "the letter goes, and the Windows key's release isn't a lone press"
+            [
+                Pass,
+                Panel(Target::Notifications),
+                Swallow,
+                Swallow,
+                Open(Target::Notifications)
+            ],
+            "the letter goes; Win's release opens the flyout, not the launcher"
         );
         assert_eq!(
             run(&[
@@ -440,7 +465,29 @@ mod tests {
                 (A, false, false),
                 (RWIN, false, false)
             ]),
-            [Pass, Panel(Target::Quick), Swallow, Pass]
+            [Pass, Panel(Target::Quick), Swallow, Open(Target::Quick)]
+        );
+        // Win let go before the letter: the letter's release is still swallowed.
+        assert_eq!(
+            run(&[
+                (LWIN, true, false),
+                (A, true, false),
+                (LWIN, false, false),
+                (A, false, false)
+            ]),
+            [Pass, Panel(Target::Quick), Open(Target::Quick), Swallow]
+        );
+        // The next lone press is the launcher again.
+        assert_eq!(
+            run(&[
+                (LWIN, true, false),
+                (N, true, false),
+                (N, false, false),
+                (LWIN, false, false),
+                (LWIN, true, false),
+                (LWIN, false, false)
+            ])[5],
+            OPEN
         );
     }
 
@@ -456,7 +503,10 @@ mod tests {
             Action::Pass
         );
         // N alone, or our own N, is nobody's business.
-        assert_eq!(run(&[(N, true, false), (N, false, false)]), [Action::Pass; 2]);
+        assert_eq!(
+            run(&[(N, true, false), (N, false, false)]),
+            [Action::Pass; 2]
+        );
         assert_eq!(
             run(&[(LWIN, true, false), (N, true, true), (N, false, true)])[1..],
             [Action::Pass; 2]
@@ -467,13 +517,14 @@ mod tests {
     fn a_panel_that_cannot_open_lets_the_letter_through() {
         let mut machine = Machine::default();
         machine.on_key(LWIN, true, false);
-        assert_eq!(
-            machine.on_key(A, true, false),
-            Action::Panel(Target::Quick)
-        );
+        assert_eq!(machine.on_key(A, true, false), Action::Panel(Target::Quick));
         machine.cancel_swallow();
         assert_eq!(machine.on_key(A, false, false), Action::Pass);
-        assert_eq!(machine.on_key(LWIN, false, false), Action::Pass);
+        assert_eq!(
+            machine.on_key(LWIN, false, false),
+            Action::Pass,
+            "no flyout was asked for, and it isn't a lone press"
+        );
     }
 
     #[test]
@@ -509,7 +560,7 @@ mod tests {
         // Our own keys during the press (desktop switching) don't count either way.
         assert_eq!(
             run(&[(LWIN, true, false), (E, true, true), (LWIN, false, false)])[2],
-            Action::Open
+            OPEN
         );
     }
 
@@ -523,13 +574,13 @@ mod tests {
         assert_eq!(machine.on_key(LWIN, true, false), Action::Pass);
         assert_eq!(
             machine.on_key(LWIN, false, false),
-            Action::Open,
+            OPEN,
             "E came before this press, so it isn't a combination"
         );
         // The same epoch again changes nothing.
         machine.on_key(LWIN, true, false);
         machine.sync(1);
-        assert_eq!(machine.on_key(LWIN, false, false), Action::Open);
+        assert_eq!(machine.on_key(LWIN, false, false), OPEN);
     }
 
     #[test]
@@ -545,7 +596,7 @@ mod tests {
                 (LWIN, true, false),
                 (LWIN, false, false)
             ]),
-            [Action::Pass, Action::Pass, Action::Open]
+            [Action::Pass, Action::Pass, OPEN]
         );
         // After a combination, the next lone press counts again.
         assert_eq!(
@@ -556,7 +607,7 @@ mod tests {
                 (LWIN, true, false),
                 (LWIN, false, false)
             ])[4],
-            Action::Open
+            OPEN
         );
     }
 }

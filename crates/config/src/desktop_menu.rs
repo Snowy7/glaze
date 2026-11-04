@@ -249,7 +249,10 @@ mod tests {
             enabled: false,
             ..DesktopMenu::default()
         };
-        assert!(!off.is_default(), "turned off is a setting, so it's written");
+        assert!(
+            !off.is_default(),
+            "turned off is a setting, so it's written"
+        );
         let custom = DesktopMenu {
             enabled: true,
             items: vec![Entry::Builtin(Builtin::Sort)],
