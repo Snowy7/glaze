@@ -3,6 +3,9 @@ import {
   dayLabel,
   degrees,
   errorInfo,
+  placeRequest,
+  readLocated,
+  readPlace,
   hourLabel,
   pickLayout,
   placeNow,
@@ -99,7 +102,7 @@ describe("weather numbers and labels", () => {
   });
 
   it("explains an error by its code", () => {
-    expect(errorInfo("NotFound", "Atlantis").title).toBe("Unknown city");
+    expect(errorInfo("NotFound", "Atlantis").title).toBe("Unknown town");
     expect(errorInfo("NotFound", "Atlantis").hint).toContain("Atlantis");
     expect(errorInfo("PluginUnavailable", "x").title).toBe("Weather unavailable");
     expect(errorInfo(undefined, "x").title).toBe("Couldn't load the weather");
@@ -123,5 +126,26 @@ describe("the hourly strip", () => {
     expect(upcomingHours(hourly, "2026-11-04T14:20", 9).map((h) => h.time)).toEqual(["2026-11-04T14:00", "2026-11-04T15:00", "2026-11-04T16:00"]);
     expect(upcomingHours(hourly, "2026-11-04T14:20", 2)).toHaveLength(2);
     expect(upcomingHours(hourly, "2026-11-04T18:00", 5)).toEqual([]);
+  });
+});
+
+describe("where the weather is for", () => {
+  it("reads the location setting: automatic, a picked town, or an older city name", () => {
+    expect(readPlace(null)).toBeNull();
+    expect(readPlace({ name: " " })).toBeNull();
+    expect(readPlace({ name: "Bergen", lat: 60.39, lon: 5.32, country: "NO" })).toEqual({ name: "Bergen", lat: 60.39, lon: 5.32 });
+    expect(readPlace("Oslo")).toEqual({ name: "Oslo" });
+    expect(readPlace({ name: "Oslo", lat: 59.9 })).toEqual({ name: "Oslo" });
+  });
+
+  it("asks by coordinates when it has them, else by name", () => {
+    expect(placeRequest({ name: "Bergen", lat: 60.39, lon: 5.32 })).toEqual({ lat: 60.39, lon: 5.32 });
+    expect(placeRequest({ name: "Oslo" })).toEqual({ city: "Oslo" });
+  });
+
+  it("takes a located place only with its coordinates", () => {
+    expect(readLocated({ name: "Kensington", admin1: "England", lat: 51.5, lon: -0.19 })).toEqual({ name: "Kensington", lat: 51.5, lon: -0.19 });
+    expect(readLocated({ name: "Somewhere" })).toBeNull();
+    expect(readLocated(undefined)).toBeNull();
   });
 });

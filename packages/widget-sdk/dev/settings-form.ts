@@ -258,7 +258,31 @@ export function withDefaults(defs: readonly SettingDef[], values: Settings): Set
   return { ...Object.fromEntries(defs.map((d) => [d.key, d.default])), ...values };
 }
 
-export function settingsForm(defs: readonly SettingDef[], values: Settings, onChange: (s: Settings) => void): HTMLElement {
+/** A `place` setting: a town search (Enter takes the first match), or empty for automatic. */
+function placeEditor(def: Extract<SettingDef, { type: "place" }>, value: unknown, set: (v: unknown) => void, search?: PlaceSearch): HTMLElement {
+  const input = el("input");
+  input.type = "text";
+  input.placeholder = "Automatic (type a town, Enter)";
+  input.value = typeof value === "object" && value !== null && "name" in value && typeof value.name === "string" ? value.name : "";
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const query = input.value.trim();
+    if (query === "" || !def.search || !search) return set(null);
+    void search(def.search.plugin, def.search.method, query).then((found) => {
+      const first = Array.isArray(found) ? (found[0] as { name?: unknown; lat?: unknown; lon?: unknown } | undefined) : undefined;
+      if (first && typeof first.name === "string" && typeof first.lat === "number" && typeof first.lon === "number") {
+        input.value = first.name;
+        set({ name: first.name, lat: first.lat, lon: first.lon });
+      }
+    });
+  });
+  return input;
+}
+
+/** How the harness's form asks a widget's plugin for place suggestions. */
+export type PlaceSearch = (plugin: string, method: string, query: string) => Promise<unknown>;
+
+export function settingsForm(defs: readonly SettingDef[], values: Settings, onChange: (s: Settings) => void, search?: PlaceSearch): HTMLElement {
   const root = el("div");
   const current = withDefaults(defs, values);
   if (defs.length === 0) {
@@ -274,6 +298,18 @@ export function settingsForm(defs: readonly SettingDef[], values: Settings, onCh
     if (def.group !== undefined && def.group !== group) root.append(el("h2", undefined, def.group));
     group = def.group;
 
+    if (def.type === "place") {
+      root.append(
+        labelled(
+          def.label,
+          placeEditor(def, current[def.key], (v) => {
+            current[def.key] = v;
+            emit();
+          }, search),
+        ),
+      );
+      continue;
+    }
     if (def.type === "list") {
       root.append(el("div", "note", def.label));
       const value = current[def.key];

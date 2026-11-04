@@ -164,14 +164,54 @@ export function dayLabel(date, index, locale) {
   return new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(Date.UTC(y, m - 1, d));
 }
 
+/** @typedef {{ name: string, lat?: number, lon?: number }} Where */
+
 /**
- * What to tell the user when loading fails: `code` is the wire error code of the failed call.
+ * The `city` setting (a `place`): null is automatic, else a town. Untrusted JSON, so anything
+ * malformed counts as automatic.
+ * @param {unknown} value
+ * @returns {Where | null}
+ */
+export function readPlace(value) {
+  // A plain name, as an older text setting saved it (the host already turns it into { name }).
+  if (typeof value === "string") return value.trim() ? { name: value.trim() } : null;
+  if (typeof value !== "object" || value === null || !("name" in value) || typeof value.name !== "string" || !value.name.trim()) return null;
+  const lat = "lat" in value && typeof value.lat === "number" && Number.isFinite(value.lat) ? value.lat : undefined;
+  const lon = "lon" in value && typeof value.lon === "number" && Number.isFinite(value.lon) ? value.lon : undefined;
+  const name = value.name.trim();
+  return lat !== undefined && lon !== undefined ? { name, lat, lon } : { name };
+}
+
+/**
+ * How to ask the plugin for a place: by coordinates when known, else by name (an older city
+ * setting, which the plugin geocodes).
+ * @param {Where} place
+ * @returns {{ lat: number, lon: number } | { city: string }}
+ */
+export function placeRequest(place) {
+  return place.lat !== undefined && place.lon !== undefined ? { lat: place.lat, lon: place.lon } : { city: place.name };
+}
+
+/**
+ * The plugin's `locate` answer as a place, or null when it has none: the town (or suburb) and
+ * its coordinates.
+ * @param {unknown} reply
+ * @returns {Where | null}
+ */
+export function readLocated(reply) {
+  const place = readPlace(reply);
+  return place && place.lat !== undefined ? place : null;
+}
+
+/**
+ * What to tell the user when loading fails: `code` is the wire error code of the failed call,
+ * `city` the name of a town looked up by name ("" for coordinates or automatic).
  * @param {string | undefined} code
  * @param {string} city
  */
 export function errorInfo(code, city) {
   if (code === "NotFound") {
-    return { title: "Unknown city", hint: city ? `Nothing found for "${city}". Try another name, or set a latitude and longitude.` : "Try another name, or set a latitude and longitude." };
+    return { title: "Unknown town", hint: city ? `Nothing found for "${city}". Choose the town again in this widget's settings.` : "Choose a town in this widget's settings." };
   }
   if (code === "PluginUnavailable") return { title: "Weather unavailable", hint: "Can't reach the weather service. Trying again every minute." };
   return { title: "Couldn't load the weather", hint: "Trying again every minute." };

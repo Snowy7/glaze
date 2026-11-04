@@ -2,7 +2,7 @@
 // Countdown to (or since) a date. Digits: the biggest unit that isn't zero as the hero ("57 days"),
 // the rest as a quiet line ("11 h 11 min"), then the date and how far along. Ring: the same hero
 // inside an arc of the progress. One timer, aligned to the minute (or second), only while visible.
-import { $, onVisible, pad2, setText, trackSettings, trackSize } from "./kit.js";
+import { $, onVisible, setText, trackSettings, trackSize } from "./kit.js";
 import { breakdown, phaseOf, progress, resolveTarget } from "./count.js";
 
 /** @typedef {{ n: number, text: string, label: string }} Part */

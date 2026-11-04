@@ -1,6 +1,7 @@
 import "./style.css";
 import { createEditor, type Editor } from "./edit";
 import { createFrames } from "./frames";
+import { takeReply } from "./calls";
 import { listen, send } from "./host";
 import { layerOf } from "./placement";
 
@@ -20,7 +21,7 @@ listen((message) => {
     }
     frames.sync(message);
     editor?.sync(message);
-  } else {
+  } else if (!takeReply(message)) {
     frames.onHost(message);
   }
 });

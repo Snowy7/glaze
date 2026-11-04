@@ -1,7 +1,7 @@
 // Pure helpers behind the settings form (docs/widgets.md, "Widget manifest"): grouping, select
 // options, color encoding with alpha, file names. No DOM, so they are unit-tested.
 
-import type { SelectOption, SettingDef } from "./protocol";
+import type { SelectOption, SettingDef, Place, PlaceCandidate } from "./protocol";
 
 // ---- groups ----
 
@@ -43,6 +43,29 @@ export const optionText = (option: SelectOption): string => {
   const icon = optionIcon(option);
   return icon ? `${icon} ${optionLabel(option)}` : optionLabel(option);
 };
+
+/** A saved `place` value: a picked town, or null (automatic, or anything malformed). */
+export function readPlace(value: unknown): Place | null {
+  if (typeof value !== "object" || value === null || !("name" in value) || typeof value.name !== "string" || value.name === "") return null;
+  const lat = "lat" in value && typeof value.lat === "number" ? value.lat : undefined;
+  const lon = "lon" in value && typeof value.lon === "number" ? value.lon : undefined;
+  return lat !== undefined && lon !== undefined ? { name: value.name, lat, lon } : { name: value.name };
+}
+
+/** A search answer as candidates, keeping only well-formed ones (the plugin is untrusted). */
+export function readCandidates(value: unknown): PlaceCandidate[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (c): c is PlaceCandidate =>
+      typeof c === "object" && c !== null && typeof c.name === "string" && c.name !== "" && Number.isFinite(c.lat) && Number.isFinite(c.lon),
+  );
+}
+
+/** A candidate as one line: "Springfield, Illinois, United States" (no repeats, no blanks). */
+export function placeLine(c: PlaceCandidate): string {
+  const parts = [c.name, c.admin1, c.country].filter((p): p is string => typeof p === "string" && p.trim() !== "");
+  return parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+}
 
 export type SelectStyle = "segmented" | "icons" | "dropdown";
 

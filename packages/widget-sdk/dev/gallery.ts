@@ -14,10 +14,11 @@ import { FakeBackend } from "./fake";
 import { BridgeHost, type HostOutput } from "./host";
 import { seedSharedFromParams } from "./seed";
 import { lookFromParams } from "./look";
-import { mockPlugin, type FolderMocks } from "./mock-plugins";
+import { mockPlugin, setMockLocate, type FolderMocks } from "./mock-plugins";
 import { withDefaults } from "./settings-form";
 
 const q = new URLSearchParams(location.search);
+setMockLocate(q.get("locate"));
 const num = (key: string, fallback: number) => {
   const n = Number(q.get(key));
   return q.has(key) && Number.isFinite(n) && n > 0 ? n : fallback;

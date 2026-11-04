@@ -1,6 +1,6 @@
 // @ts-check
 import { $, every, onVisible, setText, trackSettings, trackSize } from "./kit.js";
-import { dayLabel, degrees, errorInfo, hourLabel, pickLayout, placeNow, rangeBar, sceneFor, slotCount, upcomingHours } from "./weather-logic.js";
+import { dayLabel, degrees, errorInfo, hourLabel, pickLayout, placeNow, placeRequest, rangeBar, readLocated, readPlace, sceneFor, slotCount, upcomingHours } from "./weather-logic.js";
 
 /** @typedef {import("./weather-logic.js").Current} Current */
 /** @typedef {import("./weather-logic.js").Forecast} Forecast */
@@ -9,6 +9,7 @@ import { dayLabel, degrees, errorInfo, hourLabel, pickLayout, placeNow, rangeBar
 /** @typedef {import("./weather-logic.js").Variant} Variant */
 
 const REFRESH_MS = 10 * 60_000; // the plugin caches for the same time
+const RELOCATE_MS = 30 * 60_000; // where this PC is changes slowly; a laptop moves now and then
 const RETRY_MS = 60_000;
 const VARIANTS = ["card", "compact", "forecast"];
 // Smallest slots, in px, of the hourly strip (and its gap), a day row and a day column.
@@ -34,7 +35,8 @@ const els = {
 };
 const layers = [...els.art.querySelectorAll("[data-layer]")].filter((g) => g instanceof SVGElement);
 
-const defaults = { variant: "card", city: "London", lat: "", lon: "", units: "metric", animate: true };
+// `city` is a place setting: null (automatic) or { name, lat?, lon? } (readPlace).
+const defaults = { variant: "card", city: /** @type {unknown} */ (null), units: "metric", animate: true };
 let settings = defaults;
 /** @type {Variant} */
 let variant = "card";
@@ -48,13 +50,30 @@ let settingsKnown = false;
 let data;
 let hourKey = "";
 
-/** `lat`/`lon` win when both parse; otherwise the city. */
-function placeParams() {
-  const lat = Number.parseFloat(settings.lat);
-  const lon = Number.parseFloat(settings.lon);
-  if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
-  const city = settings.city.trim();
-  return city ? { city } : undefined;
+/** Where this PC is, as the plugin last said, and when (kept in storage for a fast start). */
+/** @type {{ place: import("./weather-logic.js").Where, at: number } | undefined} */
+let located;
+/** The name to show for the place, when the setting or `locate` gave one. */
+let placeName = "";
+
+/**
+ * Where this PC is: the cached answer while fresh, else the plugin's `locate` (Windows' location,
+ * else the network's), remembered in storage. Throws when neither knows.
+ */
+async function locate() {
+  if (located && Date.now() - located.at < RELOCATE_MS) return located.place;
+  const place = readLocated(await mypaper.plugin("weather", "locate", {}));
+  if (!place) throw Object.assign(new Error("no location"), { code: "NotFound" });
+  located = { place, at: Date.now() };
+  void mypaper.storage.set("located", located);
+  return place;
+}
+
+/** @param {unknown} saved */
+function readCache(saved) {
+  if (typeof saved !== "object" || saved === null || !("place" in saved) || !("at" in saved) || typeof saved.at !== "number") return undefined;
+  const place = readLocated(saved.place);
+  return place ? { place, at: saved.at } : undefined;
 }
 
 /** @param {string} icon */
@@ -90,7 +109,7 @@ function renderNow() {
   const today = forecast.days[0];
   setText(els.temp, degrees(current.temperature));
   setText(els.cond, current.condition);
-  setText(els.place, current.location.name);
+  setText(els.place, placeName || current.location.name);
   setText(els.hilo, today ? `H ${degrees(today.max)}  L ${degrees(today.min)}` : "");
   els.miniUse.setAttribute("href", iconHref(current.icon));
 
@@ -177,22 +196,39 @@ function render() {
   renderLists();
 }
 
-/** @param {string} title @param {string} hint */
-function showError(title, hint) {
+/** @param {string} title @param {string} hint @param {"error" | "locating"} [state] */
+function showError(title, hint, state = "error") {
   data = undefined;
-  card.dataset["state"] = "error";
+  card.dataset["state"] = state;
   setText(els.statusTitle, title);
   setText(els.statusHint, hint);
 }
 
 async function load() {
-  const params = placeParams();
-  if (!params) {
-    showError("Set a city", "Add a city (or a latitude and longitude) in this widget's settings.");
-    return;
-  }
+  const picked = readPlace(settings.city);
   const mine = ++generation;
   lastTry = Date.now();
+  /** @type {{ lat: number, lon: number } | { city: string }} */
+  let params;
+  if (picked) {
+    params = placeRequest(picked);
+    placeName = picked.lat !== undefined ? picked.name : "";
+  } else {
+    // Automatic: say so while the first answer is on its way, then show the town found.
+    if (!data && !located) showError("Locating…", "", "locating");
+    try {
+      const here = await locate();
+      if (mine !== generation) return;
+      params = placeRequest(here);
+      placeName = here.name;
+    } catch {
+      if (mine !== generation) return;
+      failed = true;
+      if (data) return; // keep the last good weather
+      showError("Location unavailable", "Turn on location in Windows Settings, or choose a town in this widget's settings.");
+      return;
+    }
+  }
   try {
     const request = { ...params, units: settings.units };
     const [current, forecast] = await Promise.all([
@@ -211,7 +247,7 @@ async function load() {
     // Keep showing the last good data if we have it.
     if (data) return;
     // MypaperError: `code` is one of the documented wire codes.
-    const { title, hint } = errorInfo(/** @type {{ code?: string }} */ (err).code, settings.city);
+    const { title, hint } = errorInfo(/** @type {{ code?: string }} */ (err).code, "city" in params ? params.city : "");
     showError(title, hint);
   }
 }
@@ -246,8 +282,12 @@ const lists = new ResizeObserver(renderLists);
 lists.observe(els.hours);
 lists.observe(els.days);
 
+void mypaper.storage.get("located").then((saved) => {
+  located ??= readCache(saved);
+});
+
 trackSettings(defaults, (next) => {
-  const changedPlace = !settingsKnown || next.city !== settings.city || next.lat !== settings.lat || next.lon !== settings.lon || next.units !== settings.units;
+  const changedPlace = !settingsKnown || JSON.stringify(next.city) !== JSON.stringify(settings.city) || next.units !== settings.units;
   settings = next;
   settingsKnown = true;
   variant = /** @type {Variant} */ (VARIANTS.includes(next.variant) ? next.variant : "card");

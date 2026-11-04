@@ -22,6 +22,26 @@ const SCENARIOS: Record<string, { code: number; condition: string; icon: string;
   storm: { code: 95, condition: "Thunderstorm", icon: "thunderstorm", temp: 16.9 },
 };
 
+/** Towns the mock `search` knows, and where `locate` says this PC is (?locate=ok|slow|fail). */
+const TOWNS = [
+  { name: "Kensington", admin1: "England", admin2: "Greater London", country: "United Kingdom", country_code: "GB", lat: 51.4991, lon: -0.1938, population: 64681 },
+  { name: "Bergen", admin1: "Vestland", country: "Norway", country_code: "NO", lat: 60.3913, lon: 5.3221, population: 285601 },
+  { name: "Bergen op Zoom", admin1: "North Brabant", country: "Netherlands", country_code: "NL", lat: 51.495, lon: 4.2917, population: 66354 },
+  { name: "Springfield", admin1: "Illinois", country: "United States", country_code: "US", lat: 39.8017, lon: -89.6437, population: 114394 },
+  { name: "Springfield", admin1: "Missouri", country: "United States", country_code: "US", lat: 37.2153, lon: -93.2982, population: 169176 },
+  { name: "Tromsø", admin1: "Troms", country: "Norway", country_code: "NO", lat: 69.6496, lon: 18.957, population: 77544 },
+];
+let locating: "ok" | "slow" | "fail" = "ok";
+/** The harness's `locate=` parameter: how the mock `locate` behaves. */
+export function setMockLocate(mode: string | null): void {
+  locating = mode === "fail" || mode === "slow" ? mode : "ok";
+}
+
+/** The mock town nearest to a point (for a location's name from coordinates). */
+function nearest(lat: number, lon: number) {
+  return TOWNS.reduce((best, t) => (Math.hypot(t.lat - lat, t.lon - lon) < Math.hypot(best.lat - lat, best.lon - lon) ? t : best));
+}
+
 function asParams(value: unknown): Params {
   return typeof value === "object" && value !== null ? { ...value } : {};
 }
@@ -45,6 +65,15 @@ function hourIcon(code: number, isDay: boolean): string {
 
 function weather(method: string, raw: unknown): unknown {
   const p = asParams(raw);
+  if (method === "locate") {
+    if (locating === "fail") throw new MypaperError("NotFound", "location unavailable");
+    const here = TOWNS[0]!;
+    return { ...here, source: "windows" };
+  }
+  if (method === "search") {
+    const query = typeof p["query"] === "string" ? p["query"].trim().toLowerCase() : "";
+    return query.length < 2 ? [] : TOWNS.filter((t) => t.name.toLowerCase().startsWith(query));
+  }
   const imperial = p["units"] === "imperial";
   const t = (c: number) => Math.round((imperial ? c * 1.8 + 32 : c) * 10) / 10;
   const city = typeof p["city"] === "string" && p["city"] ? p["city"] : null;
@@ -52,11 +81,13 @@ function weather(method: string, raw: unknown): unknown {
   if (key === "nowhere") throw new MypaperError("NotFound", `no place called "${city}"`);
   if (key === "offline") throw new MypaperError("PluginUnavailable", "weather service unreachable");
   const scenario = SCENARIOS[key] ?? SCENARIOS["partly"]!;
+  const lat = typeof p["lat"] === "number" ? p["lat"] : 51.5;
+  const lon = typeof p["lon"] === "number" ? p["lon"] : -0.12;
   const location = {
-    name: city ?? "Mockville",
-    country: "Testland",
-    lat: typeof p["lat"] === "number" ? p["lat"] : 51.5,
-    lon: typeof p["lon"] === "number" ? p["lon"] : -0.12,
+    name: city ?? nearest(lat, lon).name,
+    country: city ? "Testland" : nearest(lat, lon).country,
+    lat,
+    lon,
   };
   const units = imperial
     ? { temperature: "°F", speed: "mph", precipitation: "in" }
@@ -124,7 +155,7 @@ export type FolderMocks = Record<string, Record<string, unknown>>;
 
 export async function mockPlugin(id: string, method: string, params: unknown, folder: FolderMocks = {}): Promise<unknown> {
   // Feel like a process; the weather city "slow" never answers (to look at loading states).
-  const slow = id === "weather" && asParams(params)["city"] === "slow";
+  const slow = id === "weather" && (asParams(params)["city"] === "slow" || (method === "locate" && locating === "slow"));
   await new Promise((r) => setTimeout(r, slow ? 600_000 : 120));
   const fromFolder = folder[id]?.[method];
   if (fromFolder !== undefined) return fromFolder;

@@ -77,7 +77,35 @@ export interface ListSetting
   maxItems?: number;
 }
 
-export type SettingDef = ScalarSetting | ListSetting;
+/** A `place` value other than automatic: a name, and its coordinates when known. */
+export interface Place {
+  name: string;
+  lat?: number;
+  lon?: number;
+}
+
+/** A town suggestion, as a `place` setting's `search` method answers `{ query }`. */
+export interface PlaceCandidate {
+  name: string;
+  admin1?: string;
+  admin2?: string;
+  country?: string;
+  country_code?: string;
+  lat: number;
+  lon: number;
+  population?: number;
+}
+
+/**
+ * A place: `null` is automatic (where this PC is), else a picked town. The form searches as you
+ * type with `search`, a method of one of the widget's plugins. A plain string saved by an older
+ * text setting arrives as `{ name }`.
+ */
+export interface PlaceSetting extends SettingBase<"place", Place | null> {
+  search?: { plugin: string; method: string };
+}
+
+export type SettingDef = ScalarSetting | ListSetting | PlaceSetting;
 export type SettingType = SettingDef["type"];
 
 /** Where a widget lives: the desktop layer, an always-on-top overlay, or a bar's popup. */

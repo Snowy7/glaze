@@ -2,7 +2,7 @@
    data-variant  card | compact | forecast (the user's choice)
    data-layout   from the size: mini (one short row) | strip (one wide row) | stack | tall | side
    data-days     rows | cols (how the days are laid out)
-   data-state    loading | ready | error       data-motion  on | off
+   data-state    loading | locating | ready | error       data-motion  on | off
    The grid areas below say what each layout holds; counts of hours and days come from main.js,
    which measures their boxes. Groups are separated by spacing, never by boxes where there may be no
    surface; the hourly slots are .tile, which the style paints even on a bare wallpaper. */
@@ -490,7 +490,10 @@ html[data-surface="none"] .sk {
   }
 }
 
-.card[data-state="error"] .status {
+.card[data-state="locating"] .status-ico {
+  animation: sk 1.2s ease-in-out infinite alternate;
+}
+.card:is([data-state="error"], [data-state="locating"]) .status {
   display: grid;
   place-content: center;
   justify-items: center;

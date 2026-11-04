@@ -117,9 +117,8 @@ function span(className, text) {
  * One headline. A button when it has a link to open, a plain block otherwise.
  * @param {Item} item
  * @param {number} nowSec
- * @param {boolean} lead the first one: it gets the accent bar (shown when it is large)
  */
-function itemElement(item, nowSec, lead) {
+function itemElement(item, nowSec) {
   const el = document.createElement(isWebLink(item.link) ? "button" : "div");
   el.className = settings.variant === "cards" ? "item tile" : "item";
   el.setAttribute("role", "listitem");
@@ -186,7 +185,7 @@ function render() {
   head.hidden = false;
   const nowSec = Date.now() / 1000;
   list.dataset.variant = settings.variant === "cards" ? "cards" : "list";
-  list.replaceChildren(...cache.items.slice(0, clamp(Math.round(settings.maxItems), 3, 30)).map((item, i) => itemElement(item, nowSec, i === 0)));
+  list.replaceChildren(...cache.items.slice(0, clamp(Math.round(settings.maxItems), 3, 30)).map((item) => itemElement(item, nowSec)));
 
   // One quiet line for anything the reader should know: a stale list, or feeds that failed.
   const failed = cache.errors.length;

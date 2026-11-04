@@ -12,7 +12,7 @@ import { FakeBackend, THEMES } from "./fake";
 import { BridgeHost, type HostOutput } from "./host";
 import { seedSharedFromParams } from "./seed";
 import { appearanceForm, lookFromParams } from "./look";
-import { mockPlugin, type FolderMocks } from "./mock-plugins";
+import { mockPlugin, setMockLocate, type FolderMocks } from "./mock-plugins";
 import { settingsForm, withDefaults } from "./settings-form";
 
 interface WidgetInfo {
@@ -26,6 +26,7 @@ interface PluginInfo {
 }
 
 const q = new URLSearchParams(location.search);
+setMockLocate(q.get("locate"));
 const num = (key: string, fallback: number) => {
   const n = Number(q.get(key));
   return q.has(key) && Number.isFinite(n) && n > 0 ? n : fallback;
@@ -389,11 +390,16 @@ function renderPanel() {
   // settings
   panel.append(el("h2", undefined, "Settings"));
   panel.append(
-    settingsForm(m.settings ?? [], state.settings, (s) => {
-      state.settings = s;
-      saveSettings(m.id, s);
-      host?.setSettings(s);
-    }),
+    settingsForm(
+      m.settings ?? [],
+      state.settings,
+      (s) => {
+        state.settings = s;
+        saveSettings(m.id, s);
+        host?.setSettings(s);
+      },
+      (plugin, method, query) => backend.pluginCall(plugin, method, { query }),
+    ),
   );
   const reset = el("button", undefined, "Reset settings");
   reset.addEventListener("click", () => {
