@@ -12,13 +12,17 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Vec2, Vec3};
 use mypaper_theme::{Fit, LoadedTheme, SceneWallpaper};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use windows::Win32::Foundation::HWND;
 
 use super::blit::BlitQuad;
-use super::{Frame, Redraw, Source, begin};
+use super::{Frame, Redraw, Source, Visibility, begin};
 use crate::gpu::Gpu;
+use input::SceneInput;
 use load::{SceneData, Vertex};
 use math::{Sphere, View};
 
+#[path = "scene_input.rs"]
+mod input;
 #[path = "scene_load.rs"]
 mod load;
 #[path = "scene_math.rs"]
@@ -105,6 +109,10 @@ pub struct SceneSource {
     screens: Vec<Option<ScreenState>>,
     /// The live multisampled attachments, shared by same-sized screens.
     attachments: Vec<Weak<Attachments>>,
+    /// Drag-to-orbit for `interactive` scenes; `None` (and nothing listening) otherwise.
+    input: Option<SceneInput>,
+    /// Per screen: visible (not covered, not held). Input listens while any is.
+    live: Vec<bool>,
 }
 
 /// One draw: an index range plus the texture bound for it.
@@ -220,11 +228,20 @@ impl SceneSource {
             globals_layout: gpu_resources.globals_layout,
             screens: Vec::new(),
             attachments: Vec::new(),
+            input: config
+                .interactive
+                .then(SceneInput::start)
+                .transpose()
+                .inspect_err(|e| log::warn!("scene: no mouse input: {e:#}"))
+                .unwrap_or(None),
+            // Every screen is visible until the engine says otherwise: starting empty would let
+            // the first screen to report "covered" look like "all covered".
+            live: vec![true; mypaper_desktop::monitors().len().max(1)],
         })
     }
 
     fn animated(&self) -> bool {
-        self.orbit != 0.0 || self.parallax != 0.0
+        self.orbit != 0.0 || self.parallax != 0.0 || self.input.is_some()
     }
 }
 
@@ -254,12 +271,28 @@ impl Source for SceneSource {
         let dt = frame.clock.saturating_sub(state.last_clock).as_secs_f32();
         state.last_clock = frame.clock;
         state.lean = math::approach(state.lean, mouse, dt, LEAN_RATE);
+        // Dragging adds to the orbit, and (as lean, so it works with no parallax) tilts the camera.
+        let drag = self
+            .input
+            .as_ref()
+            .map(SceneInput::drag)
+            .unwrap_or_default();
+        let lean_gain = if self.input.is_some() {
+            self.parallax.max(0.12)
+        } else {
+            self.parallax
+        };
+        let lean = if lean_gain > 0.0 {
+            state.lean * (self.parallax / lean_gain) + Vec2::new(0.0, drag.pitch)
+        } else {
+            state.lean
+        };
         let view = math::camera(
             self.sphere,
             w / h,
-            math::azimuth(self.orbit, frame.clock),
-            state.lean,
-            self.parallax,
+            math::azimuth(self.orbit, frame.clock) + drag.yaw,
+            lean,
+            lean_gain,
         );
         let globals = self.globals.with_view(&view);
         gpu.queue
@@ -316,6 +349,15 @@ impl Source for SceneSource {
         } else {
             Redraw::OnChange
         }
+    }
+
+    fn set_visibility(&mut self, screen: usize, _hwnd: HWND, visibility: Visibility) {
+        let Some(input) = &mut self.input else { return };
+        if self.live.len() <= screen {
+            self.live.resize(screen + 1, true);
+        }
+        self.live[screen] = visibility == Visibility::Live;
+        input.set_live(self.live.iter().any(|&live| live));
     }
 }
 

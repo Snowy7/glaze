@@ -61,25 +61,40 @@
 | `image` | Any format WIC decodes, with EXIF rotation | decoded once at screen size, drawn once |
 | `slideshow` | A folder, cross-faded | idle between slides; the next image is decoded ahead |
 | `video` | H.264, HEVC, VP9 or AV1, in 8-bit or 10-bit HDR | hardware decode, zero-copy into the GPU, paused when hidden |
-| `scene` | A glTF / GLB scene with orbit and parallax | few draw calls; static scenes draw once |
-| `web` | A local page or URL (WebView2) | suspended while hidden; a still is shown on paused screens |
+| `scene` | A glTF / GLB scene with orbit and parallax; optionally interactive (drag to orbit) | few draw calls; static scenes draw once |
+| `web` | A local page or URL (WebView2); optionally interactive (mouse input over the bare desktop) | suspended while hidden; a still is shown on paused screens |
 | `app` | Any renderer that takes a window handle (e.g. Unity's `-parentHWND`) | the process is suspended while hidden |
 
 The bundled photos and video are public-domain NASA media ([credits](themes/CREDITS.md)).
 
 ### Widgets
 
-21 widgets, each in its own sandbox:
+28 widgets, each in its own sandbox:
 
-- **Time**: clock, analog clock, world clock, calendar, countdown, timer.
-- **Media and web**: now playing, weather, RSS, crypto, photo frame.
-- **System**: system monitor, battery, network, disk, system info.
-- **Tools**: notes, todo, launcher, search, quote.
+- **Time**: clock (desk, flip or minimal), analog clock, world clock, calendar (month, agenda or
+  week), countdown, timer.
+- **Media**: now playing (card, art backdrop or strip), media pill, audio visualizer.
+- **Web**: weather (animated scenes, hourly and 5-day), RSS, crypto.
+- **System**: system monitor (rings, bars or sparklines), battery, network, disk, system info, quick
+  toggles.
+- **Tools and personal**: notes, todo, activity heatmap, launcher, app shortcuts, search, quote,
+  greeting, photo, and photo frame.
 
-Edit mode (**Ctrl+Alt+Shift+W**):
+**Five design styles** apply to every widget:
+- **minimal**;
+- **depth**: raised 3D cards;
+- **neon**: glowing outlines;
+- **paper**: matte;
+- **aero**: glossy glass.
+
+Each combines with a surface (none, glass or solid), a tint, blur, radius, text tone, accent, font
+and scale.
+
+**Edit mode** (**Ctrl+Alt+Shift+W**):
 - drag to move and resize within each widget's own limits, snapping to the grid;
-- add, duplicate and restyle any widget;
-- set the surface: none, glass or solid.
+- add, duplicate and restyle any widget.
+
+**Overlay widgets** (**Ctrl+Alt+Shift+O**) float above your apps.
 
 Widgets keep running on any monitor you can see, and pause only where they're covered.
 
@@ -102,6 +117,16 @@ A theme can set:
 
 These apply only to Windows' own windows, never to games or other apps. See
 [docs/windows-styling.md](docs/windows-styling.md).
+
+### Desktop extras
+
+- **Desktop right-click menu (opt-in):** our own themed menu on the bare desktop, opening in under
+  10 ms. Right-clicking an icon, or pressing Shift, still gives the native menu.
+- **Cursor themes:** two built-in sets, dark and light.
+- **Desktop tray menu:** desktop icon size and visibility.
+- **Classic Windows 11 context menu (opt-in):** a reversible toggle.
+
+Every change is journaled and restored. See [docs/desktop-extras.md](docs/desktop-extras.md).
 
 ### Studio
 
@@ -230,6 +255,7 @@ frontend, rust-lld and a DX12-only wgpu ([engine notes](docs/engine-notes.md)).
 | [bars.md](docs/bars.md) | Top bar, dock and taskbar |
 | [windows-styling.md](docs/windows-styling.md) | Accent, borders, Mica, dark mode, and what is restored |
 | [web-and-app-wallpapers.md](docs/web-and-app-wallpapers.md) | Web and external-renderer wallpapers |
+| [desktop-extras.md](docs/desktop-extras.md) | Desktop right-click menu, cursor themes, classic menu, interactive wallpapers |
 | [engine-notes.md](docs/engine-notes.md) | Memory findings, hot-patching status |
 | [research/customization-landscape.md](docs/research/customization-landscape.md) | How Seelen UI, YASB, ManagedShell, Rainmeter and others do it, with sources |
 
@@ -241,10 +267,6 @@ In progress:
 - **Menus:** our own Start menu, quick settings, network, audio mixer, language, calendar,
   notifications, and a native tray host.
 - **Performance:** a measured, enforced budget, and an instant first paint at login.
-- **Widgets v2:** design styles (depth, neon, aero, paper), redesigned hero widgets, an audio
-  visualizer, and overlay widgets.
-- **Desktop extras:** an optional custom desktop right-click menu, cursor themes, and interactive
-  wallpapers.
 
 Not planned: restyling Explorer's own UI or other apps from the inside. That needs code injection,
 which mypaper doesn't do.

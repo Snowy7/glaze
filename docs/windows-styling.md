@@ -36,6 +36,7 @@ rejected.
 | `corners` | `default`, `round`, `small`, `square` | Corner rounding (`DWMWA_WINDOW_CORNER_PREFERENCE`) |
 | `backdrop` | `auto`, `none`, `mica`, `acrylic`, `tabbed` | System backdrop (`DWMWA_SYSTEMBACKDROP_TYPE`) |
 | `dark_mode` | `true` / `false` | Dark title bars (`DWMWA_USE_IMMERSIVE_DARK_MODE`) and the system's app/system theme |
+| `cursors` | `"mypaper-dark"`, `"mypaper-light"`, a set name, or a folder | The mouse cursor scheme (`HKCU\Control Panel\Cursors` + `SPI_SETCURSORS`), journaled like the accent; see [desktop-extras.md](desktop-extras.md#cursor-themes) |
 
 Border, caption, corner and backdrop attributes need Windows 11 (build 22000, and 22621 for
 `backdrop`); older builds ignore them. Dark title bars need Windows 10 20H1 or later. Whether a
@@ -108,8 +109,10 @@ Nothing is changed without a way back.
   `DWMWA_COLOR_DEFAULT`, `DWMWCP_DEFAULT` and `DWMSBT_AUTO` back for every attribute the theme set.
   Windows closed in the meantime are skipped, and the allowlist is checked again before a window is
   written to, in case its handle was reused.
-- **Registry**: before the first write, the original of every value (including "absent") is saved to
-  `%LOCALAPPDATA%\mypaper\undo.json`, written atomically. Later palette updates keep the first
+- **Registry**: before the first write, the original of every value (including "absent", and its
+  exact type: `REG_DWORD`, `REG_BINARY`, `REG_SZ`, `REG_EXPAND_SZ`) is saved to
+  `%LOCALAPPDATA%\mypaper\undo.json`, written atomically. Registry keys the styling had to create are
+  recorded too and removed again. Later palette updates keep the first
   originals. Restoring writes the originals back (deleting what was absent), announces the change,
   then re-checks and rewrites any value Windows changed in reaction (it keeps the DWM accent in sync
   with `AccentColorMenu`), so the registry ends up as it was. The journal is deleted after that.

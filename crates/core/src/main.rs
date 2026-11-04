@@ -18,6 +18,7 @@
 
 mod bars;
 mod child;
+mod desktop_extras;
 mod restart;
 mod styling;
 mod tray;
@@ -40,6 +41,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::w;
 
 use crate::child::{Outcome, Supervised};
+use crate::desktop_extras::DesktopExtras;
 use crate::styling::{Styling, WM_STYLE_CONFIG, WM_STYLE_PALETTE};
 use crate::tray::{Tray, WM_RESTART_WALLPAPER};
 
@@ -110,6 +112,10 @@ fn run() -> Result<()> {
     if let Some(styling) = &mut styling {
         styling.set_theme(&theme.to_string_lossy());
     }
+
+    // The desktop right-click menu and the classic-menu switch, both opt-in via config.json
+    // (docs/desktop-extras.md). Nothing is installed unless asked for.
+    let mut extras = DesktopExtras::new(&config);
 
     // The same for the native taskbar: a run that crashed may have left it hidden. Put it back
     // before the bars start (they apply their mode again from scratch).
@@ -241,6 +247,10 @@ fn run() -> Result<()> {
                 styling.palette_changed();
             }
         }
+        // The menu's look follows the theme (and its palette), so both signals count.
+        if pumped.config_changed || pumped.palette_changed {
+            extras.follow_config();
+        }
     }
 
     // The bars first: they put the native taskbar back as they exit. If they had to be killed,
@@ -253,6 +263,7 @@ fn run() -> Result<()> {
         host.stop();
     }
     wallpaper.stop();
+    extras.stop();
     if let Some(styling) = &mut styling {
         styling.stop();
     }

@@ -117,7 +117,7 @@ impl Styling {
                 let palette = palette::read()
                     .filter(|snapshot| snapshot.is_for(dir))
                     .map(|snapshot| snapshot.palette);
-                self.tweaks.activate(style, palette.as_ref());
+                self.tweaks.activate(style, palette.as_ref(), dir);
             }
             _ => self.tweaks.deactivate(),
         }

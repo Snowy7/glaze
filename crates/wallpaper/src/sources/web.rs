@@ -23,6 +23,8 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use mypaper_desktop::desktop_hit::{Under, under};
+use mypaper_desktop::raw_input::{Button, Event, Gate, Kind, RawMouse};
 use mypaper_theme::{Fit, LoadedTheme, WebWallpaper};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, COREWEBVIEW2_COLOR,
@@ -34,13 +36,18 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
 use webview2_com::{
     CapturePreviewCompletedHandler, CoreWebView2EnvironmentOptions,
     CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
-    NavigationCompletedEventHandler, TrySuspendCompletedHandler,
+    ExecuteScriptCompletedHandler, NavigationCompletedEventHandler, TrySuspendCompletedHandler,
 };
-use windows::Win32::Foundation::{HGLOBAL, HWND, RECT};
+use windows::Win32::Foundation::{HGLOBAL, HWND, LPARAM, POINT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::System::Com::IStream;
 use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
-use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
-use windows::core::{HSTRING, Interface, PCWSTR};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EnumChildWindows, GetClassNameW, GetClientRect, GetWindowRect, IsWindow, PostMessageW,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONDOWN,
+    WM_RBUTTONUP,
+};
+use windows::core::{BOOL, HSTRING, Interface, PCWSTR};
 
 use super::wic::{Budget, Decoded, Decoder, Picture};
 use super::{Frame, Redraw, Source, Visibility, begin};
@@ -139,6 +146,8 @@ fn user_data_folder() -> Result<PathBuf> {
 /// environment, which lets the browser processes exit.
 pub struct WebSource {
     state: Rc<RefCell<State>>,
+    /// Mouse forwarding for `interactive` pages; `None` (and nothing listening) otherwise.
+    input: Option<RawMouse>,
 }
 
 struct State {
@@ -249,7 +258,26 @@ impl WebSource {
             "creating the WebView2 environment (is the WebView2 Runtime installed? \
              https://developer.microsoft.com/microsoft-edge/webview2/)",
         )?;
-        Ok(Self { state })
+        let input = config
+            .interactive
+            .then(|| start_forwarding(&state))
+            .transpose()
+            .inspect_err(|e| log::warn!("web: no mouse input for the page: {e:#}"))
+            .unwrap_or(None);
+        Ok(Self { state, input })
+    }
+
+    /// Listens for the mouse only while some screen is live: while the wallpaper is held
+    /// (a fullscreen game) or covered, Raw Input is switched off entirely.
+    fn sync_input(&mut self) {
+        let Some(input) = &mut self.input else { return };
+        let live = self
+            .state
+            .borrow()
+            .screens
+            .iter()
+            .any(|s| s.visibility == Visibility::Live);
+        input.set_active(live);
     }
 }
 
@@ -325,7 +353,14 @@ impl Source for WebSource {
         }
     }
 
-    fn set_visibility(&mut self, screen: usize, _hwnd: HWND, visibility: Visibility) {
+    fn set_visibility(&mut self, screen: usize, hwnd: HWND, visibility: Visibility) {
+        self.apply_visibility(screen, hwnd, visibility);
+        self.sync_input();
+    }
+}
+
+impl WebSource {
+    fn apply_visibility(&mut self, screen: usize, _hwnd: HWND, visibility: Visibility) {
         let (view, previous, has_still) = {
             let mut state = self.state.borrow_mut();
             let Some(slot) = state.screens.get_mut(screen) else {
@@ -631,6 +666,220 @@ fn captured(weak: &Weak<RefCell<State>>, screen: usize, png: Result<IStream>) {
     }
 }
 
+/// How often forwarded mouse moves are delivered: the page's frame rate.
+const FORWARD_INTERVAL_MS: u32 = 16;
+
+/// Starts listening to the mouse (Raw Input) for an `interactive` page and
+/// forwards what belongs to the bare desktop to the page.
+fn start_forwarding(state: &Rc<RefCell<State>>) -> Result<RawMouse> {
+    let weak = Rc::downgrade(state);
+    let mut forwarder = Forwarder::default();
+    let mut input = RawMouse::new(FORWARD_INTERVAL_MS, move |events| {
+        if let Some(state) = weak.upgrade() {
+            forwarder.forward(&state, events);
+        }
+    })?;
+    input.set_active(true);
+    Ok(input)
+}
+
+/// Turns gated pointer events into the window messages Chromium's widget window
+/// expects, posted to the page of the screen the pointer is on.
+#[derive(Default)]
+struct Forwarder {
+    gate: Gate,
+    /// `MK_*` flags of the buttons the page believes are down.
+    buttons: usize,
+    /// Per screen: the page's input window, found on first use.
+    targets: Vec<Option<HWND>>,
+    /// The screen the pointer was last forwarded to (a `Leave` goes there).
+    last: Option<usize>,
+}
+
+/// `WM_MOUSELEAVE` lives in the controls header, outside the messages module.
+const WM_MOUSELEAVE: u32 = 0x02A3;
+const MK_LBUTTON: usize = 0x01;
+const MK_RBUTTON: usize = 0x02;
+const MK_MBUTTON: usize = 0x10;
+
+impl Forwarder {
+    fn forward(&mut self, state: &RefCell<State>, events: &[Event]) {
+        // A handler that re-enters while WebView2 is mid-call is skipped, not queued.
+        let Ok(state) = state.try_borrow() else {
+            return;
+        };
+        for &event in events {
+            let point = POINT {
+                x: event.at.0,
+                y: event.at.1,
+            };
+            let forwarded = self.gate.filter(
+                event,
+                || under(point) == Under::Desktop,
+                || mypaper_desktop::desktop_view::on_icon(event.at),
+            );
+            if let Some(event) = forwarded {
+                self.deliver(&state, event);
+            }
+        }
+    }
+
+    fn deliver(&mut self, state: &State, event: Event) {
+        let screen = match event.kind {
+            Kind::Leave => self.last,
+            _ => screen_at(state, event.at).or(self.last),
+        };
+        let Some(screen) = screen else { return };
+        self.last = Some(screen);
+        let Some(target) = self.target(screen, state.screens[screen].hwnd) else {
+            return;
+        };
+        let mut client = POINT {
+            x: event.at.0,
+            y: event.at.1,
+        };
+        // SAFETY: valid window handle; `client` outlives the call.
+        let _ = unsafe { ScreenToClient(target, &mut client) };
+        let at = pack(client.x, client.y);
+        let post = |message: u32, wparam: usize, lparam: isize| {
+            // SAFETY: posting to a window of another process is allowed; it fails harmlessly if gone.
+            let _ = unsafe { PostMessageW(Some(target), message, WPARAM(wparam), LPARAM(lparam)) };
+        };
+        match event.kind {
+            Kind::Move => post(WM_MOUSEMOVE, self.buttons, at),
+            Kind::Down(button) => {
+                self.buttons |= mk_flag(button);
+                post(down_message(button), self.buttons, at);
+            }
+            Kind::Up(button) => {
+                post(up_message(button), self.buttons, at);
+                self.buttons &= !mk_flag(button);
+            }
+            // Chromium re-targets a wheel message to the window under the *real* pointer (the
+            // desktop), so a posted one never reaches the page. The page gets a `WheelEvent`.
+            Kind::Wheel(delta) => {
+                if let Some(view) = &state.screens[screen].view {
+                    wheel(&view.webview, client, delta);
+                }
+            }
+            Kind::Leave => {
+                post(WM_MOUSEMOVE, 0, pack(-1, -1));
+                post(WM_MOUSELEAVE, 0, 0);
+            }
+        }
+    }
+
+    /// The window of `screen`'s page that takes mouse input.
+    fn target(&mut self, screen: usize, parent: HWND) -> Option<HWND> {
+        if self.targets.len() <= screen {
+            self.targets.resize(screen + 1, None);
+        }
+        // SAFETY: read-only validity check of a handle.
+        let valid = |hwnd: HWND| unsafe { IsWindow(Some(hwnd)) }.as_bool();
+        match self.targets[screen] {
+            Some(hwnd) if valid(hwnd) => Some(hwnd),
+            _ => {
+                self.targets[screen] = find_input_window(parent);
+                self.targets[screen]
+            }
+        }
+    }
+}
+
+/// The script that dispatches a wheel notch to the element at the pointer. `x`, `y` are device
+/// pixels in the page; `delta` is Windows' wheel delta (120 per notch, positive away from the user),
+/// which the DOM spells the other way round and in pixels (100 per notch, like Chromium's own).
+fn wheel_script(x: i32, y: i32, delta: i32) -> String {
+    let dy = -delta * 100 / 120;
+    format!(
+        "(()=>{{const r=window.devicePixelRatio||1,x={x}/r,y={y}/r;\
+         const t=document.elementFromPoint(x,y)||document.body;\
+         t.dispatchEvent(new WheelEvent('wheel',{{bubbles:true,cancelable:true,composed:true,\
+         clientX:x,clientY:y,deltaY:{dy},deltaMode:0}}))}})()"
+    )
+}
+
+fn wheel(webview: &ICoreWebView2_3, at: POINT, delta: i32) {
+    let script = HSTRING::from(wheel_script(at.x, at.y, delta));
+    let done = ExecuteScriptCompletedHandler::create(Box::new(|_, _| Ok(())));
+    // SAFETY: a COM call on the thread that created the WebView; the handler runs on its loop.
+    let result = unsafe {
+        webview
+            .cast::<ICoreWebView2>()
+            .and_then(|webview| webview.ExecuteScript(&script, &done))
+    };
+    if let Err(e) = result {
+        log::debug!("web: wheel: {e}");
+    }
+}
+
+/// Which screen's window contains the screen point.
+fn screen_at(state: &State, at: (i32, i32)) -> Option<usize> {
+    state.screens.iter().position(|s| {
+        let mut rect = RECT::default();
+        // SAFETY: valid window; `rect` outlives the call.
+        let _ = unsafe { GetWindowRect(s.hwnd, &mut rect) };
+        at.0 >= rect.left && at.0 < rect.right && at.1 >= rect.top && at.1 < rect.bottom
+    })
+}
+
+/// Chromium's `Chrome_RenderWidgetHostHWND` inside a screen window: the window the page's mouse
+/// input arrives at.
+fn find_input_window(parent: HWND) -> Option<HWND> {
+    let mut found = HWND::default();
+    // SAFETY: the callback runs during this call and only writes `found`.
+    unsafe {
+        let _ = EnumChildWindows(
+            Some(parent),
+            Some(match_widget_host),
+            LPARAM(&raw mut found as isize),
+        );
+    }
+    (!found.is_invalid()).then_some(found)
+}
+
+unsafe extern "system" fn match_widget_host(hwnd: HWND, out: LPARAM) -> BOOL {
+    let mut class = [0u16; 40];
+    // SAFETY: `class` is a valid buffer; `out` points at the HWND owned by `find_input_window`.
+    unsafe {
+        let len = GetClassNameW(hwnd, &mut class).max(0) as usize;
+        if String::from_utf16_lossy(&class[..len]) == "Chrome_RenderWidgetHostHWND" {
+            *(out.0 as *mut HWND) = hwnd;
+            return false.into();
+        }
+    }
+    true.into()
+}
+
+fn mk_flag(button: Button) -> usize {
+    match button {
+        Button::Left => MK_LBUTTON,
+        Button::Right => MK_RBUTTON,
+        Button::Middle => MK_MBUTTON,
+    }
+}
+
+fn down_message(button: Button) -> u32 {
+    match button {
+        Button::Left => WM_LBUTTONDOWN,
+        Button::Right => WM_RBUTTONDOWN,
+        Button::Middle => WM_MBUTTONDOWN,
+    }
+}
+
+fn up_message(button: Button) -> u32 {
+    match button {
+        Button::Left => WM_LBUTTONUP,
+        Button::Right => WM_RBUTTONUP,
+        Button::Middle => WM_MBUTTONUP,
+    }
+}
+
+/// Two signed coordinates in an `lParam` (client coordinates, or screen ones for the wheel).
+fn pack(x: i32, y: i32) -> isize {
+    (i32::from(y as i16) << 16 | i32::from(x as i16) & 0xFFFF) as isize
+}
+
 /// Sizes a controller to its window's client area.
 fn fill(controller: &ICoreWebView2Controller, hwnd: HWND) {
     let mut rect = RECT::default();
@@ -696,6 +945,32 @@ mod tests {
                 url: "https://mypaper.theme/home.html".into(),
             }
         );
+    }
+
+    #[test]
+    fn mouse_coordinates_pack_as_signed_halves_and_buttons_map_to_their_flags() {
+        for (x, y) in [(0, 0), (1280, 700), (-1280, 700), (-1, -1)] {
+            let packed = pack(x, y);
+            assert_eq!(i32::from(packed as i16), x);
+            assert_eq!(i32::from((packed >> 16) as i16), y);
+        }
+        assert_eq!(
+            mk_flag(Button::Left) | mk_flag(Button::Right) | mk_flag(Button::Middle),
+            0x13
+        );
+        assert_eq!(down_message(Button::Right), WM_RBUTTONDOWN);
+        assert_eq!(up_message(Button::Middle), WM_MBUTTONUP);
+    }
+
+    #[test]
+    fn a_wheel_notch_becomes_a_dom_wheel_event_the_other_way_round() {
+        let script = wheel_script(640, 360, 120);
+        assert!(script.contains("x=640/r") && script.contains("y=360/r"));
+        assert!(
+            script.contains("deltaY:-100"),
+            "away from the user scrolls the page up"
+        );
+        assert!(wheel_script(0, 0, -240).contains("deltaY:200"));
     }
 
     #[test]

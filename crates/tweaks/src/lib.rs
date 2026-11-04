@@ -7,6 +7,11 @@
 //!   values the Settings app writes, announced with `WM_SETTINGCHANGE`
 //!   ("ImmersiveColorSet") so Windows applies them live ([`plan`], [`registry`]).
 //! - **`"auto"` colors**: taken from the wallpaper's [`palette`].
+//! - **Cursors**: a cursor scheme in `HKCU\Control Panel\Cursors` plus
+//!   `SPI_SETCURSORS`, with two built-in sets drawn in code ([`cursors`],
+//!   [`cursor_art`]).
+//! - **Classic context menu** (Win11, undocumented, opt-in): [`classic_menu`],
+//!   journaled on its own because it outlives a run.
 //!
 //! Everything is reversible. Before the first registry change the original
 //! values (including "absent") are journaled to `%LOCALAPPDATA%\mypaper\undo.json`
@@ -16,13 +21,17 @@
 //! [`Tweaks`] must live on a thread that pumps messages (window events are
 //! delivered through its queue), like core's main thread.
 
+pub mod classic_menu;
 pub mod color;
+pub mod cursor_art;
+pub mod cursors;
 pub mod dwm;
 pub mod palette;
 pub mod plan;
 pub mod registry;
 pub mod undo;
 
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -84,10 +93,11 @@ impl Tweaks {
 
     /// Applies `style`. `palette` resolves `"auto"` colors; without one,
     /// those are skipped until [`activate`](Self::activate) is called again
-    /// with it. Calling again with the same style only updates colors, and a
-    /// different style first restores everything. Failures are logged, not
-    /// returned: styling is cosmetic and must never stop the wallpaper.
-    pub fn activate(&mut self, style: &WindowsStyle, palette: Option<&Palette>) {
+    /// with it. `theme_dir` is the theme's folder, for a relative
+    /// `cursors` path. Calling again with the same style only updates colors,
+    /// and a different style first restores everything. Failures are logged,
+    /// not returned: styling is cosmetic and must never stop the wallpaper.
+    pub fn activate(&mut self, style: &WindowsStyle, palette: Option<&Palette>, theme_dir: &Path) {
         let applied = Applied {
             style: style.clone(),
             palette: palette.copied(),
@@ -100,8 +110,22 @@ impl Tweaks {
         }
         // The journal is written before anything is changed (even for a
         // theme that only styles windows), so a crash is always recoverable.
-        match self.system.apply(&plan::system_writes(style, palette)) {
-            Ok(true) => broadcast_settings_changed(),
+        let mut writes = plan::system_writes(style, palette);
+        let scheme = style.cursors.as_deref().and_then(|spec| {
+            cursors::resolve_default(spec, theme_dir)
+                .inspect_err(|e| log::warn!("cursors not applied: {e:#}"))
+                .ok()
+        });
+        if let Some(scheme) = &scheme {
+            writes.extend(cursors::writes(scheme));
+        }
+        match self.system.apply(&writes) {
+            Ok(true) => {
+                broadcast_settings_changed();
+                if scheme.is_some() {
+                    cursors::reload();
+                }
+            }
             Ok(false) => {}
             Err(e) => log::warn!("system accent/dark mode not applied: {e:#}"),
         }
@@ -124,7 +148,14 @@ impl Tweaks {
     }
 
     fn undo_system(&mut self) {
-        if let Err(e) = self.system.restore(broadcast_settings_changed) {
+        let had_cursors = self.system.journaled_key(cursors::CURSORS_KEY);
+        let announce = || {
+            broadcast_settings_changed();
+            if had_cursors {
+                cursors::reload();
+            }
+        };
+        if let Err(e) = self.system.restore(announce) {
             log::error!("could not restore system settings: {e:#}");
         }
     }

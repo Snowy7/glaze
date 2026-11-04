@@ -1,0 +1,4 @@
+{
+  "name": "Interactive",
+  "wallpaper": { "kind": "web", "url": "index.html", "interactive": true }
+}

@@ -9,21 +9,31 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-/// A registry value we may write.
+/// A registry value we may write. The empty name is a key's default value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Value {
     Dword(u32),
     Binary(Vec<u8>),
+    /// `REG_SZ`.
+    String(String),
+    /// `REG_EXPAND_SZ`: kept apart from `REG_SZ` so a restore writes the same type back.
+    ExpandString(String),
 }
 
 /// Where values live. `key` is a path under `HKEY_CURRENT_USER`.
 pub trait Store {
     /// `None` if the value does not exist.
     fn read(&self, key: &str, name: &str) -> Result<Option<Value>>;
+    /// Writes the value, creating the key (and its parents) if needed.
     fn write(&mut self, key: &str, name: &str, value: &Value) -> Result<()>;
     /// Removes the value; removing an absent value is not an error.
     fn delete(&mut self, key: &str, name: &str) -> Result<()>;
+    /// The topmost ancestor of `key` (or `key` itself) that does not exist
+    /// yet, i.e. the key a write to `key` would create first. `None` if `key` exists.
+    fn first_missing(&self, key: &str) -> Result<Option<String>>;
+    /// Deletes `key` if it has no values and no subkeys. Absent or non-empty: nothing happens.
+    fn delete_if_empty(&mut self, key: &str) -> Result<()>;
 }
 
 /// One value to set.
@@ -41,6 +51,10 @@ struct Entry {
     name: String,
     /// `None`: the value did not exist.
     original: Option<Value>,
+    /// The topmost key that did not exist and was created for this value.
+    /// Restoring removes it again (and the keys below it, if empty).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    created: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -51,6 +65,11 @@ struct Journal {
 impl Journal {
     fn has(&self, key: &str, name: &str) -> bool {
         self.entries.iter().any(|e| e.key == key && e.name == name)
+    }
+
+    /// Did the run write anything under `key`?
+    fn touches(&self, key: &str) -> bool {
+        self.entries.iter().any(|e| e.key == key)
     }
 }
 
@@ -87,6 +106,14 @@ impl<S: Store> Undo<S> {
             .is_some_and(|journal| journal.has(key, name))
     }
 
+    /// Did the journal record any value under this key?
+    pub fn journaled_key(&self, key: &str) -> bool {
+        self.load()
+            .ok()
+            .flatten()
+            .is_some_and(|journal| journal.touches(key))
+    }
+
     /// Writes `writes`, journaling each value's original first. Originals
     /// are recorded once: applying again (e.g. a new palette) keeps the
     /// values from before the first change. The journal exists after this
@@ -100,6 +127,7 @@ impl<S: Store> Undo<S> {
                     key: w.key.into(),
                     name: w.name.into(),
                     original: self.store.read(w.key, w.name)?,
+                    created: self.store.first_missing(w.key)?,
                 });
                 grown = true;
             }
@@ -166,14 +194,30 @@ impl<S: Store> Undo<S> {
 
     fn put_back(&mut self, entry: &Entry) -> Result<bool> {
         let (key, name) = (entry.key.as_str(), entry.name.as_str());
-        if self.store.read(key, name)? == entry.original {
-            return Ok(false);
+        let changed = self.store.read(key, name)? != entry.original;
+        if changed {
+            match &entry.original {
+                Some(value) => self.store.write(key, name, value)?,
+                None => self.store.delete(key, name)?,
+            }
         }
-        match &entry.original {
-            Some(value) => self.store.write(key, name, value)?,
-            None => self.store.delete(key, name)?,
+        // A key we created goes away with its last value, leaf first.
+        if entry.original.is_none()
+            && let Some(top) = &entry.created
+        {
+            let mut path = key;
+            loop {
+                self.store.delete_if_empty(path)?;
+                if path == top {
+                    break;
+                }
+                let Some((parent, _)) = path.rsplit_once('\\') else {
+                    break;
+                };
+                path = parent;
+            }
         }
-        Ok(true)
+        Ok(changed)
     }
 
     /// `None` if there is no journal. An unreadable one is set aside as
@@ -205,32 +249,95 @@ impl<S: Store> Undo<S> {
     }
 }
 
+/// `pub(crate)`: the cursor and shell-toggle tests reuse the in-memory registry.
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::cell::RefCell;
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
     use std::rc::Rc;
 
     use super::*;
+
+    #[derive(Default)]
+    struct Data {
+        values: HashMap<(String, String), Value>,
+        keys: BTreeSet<String>,
+    }
 
     /// An in-memory registry. Clones share the data, so a test can play
     /// "Windows" (rewriting values behind the journal's back) while `Undo`
     /// owns another handle.
     #[derive(Default, Clone)]
-    struct Memory(Rc<RefCell<HashMap<(String, String), Value>>>);
+    pub(crate) struct Memory(Rc<RefCell<Data>>);
+
+    impl Memory {
+        /// Makes `key` and its parents exist, like a key Windows ships.
+        pub(crate) fn create_key(&self, key: &str) {
+            let mut data = self.0.borrow_mut();
+            let mut path = String::new();
+            for part in key.split('\\') {
+                if !path.is_empty() {
+                    path.push('\\');
+                }
+                path.push_str(part);
+                data.keys.insert(path.clone());
+            }
+        }
+
+        pub(crate) fn has_key(&self, key: &str) -> bool {
+            self.0.borrow().keys.contains(key)
+        }
+    }
 
     impl Store for Memory {
         fn read(&self, key: &str, name: &str) -> Result<Option<Value>> {
-            Ok(self.0.borrow().get(&(key.into(), name.into())).cloned())
+            Ok(self
+                .0
+                .borrow()
+                .values
+                .get(&(key.into(), name.into()))
+                .cloned())
         }
         fn write(&mut self, key: &str, name: &str, value: &Value) -> Result<()> {
+            self.create_key(key);
             self.0
                 .borrow_mut()
+                .values
                 .insert((key.into(), name.into()), value.clone());
             Ok(())
         }
         fn delete(&mut self, key: &str, name: &str) -> Result<()> {
-            self.0.borrow_mut().remove(&(key.into(), name.into()));
+            self.0
+                .borrow_mut()
+                .values
+                .remove(&(key.into(), name.into()));
+            Ok(())
+        }
+        fn first_missing(&self, key: &str) -> Result<Option<String>> {
+            let data = self.0.borrow();
+            let mut path = String::new();
+            for part in key.split('\\') {
+                if !path.is_empty() {
+                    path.push('\\');
+                }
+                path.push_str(part);
+                if !data.keys.contains(&path) {
+                    return Ok(Some(path));
+                }
+            }
+            Ok(None)
+        }
+        fn delete_if_empty(&mut self, key: &str) -> Result<()> {
+            let mut data = self.0.borrow_mut();
+            let below = format!("{key}\\");
+            let in_use = data
+                .values
+                .keys()
+                .any(|(k, _)| k == key || k.starts_with(&below))
+                || data.keys.iter().any(|k| k.starts_with(&below));
+            if !in_use {
+                data.keys.remove(key);
+            }
             Ok(())
         }
     }
@@ -240,15 +347,15 @@ mod tests {
     }
 
     /// A journal path in a fresh temp folder, removed on drop.
-    struct Scratch(PathBuf);
+    pub(crate) struct Scratch(pub(crate) PathBuf);
 
     impl Scratch {
-        fn new(name: &str) -> Self {
+        pub(crate) fn new(name: &str) -> Self {
             let dir = std::env::temp_dir().join(format!("mypaper-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             Self(dir)
         }
-        fn journal(&self) -> PathBuf {
+        pub(crate) fn journal(&self) -> PathBuf {
             self.0.join("undo.json")
         }
     }
@@ -334,6 +441,80 @@ mod tests {
             windows.read("Accent", "menu").unwrap(),
             Some(Value::Dword(1))
         );
+    }
+
+    #[test]
+    fn string_values_keep_their_type_and_default_values_work() {
+        let scratch = Scratch::new("undo-strings");
+        let mut store = Memory::default();
+        store
+            .write(
+                "C",
+                "Arrow",
+                &Value::ExpandString(r"%SystemRoot%\a.cur".into()),
+            )
+            .unwrap();
+        store
+            .write("C", "", &Value::String("Old scheme".into()))
+            .unwrap();
+        let mut undo = Undo::new(store, scratch.journal(), Duration::ZERO);
+
+        undo.apply(&[
+            put("C", "Arrow", Value::ExpandString(r"D:\new.cur".into())),
+            put("C", "", Value::String("mypaper".into())),
+        ])
+        .unwrap();
+        assert!(undo.journaled_key("C") && !undo.journaled_key("D"));
+
+        // The journal is plain JSON on disk; a reload must keep REG_SZ and REG_EXPAND_SZ apart.
+        let mut after_restart = Undo::new(undo.store.clone(), scratch.journal(), Duration::ZERO);
+        after_restart.restore(|| {}).unwrap();
+        assert_eq!(
+            after_restart.store.read("C", "Arrow").unwrap(),
+            Some(Value::ExpandString(r"%SystemRoot%\a.cur".into()))
+        );
+        assert_eq!(
+            after_restart.store.read("C", "").unwrap(),
+            Some(Value::String("Old scheme".into()))
+        );
+    }
+
+    #[test]
+    fn restore_removes_keys_it_created_but_never_ones_that_existed_or_got_other_content() {
+        let scratch = Scratch::new("undo-prune");
+        let store = Memory::default();
+        store.create_key("Software\\Classes\\CLSID");
+        let mut undo = Undo::new(store.clone(), scratch.journal(), Duration::ZERO);
+
+        let deep = "Software\\Classes\\CLSID\\{x}\\Inproc";
+        undo.apply(&[put(deep, "", Value::String(String::new()))])
+            .unwrap();
+        assert!(store.has_key("Software\\Classes\\CLSID\\{x}"));
+        // Someone else adds a value to the key we created: it is theirs, so it stays.
+        store
+            .clone()
+            .write("Software\\Classes\\CLSID\\{x}", "theirs", &Value::Dword(1))
+            .unwrap();
+
+        undo.restore(|| {}).unwrap();
+        assert!(!store.has_key(deep), "our own leaf key is gone");
+        assert!(
+            store.has_key("Software\\Classes\\CLSID\\{x}"),
+            "a key with foreign content stays"
+        );
+        assert!(
+            store.has_key("Software\\Classes\\CLSID"),
+            "pre-existing keys stay"
+        );
+
+        // Without interference the whole created chain disappears.
+        let mut undo = Undo::new(store.clone(), scratch.journal(), Duration::ZERO);
+        let fresh = "Software\\Classes\\CLSID\\{y}\\Inproc";
+        undo.apply(&[put(fresh, "", Value::String(String::new()))])
+            .unwrap();
+        undo.restore(|| {}).unwrap();
+        assert!(!store.has_key("Software\\Classes\\CLSID\\{y}"));
+        assert!(store.has_key("Software\\Classes\\CLSID"));
     }
 
     #[test]
