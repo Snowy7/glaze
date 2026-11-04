@@ -1,5 +1,10 @@
 //! The native taskbar: kept, auto-hidden or hidden, and aligned, through supported APIs only
-//! (`SHAppBarMessage`, `ShowWindow`, the `TaskbarAl` value Settings writes).
+//! (`SHAppBarMessage`, `ShowWindow`, window styles, the `TaskbarAl` value Settings writes).
+//!
+//! Hidden means two things. The windows are `SW_HIDE`n, and they carry a **veil** ([`veil`]): a
+//! layered, click-through style at alpha 0, so that when Explorer shows one anyway (leaving a
+//! fullscreen app, a display change, the shell's own restarts) Windows has nothing to compose: it
+//! is never seen, even for a frame, however late we notice and hide it again.
 //!
 //! Everything is reversible: before the first change of anything, its original is written to
 //! `%LOCALAPPDATA%\mypaper\taskbar.json`. Applying `keep` (on exit, on the panic hotkey, by core
@@ -10,7 +15,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use windows::Win32::Foundation::{CloseHandle, ERROR_FILE_NOT_FOUND, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{
+    CloseHandle, COLORREF, ERROR_FILE_NOT_FOUND, HWND, LPARAM, WPARAM,
+};
 use windows::Win32::System::Registry::{
     HKEY_CURRENT_USER, REG_DWORD, RRF_RT_REG_DWORD, RegDeleteKeyValueW, RegGetValueW,
     RegSetKeyValueW,
@@ -22,11 +29,13 @@ use windows::Win32::UI::Shell::{
     ABM_GETSTATE, ABM_SETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowExW, GetClassNameW, GetWindowThreadProcessId, IsWindowVisible,
-    SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA, SendMessageTimeoutW, ShowWindow, ShowWindowAsync,
-    WM_SETTINGCHANGE,
+    FindWindowExW, GWL_EXSTYLE, GetLayeredWindowAttributes, GetWindowLongPtrW,
+    GetWindowThreadProcessId, IsWindowVisible, LAYERED_WINDOW_ATTRIBUTES_FLAGS, LWA_ALPHA,
+    SMTO_ABORTIFHUNG, SW_HIDE, SW_SHOWNA, SendMessageTimeoutW, SetLayeredWindowAttributes,
+    SetWindowLongPtrW, ShowWindow, ShowWindowAsync, WM_SETTINGCHANGE, WS_EX_LAYERED,
+    WS_EX_TRANSPARENT,
 };
-use windows::core::{BOOL, PCWSTR, PWSTR, w};
+use windows::core::{PCWSTR, PWSTR, w};
 
 use crate::config::{Alignment, TaskbarMode};
 
@@ -70,7 +79,7 @@ pub struct Journal {
     /// The app-bar state before we made the taskbar auto-hide.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appbar: Option<Was<u32>>,
-    /// We hid the taskbar windows (they were visible).
+    /// We hid and veiled the taskbar windows (they were visible).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
     /// `TaskbarAl` before we changed it (`null`: absent).
@@ -253,6 +262,12 @@ impl Shell for NativeShell {
             bail!("the taskbar isn't there (is Explorer running?)");
         }
         for hwnd in windows {
+            // Veiled before hidden, unveiled before shown: no moment in which it can be seen.
+            if hidden {
+                veil(hwnd);
+            } else {
+                unveil(hwnd);
+            }
             // SAFETY: a taskbar window found just now; SW_SHOWNA never activates it.
             let _ = unsafe { ShowWindow(hwnd, if hidden { SW_HIDE } else { SW_SHOWNA }) };
         }
@@ -319,12 +334,18 @@ impl Shell for NativeShell {
     }
 }
 
-/// `hide` mode's fast path, when Explorer showed a taskbar again (Start, a notification, a display
-/// change): hides every taskbar window that's visible and says how many were. No journal I/O; the
-/// journal already says hidden. Also reports whether auto-hide is still set, so the caller can
-/// re-apply the mode when Explorer reset it.
+/// `hide` mode's fast path, when Explorer showed a taskbar again (leaving a fullscreen app, a
+/// display change, a restarted Explorer): veils every taskbar window (so none can be seen), hides
+/// the ones that are visible and says how many were. No journal I/O; the journal already says
+/// hidden. Also reports whether auto-hide is still set, so the caller can re-apply the mode when
+/// Explorer reset it.
 pub fn hide_visible() -> (usize, bool) {
-    let shown = taskbar_windows()
+    let windows = taskbar_windows();
+    // All veils first: the hides below are only housekeeping.
+    for &hwnd in &windows {
+        veil(hwnd);
+    }
+    let shown = windows
         .into_iter()
         // SAFETY: read-only query, then a hide, on taskbar windows found just now.
         .filter(|&hwnd| unsafe { IsWindowVisible(hwnd) }.as_bool())
@@ -336,55 +357,92 @@ pub fn hide_visible() -> (usize, bool) {
     (shown, NativeShell.appbar_state() & ABS_AUTOHIDE != 0)
 }
 
-/// Explorer's `Shell_TrayWnd`: the first one `explorer.exe` owns (the bars' tray host makes one
-/// too, kept above Explorer's so apps find it, and so may another shell).
-pub fn explorer_tray() -> Option<HWND> {
-    let mut after = None;
-    // SAFETY: lookups by class name and a read-only query; a stale handle just ends the loop.
+/// The extended styles of the veil: layered (at alpha 0, set by [`veil`]) and click-through.
+const VEIL: u32 = WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0;
+
+fn ex_style(hwnd: HWND) -> u32 {
+    // SAFETY: a read-only query; a stale handle reads as 0.
+    unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 }
+}
+
+/// Makes `hwnd` invisible and click-through, whether Explorer shows it or not: a layered window
+/// at alpha 0 composes to nothing. Explorer shows, hides, moves and re-clips its taskbar, but
+/// never touches its extended style (measured on build 26300: the veil survived Start, Search,
+/// Quick Settings, Task View and fullscreen exits; `DWMWA_CLOAK` is refused cross-process with
+/// `E_ACCESSDENIED`, and an empty window region is overwritten by auto-hide's own). A window that
+/// is already layered by someone else is left alone.
+fn veil(hwnd: HWND) {
+    let style = ex_style(hwnd);
+    if style & WS_EX_LAYERED.0 != 0 {
+        return;
+    }
+    // SAFETY: style changes on another process's top-level window are allowed at the same
+    // integrity level; a layered window shows nothing until its attributes are set, which is
+    // what we want in between.
     unsafe {
-        loop {
-            let tray = FindWindowExW(None, after, w!("Shell_TrayWnd"), PCWSTR::null()).ok()?;
-            let mut pid = 0;
-            GetWindowThreadProcessId(tray, Some(&mut pid));
-            if pid != std::process::id() && is_explorer(pid) {
-                return Some(tray);
-            }
-            after = Some(tray);
-        }
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (style | VEIL) as isize);
+        let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 0, LWA_ALPHA);
     }
 }
 
-/// Explorer's `Shell_TrayWnd` and every `Shell_SecondaryTrayWnd` (never the tray host's, or
-/// another shell's).
-pub fn taskbar_windows() -> Vec<HWND> {
-    let mut found: Vec<HWND> = Vec::new();
-    // SAFETY: the callback only runs during this call, while `found` is alive.
-    unsafe {
-        let _ = EnumWindows(Some(push_taskbar), LPARAM(&raw mut found as isize));
+/// Is `hwnd` carrying our veil: layered, click-through and fully transparent? (A taskbar is never
+/// that otherwise, so it also tells our veil from someone else's layering.)
+fn is_veiled(hwnd: HWND) -> bool {
+    if ex_style(hwnd) & VEIL != VEIL {
+        return false;
     }
+    let (mut alpha, mut flags) = (u8::MAX, LAYERED_WINDOW_ATTRIBUTES_FLAGS(0));
+    // SAFETY: the out pointers outlive the call.
+    let read = unsafe {
+        GetLayeredWindowAttributes(hwnd, None, Some(&mut alpha), Some(&mut flags))
+    };
+    read.is_ok() && alpha == 0 && flags.0 & LWA_ALPHA.0 != 0
+}
+
+/// Takes our veil off `hwnd` (if it's ours): the window is as Explorer had it.
+fn unveil(hwnd: HWND) {
+    if is_veiled(hwnd) {
+        // SAFETY: as in `veil`.
+        unsafe { SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (ex_style(hwnd) & !VEIL) as isize) };
+    }
+}
+
+/// Explorer's `Shell_TrayWnd`: the first one `explorer.exe` owns (the bars' tray host makes one
+/// too, kept above Explorer's so apps find it, and so may another shell).
+pub fn explorer_tray() -> Option<HWND> {
+    explorer_windows(w!("Shell_TrayWnd")).into_iter().next()
+}
+
+/// Every top-level window of `class` that `explorer.exe` owns.
+fn explorer_windows(class: PCWSTR) -> Vec<HWND> {
+    let mut found = Vec::new();
+    let mut after = None;
+    // SAFETY: lookups by class name and a read-only query; a stale handle just ends the loop.
+    while let Ok(hwnd) = unsafe { FindWindowExW(None, after, class, PCWSTR::null()) } {
+        after = Some(hwnd);
+        let mut pid = 0;
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+        if pid != std::process::id() && is_explorer(pid) {
+            found.push(hwnd);
+        }
+    }
+    found
+}
+
+/// Explorer's `Shell_TrayWnd` and every `Shell_SecondaryTrayWnd` (never the tray host's, or
+/// another shell's). Found by class with `FindWindowEx`, not enumerated: while Start, Search,
+/// Quick Settings or Task View is open, Explorer moves the main taskbar into a higher z-band
+/// (`GetWindowBand` 6 instead of 1), and `EnumWindows` skips such windows, so a taskbar found
+/// that way could not be hidden then.
+pub fn taskbar_windows() -> Vec<HWND> {
+    let mut found = explorer_windows(w!("Shell_TrayWnd"));
+    found.extend(explorer_windows(w!("Shell_SecondaryTrayWnd")));
     found
 }
 
 /// Is `class` a taskbar window's class?
 pub fn is_taskbar_class(class: &str) -> bool {
     matches!(class, "Shell_TrayWnd" | "Shell_SecondaryTrayWnd")
-}
-
-unsafe extern "system" fn push_taskbar(hwnd: HWND, out: LPARAM) -> BOOL {
-    let mut class = [0u16; 32];
-    // SAFETY: a window handle from EnumWindows; the buffer outlives the call.
-    let len = unsafe { GetClassNameW(hwnd, &mut class) } as usize;
-    let mut pid = 0;
-    // SAFETY: a read-only query on a window handle from EnumWindows.
-    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
-    if pid != std::process::id()
-        && is_taskbar_class(&String::from_utf16_lossy(&class[..len]))
-        && is_explorer(pid)
-    {
-        // SAFETY: `out` is the Vec passed by `taskbar_windows`.
-        unsafe { (*(out.0 as *mut Vec<HWND>)).push(hwnd) };
-    }
-    true.into()
 }
 
 /// Whether process `pid` runs `explorer.exe`.
@@ -425,6 +483,45 @@ mod tests {
         assert!(!is_explorer_path(r"C:\Program Files\RetroBar\RetroBar.exe"));
         assert!(!is_explorer_path(r"C:\Tools\myexplorer.exe"));
         assert!(!is_explorer_path(""));
+    }
+
+    /// The veil goes on and comes off a real window exactly, and leaves other people's layering
+    /// alone. (Our own window stands in for a taskbar.)
+    #[test]
+    fn the_veil_round_trips_on_a_real_window() {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW, DestroyWindow, WINDOW_EX_STYLE, WS_POPUP,
+        };
+        // SAFETY: a plain hidden window of a system class, destroyed below.
+        let create = |ex: WINDOW_EX_STYLE| unsafe {
+            CreateWindowExW(ex, w!("STATIC"), w!(""), WS_POPUP, 0, 0, 10, 10, None, None, None, None)
+                .unwrap()
+        };
+
+        let plain = create(WINDOW_EX_STYLE(0x88)); // tool window, topmost: like a taskbar
+        let before = ex_style(plain);
+        assert!(!is_veiled(plain));
+        veil(plain);
+        assert!(is_veiled(plain));
+        assert_eq!(ex_style(plain), before | VEIL);
+        veil(plain); // idempotent
+        unveil(plain);
+        assert_eq!(ex_style(plain), before, "restored exactly");
+        unveil(plain); // nothing to undo
+
+        // Someone else's layering is neither replaced nor removed.
+        let theirs = create(WS_EX_LAYERED);
+        // SAFETY: our own window.
+        unsafe { SetLayeredWindowAttributes(theirs, COLORREF(0), 200, LWA_ALPHA).unwrap() };
+        let before = ex_style(theirs);
+        veil(theirs);
+        unveil(theirs);
+        assert_eq!(ex_style(theirs), before);
+
+        for hwnd in [plain, theirs] {
+            // SAFETY: windows created above, on this thread.
+            let _ = unsafe { DestroyWindow(hwnd) };
+        }
     }
 
     /// A taskbar in memory.

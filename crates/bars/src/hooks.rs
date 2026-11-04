@@ -23,7 +23,8 @@ pub const WINDOWS: u32 = 1;
 pub const FOREGROUND: u32 = 2;
 /// A top-level window moved or resized.
 pub const MOVED: u32 = 4;
-/// A taskbar window was shown or moved (Explorer re-showing, or sliding in, a taskbar we hid).
+/// A taskbar window was created, shown or moved (Explorer re-showing, or sliding in, a taskbar we
+/// hid, or building a new one).
 pub const TASKBAR_SHOWN: u32 = 8;
 
 static PENDING: AtomicU32 = AtomicU32::new(0);
@@ -91,7 +92,8 @@ fn classify(event: u32, top: bool, watching: bool, taskbar: impl Fn() -> bool) -
         EVENT_OBJECT_DESTROY => WINDOWS,
         EVENT_OBJECT_LOCATIONCHANGE if top && watching && taskbar() => MOVED | TASKBAR_SHOWN,
         EVENT_OBJECT_LOCATIONCHANGE if top => MOVED,
-        EVENT_OBJECT_SHOW if top && taskbar() => WINDOWS | TASKBAR_SHOWN,
+        // A new taskbar (a monitor came back, Explorer restarted) is born visible and unveiled.
+        EVENT_OBJECT_SHOW | EVENT_OBJECT_CREATE if top && taskbar() => WINDOWS | TASKBAR_SHOWN,
         EVENT_OBJECT_CREATE
         | EVENT_OBJECT_SHOW
         | EVENT_OBJECT_HIDE
@@ -159,6 +161,12 @@ mod tests {
             "a taskbar shown counts even when not watching its moves"
         );
         assert_eq!(classify(EVENT_OBJECT_SHOW, true, false, no), WINDOWS);
+        assert_eq!(
+            classify(EVENT_OBJECT_CREATE, true, false, yes),
+            WINDOWS | TASKBAR_SHOWN,
+            "a taskbar built anew must be veiled before it's seen"
+        );
+        assert_eq!(classify(EVENT_OBJECT_CREATE, true, false, no), WINDOWS);
     }
 
     #[test]
