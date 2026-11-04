@@ -46,6 +46,7 @@ use crate::bar::{
 };
 use crate::bridge::{Activate, BarError, BarKind, Envelope, Method, Topic, bar_topics};
 use crate::desktops::{Desktops, Workspaces};
+use crate::first_paint::FirstPaint;
 use crate::hooks::{self, Hooks};
 use crate::icons::{Icons, Source};
 use crate::look::{self, ThemeSkin};
@@ -264,6 +265,8 @@ pub struct App {
     watchers: Vec<notify::RecommendedWatcher>,
     theme_watch: Option<(PathBuf, notify::RecommendedWatcher)>,
     _palette_watch: Option<mypaper_desktop::ConfigWatcher>,
+    /// The native stand-ins shown until the pages paint, and the late topics' last values.
+    first_paint: FirstPaint,
 }
 
 impl App {
@@ -344,6 +347,7 @@ impl App {
             watchers: Vec::new(),
             theme_watch: None,
             _palette_watch: None,
+            first_paint: FirstPaint::load(),
             waker,
         };
         app.holds
@@ -467,6 +471,7 @@ impl App {
             }
             Msg::Media(state) => {
                 self.media_state = state;
+                self.first_paint.reported(Topic::Media);
                 self.emit(Topic::Media);
             }
             Msg::Volume => {
@@ -478,6 +483,7 @@ impl App {
             Msg::Network => soon(&mut self.timers.network, SETTLE_NETWORK),
             Msg::Tray(items) => {
                 self.tray_items = items;
+                self.first_paint.reported(Topic::Tray);
                 self.emit(Topic::Tray);
             }
             Msg::WatchError(path, error) => {
@@ -487,6 +493,7 @@ impl App {
     }
 
     fn tick(&mut self, now: Instant) {
+        self.first_paint.expire(now);
         if let Some(hooks) = &self.hooks {
             let happened = hooks.take();
             if happened & hooks::WINDOWS != 0 {
@@ -545,6 +552,7 @@ impl App {
         if due(&mut self.timers.stats, now) {
             if let Some(sampler) = &mut self.sampler {
                 self.stats = Some(sampler.sample());
+                self.first_paint.reported(Topic::Stats);
                 self.timers.stats = Some(now + STATS_EVERY);
             }
             self.emit(Topic::Stats);
@@ -762,8 +770,8 @@ impl App {
                     }
                 }
                 WebEvent::Painted { bar } => {
-                    log::debug!("bar {bar} painted");
                     startup::ready("bars", "first_paint_ms");
+                    self.first_paint.painted(bar);
                 }
             }
         }
@@ -870,6 +878,10 @@ impl App {
                 self.push_all(index);
             }
         }
+        let looks = [BarKind::Top, BarKind::Dock].map(|kind| self.look(kind));
+        self.first_paint.sync(&self.bars, |kind| {
+            looks[usize::from(kind == BarKind::Dock)].clone()
+        });
     }
 
     // --- Topics --------------------------------------------------------------------------------
@@ -976,6 +988,7 @@ impl App {
             return;
         };
         let message = json!({ "event": topic.event(), "data": value }).to_string();
+        self.first_paint.sent(topic, &message);
         for bar in &self.bars {
             if !bar.ready || bar.hidden || !bar_topics(bar.kind, &self.config.top).contains(&topic)
             {
@@ -988,13 +1001,20 @@ impl App {
         }
     }
 
-    /// A bar just said hello or came back: everything it shows, now.
+    /// A bar just said hello or came back: everything it shows, now. A late topic whose
+    /// provider hasn't reported yet gets its last value from the previous run.
     fn push_all(&mut self, index: usize) {
         let id = self.bars[index].id;
         self.sent.retain(|(bar, _), _| *bar != id);
         let topics = bar_topics(self.bars[index].kind, &self.config.top);
         for topic in topics.intersection(&self.active.clone()) {
-            self.emit(*topic);
+            match self.first_paint.stand_in(*topic).map(str::to_owned) {
+                Some(cached) => {
+                    self.bars[index].post(&cached);
+                    self.sent.insert((id, *topic), cached);
+                }
+                None => self.emit(*topic),
+            }
         }
     }
 
@@ -1242,6 +1262,7 @@ impl App {
         }
         if hello && index < self.bars.len() {
             self.bars[index].ready = true;
+            self.first_paint.hello(self.bars[index].id);
             self.push_all(index);
             if let Some(web) = &self.bars[index].web {
                 web.probe_paint();
@@ -1352,6 +1373,7 @@ impl App {
                 done
             }
             Method::Region { rects } => {
+                self.first_paint.region(&self.bars[index], &rects);
                 self.bars[index].set_region(rects);
                 done
             }
@@ -1598,6 +1620,7 @@ impl App {
 impl Drop for App {
     fn drop(&mut self) {
         let started = Instant::now();
+        self.first_paint.save();
         self.media.set_active(false);
         self.tray.set_active(false);
         self.bars.clear(); // app bars removed: the work area comes back

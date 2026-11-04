@@ -18,6 +18,7 @@ mod audio;
 mod bar;
 mod bridge;
 mod desktops;
+mod first_paint;
 mod hooks;
 mod icons;
 mod look;
