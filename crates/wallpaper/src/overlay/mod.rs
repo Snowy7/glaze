@@ -23,11 +23,12 @@
 //! client moves itself, so both land in the same composition frame; the glass inside follows at
 //! the next captured frame.
 //!
-//! **Memory and warmth.** Nothing exists until the first overlay opens (or a `Warm` hint
-//! arrives). WGC's first frame takes ~260 ms after a session starts, so the capture device,
-//! sessions, pipelines and DirectComposition device stay [`WARM`] after the last close, and a
-//! `Warm` hint (the shell sends one on pointer-down) starts a monitor's session before its popup
-//! opens. A warm session with no overlay drops every frame on WGC's thread.
+//! **Memory and warmth.** Nothing exists until the first overlay opens. WGC's first frame takes
+//! ~100-250 ms after a session starts, so the capture device, sessions, pipelines and
+//! DirectComposition device stay [`WARM`] after the last close: the next popup (a submenu, the
+//! next flyout) gets its glass in a frame. A warm session with no overlay drops every frame on
+//! WGC's thread. (A warm-up on pointer-down was measured and dropped: starting the capture while
+//! the button is down stalled the click's delivery to the shell by ~30 ms.)
 //!
 //! Driving it: create [`Overlays`] on the engine's thread, pump that thread's messages (requests
 //! and frame wakes arrive as window messages), call [`Overlays::tick`] after each pump, and wake
@@ -80,7 +81,7 @@ const WM_PRUNE: u32 = WM_APP + 0x4F1;
 /// Registered message posted to a client whose window must exclude itself from capture
 /// (`WDA_EXCLUDEFROMCAPTURE`), when this Windows has no per-session exclusion list.
 pub const EXCLUDE_YOURSELF: windows::core::PCWSTR = w!("mypaper.glass.exclude-yourself");
-/// How long the capture stays running after the last overlay closes, or after a `Warm` hint.
+/// How long the capture stays running after the last overlay closes.
 pub const WARM: Duration = Duration::from_secs(3);
 
 /// The engine's GPU, which draws every overlay (plan, Rule 1).
@@ -207,7 +208,8 @@ impl Overlays {
             exclusion_changed: false,
             closed_counts: Counts::default(),
             stats: Stats::default(),
-            timing: false,
+            // Measuring only: with the device's timestamp queries (MYPAPER_GPU_TIMINGS).
+            timing: std::env::var_os("MYPAPER_OVERLAY_TIMINGS").is_some(),
             warm_until: None,
         })
     }
@@ -303,25 +305,7 @@ impl Overlays {
 
     /// Keeps the capture running for [`WARM`] from now.
     fn keep_warm(&mut self) {
-        let until = Instant::now() + WARM;
-        self.warm_until = Some(self.warm_until.map_or(until, |at| at.max(until)));
-    }
-
-    /// Starts capturing the monitor under `rect`, for a popup about to open there.
-    fn warm(&mut self, rect: Rect) -> Result<()> {
-        self.keep_warm();
-        let (monitor, bounds) = monitor_of(rect);
-        if self.live.is_none() {
-            let capture = CaptureDevice::new(&self.gpu.adapter, &self.gpu.device)?;
-            self.start_session(&capture, monitor, bounds)?;
-            self.live = Some(Live::new(&self.gpu, capture, self.timing)?);
-        } else if !self.sessions.iter().any(|s| s.monitor == monitor) {
-            let live = self.live.take().context("no overlays")?;
-            let started = self.start_session(&live.capture, monitor, bounds);
-            self.live = Some(live);
-            started?;
-        }
-        Ok(())
+        self.warm_until = Some(Instant::now() + WARM);
     }
 
     /// Handles one request now (the window queues them for [`tick`](Self::tick)).
@@ -361,7 +345,6 @@ impl Overlays {
                 self.close(client);
                 Ok(())
             }
-            Request::Warm { rect, .. } => self.warm(rect),
         }
     }
 
@@ -505,6 +488,22 @@ impl Overlays {
             return;
         };
         drop(self.open.remove(o));
+        // Totals since the engine started (a harness diffs consecutive lines).
+        let s = self.stats();
+        let gpu = if s.timed > 0 {
+            s.gpu_ms / s.timed as f64
+        } else {
+            0.0
+        };
+        log::info!(
+            "glass overlay closed; totals: {} updates, {} compares ({} unchanged), {} passes, \
+             {gpu:.3} ms GPU per timed update, frames {:?}",
+            s.updates,
+            s.compares,
+            s.unchanged,
+            s.passes,
+            s.frames,
+        );
         self.exclusion_changed = true;
         // The next popup usually follows within seconds (a submenu, the next flyout): keep the
         // capture running, so its glass is there in a frame instead of ~260 ms.
@@ -746,6 +745,10 @@ impl Overlays {
                     overlay.window.fade_in(&live.dcomp)?;
                     overlay.shown = Some(Instant::now());
                     self.stats.open_to_glass = Some(overlay.opened.elapsed());
+                    log::info!(
+                        "glass overlay: open to glass {:.1} ms",
+                        overlay.opened.elapsed().as_secs_f64() * 1000.0
+                    );
                 }
                 Some(at) if !overlay.faded && at.elapsed() > window::FADE => {
                     overlay.window.settle()?;

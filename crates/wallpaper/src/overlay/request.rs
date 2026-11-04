@@ -84,10 +84,6 @@ pub enum Request {
     Material { client: HWND, material: Material },
     /// Destroys the overlay. The capture stays warm for a few seconds, for the next popup.
     Close { client: HWND },
-    /// A popup will probably open over `rect` soon (sent on pointer-down): starts the capture of
-    /// that monitor now, so its first frame (~260 ms cold) is in when the popup opens. `client`
-    /// is the window that was pressed; nothing is drawn.
-    Warm { client: HWND, rect: Rect },
 }
 
 impl Request {
@@ -96,8 +92,7 @@ impl Request {
             Self::Open { client, .. }
             | Self::Place { client, .. }
             | Self::Material { client, .. }
-            | Self::Close { client }
-            | Self::Warm { client, .. } => client,
+            | Self::Close { client } => client,
         }
     }
 }
@@ -145,7 +140,6 @@ const OPEN: u32 = 1;
 const PLACE: u32 = 2;
 const MATERIAL: u32 = 3;
 const CLOSE: u32 = 4;
-const WARM: u32 = 5;
 
 impl From<&Request> for Wire {
     fn from(request: &Request) -> Self {
@@ -178,10 +172,6 @@ impl From<&Request> for Wire {
                 wire.material = material;
             }
             Request::Close { .. } => wire.kind = CLOSE,
-            Request::Warm { rect, .. } => {
-                wire.kind = WARM;
-                wire.rect = [rect.x, rect.y, rect.width, rect.height];
-            }
         }
         wire
     }
@@ -228,7 +218,6 @@ impl Wire {
                 material: self.material,
             },
             CLOSE => Request::Close { client },
-            WARM if shape_ok => Request::Warm { client, rect },
             _ => return None,
         })
     }
@@ -327,7 +316,6 @@ mod tests {
             },
             Request::Material { client, material },
             Request::Close { client },
-            Request::Warm { client, rect },
         ] {
             assert_eq!(roundtrip(request), Some(request));
         }

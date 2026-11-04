@@ -71,8 +71,6 @@ pub trait Backdrop {
     fn place(&self, client: HWND, shape: Shape, radius: f32);
     fn material(&self, client: HWND, material: &GlassMaterial);
     fn close(&self, client: HWND);
-    /// A popup will probably open near `shape` soon (pointer-down on `client`): warm up.
-    fn warm(&self, client: HWND, shape: Shape);
 }
 
 thread_local! {
@@ -100,13 +98,6 @@ pub fn style() -> Option<GlassMaterial> {
 /// Whether a backdrop is installed and can show glass now.
 pub fn available() -> bool {
     backdrop().is_some_and(|b| b.available())
-}
-
-/// Hints that a popup may open near `shape` soon (call on pointer-down).
-pub fn warm(client: HWND, shape: Shape) {
-    if let Some(b) = backdrop() {
-        b.warm(client, shape);
-    }
 }
 
 pub(crate) fn backdrop() -> Option<Rc<dyn Backdrop>> {
