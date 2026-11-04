@@ -1,0 +1,26 @@
+{
+  "layout": "islands",
+  "height": 34,
+  "margin": 6,
+  "padding": 5,
+  "spacing": 2,
+  "left": ["start", "|", "workspaces", "|", "app"],
+  "center": ["clock"],
+  "right": ["media", "|", "tray", "|", "network", "volume", "battery", "|", "quick", "power"],
+  "look": {
+    "family": "mono",
+    "background": { "type": "solid", "color": "#141416eb" },
+    "noise": 0.03,
+    "radius": 12,
+    "corners": "squircle",
+    "border": { "rest": { "width": 1, "color": "#ffffff14" }, "hover": { "color": "#ffffff29" } },
+    "shadow": { "rest": { "y": 2, "blur": 4, "color": "#00000073" } },
+    "glass": { "rim": 0.2 },
+    "items": {
+      "radius": 8,
+      "hover": { "background": "#ffffff14", "color": "#ffffff" },
+      "active": { "background": "#ffffff24", "color": "#ffffff" }
+    }
+  },
+  "animation": { "duration": 180, "curve": "snappy", "bar": { "style": "pop" }, "open": { "style": "pop" } }
+}

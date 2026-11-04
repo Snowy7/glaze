@@ -98,6 +98,20 @@ pub enum Fill {
     /// "Wallpaper glass": the wallpaper engine's blurred snapshot of this monitor, aligned to the
     /// screen, under the tint.
     Wallpaper(WallpaperFill),
+    /// Live blur: whatever is behind the bar (windows too), blurred by Windows (DWM's host
+    /// backdrop) under the tint. Falls back to the tint where Windows can't (docs/bars.md,
+    /// "Live blur").
+    Blur(BlurFill),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlurFill {
+    #[serde(default = "one")]
+    pub brightness: f32,
+    /// Extra blur in DIPs on top of Windows' own (usually 0).
+    #[serde(default)]
+    pub blur: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -220,13 +234,13 @@ fn default_interval() -> u32 {
 }
 
 impl Fill {
-    fn validate(&self) -> Result<()> {
+    fn validate(&self, name: &str) -> Result<()> {
         match self {
             Fill::None | Fill::Solid { .. } => Ok(()),
-            Fill::Gradient(gradient) => gradient.validate("look.background"),
+            Fill::Gradient(gradient) => gradient.validate(name),
             Fill::Image(image) => {
                 if image.path.trim().is_empty() {
-                    bail!("look.background.path is empty");
+                    bail!("{name}.path is empty");
                 }
                 let words: Vec<&str> = image.position.split_whitespace().collect();
                 let word_ok = |w: &&str| {
@@ -236,28 +250,24 @@ impl Fill {
                 };
                 if words.is_empty() || words.len() > 2 || !words.iter().all(word_ok) {
                     bail!(
-                        "look.background.position: expected up to two of center/top/bottom/left/right/<n>%, got {:?}",
+                        "{name}.position: expected up to two of center/top/bottom/left/right/<n>%, got {:?}",
                         image.position
                     );
                 }
-                check(
-                    "look.background.brightness",
-                    Some(image.brightness),
-                    0.0..=2.0,
-                )?;
-                check("look.background.blur", Some(image.blur), 0.0..=64.0)
+                check(&format!("{name}.brightness"), Some(image.brightness), 0.0..=2.0)?;
+                check(&format!("{name}.blur"), Some(image.blur), 0.0..=64.0)
             }
             Fill::Wallpaper(wallpaper) => {
-                check(
-                    "look.background.brightness",
-                    Some(wallpaper.brightness),
-                    0.0..=2.0,
-                )?;
-                check("look.background.blur", Some(wallpaper.blur), 0.0..=64.0)?;
+                check(&format!("{name}.brightness"), Some(wallpaper.brightness), 0.0..=2.0)?;
+                check(&format!("{name}.blur"), Some(wallpaper.blur), 0.0..=64.0)?;
                 if !(2..=600).contains(&wallpaper.interval) {
-                    bail!("look.background.interval must be between 2 and 600 seconds");
+                    bail!("{name}.interval must be between 2 and 600 seconds");
                 }
                 Ok(())
+            }
+            Fill::Blur(blur) => {
+                check(&format!("{name}.brightness"), Some(blur.brightness), 0.0..=2.0)?;
+                check(&format!("{name}.blur"), Some(blur.blur), 0.0..=64.0)
             }
         }
     }
@@ -472,6 +482,86 @@ pub enum Corners {
     Notch,
 }
 
+/// Which operating system the flyouts and menus a bar opens are drawn after (`data-family`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Family {
+    /// mypaper's own: monochrome, "on" is the text color.
+    #[default]
+    Mono,
+    /// Windows 11: acrylic, accent-filled toggles, 8 DIP corners, Segoe Fluent Icons.
+    Fluent,
+    /// macOS: Control Center modules, vibrant glass, larger corners.
+    Macos,
+    /// ChromeOS: Material You, pill buttons and big rounded tiles.
+    Material,
+}
+
+/// The module glyphs: mypaper's own line icons, Windows' Segoe Fluent Icons (the system font,
+/// pixel-exact on Windows 11), or SF Symbols-style outlines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Glyphs {
+    #[default]
+    Default,
+    Fluent,
+    Symbols,
+}
+
+/// What makes glass read as glass, each 0..1: a fine specular `rim` along the lit edge, a soft
+/// `sheen` falling from the top, and `depth`, an inner shadow toward the bottom edge.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GlassStyle {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rim: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sheen: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth: Option<f32>,
+}
+
+/// The flyouts and menus a bar opens: live blur behind them (default on, where Windows can) and
+/// how opaque their tint is (0..1; missing: the family's).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct FlyoutStyle {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blur: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tint: Option<f32>,
+}
+
+/// A bar's type: a CSS font-family list, a size (DIPs) and a weight. Missing: the appearance's
+/// font, and the design's size and weight.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct FontStyle {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub family: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weight: Option<u16>,
+}
+
+impl FontStyle {
+    fn validate(&self, name: &str) -> Result<()> {
+        // A family list goes into a CSS variable: names, quotes, commas and spaces only.
+        let fine = |c: char| c.is_alphanumeric() || " ,'\"-_".contains(c);
+        if let Some(family) = &self.family
+            && (family.trim().is_empty() || family.len() > 200 || !family.chars().all(fine))
+        {
+            bail!("{name}.family must be a CSS font-family list (names, quotes and commas)");
+        }
+        check(&format!("{name}.size"), self.size, 9.0..=24.0)?;
+        if self.weight.is_some_and(|w| !(100..=900).contains(&w)) {
+            bail!("{name}.weight must be between 100 and 900");
+        }
+        Ok(())
+    }
+}
+
 /// The bar surfaces' look beyond `appearance` (docs/bars.md, "Look").
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -479,6 +569,15 @@ pub struct Look {
     /// Light or dark; missing: from `appearance.text`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheme: Option<Scheme>,
+    /// The OS family of the flyouts and menus; missing: `mono`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub family: Option<Family>,
+    /// The module glyph set; missing: mypaper's own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glyphs: Option<Glyphs>,
+    pub font: FontStyle,
+    pub glass: GlassStyle,
+    pub flyouts: FlyoutStyle,
     /// Missing: the appearance's tint at its opacity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<Fill>,
@@ -505,30 +604,44 @@ pub struct Look {
 
 impl Look {
     pub fn validate(&self) -> Result<()> {
+        self.validate_at("look")
+    }
+
+    /// Checks every range, naming fields from `path` (`look`, `top.look`, ...).
+    pub fn validate_at(&self, path: &str) -> Result<()> {
         if let Some(background) = &self.background {
-            background.validate()?;
+            background.validate(&format!("{path}.background"))?;
         }
-        check("look.tint", self.tint, 0.0..=1.0)?;
-        check("look.saturation", self.saturation, 0.0..=3.0)?;
-        check("look.noise", self.noise, 0.0..=0.5)?;
-        check("look.radius", self.radius, 0.0..=64.0)?;
+        check(&format!("{path}.tint"), self.tint, 0.0..=1.0)?;
+        check(&format!("{path}.saturation"), self.saturation, 0.0..=3.0)?;
+        check(&format!("{path}.noise"), self.noise, 0.0..=0.5)?;
+        check(&format!("{path}.radius"), self.radius, 0.0..=64.0)?;
+        for (field, value) in [
+            ("rim", self.glass.rim),
+            ("sheen", self.glass.sheen),
+            ("depth", self.glass.depth),
+        ] {
+            check(&format!("{path}.glass.{field}"), value, 0.0..=1.0)?;
+        }
+        check(&format!("{path}.flyouts.tint"), self.flyouts.tint, 0.0..=1.0)?;
+        self.font.validate(&format!("{path}.font"))?;
         for (state, border) in self.border.each() {
-            border.validate(&format!("look.border.{state}"))?;
+            border.validate(&format!("{path}.border.{state}"))?;
         }
         for (state, glow) in self.glow.each() {
-            glow.validate(&format!("look.glow.{state}"))?;
+            glow.validate(&format!("{path}.glow.{state}"))?;
         }
         for (state, shadow) in self.shadow.each() {
-            shadow.validate(&format!("look.shadow.{state}"))?;
+            shadow.validate(&format!("{path}.shadow.{state}"))?;
         }
-        check("look.items.radius", self.items.radius, 0.0..=32.0)?;
+        check(&format!("{path}.items.radius"), self.items.radius, 0.0..=32.0)?;
         for (state, item) in [
             ("rest", &self.items.rest),
             ("hover", &self.items.hover),
             ("active", &self.items.active),
         ] {
             if let Some(item) = item {
-                item.validate(&format!("look.items.{state}"))?;
+                item.validate(&format!("{path}.items.{state}"))?;
             }
         }
         Ok(())
@@ -695,6 +808,11 @@ impl Motion {
         self.validate_at(Level::Root, "animation")
     }
 
+    /// A whole tree (a bar's own `animation`), naming fields from `path`.
+    pub fn validate_named(&self, path: &str) -> Result<()> {
+        self.validate_at(Level::Root, path)
+    }
+
     fn validate_at(&self, level: Level, path: &str) -> Result<()> {
         check(&format!("{path}.duration"), self.duration, 0.0..=5000.0)?;
         if level != Level::Root && self.reduce_motion.is_some() {
@@ -783,8 +901,20 @@ mod tests {
             look(r#"{ "background": { "type": "image", "path": "a.png", "fit": "tile", "position": "left 30%" } }"#)
                 .is_ok()
         );
+        let blur = look(r#"{ "background": { "type": "blur" }, "glass": { "rim": 0.6 }, "flyouts": { "blur": false } }"#).unwrap();
+        assert!(matches!(blur.background, Some(Fill::Blur(BlurFill { brightness, .. })) if brightness == 1.0));
+        assert!(
+            look(r#"{ "family": "macos", "glyphs": "fluent", "font": { "family": "\"Segoe UI Variable Display\", sans-serif", "size": 13, "weight": 600 } }"#)
+                .is_ok()
+        );
         for bad in [
             r#"{ "background": { "type": "glass" } }"#,
+            r#"{ "background": { "type": "blur", "blur": 90 } }"#,
+            r#"{ "glass": { "rim": 2 } }"#,
+            r#"{ "flyouts": { "tint": -1 } }"#,
+            r#"{ "font": { "family": "x; } body { color: red" } }"#,
+            r#"{ "font": { "size": 40 } }"#,
+            r#"{ "family": "amiga" }"#,
             r##"{ "background": { "type": "solid", "color": "#fff", "extra": 1 } }"##,
             r##"{ "background": { "type": "gradient", "stops": ["#fff"] } }"##,
             r#"{ "background": { "type": "image", "path": "a.png", "position": "middle" } }"#,

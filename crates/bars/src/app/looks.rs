@@ -1,21 +1,24 @@
 //! What each bar gets about its look besides `config` (docs/bars.md, "Look"): the resolved
 //! appearance with the theme's CSS and variables, Windows' accent and light/dark mode, the icon
-//! pack and copied images (`appearance`); reduce-motion and performance mode (`mode`); and the
-//! wallpaper-glass snapshot with where the bar's window sits on its monitor (`backdrop`). Each is
-//! re-sent to a bar only when it changed.
+//! pack and copied images (`appearance`); reduce-motion, performance mode and whether live blur
+//! is on (`mode`); and the wallpaper-glass snapshot with where the bar's window sits on its
+//! monitor (`backdrop`). Each is re-sent to a bar only when it changed. Live blur itself (the
+//! page's `glass` panes) is drawn here too, through `crate::blur`.
 
 use std::collections::{BTreeMap, HashMap};
 
 use anyhow::Result;
 use mypaper_bars::BarsConfig;
 use mypaper_bars::config::Performance;
-use mypaper_bars::style::{Fill, ReduceMotion};
+use mypaper_bars::style::{Fill, Look, Motion, ReduceMotion};
 use serde_json::{Value, json};
 
 use super::App;
 use crate::accent::{self, System};
 use crate::assets::{Assets, is_image_path};
 use crate::bar::Bar;
+use crate::blur::{self, LiveBlur, Pane};
+use crate::bridge::BarKind;
 use crate::glass::{Backdrop, Glass};
 use crate::look::{self, Pack};
 use crate::wake::Waker;
@@ -28,12 +31,19 @@ pub(super) struct Looks {
     /// The theme's variables, as CSS values.
     pub vars: BTreeMap<String, String>,
     pub on_battery: bool,
+    /// Live blur's compositor, unless Windows refused one (logged).
+    pub live: Option<LiveBlur>,
+    /// Settings → Personalization → Colors → Transparency effects.
+    transparency: bool,
     /// What each bar last got per event, so unchanged ones aren't re-sent.
     sent: HashMap<(u32, &'static str), String>,
 }
 
 impl Looks {
     pub fn new(waker: Waker) -> Result<Self> {
+        let live = LiveBlur::new()
+            .inspect_err(|e| log::warn!("no live blur: {e:#}"))
+            .ok();
         Ok(Self {
             system: accent::read(),
             glass: Glass::new(mypaper_bars::files::local("backdrop")?, waker),
@@ -41,6 +51,8 @@ impl Looks {
             pack: None,
             vars: BTreeMap::new(),
             on_battery: mypaper_desktop::on_battery(),
+            live,
+            transparency: blur::transparency_on(),
             sent: HashMap::new(),
         })
     }
@@ -51,18 +63,37 @@ impl Looks {
     }
 }
 
-/// Image files a config names: a picture background and module icons given as files.
+/// The look a bar draws: its own (`top.look` or `dock.look`, already layered over its design's
+/// and the shared one).
+pub(super) fn bar_look(bar: &Bar) -> &Look {
+    match bar.kind {
+        BarKind::Top => &bar.config.top.look,
+        BarKind::Dock => &bar.config.dock.look,
+    }
+}
+
+fn bar_motion(bar: &Bar) -> &Motion {
+    match bar.kind {
+        BarKind::Top => &bar.config.top.animation,
+        BarKind::Dock => &bar.config.dock.animation,
+    }
+}
+
+/// Image files a config names: picture backgrounds (either bar's) and module icons given as
+/// files.
 fn image_paths(config: &BarsConfig) -> impl Iterator<Item = &str> + '_ {
-    let background = match &config.look.background {
-        Some(Fill::Image(image)) => Some(image.path.as_str()),
-        _ => None,
-    };
+    let backgrounds = [&config.top.look, &config.dock.look]
+        .into_iter()
+        .filter_map(|look| match &look.background {
+            Some(Fill::Image(image)) => Some(image.path.as_str()),
+            _ => None,
+        });
     let icons = config
         .modules
         .values()
         .filter_map(|m| m.icon.as_deref())
         .filter(|icon| is_image_path(icon));
-    background.into_iter().chain(icons)
+    backgrounds.chain(icons)
 }
 
 impl App {
@@ -110,21 +141,25 @@ impl App {
         }
     }
 
-    /// The `mode` event: reduce motion (Windows' setting unless `animation.reduceMotion` says
-    /// otherwise) and performance mode (no blur, no animation).
+    /// The `mode` event: reduce motion (Windows' setting unless the bar's `reduceMotion` says
+    /// otherwise), performance mode (no blur, no animation), and whether live blur draws (this
+    /// window has it, transparency effects are on, performance mode is off).
     pub(super) fn mode_payload(&self, bar: &Bar) -> Value {
-        let reduce = match bar.config.animation.reduce_motion.unwrap_or_default() {
+        let reduce = match bar_motion(bar).reduce_motion.unwrap_or_default() {
             ReduceMotion::System => !self.looks.system.animations,
             ReduceMotion::Always => true,
             ReduceMotion::Never => false,
         };
-        json!({ "reduceMotion": reduce, "performance": self.performance(bar) })
+        let performance = self.performance(bar);
+        let blur =
+            self.looks.live.is_some() && bar.has_blur() && self.looks.transparency && !performance;
+        json!({ "reduceMotion": reduce, "performance": performance, "blur": blur })
     }
 
     /// The `backdrop` event: the wallpaper snapshot of the bar's monitor, its size and where the
     /// bar's window sits on it (DIPs), or null without wallpaper glass or a snapshot.
     pub(super) fn backdrop_payload(&self, bar: &Bar) -> Value {
-        if bar.config.look.wallpaper().is_none() {
+        if bar_look(bar).wallpaper().is_none() {
             return Value::Null;
         }
         let Some(url) = self.looks.glass.url(&bar.monitor.device) else {
@@ -172,18 +207,27 @@ impl App {
             .bars
             .iter()
             .filter(|bar| !bar.hidden && !self.performance(bar))
-            .filter_map(|bar| bar.config.look.wallpaper())
+            .filter_map(|bar| bar_look(bar).wallpaper())
             .map(|wallpaper| wallpaper.interval)
             .min();
         self.looks.glass.request(interval);
     }
 
-    /// Windows' colors, light/dark mode or animation setting may have changed.
+    /// The page's `glass` request: where its live-blur panes are now.
+    pub(super) fn set_glass(&mut self, index: usize, panes: &[Pane]) {
+        if let Some(live) = &mut self.looks.live {
+            self.bars[index].set_glass(live, panes);
+        }
+    }
+
+    /// Windows' colors, light/dark mode, transparency or animation setting may have changed.
     pub(super) fn settings_changed(&mut self) {
         let system = accent::read();
-        if system != self.looks.system {
-            log::info!("system colors or animations changed");
+        let transparency = blur::transparency_on();
+        if system != self.looks.system || transparency != self.looks.transparency {
+            log::info!("system colors, transparency or animations changed");
             self.looks.system = system;
+            self.looks.transparency = transparency;
             self.push_looks();
         }
     }

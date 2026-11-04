@@ -19,9 +19,9 @@ const system: SystemLook = {
   accent: ["#0078d4", "#0091f8", "#4cc2ff", "#99ebff", "#0067c0", "#003e92", "#001a68"],
   scheme: "light",
 };
-const empty: Look = { border: {}, glow: {}, shadow: {}, items: {}, indicator: {} };
-const tokens = (look: Partial<Look>, assets: Record<string, string> = {}) =>
-  lookTokens({ ...empty, ...look }, appearance, "dark", system, assets);
+const empty: Look = { font: {}, glass: {}, flyouts: {}, border: {}, glow: {}, shadow: {}, items: {}, indicator: {} };
+const tokens = (look: Partial<Look>, assets: Record<string, string> = {}, live = false) =>
+  lookTokens({ ...empty, ...look }, appearance, "dark", system, assets, live);
 
 describe("colors and paints", () => {
   it("map tokens to the page's variables", () => {
@@ -128,5 +128,30 @@ describe("backdropTokens", () => {
     expect(vars["--backdrop-size"]).toBe("2560px 1440px");
     expect(vars["--backdrop-pos"]).toBe("0px -1018px");
     expect(backdropTokens(null).attrs["data-backdrop"]).toBe("off");
+  });
+});
+
+describe("live blur and glass", () => {
+  it("tints over live blur, and goes nearly opaque without it", () => {
+    const blur = { background: { type: "blur" as const, brightness: 1.1, blur: 4 }, tint: 0.4, saturation: 1.8 };
+    const live = tokens(blur, {}, true);
+    expect(live.attrs["data-fill"]).toBe("blur");
+    expect(live.vars["--s-tint"]).toBe("rgb(14 14 14 / 0.4)");
+    expect(live.vars["--glass-sat"]).toBe("1.8");
+    expect(live.vars["--glass-bright"]).toBe("1.1");
+    expect(live.vars["--glass-blur"]).toBe("4");
+    expect(tokens(blur).vars["--s-tint"]).toBe("rgb(14 14 14 / 0.9)");
+  });
+
+  it("carries glass highlights, type, family and the flyouts' material", () => {
+    const { attrs, vars } = tokens(
+      { family: "macos", glyphs: "symbols", glass: { rim: 0.6, sheen: 0.2 }, font: { family: "SF Pro Text", size: 13, weight: 500 }, flyouts: { tint: 0.5 } },
+      {},
+      true,
+    );
+    expect(attrs).toMatchObject({ "data-family": "macos", "data-glyphs": "symbols", "data-fly-blur": "on" });
+    expect(vars).toMatchObject({ "--g-rim": "0.6", "--g-sheen": "0.2", "--g-depth": "0", "--bar-font": "SF Pro Text", "--bar-size": "13px", "--bar-weight": "500", "--fly-tint": "0.5" });
+    expect(tokens({ flyouts: { blur: false } }, {}, true).attrs["data-fly-blur"]).toBe("off");
+    expect(tokens({}).attrs["data-fly-blur"]).toBe("off");
   });
 });

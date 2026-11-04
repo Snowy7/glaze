@@ -1,0 +1,24 @@
+{
+  "style": "floating",
+  "margin": 10,
+  "indicator": "dot",
+  "magnify": { "scale": 1.45, "range": 3 },
+  "look": {
+    "family": "mono",
+    "background": { "type": "wallpaper" },
+    "tint": 0.48,
+    "saturation": 1.45,
+    "noise": 0.02,
+    "radius": 14,
+    "corners": "squircle",
+    "border": { "rest": { "width": 1, "color": "#ffffff1f" } },
+    "shadow": { "rest": { "y": 2, "blur": 6, "color": "#0000005c" } },
+    "glass": { "rim": 0.45, "sheen": 0.12 },
+    "items": {
+      "radius": 8,
+      "hover": { "background": "#ffffff1a" },
+      "active": { "background": "#ffffff29" }
+    }
+  },
+  "animation": { "duration": 230, "curve": "spring-soft", "bar": { "style": "slide" }, "open": { "style": "pop" } }
+}

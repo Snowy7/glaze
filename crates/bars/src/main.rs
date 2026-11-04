@@ -18,6 +18,7 @@ mod apps;
 mod assets;
 mod audio;
 mod bar;
+mod blur;
 mod bridge;
 mod custom;
 mod desktops;

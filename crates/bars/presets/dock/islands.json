@@ -1,0 +1,23 @@
+{
+  "style": "floating",
+  "indicator": "bar",
+  "margin": 6,
+  "magnify": { "scale": 1.35, "range": 2.5 },
+  "look": {
+    "family": "mono",
+    "background": { "type": "solid", "color": "#141416eb" },
+    "noise": 0.03,
+    "radius": 12,
+    "corners": "squircle",
+    "border": { "rest": { "width": 1, "color": "#ffffff14" }, "hover": { "color": "#ffffff29" } },
+    "shadow": { "rest": { "y": 2, "blur": 4, "color": "#00000073" } },
+    "glass": { "rim": 0.2 },
+    "items": {
+      "radius": 8,
+      "hover": { "background": "#ffffff14", "color": "#ffffff" },
+      "active": { "background": "#ffffff24", "color": "#ffffff" }
+    },
+    "indicator": { "running": "#ffffff66", "active": "accent", "attention": "#ffcc4d" }
+  },
+  "animation": { "duration": 180, "curve": "snappy", "bar": { "style": "pop" }, "open": { "style": "pop" } }
+}

@@ -1,0 +1,44 @@
+{
+  "style": "taskbar",
+  "size": 24,
+  "padding": 8,
+  "margin": 8,
+  "spacing": 4,
+  "button": 40,
+  "magnify": false,
+  "indicator": "pill",
+  "counter": false,
+  "align": "center",
+  "left": ["start"],
+  "right": ["network", "volume", "battery", "clock"],
+  "extras": [],
+  "preview": { "delay": 400 },
+  "clock": { "format": "HH:mm" },
+  "look": {
+    "scheme": "auto",
+    "family": "fluent",
+    "glyphs": "fluent",
+    "font": { "family": "\"Segoe UI Variable Text\", \"Segoe UI\", sans-serif", "size": 12, "weight": 400 },
+    "background": { "type": "wallpaper" },
+    "tint": 0.72,
+    "saturation": 1.35,
+    "noise": 0.02,
+    "radius": 10,
+    "border": { "rest": { "width": 1, "color": "var(--edge)" } },
+    "shadow": { "rest": { "y": 2, "blur": 8, "color": "#00000047" } },
+    "glass": { "rim": 0.3 },
+    "items": {
+      "radius": 6,
+      "rest": { "color": "text" },
+      "hover": { "background": "var(--fill-1)" },
+      "active": { "background": "var(--fill-1)" }
+    },
+    "indicator": { "running": "var(--t2)", "active": "system-accent-light-2", "attention": "#ffb900" }
+  },
+  "animation": {
+    "duration": 167,
+    "curve": [0.1, 0.9, 0.2, 1],
+    "bar": { "style": "slide" },
+    "open": { "style": "slide", "duration": 250 }
+  }
+}

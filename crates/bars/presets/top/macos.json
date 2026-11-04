@@ -1,0 +1,28 @@
+{
+  "layout": "strip",
+  "height": 24,
+  "padding": 10,
+  "spacing": 0,
+  "left": ["start", "app", "workspaces"],
+  "center": [],
+  "right": ["media", "tray", "battery", "network", "volume", "quick", "clock"],
+  "clock": { "format": "ddd d MMM  HH:mm" },
+  "look": {
+    "scheme": "auto",
+    "family": "macos",
+    "glyphs": "symbols",
+    "font": { "family": "\"SF Pro Text\", \"SF Pro\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, sans-serif", "size": 13, "weight": 400 },
+    "background": { "type": "wallpaper", "brightness": 1.04 },
+    "tint": 0.42,
+    "saturation": 1.8,
+    "noise": 0.012,
+    "border": { "rest": { "width": 0 } },
+    "items": {
+      "radius": 5,
+      "rest": { "color": "text" },
+      "hover": { "background": "var(--fill-2)" },
+      "active": { "background": "var(--fill-3)" }
+    }
+  },
+  "animation": { "duration": 240, "curve": "spring", "bar": { "style": "slide" }, "open": { "style": "fade", "curve": "ease-out", "duration": 110 } }
+}

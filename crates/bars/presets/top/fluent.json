@@ -1,0 +1,29 @@
+{
+  "layout": "strip",
+  "height": 32,
+  "padding": 4,
+  "spacing": 2,
+  "left": ["start", "search", "workspaces", "app"],
+  "center": [],
+  "right": ["media", "tray", "language", "network", "volume", "battery", "clock", "notifications"],
+  "clock": { "format": "ddd d MMM  HH:mm" },
+  "look": {
+    "scheme": "auto",
+    "family": "fluent",
+    "glyphs": "fluent",
+    "font": { "family": "\"Segoe UI Variable Text\", \"Segoe UI\", sans-serif", "size": 12, "weight": 400 },
+    "background": { "type": "wallpaper" },
+    "tint": 0.8,
+    "saturation": 1.25,
+    "noise": 0.02,
+    "border": { "rest": { "width": 1, "color": "var(--edge)" } },
+    "items": {
+      "radius": 4,
+      "rest": { "color": "text" },
+      "hover": { "background": "var(--fill-1)" },
+      "active": { "background": "var(--fill-2)" }
+    },
+    "indicator": { "running": "var(--t2)", "active": "system-accent-light-2", "attention": "#ffb900" }
+  },
+  "animation": { "duration": 167, "curve": [0.1, 0.9, 0.2, 1], "bar": { "style": "slide" }, "open": { "style": "slide", "duration": 250 } }
+}

@@ -34,7 +34,19 @@ export type DockPosition = "bottom" | "top" | "left" | "right";
 export const DOCK_STYLES = ["floating", "taskbar"] as const;
 export type DockStyle = (typeof DOCK_STYLES)[number];
 export type BarKind = "top" | "dock";
-export type Preset = "monochrome" | "macos" | "windows11" | "islands" | "neon-glass" | "floating";
+/** A pairing of designs (crates/bars/presets/<name>.json). */
+export const PRESETS = ["monochrome", "macos", "windows11", "windows10", "chromeos", "islands", "neon-glass", "floating"] as const;
+export type Preset = (typeof PRESETS)[number];
+/** Top bar designs (crates/bars/presets/top/<id>.json + designs/top.css). */
+export const TOP_DESIGNS = ["monochrome", "macos", "fluent", "capsule", "minimal", "islands", "neon", "floating"] as const;
+export type TopDesign = (typeof TOP_DESIGNS)[number];
+/** Dock designs (crates/bars/presets/dock/<id>.json + designs/dock.css). */
+export const DOCK_DESIGNS = ["monochrome", "macos", "windows11", "windows10", "chromeos", "fluent", "islands", "neon", "floating"] as const;
+export type DockDesign = (typeof DOCK_DESIGNS)[number];
+/** The OS family a bar's flyouts and menus are drawn after. */
+export type Family = "mono" | "fluent" | "macos" | "material";
+/** The module glyph set. */
+export type Glyphs = "default" | "fluent" | "symbols";
 export type TopLayout = "strip" | "floating" | "islands";
 /** `full`, `auto` (hug the content), DIPs, or `"<n>%"`. */
 export type Dimension = "full" | "auto" | number | `${number}%`;
@@ -71,7 +83,9 @@ export type Fill =
       brightness: number;
       blur: number;
     }
-  | { type: "wallpaper"; brightness: number; blur: number; interval: number };
+  | { type: "wallpaper"; brightness: number; blur: number; interval: number }
+  /** Live blur: what's behind the window, blurred by Windows (crates/bars/src/blur.rs). */
+  | { type: "blur"; brightness: number; blur: number };
 
 export interface PerState<T> {
   rest?: T;
@@ -106,6 +120,13 @@ export type Corners = "round" | "squircle" | "bevel" | "scoop" | "notch";
 /** `bars.json` → `look` (docs/bars.md, "Look"). */
 export interface Look {
   scheme?: "auto" | "light" | "dark";
+  family?: Family;
+  glyphs?: Glyphs;
+  font: { family?: string; size?: number; weight?: number };
+  /** Glass highlights, 0–1. */
+  glass: { rim?: number; sheen?: number; depth?: number };
+  /** The flyouts this bar opens: live blur behind them, and their tint's opacity. */
+  flyouts: { blur?: boolean; tint?: number };
   background?: Fill;
   tint?: number;
   saturation?: number;
@@ -201,12 +222,18 @@ export interface ModuleOptions {
   interval?: number;
 }
 
+export interface ClockConfig {
+  seconds: boolean;
+  format: string;
+}
+
 /** `bars.json`, resolved for this bar's monitor, with every default filled in by the host. */
 export interface BarsConfig {
   version: 1;
   preset: Preset;
   taskbar: { mode: TaskbarMode; alignment?: "center" | "left" };
   top: {
+    design: TopDesign;
     enabled: boolean;
     monitors: Monitors;
     layout: TopLayout;
@@ -220,9 +247,12 @@ export interface BarsConfig {
     left: ModuleEntry[];
     center: ModuleEntry[];
     right: ModuleEntry[];
-    clock: { seconds: boolean; format: string };
+    clock: ClockConfig;
+    look: Look;
+    animation: Motion;
   };
   dock: {
+    design: DockDesign;
     enabled: boolean;
     monitors: Monitors;
     style: DockStyle;
@@ -247,10 +277,13 @@ export interface BarsConfig {
     align: "start" | "center";
     left: ModuleEntry[];
     right: ModuleEntry[];
+    /** A `taskbar` task button's length along the bar, DIPs (missing: the icon plus 16). */
+    button?: number;
+    clock: ClockConfig;
     pinned: Pinned[];
+    look: Look;
+    animation: Motion;
   };
-  look: Look;
-  animation: Motion;
   modules: Partial<Record<ModuleName, ModuleOptions>>;
   icons?: string;
   performance: "auto" | "on" | "off";
@@ -315,6 +348,18 @@ export interface Mode {
   reduceMotion: boolean;
   /** No blur and no animation (on battery, or chosen). */
   performance: boolean;
+  /** Live blur draws under this window's glass (Windows 11, transparency effects on, not performance mode). */
+  blur: boolean;
+}
+
+/** A piece of glass for live blur: `rect` in DIPs from the window's top-left. */
+export interface Pane {
+  rect: [number, number, number, number];
+  radius: number;
+  opacity: number;
+  saturation: number;
+  brightness: number;
+  blur: number;
 }
 
 /** The wallpaper snapshot of this bar's monitor: its size and the window's offset on it, DIPs. */
@@ -484,6 +529,8 @@ export interface MethodMap extends FlyoutMethods {
    * DIPs from the window's top-left. Everything else clicks through. Send it whenever it changes.
    */
   region: { params: { rects: [number, number, number, number][] }; result: null };
+  /** Where the page's live-blur glass is; sent every frame one moves (glass.ts). */
+  glass: { params: { panes: Pane[] }; result: null };
   /** Runs the `exec`/`open` action bars.json binds to a module's input. */
   run: { params: { module: ModuleName; trigger: Trigger }; result: null };
   /** Windows Search. */

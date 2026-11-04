@@ -1,14 +1,15 @@
 // Dev-only host: lets the page run in a plain browser (and for screenshots) with realistic data.
 // Loaded by `connect()` only when `window.chrome.webview` is absent.
 //
-//   ?bar=top|dock   ?preset=monochrome|macos|windows11|islands|neon-glass|floating
+//   ?bar=top|dock   ?preset=<pairing>   ?top=<top design>   ?dock=<dock design>
+//   ?click=<selector>: clicks it once the bar is up (opens a module's flyout, for screenshots)
 //   ?pos=bottom|top|left|right   ?size=48   ?h=28   ?autohide=1   ?scheme=light|dark
 //   ?text=light|dark   ?surface=none|glass|solid   ?wall=dark|light|vivid   ?reduce=1   ?perf=1
 
 import { flyoutMock, flyoutStart } from "./flyouts/mock";
 import { LAUNCHER_LAYOUTS } from "./flyouts/protocol";
 import type { Transport } from "./host";
-import { mockConfig, PRESETS } from "./mock-config";
+import { DOCK_BUNDLES, mockConfig, PRESETS, TOP_BUNDLES } from "./mock-config";
 import type {
   Appearance,
   BarKind,
@@ -118,6 +119,10 @@ export function createMockTransport(): Transport {
   const autohide = q.has("autohide");
   const presetName = q.get("preset");
   const preset: Preset = isPreset(presetName) ? presetName : "monochrome";
+  const topDesign = q.get("top");
+  const dockDesign = q.get("dock");
+  // The mock blurs what's behind glass with backdrop-filter: here the wallpaper is the page.
+  document.documentElement.dataset.mock = "";
 
   const appearance: Appearance = {
     surface,
@@ -135,12 +140,14 @@ export function createMockTransport(): Transport {
   const scheme = q.get("scheme");
   const config = mockConfig(preset, {
     dock: {
+      ...(dockDesign && dockDesign in DOCK_BUNDLES ? { design: dockDesign } : {}),
       enabled: true,
       ...(position ? { position } : {}),
       ...(q.has("size") ? { size: Number(q.get("size")) } : {}),
       ...(autohide ? { autohide } : {}),
     },
     top: {
+      ...(topDesign && topDesign in TOP_BUNDLES ? { design: topDesign } : {}),
       ...(q.has("h") ? { height: Number(q.get("h")) } : {}),
       // `?flyouts`: every module with a flyout, for previewing them.
       ...(q.has("flyouts")
@@ -233,6 +240,9 @@ export function createMockTransport(): Transport {
     }, 400);
   }
 
+  const click = q.get("click");
+  if (click) setTimeout(() => (document.querySelector(click) as HTMLElement | null)?.click(), 500);
+
   // ?dump=<selector>: after 2 s, the matching elements' boxes go into body[data-dump] (read it
   // with a headless browser's --dump-dom).
   const dump = q.get("dump");
@@ -286,7 +296,7 @@ export function createMockTransport(): Transport {
           monitor: { device: "\\\\.\\DISPLAY1", primary: true, width: innerWidth, height: innerHeight },
           config,
           look,
-          mode: { reduceMotion: q.has("reduce"), performance: q.has("perf") },
+          mode: { reduceMotion: q.has("reduce"), performance: q.has("perf"), blur: !q.has("noblur") },
           // The mock's window is the whole monitor.
           backdrop: { url: art.snapshot, width: innerWidth, height: innerHeight, x: 0, y: 0 },
           dpi: 96,
@@ -393,7 +403,8 @@ export function createMockTransport(): Transport {
   return {
     postMessage(message) {
       if (!isRequest(message)) return;
-      if (message.method !== "region") console.debug("[mock host]", message.method, message.params);
+      if (message.method === "glass") (window as { glassPanes?: unknown }).glassPanes = message.params.panes;
+      else if (message.method !== "region") console.debug("[mock host]", message.method, message.params);
       else console.debug("[mock host] region", JSON.stringify(message.params.rects));
       request(message);
     },

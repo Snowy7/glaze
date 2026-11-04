@@ -19,12 +19,14 @@ import { fire, request, type Scope } from "../host";
 import { icons } from "../icons";
 import { openMenu, type MenuEntry } from "../menu";
 import { mountLayer, type Layer } from "../overlay";
-import type { BarsConfig, Module } from "../protocol";
+import type { BarKind, BarsConfig, Module } from "../protocol";
 import { mediaLabel, signalLevel, volumeDelta, volumeGlyph, workspaceSteps } from "./logic";
 
 export interface TopCtx {
   config: BarsConfig;
   scope: Scope;
+  /** The bar the module sits in. */
+  kind: BarKind;
 }
 type Factory = (ctx: TopCtx) => HTMLElement;
 
@@ -33,6 +35,12 @@ type Factory = (ctx: TopCtx) => HTMLElement;
  * the module. Open it on `barAnchor(el).side`: below a top bar, above a bottom taskbar.
  */
 export const underStrip = (el: Element, _config?: BarsConfig): Rect => barAnchor(el).rect;
+
+/**
+ * Windows 11 opens quick settings from the network, volume and battery group: the `fluent` family
+ * (the bar's look.family, on <html>) does too. A `modules.<name>.click` binding still wins.
+ */
+const groupedQuick = (): boolean => document.documentElement.dataset.family === "fluent";
 
 const start: Factory = () => {
   const el = button("mod icon-only", glyph(icons.mark));
@@ -92,12 +100,13 @@ const app: Factory = ({ scope }) => {
   return el;
 };
 
-const clock: Factory = ({ config, scope }) => {
+const clock: Factory = ({ config, scope, kind }) => {
   const el = button("mod clock");
+  const { format } = kind === "dock" ? config.dock.clock : config.top.clock;
   el.addEventListener("click", () => openCalendar(el));
   scope.on("clock", ({ now }) => {
     const date = new Date(now);
-    el.textContent = formatClock(config.top.clock.format, date);
+    el.textContent = formatClock(format, date);
     el.title = date.toLocaleDateString(undefined, { dateStyle: "full" });
   });
   return el;
@@ -132,7 +141,7 @@ const media: Factory = ({ scope }) => {
 const network: Factory = ({ scope }) => {
   const g = glyph();
   const el = button("mod icon-only", g);
-  el.addEventListener("click", () => openNetwork(el));
+  el.addEventListener("click", () => (groupedQuick() ? openQuick(el) : openNetwork(el)));
   scope.on("network", (info) => {
     g.innerHTML =
       info.kind === "wifi" ? icons.wifi(signalLevel(info.signal)) : info.kind === "ethernet" ? icons.ethernet : icons.offline;
@@ -201,7 +210,7 @@ const volume: Factory = ({ scope }) => {
   };
 
   // Click: the mixer; middle click: mute.
-  el.addEventListener("click", () => openMixer(el));
+  el.addEventListener("click", () => (groupedQuick() ? openQuick(el) : openMixer(el)));
   el.addEventListener("auxclick", (event) => {
     if (event.button !== 1 || !state) return;
     request("volume", { mute: !state.muted })
@@ -232,7 +241,7 @@ const battery: Factory = ({ scope }) => {
   const g = glyph();
   const text = h("span", "battery-pct");
   const el = button("mod battery", bolt, g, text);
-  el.addEventListener("click", () => fire("openSettings", { uri: "ms-settings:batterysaver" }));
+  el.addEventListener("click", () => (groupedQuick() ? openQuick(el) : fire("openSettings", { uri: "ms-settings:batterysaver" })));
   scope.on("battery", (info) => {
     el.hidden = !info;
     if (!info) return;

@@ -5,6 +5,10 @@
    presets and themes can retime them. */
 
 :root {
+  /* "On" (a toggle, today, a primary button): a fill and the ink on it. Families retune these
+     (families.css); mono is the text color as a fill. */
+  --on: var(--t0);
+  --on-ink: var(--raised);
   --fly-radius: 14px;
   --fly-duration: 160ms;
   --fly-gap: 10px;
@@ -99,8 +103,8 @@
   background: var(--fill-3);
 }
 .fly-button.primary {
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--on);
+  color: var(--on-ink);
 }
 .fly-button.primary:hover {
   background: var(--t1);
@@ -223,7 +227,7 @@
 .fly-slider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 99px;
-  background: linear-gradient(to right, var(--t0) var(--value, 0%), var(--fill-3) var(--value, 0%));
+  background: linear-gradient(to right, var(--on) var(--value, 0%), var(--fill-3) var(--value, 0%));
 }
 .fly-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -231,8 +235,8 @@
   height: 16px;
   margin-top: -6px;
   border-radius: 50%;
-  background: var(--t0);
-  box-shadow: 0 0 0 3px var(--raised), 0 1px 4px var(--drop);
+  background: var(--thumb, var(--t0));
+  box-shadow: 0 0 0 3px var(--thumb-ring, var(--raised)), 0 1px 4px var(--drop);
   transition: transform var(--fly-duration) var(--ease);
 }
 .fly-slider:active::-webkit-slider-thumb {
@@ -267,11 +271,11 @@
   transition: transform var(--fly-duration) var(--ease), background-color var(--fly-duration) var(--ease);
 }
 .fly-switch[data-on="true"] {
-  background: var(--t0);
+  background: var(--on);
 }
 .fly-switch[data-on="true"]::after {
   transform: translateX(16px);
-  background: var(--raised);
+  background: var(--on-ink);
 }
 
 /* A quick-settings tile; on, it inverts. */
@@ -286,8 +290,8 @@
   transition: background-color var(--fly-duration) var(--ease), color var(--fly-duration) var(--ease);
 }
 .fly-tile[data-on="true"] {
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--on);
+  color: var(--on-ink);
   box-shadow: none;
 }
 .fly-tile[data-disabled] {
@@ -932,8 +936,8 @@
   color: var(--t3);
 }
 .cal-day.is-today {
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--cal-today, var(--on));
+  color: var(--cal-today-ink, var(--on-ink));
   font-weight: 700;
 }
 .cal-zones {
@@ -1063,8 +1067,8 @@
   height: 15px;
   padding: 0 4px;
   border-radius: 99px;
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--badge, var(--on));
+  color: var(--badge-ink, var(--on-ink));
   font-size: 9.5px;
   font-weight: 700;
   line-height: 15px;
@@ -1159,6 +1163,6 @@
   letter-spacing: 0.03em;
 }
 .fly-row.is-current .lang-badge {
-  background: var(--t0);
-  color: var(--raised);
+  background: var(--on);
+  color: var(--on-ink);
 }

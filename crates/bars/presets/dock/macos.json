@@ -1,0 +1,35 @@
+{
+  "style": "floating",
+  "size": 48,
+  "padding": 6,
+  "margin": 4,
+  "spacing": 4,
+  "indicator": "dot",
+  "counter": false,
+  "attention": "bounce",
+  "magnify": { "scale": 1.65, "range": 3 },
+  "extras": ["trash"],
+  "look": {
+    "scheme": "auto",
+    "family": "macos",
+    "glyphs": "symbols",
+    "font": { "family": "\"SF Pro Text\", \"SF Pro\", \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, sans-serif", "size": 13 },
+    "background": { "type": "wallpaper", "brightness": 1.06 },
+    "tint": 0.3,
+    "saturation": 1.85,
+    "noise": 0.012,
+    "radius": 19,
+    "corners": "squircle",
+    "border": { "rest": { "width": 1, "color": "#ffffff33" } },
+    "shadow": { "rest": { "y": 1, "blur": 8, "color": "#00000030" } },
+    "glass": { "rim": 0.6, "sheen": 0.14, "depth": 0.12 },
+    "items": { "radius": 10 },
+    "indicator": { "running": "text", "active": "text", "attention": "#ff9f0a" }
+  },
+  "animation": {
+    "duration": 240,
+    "curve": "spring",
+    "bar": { "style": "slide", "dock": { "magnify": { "curve": "linear", "duration": 70 }, "bounce": { "duration": 620 } } },
+    "open": { "style": "fade", "curve": "ease-out", "duration": 130 }
+  }
+}

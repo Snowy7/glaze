@@ -4,6 +4,7 @@
 // provider on the first request and releases it when idle.
 
 import "./flyouts.css";
+import "./families.css";
 import { closeFlyout, flyoutOpen } from "../flyout";
 import { fire, on } from "../host";
 import { bellModule, type ModuleCtx } from "./modules";

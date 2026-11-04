@@ -35,6 +35,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{PCWSTR, w};
 
 use crate::appbar::{AppBar, Edge, settle, window_rect};
+use crate::blur::{LiveBlur, Pane, Target};
 use crate::bridge::BarKind;
 use crate::preview::Previews;
 use crate::trash::WM_TRASH_NOTIFY;
@@ -280,6 +281,8 @@ pub struct Bar {
     pub geometry: Geometry,
     /// Window thumbnails shown over the page (the dock's previews).
     pub previews: Previews,
+    /// Live blur under the page (`crate::blur`), where Windows can draw it.
+    blur: Option<Target>,
     hwnd: HWND,
     edge: Option<HWND>,
     appbar: Option<AppBar>,
@@ -316,6 +319,7 @@ impl Bar {
         monitor: Monitor,
         config: BarsConfig,
         geometry: Geometry,
+        live: Option<&LiveBlur>,
     ) -> Result<Self> {
         // SAFETY: the class is registered; the window is ours.
         let hwnd = unsafe {
@@ -337,6 +341,11 @@ impl Bar {
                 None,
             )?
         };
+        let blur = live.and_then(|live| {
+            live.attach(hwnd)
+                .inspect_err(|e| log::info!("no live blur for this bar: {e:#}"))
+                .ok()
+        });
         let mut bar = Self {
             id,
             kind,
@@ -344,6 +353,7 @@ impl Bar {
             config,
             geometry,
             previews: Previews::default(),
+            blur,
             hwnd,
             edge: None,
             appbar: None,
@@ -590,6 +600,22 @@ impl Bar {
         }
         if !hidden {
             self.place(); // back on top, where it belongs
+        }
+    }
+
+    /// Whether this window can show live blur.
+    pub fn has_blur(&self) -> bool {
+        self.blur.is_some()
+    }
+
+    /// Shows the page's glass panes (DIPs) as live blur under it; an empty list clears it.
+    pub fn set_glass(&mut self, live: &mut LiveBlur, panes: &[Pane]) {
+        let scale = self.scale();
+        if let Some(target) = &mut self.blur
+            && let Err(e) = target.set(live, panes, scale)
+        {
+            log::warn!("live blur: {e:#}");
+            target.clear(live);
         }
     }
 

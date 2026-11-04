@@ -1,0 +1,288 @@
+/* Top bar designs (docs/bars.md, "Designs and presets"). Each design is a partial `top` with its
+   own look and motion (crates/bars/presets/top/<id>.json) plus the rules here, scoped by
+   `data-design` on a top bar's page. Look variables are set inline on <html>, so rules that retune
+   them set them on the elements that use them (.surface, button.mod). */
+
+/* --- Monochrome: a black glass strip, white type --------------------------------------------------- */
+
+:root[data-bar="top"][data-design="monochrome"] .top {
+  font-weight: 450;
+}
+:root[data-bar="top"][data-design="monochrome"] button.mod.clock {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+:root[data-bar="top"][data-design="monochrome"] .ws-dot.is-current {
+  background: var(--t0);
+}
+
+/* --- macOS: the menu bar ----------------------------------------------------------------------------
+   24 pt, translucent and vibrant, the app's name in bold and the date and time on the right; status
+   items are 16 pt template glyphs with 6 pt between them, pressed items get a rounded highlight. */
+
+:root[data-bar="top"][data-design="macos"] .top {
+  --mod-h: calc(var(--bar-h) - 2px);
+  color: var(--t0);
+  letter-spacing: -0.003em;
+}
+:root[data-bar="top"][data-design="macos"][data-scheme="light"] .surface {
+  --s-tint: rgb(246 246 248 / 0.46);
+}
+:root[data-bar="top"][data-design="macos"][data-scheme="dark"] .surface {
+  --s-tint: rgb(26 26 28 / 0.42);
+}
+:root[data-bar="top"][data-design="macos"] .zone {
+  gap: 0;
+}
+:root[data-bar="top"][data-design="macos"] button.mod,
+:root[data-bar="top"][data-design="macos"] .mod {
+  padding: 0 9px;
+  --i-fg: var(--t0);
+  --i-fg-hover: var(--t0);
+  --i-fg-active: var(--t0);
+  --i-bgc-hover: transparent;
+}
+:root[data-bar="top"][data-design="macos"] button.mod.icon-only {
+  padding: 0 7px;
+}
+:root[data-bar="top"][data-design="macos"] .top .glyph {
+  width: 16px;
+  height: 16px;
+}
+:root[data-bar="top"][data-design="macos"] .mod[data-module="start"] .glyph {
+  width: 15px;
+  height: 15px;
+}
+:root[data-bar="top"][data-design="macos"] .app-icon {
+  display: none;
+}
+:root[data-bar="top"][data-design="macos"] .app-name {
+  font-weight: 700;
+  max-width: 22em;
+}
+:root[data-bar="top"][data-design="macos"] button.mod.clock {
+  font-weight: 450;
+  padding: 0 4px 0 9px;
+}
+:root[data-bar="top"][data-design="macos"] .battery {
+  gap: 5px;
+}
+:root[data-bar="top"][data-design="macos"] .battery .glyph:not(.bolt) {
+  width: 24px;
+}
+:root[data-bar="top"][data-design="macos"] .battery-pct {
+  order: -1;
+  font-size: 0.92em;
+}
+:root[data-bar="top"][data-design="macos"] .media-label {
+  max-width: 14em;
+  font-size: 0.94em;
+}
+:root[data-bar="top"][data-design="macos"] .ws-dot {
+  background: var(--t3);
+}
+:root[data-bar="top"][data-design="macos"] .ws-dot.is-current {
+  background: var(--t0);
+}
+:root[data-bar="top"][data-design="macos"] .tray-item .tray-icon {
+  filter: saturate(0.2) contrast(1.1);
+}
+
+/* --- Fluent: a Windows 11 bar -------------------------------------------------------------------------
+   32 DIPs of Mica-like glass, Segoe UI Variable 12, Segoe Fluent Icons; buttons are 4 DIP rounded
+   subtle fills on hover (6%) and press (4%), content shrinking a hair on press. */
+
+:root[data-bar="top"][data-design="fluent"] .top {
+  --mod-h: calc(var(--bar-h) - 4px);
+  color: var(--t0);
+}
+:root[data-bar="top"][data-design="fluent"][data-scheme="dark"] .surface {
+  --s-tint: rgb(32 32 32 / 0.82);
+}
+:root[data-bar="top"][data-design="fluent"][data-scheme="light"] .surface {
+  --s-tint: rgb(238 240 244 / 0.86);
+}
+:root[data-bar="top"][data-design="fluent"] button.mod {
+  padding: 0 10px;
+}
+:root[data-bar="top"][data-design="fluent"] button.mod.icon-only {
+  padding: 0 9px;
+}
+:root[data-bar="top"][data-design="fluent"] button.mod:active > * {
+  scale: 0.92;
+}
+:root[data-bar="top"][data-design="fluent"] button.mod > * {
+  transition: scale var(--m-press) var(--m-press-ease);
+}
+:root[data-bar="top"][data-design="fluent"] .mod[data-module="start"] .glyph {
+  width: 18px;
+  height: 18px;
+  background: var(--win11-logo) center / contain no-repeat;
+}
+:root[data-bar="top"][data-design="fluent"] .mod[data-module="start"] .glyph > svg {
+  visibility: hidden;
+}
+:root[data-bar="top"][data-design="fluent"] .mod.search {
+  gap: 8px;
+  width: 200px;
+  padding: 0 12px;
+  border-radius: 99px;
+  --i-bgc: var(--fill-1);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  color: var(--t2);
+}
+:root[data-bar="top"][data-design="fluent"] .search-label {
+  display: inline;
+}
+:root[data-bar="top"][data-design="fluent"] .app-name {
+  font-weight: 600;
+}
+/* Network, volume and battery are one button, as on the taskbar. */
+:root[data-bar="top"][data-design="fluent"] .mod:is([data-module="volume"], [data-module="battery"]) {
+  margin-left: calc(-1 * var(--bar-gap, 2px));
+}
+:root[data-bar="top"][data-design="fluent"] .zone:has(> .mod:is([data-module="network"], [data-module="volume"], [data-module="battery"]):hover) > .mod:is([data-module="network"], [data-module="volume"], [data-module="battery"]) {
+  --ibgc: var(--i-bgc-hover);
+}
+
+/* --- Capsule: a floating glass pill, iPadOS and visionOS style ----------------------------------------- */
+
+:root[data-bar="top"][data-design="capsule"] .top {
+  --mod-h: calc(var(--bar-h) - 8px);
+  color: var(--t0);
+  gap: 10px;
+}
+:root[data-bar="top"][data-design="capsule"][data-scheme="light"] .surface {
+  --s-tint: rgb(255 255 255 / 0.3);
+}
+:root[data-bar="top"][data-design="capsule"][data-scheme="dark"] .surface {
+  --s-tint: rgb(36 36 40 / 0.34);
+}
+:root[data-bar="top"][data-design="capsule"] .top.surface {
+  border-radius: calc(var(--bar-h) / 2);
+}
+:root[data-bar="top"][data-design="capsule"] button.mod {
+  --i-fg: var(--t0);
+  padding: 0 10px;
+}
+:root[data-bar="top"][data-design="capsule"] button.mod.icon-only {
+  padding: 0 8px;
+}
+:root[data-bar="top"][data-design="capsule"] .app-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+:root[data-bar="top"][data-design="capsule"] .app-name {
+  font-weight: 600;
+}
+:root[data-bar="top"][data-design="capsule"] button.mod.clock {
+  font-weight: 650;
+  letter-spacing: 0.005em;
+}
+:root[data-bar="top"][data-design="capsule"] .top .glyph {
+  width: 16px;
+  height: 16px;
+}
+:root[data-bar="top"][data-design="capsule"] .battery-pct {
+  font-size: 0.9em;
+}
+
+/* --- Minimal: no surface, the clock in the middle ------------------------------------------------------- */
+
+:root[data-bar="top"][data-design="minimal"] .top {
+  color: #fff;
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.5),
+    0 0 14px rgb(0 0 0 / 0.28);
+}
+:root[data-bar="top"][data-design="minimal"] .top .glyph {
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.55));
+}
+:root[data-bar="top"][data-design="minimal"][data-scheme="light"] .top {
+  color: #000;
+  text-shadow: 0 0 10px rgb(255 255 255 / 0.6);
+}
+:root[data-bar="top"][data-design="minimal"][data-scheme="light"] .top .glyph {
+  filter: drop-shadow(0 0 4px rgb(255 255 255 / 0.7));
+}
+:root[data-bar="top"][data-design="minimal"] button.mod.clock {
+  font-size: 1.04em;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  padding: 0 14px;
+}
+:root[data-bar="top"][data-design="minimal"] .ws-dot {
+  background: rgb(255 255 255 / 0.4);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+:root[data-bar="top"][data-design="minimal"] .ws-dot.is-current {
+  background: #fff;
+}
+:root[data-bar="top"][data-design="minimal"][data-scheme="light"] .ws-dot {
+  background: rgb(0 0 0 / 0.3);
+  box-shadow: none;
+}
+:root[data-bar="top"][data-design="minimal"][data-scheme="light"] .ws-dot.is-current {
+  background: #000;
+}
+:root[data-bar="top"][data-design="minimal"] .media-label {
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* --- Islands: a pill per group ----------------------------------------------------------------------------- */
+
+:root[data-bar="top"][data-design="islands"] .island {
+  font-weight: 500;
+}
+:root[data-bar="top"][data-design="islands"][data-scheme="light"] .surface {
+  --s-fill-color: rgb(250 250 251 / 0.92);
+}
+:root[data-bar="top"][data-design="islands"] .island:has(.clock) {
+  padding: 0 4px;
+}
+:root[data-bar="top"][data-design="islands"] button.mod.clock {
+  font-weight: 650;
+  padding: 0 0.9em;
+}
+:root[data-bar="top"][data-design="islands"] .ws-dot.is-current {
+  background: var(--accent);
+}
+
+/* --- Neon: dark glass, neon edges and light -------------------------------------------------------------- */
+
+:root[data-bar="top"][data-design="neon"][data-scheme="dark"] .top {
+  color: #e8e6ff;
+}
+:root[data-bar="top"][data-design="neon"] button.mod.clock {
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  color: var(--t0);
+  text-shadow:
+    0 0 10px rgb(255 43 214 / 0.65),
+    0 0 22px rgb(123 92 255 / 0.4);
+}
+:root[data-bar="top"][data-design="neon"] .ws-dot {
+  background: rgb(0 229 255 / 0.3);
+}
+:root[data-bar="top"][data-design="neon"] .ws-dot.is-current {
+  background: linear-gradient(90deg, #ff2bd6, #00e5ff);
+  box-shadow: 0 0 10px rgb(255 43 214 / 0.6);
+}
+:root[data-bar="top"][data-design="neon"] .gauge-arc {
+  stroke: #00e5ff;
+  filter: drop-shadow(0 0 3px rgb(0 229 255 / 0.8));
+}
+:root[data-bar="top"][data-design="neon"] .app-name {
+  color: var(--t0);
+}
+
+/* --- Floating: a detached bar ------------------------------------------------------------------------------- */
+
+:root[data-bar="top"][data-design="floating"] .top {
+  font-weight: 450;
+}
+:root[data-bar="top"][data-design="floating"] button.mod.clock {
+  font-weight: 600;
+}

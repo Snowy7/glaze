@@ -94,6 +94,10 @@ pub enum Method {
     Region {
         rects: Vec<[f64; 4]>,
     },
+    /// Where the page's glass is, for live blur under it (`crate::blur`).
+    Glass {
+        panes: Vec<crate::blur::Pane>,
+    },
     /// A flyout's request (`crate::flyouts::Request`, the methods in `flyouts::METHODS`).
     #[serde(skip)]
     Flyout(crate::flyouts::Request),
@@ -256,6 +260,9 @@ impl Method {
             }
             Self::Region { rects } if rects.len() > 64 => {
                 return Err(BarError::invalid("at most 64 region rects"));
+            }
+            Self::Glass { panes } if panes.len() > crate::blur::MAX_PANES => {
+                return Err(BarError::invalid("too many glass panes"));
             }
             Self::PreviewOpen { hwnds } if hwnds.len() > 16 => {
                 return Err(BarError::invalid("at most 16 previews"));
@@ -491,6 +498,10 @@ mod tests {
                 rects: vec![[0.0, 0.0, 100.0, 32.0]]
             })
         );
+        assert!(matches!(
+            parse(r#"{ "id": 9, "method": "glass", "params": { "panes": [{ "rect": [0, 0, 100, 32], "radius": 8, "saturation": 1.8 }] } }"#),
+            Ok(Method::Glass { panes }) if panes.len() == 1 && panes[0].radius == 8.0
+        ));
     }
 
     #[test]

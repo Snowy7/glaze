@@ -1,0 +1,1 @@
+{ "top": { "design": "minimal", "enabled": false }, "dock": { "design": "chromeos", "enabled": true, "monitors": "all" } }
