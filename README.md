@@ -185,8 +185,8 @@ A theme is a folder with a `theme.json`:
 | `image` | `source`, `fit` (cover). WIC decode, EXIF rotation, downscaled to the largest monitor | `photo` |
 | `slideshow` | `folder`, `interval` (300 s), `transition` (1.5 s), `shuffle`, `fit` | `gallery` |
 | `video` | `source`, `fit`, `fps` (30), `speed` (1). H.264/HEVC/VP9/AV1 via Media Foundation, 8- and 10-bit, HDR tone-mapped | `earth-orbit` |
-| `scene` | `source` (.glb/.gltf), `fps`, `scale`, `orbit` (4°/s), `parallax` (0.15), `background` | `islands` |
-| `web` | `url` (http(s), or a local .html). WebView2, suspended while hidden | `webdemo` |
+| `scene` | `source` (.glb/.gltf), `fps`, `scale`, `orbit` (4°/s), `parallax` (0.15), `background`, `interactive` (drag to orbit) | `islands` |
+| `web` | `url` (http(s), or a local .html), `interactive` (mouse input over the bare desktop). WebView2, suspended while hidden | `webdemo`, `interactive` |
 | `app` | `command`, `args` (`{hwnd}` = the window to render into; Unity: `-parentHWND {hwnd} delayed`) | see [`themes/app-example`](themes/app-example) |
 
 `fit` is `cover`, `contain`, `stretch` or `center`. Relative paths stay inside the theme folder,
@@ -238,6 +238,10 @@ A theme's `windows` section restyles Windows using supported APIs only:
 | `corners` | Window corners: `round`, `small` or `square` |
 | `backdrop` | `mica`, `acrylic` or `tabbed` |
 | `dark_mode` | Dark or light mode |
+| `cursors` | A cursor set: `mypaper-dark`, `mypaper-light` (drawn in code), or your own folder |
+
+Also opt-in and reversible, outside any theme: mypaper's own desktop right-click menu, the Win11
+classic context menu, and interactive wallpapers. See [docs/desktop-extras.md](docs/desktop-extras.md).
 
 - **Which windows.** Only Windows' own windows are touched: an allowlist of Windows executables and
   inbox apps, each verified as Microsoft-signed. Games and third-party apps are never touched.

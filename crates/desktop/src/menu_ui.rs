@@ -27,9 +27,8 @@ use windows::Win32::Graphics::Direct2D::{
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-    DWRITE_FONT_WEIGHT_NORMAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_TEXT_METRICS,
-    DWRITE_WORD_WRAPPING_NO_WRAP, DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat,
-    IDWriteTextLayout,
+    DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_METRICS, DWRITE_WORD_WRAPPING_NO_WRAP,
+    DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat, IDWriteTextLayout,
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Gdi::{
@@ -42,10 +41,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GWLP_USERDATA, HICON, IDC_ARROW, LoadCursorW,
-    MA_NOACTIVATE, RegisterClassExW, SW_SHOWNOACTIVATE, SetForegroundWindow, SetWindowLongPtrW,
-    ShowWindow, ULW_ALPHA, UpdateLayeredWindow, WA_INACTIVE, WM_ACTIVATE, WM_KEYDOWN, WM_LBUTTONUP,
-    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_NCDESTROY, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    MA_NOACTIVATE, RegisterClassExW, SW_HIDE, SW_SHOWNOACTIVATE, SetForegroundWindow,
+    SetWindowLongPtrW, ShowWindow, ULW_ALPHA, UpdateLayeredWindow, WA_INACTIVE, WM_ACTIVATE,
+    WM_KEYDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_NCDESTROY, WM_RBUTTONUP,
+    WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{PCWSTR, w};
 use windows_numerics::Vector2;
@@ -153,8 +152,8 @@ impl Gfx {
                 size,
                 w!("en-us"),
             )?;
+            // Labels are placed by their measured height; the layout box is only a limit.
             format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
-            format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
             Ok(format)
         }
     }
@@ -210,6 +209,10 @@ pub struct MenuUi {
     /// Device pixels per design pixel: monitor DPI times the look's scale.
     scale: f32,
     panels: Vec<Panel>,
+    /// Hidden windows ready for the next menu, `(window, is_cascade)`. Creating a window costs
+    /// about 20 ms here, which would be the largest part of opening the menu, so they are made
+    /// ahead of time and reused.
+    pool: Vec<(HWND, bool)>,
     on_command: OnCommand,
 }
 
@@ -234,16 +237,64 @@ pub fn install(on_command: OnCommand) -> Result<()> {
         look: Look::default(),
         scale: 1.0,
         panels: Vec::new(),
+        pool: Vec::new(),
         on_command,
     };
+    // The first text layout loads the font system (tens of milliseconds): pay for it now,
+    // not when the menu first opens.
+    if let Ok(format) = ui.gfx.format(&font_family(&ui.look.font), 14.0) {
+        let _ = ui
+            .gfx
+            .text("Warm up", &format)
+            .map(|layout| width_of(&layout));
+    }
+    // The root window and one for a submenu, waiting hidden.
+    let mut ui = ui;
+    for cascade in [false, true] {
+        let hwnd = create_window(cascade)?;
+        ui.pool.push((hwnd, cascade));
+    }
     UI.with(|cell| *cell.borrow_mut() = Some(ui));
     Ok(())
 }
 
-/// Drops the menu UI of this thread (closing it).
+/// Drops the menu UI of this thread (closing it and destroying its windows).
 pub fn uninstall() {
     close();
+    let pooled: Vec<HWND> =
+        with_ui(|ui| ui.pool.drain(..).map(|(hwnd, _)| hwnd).collect()).unwrap_or_default();
+    for hwnd in pooled {
+        // SAFETY: our own windows, destroyed on their creating thread.
+        let _ = unsafe { DestroyWindow(hwnd) };
+    }
     UI.with(|cell| *cell.borrow_mut() = None);
+}
+
+/// A hidden, empty popup for a panel. Cascades never take the focus.
+fn create_window(cascade: bool) -> Result<HWND> {
+    let mut ex = WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
+    if cascade {
+        ex |= WS_EX_NOACTIVATE;
+    }
+    // SAFETY: class registered by `install`; a popup without a parent. Position and size are set
+    // by `UpdateLayeredWindow` whenever it is shown.
+    unsafe {
+        CreateWindowExW(
+            ex,
+            CLASS,
+            w!("mypaper menu"),
+            WS_POPUP,
+            0,
+            0,
+            1,
+            1,
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+    .context("creating the menu window")
 }
 
 /// Opens the menu at `anchor` (screen pixels), on the monitor with `work` area
@@ -256,14 +307,9 @@ pub fn show(items: Vec<Item>, anchor: (i32, i32), work: menu_model::Edges, dpi: 
     }
 }
 
-/// Closes every panel.
+/// Closes every panel (their windows go back to the pool, hidden).
 pub fn close() {
-    let hwnds: Vec<HWND> =
-        with_ui(|ui| ui.panels.drain(..).map(|p| p.hwnd).collect()).unwrap_or_default();
-    for hwnd in hwnds {
-        // SAFETY: our own windows, destroyed on their creating thread.
-        let _ = unsafe { DestroyWindow(hwnd) };
-    }
+    with_ui(MenuUi::close_panels);
 }
 
 pub fn is_open() -> bool {
@@ -303,6 +349,7 @@ impl MenuUi {
         dpi: u32,
         look: &Look,
     ) -> Result<()> {
+        let started = std::time::Instant::now();
         self.close_panels();
         self.look = look.clone();
         self.scale = dpi.max(96) as f32 / 96.0 * look.scale.clamp(0.5, 2.0);
@@ -310,35 +357,62 @@ impl MenuUi {
             self.make_panel(items, None, |size| menu_model::place(size, anchor, work))?;
         let hwnd = panel.hwnd;
         self.panels.push(Panel { origin, ..panel });
+        let made = started.elapsed();
         self.draw(0)?;
+        let drawn = started.elapsed();
         // Visible at once without taking focus; then focus, so keys and click-away work.
         // SAFETY: our own window.
         unsafe {
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        }
+        let shown = started.elapsed();
+        // SAFETY: our own window.
+        unsafe {
             let _ = SetForegroundWindow(hwnd);
         }
+        log::debug!(
+            "desktop menu: panel built {made:.1?}, drawn {drawn:.1?}, shown {shown:.1?}, focused {:.1?}",
+            started.elapsed()
+        );
         Ok(())
     }
 
     fn close_panels(&mut self) {
-        for panel in self.panels.drain(..) {
-            // SAFETY: our own window, on its creating thread.
-            let _ = unsafe { DestroyWindow(panel.hwnd) };
+        let panels = std::mem::take(&mut self.panels);
+        for panel in panels {
+            self.recycle(&panel);
+        }
+    }
+
+    /// Hides a panel's window and keeps it for the next menu.
+    fn recycle(&mut self, panel: &Panel) {
+        // SAFETY: our own window, on its creating thread.
+        let _ = unsafe { ShowWindow(panel.hwnd, SW_HIDE) };
+        self.pool.push((panel.hwnd, panel.opened_by.is_some()));
+    }
+
+    /// A window for a root panel or a cascade: a pooled one, else a new one.
+    fn take_window(&mut self, cascade: bool) -> Result<HWND> {
+        match self.pool.iter().position(|(_, c)| *c == cascade) {
+            Some(index) => Ok(self.pool.swap_remove(index).0),
+            None => create_window(cascade),
         }
     }
 
     /// Builds a panel (window created, not shown): measures the labels, lets
     /// `place` choose the origin from the panel's pixel size.
     fn make_panel(
-        &self,
+        &mut self,
         items: Vec<Item>,
         opened_by: Option<usize>,
         place: impl FnOnce((i32, i32)) -> (i32, i32),
     ) -> Result<((i32, i32), Panel)> {
+        let t0 = std::time::Instant::now();
         let metrics = Metrics::scaled(self.scale);
         let format = self
             .gfx
             .format(&font_family(&self.look.font), 14.0 * self.scale)?;
+        let t_format = t0.elapsed();
         let labels: Vec<Option<IDWriteTextLayout>> = items
             .iter()
             .map(|item| match item {
@@ -357,32 +431,14 @@ impl MenuUi {
                 .find(|(item, _)| item.label() == text)
                 .map_or(0.0, |(_, w)| *w)
         });
+        let t_labels = t0.elapsed();
         let size = (layout.width.ceil() as i32, layout.height.ceil() as i32);
         let origin = place(size);
-        let margin = (SHADOW * self.scale).ceil() as i32;
-        let extra = if self.look.shadow { margin } else { 0 };
-        let mut ex = WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
-        if opened_by.is_some() {
-            ex |= WS_EX_NOACTIVATE;
-        }
-        // SAFETY: class registered by `install`; a popup without a parent.
-        let hwnd = unsafe {
-            CreateWindowExW(
-                ex,
-                CLASS,
-                w!("mypaper menu"),
-                WS_POPUP,
-                origin.0 - extra,
-                origin.1 - extra,
-                size.0 + 2 * extra,
-                size.1 + 2 * extra,
-                None,
-                None,
-                None,
-                None,
-            )
-        }
-        .context("creating the menu window")?;
+        let hwnd = self.take_window(opened_by.is_some())?;
+        log::debug!(
+            "desktop menu: make_panel format {t_format:.1?}, labels {t_labels:.1?}, window {:.1?}",
+            t0.elapsed()
+        );
         Ok((
             origin,
             Panel {
@@ -679,9 +735,9 @@ impl MenuUi {
         if self.panels.len() > panel + 1 {
             let keep = self.panels[panel + 1].opened_by == target;
             if !keep {
-                for gone in self.panels.drain(panel + 1..) {
-                    // SAFETY: our own window, on its creating thread.
-                    let _ = unsafe { DestroyWindow(gone.hwnd) };
+                let gone: Vec<Panel> = self.panels.drain(panel + 1..).collect();
+                for panel in gone {
+                    self.recycle(&panel);
                 }
             }
         }
@@ -815,8 +871,7 @@ impl MenuUi {
 
     fn close_innermost(&mut self) {
         if let Some(gone) = self.panels.pop() {
-            // SAFETY: our own window, on its creating thread.
-            let _ = unsafe { DestroyWindow(gone.hwnd) };
+            self.recycle(&gone);
         }
     }
 }

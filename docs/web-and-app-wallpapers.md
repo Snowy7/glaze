@@ -59,8 +59,12 @@ mypaper cannot pace a page for you. A visible web page is the heaviest wallpaper
 
 ### What a page can't do
 
-- **No input.** Wallpaper windows sit *behind* the desktop icons, so clicks and keys never reach the
-  page. Hover effects, links and forms won't work. Treat the page as a movie.
+- **No input, unless asked.** Wallpaper windows sit *behind* the desktop icons, so clicks and keys
+  never reach the page. Keys never do. With `"interactive": true` in the theme's wallpaper section, the
+  mouse (move, buttons, wheel) is forwarded while the pointer is over the *bare* desktop, and arrives as
+  ordinary `mousemove` / `mousedown` / `mouseup` / `wheel` events (see
+  [desktop-extras.md](desktop-extras.md#interactive-wallpapers) and `themes/interactive`). Links and
+  forms still make little sense: treat the page as a canvas.
 - **No audio policy.** Autoplay is allowed, so a page with sound will play it. Mute in the page.
 - **No crash recovery yet.** If the WebView2 browser process dies, that screen stays blank until the
   theme reloads (touch a file in the theme folder, or re-select the theme).

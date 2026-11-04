@@ -17,7 +17,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::cursor_art::{self, Look};
 use crate::undo::{Value, Write};
 
-pub(crate) const CURSORS_KEY: &str = r"Control Panel\Cursors";
+/// Where the Mouse control panel keeps the scheme (under `HKEY_CURRENT_USER`).
+pub const CURSORS_KEY: &str = r"Control Panel\Cursors";
 
 /// Bumped when the built-in art changes, so existing installs regenerate.
 const ART_VERSION: &str = "1";
