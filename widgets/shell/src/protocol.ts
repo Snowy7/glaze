@@ -64,18 +64,21 @@ export interface Place {
   name: string;
   lat?: number;
   lon?: number;
+  /** For showing: the state or province (a candidate's `admin1`). */
+  region?: string;
+  country?: string;
 }
 
 /** A town suggestion, as a `place` setting's `search` method answers `{ query }`. */
 export interface PlaceCandidate {
   name: string;
-  admin1?: string;
-  admin2?: string;
-  country?: string;
-  country_code?: string;
+  admin1?: string | null;
+  admin2?: string | null;
+  country?: string | null;
+  country_code?: string | null;
   lat: number;
   lon: number;
-  population?: number;
+  population?: number | null;
 }
 
 /** A place: null is automatic, else a picked town; the form searches with `search`. */

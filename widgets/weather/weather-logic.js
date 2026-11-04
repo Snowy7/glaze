@@ -164,43 +164,120 @@ export function dayLabel(date, index, locale) {
   return new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(Date.UTC(y, m - 1, d));
 }
 
-/** @typedef {{ name: string, lat?: number, lon?: number }} Where */
+/**
+ * A place to show the weather of: a town picked in the settings (with its coordinates and, for
+ * showing, its region and country), one found by the plugin's `locate` (with how it was found),
+ * or only a name (an older text setting, looked up by name).
+ * @typedef {{ name: string, lat?: number, lon?: number, region?: string, country?: string,
+ *   source?: string, accuracy?: number }} Where
+ */
+/** @typedef {{ name: string, admin1?: string | null, admin2?: string | null, country?: string | null, lat: number, lon: number }} Candidate */
+
+/** The city every weather widget had before Automatic: an instance still on it moves to Automatic. */
+export const OLD_DEFAULT_CITY = "London";
+
+/** @param {unknown} v */
+const text = (v) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+/** @param {unknown} v */
+const finite = (v) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
 
 /**
  * The `city` setting (a `place`): null is automatic, else a town. Untrusted JSON, so anything
- * malformed counts as automatic.
+ * malformed counts as automatic, and so does the old default city.
  * @param {unknown} value
  * @returns {Where | null}
  */
 export function readPlace(value) {
   // A plain name, as an older text setting saved it (the host already turns it into { name }).
-  if (typeof value === "string") return value.trim() ? { name: value.trim() } : null;
-  if (typeof value !== "object" || value === null || !("name" in value) || typeof value.name !== "string" || !value.name.trim()) return null;
-  const lat = "lat" in value && typeof value.lat === "number" && Number.isFinite(value.lat) ? value.lat : undefined;
-  const lon = "lon" in value && typeof value.lon === "number" && Number.isFinite(value.lon) ? value.lon : undefined;
-  const name = value.name.trim();
-  return lat !== undefined && lon !== undefined ? { name, lat, lon } : { name };
+  const raw = typeof value === "string" ? { name: value } : value;
+  if (typeof raw !== "object" || raw === null) return null;
+  const record = /** @type {Record<string, unknown>} */ (raw);
+  const name = text(record["name"]);
+  if (!name) return null;
+  const lat = finite(record["lat"]);
+  const lon = finite(record["lon"]);
+  const coords = lat !== undefined && lon !== undefined;
+  if (!coords && name === OLD_DEFAULT_CITY) return null;
+  const region = text(record["region"]);
+  const country = text(record["country"]);
+  return {
+    name,
+    ...(coords ? { lat, lon } : {}),
+    ...(region ? { region } : {}),
+    ...(country ? { country } : {}),
+  };
 }
 
 /**
- * How to ask the plugin for a place: by coordinates when known, else by name (an older city
- * setting, which the plugin geocodes).
- * @param {Where} place
- * @returns {{ lat: number, lon: number } | { city: string }}
- */
-export function placeRequest(place) {
-  return place.lat !== undefined && place.lon !== undefined ? { lat: place.lat, lon: place.lon } : { city: place.name };
-}
-
-/**
- * The plugin's `locate` answer as a place, or null when it has none: the town (or suburb) and
- * its coordinates.
+ * The plugin's `locate` answer as a place: null without a name and coordinates.
  * @param {unknown} reply
  * @returns {Where | null}
  */
 export function readLocated(reply) {
   const place = readPlace(reply);
-  return place && place.lat !== undefined ? place : null;
+  if (!place || place.lat === undefined || typeof reply !== "object" || reply === null) return null;
+  const record = /** @type {Record<string, unknown>} */ (reply);
+  const source = text(record["source"]);
+  const accuracy = finite(record["accuracy_m"]);
+  return { ...place, ...(source ? { source } : {}), ...(accuracy !== undefined ? { accuracy } : {}) };
+}
+
+/**
+ * How to ask the plugin for a place: by coordinates (with the names to show) when known, else by
+ * name (an older city setting, which the plugin looks up).
+ * @param {Where} place
+ */
+export function placeRequest(place) {
+  if (place.lat === undefined || place.lon === undefined) return { city: place.name };
+  return {
+    lat: place.lat,
+    lon: place.lon,
+    name: place.name,
+    ...(place.region ? { region: place.region } : {}),
+    ...(place.country ? { country: place.country } : {}),
+  };
+}
+
+/** Distinct, non-empty parts joined: "Oslo, Oslo County, Norway". @param {(string | null | undefined)[]} parts */
+function joinParts(parts) {
+  const kept = parts.filter((p) => typeof p === "string" && p.trim() !== "").map((p) => String(p).trim());
+  return kept.filter((p, i) => kept.indexOf(p) === i).join(", ");
+}
+
+/** A fix is approximate when it came from the network (IP), or Windows says it is coarse (over 5 km). */
+export const isApproximate = (/** @type {Where} */ place) => place.source === "ip" || (place.accuracy ?? 0) > 5000;
+
+/**
+ * The place as the widget shows it: "Oslo, Oslo County, Norway" ("Oslo, Oslo County" when `short`), or
+ * "Near Oslo, Norway" for an approximate fix (an IP address is a region, never a suburb).
+ * @param {Where} place
+ * @param {boolean} [short] the town and its region (or country) only
+ */
+export function placeLabel(place, short = false) {
+  const label = joinParts(short ? [place.name, place.region || place.country] : [place.name, place.region, place.country]);
+  return isApproximate(place) ? `Near ${label}` : label;
+}
+
+/** A search candidate as one line, so homonyms tell apart: "Maadi, Cairo, Egypt". @param {Candidate} c */
+export const candidateLine = (c) => joinParts([c.name, c.admin2, c.admin1, c.country]);
+
+/**
+ * A `search` answer as candidates (the plugin is untrusted: keep the well-formed ones).
+ * @param {unknown} value
+ * @returns {Candidate[]}
+ */
+export function readCandidates(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((c) => typeof c === "object" && c !== null && typeof c.name === "string" && c.name !== "" && Number.isFinite(c.lat) && Number.isFinite(c.lon));
+}
+
+/**
+ * The setting a picked candidate is saved as: its coordinates and, for showing, where it is.
+ * @param {Candidate} c
+ * @returns {Where}
+ */
+export function placeOf(c) {
+  return { name: c.name, lat: c.lat, lon: c.lon, ...(c.admin1 ? { region: c.admin1 } : {}), ...(c.country ? { country: c.country } : {}) };
 }
 
 /**

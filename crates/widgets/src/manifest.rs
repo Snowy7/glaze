@@ -304,8 +304,8 @@ pub struct PlaceSearch {
     pub method: String,
 }
 
-/// A `place` value other than automatic: a name, and its coordinates when known (without them
-/// the widget looks the name up).
+/// A `place` value other than automatic: a name, its coordinates when known (without them the
+/// widget looks the name up), and where it is, for showing (`region` is the state or province).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Place {
@@ -314,6 +314,10 @@ pub struct Place {
     pub lat: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lon: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
 }
 
 impl Place {
@@ -337,10 +341,21 @@ impl Place {
         if lat.is_some() != lon.is_some() {
             return None;
         }
+        // Display text: kept when it is text of a sane length, else just left out.
+        let text = |key: &str| {
+            value
+                .get(key)?
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && s.chars().count() <= Self::MAX_NAME)
+                .map(str::to_owned)
+        };
         Some(Self {
             name: name.to_owned(),
             lat,
             lon,
+            region: text("region"),
+            country: text("country"),
         })
     }
 
@@ -1149,9 +1164,11 @@ mod tests {
             "an old city is a name to look up"
         );
         assert_eq!(
-            resolve(json!({ "name": "Bergen", "lat": 60.39, "lon": 5.32, "country": "NO" })),
-            json!({ "name": "Bergen", "lat": 60.39, "lon": 5.32 }),
-            "unknown fields go"
+            resolve(
+                json!({ "name": "Bergen", "lat": 60.39, "lon": 5.32, "region": "Vestland", "country": "Norway", "population": 1 })
+            ),
+            json!({ "name": "Bergen", "lat": 60.39, "lon": 5.32, "region": "Vestland", "country": "Norway" }),
+            "display fields stay, unknown fields go"
         );
         for bad in [
             json!({ "name": "X", "lat": 91.0, "lon": 0.0 }),

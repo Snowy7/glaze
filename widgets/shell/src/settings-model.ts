@@ -52,6 +52,17 @@ export function readPlace(value: unknown): Place | null {
   return lat !== undefined && lon !== undefined ? { name: value.name, lat, lon } : { name: value.name };
 }
 
+/** The place a picked candidate is saved as: its coordinates, and where it is for showing. */
+export function placeOf(c: PlaceCandidate): Place {
+  return {
+    name: c.name,
+    lat: c.lat,
+    lon: c.lon,
+    ...(c.admin1 ? { region: c.admin1 } : {}),
+    ...(c.country ? { country: c.country } : {}),
+  };
+}
+
 /** A search answer as candidates, keeping only well-formed ones (the plugin is untrusted). */
 export function readCandidates(value: unknown): PlaceCandidate[] {
   if (!Array.isArray(value)) return [];
@@ -61,9 +72,9 @@ export function readCandidates(value: unknown): PlaceCandidate[] {
   );
 }
 
-/** A candidate as one line: "Springfield, Illinois, United States" (no repeats, no blanks). */
+/** A candidate as one line, "Maadi, Cairo, Egypt", so homonyms tell apart (no repeats, no blanks). */
 export function placeLine(c: PlaceCandidate): string {
-  const parts = [c.name, c.admin1, c.country].filter((p): p is string => typeof p === "string" && p.trim() !== "");
+  const parts = [c.name, c.admin2, c.admin1, c.country].filter((p): p is string => typeof p === "string" && p.trim() !== "");
   return parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
 }
 

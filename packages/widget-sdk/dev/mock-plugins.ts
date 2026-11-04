@@ -24,7 +24,8 @@ const SCENARIOS: Record<string, { code: number; condition: string; icon: string;
 
 /** Towns the mock `search` knows, and where `locate` says this PC is (?locate=ok|slow|fail). */
 const TOWNS = [
-  { name: "Kensington", admin1: "England", admin2: "Greater London", country: "United Kingdom", country_code: "GB", lat: 51.4991, lon: -0.1938, population: 64681 },
+  { name: "Oslo", admin1: "Oslo County", admin2: null, country: "Norway", country_code: "NO", lat: 59.9139, lon: 10.7522, population: 344939 },
+  { name: "Maadi", admin1: "Cairo", admin2: null, country: "Egypt", country_code: "EG", lat: 29.96, lon: 31.26, population: null },
   { name: "Bergen", admin1: "Vestland", country: "Norway", country_code: "NO", lat: 60.3913, lon: 5.3221, population: 285601 },
   { name: "Bergen op Zoom", admin1: "North Brabant", country: "Netherlands", country_code: "NL", lat: 51.495, lon: 4.2917, population: 66354 },
   { name: "Springfield", admin1: "Illinois", country: "United States", country_code: "US", lat: 39.8017, lon: -89.6437, population: 114394 },
@@ -67,12 +68,12 @@ function weather(method: string, raw: unknown): unknown {
   const p = asParams(raw);
   if (method === "locate") {
     if (locating === "fail") throw new MypaperError("NotFound", "location unavailable");
-    const here = TOWNS[0]!;
-    return { ...here, source: "windows" };
+    // The real plugin's shape: every field present, region and country "" when unknown.
+    return { lat: 59.9139, lon: 10.7522, accuracy_m: 75, name: "Oslo", region: "Oslo County", country: "Norway", source: "windows" };
   }
   if (method === "search") {
     const query = typeof p["query"] === "string" ? p["query"].trim().toLowerCase() : "";
-    return query.length < 2 ? [] : TOWNS.filter((t) => t.name.toLowerCase().startsWith(query));
+    return query.length < 2 ? [] : TOWNS.filter((t) => t.name.toLowerCase().startsWith(query)).slice(0, 8);
   }
   const imperial = p["units"] === "imperial";
   const t = (c: number) => Math.round((imperial ? c * 1.8 + 32 : c) * 10) / 10;
@@ -83,9 +84,11 @@ function weather(method: string, raw: unknown): unknown {
   const scenario = SCENARIOS[key] ?? SCENARIOS["partly"]!;
   const lat = typeof p["lat"] === "number" ? p["lat"] : 51.5;
   const lon = typeof p["lon"] === "number" ? p["lon"] : -0.12;
+  const named = typeof p["name"] === "string" && p["name"] ? p["name"] : null;
   const location = {
-    name: city ?? nearest(lat, lon).name,
-    country: city ? "Testland" : nearest(lat, lon).country,
+    name: named ?? city ?? nearest(lat, lon).name,
+    country: typeof p["country"] === "string" ? p["country"] : city ? "Testland" : nearest(lat, lon).country,
+    ...(typeof p["region"] === "string" ? { region: p["region"] } : {}),
     lat,
     lon,
   };

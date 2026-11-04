@@ -22,6 +22,7 @@ import {
   optionText,
   optionValue,
   placeLine,
+  placeOf,
   readCandidates,
   readPlace,
   sections,
@@ -408,7 +409,7 @@ function placeControl(spec: PlaceSetting, value: unknown, emit: (value: Place | 
             item.type = "button";
             item.setAttribute("role", "option");
             item.addEventListener("click", () => {
-              place = { name: c.name, lat: c.lat, lon: c.lon };
+              place = placeOf(c);
               input.value = "";
               list.replaceChildren();
               paint();
@@ -421,7 +422,7 @@ function placeControl(spec: PlaceSetting, value: unknown, emit: (value: Place | 
         if (mine === ask) note.textContent = "Could not search right now";
       }
     },
-    250,
+    300,
     "debounce",
   );
   input.addEventListener("input", () => lookup.push(input.value));

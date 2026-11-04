@@ -1447,6 +1447,21 @@ impl App {
                         .map_err(internal),
                 )
             }
+            Method::SettingsSet { values } => {
+                let values = match manifest.check_settings(values) {
+                    Ok(values) => values,
+                    Err(e) => return fail(ErrorCode::InvalidParams, format!("{e:#}")),
+                };
+                // Saved like an edit from the form: the new state brings the widget its settings.
+                self.edit(
+                    index,
+                    FromShell::Settings {
+                        instance: instance.to_owned(),
+                        values,
+                    },
+                );
+                done
+            }
             Method::UserInfo => match userinfo::cached() {
                 Some(info) => Some(Ok(json!(info))),
                 None => {

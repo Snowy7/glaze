@@ -1,6 +1,6 @@
 // @ts-check
 import { $, every, onVisible, setText, trackSettings, trackSize } from "./kit.js";
-import { dayLabel, degrees, errorInfo, hourLabel, pickLayout, placeNow, placeRequest, rangeBar, readLocated, readPlace, sceneFor, slotCount, upcomingHours } from "./weather-logic.js";
+import { candidateLine, dayLabel, degrees, errorInfo, hourLabel, pickLayout, placeLabel, placeNow, placeOf, placeRequest, rangeBar, readCandidates, readLocated, readPlace, sceneFor, slotCount, upcomingHours } from "./weather-logic.js";
 
 /** @typedef {import("./weather-logic.js").Current} Current */
 /** @typedef {import("./weather-logic.js").Forecast} Forecast */
@@ -9,7 +9,6 @@ import { dayLabel, degrees, errorInfo, hourLabel, pickLayout, placeNow, placeReq
 /** @typedef {import("./weather-logic.js").Variant} Variant */
 
 const REFRESH_MS = 10 * 60_000; // the plugin caches for the same time
-const RELOCATE_MS = 30 * 60_000; // where this PC is changes slowly; a laptop moves now and then
 const RETRY_MS = 60_000;
 const VARIANTS = ["card", "compact", "forecast"];
 // Smallest slots, in px, of the hourly strip (and its gap), a day row and a day column.
@@ -50,31 +49,11 @@ let settingsKnown = false;
 let data;
 let hourKey = "";
 
-/** Where this PC is, as the plugin last said, and when (kept in storage for a fast start). */
-/** @type {{ place: import("./weather-logic.js").Where, at: number } | undefined} */
-let located;
-/** The name to show for the place, when the setting or `locate` gave one. */
-let placeName = "";
-
-/**
- * Where this PC is: the cached answer while fresh, else the plugin's `locate` (Windows' location,
- * else the network's), remembered in storage. Throws when neither knows.
- */
-async function locate() {
-  if (located && Date.now() - located.at < RELOCATE_MS) return located.place;
-  const place = readLocated(await mypaper.plugin("weather", "locate", {}));
-  if (!place) throw Object.assign(new Error("no location"), { code: "NotFound" });
-  located = { place, at: Date.now() };
-  void mypaper.storage.set("located", located);
-  return place;
-}
-
-/** @param {unknown} saved */
-function readCache(saved) {
-  if (typeof saved !== "object" || saved === null || !("place" in saved) || !("at" in saved) || typeof saved.at !== "number") return undefined;
-  const place = readLocated(saved.place);
-  return place ? { place, at: saved.at } : undefined;
-}
+/** The place shown ("Oslo, Oslo County, Norway"); null shows where the weather came back from. */
+/** @type {import("./weather-logic.js").Where | null} */
+let shownPlace = null;
+/** The plugin found no location: the status offers Windows' settings and the town picker. */
+let locationFailed = false;
 
 /** @param {string} icon */
 const iconHref = (icon) => `#i-${/^[a-z-]+$/.test(icon) ? icon : "cloudy"}`;
@@ -109,7 +88,11 @@ function renderNow() {
   const today = forecast.days[0];
   setText(els.temp, degrees(current.temperature));
   setText(els.cond, current.condition);
-  setText(els.place, placeName || current.location.name);
+  // Roomy layouts show the whole name (over two lines if need be); the others the town and region.
+  const place = shownPlace ?? readPlace(current.location) ?? { name: current.location.name };
+  const roomy = card.dataset.layout === "tall" || card.dataset.layout === "side";
+  setText(els.place, placeLabel(place, !roomy));
+  els.place.title = `${placeLabel(place)} (change the town)`;
   setText(els.hilo, today ? `H ${degrees(today.max)}  L ${degrees(today.min)}` : "");
   els.miniUse.setAttribute("href", iconHref(current.icon));
 
@@ -200,6 +183,7 @@ function render() {
 function showError(title, hint, state = "error") {
   data = undefined;
   card.dataset["state"] = state;
+  $("#status-actions").hidden = !locationFailed;
   setText(els.statusTitle, title);
   setText(els.statusHint, hint);
 }
@@ -210,22 +194,26 @@ async function load() {
   lastTry = Date.now();
   /** @type {{ lat: number, lon: number } | { city: string }} */
   let params;
+  locationFailed = false;
   if (picked) {
     params = placeRequest(picked);
-    placeName = picked.lat !== undefined ? picked.name : "";
+    shownPlace = picked.lat !== undefined ? picked : null;
   } else {
-    // Automatic: say so while the first answer is on its way, then show the town found.
-    if (!data && !located) showError("Locating…", "", "locating");
+    // Automatic: the plugin's locate (Windows' location, else the network's; it caches), then
+    // the weather there. Asked apart so "no location" and "no weather" read differently.
+    if (!data) showError("Locating…", "", "locating");
     try {
-      const here = await locate();
+      const here = readLocated(await mypaper.plugin("weather", "locate", {}));
       if (mine !== generation) return;
+      if (!here) throw new Error("no location");
       params = placeRequest(here);
-      placeName = here.name;
+      shownPlace = here;
     } catch {
       if (mine !== generation) return;
       failed = true;
       if (data) return; // keep the last good weather
-      showError("Location unavailable", "Turn on location in Windows Settings, or choose a town in this widget's settings.");
+      locationFailed = true;
+      showError("Location unavailable", "Let desktop apps use your location (Settings › Privacy & security › Location), or choose a town.");
       return;
     }
   }
@@ -282,9 +270,70 @@ const lists = new ResizeObserver(renderLists);
 lists.observe(els.hours);
 lists.observe(els.days);
 
-void mypaper.storage.get("located").then((saved) => {
-  located ??= readCache(saved);
+// ---- the town picker (from "Choose a town", or a click on the place's name)
+
+const picker = $("#picker");
+const query = $("#town-q", HTMLInputElement);
+const results = $("#town-list");
+let searchId = 0;
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let searchTimer;
+
+/** @param {boolean} open */
+function showPicker(open) {
+  picker.hidden = !open;
+  $("#town-auto").hidden = readPlace(settings.city) === null;
+  if (open) {
+    query.value = "";
+    results.replaceChildren();
+    query.focus();
+  }
+}
+
+/** Searches about 300 ms after the typing stops, from two characters; a newer query wins. */
+function search() {
+  clearTimeout(searchTimer);
+  const text = query.value.trim();
+  const mine = ++searchId;
+  if (text.length < 2) return results.replaceChildren();
+  searchTimer = setTimeout(async () => {
+    try {
+      const found = readCandidates(await mypaper.plugin("weather", "search", { query: text }));
+      if (mine !== searchId) return;
+      results.replaceChildren(
+        ...(found.length === 0
+          ? [span("picker-none", "No towns found")]
+          : found.map((c) => {
+              const item = document.createElement("button");
+              item.type = "button";
+              item.className = "picker-item ellipsis";
+              item.setAttribute("role", "option");
+              item.textContent = candidateLine(c);
+              // Only a picked candidate sets the location, never the typed text.
+              item.addEventListener("click", () => {
+                showPicker(false);
+                void mypaper.settings.set({ city: placeOf(c) });
+              });
+              return item;
+            })),
+      );
+    } catch {
+      if (mine === searchId) results.replaceChildren(span("picker-none", "Couldn't search right now"));
+    }
+  }, 300);
+}
+
+query.addEventListener("input", search);
+query.addEventListener("keydown", (e) => e.key === "Escape" && showPicker(false));
+$("#town-close").addEventListener("click", () => showPicker(false));
+$("#town-auto").addEventListener("click", () => {
+  showPicker(false);
+  void mypaper.settings.set({ city: null });
 });
+$("#choose-town").addEventListener("click", () => showPicker(true));
+els.place.addEventListener("click", () => showPicker(true));
+$("#open-location").addEventListener("click", () => void mypaper.launch("ms-settings:privacy-location").catch(() => {}));
+mypaper.on("editmode", (editing) => editing && showPicker(false));
 
 trackSettings(defaults, (next) => {
   const changedPlace = !settingsKnown || JSON.stringify(next.city) !== JSON.stringify(settings.city) || next.units !== settings.units;

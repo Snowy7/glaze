@@ -4,7 +4,7 @@
   "name": "Weather",
   "version": "3.0.0",
   "author": "mypaper",
-  "description": "The weather where you are, or in any town: an animated sky, the next hours and the week.",
+  "description": "The weather where you are, or in any town: an animated sky, the next hours and the week. Weather by Open-Meteo.",
   "entry": "index.html",
   "size": {
     "default": [3, 2],
@@ -12,7 +12,7 @@
     "max": [5, 3]
   },
   "resizable": true,
-  "permissions": [],
+  "permissions": ["launch"],
   "plugins": ["weather"],
   "settings": [
     {

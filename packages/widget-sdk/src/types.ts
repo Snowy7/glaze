@@ -82,18 +82,21 @@ export interface Place {
   name: string;
   lat?: number;
   lon?: number;
+  /** For showing: the state or province (a candidate's `admin1`). */
+  region?: string;
+  country?: string;
 }
 
 /** A town suggestion, as a `place` setting's `search` method answers `{ query }`. */
 export interface PlaceCandidate {
   name: string;
-  admin1?: string;
-  admin2?: string;
-  country?: string;
-  country_code?: string;
+  admin1?: string | null;
+  admin2?: string | null;
+  country?: string | null;
+  country_code?: string | null;
   lat: number;
   lon: number;
-  population?: number;
+  population?: number | null;
 }
 
 /**
@@ -282,6 +285,8 @@ export interface Mypaper {
   settings: {
     get(): Promise<Settings>;
     onChange(cb: (s: Settings) => void): () => void;
+    /** Saves some of the widget's own settings (checked against the manifest like a form edit); `onChange` follows. */
+    set(values: Settings): Promise<void>;
   };
   /** The resolved look. The drop-in already applies it to <html>; see `applyAppearance`. */
   appearance: {
@@ -382,6 +387,7 @@ export interface WireMethods {
   "theme.current": [undefined, ThemeInfo];
   plugin: [{ plugin: string; method: string; params?: unknown }, unknown];
   "user.info": [undefined, UserInfo];
+  "settings.set": [{ values: Settings }, null];
   pickFile: [PickFileOptions, PickedFile | null];
   appIcon: [{ target: string; size?: number }, string | null];
   subscribe: [SubscribeParams, null];
