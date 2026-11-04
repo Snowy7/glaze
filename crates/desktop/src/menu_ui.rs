@@ -36,15 +36,17 @@ use windows::Win32::Graphics::Gdi::{
     CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, SelectObject,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_DOWN, VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GWLP_USERDATA, HICON, IDC_ARROW, LoadCursorW,
-    MA_NOACTIVATE, RegisterClassExW, SW_HIDE, SW_SHOWNOACTIVATE, SetForegroundWindow,
-    SetWindowLongPtrW, ShowWindow, ULW_ALPHA, UpdateLayeredWindow, WA_INACTIVE, WM_ACTIVATE,
-    WM_KEYDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_NCDESTROY, WM_RBUTTONUP,
-    WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GWLP_USERDATA, GetForegroundWindow,
+    GetWindowThreadProcessId, HICON, IDC_ARROW, LoadCursorW, MA_NOACTIVATE, RegisterClassExW,
+    SW_HIDE, SW_SHOWNOACTIVATE, SetForegroundWindow, SetWindowLongPtrW, ShowWindow, ULW_ALPHA,
+    UpdateLayeredWindow, WA_INACTIVE, WM_ACTIVATE, WM_KEYDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE,
+    WM_MOUSEMOVE, WM_NCDESTROY, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{PCWSTR, w};
 use windows_numerics::Vector2;
@@ -297,6 +299,38 @@ fn create_window(cascade: bool) -> Result<HWND> {
     .context("creating the menu window")
 }
 
+/// Makes `hwnd` the foreground window, and says how that went (for the log).
+///
+/// The click that opened the menu was swallowed by our hook before it reached any window, so
+/// Windows does not count us as the receiver of the last input and may refuse a plain
+/// `SetForegroundWindow`. Then: attach our input queue to the foreground window's thread for the
+/// moment of the call (a documented way to share its foreground right).
+fn take_focus(hwnd: HWND) -> &'static str {
+    // SAFETY: plain window and thread queries; the queue attachment is undone before returning.
+    unsafe {
+        let _ = SetForegroundWindow(hwnd);
+        if GetForegroundWindow() == hwnd {
+            return "plain";
+        }
+        let current = GetCurrentThreadId();
+        let front = GetForegroundWindow();
+        let owner = GetWindowThreadProcessId(front, None);
+        if owner == 0 || owner == current {
+            return "refused";
+        }
+        let attached = AttachThreadInput(current, owner, true).as_bool();
+        let _ = SetForegroundWindow(hwnd);
+        if attached {
+            let _ = AttachThreadInput(current, owner, false);
+        }
+        if GetForegroundWindow() == hwnd {
+            "attached"
+        } else {
+            "refused"
+        }
+    }
+}
+
 /// Opens the menu at `anchor` (screen pixels), on the monitor with `work` area
 /// and `dpi`. A menu already open is replaced.
 pub fn show(items: Vec<Item>, anchor: (i32, i32), work: menu_model::Edges, dpi: u32, look: &Look) {
@@ -366,12 +400,9 @@ impl MenuUi {
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         }
         let shown = started.elapsed();
-        // SAFETY: our own window.
-        unsafe {
-            let _ = SetForegroundWindow(hwnd);
-        }
+        let how = take_focus(hwnd);
         log::debug!(
-            "desktop menu: panel built {made:.1?}, drawn {drawn:.1?}, shown {shown:.1?}, focused {:.1?}",
+            "desktop menu: panel built {made:.1?}, drawn {drawn:.1?}, shown {shown:.1?}, focused {:.1?} ({how})",
             started.elapsed()
         );
         Ok(())

@@ -234,7 +234,9 @@ impl SceneSource {
                 .transpose()
                 .inspect_err(|e| log::warn!("scene: no mouse input: {e:#}"))
                 .unwrap_or(None),
-            live: Vec::new(),
+            // Every screen is visible until the engine says otherwise: starting empty would let
+            // the first screen to report "covered" look like "all covered".
+            live: vec![true; mypaper_desktop::monitors().len().max(1)],
         })
     }
 

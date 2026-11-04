@@ -36,7 +36,7 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
 use webview2_com::{
     CapturePreviewCompletedHandler, CoreWebView2EnvironmentOptions,
     CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
-    NavigationCompletedEventHandler, TrySuspendCompletedHandler,
+    ExecuteScriptCompletedHandler, NavigationCompletedEventHandler, TrySuspendCompletedHandler,
 };
 use windows::Win32::Foundation::{HGLOBAL, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
@@ -44,8 +44,8 @@ use windows::Win32::System::Com::IStream;
 use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumChildWindows, GetClassNameW, GetClientRect, GetWindowRect, IsWindow, PostMessageW,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_RBUTTONDOWN, WM_RBUTTONUP,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONDOWN,
+    WM_RBUTTONUP,
 };
 use windows::core::{BOOL, HSTRING, Interface, PCWSTR};
 
@@ -755,10 +755,12 @@ impl Forwarder {
                 post(up_message(button), self.buttons, at);
                 self.buttons &= !mk_flag(button);
             }
-            // The wheel's position is in screen coordinates, unlike every other mouse message.
+            // Chromium re-targets a wheel message to the window under the *real* pointer (the
+            // desktop), so a posted one never reaches the page. The page gets a `WheelEvent`.
             Kind::Wheel(delta) => {
-                let wparam = (usize::from(delta as i16 as u16) << 16) | self.buttons;
-                post(WM_MOUSEWHEEL, wparam, pack(event.at.0, event.at.1));
+                if let Some(view) = &state.screens[screen].view {
+                    wheel(&view.webview, client, delta);
+                }
             }
             Kind::Leave => {
                 post(WM_MOUSEMOVE, 0, pack(-1, -1));
@@ -781,6 +783,33 @@ impl Forwarder {
                 self.targets[screen]
             }
         }
+    }
+}
+
+/// The script that dispatches a wheel notch to the element at the pointer. `x`, `y` are device
+/// pixels in the page; `delta` is Windows' wheel delta (120 per notch, positive away from the user),
+/// which the DOM spells the other way round and in pixels (100 per notch, like Chromium's own).
+fn wheel_script(x: i32, y: i32, delta: i32) -> String {
+    let dy = -delta * 100 / 120;
+    format!(
+        "(()=>{{const r=window.devicePixelRatio||1,x={x}/r,y={y}/r;\
+         const t=document.elementFromPoint(x,y)||document.body;\
+         t.dispatchEvent(new WheelEvent('wheel',{{bubbles:true,cancelable:true,composed:true,\
+         clientX:x,clientY:y,deltaY:{dy},deltaMode:0}}))}})()"
+    )
+}
+
+fn wheel(webview: &ICoreWebView2_3, at: POINT, delta: i32) {
+    let script = HSTRING::from(wheel_script(at.x, at.y, delta));
+    let done = ExecuteScriptCompletedHandler::create(Box::new(|_, _| Ok(())));
+    // SAFETY: a COM call on the thread that created the WebView; the handler runs on its loop.
+    let result = unsafe {
+        webview
+            .cast::<ICoreWebView2>()
+            .and_then(|webview| webview.ExecuteScript(&script, &done))
+    };
+    if let Err(e) = result {
+        log::debug!("web: wheel: {e}");
     }
 }
 
@@ -931,6 +960,17 @@ mod tests {
         );
         assert_eq!(down_message(Button::Right), WM_RBUTTONDOWN);
         assert_eq!(up_message(Button::Middle), WM_MBUTTONUP);
+    }
+
+    #[test]
+    fn a_wheel_notch_becomes_a_dom_wheel_event_the_other_way_round() {
+        let script = wheel_script(640, 360, 120);
+        assert!(script.contains("x=640/r") && script.contains("y=360/r"));
+        assert!(
+            script.contains("deltaY:-100"),
+            "away from the user scrolls the page up"
+        );
+        assert!(wheel_script(0, 0, -240).contains("deltaY:200"));
     }
 
     #[test]

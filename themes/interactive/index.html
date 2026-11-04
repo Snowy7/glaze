@@ -61,7 +61,8 @@
     el("w").textContent = ++hud.w;
     kick();
   });
-  document.addEventListener("mouseleave", () => { target = { x: -1000, y: -1000 }; kick(); });
+  // No "mouseleave" handling on purpose: Windows tracks the real pointer, which is over the
+  // desktop, not this page, so it may report a leave right after every forwarded move.
 
   function frame() {
     ctx.clearRect(0, 0, W, H);

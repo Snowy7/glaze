@@ -98,7 +98,10 @@ hook thread                              menu thread
   front (WinEvent-driven, the same detection as the wallpaper's pause), the session is locked or the
   display is off.
 - **Focus.** The menu is shown without activating (so it paints at once), then activated, so keys
-  work and clicking elsewhere closes it. Submenus never take the focus.
+  work and clicking elsewhere closes it. Submenus never take the focus. Because the opening click
+  never reached any window, Windows sometimes refuses a plain `SetForegroundWindow` (seen live); the
+  menu then attaches its input queue to the foreground window's thread for the call, which works.
+  Clicking anywhere outside the menu closes it even if focus could not be taken (the hook reports it).
 - **No lost clicks.** The hook posts to a hidden *window* of the menu thread, which only queues the
   message. (A thread message would be discarded if it arrived while the thread was inside a COM call
   to Explorer, losing the release of a swallowed right-click.) The main loop handles the queue in order.
@@ -114,8 +117,8 @@ mypaper-desktop --example menu_live`). The callback times are measured inside it
 
 | Event | Own cost, mean | Own cost, worst |
 |---|---|---|
-| mouse move (3000-4000 events per run) | **0.06 µs** | 0.3 to 1.5 µs |
-| right button press or release (30 events: 15 clicks) | 118 to 126 µs; about 240 µs per press, under 1 µs per release | 0.24 to 0.58 ms |
+| mouse move (3000-4000 events per run) | **0.06 µs** | 0.2 to 1.5 µs |
+| right button press or release (30 events: 15 clicks) | 118 to 145 µs; about 240 to 290 µs per press, under 1 µs per release | 0.24 to 0.62 ms |
 | left, middle, wheel | the same as a move (a pass-through) | |
 
 The press is the only event that does real work: `WindowFromPoint` asks the window under the cursor
@@ -123,7 +126,7 @@ to hit-test (a cross-process call), which is most of its cost. It happens once p
 
 | Menu | |
 |---|---|
-| appears after the release (15 clicks, first one cold) | median **4.5 to 7 ms**, worst 8 ms, first 8 to 10 ms |
+| appears after the release (15 clicks, first one cold) | median **4.5 to 7 ms**, worst 8 ms, first 8 to 13 ms |
 | UI Automation confirmation (during the press, not on the critical path) | 4.6 to 5.4 ms, the first one 20 ms |
 
 ### Limits
@@ -213,10 +216,17 @@ Off by default; when off, nothing is registered and nothing runs.
   that came before them, so order is kept. A burst of 1000 moves becomes one.
 - **Zero cost when held.** While every screen is held or covered (a fullscreen game), Raw Input is
   switched off again. With `interactive` off it is never on.
-- **`web`**: moves, buttons and the wheel are posted to the page's `Chrome_RenderWidgetHostHWND`
-  (client coordinates; the wheel in screen coordinates as Windows does) and arrive as ordinary
-  `mousemove`, `mousedown`, `mouseup`, `wheel` events. See `themes/interactive`.
-- **`scene`**: dragging with the left button orbits the camera (and tilts it up and down); the
+- **`web`**: moves and buttons are posted to the page's `Chrome_RenderWidgetHostHWND` (client
+  coordinates) and arrive as real `mousemove`, `mousedown`, `mouseup` events. Chromium sends a
+  wheel message to the window under the *real* pointer, so a posted one never reaches the page; the
+  wheel is delivered as a `WheelEvent` dispatched by a one-line script (`isTrusted` is false for it).
+  Windows also tracks the real pointer, which is over the desktop and not the page, so the page may
+  see a `mouseleave` right after a move: do not hide things on it (`themes/interactive` ignores it).
+  Right-clicks on the bare desktop reach the page as well (Raw Input cannot swallow them).
+  Verified live on the test machine: moves, a click and three wheel notches arrived in
+  `themes/interactive`, and a click on the menu or an icon did not.
+- **`scene`**: dragging with the left button orbits the camera (and tilts it up and down; verified
+  live on `islands`: a 180-pixel drag turned the view clearly); the
   parallax lean toward the pointer needs no input and works as before. An interactive scene renders
   at its fps cap even when `orbit` and `parallax` are 0, so it can react.
 

@@ -25,7 +25,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEINPUT, SendInput, VK_ESCAPE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowW, GetCursorPos, IsWindowVisible, SetCursorPos,
+    FindWindowW, GetCursorPos, GetForegroundWindow, IsWindowVisible, SetCursorPos,
 };
 use windows::core::{PCWSTR, w};
 
@@ -41,6 +41,8 @@ struct Args {
     shot: Option<String>,
     /// Hover the first item before the screenshot, to show its submenu.
     hover: bool,
+    /// Do not inject anything; watch for this many seconds (input comes from another process).
+    passive: u64,
 }
 
 fn args() -> Result<Args> {
@@ -52,6 +54,7 @@ fn args() -> Result<Args> {
         cycles: 10,
         shot: None,
         hover: false,
+        passive: 0,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -64,6 +67,7 @@ fn args() -> Result<Args> {
             "--cycles" => args.cycles = value()?.parse()?,
             "--shot" => args.shot = Some(value()?),
             "--hover" => args.hover = true,
+            "--passive" => args.passive = value()?.parse()?,
             other => bail!("unknown flag {other}"),
         }
     }
@@ -165,6 +169,29 @@ fn main() -> Result<()> {
         |action| println!("app action: {action:?}"),
     )?;
     std::thread::sleep(Duration::from_millis(1500)); // let the first icon read and UI Automation warm up
+
+    if args.passive > 0 {
+        // Injected input from ANOTHER process (like real hardware input, which our hook swallows
+        // before any window of ours sees it): only watch the menu window and the foreground.
+        println!("passive for {} s", args.passive);
+        let mut last = (false, false);
+        let end = Instant::now() + Duration::from_secs(args.passive);
+        while Instant::now() < end {
+            // SAFETY: plain queries.
+            let state = unsafe {
+                let menu = FindWindowW(w!("mypaper.desktopmenu"), PCWSTR::null()).ok();
+                let visible = menu.is_some_and(|m| IsWindowVisible(m).as_bool());
+                (visible, menu.is_some_and(|m| GetForegroundWindow() == m))
+            };
+            if state != last {
+                println!("menu visible: {}, has the focus: {}", state.0, state.1);
+                last = state;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        drop(menu);
+        return Ok(());
+    }
 
     let result = (|| -> Result<()> {
         println!("right-click at {at:?}");
