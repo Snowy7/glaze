@@ -35,7 +35,7 @@ export function BarPreview({ config, catalog, vars = {}, appearance, width, wall
   const [chosen, setChosen] = useState<"dark" | "light">("dark");
   const tone = wallpaper ?? chosen;
   const base = surfaceBase(appearance);
-  const scheme = config.look.scheme ?? "auto";
+  const scheme = config.top.look.scheme ?? config.dock.look.scheme ?? "auto";
   const text = scheme === "light" ? "#141414" : scheme === "dark" ? "#ffffff" : base.text === "light" ? "#ffffff" : "#141414";
   const ctx: ColorContext = { text, accent: base.accent, vars };
   const scale = width / STAGE.width;
@@ -197,7 +197,8 @@ const groups = (list: readonly ModuleRef[]): ModuleRef[][] =>
   list.reduce<ModuleRef[][]>((out, ref) => (ref === "|" ? [...out, []] : [...out.slice(0, -1), [...(out.at(-1) ?? []), ref]]), [[]]).filter((g) => g.length > 0);
 
 function TopBar({ config, catalog, base, ctx, dense }: Shared) {
-  const { top, look } = config;
+  const { top } = config;
+  const look = top.look;
   const geometry = topGeometry(config, catalog);
   const islands = top.layout === "islands";
   const radius = look.radius ?? (top.layout === "strip" ? 0 : base.radius || 12);
@@ -282,7 +283,8 @@ function Indicator({ kind, state, ctx, look }: { kind: Resolved["dock"]["indicat
 }
 
 function Dock({ config, catalog, base, ctx, dense, topBand }: Shared & { topBand: number }) {
-  const { dock, look } = config;
+  const { dock } = config;
+  const look = dock.look;
   const geometry = dockGeometry(config, catalog);
   const vertical = dock.position === "left" || dock.position === "right";
   const taskbar = dock.style === "taskbar";

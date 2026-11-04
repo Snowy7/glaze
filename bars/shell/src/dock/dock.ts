@@ -73,7 +73,7 @@ export function createDock(root: HTMLElement, config: BarsConfig, ctx: BarContex
   const taskbar = dock.style === "taskbar";
   const horizontal = position === "bottom" || position === "top";
   const titles = taskbar && dock.titles && horizontal;
-  const slotLength = taskbar ? (titles ? TITLE_WIDTH : size + 2 * TASK_PAD) : size;
+  const slotLength = taskbar ? (titles ? TITLE_WIDTH : (dock.button ?? size + 2 * TASK_PAD)) : size;
   const pitch = slotLength + spacing;
   const scope = createScope();
   const magnifyOn = () => !taskbar && dock.magnify.enabled && !prefersReducedMotion();
@@ -99,7 +99,7 @@ export function createDock(root: HTMLElement, config: BarsConfig, ctx: BarContex
       const el = h("div", `tb-zone ${name}`);
       for (const group of groupsOf(entries, seen)) {
         if (el.childElementCount > 0) el.append(h("span", "sep"));
-        el.append(...group.map((module) => mount(module, config, scope)));
+        el.append(...group.map((module) => mount(module, config, scope, "dock")));
       }
       return el;
     };

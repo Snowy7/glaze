@@ -12,6 +12,8 @@ const PRESETS: readonly { id: PresetId; name: string; blurb: string }[] = [
   { id: "monochrome", name: "Monochrome", blurb: "Black glass over the live wallpaper, white type, a floating dock. The default." },
   { id: "macos", name: "macOS", blurb: "A translucent menu bar and a magnifying dock with springy motion." },
   { id: "windows11", name: "Windows 11", blurb: "One full-width taskbar: Start, search, task buttons, tray and clock. No top bar." },
+  { id: "windows10", name: "Windows 10", blurb: "The Windows 10 taskbar: left-aligned, square buttons, a search field. No top bar." },
+  { id: "chromeos", name: "ChromeOS", blurb: "The shelf: a launcher circle, centered apps and the status pill. No top bar." },
   { id: "islands", name: "Islands", blurb: "A transparent rail with one pill per group of modules." },
   { id: "neon-glass", name: "Neon glass", blurb: "Dark glass, neon gradient edges and glow." },
   { id: "floating", name: "Floating", blurb: "A detached, rounded top bar and dock." },
@@ -44,7 +46,7 @@ export function PresetsPanel() {
   return (
     <div className="flex flex-col gap-5">
       <p className="text-[13px] text-ink-3">
-        A preset is a starting point: layout, look and motion. Whatever your <code className="font-mono text-xs">bars.json</code> sets goes on top of it, so you can tweak a preset and keep its character.
+        A preset is a pairing: which design each bar starts from (and which bars are on). Pick each bar's design in Top bar and Bottom bar. Whatever your <code className="font-mono text-xs">bars.json</code> sets goes on top of it, so you can tweak a preset and keep its character.
       </p>
 
       {pending && (

@@ -1,13 +1,15 @@
 // Working with a `bars.json` document: reading and setting paths in it, and computing the values
-// the host would end up with. The host merges the file over its preset over its defaults
-// (crates/bars/src/presets.rs `merge`); `resolve` does the same merge from the catalog the Rust
-// side sends, so the controls show real values the moment a preset or a field changes.
+// the host would end up with. The host layers each bar's design, then the preset, then the file
+// with its shared `look` and `animation` folded under each bar's own (crates/bars/src/presets.rs
+// `layered`, `merge`); `resolve` does the same from the catalog the Rust side sends, so the
+// controls show real values the moment a design, a preset or a field changes.
 
 import type { BarsCatalog } from "./api";
 import type {
   Attention,
   BarsDoc,
   DockPosition,
+  DockDesign,
   DockStyle,
   Extra,
   Indicator,
@@ -22,6 +24,7 @@ import type {
   PresetId,
   TaskbarAlignment,
   TaskbarMode,
+  TopDesign,
   TopLayout,
   TopPosition,
   Weekday,
@@ -58,9 +61,13 @@ export function setIn<T extends object>(root: T, path: Path, value: unknown): T 
   return node as T;
 }
 
-/** Objects merge key by key; anything else (arrays included) is replaced. Same as the host's. */
+/**
+ * Objects merge key by key; anything else (arrays included) is replaced; an object whose `type`
+ * differs from the base's (a background switching kinds) replaces it whole. Same as the host's.
+ */
 export function merge(base: unknown, over: unknown): unknown {
   if (!isObject(base) || !isObject(over)) return over;
+  if ("type" in over && base.type !== over.type) return over;
   const out: Obj = { ...base };
   for (const [key, value] of Object.entries(over)) out[key] = key in out ? merge(out[key], value) : value;
   return out;
@@ -71,6 +78,10 @@ export type Resolved = {
   preset: PresetId;
   taskbar: { mode: TaskbarMode; alignment?: TaskbarAlignment };
   top: {
+    design: TopDesign;
+    /** This bar's look and motion: its design's, the shared ones, then its own. */
+    look: Look;
+    animation: Motion;
     enabled: boolean;
     monitors: Monitors;
     layout: TopLayout;
@@ -86,6 +97,11 @@ export type Resolved = {
     clock: { seconds: boolean; format: string | null };
   };
   dock: {
+    design: DockDesign;
+    look: Look;
+    animation: Motion;
+    clock: { seconds: boolean; format: string | null };
+    button?: number;
     enabled: boolean;
     monitors: Monitors;
     style: DockStyle;
@@ -114,6 +130,7 @@ export type Resolved = {
   tray: { host: boolean };
   calendar: { zones: Zone[]; firstDay?: Weekday };
   audio: { switchOutput: boolean };
+  /** The shared look and motion as the file writes them (each bar's own is under it). */
   look: Look;
   animation: Motion;
   modules: Record<string, ModuleOptions>;
@@ -121,11 +138,32 @@ export type Resolved = {
   performance: Performance;
 };
 
+/** The file with its shared `look` and `animation` under each bar's own, as the host folds them. */
+function foldShared(doc: BarsDoc): BarsDoc {
+  const fold = <S extends { look?: Look; animation?: Motion }>(own: S): S => ({
+    ...own,
+    ...(doc.look ? { look: merge(doc.look, own.look ?? {}) as Look } : {}),
+    ...(doc.animation ? { animation: merge(doc.animation, own.animation ?? {}) as Motion } : {}),
+  });
+  return { ...doc, top: fold(doc.top ?? {}), dock: fold(doc.dock ?? {}) };
+}
+
 export function resolve(catalog: BarsCatalog, doc: BarsDoc): Resolved {
-  const preset = catalog.presets.find((p) => p.id === (doc.preset ?? "monochrome"));
-  const merged = merge(merge(catalog.defaults, preset?.bundle ?? {}), doc);
-  // The host parsed the same merge into its typed config, so the shape is the one described above.
-  return merged as Resolved;
+  const preset = catalog.presets.find((p) => p.id === (doc.preset ?? "monochrome"))?.bundle ?? {};
+  const top = doc.top?.design ?? preset.top?.design ?? "monochrome";
+  const dock = doc.dock?.design ?? preset.dock?.design ?? "monochrome";
+  const designs = {
+    top: catalog.topDesigns.find((d) => d.id === top)?.bundle ?? {},
+    dock: catalog.dockDesigns.find((d) => d.id === dock)?.bundle ?? {},
+  };
+  let merged = merge(catalog.defaults, designs);
+  merged = merge(merged, preset);
+  merged = merge(merged, foldShared(doc));
+  // The host parsed the same layers into its typed config, so the shape is the one described above.
+  const resolved = merged as Resolved;
+  resolved.top.design = top;
+  resolved.dock.design = dock;
+  return resolved;
 }
 
 /** The magnify settings with the host's defaults for a bare `true`. */

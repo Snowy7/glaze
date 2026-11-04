@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use mypaper_bars::icon_pack::{self, IconPack};
 use mypaper_bars::vars::VarDecl;
-use mypaper_theme::{Appearance, Color, LoadedTheme, Paint, Surface, TextTone};
+use mypaper_theme::{Appearance, Color, Liquid, LoadedTheme, Paint, Surface, TextTone};
 use serde::{Deserialize, Serialize};
 
 use crate::bridge::BarKind;
@@ -27,6 +27,9 @@ pub struct Look {
     pub font: String,
     pub scale: f32,
     pub shadow: bool,
+    /// The appearance's design style by name (`liquid` makes the bars' glass liquid by default).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
 }
 
 const WHITE: Color = Color([0xff; 3]);
@@ -79,6 +82,10 @@ pub fn resolve(
         font: merged.font.unwrap_or_default(),
         scale: merged.scale.unwrap_or(1.0),
         shadow: merged.shadow.unwrap_or(false),
+        style: merged
+            .style
+            .and_then(|style| serde_json::to_value(style).ok())
+            .and_then(|name| name.as_str().map(str::to_owned)),
     }
 }
 
@@ -91,6 +98,8 @@ pub struct ThemeSkin {
     pub css: Option<String>,
     /// The variables its CSS declares (`@mypaper-vars`).
     pub vars: BTreeMap<String, VarDecl>,
+    /// Its liquid-glass knobs (`bars.glass`): what a bar's `look.glass` leaves out.
+    pub glass: Option<Liquid>,
 }
 
 impl ThemeSkin {
@@ -123,6 +132,7 @@ impl ThemeSkin {
                     appearance: skin.appearance,
                     css,
                     vars,
+                    glass: skin.glass,
                 }
             }
             Err(e) => {

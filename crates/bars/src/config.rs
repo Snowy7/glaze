@@ -1,8 +1,8 @@
-//! `%APPDATA%\mypaper\bars.json`: which bars show where, their layout, modules, look and motion,
-//! the dock's pins and the native taskbar's mode (docs/bars.md, "Config").
+//! `%APPDATA%\mypaper\bars.json`: which bars show where, their designs, layout, modules, look and
+//! motion, the dock's pins and the native taskbar's mode (docs/bars.md, "Config").
 //!
-//! Every field is optional and unknown fields are errors. The file is merged over its preset
-//! (`presets.rs`), and per-monitor `overrides` are merged over that for their monitor
+//! Every field is optional and unknown fields are errors. The file is merged over its preset and
+//! each bar's design (`presets.rs`), and per-monitor `overrides` are merged over that for their monitor
 //! ([`BarsConfig::for_monitor`]). Writers (core's tray, Studio, the dock's pin edits) change the
 //! file with [`edit`], which touches only the fields it sets, so a file keeps what its author
 //! wrote and never gains the defaults.
@@ -19,8 +19,8 @@ pub use crate::flyout_config::{
     AudioConfig, CalendarConfig, LauncherConfig, LauncherLayout, TrayConfig, Weekday, Zone,
 };
 
-pub use crate::presets::Preset;
-use crate::presets::merge;
+pub use crate::presets::{DockDesign, Preset, TopDesign};
+use crate::presets::{layered, merge};
 use crate::style::{BorderStyle, ColorRef, Look, Motion, Paint, check};
 
 pub const FILE: &str = "bars.json";
@@ -34,7 +34,7 @@ pub fn path() -> Result<PathBuf> {
 #[serde(default, deny_unknown_fields)]
 pub struct BarsConfig {
     pub version: u32,
-    /// The bundle the file starts from; its fields sit under the user's.
+    /// Which design each bar starts from (and which bars are on); a bar's own `design` beats it.
     pub preset: Preset,
     pub taskbar: TaskbarConfig,
     pub top: TopConfig,
@@ -43,7 +43,12 @@ pub struct BarsConfig {
     pub tray: TrayConfig,
     pub calendar: CalendarConfig,
     pub audio: AudioConfig,
+    /// The shared look: both bars', over their designs' and under their own (`top.look`,
+    /// `dock.look`), which is what they use. The page only gets those.
+    #[serde(skip_serializing)]
     pub look: Look,
+    /// The shared motion, layered like `look`.
+    #[serde(skip_serializing)]
     pub animation: Motion,
     /// Per module (`clock`, `custom:<id>`…): click actions, style, icon; a custom module's command.
     pub modules: BTreeMap<ModuleRef, ModuleOptions>,
@@ -210,6 +215,9 @@ impl<'de> Deserialize<'de> for Dimension {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TopConfig {
+    /// The design it starts from (`presets/top/<id>.json`): layout, metrics, modules, look and
+    /// motion, all under the fields set here.
+    pub design: TopDesign,
     pub enabled: bool,
     pub monitors: Monitors,
     pub layout: TopLayout,
@@ -228,6 +236,10 @@ pub struct TopConfig {
     pub center: Vec<ModuleRef>,
     pub right: Vec<ModuleRef>,
     pub clock: ClockConfig,
+    /// This bar's look: its design's, then the shared `look`, then this.
+    pub look: Look,
+    /// This bar's motion, layered like `look`.
+    pub animation: Motion,
 }
 
 impl Default for TopConfig {
@@ -235,6 +247,7 @@ impl Default for TopConfig {
         use Module::*;
         let modules = |list: &[Module]| list.iter().copied().map(ModuleRef::Builtin).collect();
         Self {
+            design: TopDesign::default(),
             enabled: true,
             monitors: Monitors::All,
             layout: TopLayout::Strip,
@@ -248,6 +261,8 @@ impl Default for TopConfig {
             center: modules(&[Clock]),
             right: modules(&[Media, Tray, Network, Volume, Battery, Quick, Power]),
             clock: ClockConfig::default(),
+            look: Look::default(),
+            animation: Motion::default(),
         }
     }
 }
@@ -509,6 +524,8 @@ pub enum ItemsAlign {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct DockConfig {
+    /// The design it starts from (`presets/dock/<id>.json`), under the fields set here.
+    pub design: DockDesign,
     pub enabled: bool,
     pub monitors: Monitors,
     /// Which dock layout the page draws; the host sizes the band for it.
@@ -544,8 +561,18 @@ pub struct DockConfig {
     /// The `taskbar` style's modules before and after the task buttons.
     pub left: Vec<ModuleRef>,
     pub right: Vec<ModuleRef>,
+    /// A `taskbar` task button's length along the bar, DIPs (16..240). Missing: the icon plus 16,
+    /// or 168 with `titles`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub button: Option<f64>,
+    /// The `taskbar` style's clock (its own format: a taskbar's is often two lines).
+    pub clock: ClockConfig,
     /// Missing: the native taskbar's pinned shortcuts (see [`BarsConfig::resolve`]).
     pub pinned: Option<Vec<Pinned>>,
+    /// This bar's look: its design's, then the shared `look`, then this.
+    pub look: Look,
+    /// This bar's motion, layered like `look`.
+    pub animation: Motion,
 }
 
 impl Default for DockConfig {
@@ -553,6 +580,7 @@ impl Default for DockConfig {
         use Module::*;
         let modules = |list: &[Module]| list.iter().copied().map(ModuleRef::Builtin).collect();
         Self {
+            design: DockDesign::default(),
             enabled: false,
             monitors: Monitors::Primary,
             style: DockStyle::Floating,
@@ -575,7 +603,11 @@ impl Default for DockConfig {
             align: ItemsAlign::Center,
             left: modules(&[Start, Search]),
             right: modules(&[Tray, Network, Volume, Battery, Clock]),
+            button: None,
+            clock: ClockConfig::default(),
             pinned: None,
+            look: Look::default(),
+            animation: Motion::default(),
         }
     }
 }
@@ -1001,25 +1033,21 @@ impl BarsConfig {
         Ok(config)
     }
 
-    /// The user's fields over their preset's, parsed and checked.
+    /// The user's fields over their preset and each bar's design (`presets::layered`), parsed
+    /// and checked.
     fn merged(raw: &Map<String, Value>) -> Result<Self> {
-        let preset = match raw.get("preset") {
-            Some(name) => Preset::deserialize(name)?,
-            None => Preset::default(),
-        };
-        let mut value = preset.bundle();
-        merge(&mut value, &Value::Object(raw.clone()));
-        let mut config: Self = serde_json::from_value(value)?;
+        let mut config: Self = serde_json::from_value(layered(raw)?)?;
         config.validate()?;
         config.raw = raw.clone();
         Ok(config)
     }
 
-    /// Loads `path`, or the defaults when there is no file.
+    /// Loads `path`, or the defaults (an empty file's: the default preset and designs) when there
+    /// is no file.
     pub fn load(path: &Path) -> Result<Self> {
         match std::fs::read_to_string(path) {
             Ok(text) => Self::parse(&text).with_context(|| format!("in {}", path.display())),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self::parse("{}"),
             Err(e) => Err(e).with_context(|| format!("reading {}", path.display())),
         }
     }
@@ -1051,6 +1079,7 @@ impl BarsConfig {
         config.overrides.clear();
         config.dock.pinned.clone_from(&self.dock.pinned);
         config.top.clock.format.clone_from(&self.top.clock.format);
+        config.dock.clock.format.clone_from(&self.dock.clock.format);
         config.fill_defaults();
         Ok(config)
     }
@@ -1088,8 +1117,13 @@ impl BarsConfig {
         if dock.extras.iter().collect::<BTreeSet<_>>().len() != dock.extras.len() {
             bail!("dock.extras: an extra is listed twice");
         }
-        if top.clock.format.as_ref().is_some_and(|f| f.len() > 64) {
-            bail!("top.clock.format is longer than 64 characters");
+        for (bar, clock) in [("top", &top.clock), ("dock", &dock.clock)] {
+            if clock.format.as_ref().is_some_and(|f| f.len() > 64) {
+                bail!("{bar}.clock.format is longer than 64 characters");
+            }
+        }
+        if dock.button.is_some_and(|b| !(16.0..=240.0).contains(&b)) {
+            bail!("dock.button must be between 16 and 240 DIPs");
         }
         let pinned = dock.pinned.iter().flatten();
         if pinned.clone().any(|p| p.path.trim().is_empty()) {
@@ -1114,16 +1148,21 @@ impl BarsConfig {
         }
         self.look.validate()?;
         self.animation.validate()?;
+        self.top.look.validate_at("top.look")?;
+        self.top.animation.validate_named("top.animation")?;
+        self.dock.look.validate_at("dock.look")?;
+        self.dock.animation.validate_named("dock.animation")?;
         self.appearance.validate()
     }
 
     /// Fills the defaults that depend on the machine or the layout: the clock format, layout
     /// geometry and, when `pinned` is missing, `default_pins` (the native taskbar's pins).
     pub fn resolve(&mut self, default_pins: impl FnOnce() -> Vec<Pinned>) {
-        let clock = &mut self.top.clock;
-        clock
-            .format
-            .get_or_insert_with(|| ClockConfig::default_format(clock.seconds).to_owned());
+        for clock in [&mut self.top.clock, &mut self.dock.clock] {
+            clock
+                .format
+                .get_or_insert_with(|| ClockConfig::default_format(clock.seconds).to_owned());
+        }
         self.dock.pinned.get_or_insert_with(default_pins);
         self.fill_defaults();
     }
@@ -1236,6 +1275,7 @@ pub fn set(root: &mut Map<String, Value>, section: &str, key: &str, value: Value
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::style::Family;
 
     #[test]
     fn no_file_and_empty_object_mean_the_defaults() {
@@ -1327,6 +1367,155 @@ mod tests {
             BarsConfig::parse(r#"{ "preset": "windows11", "top": { "enabled": true } }"#).unwrap();
         assert!(config.top.enabled, "the user wins");
         assert_eq!(config.dock.style, DockStyle::Taskbar, "the rest stays");
+    }
+
+    /// A file written before designs existed (the shape Studio and the tray wrote) keeps its
+    /// look: its preset now names the designs it was made of.
+    #[test]
+    fn files_from_before_designs_still_resolve_the_same() {
+        let config = BarsConfig::parse(
+            r#"{ "version": 1, "preset": "islands", "taskbar": { "mode": "hide" },
+                 "dock": { "enabled": true, "monitors": "all", "position": "bottom" },
+                 "icons": "mono", "tray": { "host": true } }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            (config.top.design, config.dock.design),
+            (TopDesign::Islands, DockDesign::Islands)
+        );
+        assert_eq!(config.top.layout, TopLayout::Islands);
+        assert!(config.top.right.contains(&ModuleRef::Break));
+        assert_eq!(config.dock.indicator, IndicatorStyle::Bar);
+        assert!(config.dock.enabled && config.dock.monitors == Monitors::All);
+        assert!(matches!(
+            config.top.look.background,
+            Some(crate::style::Fill::Solid { .. })
+        ));
+        assert_eq!(config.taskbar.mode, TaskbarMode::Hide);
+
+        let win = BarsConfig::parse(r#"{ "preset": "windows11", "taskbar": { "mode": "hide" } }"#)
+            .unwrap();
+        assert!(!win.top.enabled);
+        assert_eq!(win.dock.design, DockDesign::Windows11);
+        assert_eq!(win.dock.style, DockStyle::Taskbar);
+        assert_eq!(win.dock.band(), 48.0, "Windows 11's taskbar is 48 DIPs");
+    }
+
+    #[test]
+    fn each_bar_takes_its_own_design() {
+        let config = BarsConfig::parse(
+            r#"{ "top": { "design": "macos" }, "dock": { "design": "windows11", "enabled": true } }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.preset,
+            Preset::Monochrome,
+            "the preset only fills what's unnamed"
+        );
+        assert_eq!(config.top.height, 24.0);
+        assert_eq!(config.top.look.family, Some(Family::Macos));
+        assert_eq!(config.dock.style, DockStyle::Taskbar);
+        assert_eq!(config.dock.look.family, Some(Family::Fluent));
+        assert_eq!(
+            config.dock.clock.format.as_deref(),
+            Some("HH:mm\ndd/MM/yyyy")
+        );
+
+        // A bar's design beats the preset's choice for it; the other bar keeps the preset's.
+        let config =
+            BarsConfig::parse(r#"{ "preset": "macos", "dock": { "design": "chromeos" } }"#)
+                .unwrap();
+        assert_eq!(
+            (config.top.design, config.dock.design),
+            (TopDesign::Macos, DockDesign::Chromeos)
+        );
+        assert!(
+            BarsConfig::parse(r#"{ "top": { "design": "windows11" } }"#).is_err(),
+            "a dock design"
+        );
+        assert!(
+            BarsConfig::parse(r#"{ "dock": { "design": "capsule" } }"#).is_err(),
+            "a top design"
+        );
+    }
+
+    #[test]
+    fn looks_layer_design_then_shared_then_the_bars_own() {
+        let config = BarsConfig::parse(
+            r#"{ "top": { "design": "macos", "look": { "tint": 0.9 } },
+                 "dock": { "design": "macos" },
+                 "look": { "tint": 0.2, "noise": 0.3 },
+                 "animation": { "duration": 90 } }"#,
+        )
+        .unwrap();
+        assert_eq!(config.top.look.tint, Some(0.9), "the bar's own wins");
+        assert_eq!(config.dock.look.tint, Some(0.2), "then the shared look");
+        assert_eq!(config.top.look.noise, Some(0.3));
+        assert_eq!(
+            config.dock.look.saturation,
+            Some(1.85),
+            "the design's fills the rest"
+        );
+        assert_eq!(config.top.animation.duration, Some(90.0));
+        assert_eq!(config.dock.animation.duration, Some(90.0));
+
+        // Another background type replaces the design's whole background, in one bar only.
+        let config = BarsConfig::parse(
+            r##"{ "top": { "look": { "background": { "type": "solid", "color": "#101010" } } } }"##,
+        )
+        .unwrap();
+        assert!(matches!(
+            config.top.look.background,
+            Some(crate::style::Fill::Solid { .. })
+        ));
+        assert!(
+            config.dock.look.wallpaper().is_some(),
+            "the dock keeps its design's glass"
+        );
+    }
+
+    #[test]
+    fn bar_looks_are_checked_with_their_paths() {
+        let error = BarsConfig::parse(r#"{ "dock": { "look": { "tint": 4 } } }"#).unwrap_err();
+        assert!(format!("{error:#}").contains("dock.look.tint"), "{error:#}");
+        let error =
+            BarsConfig::parse(r#"{ "top": { "animation": { "magnify": {} } } }"#).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("top.animation.magnify"),
+            "{error:#}"
+        );
+        assert!(BarsConfig::parse(r#"{ "dock": { "button": 4 } }"#).is_err());
+    }
+
+    #[test]
+    fn a_monitor_can_have_its_own_designs() {
+        let config = BarsConfig::parse(
+            r#"{ "top": { "design": "macos" },
+                 "overrides": { "secondary": { "top": { "design": "minimal" } } } }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.for_monitor("DISPLAY1", true).unwrap().top.design,
+            TopDesign::Macos
+        );
+        let second = config.for_monitor("DISPLAY2", false).unwrap();
+        assert_eq!(second.top.design, TopDesign::Minimal);
+        assert!(matches!(
+            second.top.look.background,
+            Some(crate::style::Fill::None)
+        ));
+    }
+
+    #[test]
+    fn no_file_is_an_empty_file() {
+        let dir = crate::files::temp_dir("config-none");
+        let missing = BarsConfig::load(&dir.join(FILE)).unwrap();
+        assert_eq!(missing, BarsConfig::parse("{}").unwrap());
+        assert!(
+            missing.top.look.wallpaper().is_some(),
+            "the default design's look"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

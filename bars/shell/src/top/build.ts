@@ -3,7 +3,7 @@
 
 import { button, h } from "../dom";
 import type { Scope } from "../host";
-import { MODULES, type BarsConfig, type Module, type ModuleEntry, type ModuleName } from "../protocol";
+import { MODULES, type BarKind, type BarsConfig, type Module, type ModuleEntry, type ModuleName } from "../protocol";
 import { factories } from "./modules";
 
 const isBuiltin = (name: ModuleName): name is Module => MODULES.some((m) => m === name);
@@ -56,8 +56,9 @@ function custom(id: string, scope: Scope): HTMLElement {
   return el;
 }
 
-export function buildModule(name: ModuleName, config: BarsConfig, scope: Scope): HTMLElement {
-  const el = isBuiltin(name) ? factories[name]({ config, scope }) : custom(name.slice("custom:".length), scope);
+/** Builds `name` for the `kind` bar it sits in (a taskbar dock's clock has its own format). */
+export function buildModule(name: ModuleName, config: BarsConfig, scope: Scope, kind: BarKind = "top"): HTMLElement {
+  const el = isBuiltin(name) ? factories[name]({ config, scope, kind }) : custom(name.slice("custom:".length), scope);
   el.dataset.module = name;
   return el;
 }

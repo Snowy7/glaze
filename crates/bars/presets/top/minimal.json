@@ -1,0 +1,23 @@
+{
+  "layout": "strip",
+  "height": 30,
+  "padding": 12,
+  "spacing": 4,
+  "left": ["workspaces"],
+  "center": ["clock"],
+  "right": ["media", "network", "volume", "battery"],
+  "clock": { "format": "ddd d MMM   HH:mm" },
+  "look": {
+    "family": "mono",
+    "font": { "size": 13, "weight": 600 },
+    "background": { "type": "none" },
+    "border": { "rest": { "width": 0 } },
+    "items": {
+      "radius": 8,
+      "rest": { "color": "text" },
+      "hover": { "background": "#ffffff1f" },
+      "active": { "background": "#ffffff2e" }
+    }
+  },
+  "animation": { "duration": 260, "curve": "smooth", "bar": { "style": "fade" }, "open": { "style": "pop", "duration": 160 } }
+}

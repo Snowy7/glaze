@@ -2,12 +2,16 @@ import type { Bar } from "./bar";
 import { dockStyles } from "./dock/styles";
 import { initSurfaces, setSurfaceConfig } from "./flyouts";
 import { connect, fire, on } from "./host";
+import { createGlass } from "./glass";
+import { createLiquid } from "./liquid";
 import { initOverlay } from "./overlay";
 import type { BarsConfig } from "./protocol";
 import { createRegion } from "./region";
 import { applyLook, type PageLook } from "./style/apply";
 import "./style.css";
-import "./presets/presets.css";
+import "./designs/marks.css";
+import "./designs/top.css";
+import "./designs/dock.css";
 import { createTop } from "./top/top";
 
 async function main(): Promise<void> {
@@ -27,7 +31,17 @@ async function main(): Promise<void> {
   applyLook(state);
 
   const region = createRegion((rects) => fire("region", { rects }));
-  initOverlay(overlay, region.invalidate);
+  const glass = createGlass((panes) => fire("glass", { panes }));
+  const liquid = createLiquid();
+  // Whatever moves the region may move glass too (glass also follows animations by itself).
+  const invalidate = () => {
+    region.invalidate();
+    glass.invalidate();
+    liquid.invalidate();
+  };
+  on("behind", () => liquid.recapture());
+  on("reveal", () => liquid.invalidate());
+  initOverlay(overlay, invalidate);
 
   let bar: Bar | undefined;
   let pack = JSON.stringify(state.look.iconPack);
@@ -36,10 +50,10 @@ async function main(): Promise<void> {
   const build = () => {
     setSurfaceConfig(state.config);
     bar?.destroy();
-    const ctx = { invalidateRegion: region.invalidate, iconPack: state.look.iconPack };
+    const ctx = { invalidateRegion: invalidate, iconPack: state.look.iconPack };
     bar =
       state.kind === "top" ? createTop(app, state.config) : dockStyles[state.config.dock.style](app, state.config, ctx);
-    region.invalidate();
+    invalidate();
   };
   build();
   // The bar comes in with its `show` animation (data-m-show), once.
@@ -54,6 +68,8 @@ async function main(): Promise<void> {
   on("appearance", (look) => {
     state.look = look;
     applyLook(state);
+    glass.invalidate();
+    liquid.invalidate();
     const next = JSON.stringify(look.iconPack);
     if (next !== pack) {
       pack = next;
@@ -63,6 +79,8 @@ async function main(): Promise<void> {
   on("mode", (mode) => {
     state.mode = mode;
     applyLook(state);
+    glass.invalidate();
+    liquid.invalidate();
   });
   on("backdrop", (backdrop) => {
     state.backdrop = backdrop;

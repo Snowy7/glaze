@@ -1,0 +1,509 @@
+/* Flyout families (docs/bars.md, "Look" → `family`): what the flyouts and menus a bar opens are
+   drawn after. Each retunes the flyout tokens (flyouts.css: --on, --fly-radius, --fly-tile-h...)
+   on the layers themselves (the appearance tokens are inline on <html>, so they're overridden where
+   they're used), and adds what tokens can't say. With live blur on, a layer is Windows' blur of
+   what's behind it under --fly-glass, the family's tint; without it, the family's solid color. */
+
+/* --- Every family: the glass ------------------------------------------------------------------------ */
+
+:is(.layer, .dock-label) {
+  --fly-bg: rgb(20 20 22);
+  --fly-tint-default: 0.74;
+  --fly-glass: rgb(from var(--fly-bg) r g b / var(--fly-tint, var(--fly-tint-default)));
+}
+[data-scheme="light"] :is(.layer, .dock-label) {
+  --fly-bg: rgb(246 246 248);
+  --fly-tint-default: 0.78;
+}
+/* Liquid flyouts bend more than their bar (a menu bar's lens is subtle) and are frosted, as Apple's
+   regular glass is for menus and Control Center, so their text stays legible over anything. */
+.layer {
+  --lq-refraction: 0.85;
+  --lq-blur: 12;
+  --fly-liquid-tint: 0.4;
+}
+[data-scheme="light"] .layer {
+  --fly-liquid-tint: 0.5;
+}
+[data-fly-blur="on"] .layer {
+  --fly-shadow: 0 0 0 1px var(--edge), inset 0 1px 0 rgb(255 255 255 / 0.07), 0 10px 30px var(--drop), 0 2px 6px var(--drop);
+}
+
+/* --- Fluent: Windows 11 ---------------------------------------------------------------------------------
+   Acrylic (a 30 DIP blur under a near-opaque tint), 8 DIP corners, a 1 DIP stroke, 14 DIP body text,
+   accent-filled toggles with black ink in dark mode. Quick settings tiles are 48 DIP buttons with
+   their label under them; the footer is a darker band. */
+
+[data-family="fluent"] :is(.layer, .dock-label) {
+  --fly-bg: rgb(38 38 38);
+  --fly-tint-default: 0.84;
+  --fly-sat: 1.2;
+  --fly-radius: 8px;
+  --menu-radius: 8px;
+  --fly-font: calc(14px * var(--scale));
+  --fly-gap: 12px;
+  --fly-tile-h: 48px;
+  --edge: rgb(255 255 255 / 0.08);
+  --fill-1: rgb(255 255 255 / 0.06);
+  --fill-2: rgb(255 255 255 / 0.084);
+  --fill-3: rgb(255 255 255 / 0.12);
+  --on: var(--system-accent-light-2);
+  --on-ink: #000;
+  --thumb: var(--system-accent-light-2);
+  --thumb-ring: #454545;
+  --fly-shadow: 0 0 0 1px rgb(0 0 0 / 0.42), inset 0 1px 0 rgb(255 255 255 / 0.06), 0 8px 16px rgb(0 0 0 / 0.26), 0 24px 48px rgb(0 0 0 / 0.22);
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+[data-family="fluent"][data-scheme="light"] :is(.layer, .dock-label) {
+  --fly-bg: rgb(242 242 242);
+  --fly-tint-default: 0.86;
+  --edge: rgb(0 0 0 / 0.07);
+  --fill-1: rgb(255 255 255 / 0.7);
+  --fill-2: rgb(249 249 249 / 0.5);
+  --fill-3: rgb(0 0 0 / 0.06);
+  --on: var(--system-accent-dark-1);
+  --on-ink: #fff;
+  --thumb: var(--system-accent-dark-1);
+  --thumb-ring: #fff;
+  --fly-shadow: 0 0 0 1px rgb(0 0 0 / 0.1), 0 8px 16px rgb(0 0 0 / 0.14), 0 24px 48px rgb(0 0 0 / 0.12);
+}
+[data-family="fluent"] .fly-panel {
+  padding: 16px;
+}
+[data-family="fluent"] .fly-title {
+  font-size: 1em;
+}
+[data-family="fluent"] .fly-row,
+[data-family="fluent"] .launcher-row,
+[data-family="fluent"] .launcher-tile,
+[data-family="fluent"] .mix-device,
+[data-family="fluent"] .fly-icon-button,
+[data-family="fluent"] .fly-button,
+[data-family="fluent"] .tray-cell {
+  border-radius: 4px;
+}
+[data-family="fluent"] .fly-button {
+  height: 32px;
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+/* The slider: a 4 DIP track and the thumb's accent dot in a ring. */
+[data-family="fluent"] .fly-slider::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
+  background: radial-gradient(circle, var(--thumb) 0 5px, var(--thumb-ring) 5.5px);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12), 0 1px 2px rgb(0 0 0 / 0.3);
+}
+[data-family="fluent"] .fly-slider:hover::-webkit-slider-thumb {
+  background: radial-gradient(circle, var(--thumb) 0 6.5px, var(--thumb-ring) 7px);
+}
+/* Quick settings: tiles with their label below. */
+[data-family="fluent"] .qs-tiles {
+  gap: 14px 12px;
+}
+[data-family="fluent"] .fly-tile {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: var(--fly-tile-h) auto;
+  row-gap: 6px;
+  height: auto;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+[data-family="fluent"] .fly-tile-main {
+  display: contents;
+}
+[data-family="fluent"] .fly-tile-glyph {
+  grid-area: 1 / 1 / 2 / -1;
+  width: auto;
+  height: auto;
+  border-radius: 4px;
+  background: var(--fill-1);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  display: grid;
+  place-items: center;
+  transition: background-color var(--fly-duration) var(--ease);
+}
+[data-family="fluent"] .fly-tile:has(.fly-tile-more) .fly-tile-glyph {
+  grid-area: 1 / 1;
+  border-radius: 4px 0 0 4px;
+}
+[data-family="fluent"] .fly-tile-glyph > svg {
+  width: 16px;
+  height: 16px;
+}
+[data-family="fluent"] .fly-tile-main:hover .fly-tile-glyph,
+[data-family="fluent"] .fly-tile-more:hover {
+  background: var(--fill-2);
+}
+[data-family="fluent"] .fly-tile-text {
+  grid-area: 2 / 1 / 3 / -1;
+  align-items: center;
+  text-align: center;
+}
+[data-family="fluent"] .fly-tile-label {
+  font-weight: 400;
+  font-size: 12px;
+}
+[data-family="fluent"] .fly-tile-detail {
+  display: none;
+}
+[data-family="fluent"] .fly-tile-more {
+  grid-area: 1 / 2;
+  width: 32px;
+  border-left: 1px solid rgb(0 0 0 / 0.2);
+  border-radius: 0 4px 4px 0;
+  background: var(--fill-1);
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+[data-family="fluent"] .fly-tile[data-on="true"] {
+  background: none;
+  color: var(--t0);
+}
+[data-family="fluent"] .fly-tile[data-on="true"] :is(.fly-tile-glyph, .fly-tile-more) {
+  background: var(--on);
+  color: var(--on-ink);
+  box-shadow: none;
+}
+[data-family="fluent"] .fly-tile[data-on="true"] .fly-tile-main:hover .fly-tile-glyph,
+[data-family="fluent"] .fly-tile[data-on="true"] .fly-tile-more:hover {
+  background: color-mix(in srgb, var(--on) 90%, var(--fly-bg));
+}
+[data-family="fluent"] .qs .fly-footer,
+[data-family="fluent"] .launcher-footer {
+  margin: 4px -16px -16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--edge);
+  background: rgb(0 0 0 / 0.16);
+  border-radius: 0 0 var(--fly-radius) var(--fly-radius);
+}
+[data-family="fluent"][data-scheme="light"] :is(.qs .fly-footer, .launcher-footer) {
+  background: rgb(0 0 0 / 0.03);
+}
+/* Start: a pill search box, a darker footer with the user and power. */
+[data-family="fluent"] .launcher-search {
+  height: 36px;
+  border-radius: 18px;
+  background: var(--fill-1);
+  box-shadow: inset 0 0 0 1px var(--edge), inset 0 -1px 0 rgb(255 255 255 / 0.06);
+}
+[data-family="fluent"] .launcher-search:focus-within {
+  box-shadow: inset 0 0 0 1px var(--edge), inset 0 -2px 0 var(--on);
+}
+[data-family="fluent"] .launcher-footer {
+  margin: 6px -18px -12px;
+  padding: 12px 40px;
+}
+[data-family="fluent"] .launcher-section-title {
+  font-size: 0.95em;
+}
+[data-family="fluent"] .launcher-text-button {
+  height: 24px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+[data-family="fluent"] .menu {
+  padding: 4px;
+}
+[data-family="fluent"] .menu-item {
+  height: 32px;
+  border-radius: 4px;
+  padding: 0 12px 0 8px;
+}
+[data-family="fluent"] .menu-item:hover {
+  background: var(--fill-2);
+}
+[data-family="fluent"] .cal-day {
+  font-size: 0.92em;
+}
+[data-family="fluent"] .notif-card {
+  border-radius: 8px;
+}
+[data-family="fluent"] .notif-stack[data-more]::before,
+[data-family="fluent"] .notif-stack[data-more="2"]::after {
+  border-radius: 0 0 8px 8px;
+}
+[data-family="fluent"] :is(.notif-dnd, .notif-clear, .notif-group-toggle) {
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+[data-family="fluent"] .notif-title {
+  font-weight: 600;
+}
+[data-family="fluent"] .dock-label {
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* --- macOS ------------------------------------------------------------------------------------------------
+   Vibrant glass (a strongly saturated blur under a light tint), a hairline rim, 16 pt panel corners.
+   Control Center tiles are modules: a glyph in a circle (blue when on) beside its label; sliders are
+   22 pt bars. Menus highlight their row in the accent; today is red in the calendar. */
+
+[data-family="macos"] :is(.layer, .dock-label) {
+  --fly-bg: rgb(36 36 38);
+  --fly-tint-default: 0.5;
+  --fly-sat: 1.9;
+  --fly-radius: 16px;
+  --menu-radius: 10px;
+  --fly-font: calc(13px * var(--scale));
+  --fly-gap: 10px;
+  --fly-tile-h: 56px;
+  --edge: rgb(255 255 255 / 0.1);
+  --fill-1: rgb(255 255 255 / 0.08);
+  --fill-2: rgb(255 255 255 / 0.13);
+  --fill-3: rgb(255 255 255 / 0.22);
+  --on: #0a84ff;
+  --on-ink: #fff;
+  --cal-today: #ff453a;
+  --cal-today-ink: #fff;
+  --badge: #ff453a;
+  --badge-ink: #fff;
+  --thumb: #fff;
+  --thumb-ring: transparent;
+  --fly-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.5), inset 0 0 0 0.5px rgb(255 255 255 / 0.14), 0 12px 36px rgb(0 0 0 / 0.32);
+}
+[data-family="macos"][data-scheme="light"] :is(.layer, .dock-label) {
+  --fly-bg: rgb(240 240 242);
+  --fly-tint-default: 0.58;
+  --edge: rgb(0 0 0 / 0.08);
+  --fill-1: rgb(255 255 255 / 0.5);
+  --fill-2: rgb(0 0 0 / 0.06);
+  --fill-3: rgb(0 0 0 / 0.12);
+  --on: #007aff;
+  --cal-today: #ff3b30;
+  --badge: #ff3b30;
+  --fly-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.18), inset 0 0 0 0.5px rgb(255 255 255 / 0.7), 0 12px 38px rgb(0 0 0 / 0.2);
+}
+[data-family="macos"] .fly-panel {
+  padding: 10px;
+}
+[data-family="macos"] .fly-header {
+  padding: 2px 6px 0;
+}
+[data-family="macos"] .fly-title {
+  font-size: 1em;
+  font-weight: 700;
+}
+/* Control Center modules. */
+[data-family="macos"] .qs-tiles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+[data-family="macos"] .fly-tile,
+[data-family="macos"] .fly-tile[data-on="true"] {
+  border-radius: 13px;
+  background: var(--fill-1);
+  color: var(--t0);
+  box-shadow: inset 0 0 0 0.5px var(--edge);
+}
+[data-family="macos"] .fly-tile-main {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 0 10px;
+}
+[data-family="macos"] .fly-tile-glyph {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--fill-2);
+  transition: background-color var(--fly-duration) var(--ease), color var(--fly-duration) var(--ease);
+}
+[data-family="macos"] .fly-tile-glyph > svg {
+  width: 15px;
+  height: 15px;
+}
+[data-family="macos"] .fly-tile[data-on="true"] .fly-tile-glyph {
+  background: var(--on);
+  color: var(--on-ink);
+}
+[data-family="macos"] .fly-tile-label {
+  font-size: 0.92em;
+  font-weight: 600;
+}
+[data-family="macos"] .fly-tile-detail {
+  color: var(--t2);
+  opacity: 1;
+}
+[data-family="macos"] .fly-tile-main:hover,
+[data-family="macos"] .fly-tile-more:hover,
+[data-family="macos"] .fly-tile[data-on="true"] .fly-tile-main:hover,
+[data-family="macos"] .fly-tile[data-on="true"] .fly-tile-more:hover {
+  background: var(--fill-1);
+}
+[data-family="macos"] .fly-tile-more {
+  border-left: 0;
+}
+/* Display and Sound: modules with a thick bar. */
+[data-family="macos"] .qs-sliders {
+  gap: 10px;
+}
+[data-family="macos"] .qs-sliders > * {
+  padding: 9px 10px;
+  border-radius: 13px;
+  background: var(--fill-1);
+  box-shadow: inset 0 0 0 0.5px var(--edge);
+}
+[data-family="macos"] .fly-slider {
+  height: 22px;
+}
+[data-family="macos"] .fly-slider::-webkit-slider-runnable-track {
+  height: 22px;
+  border-radius: 11px;
+  background: linear-gradient(to right, #fff var(--value, 0%), var(--fill-2) var(--value, 0%));
+}
+[data-family="macos"][data-scheme="light"] .fly-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #fff var(--value, 0%), rgb(0 0 0 / 0.1) var(--value, 0%));
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.08);
+}
+[data-family="macos"] .fly-slider::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: 0;
+  background: #fff;
+  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.2), 0 1px 3px rgb(0 0 0 / 0.35);
+}
+[data-family="macos"] .fly-switch[data-on="true"] {
+  background: #30d158;
+}
+[data-family="macos"] .fly-switch[data-on="true"]::after,
+[data-family="macos"] .fly-switch::after {
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+}
+[data-family="macos"] .fly-footer {
+  padding: 8px 6px 2px;
+}
+/* Menus: accent rows, 22 pt items, quiet separators. */
+[data-family="macos"] .menu {
+  padding: 5px;
+  min-width: 220px;
+}
+[data-family="macos"] .menu-item {
+  height: 24px;
+  padding: 0 10px 0 6px;
+  border-radius: 5px;
+}
+[data-family="macos"] .menu-item:hover,
+[data-family="macos"] .menu-item:focus-visible {
+  background: var(--on);
+  color: #fff;
+}
+[data-family="macos"] .menu-item:hover .menu-detail {
+  color: rgb(255 255 255 / 0.8);
+}
+[data-family="macos"] .menu-sep {
+  margin: 5px 10px;
+}
+[data-family="macos"] .fly-row,
+[data-family="macos"] .launcher-row,
+[data-family="macos"] .mix-device,
+[data-family="macos"] .tray-cell {
+  border-radius: 7px;
+}
+[data-family="macos"] .launcher-search {
+  border-radius: 12px;
+  background: var(--fill-1);
+}
+/* Notification Center: big icons, round cards that read as glass of their own. */
+[data-family="macos"] .notif-card {
+  grid-template-columns: 34px minmax(0, 1fr);
+  padding: 12px 14px;
+  border-radius: 18px;
+  --notif-card: rgb(from var(--fly-bg) r g b / 0.42);
+  --notif-card-hover: rgb(from var(--fly-bg) r g b / 0.55);
+  box-shadow: inset 0 0 0 0.5px var(--edge);
+}
+[data-family="macos"] .notif-card :is(.notif-icon, .notif-badge-slot > *) {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+}
+[data-family="macos"] .notif-stack[data-more]::before,
+[data-family="macos"] .notif-stack[data-more="2"]::after {
+  border-radius: 0 0 16px 16px;
+  background: rgb(from var(--fly-bg) r g b / 0.3);
+}
+[data-family="macos"] .notif-time {
+  font-size: 0.78em;
+}
+[data-family="macos"] .cal-day.is-today {
+  font-weight: 600;
+}
+[data-family="macos"] .dock-label {
+  border-radius: 7px;
+  padding: 5px 11px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* --- Material: ChromeOS ----------------------------------------------------------------------------------
+   Material You: 20 DIP bubbles, pill-shaped tiles (primary when on), thick round sliders. */
+
+[data-family="material"] :is(.layer, .dock-label) {
+  --fly-bg: rgb(32 33 36);
+  --fly-tint-default: 0.86;
+  --fly-sat: 1.2;
+  --fly-radius: 20px;
+  --menu-radius: 12px;
+  --fly-font: calc(13px * var(--scale));
+  --fly-gap: 12px;
+  --fly-tile-h: 56px;
+  --edge: rgb(255 255 255 / 0.06);
+  --fill-1: rgb(255 255 255 / 0.07);
+  --fill-2: rgb(255 255 255 / 0.11);
+  --fill-3: rgb(255 255 255 / 0.18);
+  --on: #a8c7fa;
+  --on-ink: #062e6f;
+  --thumb: #a8c7fa;
+  --thumb-ring: transparent;
+  --fly-shadow: 0 0 0 1px var(--edge), 0 4px 12px rgb(0 0 0 / 0.3), 0 16px 32px rgb(0 0 0 / 0.24);
+}
+[data-family="material"] .fly-panel {
+  padding: 16px;
+}
+[data-family="material"] .fly-tile {
+  border-radius: 16px;
+  box-shadow: none;
+  background: var(--fill-2);
+}
+[data-family="material"] .fly-tile-main {
+  padding: 0 14px;
+}
+[data-family="material"] .fly-tile-label {
+  font-weight: 500;
+}
+[data-family="material"] .fly-slider {
+  height: 28px;
+}
+[data-family="material"] .fly-slider::-webkit-slider-runnable-track {
+  height: 28px;
+  border-radius: 14px;
+  background: linear-gradient(to right, var(--on) var(--value, 0%), var(--fill-2) var(--value, 0%));
+}
+[data-family="material"] .fly-slider::-webkit-slider-thumb {
+  width: 4px;
+  height: 20px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--on-ink);
+  box-shadow: none;
+}
+[data-family="material"] :is(.fly-button, .fly-icon-button, .launcher-search, .launcher-text-button) {
+  border-radius: 99px;
+}
+[data-family="material"] :is(.fly-row, .launcher-row, .launcher-tile, .mix-device, .tray-cell, .notif-card) {
+  border-radius: 14px;
+}
+[data-family="material"] .menu-item {
+  height: 36px;
+  border-radius: 8px;
+}

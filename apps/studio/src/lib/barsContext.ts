@@ -4,7 +4,7 @@
 import { createContext, use } from "react";
 
 import type { BarsCatalog } from "./api";
-import type { BarsDoc } from "./barsSchema";
+import type { BarKind, BarsDoc } from "./barsSchema";
 import type { Path, Resolved } from "./barsDoc";
 
 export type BarsEditor = {
@@ -27,4 +27,21 @@ export function useBars(): BarsEditor {
   const editor = use(BarsContext);
   if (!editor) throw new Error("useBars must be used inside the Bars page");
   return editor;
+}
+
+/**
+ * The editor as one bar sees it: `look` and `animation` paths address that bar's own
+ * (`top.look`, `dock.animation`...), and `resolved.look` / `doc.look` are that bar's, so the Look
+ * and Motion panels edit one bar without knowing which.
+ */
+export function forBar(editor: BarsEditor, bar: BarKind): BarsEditor {
+  const map = (path: Path): Path => (path[0] === "look" || path[0] === "animation" ? [bar, ...path] : path);
+  const own = editor.doc[bar];
+  return {
+    ...editor,
+    doc: { ...editor.doc, look: own?.look, animation: own?.animation },
+    resolved: { ...editor.resolved, look: editor.resolved[bar].look, animation: editor.resolved[bar].animation },
+    set: (path, value) => editor.set(map(path), value),
+    has: (path) => editor.has(map(path)),
+  };
 }

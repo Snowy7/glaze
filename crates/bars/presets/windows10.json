@@ -1,0 +1,1 @@
+{ "top": { "design": "fluent", "enabled": false }, "dock": { "design": "windows10", "enabled": true, "monitors": "all" } }

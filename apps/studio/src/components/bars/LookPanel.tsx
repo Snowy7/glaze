@@ -3,11 +3,11 @@ import { useState } from "react";
 
 import { pickImage } from "../../lib/api";
 import { useBars } from "../../lib/barsContext";
-import { CORNERS, STATES, type Corner, type Fill, type FillType, type ImageFit, type Scheme, type State } from "../../lib/barsSchema";
+import { CORNERS, STATES, type Corner, type Family, type Fill, type FillType, type GlassStyle, type GlyphSet, type ImageFit, type Look, type Scheme, type State } from "../../lib/barsSchema";
 import { useActiveSkins } from "../../lib/hooks";
 import { AppearanceEditor } from "../AppearanceEditor";
 import { Block, Group, IconButton, INPUT_BASE, Note, Segmented, Select } from "../ui";
-import { ChoiceSetting, FieldColor, FieldPaint, FieldSlider, SelectSetting, percent, px } from "./BarSettings";
+import { ChoiceSetting, FieldColor, FieldPaint, FieldSlider, SelectSetting, ToggleSetting, percent, px } from "./BarSettings";
 import { GradientEditor } from "./PaintEditor";
 import { ThemeVarsPanel } from "./ThemeVarsPanel";
 
@@ -19,8 +19,25 @@ const SCHEMES: readonly { value: Scheme; label: string; hint?: string }[] = [
 
 const CORNER_OPTIONS: readonly { value: Corner; label: string }[] = CORNERS.map((value) => ({ value, label: value[0]?.toUpperCase() + value.slice(1) }));
 
-const FILL_LABELS: Record<FillType, string> = { none: "None", solid: "Solid", gradient: "Gradient", image: "Image", wallpaper: "Wallpaper glass" };
-const FILL_TYPES: readonly FillType[] = ["none", "solid", "gradient", "image", "wallpaper"];
+const FILL_LABELS: Record<FillType, string> = { none: "None", solid: "Solid", gradient: "Gradient", image: "Image", wallpaper: "Wallpaper glass", blur: "Live blur" };
+const FILL_TYPES: readonly FillType[] = ["none", "solid", "gradient", "image", "wallpaper", "blur"];
+
+const GLASS_OPTIONS: readonly { value: GlassStyle; label: string; hint: string }[] = [
+  { value: "liquid", label: "Liquid", hint: "What's behind, bent by a lens along the rim and clear in the middle, with a specular edge" },
+  { value: "frosted", label: "Frosted", hint: "What's behind, blurred" },
+  { value: "none", label: "None", hint: "The background alone" },
+];
+const FAMILY_OPTIONS: readonly { value: Family; label: string }[] = [
+  { value: "mono", label: "mypaper" },
+  { value: "fluent", label: "Windows 11" },
+  { value: "macos", label: "macOS" },
+  { value: "material", label: "ChromeOS" },
+];
+const GLYPH_OPTIONS: readonly { value: GlyphSet; label: string }[] = [
+  { value: "default", label: "mypaper" },
+  { value: "fluent", label: "Segoe Fluent Icons" },
+  { value: "symbols", label: "SF Symbols style" },
+];
 
 /** A fresh background of each type, with the values the host would pick. */
 const FILL_START: Record<FillType, Fill> = {
@@ -29,11 +46,15 @@ const FILL_START: Record<FillType, Fill> = {
   gradient: { type: "gradient", angle: 180, stops: ["#101820", "#2a3a55"] },
   image: { type: "image", path: "", fit: "cover" },
   wallpaper: { type: "wallpaper" },
+  blur: { type: "blur" },
 };
+
+/** The material a `look.glass` names (a string is the style alone). */
+const glassStyle = (glass: Look["glass"]): GlassStyle => (typeof glass === "string" ? glass : (glass?.style ?? "frosted"));
 
 export function LookPanel() {
   const skins = useActiveSkins();
-  const { doc, set } = useBars();
+  const { doc, resolved, set } = useBars();
   return (
     <div className="flex flex-col gap-6">
       <Group title="Surface">
@@ -51,6 +72,27 @@ export function LookPanel() {
           <Note>Tint is laid over an image, gradient or wallpaper background. A strip top bar is always square.</Note>
         </Block>
         <SelectSetting<Corner> path={["look", "corners"]} title="Corner shape" detail="Squircle, bevel, scoop and notch use CSS corner-shape." options={CORNER_OPTIONS} fallback="round" />
+      </Group>
+
+      <Group title="Glass">
+        <ChoiceSetting<GlassStyle> path={["look", "glass", "style"]} title="Material" detail={GLASS_OPTIONS.find((o) => o.value === glassStyle(resolved.look.glass))?.hint} options={GLASS_OPTIONS} fallback="frosted" wide />
+        <Block title="Knobs" detail="The same names as the widgets' liquid style. Flyouts use a stronger lens and more frost of their own.">
+          <div className="space-y-3">
+            <FieldSlider path={["look", "glass", "intensity"]} label="Intensity" min={0} max={1} step={0.01} fallback={1} format={percent} />
+            <FieldSlider path={["look", "glass", "refraction"]} label="Refraction" min={0} max={1} step={0.01} fallback={0.6} format={percent} />
+            <FieldSlider path={["look", "glass", "highlight"]} label="Highlight" min={0} max={1} step={0.01} fallback={0.75} format={percent} />
+            <FieldSlider path={["look", "glass", "tint"]} label="Glass tint" min={0} max={1} step={0.01} fallback={0.12} format={percent} />
+            <FieldSlider path={["look", "glass", "blur"]} label="Blur" min={0} max={32} step={0.5} fallback={1} format={px} />
+            <FieldSlider path={["look", "glass", "depth"]} label="Depth" min={0} max={1} step={0.01} fallback={0.2} format={percent} />
+            <FieldSlider path={["look", "glass", "sheen"]} label="Sheen" min={0} max={1} step={0.01} fallback={0} format={percent} />
+          </div>
+        </Block>
+        <ToggleSetting path={["look", "flyouts", "blur"]} title="Glass flyouts" detail="Menus and panels from this bar are glass (off: solid)." fallback />
+      </Group>
+
+      <Group title="Family">
+        <SelectSetting<Family> path={["look", "family"]} title="Menus and panels" detail="Which system the flyouts this bar opens are drawn after." options={FAMILY_OPTIONS} fallback="mono" />
+        <SelectSetting<GlyphSet> path={["look", "glyphs"]} title="Icons" detail="The module glyphs. An icon pack, if set, wins." options={GLYPH_OPTIONS} fallback="default" />
       </Group>
 
       <Group title="Edges and depth">

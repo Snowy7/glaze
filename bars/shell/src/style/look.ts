@@ -5,6 +5,7 @@
 
 import type {
   Appearance,
+  GlassStyle,
   BorderStyle,
   ColorRef,
   Gradient,
@@ -79,6 +80,12 @@ export function rgbOf(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+/** `tint` (a hex color) at `alpha`, as CSS. */
+const tintOver = (tint: string, alpha: number): string => {
+  const [r, g, b] = rgbOf(tint);
+  return `rgb(${r} ${g} ${b} / ${round(alpha)})`;
+};
+
 export type Scheme = "light" | "dark";
 
 /** Light or dark: the look's choice, Windows' for `auto`, else what the appearance's text implies. */
@@ -112,14 +119,51 @@ function shadowCss(shadow: ShadowStyle | undefined): string {
   return `${x}px ${y}px ${blur}px ${spread}px ${cssColor(shadow.color)}`;
 }
 
+/** The glass material a look draws: its own, else liquid when the theme's appearance style is. */
+export function glassStyleOf(look: Look, appearance: Appearance): GlassStyle {
+  return look.glass.style ?? (appearance.style === "liquid" ? "liquid" : "frosted");
+}
+
+/** Fills liquid glass can stand in for (a solid, gradient or picture fill stays as it is). */
+const LIQUID_FILLS = new Set(["tint", "wallpaper", "blur"]);
+
+/** Glass highlights, the liquid knobs, the bar's type, and its flyouts' tint. */
+function materialTokens(look: Look): Record<string, string> {
+  const { glass } = look;
+  const intensity = glass.intensity ?? 1;
+  const vars: Record<string, string> = {
+    "--g-highlight": String(glass.highlight ?? 0),
+    "--g-sheen": String(glass.sheen ?? 0),
+    "--g-depth": String(glass.depth ?? 0),
+    "--lq-intensity": String(intensity),
+    "--lq-refraction": String(glass.refraction ?? 0.6),
+    "--lq-highlight": String(round((glass.highlight ?? 0.75) * intensity)),
+    "--lq-blur": String(glass.blur ?? 1),
+  };
+  if (look.font.family) vars["--bar-font"] = look.font.family;
+  if (look.font.size !== undefined) vars["--bar-size"] = `${look.font.size}px`;
+  if (look.font.weight !== undefined) vars["--bar-weight"] = String(look.font.weight);
+  if (look.flyouts.tint !== undefined) vars["--fly-tint"] = String(look.flyouts.tint);
+  return vars;
+}
+
 /** Rest, then hover and active each layered over rest. */
 function states<T extends object>(per: PerState<T>): { rest: T; hover: T; active: T } {
   const rest = (per.rest ?? {}) as T;
   return { rest, hover: { ...rest, ...per.hover }, active: { ...rest, ...per.active } };
 }
 
-/** What draws the surface's background layer (`.surface > .bg`). */
-function fillTokens(look: Look, assets: Record<string, string>, tint: string, opacity: number): Record<string, string> {
+/**
+ * What draws the surface's background layer (`.surface > .bg`). `live`: live blur draws under
+ * the page (Windows does the blur; the page only tints).
+ */
+function fillTokens(
+  look: Look,
+  assets: Record<string, string>,
+  tint: string,
+  opacity: number,
+  live: boolean,
+): Record<string, string> {
   const tinted = (alpha: number) => {
     const [r, g, b] = rgbOf(tint);
     return `rgb(${r} ${g} ${b} / ${round(alpha)})`;
@@ -133,6 +177,9 @@ function fillTokens(look: Look, assets: Record<string, string>, tint: string, op
     "--s-fill-repeat": "no-repeat",
     "--s-filter": "none",
     "--s-tint": "transparent",
+    "--glass-sat": String(saturation),
+    "--glass-bright": "1",
+    "--glass-blur": "0",
   };
   const background = look.background;
   switch (background?.type) {
@@ -168,6 +215,12 @@ function fillTokens(look: Look, assets: Record<string, string>, tint: string, op
       vars["--s-filter"] = `brightness(${background.brightness}) saturate(${saturation}) blur(${background.blur}px)`;
       vars["--s-tint"] = tinted(look.tint ?? opacity);
       vars["--s-fill-color"] = "var(--surface)"; // until the first snapshot arrives
+      break;
+    case "blur":
+      vars["--glass-bright"] = String(background.brightness);
+      vars["--glass-blur"] = String(background.blur);
+      // Without live blur, the tint alone has to carry it: nearly opaque.
+      vars["--s-tint"] = tinted(live ? (look.tint ?? opacity) : Math.max(0.9, look.tint ?? opacity));
       break;
   }
   return vars;
@@ -221,7 +274,12 @@ export function lookTokens(
   scheme: Scheme,
   system: SystemLook,
   assets: Record<string, string>,
+  live = false,
+  liquidOn = false,
 ): LookTokens {
+  const style = glassStyleOf(look, appearance);
+  const liquid = liquidOn && style === "liquid";
+  const fill = look.background?.type ?? "tint";
   const [base, light1, light2, light3, dark1, dark2, dark3] = system.accent;
   const glow = states(look.glow);
   const shadow = states(look.shadow);
@@ -233,7 +291,8 @@ export function lookTokens(
     "--system-accent-dark-1": dark1,
     "--system-accent-dark-2": dark2,
     "--system-accent-dark-3": dark3,
-    ...fillTokens(look, assets, appearance.tint, appearance.opacity),
+    ...fillTokens(look, assets, appearance.tint, appearance.opacity, live),
+    ...materialTokens(look),
     "--s-noise": noiseImage(look.noise ?? 0),
     "--s-radius": `${look.radius ?? appearance.radius}px`,
     ...borderTokens("s", look.border, {
@@ -257,8 +316,15 @@ export function lookTokens(
       "data-system-scheme": system.scheme,
       "data-fill": look.background?.type ?? "tint",
       "data-corners": look.corners ?? "round",
+      "data-family": look.family ?? "mono",
+      "data-glyphs": look.glyphs ?? "default",
+      // Flyouts get live blur unless the look says no (and live blur is on at all).
+      "data-fly-blur": live && look.flyouts.blur !== false ? "on" : "off",
+      "data-glass-style": style,
+      "data-liquid": liquid && LIQUID_FILLS.has(fill) ? "on" : "off",
+      "data-fly-liquid": liquid && look.flyouts.blur !== false ? "on" : "off",
     },
-    vars,
+    vars: liquid ? { ...vars, "--s-tint": tintOver(appearance.tint, look.glass.tint ?? 0.06) } : vars,
   };
 }
 
