@@ -356,6 +356,8 @@ export interface LookPayload {
   iconPack: IconPack | null;
   /** Image paths in bars.json → their URLs. */
   assets: Record<string, string>;
+  /** The theme's liquid-glass knobs (`bars.glass`): what the bar's `look.glass` leaves out. */
+  glass?: { intensity?: number; refraction?: number; highlight?: number } | null;
 }
 
 export interface Mode {

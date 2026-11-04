@@ -403,6 +403,8 @@ items (module buttons, task buttons):
   alone: `"glass": "liquid"`. Missing `style`: `liquid` when the theme's appearance style is
   `liquid` (the widgets' Liquid Glass), else `frosted`, so one theme switch makes the whole desktop
   liquid. The macOS designs default to liquid; the Windows designs to frosted.
+  The theme's `bars.glass` knobs (`intensity`, `refraction`, `highlight`, shared with the
+  widgets) fill in what a bar's `look.glass` leaves out.
 - **`flyouts`**: `{ blur, tint }`: whether this bar's flyouts are glass (default on; off: solid)
   and their tint's opacity (missing: the family's).
 - **`background: { "type": "blur", "brightness", "blur" }`** is live blur: Windows' own blur of

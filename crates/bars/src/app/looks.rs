@@ -141,6 +141,7 @@ impl App {
             "vars": self.looks.vars,
             "iconPack": self.looks.pack,
             "assets": self.looks.assets.urls(),
+            "glass": self.skin.glass,
         })
     }
 

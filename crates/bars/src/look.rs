@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use mypaper_bars::icon_pack::{self, IconPack};
 use mypaper_bars::vars::VarDecl;
-use mypaper_theme::{Appearance, Color, LoadedTheme, Paint, Surface, TextTone};
+use mypaper_theme::{Appearance, Color, Liquid, LoadedTheme, Paint, Surface, TextTone};
 use serde::{Deserialize, Serialize};
 
 use crate::bridge::BarKind;
@@ -98,6 +98,8 @@ pub struct ThemeSkin {
     pub css: Option<String>,
     /// The variables its CSS declares (`@mypaper-vars`).
     pub vars: BTreeMap<String, VarDecl>,
+    /// Its liquid-glass knobs (`bars.glass`): what a bar's `look.glass` leaves out.
+    pub glass: Option<Liquid>,
 }
 
 impl ThemeSkin {
@@ -130,6 +132,7 @@ impl ThemeSkin {
                     appearance: skin.appearance,
                     css,
                     vars,
+                    glass: skin.glass,
                 }
             }
             Err(e) => {

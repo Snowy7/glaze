@@ -53,7 +53,9 @@ export function pageTokens({ kind, config, look, mode, backdrop }: PageLook): {
   vars: Record<string, string>;
 } {
   const style = barStyle(kind, config);
-  const barLook = effectiveLook(kind, config, mode);
+  const own = effectiveLook(kind, config, mode);
+  // The theme's liquid knobs fill in what the bar's look leaves out.
+  const barLook = look.glass ? { ...own, glass: { ...look.glass, ...own.glass } } : own;
   const scheme = schemeOf(barLook, look.appearance, look.system);
   const appearance = schemed(look.appearance, scheme);
   const base = appearanceTokens(appearance);
