@@ -1395,7 +1395,9 @@ impl App {
                 };
                 let look =
                     look::resolve(&instance.appearance, &self.layout.appearance, &base, accent);
-                if look.style != Some(WidgetStyle::Liquid) || look.surface != Some(SurfaceKind::Glass) {
+                if look.style != Some(WidgetStyle::Liquid)
+                    || look.surface != Some(SurfaceKind::Glass)
+                {
                     continue;
                 }
                 let tint = look.tint.unwrap_or(look::DEFAULT_TINT);

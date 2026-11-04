@@ -537,7 +537,9 @@ mod tests {
             "type": "plates", "plates": [{ "instance": "a-1", "rect": [1, 2, 30, 40], "radius": 9 }]
         }))
         .unwrap();
-        assert!(matches!(plates, FromShell::Plates { ref plates } if plates[0].rect == [1.0, 2.0, 30.0, 40.0]));
+        assert!(
+            matches!(plates, FromShell::Plates { ref plates } if plates[0].rect == [1.0, 2.0, 30.0, 40.0])
+        );
 
         // Appearance edits: the user's layer has no instance; null clears a field.
         let user: FromShell = serde_json::from_value(

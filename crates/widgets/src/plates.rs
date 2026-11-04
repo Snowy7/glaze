@@ -187,7 +187,10 @@ mod tests {
         assert_eq!(got.radius, 27.0);
         assert_eq!(got.tint, [16, 16, 16, 26]);
         assert_eq!(got.blur, 3.0, "blur is DIPs too");
-        assert_eq!((got.intensity, got.refraction, got.highlight), (1.0, 0.6, 0.5));
+        assert_eq!(
+            (got.intensity, got.refraction, got.highlight),
+            (1.0, 0.6, 0.5)
+        );
     }
 
     #[test]
@@ -209,10 +212,18 @@ mod tests {
         };
 
         plates.offer(Vec::new(), start);
-        assert_eq!(plates.deadline(), None, "nothing liquid: nothing is ever written");
+        assert_eq!(
+            plates.deadline(),
+            None,
+            "nothing liquid: nothing is ever written"
+        );
 
         plates.offer(one(0), start);
-        assert_eq!(plates.take_due(start), Some(one(0)), "the first change goes out at once");
+        assert_eq!(
+            plates.take_due(start),
+            Some(one(0)),
+            "the first change goes out at once"
+        );
         assert!(plates.published());
 
         // A drag: three moves within one throttle window publish once, the last of them.

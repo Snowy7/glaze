@@ -772,7 +772,10 @@ mod tests {
         };
         let merged = glass.over(&base);
         assert_eq!(merged.intensity, Some(1.0), "unset keeps the layer below");
-        assert_eq!((merged.refraction, merged.tint, merged.blur), (Some(0.4), Some(0.1), Some(2.0)));
+        assert_eq!(
+            (merged.refraction, merged.tint, merged.blur),
+            (Some(0.4), Some(0.1), Some(2.0))
+        );
         assert!(parse(&skin.replace("\"blur\": 2", "\"blur\": 40")).is_err());
         assert!(parse(&skin.replace("\"tint\": 0.1", "\"tint\": 1.5")).is_err());
         assert!(parse(&skin.replace("\"tint\": 0.1", "\"sheen\": 1")).is_err());

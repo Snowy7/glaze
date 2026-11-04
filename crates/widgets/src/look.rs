@@ -10,7 +10,9 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use mypaper_theme::{Appearance, Color, Liquid, LoadedTheme, Paint, Surface, TextTone, WidgetStyle};
+use mypaper_theme::{
+    Appearance, Color, Liquid, LoadedTheme, Paint, Surface, TextTone, WidgetStyle,
+};
 use serde_json::{Map, Value};
 
 /// A style sheet bigger than this is ignored (it is sent to every widget on every change).
@@ -366,7 +368,11 @@ mod tests {
         assert_eq!(skin.css.as_deref(), Some("html { --x: 1 }"));
         let glass = liquid(&skin);
         assert_eq!(glass.refraction, Some(0.3), "the theme's knob");
-        assert_eq!(glass.intensity, liquid_defaults().intensity, "the rest built in");
+        assert_eq!(
+            glass.intensity,
+            liquid_defaults().intensity,
+            "the rest built in"
+        );
 
         // A style sheet that is missing costs only the sheet.
         std::fs::remove_file(dir.join("w.css")).unwrap();
