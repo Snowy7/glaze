@@ -1,11 +1,10 @@
-import { TriangleAlert, ZoomIn, ZoomOut } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { BarInspector, BarsOverview, ModuleCatalog, ModuleInspector } from "../components/bars/BarsInspector";
-import { BarsLayer, zonesOf, type BarPick, type ModuleMove } from "../components/stage/BarsLayer";
-import { DesktopScene } from "../components/stage/DesktopScene";
-import { StageTools } from "../components/stage/Stage";
-import { Button, EditorLayout, IconButton, Inspector, InspectorHeader, InspectorSection, PageBar, SaveState, Skeleton } from "../components/ui";
+import { zonesOf, type BarPick, type ModuleMove } from "../components/stage/BarsLayer";
+import { BarsScene } from "../components/stage/BarsScene";
+import { Button, EditorLayout, Inspector, InspectorHeader, InspectorSection, PageBar, SaveState, Skeleton } from "../components/ui";
 import { api, errorText, type BarsCatalog, type BarsState } from "../lib/api";
 import { getIn, resolve, setIn, type Path, type Resolved } from "../lib/barsDoc";
 import { BarsContext, type BarsEditor } from "../lib/barsContext";
@@ -26,9 +25,6 @@ type View =
   | { kind: "module"; bar: BarKind; zone: ZoneId; ref: ModuleRef }
   | { kind: "add"; bar: BarKind; zone: ZoneId };
 
-/** How big a picked bar is drawn at least (screen DIPs to pixels): its modules stay easy to point at and drag. */
-const BAR_ZOOM = 0.75;
-
 const viewOf = (pick: BarPick): View => (pick.module ? { kind: "module", bar: pick.bar, zone: pick.module.zone, ref: pick.module.ref } : { kind: "bar", bar: pick.bar });
 
 /**
@@ -45,7 +41,7 @@ function settle(view: View, config: Resolved): View {
 }
 
 /**
- * The top bar and the bottom bar, live on your desktop: click a bar or a module to change it,
+ * The top bar and the bottom bar, live on your wallpaper: click a bar or a module to change it,
  * drag modules to move them. Edits `bars.json`, which the running bars follow as you go.
  */
 export function Bars() {
@@ -55,7 +51,6 @@ export function Bars() {
   const wallpaper = useWallpaperDataUrl(desktop.active?.preview ?? null);
   const [catalog, setCatalog] = useState<BarsCatalog | null>(null);
   const [view, setView] = useState<View>(route.page === "bars" && route.select ? { kind: "bar", bar: route.select } : { kind: "bars" });
-  const [zoomIn, setZoomIn] = useState(true);
   const file = useAutosaved<BarsState>({
     load: api.getBars,
     save: (state) => api.setBars(state.doc),
@@ -134,37 +129,7 @@ export function Bars() {
         <SaveState saving={file.saving} />
       </PageBar>
       <EditorLayout
-        stage={
-          <DesktopScene
-            desktop={desktop}
-            selection={null}
-            onSelect={() => setView({ kind: "bars" })}
-            editable={{}}
-            zoom={zoomIn && shown.kind !== "bars" ? BAR_ZOOM : undefined}
-            tools={
-              shown.kind !== "bars" && (
-                <StageTools>
-                  <IconButton icon={zoomIn ? ZoomOut : ZoomIn} variant="ghost" size="sm" label={zoomIn ? "Show the whole screen" : "Zoom in on the bar"} onClick={() => setZoomIn(!zoomIn)} />
-                </StageTools>
-              )
-            }
-            barsLayer={
-              editor && (
-                <BarsLayer
-                  doc={editor.doc}
-                  config={editor.resolved}
-                  catalog={editor.catalog}
-                  screen={desktop.grid.screen}
-                  wallpaper={wallpaper}
-                  mode="modules"
-                  selection={selection}
-                  onSelect={(pick) => setView(viewOf(pick))}
-                  onMove={move}
-                />
-              )
-            }
-          />
-        }
+        stage={<BarsScene desktop={desktop} editor={editor} wallpaper={wallpaper} selection={selection} onSelect={(pick) => setView(pick ? viewOf(pick) : { kind: "bars" })} onMove={move} />}
         inspector={
           <Inspector label="Inspector">
             {editor ? <BarsContext value={editor}>{inspector}</BarsContext> : inspector}

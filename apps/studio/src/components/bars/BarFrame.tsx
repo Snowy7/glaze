@@ -51,6 +51,20 @@ type Props = {
 const STYLE_ID = "studio-preview";
 /** Room around the bars' surfaces for their shadows and glow. */
 const CLIP_PAD = 28;
+/** How far the clipped frame fades out at its edges (inside CLIP_PAD, so the bars themselves never fade). */
+const EDGE_FADE = 16;
+
+/**
+ * Fades a clipped frame out at each edge that's inside the screen. A hard edge of a frame on a
+ * scaled stage draws a dark one-pixel seam; faded, its edge pixels are transparent. An edge on the
+ * screen's own edge (a strip bar's top) stays hard.
+ */
+function edgeFade(box: { x: number; y: number; w: number; h: number }, width: number, height: number): CSSProperties {
+  const along = (direction: string, start: boolean, end: boolean) =>
+    `linear-gradient(${direction}, ${start ? `transparent, #000 ${EDGE_FADE}px` : "#000"}, ${end ? `#000 calc(100% - ${EDGE_FADE}px), transparent` : "#000"})`;
+  const mask = `${along("to bottom", box.y > 0, box.y + box.h < height)}, ${along("to right", box.x > 0, box.x + box.w < width)}`;
+  return { maskImage: mask, WebkitMaskImage: mask, maskComposite: "intersect", WebkitMaskComposite: "source-in" };
+}
 const READY_TRIES = 100;
 
 /** The page's look over its own: the wallpaper behind the glass, and no pointer. */
@@ -138,9 +152,8 @@ export function BarFrame({ bar, doc, width, height, wallpaper, clip = false, onG
     };
   }, [ready]);
 
-  const [x = 0, y = 0, w = 0, h = 0] = bands?.split(",").map(Number) ?? [];
-  const clipped: CSSProperties = clip ? { clipPath: bands ? `inset(${y}px ${width - x - w}px ${height - y - h}px ${x}px)` : "inset(50%)" } : {};
-  return (
+  const [x = 0, y = 0, w = 0, h = 0] = bands?.split(",").map((n) => Math.round(Number(n))) ?? [];
+  const page = (
     <iframe
       ref={frame}
       src={src}
@@ -149,7 +162,14 @@ export function BarFrame({ bar, doc, width, height, wallpaper, clip = false, onG
       aria-hidden
       onLoad={onLoad}
       className={`pointer-events-none absolute top-0 left-0 border-0 transition-opacity duration-200 ${ready ? "opacity-100" : "opacity-0"} ${className}`}
-      style={{ width, height, colorScheme: "normal", ...clipped, ...style }}
+      style={{ width, height, colorScheme: "normal", ...(clip && { left: -x, top: -y }), ...style }}
     />
+  );
+  if (!clip) return page;
+  // Clipped to a box around its bars, faded at its edges.
+  return (
+    <div aria-hidden className="pointer-events-none absolute overflow-hidden" style={{ left: x, top: y, width: w, height: h, ...edgeFade({ x, y, w, h }, width, height) }}>
+      {page}
+    </div>
   );
 }
