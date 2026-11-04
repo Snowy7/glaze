@@ -92,7 +92,7 @@ function answer(bridge: Bridge, request: Request): unknown {
   const state = bridge.state();
   switch (request.method) {
     case "hello":
-      return { instance: state.instance, widget: state.manifest, settings: state.settings, size: state.size, visible: true, editing: false, appearance: state.appearance, themeCss: null };
+      return { instance: state.instance, widget: state.manifest, settings: state.settings, size: state.size, visible: true, editing: false, appearance: state.appearance, themeCss: null, plate: false };
     case "storage.get": {
       const store = typeof params.shared === "string" ? (sharedStorage.get(params.shared) ?? new Map()) : bridge.storage;
       return store.get(String(params.key)) ?? null;
@@ -135,6 +135,9 @@ function answer(bridge: Bridge, request: Request): unknown {
       });
     case "settings.set":
       // The desktop's widget host owns those writes; in the preview the widget keeps what Studio shows.
+      return null;
+    case "plate":
+      // No wallpaper here draws liquid glass (`plate` is false): the kit draws its own stand-in.
       return null;
     default:
       throw Object.assign(new Error(`${request.method} isn't available in the preview`), { code: "NotFound" });
@@ -188,7 +191,7 @@ export function attachFrame(frame: HTMLIFrameElement, state: () => FrameState) {
   return {
     push(event: "settings" | "size" | "appearance") {
       const current = state();
-      const data = event === "settings" ? current.settings : event === "size" ? current.size : { appearance: current.appearance, themeCss: null };
+      const data = event === "settings" ? current.settings : event === "size" ? current.size : { appearance: current.appearance, themeCss: null, plate: false };
       post(bridge, { event, data });
     },
     dispose() {

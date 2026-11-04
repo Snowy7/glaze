@@ -139,6 +139,7 @@ function SkinFields({ skin, kind, theme, editable, userSets }: { skin: Autosaved
           disabled={!editable}
           onChange={(appearance, label) => skin.edit((current) => ({ ...current, appearance }), label)}
           glass={kind === "widgets" ? { value: value.glass, onChange: (glass, label) => skin.edit((current) => ({ ...current, glass }), label) } : undefined}
+          wallpaper={theme.kind}
         />
       )}
       <More label="Style sheet">

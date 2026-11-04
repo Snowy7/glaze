@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 
 import type { Appearance, PlacedWidget, WidgetInfo } from "../../lib/api";
-import { mergeLayers, resolve as resolveLook, WIDGET_DEFAULTS } from "../../lib/appearance";
+import { sentLook, widgetLook } from "../../lib/appearance";
 import { boxOf, cellAt, clampCell, fits, sizeOf, type Cells, type DesktopGrid, type Placement } from "../../lib/desktopGrid";
 import { settingsWithDefaults } from "../../lib/widgetHost";
 import { widgetIcon } from "../../lib/widgetIcons";
@@ -120,7 +120,7 @@ export function WidgetsLayer({ grid, items, installed, below, theme, selected, o
         const own = drag?.instance === item.instance ? drag : null;
         const shift: CSSProperties = own?.kind === "move" ? { transform: `translate(${own.dx}px, ${own.dy}px)`, zIndex: 25, opacity: 0.92 } : {};
         const resize: CSSProperties = own?.kind === "resize" ? { width: Math.max(box.width / 2, box.width + own.dx), height: Math.max(box.height / 2, box.height + own.dy) } : {};
-        const look = resolveLook(WIDGET_DEFAULTS, ...below, item.appearance);
+        const look = widgetLook(...below, item.appearance);
         const isSelected = selected === item.instance;
         return (
           <div
@@ -138,8 +138,8 @@ export function WidgetsLayer({ grid, items, installed, below, theme, selected, o
                   manifest: widget.manifest,
                   settings: settingsWithDefaults(widget.manifest.settings, item.settings),
                   size: { cells: placement.size, px: [Math.round(box.width), Math.round(box.height)], dpi: 96 },
-                  // What the shell sends: only set fields; the SDK fills in the rest.
-                  appearance: mergeLayers(...below, item.appearance),
+                  // What the host sends: the set fields (tint and accent tone-aware); the SDK fills in the rest.
+                  appearance: sentLook(...below, item.appearance),
                   theme,
                 }}
               />

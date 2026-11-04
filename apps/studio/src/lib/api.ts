@@ -172,7 +172,8 @@ export type Appearance = {
 export type SkinKind = "widgets" | "bars";
 
 /** Liquid glass, each 0 to 1 (for `style: "liquid"`): the whole effect, how much the rim bends, the rim's shine. */
-export type Glass = { intensity?: number; refraction?: number; highlight?: number };
+/** A theme's liquid glass knobs (`widgets.glass`): 0–1 each, but `blur` in DIPs (0–32). */
+export type Glass = { intensity?: number; refraction?: number; highlight?: number; tint?: number; blur?: number };
 
 /** A theme's `widgets` / `bars` section. */
 export type SkinEdit = { appearance: Appearance; css: string | null; glass: Glass | null };

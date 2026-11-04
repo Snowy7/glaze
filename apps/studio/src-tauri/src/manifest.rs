@@ -516,14 +516,17 @@ mod tests {
                 appearance: serde_json::from_str(r#"{ "style": "liquid" }"#).unwrap(),
                 css: None,
                 glass: Some(
-                    serde_json::from_str(r#"{ "intensity": 0.6, "highlight": 0.3 }"#).unwrap(),
+                    serde_json::from_str(
+                        r#"{ "intensity": 0.6, "highlight": 0.3, "tint": 0.1, "blur": 2.5 }"#,
+                    )
+                    .unwrap(),
                 ),
             },
         )
         .unwrap();
         assert_eq!(
             field(&text, "widgets")["glass"],
-            serde_json::json!({ "intensity": 0.6, "highlight": 0.3 }),
+            serde_json::json!({ "intensity": 0.6, "highlight": 0.3, "tint": 0.1, "blur": 2.5 }),
             "written as typed, no float noise, unset fields left out"
         );
         let read = read_skin(&text, SkinKind::Widgets).unwrap();
@@ -533,7 +536,11 @@ mod tests {
             theme.appearance.unwrap().style,
             Some(theme::WidgetStyle::Liquid)
         );
-        assert_eq!(theme.glass.unwrap().intensity, Some(0.6));
+        let glass = theme.glass.unwrap();
+        assert_eq!(
+            (glass.intensity, glass.tint, glass.blur),
+            (Some(0.6), Some(0.1), Some(2.5))
+        );
 
         let empty = SkinEdit {
             glass: Some(Liquid::default()),

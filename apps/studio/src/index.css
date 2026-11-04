@@ -335,11 +335,11 @@
  * "Appearance"); without one, over a quiet stand-in. They are content, so they ignore the UI tokens.
  */
 .ap-stage[data-wallpaper="dark"] {
-  background: linear-gradient(165deg, #3a3f49, #1b1d22 70%);
+  background: #2a2e35;
 }
 
 .ap-stage[data-wallpaper="light"] {
-  background: linear-gradient(165deg, #e9ebef, #c9ccd3 70%);
+  background: #d9dce2;
 }
 
 .ap-root {
@@ -373,11 +373,14 @@
 
 /*
  * Widget design languages (docs/widgets.md, "Styles"), approximated for previews. The real ones
- * live in the widget kit; these only have to read the same way, and stay restrained: one soft
- * shadow at most, no sheens or glows.
+ * live in the widget kit; these only have to read the same way. Minimal is the plain surface
+ * above; depth raises it a little (a faint top edge, one small shadow), with no gradients.
  */
 .ap-root[data-style="depth"] .ap-surface {
-  box-shadow: 0 6px 16px -6px rgb(0 0 0 / 0.5);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 1px 2px rgb(0 0 0 / 0.14),
+    0 3px 6px -1px rgb(0 0 0 / 0.22);
 }
 
 .ap-root[data-style="neon"] .ap-surface {
@@ -401,11 +404,18 @@
   border: 1px solid rgb(255 255 255 / 0.4);
 }
 
-/* Liquid glass: a clear plate with a thin bright rim; the wallpaper shows through, barely blurred. */
-.ap-root[data-style="liquid"] .ap-surface {
-  background: rgb(255 255 255 / 0.05);
-  backdrop-filter: blur(2px) saturate(1.3);
-  border: 1px solid rgb(255 255 255 / 0.32);
+/*
+ * Liquid glass, as the widget kit draws it where the wallpaper can't (Studio's previews): clear,
+ * a whisper of the tint, and one thin specular edge lit from the top left.
+ */
+.ap-root[data-style="liquid"][data-surface="glass"] .ap-surface {
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+  border-color: transparent;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    inset 1px 1.5px 0 -0.5px rgb(255 255 255 / 0.42),
+    inset -1px -1.5px 0 -0.5px rgb(255 255 255 / 0.16);
+  backdrop-filter: blur(2px) saturate(1.2);
 }
 
 /* Bars preview: the corner shapes the look can ask for (CSS corner-shape). */
