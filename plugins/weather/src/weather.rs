@@ -34,7 +34,8 @@ impl UnitSystem {
 /// Where to get the weather for.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Where {
-    Coords { lat: f64, lon: f64 },
+    Auto,
+    Coords(Place),
     City(String),
 }
 
@@ -51,9 +52,12 @@ const DEFAULT_DAYS: usize = 5;
 /// How many hourly entries `forecast` returns.
 pub const HOURS: usize = 24;
 
-/// `{ lat, lon }` or `{ city }`, plus optional `units` ("metric" | "imperial") and `days` (1 to 7).
-/// Coordinates win when both are given.
+/// Missing location means auto. Explicit coordinates win over city, then auto.
 pub fn parse_request(params: &Value) -> Result<Request, RpcError> {
+    validate_object(params)?;
+    if params.get("auto").is_some_and(|v| !v.is_boolean()) {
+        return Err(RpcError::invalid_params("\"auto\" must be a boolean"));
+    }
     let field = |name: &str| params.get(name).filter(|v| !v.is_null());
     let number = |name: &str| -> Result<Option<f64>, RpcError> {
         field(name)
@@ -71,16 +75,28 @@ pub fn parse_request(params: &Value) -> Result<Request, RpcError> {
                     "lat must be -90..90 and lon -180..180",
                 ));
             }
-            Where::Coords { lat, lon }
+            Where::Coords(Place {
+                name: optional_text(params, "name")?
+                    .unwrap_or_else(|| format!("{lat:.2}, {lon:.2}")),
+                region: optional_text(params, "region")?,
+                country: optional_text(params, "country")?,
+                lat,
+                lon,
+                ..Place::default()
+            })
         }
-        (None, None) => {
-            let city = field("city")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|c| !c.is_empty())
-                .ok_or_else(|| RpcError::invalid_params("pass { lat, lon } or { city }"))?;
-            Where::City(city.to_owned())
-        }
+        (None, None) => match field("city") {
+            Some(_) => Where::City(
+                optional_text(params, "city")?
+                    .ok_or_else(|| RpcError::invalid_params("\"city\" must not be empty"))?,
+            ),
+            None if params["auto"] == false => {
+                return Err(RpcError::invalid_params(
+                    "pass { lat, lon }, { city }, or { auto: true }",
+                ));
+            }
+            None => Where::Auto,
+        },
         _ => return Err(RpcError::invalid_params("\"lat\" and \"lon\" go together")),
     };
 
@@ -106,13 +122,51 @@ pub fn parse_request(params: &Value) -> Result<Request, RpcError> {
     Ok(Request { place, units, days })
 }
 
+pub fn validate_object(params: &Value) -> Result<(), RpcError> {
+    if !params.is_null() && !params.is_object() {
+        return Err(RpcError::invalid_params("params must be an object"));
+    }
+    Ok(())
+}
+
+fn optional_text(params: &Value, field: &str) -> Result<Option<String>, RpcError> {
+    let Some(value) = params.get(field).filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    let text = value
+        .as_str()
+        .filter(|v| v.len() <= 200)
+        .ok_or_else(|| {
+            RpcError::invalid_params(format!("\"{field}\" must be a string of at most 200 bytes"))
+        })?
+        .trim();
+    Ok((!text.is_empty()).then(|| text.to_owned()))
+}
+
+pub fn parse_query(params: &Value) -> Result<String, RpcError> {
+    validate_object(params)?;
+    optional_text(params, "query")?
+        .ok_or_else(|| RpcError::invalid_params("pass a nonempty \"query\" string"))
+}
+
+/// Only these rounded coordinates are sent to the forecast endpoint.
+pub fn weather_coordinate(degrees: f64) -> String {
+    format!("{degrees:.2}")
+}
+
 // ------------------------------------------------------------------ results
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Place {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub country: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accuracy_m: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::location::Origin>,
     pub lat: f64,
     pub lon: f64,
 }
@@ -396,17 +450,36 @@ pub fn map_forecast(
 #[derive(Debug, Deserialize)]
 pub struct RawGeocoding {
     #[serde(default)]
-    results: Vec<RawPlace>,
+    pub results: Vec<Candidate>,
 }
 
-#[derive(Debug, Deserialize)]
-struct RawPlace {
-    name: String,
-    latitude: f64,
-    longitude: f64,
-    country: Option<String>,
-    country_code: Option<String>,
-    admin1: Option<String>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Candidate {
+    pub name: String,
+    #[serde(rename(deserialize = "latitude"))]
+    pub lat: f64,
+    #[serde(rename(deserialize = "longitude"))]
+    pub lon: f64,
+    pub country: Option<String>,
+    pub country_code: Option<String>,
+    pub admin1: Option<String>,
+    pub admin2: Option<String>,
+    pub population: Option<u64>,
+    #[serde(skip_serializing)]
+    pub feature_code: Option<String>,
+}
+
+impl Candidate {
+    pub fn place(&self) -> Place {
+        Place {
+            name: self.name.clone(),
+            country: self.country.clone(),
+            region: self.admin1.clone(),
+            lat: self.lat,
+            lon: self.lon,
+            ..Place::default()
+        }
+    }
 }
 
 /// Splits "Paris, Texas" into the name to search and an optional hint to choose between matches.
@@ -418,22 +491,62 @@ pub fn split_city(city: &str) -> (&str, Option<&str>) {
     }
 }
 
-/// The first result, or the first whose country, country code or region matches the hint.
-pub fn pick_place(raw: RawGeocoding, hint: Option<&str>) -> Option<Place> {
-    let hint = hint.map(str::to_lowercase);
-    let matches = |p: &RawPlace| {
-        let Some(hint) = &hint else { return true };
-        [&p.country, &p.country_code, &p.admin1]
-            .into_iter()
-            .flatten()
-            .any(|field| field.to_lowercase() == *hint)
-    };
-    raw.results.into_iter().find(matches).map(|p| Place {
-        name: p.name,
-        country: p.country,
-        lat: p.latitude,
-        lon: p.longitude,
-    })
+/// Apply every comma-separated region/country hint; never silently choose a different country.
+pub fn rank_places(raw: RawGeocoding, query: &str) -> Vec<Candidate> {
+    let (name, hint) = split_city(query);
+    let mut candidates: Vec<_> = raw
+        .results
+        .into_iter()
+        .filter(|p| {
+            crate::location::valid_coordinates(p.lat, p.lon)
+                && !p.name.trim().is_empty()
+                && p.feature_code
+                    .as_deref()
+                    .is_none_or(|code| code.starts_with("PPL") || code == "LCTY")
+                && hint.is_none_or(|hint| {
+                    hint.split(',')
+                        .map(str::trim)
+                        .filter(|h| !h.is_empty())
+                        .all(|hint| {
+                            let country = [&p.country, &p.country_code]
+                                .into_iter()
+                                .flatten()
+                                .any(|field| field.eq_ignore_ascii_case(hint));
+                            country
+                                || [&p.admin1, &p.admin2]
+                                    .into_iter()
+                                    .flatten()
+                                    .any(|field| admin_name(field) == admin_name(hint))
+                        })
+                })
+        })
+        .collect();
+    candidates.sort_by_key(|p| {
+        std::cmp::Reverse((
+            p.name.eq_ignore_ascii_case(name),
+            p.population.unwrap_or_default(),
+        ))
+    });
+    candidates
+}
+
+/// Accept "Cairo" for "Cairo Governorate" without accepting partial names like "Calif".
+fn admin_name(name: &str) -> String {
+    let name = name.trim().to_lowercase();
+    for suffix in [
+        " governorate",
+        " province",
+        " region",
+        " state",
+        " county",
+        " municipality",
+        " district",
+    ] {
+        if let Some(short) = name.strip_suffix(suffix) {
+            return short.to_owned();
+        }
+    }
+    name
 }
 
 #[cfg(test)]
@@ -447,10 +560,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             r.place,
-            Where::Coords {
+            Where::Coords(Place {
+                name: "59.90, 10.70".into(),
                 lat: 59.9,
-                lon: 10.7
-            }
+                lon: 10.7,
+                ..Place::default()
+            })
         );
         assert_eq!((r.units, r.days), (UnitSystem::Imperial, 3));
 
@@ -460,10 +575,22 @@ mod tests {
 
         // Coordinates win over the city.
         let r = parse_request(&json!({ "city": "Oslo", "lat": 1.0, "lon": 2.0 })).unwrap();
-        assert!(matches!(r.place, Where::Coords { .. }));
+        assert!(matches!(r.place, Where::Coords(_)));
+
+        for auto in [
+            Value::Null,
+            json!({}),
+            json!({ "auto": true }),
+            json!({ "units": "imperial" }),
+        ] {
+            assert_eq!(parse_request(&auto).unwrap().place, Where::Auto);
+        }
 
         for bad in [
-            json!({}),
+            json!({ "auto": false }),
+            json!({ "auto": "yes" }),
+            json!([]),
+            json!({ "city": 10 }),
             json!({ "city": "   " }),
             json!({ "lat": 1.0 }),
             json!({ "lat": 91.0, "lon": 0.0 }),
@@ -475,6 +602,24 @@ mod tests {
             let err = parse_request(&bad).unwrap_err();
             assert_eq!(err.code, -32602, "{bad}");
         }
+    }
+
+    #[test]
+    fn query_validation_and_weather_rounding() {
+        assert_eq!(
+            parse_query(&json!({ "query": " Maadi, Cairo " })).unwrap(),
+            "Maadi, Cairo"
+        );
+        for bad in [
+            Value::Null,
+            json!({ "query": " " }),
+            json!({ "query": 5 }),
+            json!({ "query": "a".repeat(201) }),
+        ] {
+            assert_eq!(parse_query(&bad).unwrap_err().code, -32602);
+        }
+        assert_eq!(weather_coordinate(59.913947), "59.91");
+        assert_eq!(weather_coordinate(-80.123456), "-80.12");
     }
 
     #[test]
@@ -518,6 +663,7 @@ mod tests {
             country: Some("United Kingdom".into()),
             lat: 51.5,
             lon: -0.12,
+            ..Place::default()
         }
     }
 
@@ -639,16 +785,41 @@ mod tests {
             .unwrap()
         };
         assert_eq!(
-            pick_place(raw(), None).unwrap().country.as_deref(),
+            rank_places(raw(), "Paris")
+                .first()
+                .unwrap()
+                .country
+                .as_deref(),
             Some("France")
         );
-        assert_eq!(pick_place(raw(), Some("texas")).unwrap().lat, 33.66);
-        assert_eq!(pick_place(raw(), Some("us")).unwrap().lon, -95.55);
-        assert!(pick_place(raw(), Some("mars")).is_none());
+        assert_eq!(rank_places(raw(), "Paris, texas")[0].lat, 33.66);
+        assert_eq!(rank_places(raw(), "Paris, us")[0].lon, -95.55);
+        assert_eq!(rank_places(raw(), "Paris, Texas, US")[0].lat, 33.66);
+        assert!(rank_places(raw(), "Paris, Texas, France").is_empty());
+        assert!(rank_places(raw(), "Paris, mars").is_empty());
 
         let none: RawGeocoding =
             serde_json::from_value(json!({ "generationtime_ms": 0.4 })).unwrap();
-        assert!(pick_place(none, None).is_none());
+        assert!(rank_places(none, "Nothing").is_empty());
+    }
+
+    #[test]
+    fn search_matches_admin_names_and_preserves_the_candidate_contract() {
+        let raw = serde_json::from_value(json!({ "results": [
+            { "name": "Maadi", "latitude": -17.83, "longitude": 145.99, "country": "Australia", "country_code": "AU", "admin1": "Queensland", "population": 45 },
+            { "name": "Maadi", "latitude": 29.95958, "longitude": 31.25924, "country": "Egypt", "country_code": "EG", "admin1": "Cairo Governorate", "feature_code": "PPLX" },
+            { "name": "Maadi", "latitude": 29.8, "longitude": 31.2, "country": "Egypt", "admin1": "Cairo Governorate", "feature_code": "MT" }
+        ] })).unwrap();
+        let hits = rank_places(raw, "Maadi, Cairo, Egypt");
+        assert_eq!(hits.len(), 1);
+        let result = serde_json::to_value(&hits[0]).unwrap();
+        assert_eq!(result["lat"], 29.95958);
+        assert!(result.get("latitude").is_none());
+        assert!(result.get("feature_code").is_none());
+        assert_eq!(result["admin1"], "Cairo Governorate");
+        assert!(result["admin2"].is_null());
+        assert!(result["population"].is_null());
+        assert_ne!(admin_name("California"), admin_name("Calif"));
     }
 
     #[test]

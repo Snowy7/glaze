@@ -2,10 +2,11 @@
 
 A widget is a folder with a `widget.json` and a web page. No build step is required, and mypaper
 doesn't need rebuilding or restarting to pick up a new folder. The contract is
-[widgets.md](widgets.md); this is the practical guide. The six bundled widgets in `widgets/` are
-complete, small examples: `clock` is the simplest, `system-monitor` and `weather` show responsive
-layouts and subscriptions, `visualizer` the audio feed, `app-shortcuts` real app icons. The rest of the bundled set (calendar, timer, todo, battery, network,
-disk, search, rss and more) are good references for storage, lists, plugins and permissions.
+[widgets.md](widgets.md); this is the practical guide. The bundled widgets in `widgets/` are complete
+examples: `clock` shows faces behind one `variant` setting, `system-monitor` and `weather` responsive
+layouts, subscriptions and a `place` setting, `now-playing` the audio feed (its Visualizer look),
+`launcher` real app icons. The rest (calendar, timer, todo, notes, rss and more) are good references
+for storage, lists, plugins and permissions.
 
 ## 1. A widget in two files
 

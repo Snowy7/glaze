@@ -7,7 +7,7 @@
 // saved) and save once on release. Inside a `list` they save throttled instead.
 
 import { h } from "./dom";
-import type { ListField, ScalarSetting, SettingDef } from "./protocol";
+import type { ListField, Place, PlaceSetting, ScalarSetting, SettingDef } from "./protocol";
 import {
   COMMON_FONTS,
   decodeColor,
@@ -21,6 +21,10 @@ import {
   optionLabel,
   optionText,
   optionValue,
+  placeLine,
+  placeOf,
+  readCandidates,
+  readPlace,
   sections,
   selectStyle,
 } from "./settings-model";
@@ -32,6 +36,8 @@ export interface SettingsFormHooks {
   onPreview(key: string, value: unknown): void;
   /** A `file`/`image` setting: the host shows the dialog, copies the file and sets the setting. */
   onPickFile(key: string, extensions: readonly string[] | undefined): void;
+  /** A `place` setting's suggestions: the widget's `plugin` `method` called with `{ query }`. */
+  onSearch?(plugin: string, method: string, query: string): Promise<unknown>;
 }
 
 export interface SettingsForm {
@@ -349,6 +355,94 @@ function fileControl(title: string, def: Extract<FieldDef, { type: "file" | "ima
   return { el: h("div", "field", h("span", "t", title), row), show };
 }
 
+/**
+ * A `place` row: "Automatic" or "Choose a town", and for a town a search box with suggestions
+ * as you type. Saves `null` or `{ name, lat, lon }`.
+ */
+function placeControl(spec: PlaceSetting, value: unknown, emit: (value: Place | null) => void, search: SettingsFormHooks["onSearch"]): HTMLElement {
+  let place = readPlace(value);
+  let choosing = place !== null;
+  const auto = h("button", "", "Automatic");
+  const town = h("button", "", "Choose a town");
+  const seg = h("div", "seg", auto, town);
+  seg.setAttribute("role", "radiogroup");
+  seg.setAttribute("aria-label", spec.label);
+  for (const b of [auto, town]) {
+    b.type = "button";
+    b.setAttribute("role", "radio");
+  }
+  const chosen = h("div", "place-chosen");
+  const input = h("input");
+  input.type = "text";
+  input.placeholder = "Search for a town";
+  input.spellcheck = false;
+  input.setAttribute("aria-label", `${spec.label}: search`);
+  const list = h("div", "place-list");
+  list.setAttribute("role", "listbox");
+  const note = h("div", "place-note");
+  const finder = h("div", "place-find", input, list, note);
+  const canSearch = spec.search !== undefined && search !== undefined;
+
+  function paint() {
+    auto.setAttribute("aria-checked", String(!choosing));
+    town.setAttribute("aria-checked", String(choosing));
+    chosen.hidden = !choosing || place === null;
+    chosen.textContent = place ? place.name : "";
+    finder.hidden = !choosing;
+  }
+
+  let ask = 0;
+  const lookup = rateLimited<string>(
+    async (query) => {
+      const mine = ++ask;
+      list.replaceChildren();
+      if (!spec.search || !search) return void (note.textContent = "Searching is not available here");
+      if (query.trim().length < 2) return void (note.textContent = "");
+      note.textContent = "Searching…";
+      try {
+        const found = readCandidates(await search(spec.search.plugin, spec.search.method, query.trim()));
+        if (mine !== ask) return;
+        note.textContent = found.length === 0 ? "No towns found" : "";
+        list.replaceChildren(
+          ...found.slice(0, 8).map((c) => {
+            const item = h("button", "place-item", placeLine(c));
+            item.type = "button";
+            item.setAttribute("role", "option");
+            item.addEventListener("click", () => {
+              place = placeOf(c);
+              input.value = "";
+              list.replaceChildren();
+              paint();
+              emit(place);
+            });
+            return item;
+          }),
+        );
+      } catch {
+        if (mine === ask) note.textContent = "Could not search right now";
+      }
+    },
+    300,
+    "debounce",
+  );
+  input.addEventListener("input", () => lookup.push(input.value));
+  if (!canSearch) note.textContent = "Searching is not available here";
+
+  auto.addEventListener("click", () => {
+    choosing = false;
+    place = null;
+    paint();
+    emit(null);
+  });
+  town.addEventListener("click", () => {
+    choosing = true;
+    paint();
+    input.focus();
+  });
+  paint();
+  return h("div", "field", h("span", "t", spec.label || spec.key), seg, chosen, finder);
+}
+
 /** One labelled input for a scalar setting (or a list field). */
 function renderField(def: FieldDef, value: unknown, io: FieldIo, limit: MakeLimiter): Control {
   const title = def.label || def.key;
@@ -532,6 +626,7 @@ export function buildSettingsForm(
 
   function control(spec: SettingDef): HTMLElement {
     if (spec.type === "list") return renderList(spec, values[spec.key], hooks.onChange, limit);
+    if (spec.type === "place") return placeControl(spec, values[spec.key], (value) => hooks.onChange(spec.key, value), hooks.onSearch);
     const control = renderField(
       spec,
       values[spec.key],

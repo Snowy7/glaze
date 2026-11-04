@@ -1,5 +1,5 @@
 //! Desktop extras (docs/desktop-extras.md), hosted in core because core is long-lived
-//! and idle: mypaper's own right-click menu for the bare desktop, the opt-in Win11
+//! and idle: mypaper's own right-click menu for the bare desktop (on by default), the opt-in Win11
 //! "classic context menu" switch, and the desktop view helpers the tray uses.
 //!
 //! Both options follow `config.json` live. The right-click menu runs on two threads of its

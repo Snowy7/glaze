@@ -1,5 +1,8 @@
 // @ts-check
-import { $, onVisible, pad2, setText, trackSettings, trackSize } from "./kit.js";
+// Countdown to (or since) a date. Digits: the biggest unit that isn't zero as the hero ("57 days"),
+// the rest as a quiet line ("11 h 11 min"), then the date and how far along. Ring: the same hero
+// inside an arc of the progress. One timer, aligned to the minute (or second), only while visible.
+import { $, onVisible, setText, trackSettings, trackSize } from "./kit.js";
 import { breakdown, phaseOf, progress, resolveTarget } from "./count.js";
 
 /** @typedef {{ n: number, text: string, label: string }} Part */
@@ -8,7 +11,6 @@ import { breakdown, phaseOf, progress, resolveTarget } from "./count.js";
 const TINY_BELOW_PX = 120; // narrower than this (or shorter than 80): one number, no frills
 const DIGIT_EM = 0.58; // width of a light tabular numeral, in em
 const MESSAGE_EM = 0.56; // average width of a letter of "Today!", in em
-const UNIT_GAP_EM = 0.4; // must match `.units { gap }`
 
 const card = $("#card");
 const arc = $("#arc");
@@ -18,6 +20,7 @@ const titleEl = $("#title");
 const unitsEl = $("#units");
 const msgEl = $("#msg");
 const footEl = $("#foot");
+const restEl = $("#rest");
 const barEl = $("#bar");
 const barFill = $("#bar-fill");
 
@@ -43,7 +46,7 @@ const unitNodes = Array.from({ length: 4 }, () => {
   const value = document.createElement("span");
   value.className = "v hero";
   const label = document.createElement("span");
-  label.className = "l caps";
+  label.className = "l";
   root.append(value, label);
   unitsEl.append(root);
   return { root, value, label };
@@ -58,10 +61,10 @@ function partsOf(b, seconds) {
   /** @type {Part[]} */
   const parts = [
     { n: b.days, text: String(b.days), label: b.days === 1 ? "day" : "days" },
-    { n: b.hours, text: pad2(b.hours), label: b.hours === 1 ? "hr" : "hrs" },
-    { n: b.minutes, text: pad2(b.minutes), label: "min" },
+    { n: b.hours, text: String(b.hours), label: b.hours === 1 ? "hour" : "hours" },
+    { n: b.minutes, text: String(b.minutes), label: "min" },
   ];
-  if (seconds) parts.push({ n: b.seconds, text: pad2(b.seconds), label: "sec" });
+  if (seconds) parts.push({ n: b.seconds, text: String(b.seconds), label: "s" });
   return parts;
 }
 
@@ -72,9 +75,15 @@ function pickLayout() {
   return tiny ? "digits-tiny" : "digits";
 }
 
-/** How many em wide a row of these numerals is. */
-const rowEm = (/** @type {Part[]} */ parts) =>
-  parts.reduce((sum, p) => sum + Math.max(p.text.length * DIGIT_EM, 1.15), 0) + Math.max(0, parts.length - 1) * UNIT_GAP_EM;
+/** How many em wide the hero is: its numerals, then its word at 0.34em. */
+const heroEm = (/** @type {Part | undefined} */ p) => (p ? p.text.length * DIGIT_EM + 0.2 + p.label.length * 0.34 * 0.55 : 1);
+
+/** The units after the hero, as one line: "11 h 11 min". @param {Part[]} parts */
+const restOf = (parts) =>
+  parts
+    .filter((p) => p.n > 0)
+    .map((p) => `${p.n} ${p.label === "hours" || p.label === "hour" ? "h" : p.label}`)
+    .join(" ");
 
 /**
  * Draws the state for `now`.
@@ -98,19 +107,22 @@ function render(now) {
 
   // The biggest unit that is not zero leads (all of them in a digits row; inside the ring otherwise).
   const lead = Math.max(0, parts.findIndex((p) => p.n > 0));
-  const shown = layout === "digits" ? parts : layout === "digits-tiny" ? parts.slice(lead, lead + 1) : ring ? parts.slice(lead + 1) : [];
+  const shown = ring ? [] : parts.slice(lead, lead + 1);
   const ago = phase === "after" && !stopped ? " ago" : "";
 
   shown.forEach((p, i) => {
     const node = unitNodes[i];
     if (!node) return;
     setText(node.value, p.text);
-    setText(node.label, layout === "digits-tiny" ? p.label + ago : p.label);
+    setText(node.label, p.label + ago);
   });
   unitNodes.forEach((node, i) => (node.root.hidden = i >= shown.length));
   unitsEl.hidden = shown.length === 0;
 
   const leader = parts[lead];
+  const rest = restOf(parts.slice(lead + 1));
+  setText(restEl, rest);
+  restEl.hidden = rest === "" || layout === "digits-tiny";
   setText(ringValue, ring ? (leader ? leader.text : message) : "");
   setText(ringLabel, ring && leader ? leader.label + ago : "");
   msgEl.hidden = ring || message === "";
@@ -123,7 +135,7 @@ function render(now) {
   setText(footEl, dateFormat.format(target) + timePart);
 
   card.dataset.layout = layout;
-  card.style.setProperty("--k", String(message ? message.length * MESSAGE_EM : rowEm(shown) || 1));
+  card.style.setProperty("--k", String(message ? message.length * MESSAGE_EM : heroEm(leader)));
   card.style.setProperty("--kc", String(message ? message.length * MESSAGE_EM * 0.9 : Math.max(2, (leader?.text.length ?? 2) * DIGIT_EM)));
   const fraction = phase === "before" ? progress(start, target, now) : 1;
   arc.setAttribute("stroke-dasharray", `${fraction < 0.004 ? 0 : fraction * 100} 100`);

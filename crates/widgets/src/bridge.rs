@@ -165,6 +165,10 @@ pub enum Method {
     ThemeCurrent,
     /// The signed-in user's display name and account name.
     UserInfo,
+    /// The widget saves some of its own settings (checked against its manifest, like a form edit).
+    SettingsSet {
+        values: Map<String, Value>,
+    },
     /// The file dialog; the pick is copied into the instance's data folder.
     PickFile {
         extensions: Vec<String>,
@@ -289,6 +293,11 @@ struct ActionParams {
 }
 
 #[derive(Deserialize)]
+struct SettingsParams {
+    values: Map<String, Value>,
+}
+
+#[derive(Deserialize)]
 struct LaunchParams {
     target: String,
 }
@@ -327,6 +336,10 @@ impl Method {
                 }
             }
             "user.info" => Self::UserInfo,
+            "settings.set" => {
+                let SettingsParams { values } = take(params)?;
+                Self::SettingsSet { values }
+            }
             "pickFile" => {
                 let PickParams { extensions, title } = if params.is_null() {
                     PickParams::default()
@@ -453,6 +466,7 @@ impl Method {
             // The widget's own state, letting go, and the dialog (which is the consent).
             Self::StorageGet { .. }
             | Self::StorageSet { .. }
+            | Self::SettingsSet { .. }
             | Self::Unsubscribe { .. }
             | Self::PickFile { .. } => return Ok(()),
         };
@@ -532,6 +546,13 @@ mod tests {
 
     #[test]
     fn methods_parse_their_params() {
+        assert_eq!(
+            parse("settings.set", json!({ "values": { "city": null } })),
+            Method::SettingsSet {
+                values: Map::from_iter([("city".to_owned(), Value::Null)])
+            }
+        );
+        assert!(Method::parse("settings.set", json!({ "city": null })).is_err());
         assert_eq!(
             parse("storage.set", json!({ "key": "k", "value": null })),
             Method::StorageSet {

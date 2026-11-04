@@ -2,21 +2,88 @@
   "$schema": "../../packages/widget-sdk/schema/widget.schema.json",
   "id": "countdown",
   "name": "Countdown",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "author": "mypaper",
-  "description": "Days, hours and minutes until a date that matters.",
+  "description": "Days to (or since) a date that matters, as a big number or a ring of the time gone by.",
   "entry": "index.html",
-  "size": { "default": [2, 1], "min": [1, 1], "max": [4, 2] },
+  "size": {
+    "default": [2, 1],
+    "min": [1, 1],
+    "max": [4, 2]
+  },
   "resizable": true,
   "permissions": [],
   "plugins": [],
   "settings": [
-    { "key": "title", "type": "string", "label": "Title", "default": "New Year" },
-    { "key": "date", "type": "string", "label": "Date (YYYY-MM-DD, empty for the next January 1st)", "default": "" },
-    { "key": "time", "type": "string", "label": "Time (HH:MM)", "default": "00:00" },
-    { "key": "style", "type": "select", "label": "Style", "options": ["digits", "ring"], "default": "digits" },
-    { "key": "showSeconds", "type": "boolean", "label": "Show seconds", "default": false },
-    { "key": "afterwards", "type": "select", "label": "After the date", "options": ["countUp", "stop"], "default": "countUp" },
-    { "key": "startDate", "type": "string", "label": "Ring starts on (YYYY-MM-DD, optional)", "default": "" }
+    {
+      "key": "style",
+      "type": "select",
+      "label": "Look",
+      "default": "digits",
+      "options": [
+        {
+          "value": "digits",
+          "label": "Number",
+          "icon": "57"
+        },
+        {
+          "value": "ring",
+          "label": "Ring",
+          "icon": "◔"
+        }
+      ]
+    },
+    {
+      "key": "title",
+      "type": "string",
+      "label": "Event",
+      "group": "Event",
+      "default": "New Year"
+    },
+    {
+      "key": "date",
+      "type": "string",
+      "label": "Date, YYYY-MM-DD (empty: the next 1 January)",
+      "group": "Event",
+      "default": ""
+    },
+    {
+      "key": "time",
+      "type": "string",
+      "label": "Time, HH:MM",
+      "group": "Event",
+      "default": "00:00"
+    },
+    {
+      "key": "afterwards",
+      "type": "select",
+      "label": "Once it has passed",
+      "group": "Event",
+      "default": "countUp",
+      "options": [
+        {
+          "value": "countUp",
+          "label": "Count the days since"
+        },
+        {
+          "value": "stop",
+          "label": "Say it's done"
+        }
+      ]
+    },
+    {
+      "key": "showSeconds",
+      "type": "boolean",
+      "label": "Seconds",
+      "group": "Look",
+      "default": false
+    },
+    {
+      "key": "startDate",
+      "type": "string",
+      "label": "Ring starts on, YYYY-MM-DD (empty: a year before)",
+      "group": "Look",
+      "default": ""
+    }
   ]
 }

@@ -69,16 +69,20 @@ The bundled photos and video are public-domain NASA media ([credits](themes/CRED
 
 ### Widgets
 
-28 widgets, each in its own sandbox:
+17 widgets, each in its own sandbox, each with faces and sizes instead of near-duplicates:
 
-- **Time**: clock (desk, flip or minimal), analog clock, world clock, calendar (month, agenda or
-  week), countdown, timer.
-- **Media**: now playing (card, art backdrop or strip), media pill, audio visualizer.
-- **Web**: weather (animated scenes, hourly and 5-day), RSS, crypto.
-- **System**: system monitor (rings, bars or sparklines), battery, network, disk, system info, quick
-  toggles.
-- **Tools and personal**: notes, todo, activity heatmap, launcher, app shortcuts, search, quote,
-  greeting, photo, and photo frame.
+- **Time**: clock (digital, flip, analog, greeting, or your cities around the world), calendar
+  (month, agenda or week), countdown, timer.
+- **Media**: now playing (card, artwork backdrop, strip, or the sound's spectrum), media pill.
+- **Web**: weather (where you are, or any town; animated sky, hourly and the week), RSS, crypto.
+- **System**: system (CPU, memory, GPU, network, drives and battery, as rings, bars or graphs),
+  quick toggles.
+- **Tools and personal**: launcher (your apps under a web search bar), photos, notes, todo, activity
+  heatmap, quote.
+
+Layouts that named a widget merged into another (analog clock, world clock, greeting, system info,
+disk, network, battery, app shortcuts, search, visualizer, photo frame) keep working: they open as
+the right face of the widget that replaced them.
 
 **Five design styles** apply to every widget:
 - **minimal**;
@@ -147,8 +151,8 @@ These apply only to Windows' own windows, never to games or other apps. See
 
 ### Desktop extras
 
-- **Desktop right-click menu (opt-in):** our own themed menu on the bare desktop, opening in under
-  10 ms. Right-clicking an icon, or pressing Shift, still gives the native menu.
+- **Desktop right-click menu (on by default):** our own themed menu on the bare desktop, opening in
+  under 10 ms (Windows' own takes 0.2 to 0.3 s). Right-clicking an icon, or pressing Shift, still gives the native menu.
 - **Cursor themes:** two built-in sets, dark and light.
 - **Desktop tray menu:** desktop icon size and visibility.
 - **Classic Windows 11 context menu (opt-in):** a reversible toggle.

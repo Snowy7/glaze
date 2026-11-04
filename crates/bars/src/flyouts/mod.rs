@@ -193,8 +193,8 @@ pub enum Done {
     },
     /// A flyout topic's new value, for the bars watching it.
     Event { topic: Watched, data: Value },
-    /// A lone Windows key press, when it happened: open the launcher.
-    WinKey(Instant),
+    /// A Windows key shortcut (the key alone, Win+N, Win+A), when it happened: open its flyout.
+    WinKey(Instant, winkey::Target),
     /// The app index was (re)built.
     Index(Vec<index::App>),
     /// A provider noticed a change (a session came, a scan finished): refresh what's watched.

@@ -60,7 +60,7 @@ html .badge.tile {
   color: var(--t0);
 }
 
-.label {
+.coin {
   flex: 1;
   display: grid;
   gap: 1px;
@@ -74,7 +74,9 @@ html .badge.tile {
   color: var(--t0);
 }
 .name {
-  font-size: clamp(8.5px, 17cqh, 10px);
+  font-size: clamp(10px, 17cqh, 11px);
+  font-weight: 500;
+  color: var(--t2);
 }
 
 /* The price never truncates; the label gives way first. */
@@ -144,7 +146,7 @@ html[data-style="neon"] .chg.chip {
   gap: 4px;
   padding-inline: 0.3em;
 }
-.rows[data-narrow] .label {
+.rows[data-narrow] .coin {
   flex: none;
   display: block;
   max-width: 100%;
@@ -242,4 +244,20 @@ html .msg-icon.tile {
 .foot[data-offline]::before {
   background: var(--t3);
   box-shadow: none;
+}
+
+.msg-title {
+  font-weight: 600;
+  color: var(--t1);
+}
+.msg-hint {
+  max-width: 24ch;
+  font-size: 11.5px;
+  color: var(--t2);
+}
+/* A short box has room for the words, not the icon. */
+@container (max-height: 110px) {
+  .msg-icon {
+    display: none;
+  }
 }

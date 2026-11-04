@@ -11,7 +11,8 @@ commit as the code.
 
 - **Our own windows, supported APIs.** Bars are our own windows (one transparent WebView2 per bar per
   monitor). The native taskbar is only shown, hidden or set to auto-hide (`ShowWindow`,
-  `SHAppBarMessage`) and aligned (its documented registry value). No code goes into Explorer.
+  `SHAppBarMessage`), veiled while hidden (a layered window style), and aligned (its documented
+  registry value). No code goes into Explorer.
 - **Always reversible.** Anything done to the native taskbar is journaled
   (`%LOCALAPPDATA%\mypaper\taskbar.json`) and undone when the bars exit, on the panic hotkey, and at
   the next start after a crash.
@@ -141,12 +142,32 @@ mypaper-wallpaper ── writes %LOCALAPPDATA%\mypaper\backdrop\<DEVICE>.bmp ─
     the journal.
   - `hide` also makes the taskbar auto-hide first, so the work area is freed even if Explorer re-shows
     it.
-  - **In `hide` the taskbar never stays visible.** Explorer shows it again on some events (Start
-    and the Windows key, notifications, display and resolution changes, `TaskbarCreated`). The bars
-    watch the taskbar windows with out-of-context WinEvent hooks (`EVENT_OBJECT_SHOW`, and
-    `EVENT_OBJECT_LOCATIONCHANGE` for an auto-hidden taskbar sliding in) and hide them again as the
-    event arrives. They never give up; re-hides are only spaced 50 ms apart, so a fight with Explorer
-    stays cheap. Each re-hide also checks that auto-hide is still set, and sets it again if not.
+  - **In `hide` the taskbar is never seen, not even for a frame.** Explorer shows it again on some
+    events (leaving a fullscreen app, auto-hide being reset, display and resolution changes,
+    `TaskbarCreated`); a hide that comes after the show can't beat a frame of composition (measured
+    with the unfixed build forcing a show: two bursts of 1 to 2 frames of taskbar pixels per show,
+    about 70 ms apart). So the hidden windows also carry a **veil**: `WS_EX_LAYERED` at alpha 0, plus
+    `WS_EX_TRANSPARENT` so they never take a click. A layered window at alpha 0 composes to nothing,
+    whether or not Explorer has it shown, moved or re-clipped. Explorer never touches the extended
+    style (measured on build 26300: it survived Start, Search, Quick Settings, Task View and fullscreen
+    exits, and the same run with the veil showed 0 changed pixels where the unfixed one showed 2
+    bursts). Other ways, tried: `DWMWA_CLOAK` is refused cross-process (`E_ACCESSDENIED`), and an empty
+    window region is replaced by auto-hide's own. The veil goes on before the hide and comes off before
+    the show, and is part of the journal's `hidden`: every restore removes it (only if it's ours: a
+    taskbar window that someone else layered is left alone). Restoring is exact, and checked live (the
+    windows come back with the extended style `0x88` they had).
+  - The bars also watch the taskbar windows with out-of-context WinEvent hooks (`EVENT_OBJECT_CREATE`
+    and `EVENT_OBJECT_SHOW`, and `EVENT_OBJECT_LOCATIONCHANGE` for an auto-hidden taskbar sliding in),
+    veil and hide them again as the event arrives (a taskbar Explorer builds anew, for a monitor that
+    came back, is born visible: that one can show for the length of the hook's delay). They never give
+    up; re-hides are only spaced 50 ms apart, so a fight with Explorer stays cheap. Each re-hide also
+    checks that auto-hide is still set, and sets it again if not.
+  - **Finding the taskbar windows.** `FindWindowEx` by class (`Shell_TrayWnd`,
+    `Shell_SecondaryTrayWnd`, owned by `explorer.exe`), never `EnumWindows`: while Start, Search,
+    Quick Settings or Task View is open, Explorer moves the main taskbar into z-band 6
+    (`GetWindowBand`; it's 1 otherwise), and `EnumWindows` doesn't list windows in higher bands.
+    A taskbar found that way could not be hidden then, nor restored afterwards, and it was found
+    that way before this fix (the primary taskbar was left sitting on screen over the dock).
   - Presets never set `taskbar`: replacing the native taskbar is always the user's choice. The
     `windows11` preset with `"taskbar": { "mode": "hide" }` is a complete taskbar replacement.
 - **`taskbar.alignment`**: `center` or `left` (the `TaskbarAl` value Settings writes, announced with
@@ -167,8 +188,8 @@ mypaper-wallpaper ── writes %LOCALAPPDATA%\mypaper\backdrop\<DEVICE>.bmp ─
   `custom:<id>` and `|` (a break: a new island in the `islands` layout, a thin separator elsewhere).
   Each module is listed at most once per bar.
 - **`launcher`** (see "Flyouts" → "Launcher"):
-  - `winKey` (default `true`): a lone Windows key opens the launcher, only while `taskbar.mode` is
-    `hide`.
+  - `winKey` (default `true`): a lone Windows key opens the launcher, and Win+N and Win+A open the
+    notifications and quick settings flyouts, only while `taskbar.mode` is `hide`.
   - `layout`: `win11` (default), `grid`, `compact` or `dashboard`.
   - `pinned`: the launcher's pins, in the shape of `dock.pinned`; missing means the dock's pins.
   - `files` (default `true`): search recent files too.
@@ -730,7 +751,18 @@ loaded anywhere else.
   key: the hook replays it after the unassigned key `vkE8` (AutoHotkey's "menu mask key"), with
   its own scan code and extended flag, and swallows the real one only once `SendInput` took all
   three. Explorer then sees a combination and keeps Start closed, and the launcher opens.
-- Combinations (Win+E, Win+Shift+S, ...) pass untouched.
+- **Win+N and Win+A** open the notifications and quick settings flyouts instead of Windows'
+  panels (same `launcher.winKey` switch, same conditions). When N or A is the first key after the
+  Windows key and no Shift, Ctrl or Alt is down, the hook injects the mask key, swallows the
+  letter (its press, repeats and release), and opens the flyout on the Windows key's release,
+  replayed like a lone press's. Explorer sees Win, `vkE8`, Win up: a combination, so neither Start
+  nor its own panel opens. (Opening at the letter was tried first: with the user's own Win key
+  still down, Windows refused the bar the foreground, and the flyout closed at once on blur.)
+  The flyout opens on a bar with its own module (`notifications`, `quick`), else the last module
+  of the bar (the right end of a top bar); pressing the shortcut again, or Escape, closes it, and
+  the app that was in front gets the foreground back. Without a bar to show it, the native panel
+  opens (`ms-actioncenter:`).
+- Other combinations (Win+E, Win+Shift+S, Win+Shift+N, ...) pass untouched.
 - The release passes and the native Start opens when:
   - a fullscreen app is in front (`SHQueryUserNotificationState`, or a window covering its
     monitor; the main loop keeps it in an atomic the hook reads);
@@ -833,6 +865,14 @@ No sparse package was needed, so none is shipped. The flyout groups toasts by ap
 with dismiss, clear all and a link to the notification center. With access turned off in Settings
 it says so and links to `ms-settings:privacy-notifications`.
 
+**Where it opens from.** The `notifications` module (a bell with the count), the `notifications`
+action, and Win+N (see "The Windows key"). The default top bar has **no** `notifications` module
+(its right side is media, tray, network, volume, battery, quick, power), so before Win+N opened the
+flyout there was no way to reach it at all. Checked live on build 26300 (unpackaged `mypaper-bars`):
+Win+N opened it under the top bar and listed the machine's real toasts (57 at the time), grouped by
+app, with Clear all. The first open is the slow one (a lane starts, then one logo is read per app),
+so the panel shows "Loading…" for a moment.
+
 ### Tray host
 
 How the `tray` module gets the real notification-area icons without injection, the ManagedShell /
@@ -905,7 +945,8 @@ Windows:
 - Stopping (the tray module removed, `taskbar.mode` back to `keep`, quitting) destroys the window
   and broadcasts `TaskbarCreated`, so apps re-register with Explorer.
 - A crash leaves nothing behind: the window dies with the process, and Explorer has every icon.
-- The bars' own `Shell_TrayWnd` lookups (`taskbar::explorer_tray`, `taskbar_windows`) only take
+- The bars' own `Shell_TrayWnd` lookups (`taskbar::explorer_tray`, `taskbar_windows`: `FindWindowEx`
+  by class, see "Config" → `taskbar.mode`) only take
   `explorer.exe`'s windows, so hiding and restoring the taskbar never touches the host's window
   (or another shell's).
 - Apps that don't handle `TaskbarCreated` keep their icon in Explorer only (Seelen and Zebar note

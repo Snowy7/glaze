@@ -108,9 +108,16 @@ html[data-surface="solid"] .tip {
   align-items: baseline;
   gap: 0.55em;
 }
-.lead .caps {
+.lead .label {
+  flex: none;
   align-self: center;
   margin-right: 0.2em;
+}
+.lead .sub {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .total {
   font-size: clamp(20px, 15cqh, 40px);
@@ -209,29 +216,9 @@ html[data-surface="solid"] .tip {
   grid-auto-columns: var(--cell);
   gap: var(--gap);
 }
-/* Nothing recorded yet: ghost squares and a hint. */
+/* Nothing recorded yet: ghost squares (the header says how to start). */
 .body[data-empty] .cells {
-  opacity: 0.45;
-}
-.hint {
-  position: absolute;
-  inset: auto 0 0 0;
-  margin: auto;
-  top: 14px;
-  width: max-content;
-  max-width: 92%;
-  height: max-content;
-  text-align: center;
-  padding: 0.5em 1em;
-  font-size: 11px;
-  color: var(--t0);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-}
-@container (max-height: 110px) {
-  .hint {
-    display: none;
-  }
+  opacity: 0.2;
 }
 
 /* ---------------------------------------------------------------- month */

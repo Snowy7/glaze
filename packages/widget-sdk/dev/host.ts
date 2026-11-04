@@ -132,6 +132,11 @@ export class BridgeHost {
     },
     "theme.current": () => (this.need("theme"), this.backend.theme()),
     "user.info": () => (this.need("user"), this.backend.user()),
+    // Like the real host, minus the manifest check: the harness form is the place for that.
+    "settings.set": ({ values }) => {
+      if (typeof values === "object" && values !== null) this.setSettings({ ...this.state.settings, ...values });
+      return null;
+    },
     // The dialog is the consent: no permission.
     pickFile: (opts) => this.backend.pickFile(opts ?? {}),
     appIcon: ({ target, size }) => {

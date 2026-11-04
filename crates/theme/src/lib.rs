@@ -13,6 +13,8 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
+pub mod glass;
+
 pub const MANIFEST: &str = "theme.json";
 
 /// Used when no theme is given on the command line.
@@ -96,6 +98,50 @@ pub struct Skin {
     /// and `data-*` attributes; it applies on top of `appearance`.
     #[serde(default)]
     pub css: Option<PathBuf>,
+    /// How liquid glass looks for this family (with `style: "liquid"`). `tint` and `blur`
+    /// come from `appearance`.
+    #[serde(default)]
+    pub glass: Option<Liquid>,
+}
+
+/// Liquid glass parameters, each 0..=1 and optional (layered like [`Appearance`]): `intensity`
+/// scales the whole effect, `refraction` how strongly the rim bends what is behind it,
+/// `highlight` the specular rim. The same names as the bars' `look.glass`.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Liquid {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intensity: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refraction: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlight: Option<f32>,
+}
+
+impl Liquid {
+    /// `self` layered over `base`: each field set here wins.
+    pub fn over(&self, base: &Liquid) -> Liquid {
+        Liquid {
+            intensity: self.intensity.or(base.intensity),
+            refraction: self.refraction.or(base.refraction),
+            highlight: self.highlight.or(base.highlight),
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        for (name, value) in [
+            ("intensity", self.intensity),
+            ("refraction", self.refraction),
+            ("highlight", self.highlight),
+        ] {
+            if let Some(v) = value
+                && !(0.0..=1.0).contains(&v)
+            {
+                bail!("glass.{name} must be between 0 and 1, got {v}");
+            }
+        }
+        Ok(())
+    }
 }
 
 /// The look of a widget or bar. Every field is optional; layers are merged
@@ -139,6 +185,8 @@ pub enum WidgetStyle {
     Neon,
     Paper,
     Aero,
+    /// Clear glass that bends the wallpaper at its rim (the wallpaper engine draws the plate).
+    Liquid,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -518,6 +566,9 @@ impl LoadedTheme {
             if let Some(css) = &skin.css {
                 check_path(css)?;
             }
+            if let Some(glass) = &skin.glass {
+                glass.validate()?;
+            }
         }
         Ok(Self { dir, theme })
     }
@@ -666,6 +717,7 @@ mod tests {
             ("neon", WidgetStyle::Neon),
             ("paper", WidgetStyle::Paper),
             ("aero", WidgetStyle::Aero),
+            ("liquid", WidgetStyle::Liquid),
         ] {
             let parsed = appearance(&format!(r#"{{ "style": "{name}" }}"#)).unwrap();
             assert_eq!(parsed.style, Some(style));

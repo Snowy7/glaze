@@ -2,16 +2,24 @@
 //! and refresh stale entries. Network access is behind [`Source`], so this is tested with a fake.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
+use crate::location::Location;
 use crate::rpc::RpcError;
-use crate::weather::{Bundle, Place, Request, UnitSystem, Where, parse_request};
+use crate::weather::{
+    Bundle, Candidate, Place, Request, UnitSystem, Where, parse_query, parse_request,
+    validate_object,
+};
 
 /// Where weather data comes from.
 pub trait Source: Send + Sync {
+    fn initialize(&self, data_dir: PathBuf);
+    fn locate(&self) -> Result<Location, RpcError>;
+    fn search(&self, query: &str) -> Result<Vec<Candidate>, RpcError>;
     /// Resolves a city name (optionally "Name, region or country"). `NotFound` if there is none.
     fn geocode(&self, city: &str) -> Result<Place, RpcError>;
     fn forecast(&self, place: &Place, units: UnitSystem) -> Result<Bundle, RpcError>;
@@ -67,8 +75,33 @@ impl<S: Source> Service<S> {
         }
     }
 
-    /// Handles `current` and `forecast`.
+    /// Configure persistence before the host starts forwarding calls.
+    pub fn initialize(&self, params: &Value) -> Result<(), RpcError> {
+        validate_object(params)?;
+        if let Some(data_dir) = params.get("dataDir") {
+            let path = data_dir
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| RpcError::invalid_params("\"dataDir\" must be a nonempty path"))?;
+            self.source.initialize(PathBuf::from(path));
+        }
+        Ok(())
+    }
+
+    /// Handles public weather and location methods.
     pub fn call(&self, method: &str, params: &Value) -> Result<Value, RpcError> {
+        match method {
+            "locate" => {
+                validate_object(params)?;
+                return serde_json::to_value(self.source.locate()?)
+                    .map_err(|e| RpcError::internal(e.to_string()));
+            }
+            "search" => {
+                return serde_json::to_value(self.source.search(&parse_query(params)?)?)
+                    .map_err(|e| RpcError::internal(e.to_string()));
+            }
+            _ => {}
+        }
         if method != "current" && method != "forecast" {
             return Err(RpcError::method_not_found(method));
         }
@@ -76,9 +109,12 @@ impl<S: Source> Service<S> {
         let place = self.resolve(&request.place)?;
         let bundle = self.bundle(&place, &request)?;
         let value = if method == "current" {
-            serde_json::to_value(&bundle.current)
+            let mut current = bundle.current.clone();
+            current.location = place;
+            serde_json::to_value(current)
         } else {
             let mut forecast = bundle.forecast.clone();
+            forecast.location = place;
             forecast.days.truncate(request.days);
             serde_json::to_value(&forecast)
         };
@@ -87,12 +123,8 @@ impl<S: Source> Service<S> {
 
     fn resolve(&self, place: &Where) -> Result<Place, RpcError> {
         match place {
-            Where::Coords { lat, lon } => Ok(Place {
-                name: format!("{lat:.2}, {lon:.2}"),
-                country: None,
-                lat: *lat,
-                lon: *lon,
-            }),
+            Where::Auto => self.source.locate().map(|l| l.place()),
+            Where::Coords(place) => Ok(place.clone()),
             Where::City(city) => {
                 let key = city.to_lowercase();
                 if let Some(place) = lock(&self.cities).get(&key) {
@@ -184,6 +216,24 @@ mod tests {
     }
 
     impl Source for Fake {
+        fn initialize(&self, _data_dir: PathBuf) {}
+
+        fn locate(&self) -> Result<Location, RpcError> {
+            Ok(Location {
+                lat: 59.91,
+                lon: 10.75,
+                accuracy_m: 80.0,
+                name: "Grunerlokka".into(),
+                region: "Oslo".into(),
+                country: "Norway".into(),
+                source: crate::location::Origin::Windows,
+            })
+        }
+
+        fn search(&self, _query: &str) -> Result<Vec<Candidate>, RpcError> {
+            Ok(Vec::new())
+        }
+
         fn geocode(&self, city: &str) -> Result<Place, RpcError> {
             self.geocodes.fetch_add(1, Ordering::SeqCst);
             if city.eq_ignore_ascii_case("oslo") {
@@ -192,6 +242,7 @@ mod tests {
                     country: Some("Norway".into()),
                     lat: 59.91,
                     lon: 10.75,
+                    ..Place::default()
                 })
             } else {
                 Err(RpcError::not_found(format!("no place called \"{city}\"")))
@@ -333,7 +384,10 @@ mod tests {
             .unwrap_err();
         assert_eq!(nowhere.data_code, Some("NotFound"));
         assert_eq!(
-            service.call("current", &json!({})).unwrap_err().code,
+            service
+                .call("current", &json!({ "auto": false }))
+                .unwrap_err()
+                .code,
             -32602
         );
         assert_eq!(
@@ -348,6 +402,37 @@ mod tests {
             .call("current", &json!({ "city": "Nowhere" }))
             .unwrap_err();
         assert_eq!(service.source.geocodes.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn auto_methods_and_manual_names_survive_shared_weather_cache() {
+        let service = Service::new(Fake::default(), TEN_MIN);
+        assert_eq!(
+            service.call("locate", &Value::Null).unwrap()["source"],
+            "windows"
+        );
+        let current = service.call("current", &Value::Null).unwrap();
+        assert_eq!(current["location"]["name"], "Grunerlokka");
+        assert_eq!(current["location"]["accuracy_m"], 80.0);
+        let manual = service
+            .call(
+                "current",
+                &json!({
+                    "lat": 59.91, "lon": 10.75, "name": "Chosen town", "country": "Norway"
+                }),
+            )
+            .unwrap();
+        assert_eq!(manual["location"]["name"], "Chosen town");
+        assert!(manual["location"].get("source").is_none());
+        assert_eq!(service.source.forecasts.load(Ordering::SeqCst), 1);
+        assert!(
+            service
+                .call("search", &json!({ "query": "Oslo" }))
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

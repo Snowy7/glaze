@@ -1,6 +1,6 @@
 // @ts-check
 import { $, every, onVisible, setText, trackSettings, trackSize } from "./kit.js";
-import { dayLabel, degrees, errorInfo, hourLabel, pickLayout, placeNow, rangeBar, sceneFor, slotCount, upcomingHours } from "./weather-logic.js";
+import { candidateLine, dayLabel, degrees, errorInfo, hourLabel, pickLayout, placeLabel, placeNow, placeOf, placeRequest, rangeBar, readCandidates, readLocated, readPlace, sceneFor, slotCount, upcomingHours } from "./weather-logic.js";
 
 /** @typedef {import("./weather-logic.js").Current} Current */
 /** @typedef {import("./weather-logic.js").Forecast} Forecast */
@@ -34,7 +34,8 @@ const els = {
 };
 const layers = [...els.art.querySelectorAll("[data-layer]")].filter((g) => g instanceof SVGElement);
 
-const defaults = { variant: "card", city: "London", lat: "", lon: "", units: "metric", animate: true };
+// `city` is a place setting: null (automatic) or { name, lat?, lon? } (readPlace).
+const defaults = { variant: "card", city: /** @type {unknown} */ (null), units: "metric", animate: true };
 let settings = defaults;
 /** @type {Variant} */
 let variant = "card";
@@ -48,14 +49,11 @@ let settingsKnown = false;
 let data;
 let hourKey = "";
 
-/** `lat`/`lon` win when both parse; otherwise the city. */
-function placeParams() {
-  const lat = Number.parseFloat(settings.lat);
-  const lon = Number.parseFloat(settings.lon);
-  if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
-  const city = settings.city.trim();
-  return city ? { city } : undefined;
-}
+/** The place shown ("Oslo, Oslo County, Norway"); null shows where the weather came back from. */
+/** @type {import("./weather-logic.js").Where | null} */
+let shownPlace = null;
+/** The plugin found no location: the status offers Windows' settings and the town picker. */
+let locationFailed = false;
 
 /** @param {string} icon */
 const iconHref = (icon) => `#i-${/^[a-z-]+$/.test(icon) ? icon : "cloudy"}`;
@@ -90,7 +88,11 @@ function renderNow() {
   const today = forecast.days[0];
   setText(els.temp, degrees(current.temperature));
   setText(els.cond, current.condition);
-  setText(els.place, current.location.name);
+  // Roomy layouts show the whole name (over two lines if need be); the others the town and region.
+  const place = shownPlace ?? readPlace(current.location) ?? { name: current.location.name };
+  const roomy = card.dataset.layout === "tall" || card.dataset.layout === "side";
+  setText(els.place, placeLabel(place, !roomy));
+  els.place.title = `${placeLabel(place)} (change the town)`;
   setText(els.hilo, today ? `H ${degrees(today.max)}  L ${degrees(today.min)}` : "");
   els.miniUse.setAttribute("href", iconHref(current.icon));
 
@@ -177,22 +179,44 @@ function render() {
   renderLists();
 }
 
-/** @param {string} title @param {string} hint */
-function showError(title, hint) {
+/** @param {string} title @param {string} hint @param {"error" | "locating"} [state] */
+function showError(title, hint, state = "error") {
   data = undefined;
-  card.dataset["state"] = "error";
+  card.dataset["state"] = state;
+  $("#status-actions").hidden = !locationFailed;
   setText(els.statusTitle, title);
   setText(els.statusHint, hint);
 }
 
 async function load() {
-  const params = placeParams();
-  if (!params) {
-    showError("Set a city", "Add a city (or a latitude and longitude) in this widget's settings.");
-    return;
-  }
+  const picked = readPlace(settings.city);
   const mine = ++generation;
   lastTry = Date.now();
+  /** @type {{ lat: number, lon: number } | { city: string }} */
+  let params;
+  locationFailed = false;
+  if (picked) {
+    params = placeRequest(picked);
+    shownPlace = picked.lat !== undefined ? picked : null;
+  } else {
+    // Automatic: the plugin's locate (Windows' location, else the network's; it caches), then
+    // the weather there. Asked apart so "no location" and "no weather" read differently.
+    if (!data) showError("Locating…", "", "locating");
+    try {
+      const here = readLocated(await mypaper.plugin("weather", "locate", {}));
+      if (mine !== generation) return;
+      if (!here) throw new Error("no location");
+      params = placeRequest(here);
+      shownPlace = here;
+    } catch {
+      if (mine !== generation) return;
+      failed = true;
+      if (data) return; // keep the last good weather
+      locationFailed = true;
+      showError("Location unavailable", "Let desktop apps use your location (Settings › Privacy & security › Location), or choose a town.");
+      return;
+    }
+  }
   try {
     const request = { ...params, units: settings.units };
     const [current, forecast] = await Promise.all([
@@ -211,7 +235,7 @@ async function load() {
     // Keep showing the last good data if we have it.
     if (data) return;
     // MypaperError: `code` is one of the documented wire codes.
-    const { title, hint } = errorInfo(/** @type {{ code?: string }} */ (err).code, settings.city);
+    const { title, hint } = errorInfo(/** @type {{ code?: string }} */ (err).code, "city" in params ? params.city : "");
     showError(title, hint);
   }
 }
@@ -246,8 +270,73 @@ const lists = new ResizeObserver(renderLists);
 lists.observe(els.hours);
 lists.observe(els.days);
 
+// ---- the town picker (from "Choose a town", or a click on the place's name)
+
+const picker = $("#picker");
+const query = $("#town-q", HTMLInputElement);
+const results = $("#town-list");
+let searchId = 0;
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let searchTimer;
+
+/** @param {boolean} open */
+function showPicker(open) {
+  picker.hidden = !open;
+  $("#town-auto").hidden = readPlace(settings.city) === null;
+  if (open) {
+    query.value = "";
+    results.replaceChildren();
+    query.focus();
+  }
+}
+
+/** Searches about 300 ms after the typing stops, from two characters; a newer query wins. */
+function search() {
+  clearTimeout(searchTimer);
+  const text = query.value.trim();
+  const mine = ++searchId;
+  if (text.length < 2) return results.replaceChildren();
+  searchTimer = setTimeout(async () => {
+    try {
+      const found = readCandidates(await mypaper.plugin("weather", "search", { query: text }));
+      if (mine !== searchId) return;
+      results.replaceChildren(
+        ...(found.length === 0
+          ? [span("picker-none", "No towns found")]
+          : found.map((c) => {
+              const item = document.createElement("button");
+              item.type = "button";
+              item.className = "picker-item ellipsis";
+              item.setAttribute("role", "option");
+              item.textContent = candidateLine(c);
+              // Only a picked candidate sets the location, never the typed text.
+              item.addEventListener("click", () => {
+                showPicker(false);
+                void mypaper.settings.set({ city: placeOf(c) });
+              });
+              return item;
+            })),
+      );
+    } catch {
+      if (mine === searchId) results.replaceChildren(span("picker-none", "Couldn't search right now"));
+    }
+  }, 300);
+}
+
+query.addEventListener("input", search);
+query.addEventListener("keydown", (e) => e.key === "Escape" && showPicker(false));
+$("#town-close").addEventListener("click", () => showPicker(false));
+$("#town-auto").addEventListener("click", () => {
+  showPicker(false);
+  void mypaper.settings.set({ city: null });
+});
+$("#choose-town").addEventListener("click", () => showPicker(true));
+els.place.addEventListener("click", () => showPicker(true));
+$("#open-location").addEventListener("click", () => void mypaper.launch("ms-settings:privacy-location").catch(() => {}));
+mypaper.on("editmode", (editing) => editing && showPicker(false));
+
 trackSettings(defaults, (next) => {
-  const changedPlace = !settingsKnown || next.city !== settings.city || next.lat !== settings.lat || next.lon !== settings.lon || next.units !== settings.units;
+  const changedPlace = !settingsKnown || JSON.stringify(next.city) !== JSON.stringify(settings.city) || next.units !== settings.units;
   settings = next;
   settingsKnown = true;
   variant = /** @type {Variant} */ (VARIANTS.includes(next.variant) ? next.variant : "card");

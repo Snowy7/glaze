@@ -98,11 +98,17 @@ export function fakeAppIcon(target: string, size: number): string {
   for (const ch of target.toLowerCase()) hash = (hash * 31 + ch.codePointAt(0)!) >>> 0;
   const hue = hash % 360;
   const px = clamp(Math.round(size), 16, 256);
+  // A Fluent-like tile: a two-hue gradient, a soft top light and a white glyph, so screenshots look
+  // like real app icons rather than placeholders.
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 64 64">` +
-    `<rect width="64" height="64" rx="14" fill="hsl(${hue} 55% 48%)"/>` +
-    `<text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, sans-serif" ` +
-    `font-size="34" font-weight="600" fill="white">${letter}</text></svg>`;
+    `<defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 78% 62%)"/>` +
+    `<stop offset="1" stop-color="hsl(${(hue + 36) % 360} 72% 42%)"/></linearGradient>` +
+    `<linearGradient id="l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/>` +
+    `<stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>` +
+    `<rect x="4" y="4" width="56" height="56" rx="15" fill="url(#b)"/><rect x="4" y="4" width="56" height="56" rx="15" fill="url(#l)"/>` +
+    `<text x="32" y="33.5" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI Variable Display, Segoe UI, sans-serif" ` +
+    `font-size="28" font-weight="600" fill="white">${letter}</text></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 

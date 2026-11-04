@@ -3,7 +3,8 @@
 // Examples (the harness must be running: `pnpm dev`, default http://localhost:5173):
 //   node scripts/shot.mjs clock "/gallery.html?widget=clock"                      the contact sheet
 //   node scripts/shot.mjs clock-glass "/?ui=0&widget=clock&surface=glass&bg=photo-dark"
-// Writes <tmp>/mypaper-shots/<name>.png and prints the path. MYPAPER_HARNESS sets the base URL.
+// Writes <tmp>/mypaper-shots/<name>.png and prints the path. MYPAPER_HARNESS sets the base URL;
+// MYPAPER_SHOT_SCALE renders at a device scale (1.5 is a 150% display, to check crispness).
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -43,6 +44,7 @@ const result = spawnSync(
     `--user-data-dir=${profile}`,
     `--screenshot=${out}`,
     `--window-size=${size.replace("x", ",")}`,
+    `--force-device-scale-factor=${Number(process.env["MYPAPER_SHOT_SCALE"]) || 1}`,
     "--virtual-time-budget=6000",
     `${base}${target}`,
   ],
