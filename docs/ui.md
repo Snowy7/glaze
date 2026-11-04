@@ -216,3 +216,10 @@ This branch's core, wallpaper and shell, in place of the user's mypaper (no bars
   introduced. Bar data/actions are Rust calls into `mypaper-bars` rather than a web bridge.
 
 See [bars.md](bars.md) for configuration, recovery ownership and the N3 flyout/plate seams.
+
+N2 bar measurements (2026-11-05, two visible 1440p screens, still photo, paused media): clean idle
+median 14 MB and 0.05% of one core; observed peak 21 MB. Three maximized samples have a 0.08% median,
+above the 0.05% gate. The final bar paint was at process age 164.4 ms (143.9 ms after core's post-spawn
+marker), above the 73 ms reference. Shell kill/repaint took 370-572 ms, above 300 ms. Alpha hit tests,
+the native clock click, panic restoration and six style PNGs pass. See [bars.md](bars.md#live-n2-measurements-2026-11-05)
+for raw samples, the interrupted Explorer sample and the missing engine/glass/N4 fixture checks.
