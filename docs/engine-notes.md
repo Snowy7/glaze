@@ -726,7 +726,8 @@ In the engine since N3 (the shell's flyouts and menus use it; docs/bars.md "Flyo
   frame wakes arrive as messages to its own window: no new wait handle.
 - **Warmth:** the capture device, sessions and DirectComposition device stay 3 s (`WARM`) after
   the last close; the glass pipelines are built once per engine. Warm opens show glass in
-  42-58 ms; cold ones in 179-208 ms (the engine's very first, 253-354 ms). A pointer-down
+  38-58 ms; cold ones in 166-252 ms in 13 of 16 live clicks, 326-354 ms in the other three
+  (WGC's first frame). A pointer-down
   warm-up request was tried and removed: starting the capture during a press delayed the
   click's delivery to the shell by ~30 ms, breaking the 30 ms content gate.
 - **Update rate:** `MIN_INTERVAL` is 1/30 s. With an animated window behind quick settings the

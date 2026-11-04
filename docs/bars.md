@@ -281,7 +281,7 @@ from another process; glass is the engine's own open-to-glass log. A cold click 
 | Content on screen, cold click | 2.7–5.6 ms; launcher 17.7 ms | ≤30 ms |
 | Content on screen, warm click | 1.9–4.6 ms | ≤30 ms |
 | Win+N / Win+A / Win | 8.9 / 5.8 / 6.1 ms | |
-| Glass, cold click | 179–208 ms; the engine's first ever 354 ms (253 ms in the run before) | ≤300 ms |
+| Glass, cold click | 166–252 ms in 13 of 16 cold clicks (two runs); 326, 351 and 354 ms in the other three | ≤300 ms: **misses 3 of 16** |
 | Glass, warm | 42–58 ms | |
 | Redraws once settled | 0 for every flyout (1 when the notification list or app index arrives after the motion) | 0 |
 | Shell private MB, a flyout open vs closed before it | +0.2 to +2.8 MB (launcher the most) | ≤ +6 MB |
@@ -296,7 +296,11 @@ from another process; glass is the engine's own open-to-glass log. A cold click 
 
 - The pointer-down warm-up was built, measured and **dropped**: with an 80 ms press it brought cold
   glass to 35–75 ms but stalled the click's delivery to the shell by ~30 ms (cold content 22–45 ms).
-  Without it the content gate holds and cold glass is 178–254 ms.
+  Without it the content gate holds, and cold glass is WGC's first frame after `StartCapture`
+  (N0.2 measured 170–340 ms): usually under 300 ms, not always. Keeping the glass pipelines across
+  cold starts did not change the outliers. The next step is a warm-up that starts **before** the
+  press: on a short hover over a module that opens a flyout (bars' hit under the pointer), so the
+  capture's start never overlaps a click.
 - 0.47% for the engine once closed was the window-cover events of the animated test window; its
   overlay log shows no glass pass then.
 - The shell keeps ~7 MB after its first flyouts (DirectWrite fonts, WARP surfaces, Msftedit, the
