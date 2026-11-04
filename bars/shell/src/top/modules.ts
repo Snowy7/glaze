@@ -1,8 +1,9 @@
 // The top-bar modules (docs/bars.md, "Modules"). Each factory builds its element once and keeps it
 // current through host events; clicks become host commands.
 
+import { barAnchor } from "../anchor";
 import { formatClock } from "../clock-format";
-import { button, glyph, glyphLetter, h, rectOf, viewport } from "../dom";
+import { button, glyph, glyphLetter, h, viewport } from "../dom";
 import { placePopover, type Rect } from "../geometry";
 import { fire, request, type Scope } from "../host";
 import { icons } from "../icons";
@@ -17,16 +18,24 @@ export interface TopCtx {
 }
 type Factory = (ctx: TopCtx) => HTMLElement;
 
-/** Where a popover under `el` starts: right below the whole strip, not just the module. */
-const underStrip = (el: Element, config: BarsConfig): Rect => {
-  const [x, , w] = rectOf(el);
-  return [x, 0, w, config.top.height];
-};
+/**
+ * Where a popover from `el` starts: across the whole band (strip, island or taskbar), not just
+ * the module. Open it on `barAnchor(el).side`: below a top bar, above a bottom taskbar.
+ */
+export const underStrip = (el: Element, _config?: BarsConfig): Rect => barAnchor(el).rect;
 
 const start: Factory = () => {
   const el = button("mod icon-only", glyph(icons.mark));
   el.title = "Start";
   el.addEventListener("click", () => fire("start"));
+  return el;
+};
+
+/** A search box: Windows Search (Win+S). Narrow bars show only the glyph (style.css). */
+const search: Factory = () => {
+  const el = button("mod search", glyph(icons.search), h("span", "search-label", "Search"));
+  el.title = "Search";
+  el.addEventListener("click", () => fire("search"));
   return el;
 };
 
@@ -146,7 +155,7 @@ const network: Factory = ({ scope }) => {
   return el;
 };
 
-const volume: Factory = ({ scope, config }) => {
+const volume: Factory = ({ scope }) => {
   const g = glyph();
   const el = button("mod icon-only", g);
   let state: { level: number; muted: boolean } | null = null;
@@ -174,7 +183,8 @@ const volume: Factory = ({ scope, config }) => {
       const fill = h("div", "hud-fill");
       const text = h("span", "hud-num");
       const el2 = h("div", "hud", h("div", "hud-track", fill), text);
-      const layer = mountLayer(el2, (size) => placePopover(underStrip(el, config), size, viewport(), "below", "center", 4));
+      const anchor = barAnchor(el);
+      const layer = mountLayer(el2, (size) => placePopover(anchor.rect, size, viewport(), anchor.side, "center", 4));
       hud = { layer, fill, text, timer: 0 };
     }
     const shown = state.muted ? 0 : state.level;
@@ -266,7 +276,7 @@ const confirmPower = (action: "restart" | "shutdown"): MenuEntry[] => {
   ];
 };
 
-const power: Factory = ({ config }) => {
+const power: Factory = () => {
   const el = button("mod icon-only", glyph(icons.power));
   el.title = "Power";
   const entries: MenuEntry[] = [
@@ -277,14 +287,15 @@ const power: Factory = ({ config }) => {
     { kind: "item", label: "Restart…", run: () => confirmPower("restart") },
     { kind: "item", label: "Shut down…", run: () => confirmPower("shutdown") },
   ];
-  el.addEventListener("click", () =>
+  el.addEventListener("click", () => {
+    const anchor = barAnchor(el);
     openMenu({
       anchor: el,
       entries,
-      origin: "100% 0",
-      place: (size) => placePopover(underStrip(el, config), size, viewport(), "below", "end", 4),
-    }),
-  );
+      origin: anchor.origin,
+      place: (size) => placePopover(anchor.rect, size, viewport(), anchor.side, "end", 4),
+    });
+  });
   return el;
 };
 
@@ -312,6 +323,7 @@ const stats: Factory = ({ scope }) => {
 /** Typed by `Module`, so adding a module to protocol.ts fails the build until it has a factory. */
 export const factories: Record<Module, Factory> = {
   start,
+  search,
   workspaces,
   app,
   clock,

@@ -9,6 +9,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use anyhow::{Context, Result};
+use mypaper_bars::BarsConfig;
 use mypaper_desktop::{Monitor, Rect};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -23,17 +24,20 @@ use windows::Win32::UI::Shell::{ABM_ACTIVATE, ABM_WINDOWPOSCHANGED, APPBARDATA, 
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GA_ROOT, GetAncestor, GetCursorPos,
     HWND_TOPMOST, IDC_ARROW, LWA_ALPHA, LoadCursorW, MA_NOACTIVATE, PBT_APMPOWERSTATUSCHANGE,
-    PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW, SPI_SETWORKAREA, SW_HIDE,
-    SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetLayeredWindowAttributes, SetWindowPos, ShowWindow,
-    WA_ACTIVE, WM_ACTIVATE, WM_APP, WM_CLOSE, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_ERASEBKGND,
-    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_POWERBROADCAST, WM_SETTINGCHANGE, WM_TIMECHANGE,
-    WM_WINDOWPOSCHANGED, WNDCLASSEXW, WS_CLIPCHILDREN, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WindowFromPoint,
+    PostThreadMessageW, RegisterClassExW, RegisterShellHookWindow, RegisterWindowMessageW,
+    SPI_SETWORKAREA, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetLayeredWindowAttributes,
+    SetWindowPos, ShowWindow, WA_ACTIVE, WM_ACTIVATE, WM_APP, WM_CLOSE, WM_DISPLAYCHANGE,
+    WM_DPICHANGED, WM_ERASEBKGND, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_POWERBROADCAST,
+    WM_SETTINGCHANGE, WM_TIMECHANGE, WM_WINDOWPOSCHANGED, WNDCLASSEXW, WS_CLIPCHILDREN,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_POPUP, WindowFromPoint,
 };
 use windows::core::{PCWSTR, w};
 
 use crate::appbar::{AppBar, Edge, settle, window_rect};
 use crate::bridge::BarKind;
+use crate::preview::Previews;
+use crate::trash::WM_TRASH_NOTIFY;
 use crate::web::Web;
 
 /// Extra room every bar window has beyond its band, for flyouts, menus and magnify (DIPs). It's
@@ -61,8 +65,17 @@ pub const WM_BARS_POWER: u32 = WM_APP + 25;
 pub const WM_BARS_TIME: u32 = WM_APP + 26;
 /// Posted to the main thread: a bar was activated without a click (`lParam`: its window).
 pub const WM_BARS_ACTIVATED: u32 = WM_APP + 27;
+/// Posted to the main thread: a shell hook event (`wParam`: the `HSHELL_*` code, `lParam`: the
+/// window), e.g. a window flashing for attention.
+pub const WM_BARS_SHELL: u32 = WM_APP + 28;
+/// Posted to the main thread: a system setting changed (colors, light/dark, animations).
+pub const WM_BARS_SETTINGS: u32 = WM_APP + 29;
+/// Posted to the main thread: the Recycle Bin changed.
+pub const WM_BARS_TRASH: u32 = WM_APP + 30;
 
 static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
+/// The shell hook message (`RegisterWindowMessage("SHELLHOOK")`).
+static SHELLHOOK: AtomicU32 = AtomicU32::new(0);
 
 fn post(message: u32, wparam: usize, lparam: isize) {
     // SAFETY: window procedures run on the main thread, which pumps these.
@@ -84,6 +97,7 @@ pub fn register_classes() -> Result<()> {
             RegisterWindowMessageW(w!("TaskbarCreated")),
             Ordering::Relaxed,
         );
+        SHELLHOOK.store(RegisterWindowMessageW(w!("SHELLHOOK")), Ordering::Relaxed);
         let instance = GetModuleHandleW(None)?.into();
         let cursor = LoadCursorW(None, IDC_ARROW)?;
         for (class, proc) in [
@@ -109,8 +123,10 @@ pub fn register_classes() -> Result<()> {
 
 type WndProc = unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT;
 
-/// A hidden top-level window that hears system broadcasts (`TaskbarCreated`, display, power
-/// and time changes) even while no bar is up. Message-only windows don't get broadcasts.
+/// A hidden top-level window that hears system broadcasts (`TaskbarCreated`, display, power,
+/// time and setting changes) even while no bar is up, and the shell hook (`HSHELL_FLASH` for
+/// windows asking for attention; `RegisterShellHookWindow` is a documented API, nothing runs in
+/// Explorer). Message-only windows don't get broadcasts.
 pub fn broadcast_window() -> Result<HWND> {
     // SAFETY: the class is registered; the window is never shown.
     let hwnd = unsafe {
@@ -129,6 +145,10 @@ pub fn broadcast_window() -> Result<HWND> {
             None,
         )?
     };
+    // SAFETY: registers our own top-level window for shell hook messages.
+    if !unsafe { RegisterShellHookWindow(hwnd) }.as_bool() {
+        log::warn!("no shell hook: apps asking for attention won't show");
+    }
     Ok(hwnd)
 }
 
@@ -173,6 +193,16 @@ unsafe extern "system" fn bar_proc(
         // The work area moved (an app bar came or went, the taskbar changed): an auto-hiding dock
         // sits at its edge.
         WM_SETTINGCHANGE if wparam.0 as u32 == SPI_SETWORKAREA.0 => post(WM_BARS_DISPLAY, 0, 0),
+        // Colors, light/dark mode or animation effects may have changed: cheap to re-read.
+        WM_SETTINGCHANGE => post(WM_BARS_SETTINGS, 0, 0),
+        WM_TRASH_NOTIFY => {
+            post(WM_BARS_TRASH, 0, 0);
+            return LRESULT(0);
+        }
+        _ if msg == SHELLHOOK.load(Ordering::Relaxed) && msg != 0 => {
+            post(WM_BARS_SHELL, wparam.0, lparam.0);
+            return LRESULT(0);
+        }
         // The host places and scales bars itself; don't take Windows' suggested rect.
         WM_DPICHANGED => {
             post(WM_BARS_DISPLAY, 0, 0);
@@ -245,7 +275,11 @@ pub struct Bar {
     pub id: u32,
     pub kind: BarKind,
     pub monitor: Monitor,
+    /// `bars.json` as this monitor's bars see it (with its `overrides`).
+    pub config: BarsConfig,
     pub geometry: Geometry,
+    /// Window thumbnails shown over the page (the dock's previews).
+    pub previews: Previews,
     hwnd: HWND,
     edge: Option<HWND>,
     appbar: Option<AppBar>,
@@ -263,7 +297,13 @@ pub struct Bar {
 }
 
 impl Bar {
-    pub fn new(id: u32, kind: BarKind, monitor: Monitor, geometry: Geometry) -> Result<Self> {
+    pub fn new(
+        id: u32,
+        kind: BarKind,
+        monitor: Monitor,
+        config: BarsConfig,
+        geometry: Geometry,
+    ) -> Result<Self> {
         // SAFETY: the class is registered; the window is ours.
         let hwnd = unsafe {
             CreateWindowExW(
@@ -288,7 +328,9 @@ impl Bar {
             id,
             kind,
             monitor,
+            config,
             geometry,
+            previews: Previews::default(),
             hwnd,
             edge: None,
             appbar: None,
@@ -544,6 +586,7 @@ impl Bar {
 
 impl Drop for Bar {
     fn drop(&mut self) {
+        self.previews.close();
         self.web = None;
         self.appbar = None; // ABM_REMOVE before the window goes
         // SAFETY: our own windows, destroyed on their creating thread.

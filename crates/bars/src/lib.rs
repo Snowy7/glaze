@@ -1,10 +1,15 @@
-//! The shell bars' shared half (docs/bars.md): `bars.json` and the native taskbar with its undo
-//! journal. The `mypaper-bars` binary uses it, and so does core, which edits `bars.json` from the
-//! tray and replays the journal when the bars didn't exit cleanly.
+//! The shell bars' shared half (docs/bars.md): `bars.json` with its presets, look and animation
+//! schema, theme variables, icon packs, and the native taskbar with its undo journal. The
+//! `mypaper-bars` binary uses it, and so do core (which edits `bars.json` from the tray and
+//! replays the journal when the bars didn't exit cleanly) and Studio (presets, variables, packs).
 
 pub mod config;
 pub mod files;
+pub mod icon_pack;
+pub mod presets;
+pub mod style;
 pub mod taskbar;
+pub mod vars;
 
-pub use config::{BarsConfig, Module, TaskbarMode};
+pub use config::{BarsConfig, Module, ModuleRef, TaskbarMode};
 pub use taskbar::replay;

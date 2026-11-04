@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use serde::Serialize;
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM};
 use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
+use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromWindow};
 use windows::Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID;
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc;
@@ -67,6 +68,8 @@ pub struct AppWindow {
     pub aumid: Option<String>,
     /// The process image, lowercase.
     pub exe: Option<String>,
+    /// The monitor it's on (`HMONITOR`; where it will restore to, if minimized).
+    pub monitor: isize,
 }
 
 /// One app's windows: the same AppUserModelID, or the same process image when there is none.
@@ -154,6 +157,11 @@ pub struct Item {
     pub icon: Option<String>,
     pub pinned: bool,
     pub windows: Vec<ItemWindow>,
+    /// What identifies the app, for icon packs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aumid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exe: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -162,6 +170,8 @@ pub struct ItemWindow {
     pub title: String,
     pub active: bool,
     pub minimized: bool,
+    /// Flashing for attention (`HSHELL_FLASH`) since it was last in front.
+    pub attention: bool,
 }
 
 /// The key of a pinned item: its path, case-insensitively.
@@ -169,24 +179,35 @@ pub fn pin_key(path: &str) -> String {
     format!("pin:{}", path.to_lowercase())
 }
 
-/// The dock: pinned items in order (with the windows of every app they match), then, if
-/// `running`, the other running apps in `order`. `active` is the window in front.
-pub fn dock_items(
-    pins: &[Pin],
-    running: &[Running],
-    order: &[String],
-    show_running: bool,
-    active: Option<isize>,
-) -> Vec<Item> {
+/// What one dock shows of the running apps.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct View<'a> {
+    /// Running apps that aren't pinned.
+    pub running: mypaper_bars::config::Running,
+    /// The dock's monitor, for `running: "monitor"`.
+    pub monitor: isize,
+    /// The window in front.
+    pub active: Option<isize>,
+    /// Windows asking for attention.
+    pub attention: Option<&'a std::collections::HashSet<isize>>,
+}
+
+/// The dock: pinned items in order (with the windows of every app they match), then the other
+/// running apps in `order`, as `view` says.
+pub fn dock_items(pins: &[Pin], running: &[Running], order: &[String], view: View) -> Vec<Item> {
+    use mypaper_bars::config::Running as Show;
+    let here = |w: &AppWindow| view.running != Show::Monitor || w.monitor == view.monitor;
     let windows_of = |groups: &[&Group]| -> Vec<ItemWindow> {
         groups
             .iter()
             .flat_map(|g| &g.windows)
+            .filter(|w| here(w))
             .map(|w| ItemWindow {
                 hwnd: w.hwnd,
                 title: w.title.clone(),
-                active: Some(w.hwnd) == active,
+                active: Some(w.hwnd) == view.active,
                 minimized: w.minimized,
+                attention: view.attention.is_some_and(|a| a.contains(&w.hwnd)),
             })
             .collect()
     };
@@ -210,14 +231,16 @@ pub fn dock_items(
                 icon: pin.icon.clone(),
                 pinned: true,
                 windows: windows_of(&groups),
+                aumid: pin.aumid.clone(),
+                exe: pin.exe.clone(),
             }
         })
         .collect();
-    if show_running {
+    if view.running != Show::None {
         let mut rest: Vec<&Running> = running
             .iter()
             .zip(&claimed)
-            .filter(|(_, claimed)| !**claimed)
+            .filter(|(app, claimed)| !**claimed && app.group.windows.iter().any(here))
             .map(|(app, _)| app)
             .collect();
         rest.sort_by_key(|app| order.iter().position(|k| *k == app.group.key));
@@ -228,6 +251,8 @@ pub fn dock_items(
             icon: app.icon.clone(),
             pinned: false,
             windows: windows_of(&[&app.group]),
+            aumid: app.group.aumid.clone(),
+            exe: app.group.exe.clone(),
         }));
     }
     items
@@ -369,7 +394,14 @@ fn read_window(hwnd: HWND, exe: Option<String>) -> AppWindow {
         minimized: unsafe { IsIconic(hwnd) }.as_bool(),
         aumid: window_aumid(hwnd),
         exe,
+        monitor: window_monitor(hwnd),
     }
+}
+
+/// The monitor a window is on (for a minimized one, where it restores to).
+pub fn window_monitor(hwnd: HWND) -> isize {
+    // SAFETY: a read-only query; a stale handle gives the nearest monitor.
+    unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) }.0 as isize
 }
 
 /// The title. For another process's window this reads the stored caption; it never sends that
@@ -463,6 +495,7 @@ mod tests {
             minimized: false,
             aumid: aumid.map(Into::into),
             exe: exe.map(Into::into),
+            monitor: 1,
         }
     }
 
@@ -563,7 +596,13 @@ mod tests {
                 ..Pin::default()
             },
         ];
-        let items = dock_items(&pins, &apps, &order, true, Some(13));
+        let flashing = std::collections::HashSet::from([12]);
+        let view = View {
+            active: Some(13),
+            attention: Some(&flashing),
+            ..View::default()
+        };
+        let items = dock_items(&pins, &apps, &order, view);
         let summary: Vec<(&str, bool, usize)> = items
             .iter()
             .map(|i| (i.name.as_str(), i.pinned, i.windows.len()))
@@ -578,14 +617,29 @@ mod tests {
             ]
         );
         assert_eq!(items[0].key, r"pin:c:\windows\explorer.exe");
+        assert_eq!(items[0].exe.as_deref(), Some(EXPLORER));
         let chrome = &items[2];
         assert_eq!(
             chrome.windows.iter().map(|w| w.active).collect::<Vec<_>>(),
             [false, true]
         );
+        assert!(items[3].windows[0].attention, "spotify flashes");
+        assert_eq!(items[3].aumid.as_deref(), Some("Spotify"));
 
-        let pinned_only = dock_items(&pins, &apps, &order, false, None);
-        assert_eq!(pinned_only.len(), 2);
+        use mypaper_bars::config::Running as Show;
+        let pinned_only = View {
+            running: Show::None,
+            ..View::default()
+        };
+        assert_eq!(dock_items(&pins, &apps, &order, pinned_only).len(), 2);
+        let elsewhere = View {
+            running: Show::Monitor,
+            monitor: 2,
+            ..View::default()
+        };
+        let items = dock_items(&pins, &apps, &order, elsewhere);
+        assert_eq!(items.len(), 2, "no running app has a window on monitor 2");
+        assert!(items.iter().all(|i| i.windows.is_empty()));
     }
 
     #[test]

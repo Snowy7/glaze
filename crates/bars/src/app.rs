@@ -4,6 +4,13 @@
 //! One thread. It sleeps in `MsgWaitForMultipleObjectsEx` until a window message, a [`Msg`] from
 //! a worker, the virtual-desktop registry event, or the earliest timer (debounces, the clock, the
 //! stats sample). Sources run only while some bar on screen shows their module.
+//!
+//! Each bar keeps `bars.json` as its monitor sees it (with `overrides`). The look a bar gets
+//! besides its config is in `looks`; attention, custom modules, the trash and previews in
+//! `extras`.
+
+mod extras;
+mod looks;
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -11,7 +18,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use mypaper_bars::config::{self, BarsConfig, DockPosition, Pinned, TaskbarMode};
+use mypaper_bars::config::{self, BarsConfig, DockPosition, Pinned, TaskbarMode, TopPosition};
 use mypaper_bars::taskbar::{NativeShell, Taskbar, Wanted};
 use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, Holds, Reason};
@@ -37,19 +44,26 @@ use windows::core::{PCWSTR, w};
 
 use crate::appbar::Edge;
 use crate::apps::{self, Apps, Pin, Running};
+use crate::assets::ASSETS_HOST;
 use crate::audio::Audio;
 use crate::bar::{
     self, Bar, Geometry, WM_BARS_ACTIVATED, WM_BARS_APPBAR, WM_BARS_DISPLAY, WM_BARS_EDGE,
-    WM_BARS_POWER, WM_BARS_TASKBAR, WM_BARS_TIME,
+    WM_BARS_POWER, WM_BARS_SETTINGS, WM_BARS_SHELL, WM_BARS_TASKBAR, WM_BARS_TIME, WM_BARS_TRASH,
 };
-use crate::bridge::{Activate, BarError, BarKind, Envelope, Method, Topic, bar_topics};
+use crate::bridge::{
+    Activate, BarError, BarKind, Envelope, Method, Topic, TrashAction, bar_topics,
+};
 use crate::desktops::{Desktops, Workspaces};
+use crate::glass::BACKDROP_HOST;
 use crate::hooks::{self, Hooks};
+use crate::icons::ICON_HOST;
 use crate::icons::{Icons, Source};
+use crate::look::PACKS_HOST;
 use crate::look::{self, ThemeSkin};
 use crate::media::{Media, MediaInfo};
 use crate::network::{self, NetworkInfo, NetworkWatch};
 use crate::system::{self, Sampler, Stats};
+use crate::trash;
 use crate::tray::{Tray, TrayItem};
 use crate::wake::{Msg, WM_WAKE, Waker};
 use crate::web::{self, Events, Folders, PAGE_HOST, Web, WebEvent};
@@ -64,6 +78,7 @@ const SETTLE_PAGE: Duration = Duration::from_millis(500);
 const SETTLE_DISPLAY: Duration = Duration::from_millis(300);
 const SETTLE_APPBAR: Duration = Duration::from_millis(50);
 const SETTLE_NETWORK: Duration = Duration::from_millis(500);
+const SETTLE_SETTINGS: Duration = Duration::from_millis(250);
 /// Explorer needs a moment after `TaskbarCreated` before its taskbar takes settings.
 const SETTLE_EXPLORER: Duration = Duration::from_secs(1);
 const STATS_EVERY: Duration = Duration::from_secs(2);
@@ -93,6 +108,9 @@ struct Timers {
     clock: Option<Instant>,
     stats: Option<Instant>,
     webview: Option<Instant>,
+    settings: Option<Instant>,
+    /// The next custom module due to run.
+    custom: Option<Instant>,
 }
 
 impl Timers {
@@ -111,6 +129,8 @@ impl Timers {
             self.clock,
             self.stats,
             self.webview,
+            self.settings,
+            self.custom,
         ]
         .into_iter()
         .flatten()
@@ -209,7 +229,8 @@ fn next_tick(now_ms: u64, seconds: bool) -> Duration {
 
 pub struct App {
     control: ControlWindow,
-    _broadcast: HWND,
+    /// Hears broadcasts and the shell hook; the Recycle Bin's notifications go to it.
+    broadcast: HWND,
     rx: Receiver<Msg>,
     waker: Waker,
     events: Events,
@@ -253,6 +274,8 @@ pub struct App {
     workspaces: Workspaces,
     sampler: Option<Sampler>,
     stats: Option<Stats>,
+    looks: looks::Looks,
+    extras: extras::Extras,
 
     /// Topics being produced right now.
     active: BTreeSet<Topic>,
@@ -298,7 +321,7 @@ impl App {
         let monitors = monitor_infos();
         let mut app = Self {
             control,
-            _broadcast: broadcast,
+            broadcast,
             rx,
             events: Events::default(),
             env: Env::None,
@@ -336,6 +359,8 @@ impl App {
             },
             sampler: None,
             stats: None,
+            looks: looks::Looks::new(waker.clone())?,
+            extras: extras::Extras::new(waker.clone()),
             active: BTreeSet::new(),
             sent: HashMap::new(),
             timers: Timers::default(),
@@ -355,6 +380,7 @@ impl App {
         app.apply_taskbar();
         app.watch();
         app.reconcile();
+        app.refresh_look();
         app.refresh_fullscreen();
         app.sync_hold();
         Ok(app)
@@ -431,10 +457,14 @@ impl App {
                         soon(&mut self.timers.explorer, SETTLE_EXPLORER);
                     }
                     WM_BARS_POWER => {
-                        self.holds
-                            .set(Fact::OnBattery, mypaper_desktop::on_battery());
+                        let on_battery = mypaper_desktop::on_battery();
+                        self.holds.set(Fact::OnBattery, on_battery);
                         self.emit(Topic::Battery);
+                        self.power_changed(on_battery);
                     }
+                    WM_BARS_SHELL => self.on_shell(msg.wParam.0, msg.lParam.0),
+                    WM_BARS_SETTINGS => soon(&mut self.timers.settings, SETTLE_SETTINGS),
+                    WM_BARS_TRASH => self.trash_changed(),
                     WM_BARS_TIME => {
                         self.timers.clock = None;
                         self.sync_clock();
@@ -477,6 +507,12 @@ impl App {
             Msg::Tray(items) => {
                 self.tray_items = items;
                 self.emit(Topic::Tray);
+            }
+            Msg::Backdrop => self.backdrop_changed(),
+            Msg::Custom(id, output) => {
+                if self.extras.custom.finished(id, output) {
+                    self.emit(Topic::Custom);
+                }
             }
             Msg::WatchError(path, error) => {
                 log::warn!("stopped watching {}: {error}", path.display())
@@ -523,6 +559,7 @@ impl App {
             for bar in &mut self.bars {
                 bar.appbar_moved();
             }
+            self.push_looks();
         }
         if due(&mut self.timers.explorer, now) {
             self.explorer_restarted();
@@ -550,53 +587,68 @@ impl App {
         if due(&mut self.timers.webview, now) {
             self.ensure_webviews();
         }
+        if due(&mut self.timers.settings, now) {
+            self.settings_changed();
+        }
+        if due(&mut self.timers.custom, now) {
+            self.timers.custom = self.extras.custom.tick(now);
+        }
     }
 
     // --- Bars --------------------------------------------------------------------------------
 
-    fn geometry(&self, kind: BarKind) -> Geometry {
+    fn geometry(kind: BarKind, config: &BarsConfig) -> Geometry {
         match kind {
             BarKind::Top => Geometry {
-                edge: Edge::Top,
-                thickness: self.config.top.height,
+                edge: match config.top.position {
+                    TopPosition::Top => Edge::Top,
+                    TopPosition::Bottom => Edge::Bottom,
+                },
+                thickness: config.top.band(),
                 reserve: true,
             },
             BarKind::Dock => Geometry {
-                edge: match self.config.dock.position {
+                edge: match config.dock.position {
                     DockPosition::Bottom => Edge::Bottom,
+                    DockPosition::Top => Edge::Top,
                     DockPosition::Left => Edge::Left,
                     DockPosition::Right => Edge::Right,
                 },
-                thickness: self.config.dock.style.band(self.config.dock.size),
-                reserve: !self.config.dock.autohide,
+                thickness: config.dock.band(),
+                reserve: !config.dock.autohide,
             },
         }
     }
 
+    /// `bars.json` as `monitor`'s bars see it (its `overrides` applied).
+    fn monitor_config(&self, monitor: &Monitor) -> BarsConfig {
+        self.config
+            .for_monitor(&monitor.device, monitor.primary)
+            .unwrap_or_else(|e| {
+                log::error!("overrides for {}: {e:#}", monitor.device);
+                self.config.clone()
+            })
+    }
+
     /// Makes the bars match `bars.json` and the monitors: one window per bar per monitor.
     fn reconcile(&mut self) {
-        let wanted: Vec<(BarKind, Monitor)> = if self.page.is_none() {
+        let wanted: Vec<(BarKind, Monitor, BarsConfig)> = if self.page.is_none() {
             Vec::new()
         } else {
             self.monitors
                 .iter()
                 .flat_map(|monitor| {
-                    let top = self.config.top.enabled
-                        && self
-                            .config
-                            .top
-                            .monitors
-                            .includes(&monitor.device, monitor.primary);
-                    let dock = self.config.dock.enabled
-                        && self
-                            .config
-                            .dock
-                            .monitors
-                            .includes(&monitor.device, monitor.primary);
+                    let config = self.monitor_config(monitor);
+                    let shows = |enabled: bool, monitors: &config::Monitors| {
+                        enabled && monitors.includes(&monitor.device, monitor.primary)
+                    };
+                    let top = shows(config.top.enabled, &config.top.monitors);
+                    let dock = shows(config.dock.enabled, &config.dock.monitors);
                     [(BarKind::Top, top), (BarKind::Dock, dock)]
                         .into_iter()
                         .filter(|(_, on)| *on)
-                        .map(|(kind, _)| (kind, monitor.clone()))
+                        .map(|(kind, _)| (kind, monitor.clone(), config.clone()))
+                        .collect::<Vec<_>>()
                 })
                 .collect()
         };
@@ -604,21 +656,24 @@ impl App {
         self.bars.retain(|bar| {
             wanted
                 .iter()
-                .any(|(kind, m)| *kind == bar.kind && m.device == bar.monitor.device)
+                .any(|(kind, m, _)| *kind == bar.kind && m.device == bar.monitor.device)
         });
         let mut changed = self.bars.len() != before;
         // Top bars first: a dock on the same monitor then reserves past them.
-        for (kind, monitor) in wanted {
-            let geometry = self.geometry(kind);
+        for (kind, monitor, config) in wanted {
+            let geometry = Self::geometry(kind, &config);
             match self
                 .bars
                 .iter_mut()
                 .find(|b| b.kind == kind && b.monitor.device == monitor.device)
             {
-                Some(bar) => changed |= bar.update(monitor, geometry),
+                Some(bar) => {
+                    bar.config = config;
+                    changed |= bar.update(monitor, geometry);
+                }
                 None => {
                     self.next_bar += 1;
-                    match Bar::new(self.next_bar, kind, monitor, geometry) {
+                    match Bar::new(self.next_bar, kind, monitor, config, geometry) {
                         Ok(bar) => {
                             log::info!("{kind:?} bar on {}", bar.monitor.device);
                             self.bars.push(bar);
@@ -644,6 +699,8 @@ impl App {
         self.sync_hooks();
         self.apply_visibility();
         self.sync_topics();
+        // Windows moved: wallpaper glass lines up again.
+        self.push_looks();
     }
 
     /// Hooks run while a bar exists (window lists, fullscreen apps) or the taskbar is hidden
@@ -786,9 +843,16 @@ impl App {
             Ok(controller) => controller,
             Err(e) => return log::error!("creating a WebView: {e}"),
         };
+        let packs = look::packs_dir().unwrap_or_else(|| self.looks.assets.dir().to_owned());
+        let images = [
+            (ICON_HOST, self.icons.dir()),
+            (PACKS_HOST, packs.as_path()),
+            (BACKDROP_HOST, self.looks.glass.dir()),
+            (ASSETS_HOST, self.looks.assets.dir()),
+        ];
         let folders = Folders {
             page: &page,
-            icons: self.icons.dir(),
+            images: &images,
         };
         match Web::attach(
             controller,
@@ -847,6 +911,7 @@ impl App {
     }
 
     fn apply_visibility(&mut self) {
+        let mut changed = false;
         for index in 0..self.bars.len() {
             let bar = &self.bars[index];
             let hidden =
@@ -857,12 +922,17 @@ impl App {
             if hidden {
                 log::info!("hiding the {:?} bar on {}", bar.kind, bar.monitor.device);
                 self.post_event(index, "visibility", &json!(false));
+                self.bars[index].previews.close();
                 self.bars[index].set_hidden(true);
             } else {
                 self.bars[index].set_hidden(false);
                 self.post_event(index, "visibility", &json!(true));
                 self.push_all(index);
             }
+            changed = true;
+        }
+        if changed {
+            self.sync_glass();
         }
     }
 
@@ -876,7 +946,7 @@ impl App {
         self.bars
             .iter()
             .filter(|b| !b.hidden)
-            .flat_map(|b| bar_topics(b.kind, &self.config.top))
+            .flat_map(|b| bar_topics(b.kind, &b.config))
             .filter(|t| !(idle && t.periodic()))
             .collect()
     }
@@ -885,6 +955,8 @@ impl App {
     fn sync_topics(&mut self) {
         let wanted = self.shown_topics();
         if wanted == self.active {
+            // Which custom modules show can change without the topic set changing.
+            self.sync_extras();
             return;
         }
         let on = |topic| wanted.contains(&topic);
@@ -928,6 +1000,7 @@ impl App {
         let started: Vec<Topic> = wanted.difference(&self.active).copied().collect();
         self.active = wanted;
         self.sync_clock();
+        self.sync_extras();
         for topic in started {
             self.emit(topic);
         }
@@ -937,15 +1010,16 @@ impl App {
         if !self.active.contains(&Topic::Clock) {
             self.timers.clock = None;
         } else if self.timers.clock.is_none() {
-            let wait = next_tick(epoch_ms(), self.config.top.clock.seconds);
+            let seconds = self.bars.iter().any(|b| b.config.top.clock.seconds);
+            let wait = next_tick(epoch_ms(), seconds);
             self.timers.clock = Some(Instant::now() + wait);
         }
     }
 
-    /// The current value of a topic.
-    fn value(&mut self, topic: Topic) -> Option<Value> {
+    /// The current value of a topic, as bar `index` sees it (only the dock's apps differ by bar).
+    fn value(&mut self, topic: Topic, index: usize) -> Option<Value> {
         Some(match topic {
-            Topic::Apps => json!(self.dock_items()),
+            Topic::Apps => json!(self.dock_items(index)),
             Topic::Foreground => self.foreground_info(),
             Topic::Clock => json!({ "now": epoch_ms() }),
             Topic::Media => json!(self.media_state),
@@ -958,6 +1032,8 @@ impl App {
             Topic::Tray => json!(self.tray_items),
             Topic::Workspaces => json!(self.workspaces),
             Topic::Stats => json!(self.stats?),
+            Topic::Custom => self.custom_value(),
+            Topic::Trash => self.trash_value(),
         })
     }
 
@@ -966,18 +1042,27 @@ impl App {
         if !self.active.contains(&topic) {
             return;
         }
-        let Some(value) = self.value(topic) else {
-            return;
-        };
-        let message = json!({ "event": topic.event(), "data": value }).to_string();
-        for bar in &self.bars {
-            if !bar.ready || bar.hidden || !bar_topics(bar.kind, &self.config.top).contains(&topic)
-            {
+        let mut shared: Option<String> = None;
+        for index in 0..self.bars.len() {
+            let bar = &self.bars[index];
+            if !bar.ready || bar.hidden || !bar_topics(bar.kind, &bar.config).contains(&topic) {
                 continue;
             }
+            let message = match &shared {
+                Some(message) if topic != Topic::Apps => message.clone(),
+                _ => {
+                    let Some(value) = self.value(topic, index) else {
+                        return;
+                    };
+                    let message = json!({ "event": topic.event(), "data": value }).to_string();
+                    shared = Some(message.clone());
+                    message
+                }
+            };
+            let bar = &self.bars[index];
             if self.sent.get(&(bar.id, topic)) != Some(&message) {
                 bar.post(&message);
-                self.sent.insert((bar.id, topic), message.clone());
+                self.sent.insert((bar.id, topic), message);
             }
         }
     }
@@ -986,7 +1071,7 @@ impl App {
     fn push_all(&mut self, index: usize) {
         let id = self.bars[index].id;
         self.sent.retain(|(bar, _), _| *bar != id);
-        let topics = bar_topics(self.bars[index].kind, &self.config.top);
+        let topics = bar_topics(self.bars[index].kind, &self.bars[index].config);
         for topic in topics.intersection(&self.active.clone()) {
             self.emit(*topic);
         }
@@ -1021,6 +1106,7 @@ impl App {
         if self.foreground != Some(root) {
             self.foreground = Some(root);
             soon(&mut self.timers.windows, SETTLE_WINDOWS);
+            self.attended(root);
             self.emit(Topic::Apps);
             self.emit(Topic::Foreground);
         }
@@ -1080,16 +1166,18 @@ impl App {
             .collect()
     }
 
-    fn dock_items(&mut self) -> Vec<apps::Item> {
+    /// What dock `index` shows (its config decides which running apps).
+    fn dock_items(&mut self, index: usize) -> Vec<apps::Item> {
         let pins = self.pins();
         let running = self.running();
-        apps::dock_items(
-            &pins,
-            &running,
-            &self.apps.order,
-            self.config.dock.running,
-            self.foreground,
-        )
+        let bar = &self.bars[index];
+        let view = apps::View {
+            running: bar.config.dock.running,
+            monitor: apps::window_monitor(bar.hwnd()),
+            active: self.foreground,
+            attention: Some(&self.extras.attention),
+        };
+        apps::dock_items(&pins, &running, &self.apps.order, view)
     }
 
     fn foreground_info(&mut self) -> Value {
@@ -1114,8 +1202,8 @@ impl App {
 
     /// A dock click: launch it if it isn't running, minimize it if it's in front, else bring its
     /// most recent window to the front (restoring it).
-    fn activate_app(&mut self, key: &str) -> Result<Value, BarError> {
-        let items = self.dock_items();
+    fn activate_app(&mut self, index: usize, key: &str) -> Result<Value, BarError> {
+        let items = self.dock_items(index);
         let item = items
             .iter()
             .find(|i| i.key == key)
@@ -1236,7 +1324,9 @@ impl App {
         }
         if hello && index < self.bars.len() {
             self.bars[index].ready = true;
+            self.looks.forget(self.bars[index].id);
             self.push_all(index);
+            self.push_looks();
         }
     }
 
@@ -1263,13 +1353,14 @@ impl App {
                         "width": f64::from(bar.monitor.rect.width) / scale,
                         "height": f64::from(bar.monitor.rect.height) / scale,
                     },
-                    "config": self.config,
-                    "appearance": self.look(bar.kind),
-                    "themeCss": self.skin.css,
+                    "config": bar.config,
+                    "look": self.look_payload(bar),
+                    "mode": self.mode_payload(bar),
+                    "backdrop": self.backdrop_payload(bar),
                     "dpi": bar.monitor.dpi,
                 }))
             }
-            Method::Activate(Activate::App { app }) => self.activate_app(&app),
+            Method::Activate(Activate::App { app }) => self.activate_app(index, &app),
             Method::Activate(Activate::Window { hwnd }) => {
                 if system::activate(system::hwnd(hwnd)) {
                     self.moved_foreground(Some(hwnd));
@@ -1344,6 +1435,31 @@ impl App {
             }
             Method::Region { rects } => {
                 self.bars[index].set_region(rects);
+                done
+            }
+            Method::Run { module, trigger } => self.run_action(index, &module, trigger),
+            Method::Search => {
+                system::search();
+                done
+            }
+            Method::ShowDesktop => {
+                system::show_desktop();
+                done
+            }
+            Method::Trash { action } => {
+                match action {
+                    TrashAction::Open => system::open(r"shell:RecycleBinFolder".into()),
+                    TrashAction::Empty => trash::empty(),
+                }
+                done
+            }
+            Method::PreviewOpen { hwnds } => Ok(self.preview_open(index, &hwnds)),
+            Method::PreviewPlace { windows } => {
+                self.preview_place(index, &windows);
+                done
+            }
+            Method::PreviewClose => {
+                self.bars[index].previews.close();
                 done
             }
         }
@@ -1422,7 +1538,7 @@ impl App {
         if skin != self.skin {
             self.skin = skin;
             self.watch_theme();
-            self.push_appearance();
+            self.refresh_look();
         }
         let mut config = match BarsConfig::load(&self.config_path) {
             Ok(config) => config,
@@ -1434,7 +1550,6 @@ impl App {
         }
         log::info!("bars.json changed");
         let taskbar_changed = config.taskbar != self.config.taskbar;
-        let appearance_changed = config.appearance != self.config.appearance;
         let clock_changed = config.top.clock != self.config.top.clock;
         self.config = config;
         if taskbar_changed {
@@ -1446,11 +1561,8 @@ impl App {
             self.timers.clock = None;
             self.sync_clock();
         }
-        let config = json!(self.config);
-        self.broadcast_event("config", |_| config.clone());
-        if appearance_changed {
-            self.push_appearance();
-        }
+        self.broadcast_event("config", |bar| json!(bar.config));
+        self.refresh_look();
         self.sent.clear();
         for index in 0..self.bars.len() {
             if self.bars[index].ready && !self.bars[index].hidden {
@@ -1472,14 +1584,7 @@ impl App {
             self.skin = skin;
         }
         self.palette = palette;
-        self.push_appearance();
-    }
-
-    fn push_appearance(&self) {
-        self.broadcast_event(
-            "appearance",
-            |bar| json!({ "appearance": self.look(bar.kind), "themeCss": self.skin.css }),
-        );
+        self.refresh_look();
     }
 
     fn reload_page(&mut self) {

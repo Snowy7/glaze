@@ -163,6 +163,8 @@ pub struct Screen {
     pub paused: bool,
     /// Needs a frame even if the source is static (new, resized, resumed, reloaded).
     pub dirty: bool,
+    /// The swapchain images can be copied from (the backdrop needs it).
+    pub copy_src: bool,
 }
 
 impl Screen {
@@ -182,6 +184,11 @@ impl Screen {
             config.present_mode = wgpu::PresentMode::Mailbox;
         }
         config.desired_maximum_frame_latency = 1;
+        // Lets the backdrop copy the finished frame out of the swapchain.
+        let copy_src = caps.usages.contains(wgpu::TextureUsages::COPY_SRC);
+        if copy_src {
+            config.usage |= wgpu::TextureUsages::COPY_SRC;
+        }
         Ok(Self {
             surface,
             config,
@@ -189,6 +196,7 @@ impl Screen {
             window,
             paused: false,
             dirty: true,
+            copy_src,
         })
     }
 

@@ -1,6 +1,7 @@
 //! WebView2 for the bars: one shared environment, one controller per bar window, showing the
-//! page from `https://bars.mypaper/` (`bars/shell/dist`) with icons from
-//! `https://icons.bars.mypaper/` (the icon cache).
+//! page from `https://bars.mypaper/` (`bars/shell/dist`) with images from their own virtual
+//! hosts: `icons.` (the app icon cache), `packs.` (icon packs), `backdrop.` (wallpaper
+//! snapshots) and `assets.bars.mypaper` (images `bars.json` names).
 //!
 //! WebView2 calls back on the main thread, from inside `DispatchMessage`; the callbacks only queue
 //! a [`WebEvent`] for the main loop.
@@ -20,8 +21,6 @@ use webview2_com::{
 };
 use windows::Win32::Foundation::{E_POINTER, HWND, RECT};
 use windows::core::{HSTRING, Interface, PCWSTR, PWSTR};
-
-use crate::icons::ICON_HOST;
 
 pub const PAGE_HOST: &str = "bars.mypaper";
 pub const PAGE_URL: &str = "https://bars.mypaper/index.html";
@@ -111,10 +110,12 @@ pub struct Web {
     webview: ICoreWebView2,
 }
 
-/// Where the page and the icons come from.
+/// Where the page and its images come from. Each image folder is its own virtual host
+/// (`https://<host>/`), loaded cross-origin by the page.
 pub struct Folders<'a> {
     pub page: &'a Path,
-    pub icons: &'a Path,
+    /// `(host, folder)`: the app icon cache, icon packs, wallpaper snapshots, copied images.
+    pub images: &'a [(&'a str, &'a Path)],
 }
 
 impl Web {
@@ -175,13 +176,15 @@ impl Web {
                 &HSTRING::from(plain(folders.page)),
                 COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY,
             )?;
-            // Icons are plain images loaded cross-origin by the page.
-            std::fs::create_dir_all(folders.icons)?;
-            webview3.SetVirtualHostNameToFolderMapping(
-                &HSTRING::from(ICON_HOST),
-                &HSTRING::from(plain(folders.icons)),
-                COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW,
-            )?;
+            // Icons and other images are plain files loaded cross-origin by the page.
+            for (host, folder) in folders.images {
+                std::fs::create_dir_all(folder)?;
+                webview3.SetVirtualHostNameToFolderMapping(
+                    &HSTRING::from(*host),
+                    &HSTRING::from(plain(folder)),
+                    COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW,
+                )?;
+            }
 
             let mut token = 0i64;
             let events_for_messages = events.clone();

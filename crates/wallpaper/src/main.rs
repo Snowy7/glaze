@@ -14,6 +14,7 @@
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod backdrop;
 mod control;
 mod engine;
 mod gpu;

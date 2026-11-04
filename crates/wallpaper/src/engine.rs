@@ -18,6 +18,7 @@ use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
+use crate::backdrop::{Backdrop, Draw};
 use crate::gpu::{Gpu, Screen};
 use crate::hold::{Fact, HoldReasons, Holds};
 use crate::palette;
@@ -66,6 +67,8 @@ pub struct Engine {
     reasons: HoldReasons,
     /// The loaded theme's palette has not been written yet (once per load).
     palette_due: bool,
+    /// Publishes each screen's blurred frame for the bars (see `backdrop`).
+    backdrop: Backdrop,
 }
 
 impl Engine {
@@ -82,6 +85,7 @@ impl Engine {
             .collect::<Result<_>>()?;
         let hwnds: Vec<HWND> = screens.iter().map(|s| s.window.0).collect();
         let source = load_or_broken(&gpu, &theme, &hwnds);
+        let backdrop = Backdrop::new(monitors.as_deref(), |i| source.native(i));
         Ok(Self {
             theme,
             gpu,
@@ -100,6 +104,7 @@ impl Engine {
             holds: Holds::default(),
             reasons: HoldReasons::default(),
             palette_due: true,
+            backdrop,
         })
     }
 
@@ -272,6 +277,7 @@ impl Engine {
         // SAFETY: `cursor` outlives the call.
         let _ = unsafe { GetCursorPos(&mut cursor) };
         let mut drew = false;
+        let animated = !matches!(self.source.redraw(self.clock), Redraw::OnChange);
         for (index, screen) in self.screens.iter_mut().enumerate() {
             if screen.paused || !(due || screen.dirty) {
                 continue;
@@ -304,8 +310,23 @@ impl Engine {
                     encoder: &mut encoder,
                 },
             );
+            let publish = self.backdrop.encode(
+                &self.gpu,
+                Draw {
+                    screen: index,
+                    size: screen.size(),
+                    texture: &texture.texture,
+                    copy_src: screen.copy_src,
+                    held: self.held,
+                    animated,
+                },
+                &mut encoder,
+            );
             self.gpu.queue.submit([encoder.finish()]);
             self.gpu.queue.present(texture);
+            if publish {
+                self.backdrop.finish(&self.gpu, index);
+            }
             self.source.presented(index);
             drew = true;
         }
@@ -343,6 +364,7 @@ impl Engine {
         self.source = source;
         self.theme = theme;
         self.palette_due = true;
+        self.backdrop.reset(|i| self.source.native(i));
         self.next_frame = Instant::now();
         // A new source starts with every screen visible.
         self.shown.fill(Visibility::Live);

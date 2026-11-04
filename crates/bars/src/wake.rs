@@ -7,6 +7,7 @@ use std::sync::mpsc::Sender;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
 
+use crate::custom::Output;
 use crate::icons::{Described, Source};
 use crate::media::MediaInfo;
 use crate::tray::TrayItem;
@@ -31,6 +32,10 @@ pub enum Msg {
     Network,
     /// The notification-area icons, read through UI Automation.
     Tray(Vec<TrayItem>),
+    /// The wallpaper engine wrote a new snapshot (wallpaper glass).
+    Backdrop,
+    /// A custom module's command finished.
+    Custom(String, Output),
     /// A file watcher failed and stopped (logged).
     WatchError(PathBuf, String),
 }

@@ -1,8 +1,9 @@
-/* mypaper bars: a macOS-style top bar and dock. Everything is drawn from the appearance tokens that
-   appearance.ts sets on <html>; nothing here hard-codes a background, so a theme can restyle it. */
+/* mypaper bars: a top bar and a dock. Everything is drawn from the tokens style/apply.ts sets on
+   <html> (appearance, look, motion); nothing here hard-codes a background, so presets
+   (presets/*.css) and themes restyle it. docs/bars.md, "Styling", lists the hooks. */
 
 :root {
-  /* Defaults until the first appearance arrives (light text on a dark tint). */
+  /* Defaults until the first look arrives (light text on a dark tint). */
   --surface: rgb(16 16 16 / 0.55);
   --raised: rgb(16 16 16 / 0.92);
   --blur: 24px;
@@ -20,13 +21,50 @@
   --font: "Segoe UI Variable";
   --scale: 1;
 
-  --ease: cubic-bezier(0.22, 0.7, 0.2, 1);
+  --m-show: 220ms;
+  --m-show-ease: cubic-bezier(0.22, 0.7, 0.2, 1);
+  --m-hover: 150ms;
+  --m-hover-ease: cubic-bezier(0.22, 0.7, 0.2, 1);
+  --m-press: 110ms;
+  --m-press-ease: cubic-bezier(0.22, 0.7, 0.2, 1);
+  --m-open: 170ms;
+  --m-open-ease: cubic-bezier(0.22, 0.7, 0.2, 1);
+  --m-magnify: 80ms;
+  --m-magnify-ease: linear;
+  --m-bounce: 560ms;
+  --m-bounce-ease: ease-out;
+  --m-attention: 900ms;
+  --m-attention-ease: ease-in-out;
+
+  --corner: round;
   --shade: rgb(0 0 0 / 0.45); /* text shadow for surface: none */
   --drop: rgb(0 0 0 / 0.42); /* popover shadow */
+  --slide: 0 -8px; /* where flyouts slide in from: toward their bar */
 }
 :root[data-text="dark"] {
   --shade: rgb(255 255 255 / 0.55);
   --drop: rgb(0 0 0 / 0.2);
+}
+:root[data-edge="bottom"] {
+  --slide: 0 8px;
+}
+:root[data-edge="left"] {
+  --slide: -8px 0;
+}
+:root[data-edge="right"] {
+  --slide: 8px 0;
+}
+:root[data-corners="squircle"] {
+  --corner: squircle;
+}
+:root[data-corners="bevel"] {
+  --corner: bevel;
+}
+:root[data-corners="scoop"] {
+  --corner: scoop;
+}
+:root[data-corners="notch"] {
+  --corner: notch;
 }
 
 *,
@@ -73,7 +111,7 @@ img {
   display: none !important;
 }
 
-/* Glyphs: inline SVG sized by the font. */
+/* Glyphs: inline SVG sized by the font. An icon pack swaps them by key (style/icon-pack.ts). */
 .glyph {
   display: inline-flex;
   flex: none;
@@ -90,37 +128,239 @@ img {
   height: 0.95em;
 }
 
+/* --- Surfaces ------------------------------------------------------------------------------------
+   The top bar, each island and the dock's pill. Layers, back to front: `.bg` (the fill: color,
+   gradient, image or wallpaper glass, with its filter), `::before` (the tint and the grain), the
+   content, `::after` (the border ring; a gradient-capable ring cut out with a mask). Glow and
+   shadow are the box-shadow. Hover and active swap in their state's tokens. */
+
+.surface {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--s-radius, var(--radius));
+  corner-shape: var(--corner);
+  --bw: var(--s-bw, 1px);
+  --bi: var(--s-bi, linear-gradient(var(--line), var(--line)));
+  --glow: var(--s-glow, 0 0 0 0 transparent);
+  --shade-now: var(--s-shadow, 0 0 0 0 transparent);
+  box-shadow: var(--glow), var(--shade-now);
+  transition: box-shadow var(--m-hover) var(--m-hover-ease);
+}
+.surface:hover {
+  --bw: var(--s-bw-hover);
+  --bi: var(--s-bi-hover);
+  --glow: var(--s-glow-hover);
+  --shade-now: var(--s-shadow-hover);
+}
+.surface:has(:active) {
+  --bw: var(--s-bw-active);
+  --bi: var(--s-bi-active);
+  --glow: var(--s-glow-active);
+  --shade-now: var(--s-shadow-active);
+}
+.surface > .bg,
+.surface::before,
+.surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  corner-shape: inherit;
+  pointer-events: none;
+}
+.surface > .bg {
+  z-index: -2;
+  background-color: var(--s-fill-color, var(--surface));
+  background-image: var(--s-fill, none);
+  background-size: var(--s-fill-size, cover);
+  background-position: var(--s-fill-pos, center);
+  background-repeat: var(--s-fill-repeat, no-repeat);
+  filter: var(--s-filter, none);
+}
+/* Wallpaper glass: the engine's snapshot of this monitor, fixed to the window and offset by the
+   window's place on the monitor, so it lines up with the real wallpaper behind the bar. */
+[data-fill="wallpaper"][data-backdrop="on"] .surface > .bg {
+  background-color: transparent;
+  background-image: var(--backdrop);
+  background-size: var(--backdrop-size);
+  background-position: var(--backdrop-pos);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+.surface::before {
+  z-index: -1;
+  background: var(--s-noise, none), linear-gradient(var(--s-tint, transparent), var(--s-tint, transparent));
+}
+[data-fill="tint"] .surface::before,
+[data-fill="solid"] .surface::before,
+[data-fill="none"] .surface::before {
+  background: var(--s-noise, none);
+}
+.surface::after {
+  z-index: 3;
+  padding: var(--bw);
+  background: var(--bi) border-box;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+/* Glass without the engine's snapshot: what's behind is the wallpaper (bars reserve their band),
+   so the page's own blur only matters under popovers. */
+[data-surface="glass"]:not([data-fill="wallpaper"]) .surface > .bg {
+  backdrop-filter: blur(var(--blur)) saturate(1.5);
+}
+[data-surface="none"] .surface > .bg,
+[data-surface="none"] .surface::before {
+  display: none;
+}
+
+/* --- Items: module buttons and task buttons -------------------------------------------------------- */
+
+button.mod,
+.dock.taskbar .slot > .tile,
+.slot.extra > .tile {
+  --ibgc: var(--i-bgc, transparent);
+  --ibgi: var(--i-bgi, none);
+  --ifg: var(--i-fg, var(--t1));
+  --ibw: var(--i-bw, 0px);
+  --ibi: var(--i-bi, none);
+  --iglow: var(--i-glow, 0 0 0 0 transparent);
+  --iscale: var(--i-scale, 1);
+}
+button.mod:hover,
+.dock.taskbar .slot:hover > .tile,
+.slot.extra:hover > .tile {
+  --ibgc: var(--i-bgc-hover);
+  --ibgi: var(--i-bgi-hover);
+  --ifg: var(--i-fg-hover);
+  --ibw: var(--i-bw-hover);
+  --ibi: var(--i-bi-hover);
+  --iglow: var(--i-glow-hover);
+  --iscale: var(--i-scale-hover);
+}
+button.mod:active,
+button.mod.is-open,
+.dock.taskbar .slot[data-state="active"] > .tile,
+.dock.taskbar .slot:active > .tile {
+  --ibgc: var(--i-bgc-active);
+  --ibgi: var(--i-bgi-active);
+  --ifg: var(--i-fg-active);
+  --ibw: var(--i-bw-active);
+  --ibi: var(--i-bi-active);
+  --iglow: var(--i-glow-active);
+  --iscale: var(--i-scale-active);
+}
+button.mod,
+.dock.taskbar .slot > .tile,
+.slot.extra > .tile {
+  position: relative;
+  background-color: var(--ibgc);
+  background-image: var(--ibgi);
+  color: var(--ifg);
+  border-radius: var(--i-radius, 6px);
+  corner-shape: var(--corner);
+  box-shadow: var(--iglow);
+  scale: var(--iscale);
+  transition:
+    background-color var(--m-hover) var(--m-hover-ease),
+    color var(--m-hover) var(--m-hover-ease),
+    box-shadow var(--m-hover) var(--m-hover-ease),
+    scale var(--m-press) var(--m-press-ease);
+}
+button.mod::after,
+.dock.taskbar .slot > .tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: var(--ibw);
+  background: var(--ibi) border-box;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
 /* --- Top bar ------------------------------------------------------------------------------------ */
 
 .top {
   --mod-h: calc(var(--bar-h) - 6px);
   position: fixed;
-  inset: 0 0 auto 0;
+  top: var(--bar-margin, 0px);
+  left: var(--bar-margin, 0px);
+  right: var(--bar-margin, 0px);
   height: var(--bar-h);
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding: 0 5px;
+  padding: 0 var(--bar-pad, 5px);
   font-size: calc(13px * var(--scale));
   color: var(--t1);
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-  border-radius: var(--radius);
 }
-[data-surface="glass"] .top {
-  backdrop-filter: blur(var(--blur)) saturate(1.5);
+[data-position="bottom"] .top {
+  top: auto;
+  bottom: var(--bar-margin, 0px);
 }
+/* A strip is flush with the screen: square, with one hairline toward the windows. */
+[data-layout="strip"] .top.surface {
+  border-radius: 0;
+  --bw: 0px;
+}
+[data-layout="strip"] .top.surface::after {
+  padding: 0 0 var(--s-bw, 1px) 0;
+}
+[data-layout="strip"][data-position="bottom"] .top.surface::after {
+  padding: var(--s-bw, 1px) 0 0 0;
+}
+/* Floating with a set width, or hugging its modules. */
+[data-layout="floating"] .top[data-width="auto"],
+[data-layout="floating"] .top[data-width="dips"],
+[data-layout="floating"] .top[data-width="percent"] {
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: var(--bar-w, max-content);
+  max-width: calc(100vw - 2 * var(--bar-margin, 0px));
+}
+[data-layout="floating"] .top[data-width="auto"] {
+  display: flex;
+  gap: calc(var(--bar-pad, 6px) * 3);
+}
+/* Islands: a transparent rail; each group is its own surface. */
+[data-layout="islands"] .top {
+  --mod-h: calc(var(--bar-h) - 8px);
+  padding: 0;
+}
+.island {
+  display: flex;
+  align-items: center;
+  height: var(--bar-h);
+  padding: 0 var(--bar-pad, 4px);
+  gap: var(--bar-gap, 2px);
+}
+[data-layout="islands"] .zone {
+  gap: var(--bar-margin, 6px);
+}
+
 .zone {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: var(--bar-gap, 1px);
   min-width: 0;
+  height: 100%;
 }
 .zone.right {
   justify-content: flex-end;
 }
 .zone.center {
   justify-content: center;
+}
+.sep {
+  flex: none;
+  width: 1px;
+  height: 46%;
+  margin: 0 3px;
+  background: var(--edge);
 }
 
 .mod {
@@ -130,19 +370,9 @@ img {
   gap: 0.5em;
   height: var(--mod-h);
   padding: 0 0.6em;
-  border-radius: 0.42em;
+  border-radius: var(--i-radius, 0.42em);
   white-space: pre;
   font-variant-numeric: tabular-nums;
-  transition:
-    background-color 150ms var(--ease),
-    color 150ms var(--ease);
-}
-button.mod:hover {
-  background: var(--fill-2);
-  color: var(--t0);
-}
-button.mod:active {
-  background: var(--fill-3);
 }
 .mod.icon-only {
   padding: 0 0.5em;
@@ -164,9 +394,27 @@ button.mod:active {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.clock {
-  color: var(--t0);
+button.mod.clock {
+  --i-fg: var(--t0);
   font-weight: 500;
+  line-height: 1.25;
+}
+.search-label {
+  display: none;
+}
+.custom-text {
+  max-width: 22em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.custom-emoji {
+  justify-content: center;
+  align-items: center;
+  font-size: 1em;
+  line-height: 1;
+}
+.mod.custom[data-error="true"] {
+  opacity: 0.55;
 }
 
 /* Workspaces: one dot per desktop, the current one stretched into a pill. */
@@ -181,8 +429,8 @@ button.mod:active {
   border-radius: 99px;
   background: var(--t3);
   transition:
-    width 220ms var(--ease),
-    background-color 180ms var(--ease);
+    width var(--m-hover) var(--m-hover-ease),
+    background-color var(--m-hover) var(--m-hover-ease);
 }
 .ws-dot::before {
   content: "";
@@ -264,7 +512,7 @@ button.mod:active {
   stroke: var(--t0);
   stroke-linecap: round;
   stroke-dasharray: var(--p, 0) 100;
-  transition: stroke-dasharray 400ms var(--ease);
+  transition: stroke-dasharray 400ms var(--m-hover-ease);
 }
 
 /* Text legibility with no surface behind it. */
@@ -276,7 +524,7 @@ button.mod:active {
   filter: drop-shadow(0 1px 2px var(--shade));
 }
 
-/* --- Popovers, menus, HUD -------------------------------------------------------------------------- */
+/* --- Popovers, menus, HUD, previews ----------------------------------------------------------------- */
 
 #overlay {
   position: fixed;
@@ -291,6 +539,7 @@ button.mod:active {
   font-size: calc(13px * var(--scale));
   background: var(--raised);
   border-radius: 10px;
+  corner-shape: var(--corner);
   box-shadow:
     0 0 0 1px var(--edge),
     0 10px 30px var(--drop),
@@ -299,12 +548,62 @@ button.mod:active {
 [data-surface="glass"] .layer {
   backdrop-filter: blur(var(--blur)) saturate(1.5);
 }
-/* Every flyout (flyout.ts) pops in from the side toward its anchor. */
+/* Every flyout (flyout.ts) enters from the side toward its anchor, in the `open` style. */
 .flyout {
   outline: none;
   transform-origin: var(--origin, 50% 0);
-  animation: pop 150ms var(--ease);
+  animation: fly-pop var(--m-open) var(--m-open-ease) both;
 }
+[data-m-open="fade"] .flyout {
+  animation-name: fly-fade;
+}
+[data-m-open="slide"] .flyout {
+  animation-name: fly-slide;
+}
+[data-m-open="scale"] .flyout {
+  animation-name: fly-scale;
+}
+[data-m-open="none"] .flyout {
+  animation: none;
+}
+.flyout.leaving {
+  pointer-events: none;
+  animation: fly-out var(--m-open) var(--m-open-ease) both;
+}
+[data-m-open="none"] .flyout.leaving {
+  animation: none;
+  opacity: 0;
+}
+@keyframes fly-pop {
+  from {
+    opacity: 0;
+    scale: 0.94;
+  }
+}
+@keyframes fly-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fly-slide {
+  from {
+    opacity: 0;
+    translate: var(--slide);
+  }
+}
+@keyframes fly-scale {
+  from {
+    opacity: 0;
+    scale: 0.82;
+  }
+}
+@keyframes fly-out {
+  to {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+
 .menu {
   min-width: 204px;
   max-width: 300px;
@@ -322,6 +621,7 @@ button.mod:active {
   border-radius: 6px;
   text-align: left;
   color: var(--t0);
+  transition: background-color var(--m-hover) var(--m-hover-ease);
 }
 .menu-item:hover,
 .menu-item:focus-visible {
@@ -377,7 +677,7 @@ button.mod:active {
   gap: 0.75em;
   padding: 0.6em 0.85em;
   pointer-events: none;
-  animation: pop 140ms var(--ease);
+  animation: fly-pop var(--m-open) var(--m-open-ease);
 }
 .hud-track {
   width: 88px;
@@ -398,11 +698,80 @@ button.mod:active {
   font-variant-numeric: tabular-nums;
 }
 
-@keyframes pop {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
+/* Window previews: a card per window; the host draws each live thumbnail over `.pv-thumb`. */
+.preview {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+}
+.pv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  text-align: left;
+  transition: background-color var(--m-hover) var(--m-hover-ease);
+}
+.pv-card:hover {
+  background: var(--fill-2);
+}
+.pv-card[data-active="true"] {
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+.pv-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 20px;
+  font-size: 12px;
+  color: var(--t1);
+}
+.pv-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+.ph-mini {
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--fill-3);
+  font-size: 10px;
+  font-weight: 600;
+}
+.pv-title {
+  flex: 1;
+  width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pv-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transition:
+    opacity var(--m-hover) var(--m-hover-ease),
+    background-color var(--m-hover) var(--m-hover-ease);
+}
+.pv-card:hover .pv-close {
+  opacity: 1;
+}
+.pv-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+.pv-thumb {
+  border-radius: 6px;
+  background: var(--fill-1);
 }
 
 /* --- Dock --------------------------------------------------------------------------------------- */
@@ -410,6 +779,7 @@ button.mod:active {
 .dock {
   --pad: 5px;
   --edge-gap: 6px;
+  --gap: 6px;
   position: fixed;
   inset: 0;
   display: flex;
@@ -419,6 +789,11 @@ button.mod:active {
   align-items: flex-end;
   justify-content: center;
   padding-bottom: var(--edge-gap);
+}
+[data-position="top"] .dock {
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: var(--edge-gap);
 }
 [data-position="left"] .dock {
   align-items: center;
@@ -433,64 +808,84 @@ button.mod:active {
 
 .pill {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
   pointer-events: auto;
   padding: var(--pad);
 }
-/* The pill's surface is a layer of its own so it can stretch with the magnified icons
+[data-position="left"] .pill,
+[data-position="right"] .pill {
+  flex-direction: column;
+}
+/* The pill's surface is a layer of its own, so it can stretch with the magnified icons
    (--ga / --gb: how far the first and last icon have spread past each end). */
-.pill::before {
-  content: "";
+.pill-surface {
   position: absolute;
   z-index: 0;
-  pointer-events: none;
   inset: 0;
-  background: var(--surface);
-  border-radius: var(--radius);
-  box-shadow:
-    inset 0 0 0 1px var(--line),
-    0 4px 14px var(--drop);
-  transition: inset 220ms var(--ease);
+  transition:
+    left var(--m-show) var(--m-show-ease),
+    right var(--m-show) var(--m-show-ease),
+    top var(--m-show) var(--m-show-ease),
+    bottom var(--m-show) var(--m-show-ease),
+    box-shadow var(--m-hover) var(--m-hover-ease);
 }
-[data-position="bottom"] .pill::before {
+[data-position="bottom"] .pill-surface,
+[data-position="top"] .pill-surface {
   left: calc(var(--ga, 0px) * -1);
   right: calc(var(--gb, 0px) * -1);
 }
-[data-position="left"] .pill::before,
-[data-position="right"] .pill::before {
+[data-position="left"] .pill-surface,
+[data-position="right"] .pill-surface {
   top: calc(var(--ga, 0px) * -1);
   bottom: calc(var(--gb, 0px) * -1);
 }
-.pill:has(.tracking)::before {
-  transition-duration: 70ms;
-  transition-timing-function: linear;
+.pill:has(.tracking) .pill-surface {
+  transition-duration: var(--m-magnify);
+  transition-timing-function: var(--m-magnify-ease);
 }
-[data-surface="glass"] .pill::before {
-  backdrop-filter: blur(var(--blur)) saturate(1.5);
-}
-.items {
+.items,
+.extras,
+.tb-group,
+.tb-zone {
   position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--gap);
 }
-[data-position="left"] .items,
-[data-position="right"] .items {
+[data-position="left"] :is(.items, .extras, .tb-group, .tb-zone),
+[data-position="right"] :is(.items, .extras, .tb-group, .tb-zone) {
   flex-direction: column;
+}
+.extras:empty {
+  display: none;
 }
 
 .slot {
   position: relative;
   flex: none;
-  width: var(--size);
+  width: var(--slot, var(--size));
   height: var(--size);
-  transition: transform 220ms var(--ease);
+  transition: transform 220ms var(--m-show-ease);
+}
+.slot > .tile {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.dock.floating .slot:not(.extra) > .tile {
+  display: none;
 }
 .icon {
   position: absolute;
   inset: 0;
   transform-origin: 50% 100%;
-  transition: transform 220ms var(--ease);
+  transition: transform 220ms var(--m-show-ease);
+}
+[data-position="top"] .icon {
+  transform-origin: 50% 0;
 }
 [data-position="left"] .icon {
   transform-origin: 0 50%;
@@ -498,7 +893,11 @@ button.mod:active {
 [data-position="right"] .icon {
   transform-origin: 100% 50%;
 }
-.icon img {
+.pic {
+  position: absolute;
+  inset: 0;
+}
+.pic img {
   display: block;
   width: 100%;
   height: 100%;
@@ -506,88 +905,247 @@ button.mod:active {
   pointer-events: none;
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.3));
 }
+.pic .mask {
+  width: 100%;
+  height: 100%;
+  background: var(--t0);
+  -webkit-mask: var(--mask) center / 72% no-repeat;
+  mask: var(--mask) center / 72% no-repeat;
+}
 .ph {
   width: 100%;
   height: 100%;
   display: grid;
   place-items: center;
   border-radius: 22%;
+  corner-shape: var(--corner);
   background: var(--fill-3);
   box-shadow: inset 0 0 0 1px var(--edge);
   font-size: calc(var(--size) * 0.42);
   font-weight: 600;
   color: var(--t1);
 }
+/* Floating extras (trash, show desktop): a glyph on a quiet tile. */
+.slot.extra .icon {
+  display: grid;
+  place-items: center;
+  color: var(--t0);
+}
+.dock.floating .slot.extra > .tile {
+  border-radius: 23%;
+  background: linear-gradient(180deg, var(--fill-3), var(--fill-1));
+  box-shadow:
+    inset 0 0 0 1px var(--edge),
+    inset 0 1px 0 var(--fill-3);
+}
+.slot.extra .glyph {
+  width: 52%;
+  height: 52%;
+}
 
-/* Running indicator: in the pill's padding, never scaled with the icon. */
+/* Count badge: windows of an app, on the icon's corner (it scales with magnify). */
+.count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: var(--raised);
+  box-shadow:
+    0 0 0 1px var(--edge),
+    0 2px 6px var(--drop);
+  color: var(--t0);
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.count:empty {
+  display: none;
+}
+
+/* Running indicators: in the pill's padding, never scaled with the icon. */
 .dot {
   position: absolute;
-  width: 3px;
-  height: 3px;
+  pointer-events: none;
   border-radius: 99px;
-  background: var(--t2);
+  background: var(--ind-running, var(--t2));
   opacity: 0;
   transition:
-    opacity 180ms var(--ease),
-    width 220ms var(--ease),
-    height 220ms var(--ease),
-    background-color 180ms var(--ease);
-}
-[data-position="bottom"] .dot {
-  left: 50%;
-  bottom: -4px;
-  margin-left: -1.5px;
-}
-[data-position="left"] .dot {
-  top: 50%;
-  left: -4px;
-  margin-top: -1.5px;
-}
-[data-position="right"] .dot {
-  top: 50%;
-  right: -4px;
-  margin-top: -1.5px;
+    opacity var(--m-hover) var(--m-hover-ease),
+    width var(--m-show) var(--m-show-ease),
+    height var(--m-show) var(--m-show-ease),
+    background-color var(--m-hover) var(--m-hover-ease),
+    box-shadow var(--m-hover) var(--m-hover-ease);
 }
 .slot:not([data-state="none"]) .dot {
   opacity: 1;
 }
 .slot[data-state="active"] .dot {
-  background: var(--t0);
+  background: var(--ind-active, var(--t0));
 }
-[data-position="bottom"] .slot[data-state="active"] .dot {
+.slot[data-attention="true"] .dot {
+  background: var(--ind-attention);
+}
+/* Where the indicator sits: centered in the padding on the screen-edge side. */
+[data-position="bottom"] .dot,
+[data-position="top"] .dot {
+  left: 50%;
+  translate: -50% 0;
+}
+[data-position="bottom"] .dot {
+  bottom: calc(var(--pad) / -2 - 2px);
+}
+[data-position="top"] .dot {
+  top: calc(var(--pad) / -2 - 2px);
+}
+[data-position="left"] .dot,
+[data-position="right"] .dot {
+  top: 50%;
+  translate: 0 -50%;
+}
+[data-position="left"] .dot {
+  left: calc(var(--pad) / -2 - 2px);
+}
+[data-position="right"] .dot {
+  right: calc(var(--pad) / -2 - 2px);
+}
+/* dot */
+.dot {
+  width: 4px;
+  height: 4px;
+}
+[data-indicator="dot"]:is([data-position="bottom"], [data-position="top"]) .slot[data-state="active"] .dot {
   width: 10px;
-  margin-left: -5px;
 }
-[data-position="left"] .slot[data-state="active"] .dot,
-[data-position="right"] .slot[data-state="active"] .dot {
+[data-indicator="dot"]:is([data-position="left"], [data-position="right"]) .slot[data-state="active"] .dot {
   height: 10px;
-  margin-top: -5px;
+}
+/* bar: a line along the icon */
+[data-indicator="bar"]:is([data-position="bottom"], [data-position="top"]) .dot {
+  width: 36%;
+  height: 2px;
+}
+[data-indicator="bar"]:is([data-position="bottom"], [data-position="top"]) .slot[data-state="active"] .dot {
+  width: 72%;
+}
+[data-indicator="bar"]:is([data-position="left"], [data-position="right"]) .dot {
+  width: 2px;
+  height: 36%;
+}
+[data-indicator="bar"]:is([data-position="left"], [data-position="right"]) .slot[data-state="active"] .dot {
+  height: 72%;
+}
+/* glow: a soft light under the icon */
+[data-indicator="glow"] .dot {
+  width: 22px;
+  height: 3px;
+  box-shadow: 0 0 10px 2px var(--ind-running);
+}
+[data-indicator="glow"] .slot[data-state="active"] .dot {
+  width: 30px;
+  box-shadow:
+    0 0 12px 3px var(--ind-active),
+    0 0 26px 4px color-mix(in srgb, var(--ind-active) 45%, transparent);
+}
+[data-indicator="glow"]:is([data-position="left"], [data-position="right"]) .dot {
+  width: 3px;
+  height: 22px;
+}
+/* pill: Windows 11's short bar, longer and accented in front */
+[data-indicator="pill"] .dot {
+  width: 6px;
+  height: 3px;
+}
+[data-indicator="pill"] .slot[data-state="active"] .dot {
+  width: 16px;
+}
+[data-indicator="pill"]:is([data-position="left"], [data-position="right"]) .dot {
+  width: 3px;
+  height: 6px;
+}
+[data-indicator="pill"]:is([data-position="left"], [data-position="right"]) .slot[data-state="active"] .dot {
+  height: 16px;
+}
+[data-indicator="none"] .dot {
+  display: none;
+}
+
+/* Attention: a light that pulses (or the icon bounces) a few times, then the indicator keeps the
+   attention color. Bounded, so nothing keeps animating. */
+.icon::before {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--ind-attention) 70%, transparent), transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+[data-attention="pulse"] .slot[data-attention="true"] .icon::before {
+  animation: attention-pulse var(--m-attention) var(--m-attention-ease) 6;
+}
+[data-attention="bounce"] .slot[data-attention="true"] .pic {
+  animation: launch-bounce var(--m-attention) var(--m-attention-ease) 3;
+}
+@keyframes attention-pulse {
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Launch bounce: while a launched app shows no window yet. */
+.slot.launching .pic {
+  animation: launch-bounce var(--m-bounce) var(--m-bounce-ease) infinite;
+}
+@keyframes launch-bounce {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  40% {
+    translate: var(--hop, 0 calc(var(--size) * -0.38));
+  }
+}
+[data-position="top"] .dock {
+  --hop: 0 calc(var(--size) * 0.38);
+}
+[data-position="left"] .dock {
+  --hop: calc(var(--size) * 0.38) 0;
+}
+[data-position="right"] .dock {
+  --hop: calc(var(--size) * -0.38) 0;
 }
 
 .divider {
   flex: none;
   background: var(--edge);
 }
-[data-position="bottom"] .divider {
+[data-position="bottom"] .divider,
+[data-position="top"] .divider {
   width: 1px;
   height: calc(var(--size) * 0.6);
-  transition: transform 180ms var(--ease);
+  transition: transform 180ms var(--m-show-ease);
 }
 [data-position="left"] .divider,
 [data-position="right"] .divider {
   width: calc(var(--size) * 0.6);
   height: 1px;
-  transition: transform 180ms var(--ease);
+  transition: transform 180ms var(--m-show-ease);
 }
 
 /* While the pointer tracks, transforms follow it nearly 1:1. */
 .items.tracking .slot,
 .items.tracking .icon {
-  transition: transform 70ms linear;
+  transition: transform var(--m-magnify) var(--m-magnify-ease);
 }
 .items.shifting .slot:not(.dragged),
 .items.shifting .divider {
-  transition: transform 180ms var(--ease);
+  transition: transform 180ms var(--m-show-ease);
 }
 .items.instant .slot,
 .items.instant .icon,
@@ -599,17 +1157,17 @@ button.mod:active {
   transition: none;
   opacity: 0.96;
 }
-.slot.dragged .icon img {
+.slot.dragged .pic img {
   filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.4));
 }
 .slot.dragged.far {
   opacity: 0.55;
 }
 .slot.dragged.poof .icon {
-  animation: poof 240ms var(--ease) forwards;
+  animation: poof 240ms var(--m-show-ease) forwards;
 }
 .slot.enter .icon {
-  animation: slot-in 260ms var(--ease) backwards;
+  animation: slot-in 260ms var(--m-show-ease) backwards;
 }
 @keyframes poof {
   to {
@@ -631,6 +1189,7 @@ button.mod:active {
   top: 0;
   padding: 6px 11px;
   border-radius: 8px;
+  corner-shape: var(--corner);
   background: var(--raised);
   box-shadow:
     0 0 0 1px var(--edge),
@@ -642,28 +1201,206 @@ button.mod:active {
   opacity: 0;
   pointer-events: none;
   transition:
-    opacity 120ms var(--ease),
-    transform 90ms var(--ease);
+    opacity 120ms var(--m-hover-ease),
+    transform 90ms var(--m-hover-ease);
 }
 .dock-label.show {
   opacity: 1;
 }
 
-/* Auto-hide: the pill sits off the screen edge until revealed. */
+/* --- The taskbar style: the pill stretched along its edge --------------------------------------- */
+
+.dock.taskbar {
+  --mod-h: calc(var(--size) + 16px);
+}
+[data-position="bottom"] .dock.taskbar,
+[data-position="top"] .dock.taskbar {
+  align-items: stretch;
+  padding: 0;
+}
+[data-position="bottom"] .dock.taskbar {
+  align-items: flex-end;
+}
+[data-position="bottom"] .dock.taskbar .pill,
+[data-position="top"] .dock.taskbar .pill {
+  width: calc(100% - 2 * var(--edge-gap));
+  margin: var(--edge-gap);
+  height: calc(var(--size) + 2 * var(--pad));
+  padding: 0 6px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: 0;
+}
+.dock.taskbar .pill[data-align="center"] .tb-group {
+  grid-column: 2;
+}
+.dock.taskbar .pill[data-align="start"] {
+  grid-template-columns: auto 1fr auto auto;
+}
+.dock.taskbar .pill[data-align="start"] .tb-group {
+  grid-column: 1;
+}
+.dock.taskbar .tb-end {
+  grid-column: 3;
+  justify-self: end;
+  gap: 2px;
+}
+.dock.taskbar .extras {
+  grid-column: 4;
+  align-self: stretch;
+}
+[data-position="left"] .dock.taskbar,
+[data-position="right"] .dock.taskbar {
+  align-items: stretch;
+  padding: 0;
+}
+[data-position="left"] .dock.taskbar .pill,
+[data-position="right"] .dock.taskbar .pill {
+  height: calc(100% - 2 * var(--edge-gap));
+  margin: var(--edge-gap);
+  width: calc(var(--size) + 2 * var(--pad));
+  padding: 6px 0;
+  justify-content: space-between;
+}
+.dock.taskbar .tb-group {
+  gap: var(--gap);
+}
+.dock.taskbar .tb-start {
+  gap: 2px;
+}
+.dock.taskbar .slot {
+  height: calc(var(--size) + 16px);
+}
+[data-position="left"] .dock.taskbar .slot,
+[data-position="right"] .dock.taskbar .slot {
+  width: calc(var(--size) + 16px);
+  height: var(--slot);
+}
+.dock.taskbar .icon {
+  inset: auto;
+  top: 8px;
+  left: calc((var(--slot) - var(--size)) / 2);
+  width: var(--size);
+  height: var(--size);
+}
+.dock.taskbar .slot:has(.title) .icon {
+  left: 10px;
+}
+.dock.taskbar .title {
+  position: absolute;
+  left: calc(var(--size) + 18px);
+  right: 10px;
+  top: 50%;
+  translate: 0 -50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: calc(12px * var(--scale));
+  color: var(--t1);
+}
+.dock.taskbar .slot[data-state="active"] .title {
+  color: var(--t0);
+}
+.dock.taskbar .count {
+  top: -5px;
+  right: -7px;
+}
+.dock.taskbar .dot {
+  bottom: 2px;
+}
+.dock.taskbar .slot[data-attention="true"] > .tile {
+  background-color: color-mix(in srgb, var(--ind-attention) 30%, transparent);
+}
+.dock.taskbar .mod {
+  font-size: calc(12px * var(--scale));
+}
+/* The show-desktop sliver at the far end, like Windows. */
+.dock.taskbar .slot.extra.desktop {
+  width: 10px;
+  height: 100%;
+  margin-left: 4px;
+  border-left: 1px solid var(--edge);
+}
+.dock.taskbar .slot.extra.desktop .icon {
+  display: none;
+}
+.dock.taskbar .slot.extra.desktop > .tile {
+  border-radius: 0;
+}
+
+/* --- Showing: the bar's own entrance, and the auto-hide dock's reveal ------------------------------- */
+
+.entering[data-m-show="fade"] :is(.top, .island, .pill) {
+  animation: bar-in-fade var(--m-show) var(--m-show-ease) both;
+}
+.entering[data-m-show="slide"] :is(.top, .pill) {
+  animation: bar-in-slide var(--m-show) var(--m-show-ease) both;
+}
+.entering[data-m-show="slide"] .island {
+  animation: bar-in-slide var(--m-show) var(--m-show-ease) both;
+}
+.entering[data-m-show="pop"] :is(.top, .island, .pill) {
+  animation: bar-in-pop var(--m-show) var(--m-show-ease) both;
+}
+.entering[data-m-show="scale"] :is(.top, .island, .pill) {
+  animation: bar-in-scale var(--m-show) var(--m-show-ease) both;
+}
+:root {
+  --away: 0 -120%;
+}
+[data-edge="bottom"] {
+  --away: 0 120%;
+}
+[data-edge="left"] {
+  --away: -120% 0;
+}
+[data-edge="right"] {
+  --away: 120% 0;
+}
+@keyframes bar-in-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes bar-in-slide {
+  from {
+    translate: var(--away);
+  }
+}
+@keyframes bar-in-pop {
+  from {
+    opacity: 0;
+    scale: 0.92;
+  }
+}
+@keyframes bar-in-scale {
+  from {
+    scale: 0.96 0.6;
+    opacity: 0;
+  }
+}
+
+/* Auto-hide: the pill sits off the screen edge (or fades) until revealed. */
 .dock.autohide .pill {
-  transition: transform 220ms var(--ease);
+  transition:
+    translate var(--m-show) var(--m-show-ease),
+    opacity var(--m-show) var(--m-show-ease),
+    scale var(--m-show) var(--m-show-ease);
 }
 .dock.autohide:not(.revealed) .pill {
   pointer-events: none;
+  translate: var(--away);
 }
-[data-position="bottom"] .dock.autohide:not(.revealed) .pill {
-  transform: translateY(calc(100% + 24px));
+[data-m-show="fade"] .dock.autohide:not(.revealed) .pill {
+  translate: none;
+  opacity: 0;
 }
-[data-position="left"] .dock.autohide:not(.revealed) .pill {
-  transform: translateX(calc(-100% - 24px));
-}
-[data-position="right"] .dock.autohide:not(.revealed) .pill {
-  transform: translateX(calc(100% + 24px));
+[data-m-show="pop"] .dock.autohide:not(.revealed) .pill,
+[data-m-show="scale"] .dock.autohide:not(.revealed) .pill {
+  translate: none;
+  opacity: 0;
+  scale: 0.85;
 }
 .dock.autohide:not(.revealed) .dock-label {
   display: none;
@@ -678,6 +1415,14 @@ button.mod:active {
   animation-play-state: paused !important;
 }
 
+/* Reduce motion (Windows' setting, or animation.reduceMotion): no movement at all. */
+[data-motion="reduce"] *,
+[data-motion="reduce"] *::before,
+[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -686,4 +1431,20 @@ button.mod:active {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Performance mode: no blur, no grain, no glow, no animation. */
+[data-perf="on"] * {
+  backdrop-filter: none !important;
+}
+[data-perf="on"] .surface > .bg {
+  filter: none;
+}
+[data-perf="on"] .surface::before {
+  background: linear-gradient(var(--s-tint, transparent), var(--s-tint, transparent));
+}
+[data-perf="on"] .surface,
+[data-perf="on"] button.mod {
+  --glow: 0 0 0 0 transparent;
+  --iglow: 0 0 0 0 transparent;
 }
