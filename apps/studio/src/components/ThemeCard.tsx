@@ -1,66 +1,84 @@
-import { SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { Pencil, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
-import { fileUrl, type Kind, type ThemeEntry } from "../lib/api";
+import { fileUrl, licenseName, type Kind, type ThemeEntry } from "../lib/api";
 import { KINDS, placeholderBackground } from "../lib/kinds";
 import { useStudio } from "../lib/studio";
-import { Badge, Button, IconButton } from "./ui";
+import { Badge, IconButton } from "./ui";
 
 export const ORIGIN_LABEL = { user: "Yours", bundled: "Built in", external: "Custom location" } as const;
 
 type Props = {
   theme: ThemeEntry;
   index: number;
-  /** Opens the customize sheet for this theme. */
-  onCustomize: (theme: ThemeEntry) => void;
+  /** Opens the theme editor (a built-in theme is copied there first). */
+  onEdit: (theme: ThemeEntry) => void;
 };
 
-/** One theme in the gallery: its preview, what it is, and Apply. */
-export function ThemeCard({ theme, index, onCustomize }: Props) {
+/** One theme in the gallery: click the picture to put it on (with an Undo); Edit opens the theme editor. */
+export function ThemeCard({ theme, index, onEdit }: Props) {
   const { applyTheme, busy, pendingPreviews } = useStudio();
   const applying = busy.has(`apply:${theme.id}`);
   const broken = theme.error !== null;
-  const meta = [ORIGIN_LABEL[theme.origin], ...looks(theme).map((look) => look.label)];
+  const credit = theme.credit;
+  // A bundled theme says who made it and under what license; others say where they're from.
+  const meta = theme.hidden
+    ? ["From an earlier version"]
+    : credit?.author
+      ? [credit.author, ...(credit.license ? [licenseName(credit.license)] : [])]
+      : [ORIGIN_LABEL[theme.origin], ...looks(theme).map((look) => look.label)];
 
   return (
     <article
       aria-label={theme.name}
       style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}
-      className={`group flex animate-[rise_360ms_ease-out_backwards] flex-col rounded-xl bg-surface p-1.5 shadow-card ring-1 transition-[transform,box-shadow,background-color] duration-200 focus-within:-translate-y-0.5 hover:-translate-y-0.5 hover:bg-surface-hi/60 ${
-        theme.active ? "ring-ink-3" : "ring-line-strong hover:ring-line-hi focus-within:ring-line-hi"
-      }`}
+      className="group flex animate-[rise_360ms_ease-out_backwards] flex-col"
     >
-      <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-surface-hi">
+      <button
+        type="button"
+        disabled={broken || applying}
+        aria-label={theme.active ? `${theme.name}, on your desktop now` : `Use ${theme.name}`}
+        onClick={() => !theme.active && void applyTheme(theme)}
+        className={`relative aspect-[16/10] cursor-default overflow-hidden rounded-xl bg-surface-hi shadow-card transition-[transform,box-shadow] duration-200 enabled:hover:-translate-y-0.5 disabled:cursor-default ${
+          theme.active ? "ring-2 ring-ink ring-offset-[3px] ring-offset-canvas" : "ring-1 ring-line-strong enabled:hover:ring-line-hi"
+        }`}
+      >
         <ThemePreview name={theme.name} kind={theme.kind} preview={theme.preview} loading={pendingPreviews.has(theme.id)} zoom />
-        <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2">
+        <span className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2">
           <KindBadge kind={theme.kind} />
           {theme.active && (
             <Badge tone="solid">
               <span className="size-1.5 rounded-full bg-current" aria-hidden />
-              Active
+              On now
             </Badge>
           )}
-        </div>
-      </div>
+        </span>
+        {credit?.noncommercial && (
+          <span className="absolute bottom-2 left-2" title="Free for personal use. Don't sell it, and share changes under the same license.">
+            <Badge tone="overlay">Non-commercial · ShareAlike</Badge>
+          </span>
+        )}
+        {!theme.active && !broken && (
+          <span className="absolute inset-0 grid place-items-center bg-black/35 opacity-0 transition-opacity duration-150 group-hover:opacity-100" aria-hidden>
+            <span className="flex h-8 items-center gap-1.5 rounded-lg bg-white px-3.5 text-[13px] font-semibold text-black shadow-pop">{applying ? "Applying…" : "Use this theme"}</span>
+          </span>
+        )}
+      </button>
 
-      <div className="flex items-center gap-1.5 pt-2.5 pr-1 pb-1 pl-2">
+      <div className="flex items-center gap-1.5 pt-2.5 pr-0.5 pl-1">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[14px] font-semibold tracking-tight text-ink">{theme.name}</h3>
-          <p className="truncate text-[12px] text-ink-3" title={theme.dir}>
+          <h3 className="truncate text-[14px] font-semibold tracking-tight text-ink" title={theme.name}>
+            {/* The badge on the picture says it, so the title doesn't repeat it. */}
+            {credit?.noncommercial ? theme.name.replace(/\s*\(non-commercial\)$/i, "") : theme.name}
+          </h3>
+          <p className="truncate text-[12px] text-ink-3" title={credit?.source ?? theme.dir}>
             {meta.join(" · ")}
           </p>
         </div>
-        <IconButton icon={SlidersHorizontal} size="sm" variant="ghost" label={`Customize ${theme.name}`} disabled={broken} onClick={() => onCustomize(theme)} />
-        {theme.active ? (
-          <span className="px-2 text-[12.5px] font-medium text-ink-3">In use</span>
-        ) : (
-          <Button size="sm" busy={applying} disabled={broken} onClick={() => void applyTheme(theme)} aria-label={`Apply ${theme.name}`}>
-            Apply
-          </Button>
-        )}
+        <IconButton icon={Pencil} size="sm" variant="ghost" label={theme.origin === "user" ? `Edit ${theme.name}` : `Copy and edit ${theme.name}`} disabled={broken} onClick={() => onEdit(theme)} />
       </div>
       {theme.error && (
-        <p className="selectable mx-2 mb-1.5 flex items-start gap-1.5 text-xs text-ink-2" title={theme.error}>
+        <p className="selectable mx-2 mb-1.5 flex items-start gap-1.5 text-[12px] text-ink-2" title={theme.error}>
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           <span className="line-clamp-2">{errorSummary(theme.error)}</span>
         </p>
@@ -72,9 +90,9 @@ export function ThemeCard({ theme, index, onCustomize }: Props) {
 /** What the theme restyles besides the wallpaper. */
 export function looks(theme: ThemeEntry): { label: string; hint: string }[] {
   return [
-    theme.styled && { label: "Windows", hint: "Styles window colors, corners and backdrop" },
-    theme.widgetsSkin && { label: "Widgets", hint: "Sets how desktop widgets look" },
-    theme.barsSkin && { label: "Bars", hint: "Sets how the top bar and dock look" },
+    theme.styled && { label: "Windows", hint: "Changes window colors, corners and material" },
+    theme.widgetsSkin && { label: "Widgets", hint: "Changes how widgets look" },
+    theme.barsSkin && { label: "Bars", hint: "Changes how the top bar and dock look" },
   ].filter((look) => look !== false);
 }
 
@@ -106,8 +124,7 @@ export function ThemePreview({ name, kind, preview, loading = false, zoom = fals
   const Icon = kind ? KINDS[kind].icon : TriangleAlert;
   return (
     <div className={`relative grid size-full place-items-center ${motion}`} style={{ background: placeholderBackground(name) }}>
-      <div className="grain absolute inset-0" aria-hidden />
-      <Icon className={`relative size-9 text-white/55 ${loading ? "animate-pulse" : ""}`} strokeWidth={1.4} aria-hidden />
+      <Icon className={`relative size-8 text-white/45 ${loading ? "animate-pulse" : ""}`} strokeWidth={1.5} aria-hidden />
     </div>
   );
 }

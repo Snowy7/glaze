@@ -1,8 +1,43 @@
-// Small read-only data hooks for the Bars and Widgets pages.
+// Small read-only data hooks for the pages and the stage.
 
 import { useEffect, useState } from "react";
 
-import { api, fileUrl, onChanged, type ActiveSkins, type MonitorInfo, type WidgetInfo } from "./api";
+import { api, fileUrl, onChanged, type ActiveSkins, type BarsCatalog, type MonitorInfo, type WidgetInfo } from "./api";
+import { resolve, type Resolved } from "./barsDoc";
+import type { BarsDoc } from "./barsSchema";
+import { useStudio } from "./studio";
+
+/** The wallpaper on screen as a CSS background, for small previews painted over it (look tiles). */
+export function useWallpaperBackground(): string | null {
+  const { themes } = useStudio();
+  const preview = themes.find((t) => t.active)?.preview;
+  return preview ? `center / cover no-repeat url("${fileUrl(preview)}")` : null;
+}
+
+/** `bars.json` and what the host makes of it (designs, preset, the file), for the stage. Re-read when it changes. */
+export type BarsPreview = { doc: BarsDoc; config: Resolved; catalog: BarsCatalog };
+
+export function useBarsPreview(): BarsPreview | null {
+  const [preview, setPreview] = useState<BarsPreview | null>(null);
+  useEffect(() => {
+    let current = true;
+    let catalog: Promise<BarsCatalog> | null = null;
+    const refresh = () => {
+      catalog ??= api.barsCatalog();
+      void Promise.all([catalog, api.getBars()]).then(
+        ([loaded, state]) => current && !state.problem && setPreview({ doc: state.doc, config: resolve(loaded, state.doc), catalog: loaded }),
+        () => undefined,
+      );
+    };
+    refresh();
+    const unlisten = onChanged((changes) => changes.bars && refresh());
+    return () => {
+      current = false;
+      void unlisten.then((stop) => stop());
+    };
+  }, []);
+  return preview;
+}
 
 const NO_SKINS: ActiveSkins = { widgets: {}, bars: {} };
 

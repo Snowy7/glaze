@@ -57,7 +57,29 @@ export type ThemeEntry = {
   active: boolean;
   /** What to write to `config.theme` to select this theme. */
   applyAs: string;
+  /** Out of the gallery (a theme from an earlier version); listed only while it's the active one. */
+  hidden: boolean;
+  /** A bundled theme's origin and license (themes/catalog.json). */
+  credit: Credit | null;
 };
+
+/** Where a bundled theme comes from: shown on its card and in its editor. */
+export type Credit = {
+  category: string | null;
+  author: string | null;
+  /** An SPDX-style id, such as `CC-BY-NC-SA-3.0`. */
+  license: string | null;
+  licenseUrl: string | null;
+  source: string | null;
+  /** Non-commercial use only. */
+  noncommercial: boolean;
+};
+
+/** `CC-BY-NC-SA-3.0` -> `CC BY-NC-SA 3.0`, `MIT` -> `MIT`: how licenses are usually written. */
+export function licenseName(id: string): string {
+  const cc = /^CC-(BY(?:-[A-Z]{2})*)-([\d.]+)$/.exec(id);
+  return cc ? `CC ${cc[1]} ${cc[2]}` : id;
+}
 
 export type ThemeList = { themes: ThemeEntry[]; roots: string[] };
 
@@ -121,7 +143,7 @@ export type Surface = "none" | "glass" | "solid";
 export type TextTone = "light" | "dark";
 
 /** The widget design language (docs/widgets.md, "Styles"). Bars ignore it. */
-export const WIDGET_STYLES = ["minimal", "depth", "neon", "paper", "aero"] as const;
+export const WIDGET_STYLES = ["minimal", "depth", "neon", "paper", "aero", "liquid"] as const;
 export type WidgetStyle = (typeof WIDGET_STYLES)[number];
 
 /** One layer of how widgets or bars look. An absent field means "use the layer below". */
@@ -149,12 +171,32 @@ export type Appearance = {
 
 export type SkinKind = "widgets" | "bars";
 
+/** Liquid glass, each 0 to 1 (for `style: "liquid"`): the whole effect, how much the rim bends, the rim's shine. */
+/** A theme's liquid glass knobs (`widgets.glass`): 0–1 each, but `blur` in DIPs (0–32). */
+export type Glass = { intensity?: number; refraction?: number; highlight?: number; tint?: number; blur?: number };
+
 /** A theme's `widgets` / `bars` section. */
-export type SkinEdit = { appearance: Appearance; css: string | null };
+export type SkinEdit = { appearance: Appearance; css: string | null; glass: Glass | null };
 
 export type ActiveSkins = { widgets: Appearance; bars: Appearance };
 
-export type MonitorInfo = { device: string; primary: boolean; width: number; height: number };
+/** A rectangle in physical pixels. */
+export type PixelRect = { x: number; y: number; width: number; height: number };
+
+export type MonitorInfo = {
+  device: string;
+  primary: boolean;
+  /** Physical pixels. */
+  width: number;
+  height: number;
+  /** DPI scale: a DIP is `scale` pixels. */
+  scale: number;
+  /** Position on the virtual screen. */
+  x: number;
+  y: number;
+  /** Without the taskbar and app bars, relative to the monitor. */
+  work: PixelRect;
+};
 
 // --- Bars (docs/bars.md) ---
 
@@ -239,9 +281,41 @@ export type WidgetInfo = {
   preset: "desktop" | "overlay" | "popup";
   origin: "bundled" | "user";
   dir: string;
+  /** The page to load, relative to `dir`. */
+  entry: string;
+  /** The manifest as written (null when it doesn't load): the preview's handshake and the settings form. */
+  manifest: WidgetManifest | null;
   /** The manifest doesn't load. */
   error: string | null;
 };
+
+/** A `select` option: a plain value, or one with a label and an icon glyph. */
+export type SelectOption = string | { value: string; label?: string; icon?: string };
+
+type SettingBase<T extends string, V> = { key: string; type: T; label: string; group?: string; default?: V };
+
+/** One of a widget's own settings (packages/widget-sdk/src/types.ts, `SettingDef`). */
+export type WidgetSetting =
+  | SettingBase<"boolean", boolean>
+  | SettingBase<"string", string>
+  | SettingBase<"font", string>
+  | (SettingBase<"color", string> & { alpha?: boolean })
+  | (SettingBase<"select", string> & { options: readonly SelectOption[] })
+  | (SettingBase<"number", number> & { min?: number; max?: number; step?: number })
+  | (SettingBase<"slider", number> & { min: number; max: number; step?: number; unit?: string })
+  | (SettingBase<"file", string> & { extensions?: readonly string[] })
+  | (SettingBase<"image", string> & { extensions?: readonly string[] })
+  | (SettingBase<"list", Record<string, string | number | boolean>[]> & { fields: readonly unknown[]; maxItems?: number })
+  | (SettingBase<"place", Place | null> & { search?: { plugin: string; method: string } });
+
+/** A `place` value other than automatic: a picked town. */
+export type Place = { name: string; lat?: number; lon?: number; region?: string; country?: string };
+
+/** A town suggestion, as a `place` setting's `search` method answers `{ query }`. */
+export type PlaceCandidate = { name: string; admin1?: string | null; admin2?: string | null; country?: string | null; country_code?: string | null; lat: number; lon: number; population?: number | null };
+
+/** The parts of `widget.json` Studio reads; the rest is passed to the widget as is. */
+export type WidgetManifest = { id: string; name: string; settings?: readonly WidgetSetting[] } & { [key: string]: Json | readonly WidgetSetting[] | undefined };
 
 export type PlacedWidget = {
   instance: string;
@@ -250,12 +324,32 @@ export type PlacedWidget = {
   cell: [number, number] | null;
   size: [number, number] | null;
   appearance: Appearance;
+  /** The widget's own options; unset keys take the manifest's defaults. */
+  settings: Record<string, Json>;
+};
+
+/** `widgets.json` → `grid`, in DIPs; `cell` 0 is the desktop icon spacing. */
+export type Grid = { cell: number; gap: number; margin: number };
+
+/** What `put_instance` takes: only the fields to change. A new `instance` id adds the widget. */
+export type InstancePatch = {
+  instance: string;
+  widget?: string;
+  /** Null: the primary monitor. */
+  monitor?: string | null;
+  cell?: [number, number];
+  size?: [number, number];
+  settings?: Record<string, Json>;
+  appearance?: Appearance;
 };
 
 export type Layout = {
   /** The user layer: `widgets.json` → `appearance`. */
   appearance: Appearance;
   instances: PlacedWidget[];
+  grid: Grid;
+  /** The desktop icon spacing in DIPs, what `grid.cell` 0 stands for. */
+  iconCell: [number, number];
   /** Whether the topmost overlay widgets are shown (`widgets.json` → `overlay`; on unless turned off). */
   overlay: boolean;
   exists: boolean;
@@ -300,6 +394,9 @@ export const api = {
   setWidgetsOverlay: (on: boolean) => invoke<Layout>("set_widgets_overlay", { on }),
   removeInstance: (instance: string) => invoke<Layout>("remove_instance", { instance }),
   resetInstanceLook: (instance: string) => invoke<Layout>("reset_instance_look", { instance }),
+  putInstance: (patch: InstancePatch) => invoke<Layout>("put_instance", { patch }),
+  /** One of a widget's plugin methods, run for it (the widget must list the plugin). */
+  pluginCall: (widget: string, plugin: string, method: string, params: unknown) => invoke<unknown>("plugin_call", { widget, plugin, method, params }),
   toggleWidgetEdit: () => invoke<void>("toggle_widget_edit"),
   components: () => invoke<Component[]>("components"),
   engineStatus: () => invoke<EngineStatus>("engine_status"),
@@ -376,6 +473,14 @@ export function pickStyleSheet(): Promise<string | null> {
 
 /** A URL the webview can load for a local file the backend listed. */
 export const fileUrl = convertFileSrc;
+
+/**
+ * A URL for a file inside `dir` whose relative links keep working (`fileUrl` encodes the whole
+ * path as one segment). For pages Studio runs from disk, such as widgets.
+ */
+export function folderUrl(dir: string, file: string): string {
+  return fileUrl("") + [...dir.split(/[\\/]/), ...file.split("/")].filter((part) => part !== "").map(encodeURIComponent).join("/");
+}
 
 export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

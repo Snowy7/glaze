@@ -20,9 +20,10 @@ use crate::iconpacks::{self, AppIcon, PackInfo};
 use crate::icons;
 use crate::look::Look;
 use crate::manifest::{SkinEdit, SkinKind, WindowsStyle};
+use crate::plugins;
 use crate::source::{self, Kind};
 use crate::themes::{self, NewTheme, Origin, ThemeEntry, ThemeList};
-use crate::widgets::{self, Layout, WidgetInfo};
+use crate::widgets::{self, InstancePatch, Layout, WidgetInfo};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -149,12 +150,17 @@ impl From<source::Resolved> for SourceInfo {
     }
 }
 
-/// What a picked file or folder would become, or why it can't be a theme.
+/// What a picked file or folder would become, or why it can't be a theme. A picked file may then be
+/// read by the webview, so New theme can preview the picture or video itself.
 #[tauri::command]
-pub async fn inspect_source(path: PathBuf) -> CmdResult<SourceInfo> {
-    source::resolve(&path.to_string_lossy())
+pub async fn inspect_source(app: AppHandle, path: PathBuf) -> CmdResult<SourceInfo> {
+    let info: SourceInfo = source::resolve(&path.to_string_lossy())
         .map(Into::into)
-        .map_err(text)
+        .map_err(text)?;
+    if path.is_file() {
+        let _ = app.asset_protocol_scope().allow_file(&path);
+    }
+    Ok(info)
 }
 
 /// Checks a typed web address.
@@ -436,13 +442,30 @@ pub async fn list_cursor_sets() -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A rectangle in physical pixels.
+#[derive(Debug, Serialize)]
+pub struct Rect {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
 #[derive(Debug, Serialize)]
 pub struct MonitorInfo {
     /// The device name `bars.json` uses, e.g. `\\.\DISPLAY2`.
     device: String,
     primary: bool,
+    /// Physical pixels.
     width: u32,
     height: u32,
+    /// The DPI scale (1.5 = 150%): a DIP is `scale` pixels.
+    scale: f64,
+    /// Where the monitor sits on the virtual screen.
+    x: i32,
+    y: i32,
+    /// The work area (the monitor without the taskbar and app bars), relative to the monitor.
+    work: Rect,
 }
 
 #[tauri::command]
@@ -456,11 +479,21 @@ pub async fn list_monitors(app: AppHandle) -> CmdResult<Vec<MonitorInfo>> {
         .iter()
         .filter_map(|m| {
             let device = m.name()?.clone();
+            let (origin, work) = (m.position(), m.work_area());
             Some(MonitorInfo {
                 primary: primary.as_ref() == Some(&device),
                 device,
                 width: m.size().width,
                 height: m.size().height,
+                scale: m.scale_factor(),
+                x: origin.x,
+                y: origin.y,
+                work: Rect {
+                    x: work.position.x - origin.x,
+                    y: work.position.y - origin.y,
+                    width: work.size.width,
+                    height: work.size.height,
+                },
             })
         })
         .collect())
@@ -479,9 +512,43 @@ pub async fn dock_icon(app: AppHandle, path: String) -> CmdResult<String> {
     Ok(file.display().to_string())
 }
 
+/// The installed widgets. Their folders may then be read by the webview, which runs the real
+/// widget pages in Studio's live preview.
 #[tauri::command]
-pub async fn list_widgets() -> Vec<WidgetInfo> {
-    widgets::list()
+pub async fn list_widgets(app: AppHandle) -> Vec<WidgetInfo> {
+    let list = widgets::list();
+    let scope = app.asset_protocol_scope();
+    for widget in list.iter().filter(|w| w.error.is_none()) {
+        let _ = scope.allow_directory(&widget.dir, true);
+    }
+    list
+}
+
+/// Calls one of a widget's plugin methods for it: a place setting's town search, and the plugin
+/// calls of the widget pages in the live preview.
+#[tauri::command]
+pub async fn plugin_call(
+    widget: String,
+    plugin: String,
+    method: String,
+    params: serde_json::Value,
+) -> CmdResult<serde_json::Value> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let info = widgets::list()
+            .into_iter()
+            .find(|w| w.id == widget)
+            .with_context(|| format!("the {widget} widget isn't installed"))?;
+        plugins::call(&info.manifest, &plugin, &method, params)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(text)
+}
+
+/// Adds a placed widget or changes some of its fields (cell, size, monitor, settings, own look).
+#[tauri::command]
+pub async fn put_instance(patch: InstancePatch) -> CmdResult<Layout> {
+    widgets::put_instance(&patch).map_err(text)
 }
 
 #[tauri::command]

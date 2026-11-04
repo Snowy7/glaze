@@ -1,96 +1,90 @@
 import { Check } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
-import { resolve } from "../../lib/barsDoc";
 import { useBars } from "../../lib/barsContext";
-import type { BarKind, BarsDoc, DockDesign, TopDesign } from "../../lib/barsSchema";
-import { Button, Group } from "../ui";
-import { BarPreview } from "./BarPreview";
+import { DOCK_DESIGNS, TOP_DESIGNS } from "../../lib/barsNames";
+import { DOCK_DESIGNS as DOCK_IDS, TOP_DESIGNS as TOP_IDS, type BarKind, type BarsDoc } from "../../lib/barsSchema";
+import { BarFrame } from "./BarFrame";
 
-const TOP: readonly { id: TopDesign; name: string; blurb: string }[] = [
-  { id: "monochrome", name: "Monochrome", blurb: "A black glass strip with white type." },
-  { id: "macos", name: "macOS", blurb: "The menu bar: liquid glass, the app's name in bold, status icons and the date on the right." },
-  { id: "fluent", name: "Windows 11", blurb: "Mica-like, Segoe Fluent Icons, Fluent hover and press." },
-  { id: "capsule", name: "Capsule", blurb: "A floating liquid-glass pill, iPadOS and visionOS style." },
-  { id: "minimal", name: "Minimal", blurb: "No surface: the clock in the middle, a few status icons." },
-  { id: "islands", name: "Islands", blurb: "A transparent rail with one pill per group." },
-  { id: "neon", name: "Neon", blurb: "Dark glass, a neon gradient edge and glow." },
-  { id: "floating", name: "Floating", blurb: "A detached, rounded bar." },
-];
-
-const DOCK: readonly { id: DockDesign; name: string; blurb: string }[] = [
-  { id: "monochrome", name: "Monochrome", blurb: "A black glass pill with dots." },
-  { id: "macos", name: "macOS dock", blurb: "A liquid-glass plate, magnify, running dots, the trash past a divider." },
-  { id: "windows11", name: "Windows 11 taskbar", blurb: "Centered, 48 DIPs, Fluent icons, pill indicators, two-line clock." },
-  { id: "windows10", name: "Windows 10 taskbar", blurb: "Left-aligned, 40 DIPs, square buttons, underline indicators." },
-  { id: "chromeos", name: "ChromeOS shelf", blurb: "A launcher circle, centered apps, the status area as one pill." },
-  { id: "fluent", name: "Fluent dock", blurb: "The Windows 11 taskbar as a floating, rounded island." },
-  { id: "islands", name: "Islands", blurb: "A solid pill with bar indicators." },
-  { id: "neon", name: "Neon", blurb: "Dark glass, glow indicators." },
-  { id: "floating", name: "Floating", blurb: "A detached, rounded pill." },
-];
+/** Each thumbnail is the real bar page in a frame this many DIPs wide, scaled to the tile. */
+const FRAME_WIDTH = 1000;
+const FRAME_HEIGHT: Record<BarKind, number> = { top: 76, dock: 128 };
 
 /**
- * One bar's design gallery. Each card is the bar as the host would resolve it with that design
- * (the file's other settings still on top). Choosing one writes `<bar>.design`; the bar's own look
- * and motion stay, and "Reset" clears them so the design shows as made.
+ * One bar's designs, each drawn by the real bars page with that design (the file's other settings
+ * still on top, on your wallpaper). Choosing one writes `<bar>.design`.
  */
-export function DesignPicker({ bar }: { bar: BarKind }) {
-  const { doc, resolved, catalog, set, update } = useBars();
-  const designs = bar === "top" ? TOP : DOCK;
+export function DesignPicker({ bar, wallpaper }: { bar: BarKind; wallpaper: string | null }) {
+  const { doc, resolved, set } = useBars();
   const current = resolved[bar].design;
-  const own = doc[bar];
-  const styled = own?.look !== undefined || own?.animation !== undefined;
-
-  const withDesign = (id: string): BarsDoc => {
-    const shown: BarsDoc = { ...doc, top: { ...doc.top, enabled: bar === "top" }, dock: { ...doc.dock, enabled: bar === "dock" } };
-    return bar === "top" ? { ...shown, top: { ...shown.top, design: id as TopDesign } } : { ...shown, dock: { ...shown.dock, design: id as DockDesign } };
-  };
+  const ids: readonly string[] = bar === "top" ? TOP_IDS : DOCK_IDS;
+  const names: Record<string, { name: string; blurb: string }> = bar === "top" ? TOP_DESIGNS : DOCK_DESIGNS;
 
   return (
-    <div className="flex flex-col gap-5">
-      {styled && (
-        <Group>
-          <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <p className="text-[13px] text-ink-2">This bar has its own look or motion on top of its design.</p>
-            <Button
-              onClick={() =>
-                update((d) => {
-                  const strip = <S extends { look?: unknown; animation?: unknown }>({ look: _look, animation: _animation, ...rest }: S) => rest;
-                  return bar === "top" ? { ...d, top: strip(d.top ?? {}) } : { ...d, dock: strip(d.dock ?? {}) };
-                })
-              }
-            >
-              Reset to the design
-            </Button>
-          </div>
-        </Group>
-      )}
-      <ul className="grid grid-cols-2 gap-4">
-        {designs.map(({ id, name, blurb }) => {
-          const active = id === current;
-          return (
-            <li key={id} className={`rounded-2xl bg-surface p-3 shadow-card ring-1 ${active ? "ring-2 ring-ink" : "ring-line"}`}>
-              <BarPreview config={resolve(catalog, withDesign(id))} catalog={catalog} width={330} wallpaper="dark" dense />
-              <div className="mt-3 flex items-start justify-between gap-3 px-1 pb-1">
-                <div className="min-w-0">
-                  <h3 className="font-display text-[15px] font-semibold text-ink">{name}</h3>
-                  <p className="mt-0.5 text-[12.5px] text-ink-3">{blurb}</p>
-                </div>
-                {active ? (
-                  <span className="mt-0.5 flex shrink-0 items-center gap-1 rounded-full bg-solid px-2.5 py-1 text-xs font-medium text-solid-ink">
-                    <Check className="size-3.5" aria-hidden />
-                    In use
-                  </span>
-                ) : (
-                  <Button className="shrink-0" onClick={() => set([bar, "design"], id)}>
-                    Use
-                  </Button>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+    <div role="radiogroup" aria-label={bar === "top" ? "Top bar design" : "Bottom bar design"} data-setting={`bars.${bar}.design`} className="setting-anchor flex flex-col gap-2">
+      {ids.map((id) => {
+        const on = id === current;
+        const info = names[id];
+        return (
+          <button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            title={info?.blurb}
+            onClick={() => !on && set([bar, "design"], id, `Use the ${info?.name ?? id} design`)}
+            className={`group cursor-default rounded-[10px] p-1 text-left transition-[box-shadow,background-color] duration-150 ${
+              on ? "bg-surface-top ring-2 ring-ink" : "bg-surface ring-1 ring-line-strong hover:bg-surface-hi hover:ring-line-hi"
+            }`}
+          >
+            <Thumbnail bar={bar} doc={withDesign(doc, bar, id)} wallpaper={wallpaper} />
+            <span className="flex items-center gap-1.5 px-1 pt-1.5 pb-0.5">
+              <span className={`min-w-0 flex-1 truncate text-[12px] font-medium ${on ? "text-ink" : "text-ink-2"}`}>{info?.name ?? id}</span>
+              {on && <Check className="size-3.5 shrink-0 text-ink" aria-hidden />}
+            </span>
+          </button>
+        );
+      })}
     </div>
+  );
+}
+
+/** The file with this bar shown in design `id`, on its usual edge, so the designs compare side by side. */
+function withDesign(doc: BarsDoc, bar: BarKind, id: string): BarsDoc {
+  if (bar === "top") return { ...doc, top: { ...doc.top, design: TOP_IDS.find((d) => d === id), enabled: true, position: "top" } };
+  return { ...doc, dock: { ...doc.dock, design: DOCK_IDS.find((d) => d === id), enabled: true, position: "bottom", autohide: false } };
+}
+
+/** A live, scaled-down bar, mounted once it scrolls into view. */
+function Thumbnail({ bar, doc, wallpaper }: { bar: BarKind; doc: BarsDoc; wallpaper: string | null }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const [width, setWidth] = useState(0);
+  const [seen, setSeen] = useState(false);
+
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const resize = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 0));
+    const visible = new IntersectionObserver(([entry]) => entry?.isIntersecting && setSeen(true), { rootMargin: "200px" });
+    resize.observe(element);
+    visible.observe(element);
+    return () => {
+      resize.disconnect();
+      visible.disconnect();
+    };
+  }, []);
+
+  const scale = width / FRAME_WIDTH;
+  const height = FRAME_HEIGHT[bar];
+  const inner: CSSProperties = { width: FRAME_WIDTH, height, transform: `scale(${scale})` };
+  return (
+    <span ref={box} className="relative block overflow-hidden rounded-md bg-black" style={{ height: height * scale }} aria-hidden>
+      <span className="absolute inset-0 bg-cover bg-center" style={wallpaper ? { backgroundImage: `url("${wallpaper}")` } : undefined} />
+      {seen && width > 0 && (
+        <span className="absolute top-0 left-0 origin-top-left" style={inner}>
+          <BarFrame bar={bar} doc={doc} width={FRAME_WIDTH} height={height} wallpaper={wallpaper} />
+        </span>
+      )}
+    </span>
   );
 }

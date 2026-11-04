@@ -18,6 +18,7 @@ mod iconpacks;
 mod icons;
 mod look;
 mod manifest;
+mod plugins;
 mod shell;
 mod source;
 mod themes;
@@ -89,6 +90,8 @@ fn main() {
             commands::set_widgets_appearance,
             commands::set_widgets_overlay,
             commands::remove_instance,
+            commands::put_instance,
+            commands::plugin_call,
             commands::reset_instance_look,
             commands::toggle_widget_edit,
             commands::components,

@@ -21,21 +21,11 @@ function hash(text: string): number {
   return h >>> 0;
 }
 
-/**
- * A grayscale two-glow gradient seeded by the theme name, for cards without a
- * preview image. Pair it with the `.grain` overlay from index.css.
- */
+/** A quiet grayscale gradient seeded by the theme name, for cards without a preview image. */
 export function placeholderBackground(name: string): string {
   const h = hash(name);
-  const ax = 10 + (h % 40);
-  const ay = 5 + ((h >>> 6) % 35);
-  const bx = 55 + ((h >>> 12) % 40);
-  const by = 60 + ((h >>> 18) % 35);
-  const light = 0.34 + ((h >>> 4) % 14) / 100;
-  const dim = 0.2 + ((h >>> 9) % 10) / 100;
-  return [
-    `radial-gradient(110% 90% at ${ax}% ${ay}%, oklch(${light} 0 0 / 0.95), transparent 62%)`,
-    `radial-gradient(100% 100% at ${bx}% ${by}%, oklch(${dim} 0 0 / 0.9), transparent 60%)`,
-    "oklch(0.17 0 0)",
-  ].join(", ");
+  const angle = 145 + (h % 50);
+  const top = 0.27 + ((h >>> 4) % 8) / 100;
+  const bottom = 0.16 + ((h >>> 9) % 5) / 100;
+  return `linear-gradient(${angle}deg, oklch(${top} 0 0), oklch(${bottom} 0 0))`;
 }

@@ -1,10 +1,12 @@
-// A file the user edits live. Edits show at once and are written after a short
-// pause (the program that reads the file watches it, so changes apply as you
-// go). Changes made elsewhere are picked up unless there are unsaved edits here.
+// A file the user edits live. Edits show at once and are written after a short pause (the
+// program that reads the file watches it, so changes apply as you go). Every edit is an undo
+// step; quick runs of the same edit merge into one. Changes made elsewhere are picked up unless
+// there are unsaved edits here.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { errorText, onChanged, type Changes } from "./api";
+import { useHistory } from "./history";
 import { useStudio } from "./studio";
 
 const SAVE_DELAY_MS = 350;
@@ -15,6 +17,8 @@ type Options<T> = {
   save: (value: T) => Promise<T>;
   /** Whether a file-change event concerns this file. */
   concerns: (changes: Changes) => boolean;
+  /** The undo label of an edit that doesn't name itself, e.g. "Change bars". */
+  label?: string;
 };
 
 export type Autosaved<T> = {
@@ -22,16 +26,18 @@ export type Autosaved<T> = {
   value: T | null;
   error: string | null;
   saving: boolean;
-  /** Applies `change` to the current value and schedules a save. */
-  edit: (change: (current: T) => T) => void;
+  /** Applies `change` to the current value and schedules a save. `label` names the undo step. */
+  edit: (change: (current: T) => T, label?: string) => void;
   /** Re-reads the file now, dropping nothing that is unsaved. */
   reload: () => Promise<void>;
 };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-export function useAutosaved<T>({ load, save, concerns }: Options<T>): Autosaved<T> {
+export function useAutosaved<T>({ load, save, concerns, label: defaultLabel = "Change" }: Options<T>): Autosaved<T> {
   const { notify } = useStudio();
+  const history = useHistory();
+  const id = useId();
   const [value, setValue] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -84,10 +90,9 @@ export function useAutosaved<T>({ load, save, concerns }: Options<T>): Autosaved
     }
   }, [adopt, reload]);
 
-  const edit = useCallback(
-    (change: (value: T) => T) => {
-      if (current.current === null) return;
-      const next = change(current.current);
+  /** Shows `next` and schedules its save, without recording a step (undo and redo use it). */
+  const put = useCallback(
+    (next: T) => {
       current.current = next;
       dirty.current = true;
       setValue(next);
@@ -95,6 +100,19 @@ export function useAutosaved<T>({ load, save, concerns }: Options<T>): Autosaved
       timer.current = window.setTimeout(() => void flush(), SAVE_DELAY_MS);
     },
     [flush],
+  );
+
+  const edit = useCallback(
+    (change: (value: T) => T, label?: string) => {
+      const before = current.current;
+      if (before === null) return;
+      const next = change(before);
+      if (same(before, next)) return;
+      const name = label ?? defaultLabel;
+      history.record({ label: name, key: `${id}:${name}`, undo: () => put(before), redo: () => put(next) });
+      put(next);
+    },
+    [put, history, id, defaultLabel],
   );
 
   useEffect(() => {

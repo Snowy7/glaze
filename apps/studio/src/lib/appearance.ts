@@ -13,11 +13,11 @@ export type Resolved = Required<Appearance>;
 /** Built-in defaults for widgets (docs/widgets.md). */
 export const WIDGET_DEFAULTS: Resolved = {
   style: "minimal",
-  surface: "none",
-  tint: "#101010",
-  opacity: 0.55,
+  surface: "glass",
+  tint: "#343a42",
+  opacity: 0.46,
   blur: 24,
-  radius: 18,
+  radius: 22,
   border: true,
   text: "light",
   accent: "#ffffff",
@@ -66,6 +66,40 @@ export const APPEARANCE_KEYS = [
   "scale",
   "shadow",
 ] as const satisfies readonly (keyof Appearance)[];
+
+/** The built-in tint and accent, and what they become with dark text (docs/widgets.md, "Tone-aware defaults"). */
+const DARK_TEXT = { tint: { from: "#343a42", to: "#f2f2f2" }, accent: { from: "#ffffff", to: "#0a0a0c" } } as const;
+
+/** With dark text, a tint or accent that is unset or still the built-in one takes its dark-text value. */
+const forDarkText = (key: keyof typeof DARK_TEXT, value: string | undefined): string =>
+  value === undefined || value.toLowerCase() === DARK_TEXT[key].from ? DARK_TEXT[key].to : value;
+
+/** How a widget looks with these layers (lowest first): every field decided, as the widgets host decides it. */
+export function widgetLook(...layers: readonly Appearance[]): Resolved {
+  const look = resolve(WIDGET_DEFAULTS, ...layers);
+  return look.text === "dark" ? { ...look, tint: forDarkText("tint", look.tint), accent: forDarkText("accent", look.accent) } : look;
+}
+
+/** What the widgets host sends a widget: the fields the layers set, with the tone-aware tint and accent. */
+export function sentLook(...layers: readonly Appearance[]): Appearance {
+  const look = mergeLayers(...layers);
+  return look.text === "dark" ? { ...look, tint: forDarkText("tint", look.tint), accent: forDarkText("accent", look.accent) } : look;
+}
+
+/** Layers merged, lowest first, keeping only the fields some layer sets. */
+export function mergeLayers(...layers: readonly Appearance[]): Appearance {
+  const merged: Appearance = {};
+  for (const layer of layers) {
+    for (const key of APPEARANCE_KEYS) {
+      const value = layer[key];
+      if (value !== undefined) Object.assign(merged, { [key]: value });
+    }
+  }
+  return merged;
+}
+
+/** Whether any of `layers` sets `key`. */
+export const setsField = (layers: readonly Appearance[], key: keyof Appearance) => layers.some((layer) => layer[key] !== undefined);
 
 /** How many fields the layer sets. */
 export function setCount(appearance: Appearance): number {

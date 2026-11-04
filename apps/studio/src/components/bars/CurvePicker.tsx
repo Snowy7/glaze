@@ -2,7 +2,7 @@ import { useRef, type CSSProperties, type PointerEvent, type ReactNode } from "r
 
 import { tidy } from "../../lib/barsDoc";
 import { NAMED_CURVES, type Curve, type NamedCurve, type Spring } from "../../lib/barsSchema";
-import { describeCurve, easing, springAt, springSettle } from "../../lib/motion";
+import { easing, springAt, springSettle } from "../../lib/motion";
 import { Segmented, Slider } from "../ui";
 
 /** A dot that runs along a track with `curve` and `duration` (a spring brings its own), over and over. */
@@ -18,6 +18,25 @@ export function CurvePreview({ curve, duration, width = 120 }: { curve: Curve; d
     </span>
   );
 }
+
+/** The named curves, in words. */
+export const CURVE_NAMES: Record<NamedCurve, string> = {
+  linear: "Linear",
+  ease: "Ease",
+  "ease-in": "Ease in",
+  "ease-out": "Ease out",
+  "ease-in-out": "Ease in and out",
+  smooth: "Smooth",
+  snappy: "Snappy",
+  emphasized: "Emphasized",
+  overshoot: "Overshoot",
+  spring: "Spring",
+  "spring-soft": "Soft spring",
+  "spring-bouncy": "Bouncy spring",
+};
+
+/** A curve in a few words: its name, or what kind it is. */
+export const curveName = (curve: Curve): string => (typeof curve === "string" ? CURVE_NAMES[curve] : Array.isArray(curve) ? "Custom curve" : "Custom spring");
 
 type Mode = "named" | "bezier" | "spring";
 const modeOf = (curve: Curve): Mode => (typeof curve === "string" ? "named" : Array.isArray(curve) ? "bezier" : "spring");
@@ -35,26 +54,27 @@ const START: Record<Mode, Curve> = {
 export function CurvePicker({ label, value, duration, onChange }: { label: string; value: Curve; duration: number; onChange: (curve: Curve) => void }) {
   const mode = modeOf(value);
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <Segmented<Mode>
-        className="w-80"
+        className="w-full"
+        size="sm"
         label={`${label} curve type`}
         hideLabel
         value={mode}
         onChange={(next) => next !== mode && onChange(START[next])}
-        options={[{ value: "named", label: "Preset" }, { value: "bezier", label: "Bézier" }, { value: "spring", label: "Spring" }]}
+        options={[{ value: "named", label: "Named" }, { value: "bezier", label: "Curve" }, { value: "spring", label: "Spring" }]}
       />
       {typeof value === "string" && (
-        <ul className="grid grid-cols-3 gap-2" aria-label={`${label} presets`}>
+        <ul className="grid grid-cols-2 gap-1.5" aria-label={`${label} curves`}>
           {NAMED_CURVES.map((name: NamedCurve) => (
             <li key={name}>
               <button
                 type="button"
                 aria-pressed={value === name}
                 onClick={() => onChange(name)}
-                className={`flex w-full cursor-default items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[12.5px] font-medium ring-1 transition ${value === name ? "bg-solid text-solid-ink ring-transparent" : "bg-canvas text-ink-2 ring-line-strong hover:ring-line-hi"}`}
+                className={`flex h-8 w-full cursor-default items-center rounded-md px-2.5 text-left text-[12px] transition-[box-shadow,background-color] ${value === name ? "bg-surface-top font-medium text-ink ring-2 ring-ink" : "bg-surface text-ink-2 ring-1 ring-line-strong hover:bg-surface-hi hover:ring-line-hi"}`}
               >
-                {name}
+                {CURVE_NAMES[name]}
               </button>
             </li>
           ))}
@@ -62,10 +82,9 @@ export function CurvePicker({ label, value, duration, onChange }: { label: strin
       )}
       {Array.isArray(value) && <BezierEditor label={label} value={value} onChange={onChange} />}
       {typeof value === "object" && !Array.isArray(value) && <SpringEditor label={label} value={value} onChange={onChange} />}
-      <div className="flex items-center gap-3 text-xs text-ink-3">
-        <CurvePreview curve={value} duration={duration} width={160} />
-        {describeCurve(value)}
-        {typeof value !== "string" && !Array.isArray(value) && <span>settles in {Math.round(springSettle(value) * 1000)} ms</span>}
+      <div className="flex items-center gap-3 text-[12px] text-ink-3">
+        <CurvePreview curve={value} duration={duration} width={140} />
+        {typeof value === "object" && !Array.isArray(value) && <span>Settles in {Math.round(springSettle(value) * 1000)} ms</span>}
       </div>
     </div>
   );
@@ -105,12 +124,12 @@ function BezierEditor({ label, value, onChange }: { label: string; value: [numbe
 
   const field = (name: string, index: number, min: number, max: number) => (
     <SpringField key={name} name={name}>
-      <Slider className="w-52" label={`${label} ${name}`} value={value[index] ?? 0} min={min} max={max} step={0.01} format={(v) => v.toFixed(2)} onChange={(v) => onChange([x1, y1, x2, y2].map((n, i) => (i === index ? tidy(v) : n)) as [number, number, number, number])} />
+      <Slider className="min-w-0 flex-1" label={`${label} ${name}`} value={value[index] ?? 0} min={min} max={max} step={0.01} format={(v) => v.toFixed(2)} onChange={(v) => onChange([x1, y1, x2, y2].map((n, i) => (i === index ? tidy(v) : n)) as [number, number, number, number])} />
     </SpringField>
   );
 
   return (
-    <div className="flex flex-wrap items-start gap-5">
+    <div className="flex flex-col gap-3">
       <svg ref={svg} width={GRAPH.size} height={GRAPH.size} className="shrink-0 touch-none rounded-lg bg-canvas ring-1 ring-line-strong" role="img" aria-label="Curve graph; drag the two handles">
         <line x1={0} y1={gy(0)} x2={GRAPH.size} y2={gy(0)} className="stroke-line" />
         <line x1={0} y1={gy(1)} x2={GRAPH.size} y2={gy(1)} className="stroke-line" />
@@ -120,7 +139,7 @@ function BezierEditor({ label, value, onChange }: { label: string; value: [numbe
         {handle(0, x1, y1)}
         {handle(1, x2, y2)}
       </svg>
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         {field("Start x", 0, 0, 1)}
         {field("Start y", 1, -2, 3)}
         {field("End x", 2, 0, 1)}
@@ -133,7 +152,7 @@ function BezierEditor({ label, value, onChange }: { label: string; value: [numbe
 function SpringField({ name, children }: { name: string; children: ReactNode }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="w-16 shrink-0 text-[12.5px] text-ink-2">{name}</span>
+      <span className="w-16 shrink-0 text-[12px] text-ink-2">{name}</span>
       {children}
     </div>
   );
@@ -146,20 +165,20 @@ function SpringEditor({ label, value, onChange }: { label: string; value: Spring
     return `${(i / 48) * GRAPH.size},${gy(springAt(t, value)) * 0.6 + 12}`;
   }).join(" ");
   return (
-    <div className="flex flex-wrap items-start gap-5">
+    <div className="flex flex-col gap-3">
       <svg width={GRAPH.size} height={GRAPH.size * 0.6 + 24} className="shrink-0 rounded-lg bg-canvas ring-1 ring-line-strong" role="img" aria-label="Spring response over time">
         <line x1={0} y1={gy(1) * 0.6 + 12} x2={GRAPH.size} y2={gy(1) * 0.6 + 12} className="stroke-line" />
         <polyline points={samples} className="fill-none stroke-ink" strokeWidth={2} />
       </svg>
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <SpringField name="Mass">
-          <Slider className="w-60" label={`${label} mass`} value={value.mass} min={0.1} max={10} step={0.1} format={(v) => v.toFixed(1)} onChange={(mass) => onChange({ ...value, mass: tidy(mass) })} />
+          <Slider className="min-w-0 flex-1" label={`${label} mass`} value={value.mass} min={0.1} max={10} step={0.1} format={(v) => v.toFixed(1)} onChange={(mass) => onChange({ ...value, mass: tidy(mass) })} />
         </SpringField>
         <SpringField name="Stiffness">
-          <Slider className="w-60" label={`${label} stiffness`} value={value.stiffness} min={1} max={2000} step={1} onChange={(stiffness) => onChange({ ...value, stiffness })} />
+          <Slider className="min-w-0 flex-1" label={`${label} stiffness`} value={value.stiffness} min={1} max={2000} step={1} onChange={(stiffness) => onChange({ ...value, stiffness })} />
         </SpringField>
         <SpringField name="Damping">
-          <Slider className="w-60" label={`${label} damping`} value={value.damping} min={0} max={200} step={1} onChange={(damping) => onChange({ ...value, damping })} />
+          <Slider className="min-w-0 flex-1" label={`${label} damping`} value={value.damping} min={0} max={200} step={1} onChange={(damping) => onChange({ ...value, damping })} />
         </SpringField>
       </div>
     </div>

@@ -26,8 +26,29 @@ import {
   type EngineStatus,
   type ThemeEntry,
 } from "./api";
+import { useHistory } from "./history";
 
-export type Toast = { id: number; tone: "info" | "error"; message: string };
+/** The current values of the keys `patch` names: the patch that undoes it. */
+function inverse(config: Config, patch: ConfigPatch): ConfigPatch {
+  const { desktop_menu: menu, ...flat } = patch;
+  const keys = Object.keys(flat) as (keyof typeof flat)[];
+  const before: ConfigPatch = Object.fromEntries(keys.map((key) => [key, config[key]]));
+  if (menu) {
+    before.desktop_menu = {
+      ...(menu.enabled !== undefined && { enabled: config.desktop_menu.enabled }),
+      ...(menu.items !== undefined && { items: config.desktop_menu.items }),
+    };
+  }
+  return before;
+}
+
+/** A toast's button, such as Undo. */
+export type ToastAction = { label: string; run: () => void };
+
+export type Toast = { id: number; tone: "info" | "error"; message: string; action?: ToastAction };
+
+/** How `updateConfig` records the change: its undo label, or `false` (an undo or redo itself). */
+export type ConfigWrite = { label?: string; record?: boolean };
 
 type Studio = {
   config: Config | null;
@@ -40,17 +61,19 @@ type Studio = {
   /** Every mypaper program and whether it's running; null until the first check. */
   components: Component[] | null;
   autostart: Autostart | null;
-  /** Shows a message at the bottom of the window. */
-  notify: (message: string, tone?: Toast["tone"]) => void;
+  /** Shows a message at the bottom of the window, optionally with a button. */
+  notify: (message: string, tone?: Toast["tone"], action?: ToastAction) => void;
   /** Keys of in-flight actions, e.g. `apply:<theme id>` or `engine`. */
   busy: ReadonlySet<string>;
   toast: Toast | null;
   /** Ids of video themes whose thumbnail is being made right now. */
   pendingPreviews: ReadonlySet<string>;
+  /** Switches the desktop to `theme`, with an Undo in the toast. */
   applyTheme: (theme: ThemeEntry) => Promise<void>;
   /** Copies a theme into the user's themes folder; resolves to the copy. */
   duplicateTheme: (theme: ThemeEntry) => Promise<ThemeEntry | undefined>;
-  updateConfig: (patch: ConfigPatch) => Promise<void>;
+  /** Writes some config keys; recorded for undo unless `write.record` is false. */
+  updateConfig: (patch: ConfigPatch, write?: ConfigWrite) => Promise<void>;
   resetConfig: () => Promise<void>;
   startEngine: () => Promise<void>;
   stopEngine: () => Promise<void>;
@@ -86,10 +109,15 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [pendingPreviews, setPendingPreviews] = useState<ReadonlySet<string>>(new Set());
   const triedPreviews = useRef(new Set<string>());
 
-  const notify = useCallback((message: string, tone: Toast["tone"] = "info") => {
+  const history = useHistory();
+  // The latest config, for building undo steps inside callbacks.
+  const configRef = useRef<Config | null>(null);
+  configRef.current = config;
+
+  const notify = useCallback((message: string, tone: Toast["tone"] = "info", action?: ToastAction) => {
     window.clearTimeout(toastTimer.current);
-    setToast({ id: Date.now(), tone, message });
-    toastTimer.current = window.setTimeout(() => setToast(null), tone === "error" ? 8000 : 3500);
+    setToast({ id: Date.now(), tone, message, action });
+    toastTimer.current = window.setTimeout(() => setToast(null), tone === "error" ? 8000 : action ? 6000 : 3500);
   }, []);
 
   const dismissToast = useCallback(() => {
@@ -189,7 +217,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, [refreshEngine, refreshAutostart]);
 
   const updateConfig = useCallback(
-    async (patch: ConfigPatch) => {
+    async (patch: ConfigPatch, write: ConfigWrite = {}): Promise<void> => {
+      const before = configRef.current;
+      if (before && write.record !== false) {
+        const undo = inverse(before, patch);
+        history.record({
+          label: write.label ?? "Change setting",
+          key: `config:${Object.keys(patch).join(",")}`,
+          undo: () => updateConfig(undo, { record: false }),
+          redo: () => updateConfig(patch, { record: false }),
+        });
+      }
       const { desktop_menu, ...flat } = patch;
       // Shown at once; the saved config replaces it when the write returns.
       setConfig((current) => current && { ...current, ...flat, desktop_menu: { ...current.desktop_menu, ...desktop_menu } });
@@ -197,18 +235,22 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       if (saved) setConfig(saved);
       else await refreshConfig();
     },
-    [run, refreshConfig],
+    [run, refreshConfig, history],
   );
 
   const applyTheme = useCallback(
     async (theme: ThemeEntry) => {
+      const previous = configRef.current?.theme;
       const saved = await run(`apply:${theme.id}`, () => api.updateConfig({ theme: theme.applyAs }));
       if (!saved) return;
       setConfig(saved);
       await refreshThemes();
-      notify(`Applied ${theme.name}`);
+      if (previous === undefined || previous === theme.applyAs) return notify(`Applied ${theme.name}`);
+      const undo = () => updateConfig({ theme: previous }, { record: false });
+      history.record({ label: `Apply ${theme.name}`, undo, redo: () => updateConfig({ theme: theme.applyAs }, { record: false }) });
+      notify(`Applied ${theme.name}`, "info", { label: "Undo", run: history.undo });
     },
-    [run, refreshThemes, notify],
+    [run, refreshThemes, notify, updateConfig, history],
   );
 
   const duplicateTheme = useCallback(

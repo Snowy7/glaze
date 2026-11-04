@@ -1,45 +1,67 @@
 import { CircleCheck, RotateCw, TriangleAlert, X } from "lucide-react";
-import { Component, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
 
-import { Sidebar, type View } from "./components/Sidebar";
+import { CommandPalette } from "./components/CommandPalette";
+import { Sidebar } from "./components/Sidebar";
 import { Button, IconButton } from "./components/ui";
+import { HistoryProvider } from "./lib/history";
+import { NavProvider, useNav, useRevealFocus } from "./lib/nav";
 import { StudioProvider, useStudio } from "./lib/studio";
 import { Bars } from "./views/Bars";
-import { Gallery } from "./views/Gallery";
-import { NewTheme } from "./views/NewTheme";
+import { Desktop } from "./views/Desktop";
 import { Settings } from "./views/Settings";
+import { Themes } from "./views/Themes";
 import { Widgets } from "./views/Widgets";
+import { Windows } from "./views/Windows";
 
 export function App() {
   return (
     <ErrorBoundary>
-      <StudioProvider>
-        <Shell />
-      </StudioProvider>
+      <HistoryProvider>
+        <StudioProvider>
+          <NavProvider>
+            <Shell />
+          </NavProvider>
+        </StudioProvider>
+      </HistoryProvider>
     </ErrorBoundary>
   );
 }
 
 function Shell() {
-  const [view, setView] = useState<View>("gallery");
+  const { route, visit } = useNav();
+  const [searching, setSearching] = useState(false);
+  useRevealFocus();
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearching(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="flex h-full bg-sidebar">
-      <Sidebar view={view} onNavigate={setView} />
+      <Sidebar onSearch={() => setSearching(true)} />
       <main
-        // Re-key per view so each one fades in (and starts at the top).
-        key={view}
-        data-scroll-root
-        // `--page-px` is the side gutter; `Page`'s sticky header reaches across it.
-        className="min-w-0 flex-1 animate-rise overflow-y-auto rounded-tl-xl border-t border-l border-line-strong bg-canvas px-(--page-px) scroll-pt-32 pb-12 [--page-px:1.5rem] [scrollbar-gutter:stable] lg:[--page-px:2rem] 2xl:[--page-px:2.75rem]"
+        // Re-keyed per visit, so each page starts fresh (and fades in) from its route.
+        key={visit}
+        className="flex min-w-0 flex-1 animate-fade-in flex-col overflow-hidden rounded-tl-xl border-t border-l border-line-strong bg-canvas [--gutter:1.25rem] lg:[--gutter:1.75rem] 2xl:[--gutter:2.5rem]"
       >
         <ErrorBoundary inline>
-          {view === "gallery" && <Gallery onNavigate={setView} />}
-          {view === "widgets" && <Widgets />}
-          {view === "bars" && <Bars />}
-          {view === "new" && <NewTheme onNavigate={setView} />}
-          {view === "settings" && <Settings />}
+          {route.page === "desktop" && <Desktop />}
+          {route.page === "themes" && <Themes />}
+          {route.page === "widgets" && <Widgets />}
+          {route.page === "bars" && <Bars />}
+          {route.page === "windows" && <Windows />}
+          {route.page === "settings" && <Settings />}
         </ErrorBoundary>
       </main>
+      <CommandPalette open={searching} onClose={() => setSearching(false)} />
       <Toaster />
     </div>
   );
@@ -53,14 +75,21 @@ function Toaster() {
         <div
           key={toast.id}
           role={toast.tone === "error" ? "alert" : "status"}
-          className="selectable pointer-events-auto flex max-w-xl animate-rise items-start gap-2.5 rounded-xl bg-surface-hi py-2 pr-2 pl-3.5 text-[13px] text-ink shadow-pop ring-1 ring-line-hi"
+          className="selectable pointer-events-auto flex max-w-xl animate-rise items-center gap-2.5 rounded-xl bg-surface-hi py-1.5 pr-1.5 pl-3.5 text-[13px] text-ink shadow-pop ring-1 ring-line-hi"
         >
-          {toast.tone === "error" ? (
-            <TriangleAlert className="mt-1 size-4 shrink-0" aria-hidden />
-          ) : (
-            <CircleCheck className="mt-1 size-4 shrink-0 text-ink-2" aria-hidden />
+          {toast.tone === "error" ? <TriangleAlert className="size-4 shrink-0" aria-hidden /> : <CircleCheck className="size-4 shrink-0 text-ink-2" aria-hidden />}
+          <span className="py-1 leading-relaxed">{toast.message}</span>
+          {toast.action && (
+            <Button
+              size="sm"
+              onClick={() => {
+                toast.action?.run();
+                dismissToast();
+              }}
+            >
+              {toast.action.label}
+            </Button>
           )}
-          <span className="py-0.5 leading-relaxed">{toast.message}</span>
           <IconButton icon={X} label="Dismiss" size="sm" variant="ghost" onClick={dismissToast} />
         </div>
       )}
@@ -91,7 +120,7 @@ class ErrorBoundary extends Component<BoundaryProps, { error: Error | null }> {
           <span className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-surface-hi text-ink-2">
             <TriangleAlert className="size-6" strokeWidth={1.5} aria-hidden />
           </span>
-          <p className="font-display text-lg font-semibold text-ink">Something went wrong</p>
+          <p className="font-display text-[15px] font-semibold text-ink">Something went wrong</p>
           <p className="selectable mt-1 text-[13px] text-ink-3">{error.message}</p>
           <Button variant="primary" icon={RotateCw} className="mt-5" onClick={() => this.setState({ error: null })}>
             Try again

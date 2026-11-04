@@ -44,7 +44,7 @@ export const MODULE_INFO: Record<BuiltinModule, ModuleInfo> = {
 /** Name, hint and icon of any list entry: a built-in, a custom module, or a break. */
 export function describeModule(ref: ModuleRef): ModuleInfo {
   if (isBuiltinModule(ref)) return MODULE_INFO[ref];
-  if (ref === "|") return { label: "Break", hint: "A new island in the islands layout, a thin separator elsewhere", icon: Ellipsis };
+  if (ref === "|") return { label: "Gap", hint: "A separator, or a new island", icon: Ellipsis };
   const id = customId(ref);
-  return { label: id, hint: `A custom module: the output of a command (custom:${id})`, icon: Puzzle, sample: id };
+  return { label: id, hint: "Shows a program’s output", icon: Puzzle, sample: id };
 }

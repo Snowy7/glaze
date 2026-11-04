@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use mypaper_bars_schema::config::{DockStyle, TopLayout};
-use mypaper_bars_schema::style::{COLOR_TOKENS, NAMED_CURVES};
 use mypaper_bars_schema::presets::{DockDesign, TopDesign};
+use mypaper_bars_schema::style::{COLOR_TOKENS, NAMED_CURVES};
 use mypaper_bars_schema::{BarsConfig, Preset};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -239,6 +239,15 @@ mod tests {
     };
 
     use super::*;
+
+    /// Writes the catalog for the screenshot harness (apps/studio/tools/shots/catalog.json):
+    /// `STUDIO_CATALOG_OUT=<path> cargo test write_catalog -- --ignored`.
+    #[test]
+    #[ignore = "a tool, not a check"]
+    fn write_catalog_for_the_screenshot_harness() {
+        let out = std::env::var("STUDIO_CATALOG_OUT").expect("set STUDIO_CATALOG_OUT");
+        std::fs::write(out, serde_json::to_string(&catalog().unwrap()).unwrap()).unwrap();
+    }
     use crate::source::tests::temp_dir;
 
     fn json(text: &str) -> Value {
@@ -672,13 +681,22 @@ mod tests {
             parses(&value, format!(r#"{{ "top": {{ "design": "{value}" }} }}"#));
         }
         for value in ts_list("DOCK_DESIGNS") {
-            parses(&value, format!(r#"{{ "dock": {{ "design": "{value}" }} }}"#));
+            parses(
+                &value,
+                format!(r#"{{ "dock": {{ "design": "{value}" }} }}"#),
+            );
         }
         for value in ts_list("GLASS_STYLES") {
-            parses(&value, format!(r#"{{ "top": {{ "look": {{ "glass": "{value}" }} }} }}"#));
+            parses(
+                &value,
+                format!(r#"{{ "top": {{ "look": {{ "glass": "{value}" }} }} }}"#),
+            );
         }
         for value in ts_list("FAMILIES") {
-            parses(&value, format!(r#"{{ "dock": {{ "look": {{ "family": "{value}" }} }} }}"#));
+            parses(
+                &value,
+                format!(r#"{{ "dock": {{ "look": {{ "family": "{value}" }} }} }}"#),
+            );
         }
         for value in ts_list("COLOR_TOKENS") {
             assert!(COLOR_TOKENS.contains(&value.as_str()), "{value}");
