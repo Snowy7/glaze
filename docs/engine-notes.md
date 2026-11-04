@@ -209,54 +209,314 @@ README-ready text: replace the "Rust hot-patching (experimental, not working yet
 > [`docs/engine-notes.md`](docs/engine-notes.md) for the four setup problems already solved
 > and the one that remains.
 
-## Liquid glass pass (`crates/wallpaper/src/glass_pass.rs`)
+## Native plate engine (N0.3 / N2)
 
-Widgets now use the monitor's wallpaper snapshot, blurred and lensed in the shell (see
-`docs/widgets.md`, "Liquid glass"). The pass below remains available to plate writers, but the
-widget host no longer publishes engine plates. Web wallpapers publish a low-resolution snapshot
-through WebView2 `CapturePreview`; shader/image/video backdrops retain the GPU copy path. Their
-ten-second refresh requests come from the bars or `backdrop/widgets-request.json`.
+The engine is the only hardware GPU process. Native shell plates arrive through
+`mypaper-glass-ipc`, a session-local page-file mapping protected by a seqlock and a named
+auto-reset wake event. The shell owns all animation. Geometry, including subpixel positions,
+is used directly: there is no engine spring, JSON file, registered glass message, fade timer
+or plate scratch texture. A dead writer clears its plates when its process handle signals;
+a new shell can recover the abandoned writer mutex.
 
-UI processes publish glass plates (`mypaper_theme::glass`: `%LOCALAPPDATA%\mypaper\glass\<source>.json`
-plus the registered `mypaper.glass` message to the control window; the widget host writes
-`widgets.json`, see docs/widgets.md, "Liquid glass"); the engine draws them into its own frame after
-the backdrop copy. Per plate: one instance of five quads (glass.wgsl). Four make the ring of the rim
-band, the only part that samples: what is just outside the edge is pulled into the rim (a
-quarter-circle profile, steep at the very edge, with a slight chromatic split), under one thin
-specular edge lit from the top left and a fainter one opposite. The fifth is the centre, drawn only
-for a tint (a flat wash, nothing sampled) or a blur; a clear centre is never rasterized. Before the
-draw, the frame around the rims (each band and as far out as it reaches) is copied into a scratch
-texture, the strips of one plate and the facing edges of plates side by side merged into as few
-copies as cover them (a copy costs more than its pixels). Plates spring between rects; a still
-wallpaper redraws while one moves and once in the frame it settles (on every screen it was or is
-on). The hooks are four lines in `engine.rs` (`advance`, `take_dirty`, `deadline`, `encode`) and one
-in `main.rs`'s pump; without plates nothing is allocated or drawn. A native source (web, app, video
-drawn by its own swapchain) gets no plates: there is no frame of ours to draw into.
+Each visible screen keeps its **unmodified last wallpaper** as a sampled texture. Shader
+`scale` determines that texture's size: at 2560 x 1440, rain-city keeps 1664 x 936 rather than a
+second full-size texture. A full-scale source keeps 2560 x 1440. The engine restores the acquired
+swapchain image (copy at full scale when supported, upscale blit otherwise), then draws plates
+sampling the kept frame. A geometry/material update only restores and draws glass. A still
+source draws once and then makes no submissions until something changes; removing a plate
+restores the old region too. Theme switches release all old kept textures and plate bindings.
+Web/app kinds continue to own their windows and have no engine plates; their live glass is the
+separate overlay slice.
 
-Cost, measured with the ignored test `glass_cost` (`cargo test -p mypaper-wallpaper glass_cost --
---ignored --nocapture`; many passes per submit, with the CPU's encoding timed apart, so the GPU's
-share is the rest; low-power AMD iGPU, 2560x1440, widget-sized 300x200 plates). Old and new were run
-back to back, twice, with nothing else on the GPU:
+The clear material uses a continuous fourth-power rounded corner profile, a circular-cap
+**inward** bevel confined to the edge, a clear centre, optional blur, and two opposite specular
+cones coloured by the backdrop. Clarity jointly controls tint strength and luminance
+compression. Clear centres preserve the wallpaper; a caller can supply a dimming tint over bright media.
+The clear default has no shadow,
+matching the Tahoe clear references in `C:\mypaper-targets\refs\liquid-glass`. This pass does
+not introduce a regular-material drop shadow.
 
-| plates | GPU before | GPU now | CPU encoding before | now | copies now |
-|---|---|---|---|---|---|
-| 1 | 0.07 to 0.095 ms | 0.06 to 0.075 ms | 0.05 ms | 0.05 ms | 4 |
-| 4 | 0.17 ms | 0.11 ms | 0.09 ms | 0.065 ms | 7 |
-| 24 | 0.69 ms | 0.37 ms | 0.335 ms | 0.18 ms | 13 (from 96) |
+### Shell writer API
 
-(The first numbers here, 0.35 to 1.1 ms, counted the encoding as GPU time. The benchmark measures
-wall time: with another process drawing on the same GPU, a web wallpaper say, both versions show
-about 0.2 ms more of its work.) What it took: no shadow ring (half the instances and fragments), a
-narrower band, merged copies, and no allocations per frame. It is paid only on frames the wallpaper
-draws anyway (an animated source), or once (a still one). Left: at many plates the draw dominates
-(the band's three taps per fragment); a smaller band, or one tap in the band's inner half where the
-bend is under a pixel, would trim it. `glass_preview` (ignored) draws plates over a BMP, to judge
-the look without a desktop.
+The crate is `mypaper-glass-ipc` (`crates/glass-ipc`); all geometry/blur units are **physical
+virtual-desktop pixels**, not DIPs. Clarity 1 is clear and 0 is tinted. Colours are straight
+sRGB RGBA in 0..=1. Radii are nonnegative; rect width/height must be positive and finite.
+
+```rust
+pub const MAX_PLATES: usize = 96;
+
+pub struct Material {
+    pub clarity: f32,
+    pub blur: f32,         // 0..=32 physical px
+    pub refraction: f32,   // 0..=1
+    pub highlight: f32,    // 0..=1
+    pub tint: [f32; 4],    // RGBA, each 0..=1
+}
+pub struct Plate {
+    pub id: u64,           // unique within the complete snapshot
+    pub rect: [f32; 4],    // x, y, width, height
+    pub radius: f32,
+    pub material: Material,
+}
+impl Writer {
+    pub fn open() -> anyhow::Result<Self>;
+    pub fn publish(&mut self, plates: &[Plate]) -> anyhow::Result<u64>;
+}
+pub struct Snapshot {
+    pub sequence: u64,
+    pub published_qpc: u64,
+    pub plates: Vec<Plate>,
+}
+impl Reader {
+    pub fn open() -> anyhow::Result<Self>;
+    pub fn wake_event(&self) -> windows::Win32::Foundation::HANDLE;
+    pub fn writer_process(&self) -> Option<windows::Win32::Foundation::HANDLE>;
+    pub fn read_changed(&mut self) -> anyhow::Result<Option<Snapshot>>;
+}
+```
+
+`Material` and `Plate` derive `Debug, Clone, Copy, PartialEq`; `Material::default()` is
+`{ clarity: 1.0, blur: 0.75, refraction: 0.65, highlight: 0.55, tint: [0,0,0,0] }`.
+`Writer::publish` atomically replaces the complete set and returns its even sequence. Duplicate
+ids, nonfinite geometry, out-of-range materials and more than 96 plates are rejected before
+publication. Keep the writer on its creating thread: its lifetime mutex is thread-owned.
+Dropping it publishes an empty set and releases the lease. A second writer is rejected,
+including a recursive acquisition on the same thread. There is deliberately one shell writer.
+
+The named objects are `Local\mypaper.glass.v1`, `.wake`, and `.writer`. The 5,784-byte v1
+mapping holds atomic sequence/QPC/PID/count fields and 96 x 15 atomic 32-bit payload words;
+there are no pointers, strings, serde or filesystem operations on this path. The odd/even
+sequence brackets atomic payload accesses, so readers neither tear a snapshot nor create
+Rust data races. Reader retries are bounded; the event remains signalled for a later publish.
+`qpc()` and `qpc_frequency()` expose the common Windows clock for the performance harness.
+
+`cargo run --release -p mypaper-wallpaper --example plates -- --seconds 120` publishes a
+floating bar, dock and six widgets **on each monitor** (16 plates on this fixture).
+`--animate --hz <display rate>` moves both docks at that rate; no shell or second GPU device
+is created. Run this only under the desktop lock described in `plans/native/IMPLEMENTING.md`.
+
+### Renderer settings (GPU and frame cap)
+
+The default on desktops and laptops is `integrated`: wgpu's low-power preference. There is
+no battery-dependent switch to discrete graphics. `high-performance` requests that adapter;
+`auto` leaves selection to wgpu. These are preferences when the requested class is unavailable.
+The selected adapter and requested preference are logged. Only the engine opens a device.
+
+Global and per-wallpaper user keys in `%APPDATA%\mypaper\config.json`:
+
+```json
+{
+  "engine": {
+    "gpu": "integrated",
+    "fps": 60,
+    "wallpapers": {
+      "rain-city": { "gpu": "high-performance", "fps": 30 }
+    }
+  }
+}
+```
+
+A theme may provide root-level `"engine": {"gpu":"auto","fps":30}` in `theme.json`.
+Resolution is user per-wallpaper override > theme preference > global > built-in default.
+Overrides use the theme folder basename (`rain-city`), including themes loaded by absolute
+path. Omitted/null `fps` inherits; the global default is uncapped. Integer caps are 1..=360:
+`60` means at most 60 wallpaper frames per second (60 Hz). A cap cannot raise a source's own
+cadence; rain remains 30 fps at 0.65 scale unless explicitly capped lower. Plate publications
+remain independent of the wallpaper cap. Stills and slideshow holds still sleep, and external
+web/app processes retain their own clocks. The keys do not change shader quality or scale.
+
+Both files are watched. FPS changes apply in process; GPU changes exit with `EXIT_RESTART`,
+so the existing core supervisor releases and restarts only the engine on the selected adapter.
+A directly launched development engine exits with that code and needs its launcher to restart
+it. Invalid live config keeps the last valid settings. Studio controls are deferred to N7.
+The shared schema types are `mypaper_config::{GpuPreference, RenderOptions, EngineConfig,
+RenderSettings}`; theme `engine` uses `RenderOptions`. See their exact fields in
+`crates/config/src/engine.rs`.
+
+### Shader image inputs
+
+```json
+{"wallpaper":{"kind":"shader","source":"rain.wgsl","fps":30,"scale":0.65,
+ "images":[{"source":"media/city.jpg","binding":1},
+           {"binding":3,"prefilter":{"source":"profile.wgsl",
+                                     "size":[8192,1],"format":"rgba32float"}}]}}
+```
+
+Group 0 binding 0 remains the 32-byte `paper` uniform. Each image reserves an odd texture
+binding from 1 through 29 and its following filtering-sampler binding. Paths follow the same
+validation and resolution rules as other assets. WIC decodes each photo once; the GPU builds
+its mip chain once. Unorm sampling preserves the old WebGL ShaderMaterial's colour treatment.
+Use `textureSample` for implicit refracted-UV mip selection, or `textureSampleLevel` for an
+explicit LOD. `scale` still controls rendering resolution and the kept texture.
+
+Optional `prefilter` runs a theme-owned WGSL `vs`/`fs` pass once at load, with input texture
+at group 0/binding 0 and filtering sampler at binding 1. It has no `paper` uniform. Output
+`size` defaults to the input dimensions; valid dimensions are 1..=16384. `format` defaults
+to `bgra8unorm` (with mipmaps); `rgba32float` is an unfiltered, single-mip data cache accessed
+with `textureLoad`. Omit image `source` for a generated texture; its default size is then 1x1.
+Artistic shader code and its licence stay in the theme, outside the MIT engine.
+
+The three rain variants retain Heartfelt's layers, speeds, intensity, grading, vignette,
+1.06 stationary CSS zoom and **all 18 original photo samples**, including the original /16
+gain. Analytic gradients share field evaluation instead of evaluating Heartfelt three times.
+The 8192 x 1 float32 row/column cache removes repeated trig/hash work without quantizing the
+rain field. Fixed-time captures before/after this cache have 99.995% identical pixels in the
+1800 x 800 wallpaper crop; the rest differ by at most one RGB level. A static photo-blur
+prefilter was rejected because it changed the stochastic grain; branchy droplet early-outs
+were rejected because they were slower on this iGPU. Neither optimization remains in production.
+Explicit disk radii and reduced sine arguments avoid the FXC blur regression caught in the
+web/native comparison. The snow ports keep all 50 original layers and the old CSS-resolution/
+0.65-canvas crop and density. Fluids and vanta-waves remain web themes. Original GLSL, photo
+grants, vendor notices and CC BY-NC-SA terms remain; obsolete page/JS hosts are removed.
+
+### Timestamp telemetry
+
+`MYPAPER_GPU_TIMINGS=<absolute JSONL path>` enables the adapter's wgpu timestamp-query and
+encoder-timestamp features. Four GPU stamps measure wallpaper, restore/backdrop and glass
+separately, per screen. Eight asynchronous readback slots avoid waiting for a map; file output
+runs on a worker. Unsupported queries fail explicitly instead of substituting CPU timings.
+With telemetry disabled there are no queries, readback buffers, worker or polling timer.
+
+Each line contains `screen`, `frame`, `wallpaper_drawn`, `glass_drawn`, `sequence`,
+`wallpaper_ms`, `restore_ms`, `glass_ms`, `publish_to_submit_ms`, and `submit_qpc`.
+Publish-to-submit is a CPU delivery measurement. `MYPAPER_COMPOSITION_TIMING=1` additionally
+calls `DwmFlush` after presenting both screens and records `publish_to_composition_ms`, an
+upper bound on display delivery. This benchmark-only wait is excluded from ordinary CPU
+baselines. [Microsoft documents](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/nf-dwmapi-dwmflush)
+that DwmFlush waits for the caller's queued DirectX updates to be drawn. It is not a
+per-display scanout timestamp.
+GPU stamps use `Queue::get_timestamp_period()`. See `docs/performance.md` for the live runs,
+merge gates and the limits of the lag check.
+
+### Native measurements (4-5 November 2026)
+
+Release build, AMD Radeon(TM) integrated GPU (DX12/FXC), Ryzen 7 7800X3D / 16 logical
+CPUs. Both physical 2560 x 1440 displays were visible throughout every accepted sample:
+DISPLAY1 at 240 Hz, DISPLAY2 at 200 Hz. The default clear fixture publishes a bar, dock and
+six widgets on each display (16 plates); writer cost is excluded from engine-process figures.
+Each run takes the shared desktop lock, and restores the original core and window placements.
+
+CPU/private memory below are medians of **three independent 60-second samples**, without
+queries or composition waits. MiB means private bytes / 1,048,576; these are not VRAM figures.
+
+| Engine fixture | Private MiB (three runs) | Median MiB | CPU, % of one core (three runs) | Median CPU |
+|---|---|---:|---|---:|
+| Rain-city, 30 fps / 0.65 | 445.56 / 448.07 / 449.09 | **448.07** | 3.175 / 2.759 / 2.134 | **2.759%** |
+| Aurora, 60 fps / full scale | 420.21 / 418.10 / 420.68 | **420.21** | 2.629 / 2.212 / 2.889 | **2.629%** |
+
+The engine memory gate is the larger median + 10 MiB: **458.1 MiB private** (448.1 + 10,
+rounded to one decimal). Rain meets the <=4% one-core CPU gate on both screens together.
+The plan's whole-product allowance remains engine gate + 48 MiB (506.1 MiB); no native-shell
+or whole-product pass is claimed by this engine-only fixture.
+
+A separate 20-second timestamp run measures every component. Values below are
+**median / p95 / maximum milliseconds**; complete-frame time includes wallpaper + restore/
+backdrop + glass, so the 2 ms gate cannot be passed by timing only the wallpaper pass.
+All 600 two-screen frame pairs were complete.
+
+| GPU work | DISPLAY1 (240 Hz) | DISPLAY2 (200 Hz) | Gate / result |
+|---|---|---|---|
+| Wallpaper pass | 4.341 / 4.566 / 4.723 | 3.829 / 3.958 / 4.671 | Both already exceed 2 ms |
+| Restore / backdrop | 1.125 / 1.285 / 1.698 | 1.149 / 1.325 / 1.643 | Included in frame time |
+| Plates, per screen | 0.204 / 0.230 / 0.248 | 0.215 / 0.240 / 0.275 | Not the all-plate gate |
+| **Complete frame** | **5.623 / 5.949 / 6.542** | **5.196 / 5.466 / 6.160** | **FAIL <=2 ms per screen** |
+| **All 16 plates, summed** | **0.401 / 0.460 / 0.502** | (both screens combined) | **FAIL <=0.3 ms** |
+
+The remaining median gaps are **3.623 / 3.196 ms** per complete frame, and **0.101 ms** for
+all plates. Analytic gradients share Heartfelt field evaluation; one-time float32 row/column
+caching removes repeated trig/hash work; photo mipmaps are built once; static sources and
+unchanged plates skip rendering; glass reads the kept frame without a scratch copy or spring.
+All 18 photo samples, every rain/snow layer, 0.65 scale and 30 fps are retained. A static photo
+blur changed the grain and was removed; branchy droplet early-outs were slower and removed.
+The row-cache-only comparison was modest: before 4.415 / 3.877 ms wallpaper medians, after
+4.341 / 3.829 ms, with scheduling noise. This is not enough to meet the iGPU budget.
+
+A 20-second motion run publishes moving docks at **240 Hz**. Only glass-only rows are used
+for lag below: 2,005 on DISPLAY1 and 1,834 on DISPLAY2; 1,200 wallpaper submissions still run
+at 30 fps total across both screens. Latest geometry is latched after swapchain acquisition.
+
+| Rain + moving plates | DISPLAY1 | DISPLAY2 |
+|---|---|---|
+| One display frame | 4.167 ms | 5.000 ms |
+| Publish -> queue submit, median / p95 / max | 2.867 / 4.185 / 4.779 ms | 2.369 / 4.207 / 4.897 ms |
+| Publish -> DWM completion bound, median / p95 / max | 7.486 / 11.984 / 13.368 ms | 5.858 / 8.312 / 10.137 ms |
+| One-frame glass lag gate | **Not established** | **Not established** |
+
+The DwmFlush bound exceeds one frame by 3.319 / 0.858 ms at the median, and 7.817 / 3.312 ms
+at p95. This is a conservative completion bound for both screens, not a per-display scanout
+measurement. Queue submission alone cannot establish visible lag. Precise scanout remains
+unverified; the <=1-frame gate is not claimed. The composition wait changes pacing and is
+excluded from the ordinary CPU/memory baselines.
+
+Over a still photo with unchanged plates, the 60-second exact window contains **0 submissions,
+0 wallpaper passes and 0 glass passes**, with 362.09 MiB private and 0.104% one-core CPU.
+The frame loop has no idle render timer; window/config events can still wake the process.
+The telemetry-off 60-second still baseline measures **363.98 MiB / 0.078% of one core**.
+The strict 0% still-CPU gate is therefore not met in this desktop session, even though the
+separate query run proves zero rendering; event handling still has a measurable CPU cost.
+
+A separate 15-second still + 240 Hz motion run has **0 wallpaper submissions** throughout:
+2,158 / 2,110 glass-only rows. Queue delivery is 1.801 / 1.344 ms median,
+4.203 / 4.089 ms p95, 4.847 / 4.647 ms maximum. Its DWM completion bound is
+6.132 / 5.383 ms median, 8.740 / 8.160 ms p95, and 29.241 / 29.241 ms maximum.
+Its all-plate GPU time is 0.377 / 0.431 / 0.589 ms (median / p95 / max).
+This verifies source reuse, not the one-frame presentation gate.
+
+Telemetry overhead is measured separately: GPU-query rain uses 4.607% one-core CPU / 454.80 MiB;
+rain motion + DwmFlush uses 12.023% / 456.97 MiB; still motion + DwmFlush uses 13.534% /
+380.80 MiB. These opt-in runs are not substituted for the telemetry-off idle fixture.
+
+**Default stays integrated** on both desktops and laptops. The earlier RTX candidate's roughly
+0.62 ms rain / 0.067 ms all-plate figures used the rejected photo prefilter, so they are not
+final-quality measurements and do not justify a policy change. Users can explicitly select
+`high-performance` or `auto`; there is no automatic RTX promotion. Studio controls remain N7.
+
+Raw CPU/RAM samples and GPU/lag summaries are committed under
+[`tools/perf/results/native-2026-11-04`](../tools/perf/results/native-2026-11-04).
+Full JSONL traces and fixed-time images remain in `C:/mypaper-targets/native-engine/`.
+The five `visuals/<theme>-web.png` / `-native.png` pairs and `visuals/weather-comparison.png`
+were inspected for photo/crop, preset colour, weather density and blur. WebGL/WGSL hash
+rounding changes individual rain/snow locations; the port is not pixel-identical to WebGL.
+`visuals/quality-comparison.png` compares the native rain shader before/after the row cache at
+12 seconds: **99.99507% identical pixels** in a 1800 x 800 crop, RGB MAE 0.00001644,
+p99 difference 0 and maximum 1/255. No blur taps, scale or layer counts were reduced.
+Clear-glass edge/dock crops were compared with the Tahoe clear references: inward lensing,
+clear centre, opposite angle-dependent glints, no clear-material shadow.
+
+The required `measure.ps1 -Label native-engine-restored-desktop -Seconds 60` also ran
+under its own lock after the isolated fixture was stopped. It samples the **restored legacy
+product**, not the native engine fixture: 24 processes, 98.72% of one core (6.170% of this
+machine), 7.73% GPU 3D, 455 MiB GPU memory, 1,069 MiB private / 1,587 MiB working set.
+Its 19 WebView2 processes account for 852 MiB private and 96.43% one-core CPU. This separate
+counter sample is excluded from N0.3 gates; its raw output is `restored-product-counters.json`.
+
+Cleanup limitation: automatic approval review rejected removal of the stopped test WebView
+profile, returning only "blocked by policy". No test WebView processes remain, but
+`C:/mypaper-targets/native-engine/release/native-stage/env-0/local/mypaper/webview2` was left
+on disk. No user browser profile was targeted.
+
+Desktop cleanup stopped all fixture engines/writers and restarted the original
+`D:/Coding/projects/desktop/wallpaper/target/release/mypaper-core.exe`. The existing user's
+`bars.json` has `taskbar.mode: "hide"`: a final show request left the primary taskbar hidden
+and the secondary visible. That user setting was not changed. Another agent subsequently
+acquired the desktop lock for its own session; its processes/lock were left alone.
+
+The native runner's success exit means the sample was accepted (including visibility), not
+that GPU/lag/zero-CPU budgets passed. These open gates are reported explicitly above.
+
+Validation: 132 scoped Rust tests pass (config 11, IPC 2, theme 14, wallpaper 87, perf 18),
+with two existing wallpaper dev tests ignored (real desktop wallpaper mutation and the still
+export helper). All-target Clippy is clean on the five changed crates. The GPU port-compile
+test ran under the desktop lock; all 66 catalog asset byte counts and SHA-256 hashes match.
+Live config verified a 12 fps cap without restart and high-performance/auto/integrated restart
+requests using core's existing EXIT_RESTART contract. No bars/widgets compatibility patch,
+N7 Studio UI, or overlay code was changed. GPU, lag and strict still-CPU gates remain open for further optimization.
+
 
 ## Curated live wallpapers — 4 November 2026
 
-The gallery contains 15 live themes: four H.264 videos, seven local WebView2 pages and
-four WGSL ports/palettes. The user rejected plain stills and weak loops; those candidates
+The gallery contains 15 live themes: four H.264 videos, two local WebView2 pages and
+nine WGSL ports/palettes. The user rejected plain stills and weak loops; those candidates
 were removed. Rainy Hong Kong is retained with amber/heavier-rain and midnight/lighter-rain
 presets. No new original shader artwork was invented. Sources, author grants, exclusions
 and the proposed local importer are in [the research record](research/wallpaper-sources.md).
@@ -265,7 +525,7 @@ Every shipped file is attributed in [CREDITS.md](../themes/CREDITS.md); the mach
 
 New binary data is **23,947,981 bytes (22.84 MiB)**, including the new legacy interactive
 preview. Curated binaries account for 23,945,606 bytes; all curated theme files total
-28,053,809 bytes. Existing assets moved into `examples/` are excluded from new-binary
+24,706,400 bytes. Existing assets moved into `examples/` are excluded from new-binary
 accounting. Full upstream movies, download tools and temporary recordings are not shipped.
 Eight selections are CC BY-NC-SA 3.0: the rain, snow and Seascape families. Remove them or
 obtain permission before a commercial distribution; retain their ShareAlike terms and the

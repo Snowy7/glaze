@@ -1,0 +1,281 @@
+{
+  "label": "native-engine-restored-desktop",
+  "at": "2026-11-05T00:07:27",
+  "rows": [
+    {
+      "part": "webview2:crashpad-handler",
+      "pid": 87244,
+      "cpu_core_pct": 0.03,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 3,
+      "ws_mb": 13
+    },
+    {
+      "part": "webview2:utility",
+      "pid": 70556,
+      "cpu_core_pct": 0,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 8,
+      "ws_mb": 20
+    },
+    {
+      "part": "webview2:renderer",
+      "pid": 68964,
+      "cpu_core_pct": 0.03,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 30,
+      "ws_mb": 75
+    },
+    {
+      "part": "webview2:crashpad-handler",
+      "pid": 89000,
+      "cpu_core_pct": 0,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 3,
+      "ws_mb": 14
+    },
+    {
+      "part": "webview2:renderer",
+      "pid": 15208,
+      "cpu_core_pct": 3.72,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 37,
+      "ws_mb": 90
+    },
+    {
+      "part": "webview2:renderer",
+      "pid": 37176,
+      "cpu_core_pct": 0.31,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 33,
+      "ws_mb": 82
+    },
+    {
+      "part": "webview2:browser",
+      "pid": 81352,
+      "cpu_core_pct": 14.77,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 37,
+      "ws_mb": 119
+    },
+    {
+      "part": "webview2:utility",
+      "pid": 72508,
+      "cpu_core_pct": 0.05,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 11,
+      "ws_mb": 37
+    },
+    {
+      "part": "webview2:renderer",
+      "pid": 70472,
+      "cpu_core_pct": 0.08,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 29,
+      "ws_mb": 75
+    },
+    {
+      "part": "mypaper-bars",
+      "pid": 13972,
+      "cpu_core_pct": 0.99,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 9,
+      "ws_mb": 51
+    },
+    {
+      "part": "webview2:utility",
+      "pid": 55632,
+      "cpu_core_pct": 0,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 13,
+      "ws_mb": 40
+    },
+    {
+      "part": "webview2:renderer",
+      "pid": 9196,
+      "cpu_core_pct": 10.6,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 64,
+      "ws_mb": 116
+    },
+    {
+      "part": "webview2:browser",
+      "pid": 4236,
+      "cpu_core_pct": 0.86,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 51,
+      "ws_mb": 143
+    },
+    {
+      "part": "plugin-weather",
+      "pid": 66052,
+      "cpu_core_pct": 0,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 3,
+      "ws_mb": 15
+    },
+    {
+      "part": "webview2:renderer",
+      "pid": 53920,
+      "cpu_core_pct": 3.02,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 37,
+      "ws_mb": 84
+    },
+    {
+      "part": "mypaper-wallpaper",
+      "pid": 43712,
+      "cpu_core_pct": 0.89,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 77,
+      "private_mb": 142,
+      "ws_mb": 9
+    },
+    {
+      "part": "webview2:renderer",
+      "pid": 39160,
+      "cpu_core_pct": 2.73,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 37,
+      "ws_mb": 84
+    },
+    {
+      "part": "webview2:gpu-process",
+      "pid": 80856,
+      "cpu_core_pct": 6.07,
+      "gpu3d_pct": 3.61,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 156,
+      "private_mb": 154,
+      "ws_mb": 98
+    },
+    {
+      "part": "mypaper-core",
+      "pid": 61320,
+      "cpu_core_pct": 0.05,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 10,
+      "private_mb": 53,
+      "ws_mb": 50
+    },
+    {
+      "part": "webview2:renderer",
+      "pid": 65164,
+      "cpu_core_pct": 4.11,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 36,
+      "ws_mb": 91
+    },
+    {
+      "part": "webview2:utility",
+      "pid": 64192,
+      "cpu_core_pct": 0,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 7,
+      "ws_mb": 20
+    },
+    {
+      "part": "mypaper-widgets",
+      "pid": 57204,
+      "cpu_core_pct": 0.36,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 10,
+      "ws_mb": 35
+    },
+    {
+      "part": "webview2:gpu-process",
+      "pid": 93316,
+      "cpu_core_pct": 49.95,
+      "gpu3d_pct": 4.12,
+      "gpu_copy_pct": 0.05,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 212,
+      "private_mb": 229,
+      "ws_mb": 144
+    },
+    {
+      "part": "webview2:renderer",
+      "pid": 82992,
+      "cpu_core_pct": 0.1,
+      "gpu3d_pct": 0,
+      "gpu_copy_pct": 0,
+      "gpu_video_pct": 0,
+      "gpu_mem_mb": 0,
+      "private_mb": 33,
+      "ws_mb": 82
+    }
+  ],
+  "total": {
+    "part": "TOTAL",
+    "procs": 24,
+    "cpu_core_pct": 98.72,
+    "gpu3d_pct": 7.73,
+    "gpu_video_pct": 0,
+    "gpu_mem_mb": 455,
+    "private_mb": 1069,
+    "ws_mb": 1587
+  },
+  "theme": "rain-city"
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "scenario": "still-plates",
+    "run": 0,
+    "seconds": 60.0318651,
+    "private_mb": 362.09375,
+    "cpu_core_pct": 0.1041113746772462,
+    "cpu_machine_pct": 0.006506960917327887,
+    "visible_screens": 2,
+    "timing_file": "C:/mypaper-targets/native-engine/measured-still.run0.jsonl",
+    "sample_started_qpc": 3585692617863,
+    "sample_ended_qpc": 3586292936517
+  }
+]

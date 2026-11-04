@@ -23,11 +23,12 @@ use windows::core::BOOL;
 
 use crate::procs::{self, Handle};
 
-const ENGINE: [&str; 4] = [
+const ENGINE: [&str; 5] = [
     "mypaper-core.exe",
     "mypaper-wallpaper.exe",
     "mypaper-widgets.exe",
     "mypaper-bars.exe",
+    "mypaper-plates.exe",
 ];
 const LOCK_RETRY: Duration = Duration::from_secs(5);
 const LOCK_STALE: Duration = Duration::from_secs(5 * 60);
@@ -211,6 +212,12 @@ fn stop_user_mypaper(stage: &Path) -> Result<Option<PathBuf>> {
         user_core = user_core.or(image);
     }
     let gone = procs::wait_until(STOP_TIMEOUT, || {
+        for core in procs::list()
+            .iter()
+            .filter(|p| p.name.eq_ignore_ascii_case(ENGINE[0]))
+        {
+            procs::post_quit(core.pid);
+        }
         !procs::list()
             .iter()
             .any(|p| ENGINE.iter().any(|e| p.name.eq_ignore_ascii_case(e)))

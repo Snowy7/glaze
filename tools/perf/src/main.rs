@@ -12,10 +12,13 @@
 //! `%APPDATA%` / `%LOCALAPPDATA%`, restarts the user's mypaper (always), writes
 //! `perf/results/<date>.{md,json}` and `perf/latest.{md,json}`, and exits with 1 when a limit is
 //! broken (listing every one), 2 when it couldn't run.
+//! Native N0.3 measurement mode saves raw CPU/RAM samples and optional GPU JSONL instead;
+//! its exit status validates the sample, not the native plan's GPU/lag gates.
 
 mod budget;
 mod cpu;
 mod markers;
+mod native;
 mod procs;
 mod report;
 mod run;
@@ -42,7 +45,8 @@ use crate::session::Session;
 
 const USAGE: &str = "usage: mypaper-perf [--build DIR] [--content DIR] [--runs N] [--seconds N] \
                      [--label TEXT] [--restart EXE] [--hold SECONDS] [--no-write] [SCENARIO...] \
-                     | --check REPORT.json | --list";
+                     | --check REPORT.json | --list \
+                     | --native --build DIR --content DIR [--timestamps] [--composition] NATIVE_SCENARIO";
 /// Sessions stop the user's mypaper; each stays under this (the lock protocol's 5 minutes,
 /// with room for stopping and restarting).
 const SESSION_BUDGET: Duration = Duration::from_secs(4 * 60);
@@ -74,6 +78,9 @@ fn main() -> ExitCode {
 
 /// `Ok(true)` when every limit holds.
 fn real_main() -> Result<bool> {
+    if std::env::args().any(|a| a == "--native") {
+        return native::run();
+    }
     let Some(args) = parse_args()? else {
         return Ok(true);
     };
