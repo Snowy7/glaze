@@ -212,7 +212,7 @@ COM/WinRT lane; `Lane::run` executes a plain Rust closure there. N3 can reuse th
 without recreating the old request envelopes. Virtual-desktop notifications are manual-reset: the
 outer wait leaves them signalled until `Desktops::changed` resets/rearms and reads the values.
 
-## Flyout integration seam (N3)
+## Flyouts (N3)
 
 Every panel-opening bar click calls exactly:
 
@@ -221,9 +221,88 @@ flyouts::open(kind: flyouts::Kind, anchor_rect: mypaper_ui::Rect, monitor: &mypa
 ```
 
 The anchor is in physical **screen** pixels. `Kind` is Calendar, Quick, Wifi, Mixer, Notifications,
-Launcher, Power, TrayOverflow or Language. The tiny `crates/shell/src/flyouts/mod.rs` currently opens
-Windows' panel: Win+N/calendar, control center, `ms-availablenetworks:`, app-volume settings, Start,
-Win+X/power, native tray overflow or Win+Space. N3 replaces that one boundary.
+Launcher, Power, TrayOverflow or Language. The request is queued and `Flyouts::process` (called
+by the shell's loop after each pass over the input) opens it in the same pass. Every one is native
+(`crates/shell/src/flyouts/`); none opens a Windows panel any more.
+
+| Kind | What it shows | Provider |
+|---|---|---|
+| Calendar | today, the time (a minute tick while open), a month to page through (`mypaper_ui::calendar::MonthGrid`) | Windows NLS names |
+| Notifications | toasts grouped by app, newest group first, stacked until opened; dismiss one, a group, or all; Do Not Disturb's state (its setting opens: no API changes it); the month underneath. Clock clicks open this. | `notifications` lane, read on open and every 3 s while open |
+| Quick | Wi-Fi and Bluetooth tiles (Wi-Fi's chevron opens the Wi-Fi list), power mode (cycles), battery saver, do not disturb, focus, night light (their settings), brightness, volume (mute; chevron opens the mixer), battery | `quick` lane, the endpoint volume |
+| Wifi | the radio switch, networks with signal, security and lock; Connect / Disconnect; a network that needs a password goes to **Windows' own prompt** (`ms-availablenetworks:`), enterprise ones to Settings; location-access and no-adapter states | `wifi` lane, refreshed by its scan notification |
+| Mixer | output devices (switching the default needs `audio.switchOutput`, else Sound settings), master volume, each app's volume and mute | `mixer` lane, refreshed by session events |
+| Language | the installed layouts, the front app's checked; choosing switches it | `flyouts::language` |
+| Power | lock, sleep, sign out, restart, shut down; the last three ask first | `system::power` |
+| TrayOverflow | the unpinned tray icons; left and right clicks go to the app as from the bar | `Bars::tray`, `Bars::click_tray` |
+| Launcher | a windowless RichEdit search field (IME, Arabic, CJK) over the Start menu's apps; Up/Down choose, Enter runs, recent first with no query | `apps.json` index (rebuilt on the `apps` lane when missing or a day old), `launcher.json` history |
+
+- **Win, Win+N, Win+A** open the launcher, notifications and quick settings, through the existing
+  `winkey` hook, installed while `launcher.winKey` is on and the taskbar is hidden; a fullscreen app
+  in front keeps the key for Windows. Pressing the same shortcut again closes it.
+- **One at a time, never overlapping.** One reused popup window (created hidden at start: a new
+  layered window costs ~20 ms). Opening another replaces it; the same kind again closes it.
+  Escape, a click elsewhere (deactivation) and handing over to Windows close it.
+- **Placement:** centred under (or over) the clicked module, a gap from the bar's band, inside the
+  work area; notifications at the right edge; the launcher centred high on the monitor.
+- **Motion:** position and alpha only, on a spring (~0.35 s), on a ticker armed only while it
+  moves. It is visible from its first frame (alpha starts at 45%).
+- **Glass:** for the liquid style the body is engine glass (more tinted than the bars' clear
+  glass, `look.flyouts.tint`, default 0.5) under an invisible `Rgba::HIT` fill; solid and mono
+  draw their own fill. Menus (the dock's and the desktop's) use the same material. See
+  [ui.md](ui.md) "Glass under a surface" and engine-notes "Glass overlays".
+- **Data never blocks the first frame.** Panels draw at once from what they have; lane replies and
+  worker news redraw them. Slow set-up (the endpoint volume, the keyboard layouts, launcher
+  icons) runs right after the window is shown (`Panel::opened`). Lanes stop 5 s after a close;
+  nothing polls while closed.
+- **Panels** implement `flyouts::Panel` (`width`, `view(&mut Kit)`, `activate`, `context`,
+  `slide`, `wheel`, `reply`, `changed`, `key`, `tick`, `opened`, `refresh`, `field`,
+  `text_changed`, `submit`) and lay out with `flyouts::kit::Kit` (header, rows, tiles, sliders,
+  switches, buttons, links, notices). Each control always emits the same ops, transparent at
+  rest, so a hover redraws only that control.
+
+**A bar over a window (handed over).** Bars draw plates; while an app window overlaps a bar its
+plate is hidden behind that window. The switch is one call on the bar's surface, with no new API:
+`surface.set_glass(Some(Glass { body, radius, material }))` while a window overlaps it (and that
+bar publishes no plate), `set_glass(None)` when none does. An overlay is one rounded rectangle per
+window, so islands need one surface per island or stay on plates. This lives in `bars/**`
+(the bars follow-up agent's) and is not wired in this slice.
+
+### Live N3 measurements (2026-11-05)
+
+Release core, shell and engine from this worktree under the desktop lock; fixture `APPDATA` (a still
+photo, liquid bars on both 1440p monitors, every module), `%TEMP%\mypaper-tools\n3-flyouts-live.ps1`.
+Content time is from the injected button release to the flyout window being visible, measured
+from another process; glass is the engine's own open-to-glass log. A cold click comes after 8 s idle
+(capture cold) with an 80 ms press; warm clicks follow 0.4 s after a close.
+
+| Check | Measured | Gate |
+|---|---|---|
+| Content on screen, cold click | 2.7–5.6 ms; launcher 17.7 ms | ≤30 ms |
+| Content on screen, warm click | 1.9–4.6 ms | ≤30 ms |
+| Win+N / Win+A / Win | 8.9 / 5.8 / 6.1 ms | |
+| Glass, cold click | 179–208 ms; the engine's first ever 354 ms (253 ms in the run before) | ≤300 ms |
+| Glass, warm | 42–58 ms | |
+| Redraws once settled | 0 for every flyout (1 when the notification list or app index arrives after the motion) | 0 |
+| Shell private MB, a flyout open vs closed before it | +0.2 to +2.8 MB (launcher the most) | ≤ +6 MB |
+| Shell private MB vs the pristine shell | 29.4 before any flyout; 35.9 with the first; 36.7 after all closed and lanes stopped | freed on close |
+| Overlay CPU, an animated window behind quick settings | engine 1.8–2.1% of a core (~25 updates/s), shell 0.2–0.4% | ≤3% |
+| Overlay GPU per update | 0.12–0.15 ms (copy, compare, glass; `MYPAPER_OVERLAY_TIMINGS`) | ≤0.5 ms |
+| Overlay once closed | engine 0–0.47% (no glass pass); +24 MB while open, freed after the 3 s warmth | 0 |
+| Capture border | 0 yellow edge pixels | none |
+| Screenshots | a GDI screenshot shows the popup (mean difference 316 in its rectangle) | shown |
+| Launcher typing | Latin; Arabic on the Arabic (101) layout (`لاتنم`); CJK as text (`日本語 中文 한국어`) | |
+| Dock menu with glass | glass in 174 ms | |
+
+- The pointer-down warm-up was built, measured and **dropped**: with an 80 ms press it brought cold
+  glass to 35–75 ms but stalled the click's delivery to the shell by ~30 ms (cold content 22–45 ms).
+  Without it the content gate holds and cold glass is 178–254 ms.
+- 0.47% for the engine once closed was the window-cover events of the animated test window; its
+  overlay log shows no glass pass then.
+- The shell keeps ~7 MB after its first flyouts (DirectWrite fonts, WARP surfaces, Msftedit, the
+  heap's high-water); each later open adds ≤2.8 MB and returns it.
+- No CJK IME is installed on this machine: CJK went in as committed text (Unicode input), not
+  through an IME's composition window. Arabic used the real keyboard layout.
 
 ## Plate integration seam
 

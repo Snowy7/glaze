@@ -24,10 +24,10 @@
 //! the next captured frame.
 //!
 //! **Memory and warmth.** Nothing exists until the first overlay opens. WGC's first frame takes
-//! ~100-250 ms after a session starts, so the capture device, sessions, pipelines and
-//! DirectComposition device stay [`WARM`] after the last close (the pipelines stay for good): the next popup (a submenu, the
-//! next flyout) gets its glass in a frame. A warm session with no overlay drops every frame on
-//! WGC's thread. (A warm-up on pointer-down was measured and dropped: starting the capture while
+//! ~100-250 ms after a session starts, so the capture device, sessions and DirectComposition
+//! device stay [`WARM`] after the last close (the pipelines stay for good): the next popup (a
+//! submenu, the next flyout) gets its glass in a frame. A warm session with no overlay drops
+//! every frame on WGC's thread. (A warm-up on pointer-down was measured and dropped: starting the capture while
 //! the button is down stalled the click's delivery to the shell by ~30 ms.)
 //!
 //! Driving it: create [`Overlays`] on the engine's thread, pump that thread's messages (requests

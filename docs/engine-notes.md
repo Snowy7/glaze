@@ -720,11 +720,17 @@ wallpaper showing, for example a second `mypaper-wallpaper fluids` run with `RUS
 `MYPAPER_SPIKE_NO_TIMING=1` leaves out the GPU timestamps (they wait for the GPU). Screenshots go
 to `%TEMP%\mypaper-overlay-spike\`.
 
-Left for N3:
-- The cold open misses the 300 ms window. Options: keep the session (and the 16 MB device) for a
-  few seconds after the last close, or let the shell send a hint on pointer-down.
-- At ~59 updates/s the CPU is at the 3% gate. `MIN_INTERVAL` (`capture.rs`) caps updates at
-  60/s; 1/30 s would halve it, at the cost of 30 fps glass over 60 fps content.
-- `gpu.rs` must expose the adapter for `overlay::Gpu`.
-- The engine's loop calls `Overlays::tick` after each message pump. Requests and frame wakes
-  arrive as messages to its own window, so no new wait handle is needed.
+In the engine since N3 (the shell's flyouts and menus use it; docs/bars.md "Flyouts (N3)"):
+- The engine creates `Overlays` in desktop mode with `Engine::overlay_gpu()` (`gpu.rs` exposes the
+  adapter), calls `tick` after each message pump, and wakes by `Overlays::deadline`. Requests and
+  frame wakes arrive as messages to its own window: no new wait handle.
+- **Warmth:** the capture device, sessions and DirectComposition device stay 3 s (`WARM`) after
+  the last close; the glass pipelines are built once per engine. Warm opens show glass in
+  42-58 ms; cold ones in 179-208 ms (the engine's very first, 253-354 ms). A pointer-down
+  warm-up request was tried and removed: starting the capture during a press delayed the
+  click's delivery to the shell by ~30 ms, breaking the 30 ms content gate.
+- **Update rate:** `MIN_INTERVAL` is 1/30 s. With an animated window behind quick settings the
+  engine used 1.8-2.1% of a core (~25 updates/s) and 0.12-0.15 ms GPU per update; 0 glass
+  passes and no session once closed.
+- `MYPAPER_OVERLAY_TIMINGS=1` (with `MYPAPER_GPU_TIMINGS` for the timestamp feature) times the
+  overlays' GPU work; every open logs its open-to-glass time and every close the update totals.
