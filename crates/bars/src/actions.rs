@@ -116,8 +116,7 @@ pub fn module_topic(module: &ModuleRef) -> Option<Topic> {
         | Module::Quick
         | Module::Power
         | Module::T3
-        | Module::Obs
-        | Module::Docker => None,
+        | Module::Obs => None,
     }
 }
 
