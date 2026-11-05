@@ -135,9 +135,6 @@ pub fn builtins() -> Registry {
     let manifest = WidgetManifest::parse(include_str!("catalog/docker.json"), "docker")
         .expect("built-in schema");
     widgets.insert("docker".into(), Installed { manifest });
-    let manifest = WidgetManifest::parse(include_str!("catalog/tailscale.json"), "tailscale")
-        .expect("built-in schema");
-    widgets.insert("tailscale".into(), Installed { manifest });
     let manifest =
         WidgetManifest::parse(include_str!("catalog/grok.json"), "grok").expect("built-in schema");
     widgets.insert("grok".into(), Installed { manifest });
