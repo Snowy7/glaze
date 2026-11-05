@@ -7,19 +7,16 @@ use std::{
 };
 use windows::Win32::{
     Foundation::{HWND, LPARAM},
-    UI::{
-        Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent},
-        WindowsAndMessaging::*,
-    },
+    UI::{Accessibility::HWINEVENTHOOK, WindowsAndMessaging::*},
 };
+
+use mypaper_desktop::win_events::Subscription;
 
 static CHANGED: AtomicBool = AtomicBool::new(true);
 thread_local! {static TOP:RefCell<HashSet<isize>>=RefCell::new(HashSet::new());}
 
 pub struct WindowEvents {
-    hooks: Vec<HWINEVENTHOOK>,
-    locations: Vec<HWINEVENTHOOK>,
-    processes: Vec<u32>,
+    _subscription: Subscription,
 }
 impl WindowEvents {
     pub fn install() -> Self {
@@ -28,80 +25,29 @@ impl WindowEvents {
         unsafe {
             let _ = EnumWindows(Some(remember), LPARAM(0));
         }
-        let hooks = [
-            (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
-            (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
-            (EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE),
-            (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
-        ]
-        .into_iter()
-        .filter_map(|(first, last)| hook(first, last, 0))
-        .collect();
         CHANGED.store(true, Ordering::Relaxed);
         Self {
-            hooks,
-            locations: Vec::new(),
-            processes: Vec::new(),
+            _subscription: Subscription::new(|event| {
+                if event.event == EVENT_OBJECT_NAMECHANGE {
+                    return;
+                }
+                // SAFETY: the shared source calls us on the shell UI thread with whole windows.
+                unsafe {
+                    changed(
+                        HWINEVENTHOOK::default(),
+                        event.event,
+                        HWND(event.window as _),
+                        OBJID_WINDOW.0,
+                        CHILDID_SELF as i32,
+                        0,
+                        0,
+                    )
+                };
+            }),
         }
     }
     pub fn take_changed(&mut self) -> bool {
-        if !CHANGED.swap(false, Ordering::Relaxed) {
-            return false;
-        }
-        let (mut foreground, mut explorer) = (0, 0);
-        // SAFETY: read-only process IDs, used to scope callbacks on this UI thread.
-        unsafe {
-            GetWindowThreadProcessId(GetForegroundWindow(), Some(&mut foreground));
-            GetWindowThreadProcessId(GetShellWindow(), Some(&mut explorer));
-        }
-        let mut processes: Vec<_> = [foreground, explorer]
-            .into_iter()
-            .filter(|&pid| pid != 0 && pid != std::process::id())
-            .collect();
-        processes.sort_unstable();
-        processes.dedup();
-        if processes != self.processes {
-            unhook(&mut self.locations);
-            self.locations = processes
-                .iter()
-                .filter_map(|&pid| {
-                    hook(
-                        EVENT_OBJECT_LOCATIONCHANGE,
-                        EVENT_OBJECT_LOCATIONCHANGE,
-                        pid,
-                    )
-                })
-                .collect();
-            self.processes = processes;
-        }
-        true
-    }
-}
-impl Drop for WindowEvents {
-    fn drop(&mut self) {
-        unhook(&mut self.hooks);
-        unhook(&mut self.locations);
-    }
-}
-fn hook(first: u32, last: u32, pid: u32) -> Option<HWINEVENTHOOK> {
-    // SAFETY: static out-of-context callback, owned and removed on its installing thread.
-    let hook = unsafe {
-        SetWinEventHook(
-            first,
-            last,
-            None,
-            Some(changed),
-            pid,
-            0,
-            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
-        )
-    };
-    (!hook.is_invalid()).then_some(hook)
-}
-fn unhook(hooks: &mut Vec<HWINEVENTHOOK>) {
-    for hook in hooks.drain(..) {
-        // SAFETY: this object owns each successfully registered hook.
-        let _ = unsafe { UnhookWinEvent(hook) };
+        CHANGED.swap(false, Ordering::Relaxed)
     }
 }
 fn eligible(hwnd: HWND) -> bool {

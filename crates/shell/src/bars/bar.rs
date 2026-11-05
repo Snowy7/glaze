@@ -41,7 +41,7 @@ pub struct Bar {
     presentation_dirty: bool,
     pub hidden: bool,
     pub dirty: bool,
-    redraws: u64,
+    pub(super) redraws: u64,
     pub hide_at: Option<Instant>,
     pub pointer: Option<Point>,
     pub reservation: Option<Reservation>,

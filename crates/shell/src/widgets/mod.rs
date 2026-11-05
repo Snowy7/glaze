@@ -85,6 +85,9 @@ pub struct WorkCosts {
     clock_us: u64,
     coverage_us: u64,
     stats_us: u64,
+    stats_samples: u64,
+    stats_deliveries: u64,
+    stats_presents: u64,
     paint_us: u64,
     polls: u64,
     orders: u64,
@@ -710,6 +713,8 @@ impl Widgets {
         }
         let measured = Instant::now();
         let deliveries = self.stats.tick(instant);
+        self.costs.stats_samples = self.stats.samples();
+        self.costs.stats_deliveries += deliveries.len() as u64;
         self.costs.stats_us += measured.elapsed().as_micros() as u64;
         for delivery in deliveries {
             if let Delivery::Event {
@@ -860,6 +865,9 @@ impl Widgets {
                     Ok(drawn) => {
                         if drawn {
                             self.presents += 1;
+                            if matches!(entry.model.kind, Widget::System | Widget::QuickToggles) {
+                                self.costs.stats_presents += 1;
+                            }
                             if entry.model.kind == Widget::Clock {
                                 self.clock_presents += 1;
                             }

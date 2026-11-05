@@ -619,6 +619,7 @@ pub enum Delivery {
 /// Every `system.stats` request and `system` subscription, driven by one timer.
 #[derive(Default)]
 pub struct Stats {
+    samples: u64,
     sampler: Option<Sampler>,
     /// The sampler can't answer before this (see [`WARMUP`]).
     ready_at: Option<Instant>,
@@ -628,6 +629,10 @@ pub struct Stats {
 }
 
 impl Stats {
+    /// Cumulative OS samples, independent of the number of deliveries sharing each reading.
+    pub fn samples(&self) -> u64 {
+        self.samples
+    }
     fn wake(&mut self, now: Instant) {
         if self.sampler.is_none() && !self.held && !(self.subs.is_empty() && self.once.is_empty()) {
             let mut sampler = Sampler::new();
@@ -758,6 +763,7 @@ impl Stats {
         }
         .unwrap_or(SampleFields::ALL);
         let stats = sampler.sample(fields);
+        self.samples += 1;
         let mut out: Vec<Delivery> = self
             .once
             .drain(..)

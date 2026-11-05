@@ -55,6 +55,7 @@ pub struct Model {
 }
 
 pub struct Services {
+    pub stats_costs: (u64, u64, u64),
     pub model: Model,
     pub apps: Apps,
     pub icons: Icons,
@@ -98,6 +99,7 @@ impl Services {
         let waker = Waker::new(tx, unsafe { GetCurrentThreadId() });
         let dir = services::files::local("icons")?;
         Ok(Self {
+            stats_costs: (0, 0, 0),
             model: Model {
                 foreground: None,
                 app_name: "Desktop".into(),
@@ -315,13 +317,17 @@ impl Services {
         if take_due(&mut self.stats_due, now)
             && let Some(s) = &mut self.sampler
         {
+            let started = Instant::now();
             let stats = s.sample();
+            self.stats_costs.0 += 1;
+            self.stats_costs.2 += started.elapsed().as_micros() as u64;
             stats_changed = self
                 .model
                 .stats
                 .as_ref()
                 .is_none_or(|old| displayed_stats(old) != displayed_stats(&stats));
             self.model.stats = Some(stats);
+            self.stats_costs.1 += u64::from(stats_changed);
             self.stats_due = Some(now + Duration::from_secs(2));
         }
         if take_due(&mut self.custom_due, now) {

@@ -66,6 +66,7 @@ fn run() -> Result<()> {
     startup::ready("shell", "prepared_ms");
     let _com = Com::init();
     let mut ui = Ui::new()?;
+    let mut win_events = mypaper_desktop::win_events::WinEvents::install();
     startup::ready("shell", "factories_ms");
     overlay_client::install();
     let bars = bars::Bars::new(&mut ui, bars_start)?;
@@ -182,6 +183,7 @@ fn run() -> Result<()> {
                 DispatchMessageW(&msg);
             }
         }
+        win_events.refresh();
         at = wakes.spent("pump", at);
         let sent_only = cause.is_none();
         wakes.wake(cause.unwrap_or(Cause::Sent));
@@ -191,8 +193,10 @@ fn run() -> Result<()> {
                 .map(|(part, d)| format!("{part} {:.1}", d.as_secs_f64() * 1e3))
                 .collect();
             format!(
-                "bars.tick ms: {}; widgets since start: {:?}",
+                "bars.tick ms: {}; bar stats (samples, changes, sample_us, all bar repaints) since start: {:?}; WinEvents (hooks, callbacks, subscribers): {:?}; widgets since start: {:?}",
                 bars.join(", "),
+                shell.bars.stats_counts(),
+                win_events.counts(),
                 shell.widgets.as_ref().map(widgets::Widgets::costs)
             )
         });

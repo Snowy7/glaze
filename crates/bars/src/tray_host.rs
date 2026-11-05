@@ -65,14 +65,15 @@ use windows::Win32::System::Threading::{
     CreateEventW, GetCurrentThreadId, GetProcessTimes, INFINITE, OpenProcess,
     PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
 };
-use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
+use windows::Win32::UI::Accessibility::HWINEVENTHOOK;
+use mypaper_desktop::win_events::{Event as WindowEvent, Subscription};
 use windows::Win32::UI::Shell::{
     ABM_SETSTATE, SHAllocShared, SHFreeShared, SHLockShared, SHUnlockShared,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AllowSetForegroundWindow, CHILDID_SELF, CS_DBLCLKS, CopyIcon, CreateWindowExW, DefWindowProcW,
     DestroyIcon, DestroyWindow, DispatchMessageW, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
-    EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_FOREGROUND, FindWindowW, GWL_STYLE, GetIconInfo,
+    EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, EVENT_SYSTEM_FOREGROUND, FindWindowW, GWL_STYLE, GetIconInfo,
     GetShellWindow, GetWindowLongPtrW, GetWindowThreadProcessId, HICON, HWND_BROADCAST,
     HWND_TOPMOST, ICONINFO, ISMEX_NOTIFY, ISMEX_SEND, InSendMessageEx, IsWindow, MSG,
     MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, OBJID_WINDOW, PM_REMOVE, PeekMessageW,
@@ -80,7 +81,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     ReplyMessage, SC_TASKLIST, SEND_MESSAGE_TIMEOUT_FLAGS, SMTO_ABORTIFHUNG, SMTO_BLOCK,
     SMTO_ERRORONEXIT, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
     SendMessageTimeoutW, SendNotifyMessageW, SetWindowLongPtrW, SetWindowPos, TranslateMessage,
-    UnregisterClassW, WINDOWPOS, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CLOSE, WM_COMMAND, WM_COPYDATA,
+    UnregisterClassW, WINDOWPOS, WM_APP, WM_CLOSE, WM_COMMAND, WM_COPYDATA,
     WM_NCDESTROY, WM_QUIT, WM_SYSCOMMAND, WM_USER, WM_WINDOWPOSCHANGED, WM_WINDOWPOSCHANGING,
     WNDCLASSEXW, WNDPROC, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_TOOLWINDOW,
     WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
@@ -166,6 +167,7 @@ enum Command {
     },
     Place(Option<Band>),
     ExplorerRestarted,
+    ExplorerEvent(WindowEvent),
     /// An exe's description, read off the host's thread (`describe`).
     Named {
         exe: String,
@@ -619,6 +621,11 @@ fn run(commands: &Receiver<Command>, own: Sender<Command>, waker: Waker, band: O
                                         join_at = Some(Instant::now() + EXPLORER_SETTLE);
                                     }
                                 }
+                                Command::ExplorerEvent(event) => {
+                                    on_explorer_event(HWINEVENTHOOK::default(), event.event,
+                                        HWND(event.window as _), OBJID_WINDOW.0,
+                                        CHILDID_SELF as i32, 0, 0);
+                                }
                                 Command::Named { exe, name } => {
                                     with_state(|s| {
                                         s.names.insert(exe, name);
@@ -666,7 +673,7 @@ enum Join {
 struct Session {
     /// Explorer's process, signaled when it exits.
     process: Option<HANDLE>,
-    hooks: Vec<HWINEVENTHOOK>,
+    hook: Option<Subscription>,
 }
 
 impl Session {
@@ -700,28 +707,19 @@ impl Session {
         };
         // SAFETY: a wait-only handle we close in `leave`.
         self.process = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, explorer.pid) }.ok();
-        // Explorer's own windows: its tray raised, destroyed, shown, hidden or moved.
-        self.hooks = [
-            (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
-            (EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE),
-            (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
-        ]
-        .into_iter()
-        // SAFETY: out-of-context hooks on one process, delivered to this thread's loop; removed in
-        // `leave`.
-        .map(|(min, max)| unsafe {
-            SetWinEventHook(
-                min,
-                max,
-                None,
-                Some(on_explorer_event),
-                explorer.pid,
-                0,
-                WINEVENT_OUTOFCONTEXT,
-            )
-        })
-        .filter(|hook| !hook.is_invalid())
-        .collect();
+        if let Some((commands, thread)) = with_state(|s| (s.commands.clone(), s.thread)) {
+            let tray = explorer.tray.0 as isize;
+            self.hook = Some(Subscription::new(move |event| {
+                if event.window == tray && matches!(event.event,
+                    EVENT_SYSTEM_FOREGROUND | EVENT_OBJECT_DESTROY | EVENT_OBJECT_SHOW
+                    | EVENT_OBJECT_HIDE | EVENT_OBJECT_LOCATIONCHANGE)
+                    && commands.send(Command::ExplorerEvent(event)).is_ok()
+                {
+                    // SAFETY: only posts to our own tray host, whose state remains on its thread.
+                    let _ = unsafe { PostThreadMessageW(thread, WM_HOST_COMMAND, WPARAM(0), LPARAM(0)) };
+                }
+            }));
+        }
         with_state(|s| {
             s.window = Some(window);
             s.explorer = Some(explorer);
@@ -736,10 +734,7 @@ impl Session {
     /// Explorer's tray is gone: nobody would take their icons, and Explorer broadcasts its own
     /// `TaskbarCreated` when it's back.
     fn leave(&mut self) {
-        for hook in self.hooks.drain(..) {
-            // SAFETY: a hook from SetWinEventHook.
-            let _ = unsafe { UnhookWinEvent(hook) };
-        }
+        self.hook = None;
         if let Some(process) = self.process.take() {
             // SAFETY: our handle.
             let _ = unsafe { CloseHandle(process) };
