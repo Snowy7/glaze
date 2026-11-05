@@ -7,7 +7,6 @@ pub mod t3_widgets;
 mod grok_plugin_tests;
 pub mod calendar;
 pub mod custom;
-pub mod discord;
 mod panels;
 #[cfg(test)]
 mod tests;
@@ -302,7 +301,6 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
             Provider::T3 => "T3",
             Provider::Media => "Media",
             Provider::Calendar => "Calendar",
-            Provider::Discord => "Discord",
         }
         .into(),
     };
@@ -313,7 +311,6 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
             Provider::T3 => "\u{e8f2}",
             Provider::Media => "\u{e768}",
             Provider::Calendar => "\u{e787}",
-            Provider::Discord => "\u{e8f2}",
         },
     ))
 }
