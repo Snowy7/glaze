@@ -281,4 +281,47 @@ mod tests {
         snapshot.focus = Some(99);
         assert_eq!(snapshot.tree().focus, ROOT);
     }
+
+    /// The same through AccessKit itself, once a UI Automation client has activated it.
+    #[test]
+    fn an_active_adapter_survives_duplicate_hits_and_a_stale_focus() {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW, DestroyWindow, WINDOW_EX_STYLE, WS_OVERLAPPED,
+        };
+        use windows::core::w;
+        // SAFETY: a hidden STATIC window owned by this test thread, destroyed at the end.
+        let hwnd = unsafe {
+            CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("STATIC"),
+                w!("a11y test"),
+                WS_OVERLAPPED,
+                0,
+                0,
+                100,
+                100,
+                None,
+                None,
+                None,
+                None,
+            )
+        }
+        .unwrap();
+        let hit = |id| Hit {
+            id,
+            rect: Rect::new(0.0, 0.0, 50.0, 10.0),
+            role: Role::Button,
+            label: format!("hit {id}").into(),
+            enabled: true,
+            checked: None,
+        };
+        let mut a11y = A11y::deferred(hwnd, Role::Pane, "calendar".into());
+        a11y.update(&[hit(6), hit(2)], Some(6));
+        // A client asking for the window's UIA root (UiaRootObjectId) activates the adapter.
+        let _: Option<LRESULT> = a11y.get_object(WPARAM(0), LPARAM(-25)).map(Into::into);
+        a11y.update(&[hit(6), hit(2), hit(6)], Some(6));
+        a11y.update(&[hit(2)], Some(6));
+        // SAFETY: the window created above, on this thread.
+        let _ = unsafe { DestroyWindow(hwnd) };
+    }
 }
