@@ -46,9 +46,10 @@ pub fn parse(id: &str) -> Option<(&str, &str)> {
     id.split_once("--").filter(|(p, b)| !p.is_empty() && !b.is_empty())
 }
 
-/// The plugin module ids placed in `config`'s bars (both bars, every zone).
+/// The plugin module ids placed in `config`'s bars: the top bar's zones and the dock's
+/// `left`/`right` modules (a plugin dock module is the same `custom:<plugin>--<bar>`).
 pub fn place(config: &BarsConfig) {
-    let placed: BTreeSet<String> = [&config.top.left, &config.top.center, &config.top.right]
+    let placed: BTreeSet<String> = [&config.top.left, &config.top.center, &config.top.right, &config.dock.left, &config.dock.right]
         .into_iter()
         .flatten()
         .filter_map(|m| match m {

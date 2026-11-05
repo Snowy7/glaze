@@ -455,6 +455,8 @@ pub struct Flyouts {
     surface: Surface,
     open: Option<Open>,
     look: Look,
+    /// `bars::plugin_style::generation` when `look` was read: a newer one reads it again.
+    style_generation: u64,
     lanes: Lanes,
     images: Images,
     ticker: Ticker,
@@ -508,6 +510,7 @@ impl Flyouts {
                 audio: None,
             },
             look,
+            style_generation: crate::bars::plugin_style::generation(),
             images: Images::default(),
             ticker: Ticker::new()?,
             rx,
@@ -883,6 +886,11 @@ impl Flyouts {
     /// Opens `request`'s panel: drawn, placed and shown at once; its data follows.
     fn show(&mut self, ui: &mut Ui, bars: &mut Bars, request: Request) {
         let started = Instant::now();
+        // A plugin restyled the `panel` surface since the look was read.
+        let generation = crate::bars::plugin_style::generation();
+        if std::mem::replace(&mut self.style_generation, generation) != generation {
+            self.look = Look::load(&ui.text);
+        }
         let return_to = bars.external_foreground();
         self.hide();
         self.release_due = None;

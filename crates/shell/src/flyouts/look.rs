@@ -55,12 +55,11 @@ impl Look {
         let knobs = Config::load()
             .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))
             .unwrap_or_default();
-        let mut look = Self::resolve_with(
-            &bars.top.look,
-            &bars.appearance.over(&appearance),
-            &accent::read(),
-            &knobs,
-        );
+        // Plugin `panel` style patches (docs/plugins.md, "Styling"), under the user's own fields.
+        let (mut bar_look, mut appearance) = (bars.top.look.clone(), bars.appearance.over(&appearance));
+        let colors = crate::bars::plugin_style::patch_look("panel", "top", bars.raw(), &mut bar_look, &mut appearance);
+        let mut look = Self::resolve_with(&bar_look, &appearance, &accent::read(), &knobs);
+        look.patch_colors(&colors);
         look.icons = icons::system_family(text);
         look.win_key = bars.launcher.win_key;
         look.first_day = bars.calendar.first_day.map(|d| match d {
@@ -70,6 +69,22 @@ impl Look {
         });
         look.switch_output = bars.audio.switch_output;
         look
+    }
+
+    /// A plugin `panel` patch's colour roles: `label` (the ink), `accent`, and `surface` or
+    /// `background` (the body without glass). Other roles and tones are ignored here.
+    pub fn patch_colors(&mut self, colors: &[(String, crate::bars::plugin_style::TokenValue)]) {
+        use crate::bars::plugin_style::{TokenValue, hex};
+        for (name, value) in colors {
+            let TokenValue::Color(text) = value else { continue };
+            let Some(color) = hex(text) else { continue };
+            match name.as_str() {
+                "label" => self.ink = color,
+                "accent" => self.accent = color,
+                "surface" | "background" => self.fill = color,
+                _ => {}
+            }
+        }
     }
 
     /// The look of `bar` over `appearance`, as the bars resolve theirs (bars/look.rs).
@@ -336,5 +351,22 @@ mod tests {
             let glass = look.glass.expect("glass");
             assert_eq!((glass.clarity, glass.blur, glass.tint.a), (1.0, 0.0, 0.0), "{style:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod plugin_style_tests {
+    use super::*;
+    use crate::bars::plugin_style::TokenValue;
+
+    #[test]
+    fn a_panel_patch_sets_ink_accent_and_fill() {
+        let mut look = Look::resolve(&BarLook::default(), &Appearance::default(), &fixed_system());
+        let before = look.ink;
+        let token = |name: &str, value: TokenValue| (name.to_owned(), value);
+        look.patch_colors(&[token("accent", TokenValue::Color("#ff0000".into())), token("surface", TokenValue::Color("#102030".into())), token("label", TokenValue::Tone("accent".into()))]);
+        assert_eq!(look.accent, Rgba::rgb8([255, 0, 0], 1.0));
+        assert_eq!(look.fill, Rgba::rgb8([0x10, 0x20, 0x30], 1.0));
+        assert_eq!(look.ink, before, "tones are left to the bars' resolver");
     }
 }
