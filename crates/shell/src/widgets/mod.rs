@@ -2071,10 +2071,15 @@ impl Widgets {
             });
         }
         let scale = self.monitors[entry.monitor].dpi as f32 / 96.0 * entry.tokens.scale;
+        // Notes keep their own size; one-line fields type in the kit's Body text, as the
+        // placeholder and the buttons around them are drawn.
         let size = if m.kind == Widget::Notes {
-            14.0 * m.num("fontScale", 1.0) as f32
+            14.0 * m.num("fontScale", 1.0) as f32 * scale
         } else {
-            13.0
+            view::theme(m, &entry.tokens)
+                .font
+                .style(mypaper_ui::TextRole::Body, scale)
+                .size
         };
         let result = TextField::new(
             entry.surface.hwnd(),
@@ -2085,7 +2090,7 @@ impl Widgets {
                 entry.rect.height() - 32.0 * scale,
             ),
             m.kind == Widget::Notes,
-            size * scale,
+            size,
             entry.tokens.colors.text,
         );
         match result {
