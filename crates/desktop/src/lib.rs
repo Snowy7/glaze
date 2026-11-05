@@ -37,8 +37,8 @@ pub const EXIT_RESTART: u8 = 3;
 /// missing or invalid theme)". Restarting cannot help, so the supervisor stops.
 pub const EXIT_CONFIG: u8 = 2;
 
-use windows::Win32::Foundation::{LPARAM, WPARAM};
-use windows::Win32::System::Console::SetConsoleCtrlHandler;
+use windows::Win32::Foundation::{HANDLE, LPARAM, WPARAM};
+use windows::Win32::System::Console::{STD_ERROR_HANDLE, SetConsoleCtrlHandler, SetStdHandle};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
@@ -55,9 +55,34 @@ pub fn init_logging() {
     if !cfg!(debug_assertions)
         && let Some(file) = log_file()
     {
+        // std writes an allocation failure ("memory allocation of N bytes failed") to stderr
+        // just before aborting, and stable Rust has no hook for it: stderr goes to the log too.
+        if let Ok(stderr) = file.try_clone() {
+            use std::os::windows::io::IntoRawHandle;
+            // SAFETY: the duplicated handle is leaked on purpose; it stays valid for the process.
+            let _ = unsafe {
+                SetStdHandle(STD_ERROR_HANDLE, HANDLE(stderr.into_raw_handle()))
+            };
+        }
         builder.target(env_logger::Target::Pipe(Box::new(file)));
     }
     builder.init();
+    install_panic_hook();
+}
+
+/// Release builds use `panic = "abort"` and have no console, so a panic used to end the process
+/// (0xC0000409) without a word. The hook logs the message, its location and a backtrace, and
+/// flushes, before the abort.
+fn install_panic_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        let thread = std::thread::current();
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        log::error!(
+            "PANIC on thread '{}': {info}\nbacktrace:\n{backtrace}",
+            thread.name().unwrap_or("<unnamed>")
+        );
+        log::logger().flush();
+    }));
 }
 
 fn log_file() -> Option<std::fs::File> {

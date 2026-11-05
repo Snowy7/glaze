@@ -63,6 +63,9 @@ pub const PRIVACY: HitId = 12;
 pub const CANCEL: HitId = 13;
 pub const EVENT_DATE: HitId = 14;
 pub const EVENT_TIME: HitId = 15;
+/// The event editor's "Title: …" button, which puts the title back in the field (the field
+/// itself is `FIELD`; one id per hit, or the accessibility tree is invalid).
+pub const EVENT_TITLE: HitId = 16;
 pub const EVENT_COLOR: HitId = 20;
 
 /// The widgets' default family: Segoe UI Variable through its axes (the kit's ramp).

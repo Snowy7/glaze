@@ -2,8 +2,8 @@
 //! date large, the next event), a **week strip**, the **month** with the selected day's events
 //! under it when tall, or the **agenda** of what is coming. Today is the one filled disc.
 use super::{
-    CANCEL, Ctx, DELETE_TASK, EDIT_TASK, EVENT_COLOR, EVENT_COLORS, EVENT_DATE, EVENT_TIME, FIELD,
-    ITEM, NEXT, PREVIOUS, PRIMARY, TODAY, field,
+    CANCEL, Ctx, DELETE_TASK, EDIT_TASK, EVENT_COLOR, EVENT_COLORS, EVENT_DATE, EVENT_TIME,
+    EVENT_TITLE, ITEM, NEXT, PREVIOUS, PRIMARY, TODAY, field,
 };
 use crate::widgets::model::Model;
 use crate::widgets::time;
@@ -497,7 +497,7 @@ fn editor(c: &mut Ctx, r: Rect) {
     c.f.button(EVENT_TIME, time_box, time_label, Some(Icon::Clock), ButtonKind::Gray, true);
     let (row, rest) = rest.take_top(control, gap);
     let title_label = format!("Title: {}", draft.title);
-    c.f.button(FIELD, row, &title_label, None, ButtonKind::Plain, true);
+    c.f.button(EVENT_TITLE, row, &title_label, None, ButtonKind::Plain, true);
     let (swatches, rest) = rest.take_top(c.px(24.0), gap);
     let d = c.px(22.0);
     for i in 0..EVENT_COLORS.len() {

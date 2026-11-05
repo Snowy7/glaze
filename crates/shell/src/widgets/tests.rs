@@ -1054,3 +1054,44 @@ fn existing_user_layout_and_data_load_read_only() {
     );
     assert_eq!(loaded, layout.instances.len());
 }
+
+/// The event editor once gave its field and its "Title: …" button the same id; AccessKit
+/// panics on a duplicate child and the release build aborted (0xC0000409) as soon as a UI
+/// Automation client read the widget. Every calendar view gives each hit its own id.
+#[test]
+fn calendar_views_and_the_event_editor_give_every_hit_its_own_id() {
+    let mut ui = Ui::new().unwrap();
+    let mut m = fixture("calendar", temp("calendar-hit-ids"));
+    let tokens = tokens(&m.placed.appearance);
+    for variant in ["month", "strip", "agenda"] {
+        for editing in [false, true] {
+            m.placed.settings.insert("variant".into(), json!(variant));
+            m.event_draft = editing.then(|| model::EventDraft {
+                title: "Dentist".into(),
+                date: "2026-11-05".into(),
+                time: String::new(),
+                color: 0,
+                part: model::EventPart::Title,
+            });
+            for size in [(160, 160), (320, 310), (420, 420)] {
+                let frame = view::Frame {
+                    size,
+                    scale: 1.0,
+                    now: now(),
+                    instant: Instant::now(),
+                    editing: false,
+                };
+                let list = view::view(&m, &tokens, frame, &mut ui.text);
+                let mut seen = std::collections::HashSet::new();
+                for hit in &list.hits {
+                    assert!(
+                        seen.insert(hit.id),
+                        "{variant} (editor: {editing}) at {size:?}: hit {} ({}) is not unique",
+                        hit.id,
+                        hit.label
+                    );
+                }
+            }
+        }
+    }
+}

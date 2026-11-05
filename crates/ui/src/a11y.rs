@@ -35,12 +35,26 @@ pub(crate) struct Snapshot {
 }
 
 impl Snapshot {
+    /// AccessKit panics (and `panic = "abort"` kills the process) on a duplicate child or a
+    /// focus outside the tree, so the first hit per id wins and a stale focus falls back to
+    /// the root. Views should still give every hit its own id.
     fn tree(&self) -> TreeUpdate {
+        let mut seen = std::collections::HashSet::new();
+        let hits: Vec<&Hit> = self.hits.iter().filter(|h| seen.insert(h.id)).collect();
+        static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if hits.len() != self.hits.len() && !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            log::warn!(
+                "a11y: {} hits share an id in {:?}; only the first of each is exposed",
+                self.hits.len() - hits.len(),
+                &*self.name
+            );
+        }
         let mut root = Node::new(self.role);
         root.set_label(&*self.name);
-        root.set_children(self.hits.iter().map(|h| node_id(h.id)).collect::<Vec<_>>());
+        root.set_children(hits.iter().map(|h| node_id(h.id)).collect::<Vec<_>>());
         let mut nodes = vec![(ROOT, root)];
-        nodes.extend(self.hits.iter().map(|hit| {
+        nodes.extend(hits.iter().map(|hit| {
             let mut node = Node::new(hit.role);
             node.set_label(&*hit.label);
             node.set_bounds(accesskit::Rect {
@@ -64,7 +78,10 @@ impl Snapshot {
             nodes,
             tree: Some(TreeInfo::new(ROOT)),
             tree_id: TreeId::ROOT,
-            focus: self.focus.map_or(ROOT, node_id),
+            focus: self
+                .focus
+                .filter(|focus| seen.contains(focus))
+                .map_or(ROOT, node_id),
         }
     }
 }
@@ -236,5 +253,32 @@ mod tests {
         assert!(!first.is_disabled());
         assert!(tree.nodes[2].1.is_disabled());
         assert_eq!(tree.nodes[2].1.label(), Some("item 2"));
+    }
+
+    /// AccessKit aborts the process on a duplicate child or a focus outside the tree (the
+    /// calendar editor's crash): the first hit per id wins and a stale focus is the root.
+    #[test]
+    fn duplicate_hits_and_stale_focus_still_make_a_valid_tree() {
+        let hit = |id, label: &str| Hit {
+            id,
+            rect: Rect::new(0.0, 0.0, 50.0, 10.0),
+            role: Role::Button,
+            label: label.into(),
+            enabled: true,
+            checked: None,
+        };
+        let mut snapshot = Snapshot {
+            role: Role::Pane,
+            name: "calendar".into(),
+            hits: vec![hit(6, "field"), hit(2, "save"), hit(6, "title")],
+            focus: Some(6),
+        };
+        let tree = snapshot.tree();
+        assert_eq!(tree.nodes[0].1.children(), [node_id(6), node_id(2)]);
+        assert_eq!(tree.nodes.len(), 3);
+        assert_eq!(tree.nodes[1].1.label(), Some("field"));
+        assert_eq!(tree.focus, node_id(6));
+        snapshot.focus = Some(99);
+        assert_eq!(snapshot.tree().focus, ROOT);
     }
 }
