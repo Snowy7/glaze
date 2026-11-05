@@ -537,9 +537,7 @@ impl Surface {
             .and_then(|r| r.pixels(size.0, size.1));
         if let (Some(_), Some((canvas, dib))) = (dirty, &mut self.pixels) {
             canvas.draw_regions(&mut ui.text, &list, &regions)?;
-            for region in regions {
-                canvas.read(region, |row, bytes| dib.put_row(region, row, bytes))?;
-            }
+            canvas.read_regions(&regions, |area, row, bytes| dib.put_row(area, row, bytes))?;
         }
         if dirty.is_some() || origin != self.origin {
             let source = dirty.map(|area| (self.dib_dc(), area, resized));
@@ -777,7 +775,7 @@ impl Surface {
             .map_or(HDC::default(), |(_, dib)| dib.dc)
     }
 
-    /// `UpdateLayeredWindowIndirect`: always position and alpha, plus pixels from `source`
+    /// `UpdateLayeredWindowIndirect`: changed position and alpha, plus pixels from `source`
     /// (the DC, its dirty area, and whether the size changed) when there are new ones.
     fn update(&mut self, origin: (i32, i32), source: Option<(HDC, PixelRect, bool)>) -> Result<()> {
         let blend = BLENDFUNCTION {
@@ -812,8 +810,12 @@ impl Surface {
         let info = UPDATELAYEREDWINDOWINFO {
             cbSize: size_of::<UPDATELAYEREDWINDOWINFO>() as u32,
             hdcDst: HDC::default(),
-            pptDst: &at,
-            psize: if source.is_some() {
+            pptDst: if origin != self.origin {
+                &at
+            } else {
+                std::ptr::null()
+            },
+            psize: if source.is_some_and(|(_, _, resized)| resized) {
                 &size
             } else {
                 std::ptr::null()

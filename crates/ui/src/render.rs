@@ -33,6 +33,58 @@ use crate::text::Text;
 
 #[cfg(test)]
 #[test]
+fn a_sparse_read_keeps_row_offsets_inside_one_nonzero_origin_lock() {
+    let mut ui = Ui::new().unwrap();
+    let list = DisplayList {
+        ops: vec![Op::Image {
+            rect: Rect::new(0.0, 0.0, 64.0, 48.0),
+            image: Arc::new(Image {
+                width: 64,
+                height: 48,
+                pixels: (0..48)
+                    .flat_map(|y| (0..64).flat_map(move |x| [x as u8, y as u8, (x + y) as u8, 255]))
+                    .collect(),
+            }),
+            opacity: 1.0,
+            source: None,
+        }],
+        ..Default::default()
+    };
+    let canvas = Canvas::new(&ui, 64, 48).unwrap();
+    canvas
+        .draw(&mut ui.text, &list, PixelRect::full(64, 48))
+        .unwrap();
+    let expected = render(&mut ui, &list, 64, 48).unwrap();
+    let areas = [
+        PixelRect {
+            x: 3,
+            y: 4,
+            width: 5,
+            height: 6,
+        },
+        PixelRect {
+            x: 31,
+            y: 20,
+            width: 12,
+            height: 10,
+        },
+    ];
+    let mut rows = 0;
+    canvas
+        .read_regions(&areas, |area, row, bytes| {
+            let start = ((area.y + row) * 64 + area.x) as usize * 4;
+            assert_eq!(
+                bytes,
+                &expected.pixels[start..start + area.width as usize * 4]
+            );
+            rows += 1;
+        })
+        .unwrap();
+    assert_eq!(rows, 16);
+}
+
+#[cfg(test)]
+#[test]
 fn marker_and_retained_clips_are_nested_and_balanced() {
     let mut ui = Ui::new().unwrap();
     let fill = |color| Op::Fill {
@@ -193,6 +245,11 @@ fn sparse_meter_updates_match_a_complete_render() {
         );
         before = after;
     }
+    assert_eq!(
+        canvas.arcs.borrow().len(),
+        1,
+        "a meter keeps only its latest partial geometry"
+    );
 }
 
 /// The UI of one thread: the factories, the text cache, and what every surface shares.
@@ -374,7 +431,12 @@ pub(crate) struct Canvas {
     target: ID2D1RenderTarget,
     brush: ID2D1SolidColorBrush,
     images: RefCell<HashMap<usize, (Arc<Image>, ID2D1Bitmap)>>,
-    arcs: RefCell<HashMap<[u32; 4], ID2D1PathGeometry>>,
+    arcs: RefCell<HashMap<[u32; 3], CachedArc>>,
+}
+
+struct CachedArc {
+    sweep: u32,
+    geometry: ID2D1PathGeometry,
 }
 
 impl Canvas {
@@ -449,13 +511,37 @@ impl Canvas {
 
     /// Hands each row of `area` (premultiplied BGRA) to `sink`, top to bottom.
     pub(crate) fn read(&self, area: PixelRect, mut sink: impl FnMut(u32, &[u8])) -> Result<()> {
-        let rect = WICRect {
-            X: area.x as i32,
-            Y: area.y as i32,
-            Width: area.width as i32,
-            Height: area.height as i32,
+        self.read_regions(&[area], |_, row, bytes| sink(row, bytes))
+    }
+
+    /// One WIC lock for a sparse frame. Each returned row still contains only its dirty area.
+    pub(crate) fn read_regions(
+        &self,
+        areas: &[PixelRect],
+        mut sink: impl FnMut(PixelRect, u32, &[u8]),
+    ) -> Result<()> {
+        let Some(&first) = areas.first() else {
+            return Ok(());
         };
-        // SAFETY: the lock covers `area`, which lies inside the bitmap; the slices stay within
+        let (mut left, mut top, mut right, mut bottom) = (
+            first.x,
+            first.y,
+            first.x + first.width,
+            first.y + first.height,
+        );
+        for area in &areas[1..] {
+            left = left.min(area.x);
+            top = top.min(area.y);
+            right = right.max(area.x + area.width);
+            bottom = bottom.max(area.y + area.height);
+        }
+        let rect = WICRect {
+            X: left as i32,
+            Y: top as i32,
+            Width: (right - left) as i32,
+            Height: (bottom - top) as i32,
+        };
+        // SAFETY: the lock covers every area, which lies inside the bitmap; slices stay within
         // the locked buffer (`stride` bytes per row, `width * 4` of them pixels) and are dropped
         // before the lock.
         unsafe {
@@ -466,10 +552,13 @@ impl Canvas {
             let stride = lock.GetStride()? as usize;
             let (mut size, mut data) = (0u32, std::ptr::null_mut());
             lock.GetDataPointer(&mut size, &mut data)?;
-            let row_bytes = area.width as usize * 4;
-            for row in 0..area.height {
-                let start = data.add(row as usize * stride);
-                sink(row, std::slice::from_raw_parts(start, row_bytes));
+            for &area in areas {
+                let row_bytes = area.width as usize * 4;
+                for row in 0..area.height {
+                    let start = data
+                        .add((area.y + row - top) as usize * stride + (area.x - left) as usize * 4);
+                    sink(area, row, std::slice::from_raw_parts(start, row_bytes));
+                }
             }
         }
         Ok(())
@@ -591,14 +680,11 @@ impl Canvas {
                             None,
                         );
                     } else if *sweep > 0.0 {
-                        let key = [
-                            center.x.to_bits(),
-                            center.y.to_bits(),
-                            radius.to_bits(),
-                            sweep.to_bits(),
-                        ];
+                        let key = [center.x.to_bits(), center.y.to_bits(), radius.to_bits()];
                         let mut arcs = self.arcs.borrow_mut();
-                        if !arcs.contains_key(&key)
+                        if !arcs
+                            .get(&key)
+                            .is_some_and(|arc| arc.sweep == sweep.to_bits())
                             && let Ok(path) = t.GetFactory().and_then(|f| f.CreatePathGeometry())
                             && let Ok(sink) = path.Open()
                         {
@@ -630,14 +716,22 @@ impl Canvas {
                             }
                             sink.EndFigure(D2D1_FIGURE_END_OPEN);
                             if sink.Close().is_ok() {
-                                if arcs.len() >= 256 {
+                                if arcs.len() >= 64 && !arcs.contains_key(&key) {
                                     arcs.clear();
                                 }
-                                arcs.insert(key, path);
+                                // Retain the current meter, not every value seen since startup.
+                                arcs.insert(
+                                    key,
+                                    CachedArc {
+                                        sweep: sweep.to_bits(),
+                                        geometry: path,
+                                    },
+                                );
                             }
                         }
-                        if let Some(path) = arcs.get(&key) {
-                            t.DrawGeometry(path, brush, *width, None);
+                        if let Some(arc) = arcs.get(&key).filter(|arc| arc.sweep == sweep.to_bits())
+                        {
+                            t.DrawGeometry(&arc.geometry, brush, *width, None);
                         }
                     }
                 }
