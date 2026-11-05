@@ -289,7 +289,6 @@
     },
     "small": {
       "body": {
-        "detail": "Open OBS and enable its WebSocket server.",
         "icon": "video",
         "kind": "empty",
         "title": "OBS isn't running"

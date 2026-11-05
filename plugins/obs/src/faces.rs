@@ -40,7 +40,7 @@ pub fn face(size: SizeClass, snapshot: &Snapshot, now: i64) -> Face {
         };
         let title = if detail == "OBS isn't running" { "OBS isn't running" } else if snapshot.availability == Availability::Connecting { "Connecting to OBS…" } else { "Connect OBS" };
         let detail = if detail == "OBS isn't running" { "Open OBS and enable its WebSocket server." } else { detail };
-        let mut face = View::empty("video", title, detail).face();
+        let mut face = View::Empty { icon: Some("video".into()), title: title.into(), detail: (size != SizeClass::Small).then(|| detail.into()) }.face();
         face.refresh = true;
         return face;
     };
