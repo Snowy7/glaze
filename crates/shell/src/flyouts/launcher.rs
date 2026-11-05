@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use anyhow::Result;
 use mypaper_bars::files;
 use mypaper_bars::flyouts::index::{self, App, History};
 use mypaper_bars::system;
@@ -114,7 +113,8 @@ pub fn results<'a>(apps: &'a [App], history: &History, query: &str) -> Vec<&'a A
 }
 
 pub struct Launcher {
-    field: TextField,
+    field: Option<TextField>,
+    window: Option<HWND>,
     field_rect: Rect,
     query: String,
     apps: Vec<App>,
@@ -140,7 +140,7 @@ pub struct Launcher {
 }
 
 impl Launcher {
-    pub fn new(cx: &mut Cx, window: HWND) -> Result<Self> {
+    pub fn new(cx: &mut Cx, window: HWND) -> Self {
         let s = cx.scale;
         let width = Self::WIDTH * s;
         let icon = 30.0 * s;
@@ -150,7 +150,6 @@ impl Launcher {
             width - 2.0 * PAD * s - icon,
             FIELD * s,
         );
-        let field = TextField::new(window, field_rect, false, 18.0 * s, cx.look.ink)?;
         let cache = files::local("apps.json").ok();
         let fresh = cache
             .as_ref()
@@ -179,7 +178,8 @@ impl Launcher {
         let compact = matches!(config.layout.native(), LauncherLayout::Compact);
         let files = config.files;
         let mut launcher = Self {
-            field,
+            field: None,
+            window: Some(window),
             field_rect,
             query: String::new(),
             loading: apps.is_empty(),
@@ -202,7 +202,7 @@ impl Launcher {
             user: String::new(),
         };
         launcher.resolve_pins();
-        Ok(launcher)
+        launcher
     }
 
     const WIDTH: f32 = 560.0;
@@ -212,7 +212,8 @@ impl Launcher {
     pub fn with(field: TextField, apps: Vec<App>, history: History) -> Self {
         let icon = 30.0;
         Self {
-            field,
+            field: Some(field),
+            window: None,
             field_rect: Rect::new(PAD + icon, PAD, Self::WIDTH - 2.0 * PAD - icon, FIELD),
             query: String::new(),
             loading: false,
@@ -414,13 +415,15 @@ impl Panel for Launcher {
                 r.width(),
             );
         }
-        kit.list.ops.push(Op::TextField {
-            rect: r,
-            field: self.field.clone(),
-            revision: self.field.revision(),
-        });
-        if let Some(caret) = self.field.caret() {
-            kit.fill(caret, 0.0, kit.look.ink);
+        if let Some(field) = &self.field {
+            kit.list.ops.push(Op::TextField {
+                rect: r,
+                field: field.clone(),
+                revision: field.revision(),
+            });
+            if let Some(caret) = field.caret() {
+                kit.fill(caret, 0.0, kit.look.ink);
+            }
         }
         kit.y = r.bottom + kit.px(8.0);
         kit.separator();
@@ -578,7 +581,9 @@ impl Panel for Launcher {
                 self.all_apps = !self.all_apps;
                 self.clipboard_open = false;
                 self.query.clear();
-                let _ = self.field.set_text("");
+                if let Some(field) = &self.field {
+                    let _ = field.set_text("");
+                }
                 self.chosen = 0;
                 self.top = 0;
                 self.load_icons(cx);
@@ -659,6 +664,7 @@ impl Panel for Launcher {
         std::mem::take(&mut self.menu_entries)
     }
     fn command(&mut self, command: PanelCommand, _: &mut Cx) -> Effect {
+        let previous = self.pins.clone();
         let result = mypaper_bars::config::path().and_then(|path| match command {
             PanelCommand::PinLauncher(pin) => {
                 if !self
@@ -685,6 +691,7 @@ impl Panel for Launcher {
             }
         });
         if let Err(e) = result {
+            self.pins = previous;
             log::warn!("launcher pins: {e:#}");
         }
         self.resolve_pins();
@@ -775,6 +782,17 @@ impl Panel for Launcher {
     }
 
     fn opened(&mut self, cx: &mut Cx) -> bool {
+        // Load RichEdit after the first content frame; its cold DLL load must not delay the click.
+        if let Some(window) = self.window.take() {
+            match TextField::new(window, self.field_rect, false, 18.0 * cx.scale, cx.look.ink) {
+                Ok(field) => self.field = Some(field),
+                Err(e) => {
+                    log::warn!("launcher search field: {e:#}; opening Start");
+                    mypaper_bars::system::start_menu();
+                    return false;
+                }
+            }
+        }
         self.user = index::user_name();
         if self.files {
             cx.lanes
@@ -785,11 +803,15 @@ impl Panel for Launcher {
     }
 
     fn field(&self) -> Option<&TextField> {
-        Some(&self.field)
+        self.field.as_ref()
     }
 
     fn text_changed(&mut self, cx: &mut Cx) -> Effect {
-        let query = self.field.text().unwrap_or_default();
+        let query = self
+            .field
+            .as_ref()
+            .and_then(|f| f.text().ok())
+            .unwrap_or_default();
         let query = query.trim_end_matches(['\r', '\n']).to_owned();
         if query != self.query {
             log::debug!("launcher: query {query:?}");

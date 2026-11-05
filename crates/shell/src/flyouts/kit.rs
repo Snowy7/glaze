@@ -21,10 +21,8 @@ pub mod glyph {
     pub const SETTINGS: char = '\u{E713}';
     pub const CHEVRON_RIGHT: char = '\u{E76C}';
     pub const CHEVRON_LEFT: char = '\u{E76B}';
-    #[cfg(test)]
     pub const CLOSE: char = '\u{E711}';
     pub const LOCK: char = '\u{E72E}';
-    #[cfg(test)]
     pub const BELL: char = '\u{EA8F}';
     pub const MOON: char = '\u{E708}';
     pub const FOCUS: char = '\u{E916}';

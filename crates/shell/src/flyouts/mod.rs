@@ -20,12 +20,7 @@ mod language;
 mod launcher;
 pub mod look;
 mod mixer;
-#[cfg(test)]
-#[allow(
-    dead_code,
-    reason = "legacy notification grouping/calendar fixtures only; production uses integration leases"
-)]
-mod notifications;
+pub(crate) mod notifications;
 mod power;
 mod quick;
 mod settings_pages;
@@ -46,7 +41,6 @@ use mypaper_bars::actions::Topic;
 use mypaper_bars::audio::Audio;
 use mypaper_bars::flyouts::index::Builder;
 use mypaper_bars::flyouts::mixer::MixerLane;
-use mypaper_bars::flyouts::notifications::NotificationsLane;
 use mypaper_bars::flyouts::quick::QuickLane;
 use mypaper_bars::flyouts::wifi::WifiLane;
 use mypaper_bars::flyouts::winkey::{self, WinKey};
@@ -142,8 +136,8 @@ pub enum Reply {
     Quick(mypaper_bars::flyouts::quick::Quick),
     Mixer(mypaper_bars::flyouts::mixer::MixerState),
     Wifi(mypaper_bars::flyouts::wifi::WifiState),
-    #[cfg(test)]
-    Notifications(mypaper_bars::flyouts::notifications::NotificationList),
+    NotificationIcons(Vec<(String, Option<String>)>),
+    NotificationAccess(Result<(), String>),
     Apps(Vec<mypaper_bars::flyouts::index::App>),
     Files(Vec<mypaper_bars::flyouts::index::RecentFile>),
     Clipboard(mypaper_bars::flyouts::clipboard::History),
@@ -275,7 +269,6 @@ pub struct Lanes {
     quick: Option<Lane<QuickLane>>,
     mixer: Option<Lane<MixerLane>>,
     wifi: Option<Lane<WifiLane>>,
-    notifications: Option<Lane<NotificationsLane>>,
     apps: Option<Lane<Builder>>,
     clipboard: Option<Lane<mypaper_bars::flyouts::clipboard::ClipboardLane>>,
     /// The default output's volume (quick settings and the mixer), with change notifications.
@@ -339,23 +332,6 @@ impl Lanes {
         );
     }
 
-    #[cfg(test)]
-    pub fn notifications(
-        &mut self,
-        job: impl FnOnce(&mut NotificationsLane) -> Reply + Send + 'static,
-    ) {
-        let icons = self.icons.clone();
-        let init = move || NotificationsLane::new(icons);
-        Self::run(
-            &mut self.notifications,
-            "notifications",
-            init,
-            &self.replies,
-            &self.waker,
-            job,
-        );
-    }
-
     pub fn apps(&mut self, job: impl FnOnce(&mut Builder) -> Reply + Send + 'static) {
         let icons = self.icons.clone();
         let init = move || Builder::new(icons);
@@ -367,6 +343,22 @@ impl Lanes {
             &self.waker,
             job,
         );
+    }
+
+    /// Resolve toast logos on the existing STA icon lane, without another toast subscription.
+    pub fn notification_icons(&mut self, ids: Vec<String>) {
+        let dir = self.icons.clone();
+        self.apps(move |_| {
+            let resolver = mypaper_bars::icons::AppIconResolver::new();
+            Reply::NotificationIcons(
+                ids.into_iter()
+                    .map(|id| {
+                        let path = resolver.icon(&id, &dir);
+                        (id, path)
+                    })
+                    .collect(),
+            )
+        });
     }
 
     /// The default output's volume, watched while a flyout shows it.
@@ -396,7 +388,6 @@ impl Lanes {
         self.quick = None;
         self.mixer = None;
         self.wifi = None;
-        self.notifications = None;
         self.apps = None;
         self.clipboard = None;
         self.audio = None;
@@ -487,7 +478,6 @@ impl Flyouts {
                 quick: None,
                 mixer: None,
                 wifi: None,
-                notifications: None,
                 apps: None,
                 clipboard: None,
                 audio: None,
@@ -845,14 +835,7 @@ impl Flyouts {
             Kind::Power => Box::new(power::Power::new(&mut cx)),
             Kind::TrayOverflow => Box::new(tray::Overflow::new(&mut cx)),
             Kind::Language => Box::new(language::Language::new(&mut cx)),
-            Kind::Launcher => match launcher::Launcher::new(&mut cx, self.surface.hwnd()) {
-                Ok(launcher) => Box::new(launcher),
-                Err(e) => {
-                    log::warn!("launcher: {e:#}; opening Start");
-                    mypaper_bars::system::start_menu();
-                    return;
-                }
-            },
+            Kind::Launcher => Box::new(launcher::Launcher::new(&mut cx, self.surface.hwnd())),
         };
         let center_y = request.anchor.top + request.anchor.height() / 2.0;
         let monitor_mid = request.monitor.rect.y as f32 + request.monitor.rect.height as f32 / 2.0;
@@ -917,6 +900,10 @@ impl Flyouts {
                 Effect::None
             }
         });
+        if let Some(field) = self.open.as_ref().and_then(|o| o.panel.field()) {
+            self.surface.set_text_field(Some(field.clone()));
+            field.focus();
+        }
         self.schedule_tick(ui, bars, Instant::now());
     }
 

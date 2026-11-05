@@ -36,6 +36,7 @@ pub struct Bar {
     islands: Vec<Surface>,
     offsets: Vec<Point>,
     windows: Vec<Rect>,
+    presentation_dirty: bool,
     pub hidden: bool,
     pub dirty: bool,
     redraws: u64,
@@ -120,6 +121,7 @@ impl Bar {
             islands: vec![],
             offsets: vec![],
             windows: vec![],
+            presentation_dirty: true,
             hidden: false,
             dirty: true,
             redraws: 0,
@@ -172,7 +174,10 @@ impl Bar {
         self.offsets.get(index).copied().unwrap_or_default()
     }
     pub fn windows(&mut self, windows: &[Rect]) {
-        self.windows = windows.to_vec();
+        if self.windows != windows {
+            self.windows = windows.to_vec();
+            self.presentation_dirty = true;
+        }
     }
     fn covered(&self, body: Rect) -> bool {
         let origin = self.origin();
@@ -326,6 +331,7 @@ impl Bar {
                 self.slide.target(1.0, self.animate, now);
             }
         }
+        let previous_slide = self.slide.value;
         let mut moving = self.slide.step(now);
         let mut zoom_changed = false;
         for (scale, shift) in &mut self.zoom {
@@ -366,7 +372,8 @@ impl Bar {
             })
             .collect();
         moving |= !self.animations.is_empty();
-        if self.dirty || zoom_changed || had_animation {
+        let rebuilt = self.dirty || zoom_changed || had_animation;
+        if rebuilt {
             let scale = self.scale();
             self.frame = if self.kind == BarKind::Top {
                 view::top(
@@ -415,7 +422,10 @@ impl Bar {
             }
             self.dirty = false;
         }
-        self.present(ui)?;
+        if rebuilt || previous_slide != self.slide.value || self.presentation_dirty {
+            self.present(ui)?;
+            self.presentation_dirty = false;
+        }
         if self.slide.value >= 0.999 && self.config.dock.autohide && self.kind == BarKind::Dock {
             if self.surface.is_visible() {
                 self.surface.hide();

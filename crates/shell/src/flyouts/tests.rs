@@ -516,9 +516,8 @@ fn the_launcher_ranks_prefixes_then_words_then_letters_and_remembers_runs() {
         launcher::score("code", "Visual Studio Code", &[])
             > launcher::score("code", "Encoder", &[])
     );
-    assert_eq!(
+    assert!(
         launcher::score("vsc", "Visual Studio Code", &[]).is_some(),
-        true,
         "letters in order"
     );
     assert_eq!(launcher::score("xyz", "Visual Studio Code", &[]), None);

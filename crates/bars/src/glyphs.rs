@@ -4,10 +4,10 @@ pub fn svg(set: Glyphs, key: &str) -> Option<&'static [u8]> {
     if set == Glyphs::Fluent {
         return None;
     }
-    if set == Glyphs::Symbols {
-        if let Some(svg) = symbols(key) {
-            return Some(svg);
-        }
+    if set == Glyphs::Symbols
+        && let Some(svg) = symbols(key)
+    {
+        return Some(svg);
     }
     crate::icon_pack::bundled_mono_icon(&format!("{key}.svg"))
 }
