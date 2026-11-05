@@ -12,6 +12,42 @@ pub struct Snapshot {
     pub paused: bool,
     pub streaming: bool,
     pub scene: String,
+    pub scenes: Vec<String>,
+    pub microphones: Vec<Microphone>,
+    pub record_clock: Clock,
+    pub stream_clock: Clock,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Microphone {
+    pub name: String,
+    pub muted: bool,
+}
+/// A server duration anchored once; the visible widget advances it without querying OBS.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Clock {
+    pub elapsed_ms: u64,
+    pub at_ms: i64,
+    pub advancing: bool,
+}
+impl Clock {
+    pub fn elapsed(&self, now_ms: i64) -> u64 {
+        self.elapsed_ms.saturating_add(if self.advancing {
+            now_ms.saturating_sub(self.at_ms).max(0) as u64
+        } else {
+            0
+        })
+    }
+    fn seed(&mut self, data: &Value, advancing: bool) {
+        self.elapsed_ms = data["outputDuration"].as_u64().unwrap_or(0);
+        self.at_ms = epoch_ms();
+        self.advancing = advancing;
+    }
+}
+fn epoch_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
 }
 #[derive(Clone, Debug)]
 pub enum Action {
@@ -21,6 +57,8 @@ pub enum Action {
     ResumeRecording,
     StartStreaming,
     StopStreaming,
+    SwitchScene(String),
+    MuteInput { name: String, muted: bool },
 }
 impl Action {
     fn request(&self) -> &'static str {
@@ -31,6 +69,8 @@ impl Action {
             Self::ResumeRecording => "ResumeRecord",
             Self::StartStreaming => "StartStream",
             Self::StopStreaming => "StopStream",
+            Self::SwitchScene(_) => "SetCurrentProgramScene",
+            Self::MuteInput { .. } => "SetInputMute",
         }
     }
 }
@@ -53,7 +93,7 @@ pub(crate) async fn run(
         hello["op"] == 0 && hello["d"]["rpcVersion"].as_u64().is_some_and(|v| v >= 1),
         "unsupported OBS protocol"
     );
-    let mut identify = json!({"op":1,"d":{"rpcVersion":1,"eventSubscriptions":68}}); // Outputs | Scenes, no high volume flags.
+    let mut identify = json!({"op":1,"d":{"rpcVersion":1,"eventSubscriptions":76}}); // Outputs | Scenes | Inputs, no meters.
     if let Some(auth) = hello["d"].get("authentication") {
         let password = credentials::read("obs")?;
         identify["d"]["authentication"] = authentication(
@@ -77,17 +117,32 @@ pub(crate) async fn run(
         "GetRecordStatus",
         "GetStreamStatus",
         "GetCurrentProgramScene",
+        "GetSceneList",
+        "GetInputList",
     ] {
         transport::send(&mut socket, request(name, next_id)).await?;
         next_id += 1;
     }
     let mut state = Snapshot::default();
-    let mut seeded = [false; 3];
+    let mut seeded = [false; 5];
+    let mut input_requests = std::collections::BTreeMap::new();
     loop {
         tokio::select! {
             Some(action) = commands.recv() => {
                 if let crate::Action::Obs(action) = action {
-                    transport::send(&mut socket, request(action.request(), next_id)).await?;
+                    let mut message = request(action.request(), next_id);
+                    match &action {
+                        Action::SwitchScene(name) => {
+                            if !state.scenes.contains(name) { publish.action_result(Err(anyhow::anyhow!("scene is no longer available"))); continue; }
+                            message["d"]["requestData"] = json!({"sceneName":name});
+                        }
+                        Action::MuteInput { name, muted } => {
+                            if !state.microphones.iter().any(|input| &input.name == name) { publish.action_result(Err(anyhow::anyhow!("microphone is no longer available"))); continue; }
+                            message["d"]["requestData"] = json!({"inputName":name,"inputMuted":muted});
+                        }
+                        _ => {}
+                    }
+                    transport::send(&mut socket, message).await?;
                     next_id += 1;
                 }
             }
@@ -100,18 +155,50 @@ pub(crate) async fn run(
                         let ok = data["requestStatus"]["result"].as_bool().unwrap_or(false);
                         if !ok {
                             publish.action_result(Err(anyhow::anyhow!("OBS request rejected ({})", data["requestStatus"]["code"])));
-                            ensure!(data["requestId"].as_str().and_then(|s| s.parse::<u64>().ok()).is_none_or(|id| id > 3), "OBS initial state request failed");
+                            ensure!(data["requestId"].as_str().and_then(|s| s.parse::<u64>().ok()).is_none_or(|id| id > 5), "OBS initial state request failed");
                             continue;
                         }
                         let result = &data["responseData"];
                         match data["requestType"].as_str() {
-                            Some("GetRecordStatus") => { state.recording = result["outputActive"].as_bool().unwrap_or(false); state.paused = result["outputPaused"].as_bool().unwrap_or(false); seeded[0] = true; }
-                            Some("GetStreamStatus") => { state.streaming = result["outputActive"].as_bool().unwrap_or(false); seeded[1] = true; }
+                            Some("GetRecordStatus") => { state.recording = result["outputActive"].as_bool().unwrap_or(false); state.paused = result["outputPaused"].as_bool().unwrap_or(false); state.record_clock.seed(result, state.recording && !state.paused); seeded[0] = true; }
+                            Some("GetStreamStatus") => { state.streaming = result["outputActive"].as_bool().unwrap_or(false); state.stream_clock.seed(result, state.streaming); seeded[1] = true; }
                             Some("GetCurrentProgramScene") => { state.scene = result["currentProgramSceneName"].as_str().unwrap_or_default().into(); seeded[2] = true; }
+                            Some("GetSceneList") => { state.scenes = result["scenes"].as_array().into_iter().flatten().filter_map(|scene| scene["sceneName"].as_str()).take(128).map(str::to_owned).collect(); seeded[3] = true; }
+                            Some("GetInputList") => {
+                                input_requests.clear();
+                                state.microphones = result["inputs"].as_array().into_iter().flatten().filter(|input| matches!(input["inputKind"].as_str(), Some("wasapi_input_capture" | "pulse_input_capture" | "coreaudio_input_capture"))).filter_map(|input| input["inputName"].as_str()).take(16).map(|name| Microphone { name: name.into(), muted: false }).collect();
+                                for input in &state.microphones {
+                                    let mut message = request("GetInputMute", next_id);
+                                    message["d"]["requestData"] = json!({"inputName":input.name});
+                                    input_requests.insert(next_id, input.name.clone());
+                                    transport::send(&mut socket, message).await?;
+                                    next_id += 1;
+                                }
+                                seeded[4] = state.microphones.is_empty();
+                            }
+                            Some("GetInputMute") => {
+                                // OBS echoes neither the request data nor name: retain the request id mapping below.
+                                if let Some(id) = data["requestId"].as_str().and_then(|id| id.parse::<u64>().ok())
+                                    && let Some(name) = input_requests.remove(&id)
+                                    && let Some(input) = state.microphones.iter_mut().find(|input| input.name == name) {
+                                    input.muted = result["inputMuted"].as_bool().unwrap_or(false);
+                                }
+                                seeded[4] = input_requests.is_empty();
+                            }
                             _ => publish.action_result(Ok(())),
                         }
                     }
-                    Some(5) => apply_event(&mut state, data),
+                    Some(5) => {
+                        apply_event(&mut state, data);
+                        let refresh = match data["eventType"].as_str() {
+                            Some("RecordStateChanged") => Some("GetRecordStatus"),
+                            Some("StreamStateChanged") => Some("GetStreamStatus"),
+                            Some("SceneListChanged") => Some("GetSceneList"),
+                            Some("InputCreated" | "InputRemoved" | "InputNameChanged") => Some("GetInputList"),
+                            _ => None,
+                        };
+                        if let Some(name) = refresh { transport::send(&mut socket, request(name, next_id)).await?; next_id += 1; }
+                    }
                     _ => {}
                 }
                 if seeded.iter().all(|v| *v) { publish.set(Availability::Live, Some(Data::Obs(state.clone()))); }
@@ -131,6 +218,15 @@ pub fn apply_event(state: &mut Snapshot, data: &Value) {
         }
         Some("CurrentProgramSceneChanged") => {
             state.scene = event["sceneName"].as_str().unwrap_or_default().into()
+        }
+        Some("InputMuteStateChanged") => {
+            if let Some(input) = state
+                .microphones
+                .iter_mut()
+                .find(|input| Some(input.name.as_str()) == event["inputName"].as_str())
+            {
+                input.muted = event["inputMuted"].as_bool().unwrap_or(false);
+            }
         }
         _ => {}
     }

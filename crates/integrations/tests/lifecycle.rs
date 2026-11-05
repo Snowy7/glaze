@@ -23,7 +23,7 @@ fn obs_shared_start_stop_and_explicit_reconnect_release_the_socket() {
                 .unwrap();
             let identify: serde_json::Value =
                 serde_json::from_str(socket.read().unwrap().to_text().unwrap()).unwrap();
-            assert_eq!(identify["d"]["eventSubscriptions"], 68);
+            assert_eq!(identify["d"]["eventSubscriptions"], 76);
             socket
                 .send(Message::Text(
                     json!({"op":2,"d":{"negotiatedRpcVersion":1}})
@@ -31,12 +31,23 @@ fn obs_shared_start_stop_and_explicit_reconnect_release_the_socket() {
                         .into(),
                 ))
                 .unwrap();
-            for _ in 0..3 {
+            for _ in 0..6 {
                 let request: serde_json::Value =
                     serde_json::from_str(socket.read().unwrap().to_text().unwrap()).unwrap();
                 let mut reply = request["d"].clone();
                 reply["requestStatus"] = json!({"result":true});
-                reply["responseData"] = json!({"outputActive":false,"outputPaused":false,"currentProgramSceneName":"Desktop"});
+                reply["responseData"] = match request["d"]["requestType"].as_str() {
+                    Some("GetSceneList") => {
+                        json!({"scenes":[{"sceneName":"Desktop"},{"sceneName":"Camera"}]})
+                    }
+                    Some("GetInputList") => {
+                        json!({"inputs":[{"inputName":"Desk microphone","inputKind":"wasapi_input_capture"}]})
+                    }
+                    Some("GetInputMute") => json!({"inputMuted":true}),
+                    _ => {
+                        json!({"outputActive":false,"outputPaused":false,"currentProgramSceneName":"Desktop"})
+                    }
+                };
                 socket
                     .send(Message::Text(json!({"op":7,"d":reply}).to_string().into()))
                     .unwrap();
@@ -62,6 +73,12 @@ fn obs_shared_start_stop_and_explicit_reconnect_release_the_socket() {
     while a.snapshot().availability != Availability::Live {
         changes.recv_timeout(Duration::from_secs(5)).unwrap();
     }
+    let Some(mypaper_integrations::Data::Obs(snapshot)) = a.snapshot().data else {
+        panic!("OBS seed missing");
+    };
+    assert_eq!(snapshot.scenes, ["Desktop", "Camera"]);
+    assert_eq!(snapshot.microphones[0].name, "Desk microphone");
+    assert!(snapshot.microphones[0].muted);
     drop(a);
     assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
     b.retry();

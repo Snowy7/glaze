@@ -14,6 +14,44 @@ pub struct Container {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Snapshot {
     pub containers: Vec<Container>,
+    pub usage: std::collections::BTreeMap<String, Usage>,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Usage {
+    /// Hundredths of a percent, including all assigned CPUs.
+    pub cpu_hundredths: Option<u64>,
+    pub memory_bytes: u64,
+    pub memory_limit: u64,
+}
+pub fn usage(value: &Value) -> Usage {
+    let cpu = &value["cpu_stats"];
+    let old = &value["precpu_stats"];
+    let total = cpu["cpu_usage"]["total_usage"].as_u64().unwrap_or(0);
+    let previous = old["cpu_usage"]["total_usage"].as_u64().unwrap_or(0);
+    let system = cpu["system_cpu_usage"].as_u64().unwrap_or(0);
+    let before = old["system_cpu_usage"].as_u64().unwrap_or(0);
+    let cores = cpu["online_cpus"]
+        .as_u64()
+        .or_else(|| {
+            cpu["cpu_usage"]["percpu_usage"]
+                .as_array()
+                .map(|a| a.len() as u64)
+        })
+        .unwrap_or(1);
+    let memory = &value["memory_stats"];
+    Usage {
+        cpu_hundredths: (before > 0 && system > before && total >= previous).then(|| {
+            ((total - previous) as u128 * cores as u128 * 10_000 / (system - before) as u128)
+                .min(u64::MAX as u128) as u64
+        }),
+        memory_bytes: memory["usage"].as_u64().unwrap_or(0).saturating_sub(
+            memory["stats"]["inactive_file"]
+                .as_u64()
+                .or_else(|| memory["stats"]["total_inactive_file"].as_u64())
+                .unwrap_or(0),
+        ),
+        memory_limit: memory["limit"].as_u64().unwrap_or(0),
+    }
 }
 
 fn filter(config: &crate::config::Docker, events: bool) -> String {
@@ -61,6 +99,7 @@ pub fn snapshot(list: &Value) -> Result<Snapshot> {
         "Docker list exceeds 128 containers; select containers in settings"
     );
     Ok(Snapshot {
+        usage: Default::default(),
         containers: entries
             .iter()
             .map(|c| -> Result<Container> {
@@ -120,6 +159,18 @@ pub(crate) async fn run(
                     transport::pipe_request(&config.pipe, "POST", &path, None).await?.finish().await
                 }.await;
                 publish.action_result(result);
+            } else if matches!(action, crate::Action::DockerMetrics) {
+                // Bound the request fanout. Idle containers and hidden widgets create no stats work.
+                let mut failed = None;
+                for container in state.containers.iter().filter(|c| c.state == "running").take(16) {
+                    let path = format!("/containers/{}/stats?stream=false&one-shot=true", crate::launcher::encode(&container.id));
+                    match transport::pipe_json(&config.pipe, "GET", &path, None).await {
+                        Ok(value) => { state.usage.insert(container.id.clone(), usage(&value)); }
+                        Err(error) => { failed = Some(error); break; }
+                    }
+                }
+                publish.action_result(failed.map_or(Ok(()), Err));
+                publish.set(Availability::Live, Some(Data::Docker(state.clone())));
             },
             event = events.next() => {
                 ensure!(event?.is_some(), "Docker event stream closed");

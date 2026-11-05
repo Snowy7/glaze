@@ -51,6 +51,8 @@ async fn serve(mut pipe: NamedPipeServer, events: mpsc::Sender<String>) {
         events.send(path.to_owned()).unwrap();
         let body = if path.starts_with("/containers/json") {
             r#"[{"Id":"a","Names":["/web"],"State":"running","Status":"Up"}]"#
+        } else if path.starts_with("/containers/a/stats?") {
+            r#"{"cpu_stats":{"cpu_usage":{"total_usage":500},"system_cpu_usage":2000,"online_cpus":4},"precpu_stats":{"cpu_usage":{"total_usage":400},"system_cpu_usage":1000},"memory_stats":{"usage":4096,"limit":8192}}"#
         } else {
             "{}"
         };
@@ -105,6 +107,20 @@ fn docker_and_tailscale_start_stop_reconnect_and_controls_use_the_existing_pipe(
                     .unwrap()
                     .starts_with("/containers/json")
             );
+            lease.action(Action::DockerMetrics).unwrap();
+            assert_eq!(
+                rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+                "/containers/a/stats?stream=false&one-shot=true"
+            );
+            loop {
+                if let Some(mypaper_integrations::Data::Docker(state)) = lease.snapshot().data
+                    && let Some(usage) = state.usage.get("a")
+                {
+                    assert_eq!(usage.cpu_hundredths, Some(4000));
+                    break;
+                }
+                changes.recv_timeout(Duration::from_secs(5)).unwrap();
+            }
         }
         lease
             .action(match provider {

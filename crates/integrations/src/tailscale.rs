@@ -11,6 +11,13 @@ pub struct Snapshot {
     pub state: String,
     pub addresses: Vec<String>,
     pub exit_node: Option<String>,
+    pub peers: Vec<Peer>,
+    pub peers_known: bool,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Peer {
+    pub name: String,
+    pub online: bool,
 }
 pub fn apply(state: &mut Snapshot, event: &Value) {
     if let Some(index) = event["State"].as_u64() {
@@ -43,6 +50,36 @@ pub fn apply(state: &mut Snapshot, event: &Value) {
                 .collect();
         }
         state.exit_node = status["ExitNodeStatus"]["ID"].as_str().map(str::to_owned);
+        if let Some(peers) = status["Peer"].as_object() {
+            state.peers_known = true;
+            state.peers = peers
+                .values()
+                .take(128)
+                .map(|peer| Peer {
+                    name: peer["DNSName"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| peer["HostName"].as_str())
+                        .unwrap_or("Device")
+                        .trim_end_matches('.')
+                        .to_owned(),
+                    online: peer["Online"].as_bool().unwrap_or(false),
+                })
+                .collect();
+            state
+                .peers
+                .sort_by(|a, b| b.online.cmp(&a.online).then_with(|| a.name.cmp(&b.name)));
+        }
+        if let Some(exit) = status["Peer"].as_object().and_then(|peers| {
+            peers
+                .values()
+                .find(|peer| peer["ExitNode"].as_bool() == Some(true))
+        }) {
+            state.exit_node = exit["HostName"]
+                .as_str()
+                .map(str::to_owned)
+                .or(state.exit_node.take());
+        }
     }
     if let Some(prefs) = event.get("Prefs") {
         state.exit_node = prefs["ExitNodeID"]
@@ -67,9 +104,7 @@ pub(crate) async fn run(
     commands: &mut mpsc::Receiver<crate::Action>,
 ) -> Result<()> {
     if !config.live_verified {
-        let status =
-            transport::pipe_json(&config.pipe, "GET", "/localapi/v0/status?peers=false", None)
-                .await?;
+        let status = transport::pipe_json(&config.pipe, "GET", "/localapi/v0/status", None).await?;
         let mut state = Snapshot::default();
         apply(&mut state, &json!({"InitialStatus":status}));
         ensure!(
@@ -89,13 +124,9 @@ pub(crate) async fn run(
                 let succeeded = result.is_ok();
                 publish.action_result(result.map(|_| ()));
                 if succeeded {
-                    let status = transport::pipe_json(
-                        &config.pipe,
-                        "GET",
-                        "/localapi/v0/status?peers=false",
-                        None,
-                    )
-                    .await?;
+                    let status =
+                        transport::pipe_json(&config.pipe, "GET", "/localapi/v0/status", None)
+                            .await?;
                     let mut state = Snapshot::default();
                     apply(&mut state, &json!({"InitialStatus":status}));
                     publish.set(Availability::Cached, Some(Data::Tailscale(state)));

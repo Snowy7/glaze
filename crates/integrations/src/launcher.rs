@@ -132,8 +132,67 @@ impl Drop for Internet {
     }
 }
 
-/// Explicit launcher click only. A 200 is acceptance, never a finished-work notification.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RoutineRun {
+    pub id: String,
+    pub title: String,
+    pub state: RoutineState,
+    pub at_ms: i64,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RoutineState {
+    Sending,
+    Accepted,
+    Failed,
+}
+static RUNS: std::sync::Mutex<Vec<RoutineRun>> = std::sync::Mutex::new(Vec::new());
+/// Session-local, bounded request receipts. Acceptance does not establish Bot completion.
+pub fn routine_runs() -> Vec<RoutineRun> {
+    RUNS.lock().unwrap().clone()
+}
+
+/// Explicit user click only. Both launcher and widget submissions share these receipts.
 pub fn start_routine(routine: &crate::config::Routine) -> Result<()> {
+    let at_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    {
+        let mut runs = RUNS.lock().unwrap();
+        ensure!(
+            !runs
+                .iter()
+                .any(|run| run.id == routine.id && run.state == RoutineState::Sending),
+            "routine request is already sending"
+        );
+        runs.insert(
+            0,
+            RoutineRun {
+                id: routine.id.clone(),
+                title: routine.title.chars().take(128).collect(),
+                state: RoutineState::Sending,
+                at_ms,
+            },
+        );
+        runs.truncate(16);
+    }
+    let result = send_routine(routine);
+    if let Some(run) = RUNS
+        .lock()
+        .unwrap()
+        .iter_mut()
+        .find(|run| run.id == routine.id && run.at_ms == at_ms)
+    {
+        run.state = if result.is_ok() {
+            RoutineState::Accepted
+        } else {
+            RoutineState::Failed
+        };
+    }
+    result
+}
+
+fn send_routine(routine: &crate::config::Routine) -> Result<()> {
     let uri = routine_url(&routine.url)?;
     let secret = crate::credentials::read(&format!("grok/{}", routine.id))?;
     let host = wide(uri.host().unwrap());

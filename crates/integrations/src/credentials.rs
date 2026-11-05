@@ -51,6 +51,55 @@ impl Drop for Secret {
     }
 }
 
+/// An explicit Connect click may collect a one-time code. Windows owns the masked dialog;
+/// the result stays in memory until exchanged, and is never saved as a credential itself.
+pub fn prompt_t3_pairing() -> Result<Option<Secret>> {
+    use windows::Win32::Foundation::ERROR_CANCELLED;
+    let title: Vec<u16> = "Connect T3 Code\0".encode_utf16().collect();
+    let message: Vec<u16> = "Create a pairing code in T3 Code > Settings > Connections, then paste it in Password. mypaper requests read-only thread status.\0".encode_utf16().collect();
+    let target = target("t3-pairing")?;
+    let info = CREDUI_INFOW {
+        cbSize: std::mem::size_of::<CREDUI_INFOW>() as u32,
+        pszCaptionText: PCWSTR(title.as_ptr()),
+        pszMessageText: PCWSTR(message.as_ptr()),
+        ..Default::default()
+    };
+    let mut username = [0_u16; 128];
+    username[..7].copy_from_slice(&[109, 121, 112, 97, 112, 101, 114]);
+    let mut password = [0_u16; 2561];
+    // SAFETY: owned UTF-16 buffers remain live for this synchronous Windows-owned prompt.
+    let status = unsafe {
+        CredUIPromptForCredentialsW(
+            Some(&info),
+            PCWSTR(target.as_ptr()),
+            None,
+            0,
+            &mut username,
+            &mut password,
+            None,
+            CREDUI_FLAGS_GENERIC_CREDENTIALS
+                | CREDUI_FLAGS_ALWAYS_SHOW_UI
+                | CREDUI_FLAGS_DO_NOT_PERSIST
+                | CREDUI_FLAGS_EXCLUDE_CERTIFICATES,
+        )
+    };
+    let result = if status == ERROR_CANCELLED {
+        Ok(None)
+    } else {
+        status.ok().map_err(anyhow::Error::from).and_then(|()| {
+            let length = password
+                .iter()
+                .position(|ch| *ch == 0)
+                .unwrap_or(password.len());
+            String::from_utf16(&password[..length])
+                .map(|text| Some(Secret(text.into_bytes())))
+                .map_err(Into::into)
+        })
+    };
+    password.fill(0);
+    result
+}
+
 pub fn read(key: &str) -> Result<Secret> {
     let name = target(key)?;
     let mut credential = std::ptr::null_mut();

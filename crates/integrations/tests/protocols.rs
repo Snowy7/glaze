@@ -65,6 +65,40 @@ fn docker_failures_are_not_every_stopped_container() {
     assert!(state.containers[1].failed);
     assert!(state.containers[2].failed);
 }
+
+#[test]
+fn widget_clocks_metrics_and_peer_snapshots_preserve_unknowns() {
+    let clock = obs::Clock {
+        elapsed_ms: 12_000,
+        at_ms: 100_000,
+        advancing: true,
+    };
+    assert_eq!(clock.elapsed(103_500), 15_500);
+    assert_eq!(clock.elapsed(99_000), 12_000);
+    assert_eq!(
+        obs::Clock {
+            advancing: false,
+            ..clock
+        }
+        .elapsed(110_000),
+        12_000
+    );
+    let stats = docker::usage(
+        &json!({"cpu_stats":{"cpu_usage":{"total_usage":500},"system_cpu_usage":2000,"online_cpus":4},"precpu_stats":{"cpu_usage":{"total_usage":400},"system_cpu_usage":1000},"memory_stats":{"usage":4096,"limit":8192,"stats":{"inactive_file":1024}}}),
+    );
+    assert_eq!(stats.cpu_hundredths, Some(4000));
+    assert_eq!(stats.memory_bytes, 3072);
+    assert_eq!(docker::usage(&json!({})).cpu_hundredths, None);
+    let mut vpn = tailscale::Snapshot::default();
+    tailscale::apply(
+        &mut vpn,
+        &json!({"InitialStatus":{"BackendState":"Running","Peer":{"a":{"DNSName":"macbook.tailnet.","Online":true},"b":{"HostName":"home","Online":false,"ExitNode":true}}}}),
+    );
+    assert_eq!(vpn.peers.len(), 2);
+    assert_eq!(vpn.peers[0].name, "macbook.tailnet");
+    assert!(vpn.peers[0].online);
+    assert_eq!(vpn.exit_node.as_deref(), Some("home"));
+}
 #[test]
 fn tailscale_seeds_and_applies_prefs_without_engine_telemetry() {
     assert_eq!(tailscale::WATCH_MASK & 1, 0);

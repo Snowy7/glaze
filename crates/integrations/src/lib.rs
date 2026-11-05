@@ -7,6 +7,7 @@ pub mod launcher;
 pub mod media;
 pub mod notifications;
 pub mod obs;
+pub mod pairing;
 pub mod t3;
 pub mod tailscale;
 mod transport;
@@ -97,6 +98,8 @@ pub enum Action {
         id: String,
         start: bool,
     },
+    /// One bounded stats sample after an explicit widget refresh; never a stats stream.
+    DockerMetrics,
     Tailscale {
         connected: bool,
     },
@@ -304,6 +307,7 @@ impl Lease {
                 ) | (Provider::Media, Action::Media(_))
                     | (Provider::Obs, Action::Obs(_))
                     | (Provider::Docker, Action::Docker { .. })
+                    | (Provider::Docker, Action::DockerMetrics)
                     | (Provider::Tailscale, Action::Tailscale { .. })
             ),
             "action does not belong to this provider"
