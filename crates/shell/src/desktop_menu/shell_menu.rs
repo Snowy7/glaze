@@ -15,22 +15,59 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use mypaper_ui::Image;
-use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits,
-    GetObjectW, HBITMAP, HGDIOBJ, ReleaseDC,
+    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, CreateDIBSection,
+    DIB_RGB_COLORS, DeleteDC, DeleteObject, GdiFlush, GetDC, GetDIBits, GetObjectW, HBITMAP,
+    HGDIOBJ, ReleaseDC, SelectObject,
 };
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
+use windows::Win32::System::Registry::{HKEY_CLASSES_ROOT, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ, RegGetValueW};
 use windows::Win32::UI::Shell::{
+    ASSOCF_NONE, ASSOCSTR, ASSOCSTR_DEFAULTICON, ASSOCSTR_EXECUTABLE, AssocQueryStringW,
     CMF_NORMAL, CMIC_MASK_PTINVOKE, CMINVOKECOMMANDINFO, CMINVOKECOMMANDINFOEX, GCS_VERBW,
     IContextMenu, IContextMenu2, IContextMenu3, IShellFolder, IShellItemImageFactory,
-    SHCreateItemFromParsingName, SHGetDesktopFolder, SIIGBF_ICONONLY,
+    SHCreateItemFromParsingName, SHDefExtractIconW, SHGetDesktopFolder, SIIGBF_ICONONLY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreatePopupMenu, DestroyMenu, GetDesktopWindow, GetMenuItemCount, GetMenuItemInfoW, HMENU,
-    MENUITEMINFOW, MFS_DISABLED, MFT_OWNERDRAW, MFT_SEPARATOR, MIIM_BITMAP, MIIM_FTYPE, MIIM_ID,
-    MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, SW_SHOWNORMAL, WM_INITMENUPOPUP,
+    CreatePopupMenu, DestroyIcon, DestroyMenu, GetDesktopWindow, GetIconInfo, GetMenuItemCount,
+    GetMenuItemInfoW, HICON, HMENU, ICONINFO, MENUITEMINFOW, MFS_DISABLED, MFT_OWNERDRAW,
+    MFT_SEPARATOR, MIIM_BITMAP, MIIM_CHECKMARKS, MIIM_DATA, MIIM_FTYPE, MIIM_ID, MIIM_STATE,
+    MIIM_STRING, MIIM_SUBMENU, SW_SHOWNORMAL, WM_DRAWITEM, WM_INITMENUPOPUP, WM_MEASUREITEM,
 };
+use windows::Win32::Graphics::Gdi::HDC;
+
+// The owner-draw structs of winuser.h (`Win32_UI_Controls` in the windows crate, which this
+// crate doesn't otherwise need).
+const ODT_MENU: u32 = 1;
+const ODA_DRAWENTIRE: u32 = 1;
+
+#[repr(C)]
+#[derive(Default)]
+#[allow(non_snake_case)]
+struct MEASUREITEMSTRUCT {
+    CtlType: u32,
+    CtlID: u32,
+    itemID: u32,
+    itemWidth: u32,
+    itemHeight: u32,
+    itemData: usize,
+}
+
+#[repr(C)]
+#[derive(Default)]
+#[allow(non_snake_case)]
+struct DRAWITEMSTRUCT {
+    CtlType: u32,
+    CtlID: u32,
+    itemID: u32,
+    itemAction: u32,
+    itemState: u32,
+    hwndItem: HWND,
+    hDC: HDC,
+    rcItem: RECT,
+    itemData: usize,
+}
 use windows::core::{HSTRING, Interface, PCSTR, PCWSTR, PWSTR};
 
 /// The command ids handed to `QueryContextMenu`: `FIRST..=LAST`.
@@ -41,6 +78,30 @@ const HANG: Duration = Duration::from_millis(1500);
 /// `CMIC_MASK_UNICODE` (`SEE_MASK_UNICODE`): `lpVerbW` and `lpDirectoryW` are read.
 const CMIC_MASK_UNICODE: u32 = 0x4000;
 
+/// Where an item's icon came from (the probe reports it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IconFrom {
+    /// The verb's `Icon` registry value, extracted at the menu's size.
+    Registry,
+    /// The item's own bitmap (`hbmpItem`).
+    Bitmap,
+    /// Drawn by the extension (`HBMMENU_CALLBACK` → `WM_DRAWITEM`).
+    Callback,
+    /// The item's check-mark bitmaps.
+    Checkmark,
+    /// The registered type's own icon ("New" items).
+    Type,
+    /// The program that runs the verb or opens the type.
+    Program,
+}
+
+/// An item's icon: premultiplied BGRA, the menu's icon size where its source allows.
+#[derive(Debug, Clone)]
+pub struct ShellIcon {
+    pub image: Arc<Image>,
+    pub from: IconFrom,
+}
+
 /// One item of the shell's menu, flattened.
 #[derive(Debug, Clone)]
 pub enum ShellItem {
@@ -50,12 +111,12 @@ pub enum ShellItem {
         /// The canonical verb, when the extension names one ("paste", "undo", "git_shell").
         verb: String,
         id: u32,
-        icon: Option<Arc<Image>>,
+        icon: Option<ShellIcon>,
         enabled: bool,
     },
     Submenu {
         label: String,
-        icon: Option<Arc<Image>>,
+        icon: Option<ShellIcon>,
         items: Vec<ShellItem>,
     },
 }
@@ -282,7 +343,14 @@ impl Walker<'_> {
             let mut text = [0u16; 260];
             let mut info = MENUITEMINFOW {
                 cbSize: size_of::<MENUITEMINFOW>() as u32,
-                fMask: MIIM_FTYPE | MIIM_ID | MIIM_STRING | MIIM_SUBMENU | MIIM_STATE | MIIM_BITMAP,
+                fMask: MIIM_FTYPE
+                    | MIIM_ID
+                    | MIIM_STRING
+                    | MIIM_SUBMENU
+                    | MIIM_STATE
+                    | MIIM_BITMAP
+                    | MIIM_CHECKMARKS
+                    | MIIM_DATA,
                 dwTypeData: PWSTR(text.as_mut_ptr()),
                 cch: text.len() as u32 - 1,
                 ..Default::default()
@@ -296,8 +364,8 @@ impl Walker<'_> {
             }
             let label = String::from_utf16_lossy(&text[..info.cch as usize]);
             let label = clean(&label);
-            let mut icon = self.bitmap(info.hbmpItem);
             if !info.hSubMenu.is_invalid() && depth < 3 {
+                let icon = unsafe { self.icon(hmenu, &info, "") };
                 self.init_popup(info.hSubMenu, index);
                 let items = unsafe { self.walk(info.hSubMenu, depth + 1) };
                 if !label.is_empty() && !items.is_empty() {
@@ -313,10 +381,7 @@ impl Walker<'_> {
                 continue;
             }
             let verb = self.verb(info.wID - FIRST);
-            // "New" types without a bitmap: the type's own icon (the verb is its extension).
-            if icon.is_none() && verb.starts_with('.') {
-                icon = type_icon(&verb, self.icon);
-            }
+            let icon = unsafe { self.icon(hmenu, &info, &verb) };
             out.push(ShellItem::Action {
                 verb,
                 label,
@@ -360,13 +425,272 @@ impl Walker<'_> {
         String::from_utf16_lossy(&buffer[..end]).to_ascii_lowercase()
     }
 
-    fn bitmap(&self, hbm: HBITMAP) -> Option<Arc<Image>> {
-        // Real bitmaps only: small values are the HBMMENU_* system glyphs.
-        if (hbm.0 as isize) < 64 {
-            return None;
+    /// The item's icon, from the crispest source it has: a "New" type's own icon, a verb's
+    /// registered `Icon` (at the menu's size, where the item's bitmap is 16 px), the item's
+    /// bitmap, one the extension draws, its check-mark bitmap, else the verb's program.
+    unsafe fn icon(&self, hmenu: HMENU, info: &MENUITEMINFOW, verb: &str) -> Option<ShellIcon> {
+        let size = self.icon;
+        let found = |image: Option<Image>, from| {
+            image.map(|image| ShellIcon {
+                image: Arc::new(image),
+                from,
+            })
+        };
+        // "New" types: the verb is the extension ("newlink" makes a shortcut).
+        let extension = match verb {
+            "newlink" => Some(".lnk"),
+            v if v.starts_with('.') => Some(v),
+            _ => None,
+        };
+        if let Some(extension) = extension
+            && let Some(icon) = type_icon(extension, size)
+        {
+            return Some(icon);
         }
-        bitmap_image(hbm).map(Arc::new)
+        let key = verb_key(verb);
+        if let Some(icon) = key.as_deref().and_then(|k| reg_string(k, "Icon")) {
+            if let Some(icon) = found(extract(&icon, size), IconFrom::Registry) {
+                return Some(icon);
+            }
+        }
+        if let Some(icon) = found(bitmap(info.hbmpItem), IconFrom::Bitmap) {
+            return Some(icon);
+        }
+        // HBMMENU_CALLBACK: the extension draws it.
+        if info.hbmpItem.0 as isize == -1
+            && let Some(icon) = found(unsafe { self.draw(hmenu, info) }, IconFrom::Callback)
+        {
+            return Some(icon);
+        }
+        let checkmark = bitmap(info.hbmpUnchecked).or_else(|| bitmap(info.hbmpChecked));
+        if let Some(icon) = found(checkmark, IconFrom::Checkmark) {
+            return Some(icon);
+        }
+        let program = key
+            .and_then(|k| reg_string(&format!(r"{k}\command"), ""))
+            .and_then(|command| program_of(&command));
+        found(
+            program.and_then(|exe| file_icon_image(std::path::Path::new(&exe), size)),
+            IconFrom::Program,
+        )
     }
+
+    /// An `HBMMENU_CALLBACK` icon: the extension measures and draws it (`WM_MEASUREITEM`,
+    /// `WM_DRAWITEM`) into a memory DC, once on black and once on white, which gives its alpha.
+    unsafe fn draw(&self, hmenu: HMENU, info: &MENUITEMINFOW) -> Option<Image> {
+        let send = |msg, lparam: LPARAM| -> bool {
+            // SAFETY: the documented forwarding of owner-draw messages; `lparam` points at a
+            // live struct for the call's duration.
+            unsafe {
+                match (&self.menu3, &self.menu2) {
+                    (Some(m3), _) => m3.HandleMenuMsg2(msg, WPARAM(0), lparam, None).is_ok(),
+                    (None, Some(m2)) => m2.HandleMenuMsg(msg, WPARAM(0), lparam).is_ok(),
+                    _ => false,
+                }
+            }
+        };
+        let mut measure = MEASUREITEMSTRUCT {
+            CtlType: ODT_MENU,
+            itemID: info.wID,
+            itemData: info.dwItemData,
+            ..Default::default()
+        };
+        send(WM_MEASUREITEM, LPARAM(std::ptr::from_mut(&mut measure) as isize));
+        let fits = |v: u32| (1..=256).contains(&v);
+        let (w, h) = if fits(measure.itemWidth) && fits(measure.itemHeight) {
+            (measure.itemWidth as i32, measure.itemHeight as i32)
+        } else {
+            (self.icon, self.icon)
+        };
+        let paint = |background: u8| -> Option<Vec<u8>> {
+            // SAFETY: a memory DC and DIB section of our own, freed before returning.
+            unsafe {
+                let dc = CreateCompatibleDC(None);
+                let header = BITMAPINFO {
+                    bmiHeader: dib_header(w, h),
+                    ..Default::default()
+                };
+                let mut bits = std::ptr::null_mut();
+                let dib = CreateDIBSection(Some(dc), &header, DIB_RGB_COLORS, &mut bits, None, 0)
+                    .ok()?;
+                let old = SelectObject(dc, HGDIOBJ(dib.0));
+                let len = (w * h * 4) as usize;
+                std::ptr::write_bytes(bits.cast::<u8>(), background, len);
+                let draw = DRAWITEMSTRUCT {
+                    CtlType: ODT_MENU,
+                    itemID: info.wID,
+                    itemAction: ODA_DRAWENTIRE,
+                    hwndItem: HWND(hmenu.0),
+                    hDC: dc,
+                    rcItem: RECT {
+                        left: 0,
+                        top: 0,
+                        right: w,
+                        bottom: h,
+                    },
+                    itemData: info.dwItemData,
+                    ..Default::default()
+                };
+                let drawn = send(WM_DRAWITEM, LPARAM(std::ptr::from_ref(&draw) as isize));
+                let _ = GdiFlush();
+                let pixels = std::slice::from_raw_parts(bits.cast::<u8>(), len).to_vec();
+                SelectObject(dc, old);
+                let _ = DeleteObject(HGDIOBJ(dib.0));
+                let _ = DeleteDC(dc);
+                drawn.then_some(pixels)
+            }
+        };
+        let pixels = from_black_and_white(&paint(0)?, &paint(255)?)?;
+        Some(Image {
+            width: w as u32,
+            height: h as u32,
+            pixels,
+        })
+    }
+}
+
+/// Premultiplied BGRA from the same drawing on black and on white: where the white shows
+/// through, it is transparent. `None` if nothing was drawn.
+fn from_black_and_white(black: &[u8], white: &[u8]) -> Option<Vec<u8>> {
+    let mut out = vec![0u8; black.len()];
+    let mut any = false;
+    for ((o, b), w) in out
+        .chunks_exact_mut(4)
+        .zip(black.chunks_exact(4))
+        .zip(white.chunks_exact(4))
+    {
+        let through = (0..3).map(|c| w[c].saturating_sub(b[c])).max().unwrap_or(0);
+        let alpha = 255 - through;
+        any |= alpha > 0;
+        for c in 0..3 {
+            o[c] = b[c].min(alpha);
+        }
+        o[3] = alpha;
+    }
+    any.then_some(out)
+}
+
+/// A real menu bitmap's pixels: `0..64` and `-1` are the `HBMMENU_*` system glyphs. (A real
+/// handle may have its high bit set and read as negative, so it isn't `< 64`.)
+fn bitmap(hbm: HBITMAP) -> Option<Image> {
+    let value = hbm.0 as isize;
+    if value == -1 || (0..64).contains(&value) {
+        return None;
+    }
+    bitmap_image(hbm)
+}
+
+/// The registry key (under `HKEY_CLASSES_ROOT`) of a desktop-background verb, if it has one.
+fn verb_key(verb: &str) -> Option<String> {
+    if verb.is_empty() || verb.starts_with('.') || verb.contains('\\') {
+        return None;
+    }
+    [r"Directory\Background\shell", r"DesktopBackground\Shell"]
+        .iter()
+        .map(|root| format!(r"{root}\{verb}"))
+        .find(|key| reg_string(key, "").is_some() || reg_string(key, "Icon").is_some())
+}
+
+/// A string value of `HKEY_CLASSES_ROOT\key` (`""`: its default value), environment expanded.
+fn reg_string(key: &str, value: &str) -> Option<String> {
+    let mut buffer = [0u16; 1024];
+    let mut bytes = (buffer.len() * 2) as u32;
+    // SAFETY: a buffer of the byte length we pass.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CLASSES_ROOT,
+            &HSTRING::from(key),
+            &HSTRING::from(value),
+            RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ,
+            None,
+            Some(buffer.as_mut_ptr().cast()),
+            Some(&mut bytes),
+        )
+    };
+    if status.is_err() {
+        return None;
+    }
+    let text = &buffer[..(bytes as usize / 2)];
+    let end = text.iter().position(|&c| c == 0).unwrap_or(text.len());
+    let text = String::from_utf16_lossy(&text[..end]);
+    (!text.trim().is_empty()).then_some(text)
+}
+
+/// The program a command line runs: `"C:\a b\x.exe" "%V"` or `C:\a b\x.exe --flag` → the exe.
+fn program_of(command: &str) -> Option<String> {
+    let command = command.trim();
+    let exe = if let Some(rest) = command.strip_prefix('"') {
+        rest.split('"').next()?
+    } else {
+        let lower = command.to_ascii_lowercase();
+        match lower.find(".exe") {
+            Some(end) => &command[..end + 4],
+            None => command.split(' ').next()?,
+        }
+    };
+    (!exe.is_empty()).then(|| exe.to_owned())
+}
+
+/// The icon at an icon location (`"C:\x.exe,-105"`, `"C:\x.ico"`), `size` px square.
+fn extract(location: &str, size: i32) -> Option<Image> {
+    let location = location.trim().trim_matches('"');
+    let (path, index) = match location.rsplit_once(',') {
+        Some((path, index)) if index.trim().parse::<i32>().is_ok() => {
+            (path.trim().trim_matches('"'), index.trim().parse().unwrap_or(0))
+        }
+        _ => (location, 0),
+    };
+    let mut icon = HICON::default();
+    // SAFETY: an out pointer to a local; the icon is ours and destroyed by `icon_image`.
+    let found = unsafe {
+        SHDefExtractIconW(
+            &HSTRING::from(path),
+            index,
+            0,
+            Some(&mut icon),
+            None,
+            size as u32 & 0xFFFF,
+        )
+    };
+    if found.is_err() || found.0 == 1 || icon.is_invalid() {
+        return None;
+    }
+    icon_image(icon)
+}
+
+/// An icon's pixels (premultiplied); an icon with no alpha is cut out by its mask. Destroys
+/// the icon.
+fn icon_image(icon: HICON) -> Option<Image> {
+    let mut parts = ICONINFO::default();
+    // SAFETY: the icon is ours; its bitmaps are freed below.
+    unsafe {
+        let image = GetIconInfo(icon, &mut parts).ok().and_then(|()| {
+            let mut image = bitmap_image(parts.hbmColor)?;
+            if !has_alpha(parts.hbmColor)
+                && let Some(mask) = bitmap_image(parts.hbmMask)
+                && mask.width == image.width
+                && mask.height >= image.height
+            {
+                for (p, m) in image.pixels.chunks_exact_mut(4).zip(mask.pixels.chunks_exact(4)) {
+                    if m[0] != 0 {
+                        p.copy_from_slice(&[0, 0, 0, 0]);
+                    }
+                }
+            }
+            Some(image)
+        });
+        let _ = DeleteObject(HGDIOBJ(parts.hbmColor.0));
+        let _ = DeleteObject(HGDIOBJ(parts.hbmMask.0));
+        let _ = DestroyIcon(icon);
+        image
+    }
+}
+
+/// Does a 32-bit bitmap carry any alpha at all?
+fn has_alpha(hbm: HBITMAP) -> bool {
+    dib_pixels(hbm).is_some_and(|(_, _, bits, pixels)| {
+        bits == 32 && pixels.chunks_exact(4).any(|p| p[3] != 0)
+    })
 }
 
 /// "&New" → "New"; "Open in Terminal\tCtrl+T" → "Open in Terminal".
@@ -430,6 +754,13 @@ fn invoke(menu: &IContextMenu, id: u32, at: (i32, i32)) -> Result<()> {
 
 /// A file's or program's own icon at `size` px (premultiplied), as the shell draws it.
 pub fn file_icon(path: &std::path::Path, size: i32) -> Option<Arc<Image>> {
+    file_icon_image(path, size).map(Arc::new)
+}
+
+fn file_icon_image(path: &std::path::Path, size: i32) -> Option<Image> {
+    if !path.is_file() {
+        return None;
+    }
     // SAFETY: documented shell calls; the returned bitmap is ours and deleted after the copy.
     unsafe {
         let item: IShellItemImageFactory =
@@ -442,19 +773,70 @@ pub fn file_icon(path: &std::path::Path, size: i32) -> Option<Arc<Image>> {
             .ok()?;
         let image = bitmap_image(hbm);
         let _ = DeleteObject(HGDIOBJ(hbm.0));
-        image.map(Arc::new)
+        image
     }
 }
 
-/// The small icon of files of type `extension` (".docx"), as Explorer shows them.
-fn type_icon(extension: &str, _size: i32) -> Option<Arc<Image>> {
+/// The icon of files of type `extension` (".docx") at `size` px, as Explorer's "New" shows
+/// it: the icon of the type the "New" entry registers (`HKCR\.docx` → `Word.Document.12`), else
+/// the type's resolved icon, else the icon of the program that opens it, else the shell's own.
+/// (The resolved association can be the generic page, e.g. a default app that is gone.)
+fn type_icon(extension: &str, size: i32) -> Option<ShellIcon> {
+    let found = |image: Option<Image>, from| {
+        image.map(|image| ShellIcon {
+            image: Arc::new(image),
+            from,
+        })
+    };
+    let registered = reg_string(extension, "")
+        .and_then(|progid| reg_string(&format!(r"{progid}\DefaultIcon"), ""))
+        .into_iter()
+        .chain(assoc(extension, ASSOCSTR_DEFAULTICON))
+        .filter(|i| !i.contains("%1"))
+        .find_map(|i| extract(&i, size));
+    if let Some(icon) = found(registered, IconFrom::Type) {
+        return Some(icon);
+    }
+    let program = assoc(extension, ASSOCSTR_EXECUTABLE)
+        .filter(|exe| !exe.to_ascii_lowercase().ends_with("openwith.exe"))
+        .and_then(|exe| file_icon_image(std::path::Path::new(&exe), size));
+    if let Some(icon) = found(program, IconFrom::Program) {
+        return Some(icon);
+    }
+    found(shell_type_icon(extension), IconFrom::Type)
+}
+
+/// What `AssocQueryStringW` says about `extension`.
+fn assoc(extension: &str, what: ASSOCSTR) -> Option<String> {
+    let mut buffer = [0u16; 1024];
+    let mut len = buffer.len() as u32;
+    // SAFETY: a buffer of the length we pass.
+    let ok = unsafe {
+        AssocQueryStringW(
+            ASSOCF_NONE,
+            what,
+            &HSTRING::from(extension),
+            PCWSTR::null(),
+            Some(PWSTR(buffer.as_mut_ptr())),
+            &mut len,
+        )
+    };
+    if ok.is_err() {
+        return None;
+    }
+    let end = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+    let text = String::from_utf16_lossy(&buffer[..end]);
+    (!text.trim().is_empty()).then_some(text)
+}
+
+/// The shell's small icon for files of type `extension`.
+fn shell_type_icon(extension: &str) -> Option<Image> {
     use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL;
     use windows::Win32::UI::Shell::{
         SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON, SHGFI_USEFILEATTRIBUTES, SHGetFileInfoW,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, ICONINFO};
     let mut info = SHFILEINFOW::default();
-    // SAFETY: a valid out struct of the size we pass; the icon and its bitmaps are ours to free.
+    // SAFETY: a valid out struct of the size we pass; the icon is freed by `icon_image`.
     unsafe {
         let found = SHGetFileInfoW(
             &HSTRING::from(extension),
@@ -466,20 +848,25 @@ fn type_icon(extension: &str, _size: i32) -> Option<Arc<Image>> {
         if found == 0 || info.hIcon.is_invalid() {
             return None;
         }
-        let mut parts = ICONINFO::default();
-        let image = GetIconInfo(info.hIcon, &mut parts)
-            .ok()
-            .and_then(|()| bitmap_image(parts.hbmColor));
-        let _ = DeleteObject(HGDIOBJ(parts.hbmColor.0));
-        let _ = DeleteObject(HGDIOBJ(parts.hbmMask.0));
-        let _ = DestroyIcon(info.hIcon);
-        image.map(Arc::new)
+    }
+    icon_image(info.hIcon)
+}
+
+fn dib_header(w: i32, h: i32) -> BITMAPINFOHEADER {
+    BITMAPINFOHEADER {
+        biSize: size_of::<BITMAPINFOHEADER>() as u32,
+        biWidth: w,
+        biHeight: -h,
+        biPlanes: 1,
+        biBitCount: 32,
+        biCompression: BI_RGB.0,
+        ..Default::default()
     }
 }
 
-/// A 32-bit bitmap's pixels, top-down premultiplied BGRA. A bitmap with no alpha at all is
-/// taken as opaque; straight alpha is premultiplied.
-fn bitmap_image(hbm: HBITMAP) -> Option<Image> {
+/// A bitmap's pixels as top-down 32-bit BGRA, as stored: (width, height, its own bit depth,
+/// pixels).
+fn dib_pixels(hbm: HBITMAP) -> Option<(i32, i32, u16, Vec<u8>)> {
     // SAFETY: plain GDI queries into buffers of the sizes we pass.
     unsafe {
         let mut bm = BITMAP::default();
@@ -492,19 +879,11 @@ fn bitmap_image(hbm: HBITMAP) -> Option<Image> {
             return None;
         }
         let (w, h) = (bm.bmWidth, bm.bmHeight.abs());
-        if w <= 0 || h <= 0 || w > 256 || h > 256 {
+        if w <= 0 || h <= 0 || w > 256 || h > 512 {
             return None;
         }
         let mut info = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: w,
-                biHeight: -h,
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB.0,
-                ..Default::default()
-            },
+            bmiHeader: dib_header(w, h),
             ..Default::default()
         };
         let mut pixels = vec![0u8; (w * h * 4) as usize];
@@ -522,13 +901,20 @@ fn bitmap_image(hbm: HBITMAP) -> Option<Image> {
         if lines == 0 {
             return None;
         }
-        premultiply(&mut pixels, bm.bmBitsPixel == 32);
-        Some(Image {
-            width: w as u32,
-            height: h as u32,
-            pixels,
-        })
+        Some((w, h, bm.bmBitsPixel, pixels))
     }
+}
+
+/// A bitmap's pixels, top-down premultiplied BGRA. A bitmap with no alpha at all is taken as
+/// opaque; straight alpha is premultiplied.
+fn bitmap_image(hbm: HBITMAP) -> Option<Image> {
+    let (w, h, bits, mut pixels) = dib_pixels(hbm)?;
+    premultiply(&mut pixels, bits == 32);
+    Some(Image {
+        width: w as u32,
+        height: h as u32,
+        pixels,
+    })
 }
 
 /// Makes BGRA `pixels` premultiplied: no alpha at all (or a bitmap that has none) means
@@ -563,6 +949,31 @@ mod tests {
         assert_eq!(clean("&New"), "New");
         assert_eq!(clean("Open in &Terminal\tCtrl+T"), "Open in Terminal");
         assert_eq!(clean("Fish && Chips"), "Fish & Chips");
+    }
+
+    #[test]
+    fn verbs_run_the_program_their_command_names() {
+        let exe = |c| program_of(c);
+        assert_eq!(
+            exe(r#""C:\Program Files\Git\git-bash.exe" "--cd=%v.""#).as_deref(),
+            Some(r"C:\Program Files\Git\git-bash.exe")
+        );
+        assert_eq!(
+            exe(r#"C:\Program Files\Alacritty\alacritty.exe --working-directory "%v""#).as_deref(),
+            Some(r"C:\Program Files\Alacritty\alacritty.exe")
+        );
+    }
+
+    #[test]
+    fn a_drawing_on_black_and_on_white_gives_its_alpha() {
+        // Opaque red, half-transparent white, untouched background.
+        let black = [0, 0, 255, 0, 128, 128, 128, 0, 0, 0, 0, 0];
+        let white = [0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255];
+        assert_eq!(
+            from_black_and_white(&black, &white).unwrap(),
+            [0, 0, 255, 255, 128, 128, 128, 128, 0, 0, 0, 0]
+        );
+        assert_eq!(from_black_and_white(&[0; 4], &[255; 4]), None);
     }
 
     #[test]
@@ -609,12 +1020,12 @@ mod probe {
                         enabled,
                     } => println!(
                         "{pad}{label} [{verb}] #{id} icon={:?} enabled={enabled}",
-                        icon.as_ref().map(|i| (i.width, i.height))
+                        icon.as_ref().map(|i| (i.from, i.image.width, i.image.height))
                     ),
                     super::ShellItem::Submenu { label, icon, items } => {
                         println!(
                             "{pad}{label} > icon={:?}",
-                            icon.as_ref().map(|i| (i.width, i.height))
+                            icon.as_ref().map(|i| (i.from, i.image.width, i.image.height))
                         );
                         print(items, depth + 1);
                     }
@@ -632,19 +1043,21 @@ mod live {
 
     /// `cargo test -p mypaper-shell shell_menu::live -- --ignored --nocapture`: draws this
     /// machine's full desktop menu (its shell extensions, their icons, the desktop's state) and
-    /// its View, Sort by and New submenus to `%TEMP%\mypaper-desktop-menu-*.png`, as the shell
-    /// draws them, and times building it.
+    /// its View, Sort by, New and Open in submenus to `%TEMP%\mypaper-desktop-menu-*.png`, as
+    /// the shell draws them (at `MYPAPER_MENU_SCALE`, default 1), and times building it.
     #[test]
     #[ignore]
     fn draw_this_machines_desktop_menu() {
-        let shell = super::ShellMenu::start(16).unwrap();
+        let scale: f32 = std::env::var("MYPAPER_MENU_SCALE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1.0);
+        let shell = super::ShellMenu::start((16.0 * scale).round() as i32).unwrap();
         let started = std::time::Instant::now();
         while shell.snapshot().is_none() && started.elapsed().as_secs() < 10 {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         let snapshot = shell.snapshot().expect("a snapshot");
-        let exe = std::path::Path::new(r"C:\mypaper-targets\main\release\mypaper-studio.exe");
-        let mypaper = super::file_icon(exe, 16);
         let state = super::super::view_state();
         let mut ui = Ui::new().unwrap();
         let theme = mypaper_ui::Theme::new(
@@ -663,7 +1076,7 @@ mod live {
             state,
             Sources {
                 shell: Some(&snapshot),
-                mypaper: mypaper.as_ref(),
+                mypaper: None,
             },
         );
         let sub = |label: &str| {
@@ -680,9 +1093,10 @@ mod live {
             ("view", sub("View"), None),
             ("sort", sub("Sort by"), None),
             ("new", sub("New"), None),
+            ("open", sub("Open in"), None),
         ];
         for (name, items, hover) in panels {
-            let layout = menu::layout(&items, &tokens, 1.0, &mut ui.text);
+            let layout = menu::layout(&items, &tokens, scale, &mut ui.text);
             let list = menu::view(&items, &layout, hover, &tokens);
             let edge = tokens.menu.shadow.ceil() as u32;
             let (w, h) = layout.size();
@@ -694,7 +1108,7 @@ mod live {
             println!("{}", path.display());
         }
         println!(
-            "shell items built (worker, off the UI thread) in {:?}; items + layout + 4 panels drawn in {:?}",
+            "shell items built (worker, off the UI thread) in {:?}; items + layout + 5 panels drawn in {:?}",
             snapshot.took,
             built.elapsed()
         );

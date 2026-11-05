@@ -94,7 +94,7 @@ pub struct DesktopMenu {
     menu: Menu<Command>,
     /// The shell's own menu (New, extensions); `None` if its worker could not start.
     shell: Option<ShellMenu>,
-    /// mypaper's icon for its own items.
+    /// mypaper's mark, for its own items only where no icon font has their glyphs.
     icon: Option<Arc<Image>>,
     uia: Option<IUIAutomation>,
     hook: HookThread,
@@ -126,10 +126,7 @@ impl DesktopMenu {
         let shell = ShellMenu::start(icon_px)
             .inspect_err(|e| log::warn!("desktop menu: no shell extensions: {e:#}"))
             .ok();
-        let icon = std::env::current_exe().ok().and_then(|exe| {
-            let studio = exe.with_file_name("mypaper-studio.exe");
-            shell_menu::file_icon(if studio.is_file() { &studio } else { &exe }, icon_px)
-        });
+        let icon = mark(icon_px as u32);
         let mut menu = Self {
             settings,
             themed: None,
@@ -304,7 +301,14 @@ impl DesktopMenu {
         });
         let sources = Sources {
             shell: snapshot.as_ref(),
-            mypaper: self.icon.as_ref(),
+            // Glyphs first; mypaper's mark only where neither icon font is installed.
+            mypaper: self
+                .icon
+                .as_ref()
+                .filter(|_| {
+                    !ui.text.has_family(mypaper_ui::icons::SYSTEM_FAMILY)
+                        && !ui.text.has_family("Segoe MDL2 Assets")
+                }),
         };
         let items = items::build_with(&self.settings.menu, state, sources);
         if items.is_empty() {
@@ -463,6 +467,30 @@ fn view_state() -> ViewState {
             }
         }
     }
+}
+
+/// mypaper's mark (`assets/logo/mark-small.svg`, drawn for 16-24 px) `px` square, premultiplied
+/// BGRA.
+fn mark(px: u32) -> Option<Arc<Image>> {
+    let svg = include_bytes!("../../../../assets/logo/mark-small.svg");
+    let tree = resvg::usvg::Tree::from_data(svg, &resvg::usvg::Options::default()).ok()?;
+    let scale = px as f32 / tree.size().width().max(tree.size().height());
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(px, px)?;
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
+    // tiny-skia is premultiplied RGBA; the kit's images are premultiplied BGRA.
+    let mut pixels = pixmap.take();
+    for p in pixels.chunks_exact_mut(4) {
+        p.swap(0, 2);
+    }
+    Some(Arc::new(Image {
+        width: px,
+        height: px,
+        pixels,
+    }))
 }
 
 /// The menu's icon size in device pixels on a monitor of `dpi`: 16 px, scaled.

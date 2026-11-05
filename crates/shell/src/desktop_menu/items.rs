@@ -13,7 +13,7 @@ use mypaper_config::desktop_menu::{Builtin, DesktopMenu, Entry as Configured, de
 use mypaper_desktop::desktop_view::{IconSize, NewItem, SortKey};
 use mypaper_ui::{Entry, Image, MenuIcon};
 
-use super::shell_menu::{ShellItem, Snapshot};
+use super::shell_menu::{ShellIcon, ShellItem, Snapshot};
 
 /// Segoe Fluent Icons glyphs of Windows 11's own desktop menu.
 pub mod glyph {
@@ -29,6 +29,12 @@ pub mod glyph {
     pub const DOCUMENT: char = '\u{E8A5}';
     /// An extension that brings no icon of its own.
     pub const APP: char = '\u{ECAA}';
+    // mypaper's own items, each its own glyph (Photo, Tiles, Add, Color), apart from Display
+    // settings' monitor, Personalize's brush, View's even grid and New's circled plus.
+    pub const WALLPAPER: char = '\u{EB9F}';
+    pub const WIDGETS: char = '\u{ECA5}';
+    pub const ADD: char = '\u{E710}';
+    pub const STUDIO: char = '\u{E790}';
 }
 
 /// What choosing an item does.
@@ -83,7 +89,7 @@ pub struct ViewState {
 pub struct Sources<'a> {
     /// The shell's own menu, once the worker has built it.
     pub shell: Option<&'a Snapshot>,
-    /// mypaper's icon, for mypaper's items.
+    /// mypaper's icon, for mypaper's items only where the icon font lacks their glyphs.
     pub mypaper: Option<&'a Arc<Image>>,
 }
 
@@ -154,16 +160,19 @@ pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> V
             })
             .collect()
     };
-    let mypaper = || match sources.mypaper {
+    let mypaper = |glyph| match sources.mypaper {
         Some(image) => MenuIcon::Image(image.clone()),
-        None => MenuIcon::Glyph(glyph::APP),
+        None => MenuIcon::Glyph(glyph),
     };
     let mut items = Vec::new();
     for slot in slots {
         match slot {
             Slot::Builtin(Builtin::More) => items.extend(extensions(sources.shell)),
-            Slot::Builtin(b @ (Builtin::Wallpaper | Builtin::Widgets)) => {
-                items.push(builtin_item(b, state, sources).with_icon(mypaper()))
+            Slot::Builtin(b @ Builtin::Wallpaper) => {
+                items.push(builtin_item(b, state, sources).with_icon(mypaper(glyph::WALLPAPER)))
+            }
+            Slot::Builtin(b @ Builtin::Widgets) => {
+                items.push(builtin_item(b, state, sources).with_icon(mypaper(glyph::WIDGETS)))
             }
             Slot::Builtin(b) => items.push(builtin_item(b, state, sources)),
             Slot::Custom(c) => items.push(
@@ -176,11 +185,13 @@ pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> V
                 )
                 .with_icon(MenuIcon::Glyph(glyph::APP)),
             ),
-            Slot::AddWidget => {
-                items.push(Entry::action("Add widget", Command::AddWidget).with_icon(mypaper()))
-            }
-            Slot::Studio => items
-                .push(Entry::action("mypaper Studio", Command::OpenStudio).with_icon(mypaper())),
+            Slot::AddWidget => items.push(
+                Entry::action("Add widget", Command::AddWidget).with_icon(mypaper(glyph::ADD)),
+            ),
+            Slot::Studio => items.push(
+                Entry::action("mypaper Studio", Command::OpenStudio)
+                    .with_icon(mypaper(glyph::STUDIO)),
+            ),
         }
     }
     tidy(group_open(items))
@@ -290,8 +301,8 @@ fn extensions(shell: Option<&Snapshot>) -> Vec<Item> {
 }
 
 fn from_shell(item: &ShellItem, generation: u64, fallback: char) -> Item {
-    let icon = |image: &Option<Arc<Image>>| match image {
-        Some(image) => MenuIcon::Image(image.clone()),
+    let icon = |icon: &Option<ShellIcon>| match icon {
+        Some(icon) => MenuIcon::Image(icon.image.clone()),
         None => MenuIcon::Glyph(fallback),
     };
     match item {
