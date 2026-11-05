@@ -666,7 +666,7 @@ impl<'a> Kit<'a> {
             rect,
             radius,
             color: if glass {
-                look.fill.with_alpha(0.55)
+                look.fill.with_alpha(0.68)
             } else {
                 look.fill
             },
