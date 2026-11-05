@@ -211,6 +211,22 @@ clear message.
 | IPC | binary frames | `u32` LE length + `postcard` message on the helper's stdio. Images go through named shared memory (`image-id`) |
 | action → repaint | ≪ one frame (16 ms) | measured by `mypaper-plugins --bench` |
 
+Measured 2026-11-05 (release, `mypaper-plugins --bench plugins/hello plugins/weather`, and the
+live helper with the weather face placed):
+
+| measure | value |
+|---|---|
+| idle CPU, live helper with weather loaded, 60 s | 0.0 ms (0.000%), 4 threads |
+| live helper, weather loaded | 16.4 MB working set / 7.4 MB private |
+| engine + linker + ticker | +0.8 MB WS / +3.2 MB private, 0.8 ms |
+| per active plugin (hello / weather) | 1.06 MiB linear memory; +1.2 / +1.4 MB private |
+| cold load (AOT compile + instantiate + init) | hello 130 ms, weather 213 ms (once, at install) |
+| warm load (cached `.cwasm` + instantiate + init) | 0.62 ms |
+| action → view frame decoded, the shell's side included except the draw | p50 0.008 ms, p99 0.017 ms |
+| infinite loop stopped (50 ms budget) | 49.5 ms |
+| weather: IP lookup + forecast, two HTTP round trips | < 1 s; each reply handled in 0.3–0.5 ms |
+| component sizes | hello.wasm 107 KB, weather.wasm 196 KB; `.cwasm` 430 / 740 KB |
+
 ## Shell ↔ helper protocol
 
 The bridge starts `mypaper-plugins.exe` lazily when the first WASM plugin's face opens. It runs
