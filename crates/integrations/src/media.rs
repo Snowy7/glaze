@@ -77,7 +77,12 @@ struct Subscription {
     artwork: Option<(String, Option<String>)>,
 }
 impl Subscription {
-    fn follow(&mut self, changed: &Arc<Notify>, publish: &Publish) -> Result<()> {
+    fn follow(
+        &mut self,
+        changed: &Arc<Notify>,
+        timeline: &Arc<Notify>,
+        publish: &Publish,
+    ) -> Result<()> {
         let next = self.manager.GetCurrentSession().ok();
         if next.as_ref() == self.session.as_ref().map(|(s, _)| s) {
             return Ok(());
@@ -92,7 +97,7 @@ impl Subscription {
                     return Err(e.into());
                 }
             };
-            let c = match session.TimelinePropertiesChanged(&notify(changed, publish)) {
+            let c = match session.TimelinePropertiesChanged(&notify(timeline, publish)) {
                 Ok(c) => c,
                 Err(e) => {
                     let _ = session.RemoveMediaPropertiesChanged(a);
@@ -145,22 +150,7 @@ impl Subscription {
             })();
             self.artwork = Some((key, image));
         }
-        let timeline = session.GetTimelineProperties().ok().and_then(|timeline| {
-            let start = timeline.StartTime().ok()?.Duration;
-            let duration = timeline.EndTime().ok()?.Duration - start;
-            if duration <= 0 {
-                return None;
-            }
-            Some((
-                (timeline.Position().ok()?.Duration - start).clamp(0, duration) / 10_000,
-                duration / 10_000,
-                timeline
-                    .LastUpdatedTime()
-                    .ok()
-                    .map(|at| at.UniversalTime / 10_000 - 11_644_473_600_000),
-            ))
-        });
-        Ok(Snapshot {
+        let mut snapshot = Snapshot {
             title: props.Title()?.to_string(),
             artist: props.Artist()?.to_string(),
             album: props.AlbumTitle()?.to_string(),
@@ -170,10 +160,35 @@ impl Subscription {
             previous: controls.IsPreviousEnabled()?,
             next: controls.IsNextEnabled()?,
             artwork: self.artwork.as_ref().and_then(|(_, image)| image.clone()),
-            position_ms: timeline.as_ref().map(|(position, _, _)| *position),
-            duration_ms: timeline.as_ref().map(|(_, duration, _)| *duration),
-            position_at_ms: timeline.and_then(|(_, _, at)| at),
-        })
+            ..Snapshot::default()
+        };
+        self.read_timeline(&mut snapshot);
+        Ok(snapshot)
+    }
+    /// Seek/timeline notifications do not reread metadata or reopen the thumbnail stream.
+    fn read_timeline(&self, snapshot: &mut Snapshot) {
+        let timeline = self
+            .session
+            .as_ref()
+            .and_then(|(session, _)| session.GetTimelineProperties().ok())
+            .and_then(|timeline| {
+                let start = timeline.StartTime().ok()?.Duration;
+                let duration = timeline.EndTime().ok()?.Duration - start;
+                if duration <= 0 {
+                    return None;
+                }
+                Some((
+                    (timeline.Position().ok()?.Duration - start).clamp(0, duration) / 10_000,
+                    duration / 10_000,
+                    timeline
+                        .LastUpdatedTime()
+                        .ok()
+                        .map(|at| at.UniversalTime / 10_000 - 11_644_473_600_000),
+                ))
+            });
+        snapshot.position_ms = timeline.as_ref().map(|(position, _, _)| *position);
+        snapshot.duration_ms = timeline.as_ref().map(|(_, duration, _)| *duration);
+        snapshot.position_at_ms = timeline.and_then(|(_, _, at)| at);
     }
     fn control(&self, action: Action) -> Result<()> {
         let Some((session, _)) = &self.session else {
@@ -223,6 +238,7 @@ pub(crate) async fn run(
     let _com = Com::new()?;
     let manager = Manager::RequestAsync()?.join()?;
     let changed = Arc::new(Notify::new());
+    let timeline = Arc::new(Notify::new());
     let a = manager.CurrentSessionChanged(&notify(&changed, publish))?;
     let b = match manager.SessionsChanged(&notify(&changed, publish)) {
         Ok(b) => b,
@@ -237,11 +253,20 @@ pub(crate) async fn run(
         session: None,
         artwork: None,
     };
-    subscription.follow(&changed, publish)?;
-    publish.set(Availability::Live, Some(Data::Media(subscription.read()?)));
+    subscription.follow(&changed, &timeline, publish)?;
+    let mut snapshot = subscription.read()?;
+    publish.set(Availability::Live, Some(Data::Media(snapshot.clone())));
     loop {
         tokio::select! {
-            _ = changed.notified() => { subscription.follow(&changed,publish)?; publish.set(Availability::Live, Some(Data::Media(subscription.read()?))); }
+            _ = changed.notified() => {
+                subscription.follow(&changed, &timeline, publish)?;
+                snapshot = subscription.read()?;
+                publish.set(Availability::Live, Some(Data::Media(snapshot.clone())));
+            }
+            _ = timeline.notified() => {
+                subscription.read_timeline(&mut snapshot);
+                publish.set(Availability::Live, Some(Data::Media(snapshot.clone())));
+            }
             Some(action) = commands.recv() => if let crate::Action::Media(action) = action { publish.action_result(subscription.control(action)); }
         }
     }

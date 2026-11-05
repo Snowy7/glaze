@@ -71,6 +71,18 @@ struct Entry {
     tokens: Tokens,
     dpi_scale: f32,
 }
+#[derive(Clone, Copy, Debug, Default)]
+pub struct WorkCosts {
+    clock_us: u64,
+    coverage_us: u64,
+    stats_us: u64,
+    paint_us: u64,
+    polls: u64,
+    orders: u64,
+    order_us: u64,
+    plate_us: u64,
+    poll_us: u64,
+}
 struct Drag {
     id: String,
     start: (i32, i32),
@@ -138,7 +150,7 @@ pub struct Widgets {
     skin: look::Skin,
     presents: u64,
     clock_presents: u64,
-    costs: (u64, u64, u64),
+    costs: WorkCosts,
     ticker: Ticker,
     motion_frame: bool,
 }
@@ -241,7 +253,7 @@ impl Widgets {
             skin,
             presents: 0,
             clock_presents: 0,
-            costs: (0, 0, 0),
+            costs: WorkCosts::default(),
             ticker: Ticker::new()?,
             motion_frame: false,
         };
@@ -349,7 +361,7 @@ impl Widgets {
             .collect()
     }
     #[allow(dead_code, reason = "live fixture diagnostics")]
-    pub fn costs(&self) -> (u64, u64, u64) {
+    pub fn costs(&self) -> WorkCosts {
         self.costs
     }
     pub fn counters(&self) -> (u64, u64) {
@@ -380,9 +392,12 @@ impl Widgets {
             })
     }
     pub fn poll(&mut self, ui: &mut Ui) {
-        self.costs.2 += 1;
+        self.costs.polls += 1;
         let instant = Instant::now();
         let now = Stamp::now();
+        self.costs.clock_us += instant.elapsed().as_micros() as u64;
+        let measured = Instant::now();
+        let mut plates_changed = false;
         // A foreground transition can precede Explorer's asynchronous Show Desktop reorder.
         // One final repair after its animation settles avoids restacking for unrelated events.
         // SAFETY: a read-only snapshot; HWND is used only for identity comparison.
@@ -442,6 +457,7 @@ impl Widgets {
                 self.reconcile_needed = true;
             }
         }
+        self.costs.coverage_us += measured.elapsed().as_micros() as u64;
         let reasons = self.holds.reasons();
         let hidden = reasons.contains(Reason::Locked) || reasons.contains(Reason::DisplayOff);
         let held = !reasons.is_empty();
@@ -470,12 +486,15 @@ impl Widgets {
             }
         }
         if self.reconcile_needed {
+            plates_changed = true;
             if let Err(e) = self.reconcile(ui, now, instant) {
                 log::error!("native widgets: {e:#}");
             }
             self.reconcile_needed = false;
         }
         if self.order_due.is_some_and(|at| at <= instant) {
+            let measured = Instant::now();
+            self.costs.orders += 1;
             self.order_due = None;
             // Moving a paired glass window can displace an earlier member of the band.
             // A second pass converges the group; an already ordered surface is a no-op.
@@ -491,6 +510,7 @@ impl Widgets {
                 palette.surface.show();
                 let _ = palette.surface.raise_in_desktop_band();
             }
+            self.costs.order_us += measured.elapsed().as_micros() as u64;
         }
         while let Ok(msg) = self.rx.try_recv() {
             self.service_message(ui, msg, now, instant);
@@ -500,7 +520,7 @@ impl Widgets {
         }
         let measured = Instant::now();
         let deliveries = self.stats.tick(instant);
-        self.costs.0 += measured.elapsed().as_micros() as u64;
+        self.costs.stats_us += measured.elapsed().as_micros() as u64;
         for delivery in deliveries {
             if let Delivery::Event {
                 instance, stats, ..
@@ -642,14 +662,19 @@ impl Widgets {
                         entry.model.dirty = false;
                     }
                 }
-                self.costs.1 += measured.elapsed().as_micros() as u64;
+                self.costs.paint_us += measured.elapsed().as_micros() as u64;
                 entry.model.schedule(now, instant);
             }
         }
         if self.motion_frame && self.drag.is_some() {
             self.drag_frame(ui, now, instant);
         }
-        self.publish_plates(self.motion_frame && self.drag.is_some());
+        let moving = self.motion_frame && self.drag.is_some();
+        if plates_changed || moving {
+            let measured = Instant::now();
+            self.publish_plates(moving);
+            self.costs.plate_us += measured.elapsed().as_micros() as u64;
+        }
         self.motion_frame = false;
         self.ticker.schedule(
             !self.held
@@ -661,6 +686,7 @@ impl Widgets {
                                 || e.model.flip_at.is_some())
                     })),
         );
+        self.costs.poll_us += instant.elapsed().as_micros() as u64;
     }
 
     fn reconcile(&mut self, ui: &mut Ui, now: Stamp, instant: Instant) -> Result<()> {
@@ -922,13 +948,7 @@ impl Widgets {
                 .collect();
         } else {
             if m.kind == Widget::Media {
-                m.artwork = data
-                    .get("artwork")
-                    .and_then(|v| decode_url(ui, v, (256, 256)));
-                (m.artwork_backdrop, m.artwork_tint) = m
-                    .artwork
-                    .as_ref()
-                    .map_or((None, None), |art| artwork_material(art));
+                update_artwork(m, ui, &data);
                 if let Some(object) = data.as_object_mut() {
                     object.insert("_at".into(), json!(now.ms));
                 }
@@ -2417,6 +2437,20 @@ fn widget_surface(topmost: bool, parent: HWND, instance: &str) -> Result<Surface
         &format!("mypaper widget {instance}"),
         Role::Pane,
     )
+}
+
+/// Timeline and transport changes reuse decoded art and its blurred/tinted material.
+fn update_artwork(model: &mut Model, ui: &Ui, data: &Value) {
+    if model.data.get("artwork") == data.get("artwork") {
+        return;
+    }
+    model.artwork = data
+        .get("artwork")
+        .and_then(|value| decode_url(ui, value, (256, 256)));
+    (model.artwork_backdrop, model.artwork_tint) = model
+        .artwork
+        .as_ref()
+        .map_or((None, None), |art| artwork_material(art));
 }
 
 fn paint(

@@ -111,6 +111,38 @@ fn now() -> Stamp {
 }
 
 #[test]
+fn media_timeline_updates_reuse_artwork_and_removing_art_clears_its_material() {
+    let ui = Ui::new().unwrap();
+    let root = temp("media-art-cache");
+    let path = root.join("cover.png");
+    let image = mypaper_ui::Image {
+        width: 2,
+        height: 2,
+        pixels: [40, 80, 160, 255].repeat(4),
+    };
+    golden::write(&image, &path).unwrap();
+    let uri = format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(std::fs::read(&path).unwrap())
+    );
+    let mut m = fixture("now-playing", root.clone());
+    let mut data = json!({"artwork":uri,"position":0,"playing":true});
+    update_artwork(&mut m, &ui, &data);
+    let art = m.artwork.clone().unwrap();
+    let material = m.artwork_backdrop.clone().unwrap();
+    m.data = data.clone();
+    data["position"] = json!(30);
+    data["playing"] = json!(false);
+    update_artwork(&mut m, &ui, &data);
+    assert!(Arc::ptr_eq(&art, m.artwork.as_ref().unwrap()));
+    assert!(Arc::ptr_eq(&material, m.artwork_backdrop.as_ref().unwrap()));
+    data["artwork"] = Value::Null;
+    update_artwork(&mut m, &ui, &data);
+    assert!(m.artwork.is_none() && m.artwork_backdrop.is_none() && m.artwork_tint.is_none());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn widget_styles_preserve_none_solid_and_explicit_text_controls() {
     let mut ui = Ui::new().unwrap();
     let mut m = fixture("quote", temp("appearance"));

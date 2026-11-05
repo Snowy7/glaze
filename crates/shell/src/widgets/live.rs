@@ -53,6 +53,7 @@ fn main() -> Result<()> {
     anyhow::ensure!(!monitors.is_empty(), "no monitors");
     let registry = registry::builtins();
     let mut layout = Layout::default();
+    layout.appearance.style = Some(mypaper_theme::WidgetStyle::Liquid);
     for (i, id) in [
         "clock",
         "calendar",
@@ -234,7 +235,7 @@ fn main() -> Result<()> {
                     cpu.one_core,
                     host.counters()
                 );
-                println!("N4_COST stats_us,paint_us,polls={:?}", host.costs());
+                println!("N4_COST {:?}", host.costs());
                 let ui_cpu = perf_cpu::cpu_use(
                     Duration::from_nanos((ui_busy - ui_before) * 100),
                     at - start,
@@ -314,7 +315,9 @@ fn main() -> Result<()> {
         }
     }
     println!("N4_DONE drivers={:?}", mypaper_ui::modules::gpu_drivers());
-    println!("N4_MEDIAN {:?}", perf_cpu::median(&samples));
+    if !profiling {
+        println!("N4_MEDIAN {:?}", perf_cpu::median(&samples));
+    }
     // SAFETY: the harness owns this event and its wait loop has ended.
     unsafe {
         let _ = windows::Win32::Foundation::CloseHandle(stop);
@@ -549,6 +552,11 @@ fn exercise(ui: &mut Ui, host: &mut widgets::Widgets) -> Result<()> {
         host.live_windows()
     );
     let typed = "فحص 東京測試 한글입력";
+    // SAFETY: read-only focus/style probes of this test's own surface before keyboard input.
+    unsafe {
+        anyhow::ensure!(GetForegroundWindow()==note.hwnd && GetFocus()==note.hwnd,
+            "note field lacks real focus: foreground={:?} focus={:?} expected={:?} ex={:x}",GetForegroundWindow(),GetFocus(),note.hwnd,GetWindowLongPtrW(note.hwnd,GWL_EXSTYLE));
+    }
     let keys: Vec<_> = typed
         .encode_utf16()
         .flat_map(|ch| {
@@ -584,7 +592,7 @@ fn exercise(ui: &mut Ui, host: &mut widgets::Widgets) -> Result<()> {
     let saved = Storage::new(files::user("widget-data")?).get("notes-1", "text")?;
     anyhow::ensure!(
         saved.as_str().is_some_and(|s| s.contains(typed)),
-        "the native field did not persist keyboard-entered Arabic/CJK text"
+        "the native field did not persist keyboard-entered Arabic/CJK text: {saved}"
     );
     println!("N4_CHECK alpha_hit=1 widget_click=1 unicode_keyboard=1 z_order_after_click=1");
     // SAFETY: inverse of the Show Desktop operation above.

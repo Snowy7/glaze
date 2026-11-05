@@ -45,6 +45,9 @@ impl WindowEvents {
         }
     }
     pub fn take_changed(&mut self) -> bool {
+        if !CHANGED.swap(false, Ordering::Relaxed) {
+            return false;
+        }
         let (mut foreground, mut explorer) = (0, 0);
         // SAFETY: read-only process IDs, used to scope callbacks on this UI thread.
         unsafe {
@@ -70,9 +73,8 @@ impl WindowEvents {
                 })
                 .collect();
             self.processes = processes;
-            CHANGED.store(true, Ordering::Relaxed);
         }
-        CHANGED.swap(false, Ordering::Relaxed)
+        true
     }
 }
 impl Drop for WindowEvents {
@@ -109,6 +111,8 @@ fn eligible(hwnd: HWND) -> bool {
             && GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32
                 & (WS_EX_TOOLWINDOW.0 | WS_EX_TRANSPARENT.0 | WS_EX_NOACTIVATE.0)
                 == 0
+            && IsWindowVisible(hwnd).as_bool()
+            && !IsIconic(hwnd).as_bool()
     }
 }
 unsafe extern "system" fn remember(hwnd: HWND, _: LPARAM) -> windows::core::BOOL {
@@ -129,13 +133,20 @@ unsafe extern "system" fn changed(
     if object != OBJID_WINDOW.0 || child != CHILDID_SELF as i32 {
         return;
     }
+    if event == EVENT_SYSTEM_FOREGROUND {
+        CHANGED.store(true, Ordering::Relaxed);
+    }
     let relevant = if event == EVENT_OBJECT_DESTROY {
         TOP.with_borrow_mut(|top| top.remove(&(hwnd.0 as isize)))
-    } else if eligible(hwnd) {
-        TOP.with_borrow_mut(|top| top.insert(hwnd.0 as isize));
-        true
     } else {
-        false
+        let visible = eligible(hwnd);
+        TOP.with_borrow_mut(|top| {
+            let known = top.remove(&(hwnd.0 as isize));
+            if visible {
+                top.insert(hwnd.0 as isize);
+            }
+            visible || known
+        })
     };
     if relevant {
         CHANGED.store(true, Ordering::Relaxed);
@@ -183,9 +194,24 @@ mod tests {
             TOP.with_borrow_mut(|top| {
                 top.clear();
             });
+            CHANGED.store(false, Ordering::Relaxed);
             changed(
                 HWINEVENTHOOK::default(),
                 EVENT_OBJECT_CREATE,
+                parent,
+                OBJID_WINDOW.0,
+                0,
+                0,
+                0,
+            );
+            assert!(
+                !CHANGED.load(Ordering::Relaxed),
+                "hidden app/console creation cannot cover the desktop"
+            );
+            let _ = ShowWindow(parent, SW_SHOWNOACTIVATE);
+            changed(
+                HWINEVENTHOOK::default(),
+                EVENT_OBJECT_SHOW,
                 parent,
                 OBJID_WINDOW.0,
                 0,
