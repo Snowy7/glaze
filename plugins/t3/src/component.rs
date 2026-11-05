@@ -175,8 +175,7 @@ impl T3 {
                         if !self.baseline && item.kind != "snapshot" {
                             return Err("T3 delta arrived before its baseline".into());
                         }
-                        let item = serde_json::to_value(item).map_err(|e| e.to_string())?;
-                        self.state.apply(&item).map_err(|e| e.to_string())?;
+                        self.state.apply(item).map_err(|e| e.to_string())?;
                         self.baseline = true;
                     }
                     let transition = self.state.transitions.last().filter(|t| !t.attention).map(|t| (t.run_id.clone(), t.status));

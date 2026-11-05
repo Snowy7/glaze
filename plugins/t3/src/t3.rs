@@ -1,31 +1,38 @@
 //! Effect RPC v2 shell summaries, with bounded metadata and no client ping task.
 use anyhow::{Result, bail, ensure};
+use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
+/// More threads than this in one baseline is refused (the faces can't use them anyway).
+const MAX_THREADS: usize = 16_384;
+const TOO_MANY: &str = "T3 has too many threads to load. Archive old threads, then retry.";
+
 // These wire structs deliberately omit preview bodies, repository identities and scripts.
 // Serde skips them on the socket buffer instead of allocating a full JSON tree for every wake.
+// Memory: the baseline is one ~2.4 MiB frame and the guest's linear memory never shrinks, so the
+// decode holds the frame once (borrowed `RawValue`s) and builds the kept threads straight from
+// it: no `Value` tree and no second copy of the frame.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ShellEnvelope {
+pub(crate) struct ShellEnvelope<'a> {
     #[serde(rename = "_tag")]
     pub(crate) tag: String,
     pub(crate) request_id: Option<String>,
-    #[serde(default)]
     // Route by request id before decoding. An untagged enum buffers even discarded previews.
-    pub(crate) values: Vec<Box<serde_json::value::RawValue>>,
+    #[serde(default, borrow)]
+    pub(crate) values: Vec<&'a RawValue>,
     /// A finished request's `{"_tag":"Success"|"Failure","value":…}`.
-    #[serde(default)]
-    pub(crate) exit: Option<Box<serde_json::value::RawValue>>,
+    #[serde(default, borrow)]
+    pub(crate) exit: Option<&'a RawValue>,
 }
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub(crate) struct ShellItem {
     pub(crate) kind: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     snapshot: Option<ShellBaseline>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     resolved_repository_identity_roots: Option<Vec<String>>,
     sequence: Option<u64>,
     location: Option<String>,
@@ -34,22 +41,24 @@ pub(crate) struct ShellItem {
     project: Option<ShellProject>,
     project_id: Option<String>,
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ShellBaseline {
+    #[allow(dead_code)] // required: a baseline without it is refused
     schema_version: u64,
     snapshot_sequence: u64,
-    threads: Vec<ShellThread>,
+    #[serde(deserialize_with = "baseline_threads")]
+    threads: (Vec<Thread>, BTreeMap<String, ThreadDetail>),
     projects: Vec<ShellProject>,
 }
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 struct ShellProject {
     id: String,
     #[serde(alias = "name")]
     title: String,
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ShellThread {
     id: String,
@@ -69,19 +78,67 @@ struct ShellThread {
     #[serde(default)]
     pending_background_tasks: Vec<ShellTask>,
 }
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize)]
 #[serde(default)]
 struct ShellTask {}
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize)]
 #[serde(default)]
 struct ShellModel {
     model: String,
 }
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 struct ShellLineage {
     parent_thread_id: Option<String>,
     relationship_to_parent: Option<String>,
+}
+impl ShellThread {
+    /// The thread the faces list and the detail drawn beside it (the strings are moved).
+    fn split(self) -> (Thread, ThreadDetail) {
+        let detail = ThreadDetail {
+            model: self.model_selection.model.chars().take(128).collect(),
+            parent_id: self.lineage.parent_thread_id,
+            agent: self.lineage.relationship_to_parent.as_deref() == Some("subagent"),
+            background_tasks: self.pending_background_tasks.len(),
+        };
+        let thread = Thread {
+            id: self.id,
+            project_id: self.project_id,
+            title: self.title,
+            provider_instance_id: self.provider_instance_id,
+            status: self.status,
+            latest_run_id: self.latest_run_id,
+            active_run_id: self.active_run_id,
+            pending_runtime_request: self.pending_runtime_request,
+            updated_at: self.updated_at,
+        };
+        (thread, detail)
+    }
+}
+/// Decodes the baseline's thread array element by element into what `Snapshot` keeps, so the
+/// wire records never exist as a second array beside the kept ones.
+fn baseline_threads<'de, D: Deserializer<'de>>(d: D) -> Result<(Vec<Thread>, BTreeMap<String, ThreadDetail>), D::Error> {
+    struct Threads;
+    impl<'de> Visitor<'de> for Threads {
+        type Value = (Vec<Thread>, BTreeMap<String, ThreadDetail>);
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("an array of T3 threads")
+        }
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+            let (mut threads, mut details) = (Vec::new(), BTreeMap::new());
+            while let Some(thread) = seq.next_element::<ShellThread>()? {
+                if threads.len() >= MAX_THREADS {
+                    return Err(de::Error::custom(TOO_MANY));
+                }
+                let (thread, detail) = thread.split();
+                details.insert(thread.id.clone(), detail);
+                threads.push(thread);
+            }
+            threads.shrink_to_fit();
+            Ok((threads, details))
+        }
+    }
+    d.deserialize_seq(Threads)
 }
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -242,28 +299,6 @@ impl Snapshot {
                 crate::launcher::encode(thread_id)
             )
         })
-    }
-    fn detail(&mut self, thread: &Value) {
-        if let Some(id) = thread["id"].as_str() {
-            self.details.insert(
-                id.into(),
-                ThreadDetail {
-                    model: thread["modelSelection"]["model"]
-                        .as_str()
-                        .unwrap_or_default()
-                        .chars()
-                        .take(128)
-                        .collect(),
-                    parent_id: thread["lineage"]["parentThreadId"]
-                        .as_str()
-                        .map(str::to_owned),
-                    agent: thread["lineage"]["relationshipToParent"] == "subagent",
-                    background_tasks: thread["pendingBackgroundTasks"]
-                        .as_array()
-                        .map_or(0, Vec::len),
-                },
-            );
-        }
     }
     pub(crate) fn configure(&mut self, value: &crate::t3_client::Metadata) {
         self.omit_older_settled = value.shell_older_settled;
@@ -481,59 +516,29 @@ pub struct Transition {
 }
 
 impl Snapshot {
-    pub fn apply(&mut self, item: &Value) -> Result<()> {
-        match item["kind"].as_str() {
-            Some("snapshot") => {
-                let snapshot = &item["snapshot"];
-                ensure!(
-                    snapshot["schemaVersion"].as_u64().is_some(),
-                    "missing T3 schema version"
-                );
+    /// Applies one shell stream item: a baseline `snapshot` or a delta.
+    pub(crate) fn apply(&mut self, item: ShellItem) -> Result<()> {
+        match item.kind.as_str() {
+            "snapshot" => {
+                let Some(snapshot) = item.snapshot else { bail!("missing T3 schema version") };
                 // Enrichment snapshots update project identity only; their empty thread array is not authoritative.
-                if item.get("resolvedRepositoryIdentityRoots").is_some() {
-                    for project in snapshot["projects"].as_array().into_iter().flatten() {
-                        if let (Some(id), Some(title)) =
-                            (project["id"].as_str(), project["title"].as_str())
-                        {
-                            self.projects.insert(id.into(), title.into());
-                        }
+                if item.resolved_repository_identity_roots.is_some() {
+                    for project in snapshot.projects {
+                        self.projects.insert(project.id, project.title);
                     }
                     return Ok(());
                 }
-                let threads: Vec<Thread> = serde_json::from_value(snapshot["threads"].clone())?;
-                ensure!(
-                    threads.len() <= 16_384,
-                    "T3 has too many threads to load. Archive old threads, then retry."
-                );
-                self.threads = threads;
-                self.details.clear();
-                for thread in snapshot["threads"].as_array().into_iter().flatten() {
-                    self.detail(thread);
-                }
-                self.sequence = snapshot["snapshotSequence"]
-                    .as_u64()
-                    .ok_or_else(|| anyhow::anyhow!("missing T3 sequence"))?;
+                (self.threads, self.details) = snapshot.threads;
+                self.sequence = snapshot.snapshot_sequence;
                 self.projects.clear();
-                for project in snapshot["projects"].as_array().into_iter().flatten() {
-                    if let (Some(id), Some(title)) = (
-                        project["id"].as_str(),
-                        project["title"]
-                            .as_str()
-                            .or_else(|| project["name"].as_str()),
-                    ) {
-                        self.projects.insert(id.into(), title.into());
-                    }
+                for project in snapshot.projects {
+                    self.projects.insert(project.id, project.title);
                 }
                 self.transitions.clear(); // A new/reconnected snapshot is a baseline, never historic completion notices.
             }
-            Some("synchronized") => {}
-            Some(
-                kind
-                @ ("thread.updated" | "thread.removed" | "project.updated" | "project.removed"),
-            ) => {
-                let sequence = item["sequence"]
-                    .as_u64()
-                    .ok_or_else(|| anyhow::anyhow!("missing T3 sequence"))?;
+            "synchronized" => {}
+            kind @ ("thread.updated" | "thread.removed" | "project.updated" | "project.removed") => {
+                let sequence = item.sequence.ok_or_else(|| anyhow::anyhow!("missing T3 sequence"))?;
                 if sequence <= self.sequence {
                     return Ok(());
                 }
@@ -541,10 +546,10 @@ impl Snapshot {
                 self.sequence = sequence;
                 match kind {
                     "thread.updated" => {
-                        let thread: Thread = serde_json::from_value(item["thread"].clone())?;
-                        self.detail(&item["thread"]);
+                        let (thread, detail) = item.thread.ok_or_else(|| anyhow::anyhow!("a T3 thread update without its thread"))?.split();
+                        self.details.insert(thread.id.clone(), detail);
                         let previous = self.threads.iter().position(|t| t.id == thread.id);
-                        if item["location"] == "archive" {
+                        if item.location.as_deref() == Some("archive") {
                             self.threads.retain(|t| t.id != thread.id);
                             self.details.remove(&thread.id);
                             return Ok(());
@@ -577,30 +582,23 @@ impl Snapshot {
                             }
                             self.threads[index] = thread;
                         } else {
-                            ensure!(
-                                self.threads.len() < 16_384,
-                                "T3 has too many threads to load. Archive old threads, then retry."
-                            );
+                            ensure!(self.threads.len() < MAX_THREADS, TOO_MANY);
                             self.threads.push(thread);
                         }
                     }
                     "thread.removed" => {
-                        self.threads
-                            .retain(|t| Some(t.id.as_str()) != item["threadId"].as_str());
-                        if let Some(id) = item["threadId"].as_str() {
+                        self.threads.retain(|t| Some(t.id.as_str()) != item.thread_id.as_deref());
+                        if let Some(id) = &item.thread_id {
                             self.details.remove(id);
                         }
                     }
                     "project.updated" => {
-                        if let (Some(id), Some(title)) = (
-                            item["project"]["id"].as_str(),
-                            item["project"]["title"].as_str(),
-                        ) {
-                            self.projects.insert(id.into(), title.into());
+                        if let Some(project) = item.project {
+                            self.projects.insert(project.id, project.title);
                         }
                     }
                     "project.removed" => {
-                        if let Some(id) = item["projectId"].as_str() {
+                        if let Some(id) = &item.project_id {
                             self.projects.remove(id);
                         }
                     }
@@ -616,6 +614,80 @@ impl Snapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Counts live heap bytes so a test can read the peak of one decode.
+    struct Counting;
+    static LIVE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    static PEAK: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    unsafe impl std::alloc::GlobalAlloc for Counting {
+        unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+            use std::sync::atomic::Ordering::Relaxed;
+            let live = LIVE.fetch_add(layout.size(), Relaxed) + layout.size();
+            PEAK.fetch_max(live, Relaxed);
+            unsafe { std::alloc::System.alloc(layout) }
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+            LIVE.fetch_sub(layout.size(), std::sync::atomic::Ordering::Relaxed);
+            unsafe { std::alloc::System.dealloc(ptr, layout) }
+        }
+    }
+    #[global_allocator]
+    static ALLOC: Counting = Counting;
+
+    /// A shell baseline frame shaped like T3's: `threads` summaries with the preview bodies and
+    /// repository fields the adapter skips.
+    fn baseline(threads: usize) -> String {
+        let thread = |i: usize| json!({"id":format!("thread-{i:08}"),"projectId":format!("project-{}", i % 12),"title":format!("Thread number {i} with a title"),
+            "providerInstanceId":"codex","status":if i % 7 == 0 {"running"} else {"completed"},"latestRunId":format!("run-{i:08}"),"activeRunId":null,
+            "pendingRuntimeRequest":null,"updatedAt":"2026-11-05T21:00:00.000Z","modelSelection":{"model":"gpt-6.1-sol","effort":"xhigh"},
+            "lineage":{"parentThreadId":if i % 5 == 0 {Some(format!("thread-{:08}", i - 1))} else {None},"relationshipToParent":if i % 5 == 0 {"subagent"} else {"root"}},
+            "pendingBackgroundTasks":[],"preview":{"text":"x".repeat(420),"role":"assistant"},"repository":{"root":"D:/Coding/projects/x","branch":"main"}});
+        let projects: Vec<Value> = (0..12).map(|i| json!({"id":format!("project-{i}"),"title":format!("Project {i}")})).collect();
+        json!({"_tag":"Chunk","requestId":"1","values":[{"kind":"snapshot","snapshot":{"schemaVersion":2,"snapshotSequence":41,
+            "threads":(0..threads).map(thread).collect::<Vec<_>>(),"projects":projects}}]})
+        .to_string()
+    }
+
+    /// What `component.rs` does with one shell frame.
+    fn decode(state: &mut Snapshot, frame: &str) {
+        let envelope: ShellEnvelope = serde_json::from_str(frame).unwrap();
+        for item in envelope.values {
+            state.apply(serde_json::from_str(item.get()).unwrap()).unwrap();
+        }
+    }
+
+    #[test]
+    fn baseline_then_delta_keeps_the_faces_fields() {
+        let mut state = Snapshot::default();
+        decode(&mut state, &baseline(10));
+        assert_eq!((state.threads.len(), state.details.len(), state.projects.len(), state.sequence), (10, 10, 12, 41));
+        assert_eq!(state.details["thread-00000005"], ThreadDetail { model: "gpt-6.1-sol".into(), parent_id: Some("thread-00000004".into()), agent: true, background_tasks: 0 });
+        assert_eq!(state.threads[7].status, Status::Running);
+        let update = json!({"_tag":"Chunk","requestId":"1","values":[{"kind":"thread.updated","sequence":42,"thread":{"id":"thread-00000007","projectId":"project-7",
+            "title":"Done","providerInstanceId":"codex","status":"completed","latestRunId":"run-00000007","activeRunId":null,"pendingRuntimeRequest":null,
+            "updatedAt":"2026-11-05T21:01:00.000Z"}},{"kind":"thread.removed","sequence":43,"threadId":"thread-00000001"}]});
+        decode(&mut state, &update.to_string());
+        assert_eq!(state.threads.len(), 9);
+        assert_eq!(state.transitions, vec![Transition { thread_id: "thread-00000007".into(), run_id: "run-00000007".into(), status: Status::Completed, attention: false }]);
+        assert_eq!(state.details["thread-00000007"].model, "");
+    }
+
+    /// `cargo test --release -- --ignored --nocapture baseline_decode_peak`: the heap peak of
+    /// decoding a ~2.4 MiB baseline on top of the frame itself (the guest's linear memory keeps
+    /// its peak, so this is roughly what T3 costs for good).
+    #[test]
+    #[ignore]
+    fn baseline_decode_peak() {
+        use std::sync::atomic::Ordering::Relaxed;
+        let frame = baseline(3000);
+        let mut state = Snapshot::default();
+        let before = LIVE.load(Relaxed);
+        PEAK.store(before, Relaxed);
+        decode(&mut state, &frame);
+        let (peak, kept) = (PEAK.load(Relaxed) - before, LIVE.load(Relaxed) - before);
+        println!("frame {:.2} MiB, decode peak +{:.2} MiB, kept {:.2} MiB", frame.len() as f64 / 1048576.0, peak as f64 / 1048576.0, kept as f64 / 1048576.0);
+    }
+
     #[test]
     fn config_stream_keeps_both_claude_accounts_across_provider_updates() {
         let mut metadata = crate::t3_client::Metadata::default();
@@ -631,10 +703,8 @@ mod tests {
             json!({"type":"providerStatuses","payload":{"providers":[provider.clone()]}}),
             json!({"type":"snapshot","config":{"providers":[provider]}}),
         ] {
-            let frame: ShellEnvelope = serde_json::from_value(
-                json!({"_tag":"Chunk","requestId":"config","values":[event]}),
-            )
-            .unwrap();
+            let text = json!({"_tag":"Chunk","requestId":"config","values":[event]}).to_string();
+            let frame: ShellEnvelope = serde_json::from_str(&text).unwrap();
             for item in frame.values {
                 assert!(metadata.apply(serde_json::from_str(item.get()).unwrap()));
             }
