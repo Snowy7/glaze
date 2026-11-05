@@ -123,18 +123,6 @@ pub static LIST: &[Integration] = &[
         privacy: "Talks to OBS on this PC. Outputs and scenes only: no meters or previews.",
     },
     Integration {
-        name: "Docker",
-        adds: "Container failures as a badge",
-        glyph: glyph::LAYERS,
-        section: Some("docker"),
-        builtin: false,
-        module: Some("docker"),
-        secret: None,
-        fields: &[Field::Text { path: "/docker/pipe", label: "Engine pipe", placeholder: "\\\\.\\pipe\\docker_engine" }],
-        setup: "The named pipe of your local Docker context. Monitoring never starts Docker Desktop or WSL.",
-        privacy: "Reads Docker's local engine. Nothing leaves this PC.",
-    },
-    Integration {
         name: "Grok Bot",
         adds: "Quick prompts, routines and recent requests",
         glyph: glyph::STAR,
