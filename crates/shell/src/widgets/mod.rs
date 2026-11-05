@@ -10,7 +10,8 @@ pub(crate) mod model;
 #[cfg(test)]
 mod tests;
 pub(crate) mod time;
-pub(crate) mod view;
+pub(crate) mod views;
+pub(crate) use views as view;
 
 use crate::glass::{self, Material, Plate};
 use crate::inbox;

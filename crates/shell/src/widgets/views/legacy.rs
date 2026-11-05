@@ -1,8 +1,12 @@
-//! All native widget views. Time and data are explicit inputs; views never install a timer or
-//! fetch anything. Faces are layouts of the same widget, with a single media implementation.
-use super::{
+//! The widgets not yet on the kit; each moves to its own file under `views/`.
+use super::super::{
     model::{Model, Widget},
     time::Stamp,
+};
+use super::{
+    BODY, CANCEL, DEFAULT_FAMILY, DELETE_TASK, DUPLICATE, EDIT_TASK, EVENT_COLOR, EVENT_COLORS,
+    EVENT_DATE, EVENT_TIME, FIELD, Frame, ITEM, MODE, NEXT, NOTE_TASK, PREVIOUS, PRIMARY, PRIVACY,
+    REMOVE, RESET, RESIZE, RESIZE_EDGE, RETRY, TODAY, TOGGLES, plate_radius, price_label,
 };
 use mypaper_ui::calendar::{Date, MONTHS, MonthGrid, WEEKDAYS};
 use mypaper_ui::icons::{self, Icon};
@@ -15,74 +19,6 @@ use serde_json::Value;
 use std::f32::consts::TAU;
 use std::sync::Arc;
 use std::time::Instant;
-
-pub const BODY: HitId = 1;
-pub const PRIMARY: HitId = 2;
-pub const PREVIOUS: HitId = 3;
-pub const NEXT: HitId = 4;
-pub const RESET: HitId = 5;
-pub const FIELD: HitId = 6;
-pub const REMOVE: HitId = 7;
-pub const DUPLICATE: HitId = 8;
-pub const RESIZE: HitId = 9;
-pub const ITEM: HitId = 100;
-pub const DELETE_TASK: HitId = 1000;
-pub const EDIT_TASK: HitId = 2000;
-pub const MODE: HitId = 3000;
-pub const NOTE_TASK: HitId = 4000;
-pub const RESIZE_EDGE: HitId = 5000;
-pub const TODAY: HitId = 10;
-pub const RETRY: HitId = 11;
-pub const PRIVACY: HitId = 12;
-pub const CANCEL: HitId = 13;
-pub const EVENT_DATE: HitId = 14;
-pub const EVENT_TIME: HitId = 15;
-pub const EVENT_COLOR: HitId = 20;
-
-pub fn resize_edges(hit: HitId) -> Option<[bool; 4]> {
-    if hit == RESIZE {
-        return Some([false, false, true, true]);
-    }
-    let edges = [
-        [true, false, false, false],
-        [false, true, false, false],
-        [false, false, true, false],
-        [false, false, false, true],
-        [true, true, false, false],
-        [false, true, true, false],
-        [true, false, false, true],
-    ];
-    hit.checked_sub(RESIZE_EDGE)
-        .and_then(|n| edges.get(n as usize))
-        .copied()
-}
-
-pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
-    if model.placed.widget == "media-pill" {
-        match model.str("variant", "pill").as_str() {
-            "pill" | "mini" => rect.height() / 2.0,
-            _ => 14.0 * scale,
-        }
-    } else {
-        model
-            .placed
-            .appearance
-            .get("radius")
-            .and_then(Value::as_f64)
-            .unwrap_or(22.0) as f32
-            * scale
-    }
-}
-
-/// A complete widget content frame in device pixels. Every interior pixel stays hit-testable,
-/// even when the engine supplies the visible glass fill.
-pub struct Frame {
-    pub size: (u32, u32),
-    pub scale: f32,
-    pub now: Stamp,
-    pub instant: Instant,
-    pub editing: bool,
-}
 
 pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> DisplayList {
     let Frame {
@@ -203,6 +139,7 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
         Widget::Crypto => crypto(&mut c, model),
         Widget::Heatmap => heatmap(&mut c, model, now),
         Widget::Quote => quote(&mut c, model, now),
+        _ => {}
     }
     if outlined || editing {
         c.stroke(
@@ -384,9 +321,6 @@ fn text_shadows(ops: Vec<Op>, scale: f32) -> Vec<Op> {
     }
     out
 }
-
-/// The widgets' default family: the Segoe UI Variable pair through [`Typeface::system`].
-pub const DEFAULT_FAMILY: &str = "Segoe UI Variable";
 
 /// One widget's display list, being built: shared paint helpers over the widget's tokens.
 struct Draw<'a> {
@@ -759,7 +693,7 @@ fn clock(c: &mut Draw<'_>, m: &Model, now: Stamp) {
             if footer > 0.0 {
                 c.centered(
                     Rect::new(r.left, r.bottom - footer, r.width(), footer),
-                    &super::time::date_label(now.date, false),
+                    &super::super::time::date_label(now.date, false),
                     11.0,
                     color,
                     500,
@@ -870,7 +804,7 @@ fn clock(c: &mut Draw<'_>, m: &Model, now: Stamp) {
                 .split_whitespace()
                 .next()
                 .unwrap_or("");
-            let greeting = super::time::greeting(now.hour);
+            let greeting = super::super::time::greeting(now.hour);
             let message = if name.is_empty() {
                 greeting.to_owned()
             } else {
@@ -898,7 +832,7 @@ fn clock(c: &mut Draw<'_>, m: &Model, now: Stamp) {
             if m.flag("showDate", true) {
                 c.label(
                     Rect::new(r.left, r.bottom - 20.0 * s, r.width(), 20.0 * s),
-                    &super::time::date_label(now.date, true),
+                    &super::super::time::date_label(now.date, true),
                     11.0,
                     c.ink.secondary,
                     400,
@@ -1013,7 +947,7 @@ fn clock(c: &mut Draw<'_>, m: &Model, now: Stamp) {
                 let weekday = WEEKDAYS[now.date.weekday() as usize];
                 let month = MONTHS[now.date.month as usize - 1];
                 let date = [
-                    super::time::date_label(now.date, true),
+                    super::super::time::date_label(now.date, true),
                     format!("{}, {} {month}", long_weekday(now.date), now.date.day),
                     format!("{weekday} {} {}", now.date.day, &month[..3]),
                 ]
@@ -1192,7 +1126,7 @@ fn calendar(c: &mut Draw<'_>, m: &Model, now: Stamp) {
         "sunday" => 0,
         "saturday" => 6,
         "monday" => 1,
-        _ => super::time::week_start(),
+        _ => super::super::time::week_start(),
     };
     let day_events: Vec<_> = m
         .events
@@ -1426,7 +1360,7 @@ fn agenda(c: &mut Draw<'_>, m: &Model, now: Stamp, body: Rect) {
         let date = e["date"]
             .as_str()
             .and_then(Date::parse)
-            .map(|d| super::time::date_label(d, false))
+            .map(|d| super::super::time::date_label(d, false))
             .unwrap_or_default();
         c.label(
             Rect::new(rect.left, y + 21.0 * s, rect.width(), 18.0 * s),
@@ -1725,8 +1659,8 @@ fn media(c: &mut Draw<'_>, m: &Model, now: Stamp) {
         y += 8.0 * s;
         let times = column.width() > 200.0 * s;
         let style = c.style(10.5, 500);
-        let elapsed = super::media_time(position);
-        let left = format!("-{}", super::media_time(duration - position));
+        let elapsed = super::super::media_time(position);
+        let left = format!("-{}", super::super::media_time(duration - position));
         let gutter = if times {
             c.text
                 .measure(&left, &style)
@@ -1887,31 +1821,6 @@ fn lift(c: Rgba) -> Rgba {
     let m = l - chroma / 2.0;
     Rgba::new(r + m, g + m, b + m, 1.0)
 }
-pub const TOGGLES: [(&str, &str, &str, &str); 8] = [
-    ("wifi", "Wi-Fi", "\u{E701}", "ms-settings:network-wifi"),
-    (
-        "bluetooth",
-        "Bluetooth",
-        "\u{E702}",
-        "ms-settings:bluetooth",
-    ),
-    ("focus", "Focus", "\u{E708}", "ms-settings:quiethours"),
-    (
-        "airplane",
-        "Airplane mode",
-        "\u{E709}",
-        "ms-settings:network-airplanemode",
-    ),
-    (
-        "nightlight",
-        "Night light",
-        "\u{E706}",
-        "ms-settings:nightlight",
-    ),
-    ("sound", "Sound", "\u{E767}", "ms-settings:sound"),
-    ("display", "Display", "\u{E7F4}", "ms-settings:display"),
-    ("battery", "Battery", "\u{E850}", "ms-settings:batterysaver"),
-];
 fn quick(c: &mut Draw<'_>, m: &Model) {
     let r = c.body();
     let s = c.scale;
@@ -2619,14 +2528,14 @@ fn system(c: &mut Draw<'_>, m: &Model) {
     }
     let r = c.body();
     let s = c.scale;
-    let metrics = super::metrics::visible(m);
+    let metrics = super::super::metrics::visible(m);
     if metrics.is_empty() {
         c.empty("No metrics selected", "Choose metrics in Studio");
         return;
     }
     let variant = m.str("variant", "rings");
     let primary = c.ink.primary;
-    let color = |i: usize, metric: &super::metrics::Metric| {
+    let color = |i: usize, metric: &super::super::metrics::Metric| {
         if !m.flag("vary", true) {
             primary
         } else if metric.id == "battery" && metric.detail == "Low" {
@@ -2644,7 +2553,7 @@ fn system(c: &mut Draw<'_>, m: &Model) {
         }
     };
     // The value shown in a ring or row: the network's download only (upload is the detail).
-    let short = |metric: &super::metrics::Metric| -> String {
+    let short = |metric: &super::super::metrics::Metric| -> String {
         if metric.id == "net" {
             metric
                 .value
@@ -3072,7 +2981,7 @@ fn countdown(c: &mut Draw<'_>, m: &Model, now: Stamp) {
     );
     c.centered(
         Rect::new(r.left, r.bottom - 18.0 * s, r.width(), 18.0 * s),
-        &super::time::date_label(Stamp::at(target).date, false),
+        &super::super::time::date_label(Stamp::at(target).date, false),
         9.0,
         c.ink.secondary,
         400,
@@ -3127,7 +3036,7 @@ fn photo(c: &mut Draw<'_>, m: &Model, instant: Instant) {
     c.hit(PRIMARY, r, Role::Button, "Next photo");
 }
 fn notes(c: &mut Draw<'_>, m: &Model) {
-    use super::markdown::{self, Emphasis};
+    use super::super::markdown::{self, Emphasis};
     let r = c.body();
     let s = c.scale;
     if m.field.is_some() {
@@ -3596,7 +3505,7 @@ fn crypto(c: &mut Draw<'_>, m: &Model) {
         },
         at.map_or_else(
             || "waiting for refresh".into(),
-            |at| super::time::Stamp::at(at).clock(true, false)
+            |at| super::super::time::Stamp::at(at).clock(true, false)
         )
     );
     c.label(
@@ -3762,7 +3671,7 @@ fn quote(c: &mut Draw<'_>, m: &Model, now: Stamp) {
     let r = c.body();
     let s = c.scale;
     let builtins: Vec<Value> =
-        serde_json::from_str(include_str!("quotes.json")).unwrap_or_default();
+        serde_json::from_str(include_str!("../quotes.json")).unwrap_or_default();
     let source = m.str("source", "builtin");
     let mut quotes = if source == "custom" {
         Vec::new()
@@ -3819,40 +3728,10 @@ fn relative_age(at: i64, now: Stamp) -> String {
         60..3600 => format!("{}m", seconds / 60),
         3600..86400 => format!("{}h", seconds / 3600),
         86400..604800 => format!("{}d", seconds / 86400),
-        _ => super::time::date_label(Stamp::at(at * 1000).date, false),
+        _ => super::super::time::date_label(Stamp::at(at * 1000).date, false),
     }
 }
 
-pub fn price_label(price: f64, currency: &str) -> String {
-    let decimals = if price > 0.0 && price < 1.0 {
-        ((-price.log10()).ceil() as usize + 2).clamp(2, 10)
-    } else if currency == "jpy" {
-        0
-    } else {
-        2
-    };
-    let symbol = match currency {
-        "usd" => "$",
-        "eur" => "€",
-        "gbp" => "£",
-        "jpy" => "¥",
-        _ => currency,
-    };
-    if price != 0.0 && price.abs() < 0.000_000_000_1 {
-        format!("{symbol}{price:.2e}")
-    } else {
-        format!("{symbol}{price:.decimals$}")
-    }
-}
-
-pub const EVENT_COLORS: [[u8; 3]; 6] = [
-    [125, 192, 255],
-    [137, 218, 175],
-    [255, 175, 135],
-    [210, 170, 255],
-    [255, 150, 175],
-    [245, 215, 120],
-];
 fn event_color(index: usize) -> Rgba {
     Rgba::rgb8(EVENT_COLORS[index % EVENT_COLORS.len()], 1.0)
 }
