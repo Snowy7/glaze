@@ -129,6 +129,12 @@ impl AppBar {
     /// Reserves `thickness` px along the edge of `monitor`, past any other app bars there, and
     /// returns the band the system granted.
     pub fn reserve(&mut self, monitor: Rect, thickness: i32) -> Rect {
+        self.try_reserve(monitor, thickness)
+            .unwrap_or_else(|| settle(monitor, self.edge, thickness))
+    }
+
+    /// As [`reserve`](Self::reserve), but exposes an Explorer refusal so the shell can retry.
+    pub fn try_reserve(&mut self, monitor: Rect, thickness: i32) -> Option<Rect> {
         let mut data = APPBARDATA {
             cbSize: size_of::<APPBARDATA>() as u32,
             hWnd: self.hwnd,
@@ -137,17 +143,23 @@ impl AppBar {
             ..Default::default()
         };
         // SAFETY: `data` is a valid APPBARDATA for our registered window.
-        unsafe { SHAppBarMessage(ABM_QUERYPOS, &mut data) };
+        if unsafe { SHAppBarMessage(ABM_QUERYPOS, &mut data) } == 0 {
+            self.band = None;
+            return None;
+        }
         let band = settle(data.rc.into(), self.edge, thickness);
         if self.band == Some(band) {
-            return band;
+            return Some(band);
         }
         data.rc = to_rect(band);
         // SAFETY: as above.
-        unsafe { SHAppBarMessage(ABM_SETPOS, &mut data) };
+        if unsafe { SHAppBarMessage(ABM_SETPOS, &mut data) } == 0 {
+            self.band = None;
+            return None;
+        }
         let granted: Rect = data.rc.into();
         self.band = Some(granted);
-        granted
+        Some(granted)
     }
 
     /// Forgets the last band (Explorer restarted): the next [`reserve`](Self::reserve) sets it.

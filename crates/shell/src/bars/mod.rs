@@ -85,6 +85,7 @@ pub struct Bars {
     published: BTreeMap<String, Vec<glass::Plate>>,
     config_due: Option<Instant>,
     display_due: Option<Instant>,
+    reservation_due: Option<Instant>,
     explorer_due: Option<Instant>,
     rehide_due: Option<Instant>,
     asleep: bool,
@@ -151,6 +152,7 @@ impl Bars {
             published: BTreeMap::new(),
             config_due: None,
             display_due: None,
+            reservation_due: None,
             explorer_due: None,
             rehide_due: None,
             asleep: false,
@@ -198,6 +200,7 @@ impl Bars {
         for bar in &mut bars.bars {
             bar.reserve();
         }
+        bars.schedule_reservations();
         bars.services.refresh_apps();
         bars.subscribe();
         bars.update_items();
@@ -233,6 +236,7 @@ impl Bars {
         [
             self.config_due,
             self.display_due,
+            self.reservation_due,
             self.explorer_due,
             self.rehide_due,
             self.services.deadline(),
@@ -394,6 +398,15 @@ impl Bars {
                     b.reserve();
                 }
             }
+            self.schedule_reservations();
+        }
+        if services::take_due(&mut self.reservation_due, now) {
+            for bar in &mut self.bars {
+                if !bar.reserved {
+                    bar.reserve();
+                }
+            }
+            self.schedule_reservations();
         }
         if changes.data {
             self.update_items();
@@ -1460,9 +1473,18 @@ impl Bars {
             for bar in &mut self.bars {
                 bar.reserve();
             }
+            self.schedule_reservations();
         }
         self.update_items();
         Ok(())
+    }
+    fn schedule_reservations(&mut self) {
+        if self.bars.iter().any(|bar| !bar.reserved) {
+            self.reservation_due
+                .get_or_insert_with(|| Instant::now() + Duration::from_secs(1));
+        } else {
+            self.reservation_due = None;
+        }
     }
     fn update_items(&mut self) {
         for b in &mut self.bars {

@@ -50,6 +50,8 @@ pub struct Bar {
     slide: Value,
     zoom: Vec<(Value, Value)>,
     pub animate: bool,
+    /// Explorer has accepted this bar's current work-area reservation.
+    pub reserved: bool,
     magnify_animate: bool,
     magnify_settings: motion::Settings,
     animations: HashMap<String, (Instant, bool)>,
@@ -136,6 +138,7 @@ impl Bar {
             slide,
             zoom: vec![],
             animate: slide_settings.enabled,
+            reserved: autohide,
             magnify_animate: magnify_settings.enabled,
             magnify_settings,
             animations: HashMap::new(),
@@ -219,8 +222,14 @@ impl Bar {
         }) as f32
             * self.scale())
         .round() as i32;
-        self.band = if let Some(r) = &mut self.reservation {
-            r.reserve(self.monitor.rect, thickness)
+        let granted = self
+            .reservation
+            .as_mut()
+            .and_then(|r| r.try_reserve(self.monitor.rect, thickness));
+        self.reserved =
+            granted.is_some() || (self.kind == BarKind::Dock && self.config.dock.autohide);
+        self.band = if let Some(band) = granted {
+            band
         } else {
             appbar::settle(self.monitor.work, edge(self.kind, &self.config), thickness)
         };

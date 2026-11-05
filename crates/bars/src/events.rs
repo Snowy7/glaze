@@ -67,10 +67,17 @@ impl Reservation {
     }
 
     pub fn reserve(&mut self, monitor: Rect, thickness: i32) -> Rect {
-        self.appbar.as_mut().map_or_else(
-            || crate::appbar::settle(monitor, self.edge, thickness),
-            |a| a.reserve(monitor, thickness),
-        )
+        self.try_reserve(monitor, thickness)
+            .unwrap_or_else(|| crate::appbar::settle(monitor, self.edge, thickness))
+    }
+
+    /// Registration can fail while Explorer is restarting or servicing another callback.
+    /// Keep the owned HWND and retry; geometry alone does not reserve Windows' work area.
+    pub fn try_reserve(&mut self, monitor: Rect, thickness: i32) -> Option<Rect> {
+        if self.appbar.is_none() {
+            self.appbar = AppBar::register(self.hwnd, self.edge, APPBAR);
+        }
+        self.appbar.as_mut()?.try_reserve(monitor, thickness)
     }
 
     pub fn reregister(&mut self) {
