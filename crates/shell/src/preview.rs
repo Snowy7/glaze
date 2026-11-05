@@ -6,7 +6,7 @@
 pub mod bars {
     pub use crate::bars::icons::Images;
     pub use crate::bars::look::Tokens;
-    pub use crate::bars::services::Model;
+    pub use crate::bars::services::{Model, default_pins};
     pub use crate::bars::view::{Frame, Target, dock, top};
 
     use mypaper_bars::{audio::Volume, custom::Custom, desktops::Workspaces, wake::Waker};
