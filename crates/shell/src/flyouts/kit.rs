@@ -720,3 +720,65 @@ impl<'a> Kit<'a> {
         list.ops = ops;
     }
 }
+
+/// A flyout's last row, from `column`: a separator, then `label` with a chevron (it opens
+/// Settings or another flyout).
+pub fn footer(f: &mut Frame, column: &mut mypaper_ui::Stack, id: HitId, label: &str) {
+    let line = column.next(f.px(9.0));
+    f.separator(line.left, line.right, line.top + f.px(4.0));
+    let row = mypaper_ui::ListRow {
+        id,
+        lead: mypaper_ui::Lead::None,
+        title: label,
+        subtitle: None,
+        accessory: mypaper_ui::Accessory::Chevron,
+        selected: false,
+        enabled: true,
+    };
+    let h = f.row_height(&row);
+    f.row(&row, column.next(h));
+}
+
+/// A card with a title row (icon buttons at its right) over a Control Center slider (`slider`:
+/// id, value 0..=1, accessible name, icon). Its height is [`slider_card_height`].
+pub fn slider_card(
+    f: &mut Frame,
+    rect: Rect,
+    title: &str,
+    buttons: &[(HitId, mypaper_ui::icons::Icon, &str)],
+    slider: (HitId, f32, &str, mypaper_ui::icons::Icon),
+) {
+    let c = f.theme.color;
+    let inner = f.card(rect);
+    let (head, rest) = inner.take_top(f.px(24.0), f.px(6.0));
+    let mut label = head;
+    for &(id, icon, name) in buttons.iter().rev() {
+        let (button, left) = label.take_right(f.px(26.0), f.px(2.0));
+        f.icon_button(id, button, icon, 26.0, name, false);
+        label = left;
+    }
+    f.text_in(
+        label,
+        title,
+        mypaper_ui::TextRole::Headline,
+        c.label,
+        mypaper_ui::Align::Start,
+    );
+    let (id, value, name, icon) = slider;
+    f.slider(id, rest, value, name, Some(icon));
+}
+
+/// [`slider_card`]'s height, device px.
+pub fn slider_card_height(f: &Frame) -> f32 {
+    f.px(24.0) + f.px(6.0) + f.px(28.0) + 2.0 * f.px(f.theme.metrics.pad)
+}
+
+/// The volume glyph for `level` (0..=1), or muted.
+pub fn volume_icon(level: f32, muted: bool) -> mypaper_ui::icons::Icon {
+    use mypaper_ui::icons::Icon;
+    if muted || level == 0.0 {
+        Icon::Mute
+    } else {
+        Icon::Volume(((level * 3.0).ceil() as u8).min(3))
+    }
+}

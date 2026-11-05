@@ -2,15 +2,22 @@
 //! `audio.switchOutput`, which uses an undocumented interface), the master volume, and every
 //! app playing on the default output with its own volume and mute (the `mixer` lane, which
 //! reports sessions coming, going and changing).
+//!
+//! On the kit: outputs as rows, the master volume in a Control Center card, the apps in a
+//! scroll view (only the apps scroll; the footer stays put).
+
+use std::time::Instant;
 
 use mypaper_bars::audio::Volume;
 use mypaper_bars::flyouts::mixer::{MixerState, Session};
 use mypaper_bars::flyouts::{Done, Watched};
 use mypaper_bars::system;
 use mypaper_bars::wake::Msg;
-use mypaper_ui::{HitId, Point, Rect};
+use mypaper_ui::icons::Icon;
+use mypaper_ui::layout::{Align, Stack};
+use mypaper_ui::{Accessory, Frame, HitId, Lead, ListRow, Op, Rect, Scroll, TextRole};
 
-use super::kit::{Icon, Kit, Row, glyph};
+use super::kit::{Kit, footer, slider_card, slider_card_height, volume_icon};
 use super::{Cx, Effect, LIST, Panel, Reply};
 
 const MASTER: HitId = 1;
@@ -30,6 +37,8 @@ pub struct Mixer {
     error: Option<String>,
     dragging: bool,
     pending: Option<MixerState>,
+    /// The apps list's scroll position (only it scrolls).
+    scroll: Scroll,
 }
 
 impl Mixer {
@@ -46,6 +55,7 @@ impl Mixer {
             error: None,
             dragging: false,
             pending: None,
+            scroll: Scroll::new(&cx.look.theme().motion),
         }
     }
 
@@ -59,6 +69,7 @@ impl Mixer {
             error: None,
             dragging: false,
             pending: None,
+            scroll: Scroll::default(),
         }
     }
 
@@ -73,15 +84,37 @@ impl Mixer {
         let session = self.state.as_mut()?.sessions.get_mut(index)?;
         Some((index, session))
     }
-}
 
-fn volume_glyph(level: f32, muted: bool) -> char {
-    if muted || level == 0.0 {
-        glyph::MUTE
-    } else {
-        glyph::VOLUME[((level * 3.0).ceil() as usize).min(3)]
+    /// One app: its icon and name with a mute button, over its Control Center slider.
+    fn app(&self, f: &mut Frame, i: usize, session: &Session, rect: Rect) {
+        let c = f.theme.color;
+        let slider = SESSIONS + 2 * i as HitId;
+        let (head, bar) = rect.take_top(f.px(26.0), f.px(4.0));
+        let (mute, head) = head.take_right(f.px(26.0), f.px(4.0));
+        let level = if session.muted { 0.0 } else { session.level };
+        let label = if session.muted { "Unmute" } else { "Mute" };
+        let icon = if session.muted { Icon::Mute } else { Icon::Speaker };
+        f.icon_button(slider + 1, mute, icon, 26.0, label, false);
+        let size = f.px(18.0);
+        let (lead, name) = head.take_left(size, f.px(8.0));
+        match self.icons.get(i).cloned().flatten() {
+            Some(image) => f.push(Op::Image {
+                rect: lead.place(size, size, Align::Center, Align::Center),
+                image,
+                opacity: 1.0,
+                source: None,
+            }),
+            None => f.icon(lead, Icon::Apps, 15.0, c.secondary),
+        }
+        let ink = if session.active { c.label } else { c.secondary };
+        f.text_in(name, &session.name, TextRole::Callout, ink, Align::Start);
+        f.slider(slider, bar, level, &session.name, Some(volume_icon(level, session.muted)));
     }
 }
+
+/// An app's block: its name line and its slider, design px.
+const APP: f32 = 26.0 + 4.0 + 28.0;
+const APP_GAP: f32 = 12.0;
 
 impl Panel for Mixer {
     fn width(&self) -> f32 {
@@ -89,80 +122,77 @@ impl Panel for Mixer {
     }
 
     fn view(&self, kit: &mut Kit) {
-        kit.caption("Output");
-        match &self.state {
-            None => kit.notice("…"),
-            Some(state) => {
-                for (i, device) in state.devices.iter().enumerate() {
-                    kit.row(Row {
-                        id: DEVICES + i as HitId,
-                        icon: Icon::Glyph(glyph::SPEAKERS),
-                        title: &device.name,
-                        detail: None,
-                        trailing: device.default.then_some(glyph::CHECK),
-                        selected: device.default,
-                        enabled: true,
-                    });
+        kit.frame(|f, area| {
+            let mut column = Stack::column(area, f.px(2.0));
+            f.section_header(column.next(f.px(24.0)), "Output", None);
+            match &self.state {
+                None => {
+                    let h = f.empty(column.rest(), None, "…", None);
+                    column.next(h);
+                }
+                Some(state) => {
+                    for (i, device) in state.devices.iter().enumerate() {
+                        let row = ListRow {
+                            id: DEVICES + i as HitId,
+                            lead: Lead::Badge(Icon::Speaker, device.default),
+                            title: &device.name,
+                            subtitle: None,
+                            accessory: if device.default {
+                                Accessory::Check
+                            } else {
+                                Accessory::None
+                            },
+                            selected: false,
+                            enabled: true,
+                        };
+                        let h = f.row_height(&row);
+                        f.row(&row, column.next(h));
+                    }
                 }
             }
-        }
-        if let Some(volume) = self.volume {
-            let level = if volume.muted { 0.0 } else { volume.level };
-            kit.slider(
-                MASTER,
-                level,
-                "Volume",
-                Some((MUTE, volume_glyph(level, volume.muted), "Mute")),
-                None,
-            );
-        }
-        let sessions = self.state.as_ref().map_or(&[][..], |s| &s.sessions[..]);
-        if !sessions.is_empty() {
-            kit.separator();
-            kit.caption("Apps");
-        }
-        let row_height = kit.px(58.0);
-        let room = ((kit.limit - kit.y - kit.px(60.0)) / row_height)
-            .floor()
-            .max(1.0) as usize;
-        for (i, session) in sessions.iter().take(room).enumerate() {
-            let slider = SESSIONS + 2 * i as HitId;
-            let style = kit.font(13.0, 400);
-            let icon = kit.px(20.0);
-            let top = kit.y;
-            match self.icons.get(i).cloned().flatten() {
-                Some(image) => kit.image(Rect::new(kit.left, top + kit.px(2.0), icon, icon), image),
-                None => kit.glyph(
-                    Point::new(kit.left + icon / 2.0, top + kit.px(12.0)),
-                    glyph::APP,
-                    14.0,
-                    kit.look.dim(),
-                ),
+            column.space(f.px(8.0));
+            if let Some(volume) = self.volume {
+                let level = if volume.muted { 0.0 } else { volume.level };
+                let label = if volume.muted { "Unmute" } else { "Mute" };
+                let icon = if volume.muted { Icon::Mute } else { Icon::Speaker };
+                let h = slider_card_height(f);
+                slider_card(
+                    f,
+                    column.next(h),
+                    "Volume",
+                    &[(MUTE, icon, label)],
+                    (MASTER, level, "Volume", volume_icon(level, volume.muted)),
+                );
             }
-            let ink = if session.active {
-                kit.look.ink
-            } else {
-                kit.look.dim()
-            };
-            let (left, room) = (
-                kit.left + icon + kit.px(10.0),
-                kit.width() - icon - kit.px(10.0),
-            );
-            kit.text_at(left, top + kit.px(3.0), &session.name, &style, ink, room);
-            kit.y += kit.px(24.0);
-            let level = if session.muted { 0.0 } else { session.level };
-            kit.slider(
-                slider,
-                level,
-                &session.name,
-                Some((slider + 1, volume_glyph(level, session.muted), "Mute")),
-                None,
-            );
-        }
-        if let Some(error) = &self.error {
-            kit.paragraph(error, 2, kit.look.dim());
-        }
-        kit.footer_link(SETTINGS, "Sound settings");
+            let sessions = self.state.as_ref().map_or(&[][..], |s| &s.sessions[..]);
+            // The footer's room is kept; the apps get the rest, in a scroll view.
+            let footer_h = f.px(9.0) + f.px(f.theme.metrics.row_single) + f.px(2.0);
+            let error_h = self.error.as_ref().map_or(0.0, |_| 2.0 * f.line(TextRole::Footnote));
+            if !sessions.is_empty() {
+                column.space(f.px(8.0));
+                f.section_header(column.next(f.px(24.0)), "Apps", None);
+                let (app, gap) = (f.px(APP), f.px(APP_GAP));
+                let n = sessions.len() as f32;
+                let content = n * app + (n - 1.0) * gap;
+                let room = (column.rest().height() - footer_h - error_h - f.px(4.0)).max(app);
+                let viewport = column.next(content.min(room));
+                let width = viewport.width();
+                f.scroll(viewport, &self.scroll, Instant::now(), |f, at| {
+                    let mut list = Stack::column(Rect::new(at.x, at.y, width, content), gap);
+                    for (i, session) in sessions.iter().enumerate() {
+                        self.app(f, i, session, list.next(app));
+                    }
+                    content
+                });
+            }
+            if let Some(error) = &self.error {
+                let at = column.next(error_h);
+                let c = f.theme.color;
+                f.paragraph(at.left, at.top, at.width(), error, TextRole::Footnote, c.secondary, 2);
+            }
+            footer(f, &mut column, SETTINGS, "Sound settings");
+            area.top + column.used()
+        });
     }
 
     fn activate(&mut self, id: HitId, cx: &mut Cx) -> Effect {
@@ -245,6 +275,27 @@ impl Panel for Mixer {
             },
         );
         Effect::Redraw
+    }
+
+    fn wheel(&mut self, _: Option<HitId>, delta: i16, cx: &mut Cx) -> Effect {
+        if self.scroll.wheel(delta, cx.scale, Instant::now()) {
+            Effect::Redraw
+        } else {
+            Effect::None
+        }
+    }
+
+    fn key(&mut self, key: u16, _: &mut Cx) -> Option<Effect> {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{VK_NEXT, VK_PRIOR};
+        if key == VK_NEXT.0 || key == VK_PRIOR.0 {
+            self.scroll.page(key == VK_NEXT.0, Instant::now());
+            return Some(Effect::Redraw);
+        }
+        None
+    }
+
+    fn tick(&mut self, now: Instant, _: &mut Cx) -> (bool, Option<Instant>) {
+        self.scroll.tick(now)
     }
 
     fn reply(&mut self, reply: &Reply, cx: &mut Cx) -> bool {

@@ -6,12 +6,16 @@ use std::sync::Arc;
 
 use mypaper_bars::tray::OVERFLOW;
 use mypaper_bars::tray_data::TrayItem;
-use mypaper_ui::{Button, HitId, Image, Point, Rect, Role};
+use mypaper_ui::icons::Icon;
+use mypaper_ui::layout::{self, Align};
+use mypaper_ui::{Button, HitId, Image, Op, Role};
 
-use super::kit::{Kit, glyph};
+use super::kit::Kit;
 use super::{Cx, Effect, LIST, Panel};
 
 const COLUMNS: usize = 4;
+/// A cell, design px.
+const CELL: f32 = 44.0;
 
 pub struct Overflow {
     items: Vec<TrayItem>,
@@ -64,36 +68,39 @@ impl Overflow {
 
 impl Panel for Overflow {
     fn width(&self) -> f32 {
-        (COLUMNS as f32) * 44.0 + 2.0 * 12.0 - 4.0
+        // Four cells and the kit's padding (12 px each side, Liquid's `metrics.pad`).
+        COLUMNS as f32 * CELL + 2.0 * 12.0
     }
 
     fn view(&self, kit: &mut Kit) {
-        if self.items.is_empty() {
-            kit.notice("No more icons");
-            return;
-        }
-        let cell = kit.px(44.0);
-        let icon = kit.px(20.0);
-        for (i, item) in self.items.iter().enumerate() {
-            let x = kit.left - kit.px(2.0) + (i % COLUMNS) as f32 * cell;
-            let y = kit.y + (i / COLUMNS) as f32 * cell;
-            let rect = Rect::new(x, y, cell - kit.px(4.0), cell - kit.px(4.0));
-            let id = LIST + i as HitId;
-            kit.state(id, rect, kit.px(10.0));
-            let center = Point::new(
-                rect.left + rect.width() / 2.0,
-                rect.top + rect.height() / 2.0,
-            );
-            match self.icons.get(i).cloned().flatten() {
-                Some(image) => kit.image(
-                    Rect::new(center.x - icon / 2.0, center.y - icon / 2.0, icon, icon),
-                    image,
-                ),
-                None => kit.glyph(center, glyph::APP, 16.0, kit.look.dim()),
+        kit.frame(|f, area| {
+            if self.items.is_empty() {
+                return area.top + f.empty(area, Some(Icon::Apps), "No more icons", None);
             }
-            kit.hit(id, rect, Role::Button, &item.name, true);
-        }
-        kit.y += self.items.len().div_ceil(COLUMNS) as f32 * cell;
+            let c = f.theme.color;
+            let cell = f.px(CELL);
+            let gap = f.px(4.0);
+            let size = f.px(20.0);
+            let radius = f.px(f.theme.radius.small + 4.0);
+            let rows = self.items.len().div_ceil(COLUMNS);
+            for (i, item) in self.items.iter().enumerate() {
+                let rect = layout::grid(area, COLUMNS, gap, cell - gap, i);
+                let id = LIST + i as HitId;
+                f.wash(id, rect, radius, true);
+                match self.icons.get(i).cloned().flatten() {
+                    Some(image) => f.push(Op::Image {
+                        rect: rect.place(size, size, Align::Center, Align::Center),
+                        image,
+                        opacity: 1.0,
+                        source: None,
+                    }),
+                    None => f.icon(rect, Icon::Apps, 16.0, c.secondary),
+                }
+                f.focus_ring(id, rect, radius);
+                f.hit(id, rect, Role::Button, &item.name, true, None);
+            }
+            area.top + rows as f32 * cell - gap
+        });
     }
 
     fn activate(&mut self, id: HitId, cx: &mut Cx) -> Effect {

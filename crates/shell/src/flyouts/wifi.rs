@@ -8,10 +8,12 @@ use mypaper_bars::flyouts::wifi::{Network, Security, WifiError, WifiState};
 use mypaper_bars::flyouts::{Done, Watched};
 use mypaper_bars::system;
 use mypaper_bars::wake::Msg;
-use mypaper_ui::{HitId, Point};
+use mypaper_ui::icons::Icon;
+use mypaper_ui::layout::{Align, Stack};
+use mypaper_ui::{Accessory, ButtonKind, Frame, HitId, Lead, ListRow, Rect, Scroll, TextRole};
 use std::time::{Duration, Instant};
 
-use super::kit::{Icon, Kit, Row, glyph};
+use super::kit::{Kit, footer};
 use super::{Cx, Effect, LIST, Panel, Reply, controls};
 
 const RADIO: HitId = 1;
@@ -63,7 +65,8 @@ pub struct Wifi {
     radio: Option<bool>,
     expanded: Option<String>,
     status: Option<String>,
-    scroll: usize,
+    /// The list's scroll position (only the networks scroll).
+    scroll: Scroll,
     radio_pending: bool,
 }
 
@@ -80,7 +83,7 @@ impl Wifi {
             radio: None,
             expanded: None,
             status: None,
-            scroll: 0,
+            scroll: Scroll::new(&cx.look.theme().motion),
             radio_pending: true,
         }
     }
@@ -92,7 +95,7 @@ impl Wifi {
             radio,
             expanded: expanded.map(Into::into),
             status: None,
-            scroll: 0,
+            scroll: Scroll::default(),
             radio_pending: false,
         }
     }
@@ -109,6 +112,25 @@ impl Wifi {
             .networks
             .iter()
             .find(|n| n.ssid == name)
+    }
+
+    /// The expanded network's line under its row: what is happening, and its one action.
+    fn actions(&self, f: &mut Frame, network: &Network, rect: Rect) {
+        let c = f.theme.color;
+        let (id, label, kind) = match join(network) {
+            Join::Leave => (DISCONNECT, "Disconnect", ButtonKind::Gray),
+            Join::Direct => (CONNECT, "Connect", ButtonKind::Filled),
+            Join::Prompt => (PROMPT, "Connect…", ButtonKind::Filled),
+            Join::Settings => (PROMPT, "Connect in Settings", ButtonKind::Gray),
+        };
+        let (w, h) = f.button_size(label, false);
+        let (button, status) = rect.take_right(w, f.px(8.0));
+        let button = button.place(w, h, Align::End, Align::Start);
+        f.button(id, button, label, None, kind, true);
+        if let Some(text) = &self.status {
+            let line = Rect { bottom: button.bottom, ..status };
+            f.text_in(line, text, TextRole::Footnote, c.secondary, Align::Start);
+        }
     }
 }
 
@@ -129,92 +151,122 @@ impl Panel for Wifi {
     }
 
     fn view(&self, kit: &mut Kit) {
-        let top = kit.y;
-        kit.header("Wi-Fi", &[(SCAN, glyph::REFRESH, "Scan again")]);
-        if let Some(on) = self.radio {
-            let center = top + kit.px(16.0);
-            let right = kit.right - kit.px(40.0);
-            kit.switch(RADIO, on, right, center, "Wi-Fi");
-        }
-        match &self.state {
-            None => kit.notice("Looking for networks…"),
-            Some(WifiState {
-                error: Some(WifiError::Location),
-                ..
-            }) => {
-                kit.notice("Windows shows apps Wi-Fi networks only with location access on.");
-                kit.buttons(&[(LOCATION, "Location settings", false)]);
-            }
-            Some(WifiState {
-                error: Some(WifiError::NoAdapter),
-                ..
-            }) => kit.notice("No Wi-Fi adapter"),
-            Some(WifiState { error: Some(_), .. }) => kit.notice("Wi-Fi isn't available right now"),
-            Some(state) if state.networks.is_empty() => kit.notice(if self.radio == Some(false) {
-                "Wi-Fi is off"
-            } else {
-                "Looking for networks…"
-            }),
-            Some(state) => {
-                let row = kit.px(50.0);
-                let actions = if self.expanded.is_some() {
-                    kit.px(46.0)
-                } else {
-                    0.0
-                };
-                let room = ((kit.limit - kit.y - kit.px(50.0) - actions) / row)
-                    .floor()
-                    .max(1.0) as usize;
-                for (i, network) in state
-                    .networks
-                    .iter()
-                    .enumerate()
-                    .skip(self.scroll)
-                    .take(room)
-                {
-                    kit.row(Row {
-                        id: LIST + i as HitId,
-                        icon: Icon::Glyph(glyph::WIFI[bars(network.signal) - 1]),
-                        title: &network.ssid,
-                        detail: Some(security(network)),
-                        trailing: (network.security != Security::Open).then_some(glyph::LOCK),
-                        selected: network.connected,
-                        enabled: true,
-                    });
-                    if self.expanded.as_deref() == Some(network.ssid.as_str()) {
-                        let button = match join(network) {
-                            Join::Leave => (DISCONNECT, "Disconnect", false),
-                            Join::Direct => (CONNECT, "Connect", true),
-                            Join::Prompt => (PROMPT, "Connect…", true),
-                            Join::Settings => (PROMPT, "Connect in Settings", false),
-                        };
-                        if let Some(status) = &self.status {
-                            let style = kit.font(12.0, 400);
-                            let (left, y, room) =
-                                (kit.left, kit.y + kit.px(8.0), kit.width() / 2.0);
-                            kit.text_at(left, y, status, &style, kit.look.dim(), room);
+        kit.frame(|f, area| {
+            let c = f.theme.color;
+            let mut column = Stack::column(area, f.px(6.0));
+            // The header: the title, the radio's switch and "scan again".
+            let head = column.next(f.px(32.0));
+            let (scan, title) = head.take_right(f.px(30.0), f.px(4.0));
+            f.icon_button(SCAN, scan, Icon::Refresh, 30.0, "Scan again", false);
+            let title = match self.radio {
+                Some(on) => {
+                    let mid = title.top + title.height() / 2.0;
+                    let switch = f.switch(RADIO, title.right, mid, on, "Wi-Fi", !self.radio_pending);
+                    Rect { right: switch.left - f.px(8.0), ..title }
+                }
+                None => title,
+            };
+            f.text_in(title, "Wi-Fi", TextRole::Title2, c.label, Align::Start);
+            // The footer's room is kept: a separator, its row, and the two buttons.
+            let footer_h = f.px(9.0)
+                + f.px(f.theme.metrics.row_single)
+                + f.px(f.theme.metrics.control)
+                + 3.0 * f.px(6.0);
+            let notice = |f: &mut Frame, column: &mut Stack, icon, title: &str, detail| {
+                let rect = column.rest();
+                let h = f.empty(rect, Some(icon), title, detail);
+                column.next(h);
+            };
+            match &self.state {
+                None => notice(f, &mut column, Icon::Wifi(3), "Looking for networks…", None),
+                Some(WifiState {
+                    error: Some(WifiError::Location),
+                    ..
+                }) => {
+                    notice(
+                        f,
+                        &mut column,
+                        Icon::Location,
+                        "Location access is off",
+                        Some("Windows shows apps Wi-Fi networks only with location access on."),
+                    );
+                    let row = column.next(f.px(f.theme.metrics.control));
+                    let (w, _) = f.button_size("Location settings", false);
+                    let r = row.place(w, row.height(), Align::Center, Align::Center);
+                    f.button(LOCATION, r, "Location settings", None, ButtonKind::Gray, true);
+                }
+                Some(WifiState {
+                    error: Some(WifiError::NoAdapter),
+                    ..
+                }) => notice(f, &mut column, Icon::Offline, "No Wi-Fi adapter", None),
+                Some(WifiState { error: Some(_), .. }) => notice(
+                    f,
+                    &mut column,
+                    Icon::Offline,
+                    "Wi-Fi isn't available right now",
+                    None,
+                ),
+                Some(state) if state.networks.is_empty() => {
+                    let (icon, title) = if self.radio == Some(false) {
+                        (Icon::Offline, "Wi-Fi is off")
+                    } else {
+                        (Icon::Wifi(3), "Looking for networks…")
+                    };
+                    notice(f, &mut column, icon, title, None)
+                }
+                Some(state) => {
+                    // The networks scroll in a viewport sized by the list, never by where it
+                    // is scrolled to.
+                    let width = column.rect.width();
+                    let actions = f.px(f.theme.metrics.control) + f.px(8.0);
+                    let rows: Vec<f32> = state
+                        .networks
+                        .iter()
+                        .map(|n| {
+                            let open = self.expanded.as_deref() == Some(n.ssid.as_str());
+                            f.px(f.theme.metrics.row) + if open { actions } else { 0.0 }
+                        })
+                        .collect();
+                    let content = rows.iter().sum::<f32>();
+                    let room = (column.rest().height() - footer_h).max(f.px(f.theme.metrics.row));
+                    let viewport = column.next(content.min(room));
+                    f.scroll(viewport, &self.scroll, Instant::now(), |f, at| {
+                        let mut list = Stack::column(Rect::new(at.x, at.y, width, content), 0.0);
+                        for (i, network) in state.networks.iter().enumerate() {
+                            let mut rect = list.next(rows[i]);
+                            let open = self.expanded.as_deref() == Some(network.ssid.as_str());
+                            if open {
+                                let (row, below) = rect.take_top(f.px(f.theme.metrics.row), f.px(4.0));
+                                self.actions(f, network, below);
+                                rect = row;
+                            }
+                            let row = ListRow {
+                                id: LIST + i as HitId,
+                                lead: Lead::Badge(Icon::Wifi(bars(network.signal) as u8 - 1), network.connected),
+                                title: &network.ssid,
+                                subtitle: Some(security(network)),
+                                accessory: if network.connected {
+                                    Accessory::Check
+                                } else {
+                                    Accessory::None
+                                },
+                                selected: false,
+                                enabled: true,
+                            };
+                            f.row(&row, rect);
                         }
-                        kit.buttons(&[button]);
-                    }
-                }
-                if state.networks.len() > room {
-                    let more = state.networks.len() - room - self.scroll.min(state.networks.len());
-                    if more > 0 {
-                        let center = Point::new(kit.left + kit.width() / 2.0, kit.y + kit.px(8.0));
-                        let style = kit.font(12.0, 400);
-                        kit.text_centered(
-                            center,
-                            &format!("{more} more — scroll"),
-                            &style,
-                            kit.look.faint(),
-                        );
-                        kit.y += kit.px(16.0);
-                    }
+                        content
+                    });
                 }
             }
-        }
-        kit.footer_link(SETTINGS, "Network & internet settings");
-        kit.buttons(&[(ETHERNET, "Ethernet", false), (VPN, "VPN", false)]);
+            footer(f, &mut column, SETTINGS, "Network & internet settings");
+            let buttons = column.next(f.px(f.theme.metrics.control));
+            let gap = f.px(8.0);
+            let w = (buttons.width() - gap) / 2.0;
+            f.button(ETHERNET, Rect { right: buttons.left + w, ..buttons }, "Ethernet", Some(Icon::Ethernet), ButtonKind::Gray, true);
+            f.button(VPN, Rect { left: buttons.right - w, ..buttons }, "VPN", Some(Icon::Lock), ButtonKind::Gray, true);
+            area.top + column.used()
+        });
     }
 
     fn activate(&mut self, id: HitId, cx: &mut Cx) -> Effect {
@@ -287,19 +339,21 @@ impl Panel for Wifi {
         }
     }
 
-    fn wheel(&mut self, _: Option<HitId>, delta: i16, _: &mut Cx) -> Effect {
-        let count = self.state.as_ref().map_or(0, |s| s.networks.len());
-        let before = self.scroll;
-        self.scroll = if delta > 0 {
-            self.scroll.saturating_sub(1)
-        } else {
-            (self.scroll + 1).min(count.saturating_sub(1))
-        };
-        if before == self.scroll {
-            Effect::None
-        } else {
+    fn wheel(&mut self, _: Option<HitId>, delta: i16, cx: &mut Cx) -> Effect {
+        if self.scroll.wheel(delta, cx.scale, Instant::now()) {
             Effect::Redraw
+        } else {
+            Effect::None
         }
+    }
+
+    fn key(&mut self, key: u16, _: &mut Cx) -> Option<Effect> {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{VK_NEXT, VK_PRIOR};
+        if key == VK_NEXT.0 || key == VK_PRIOR.0 {
+            self.scroll.page(key == VK_NEXT.0, Instant::now());
+            return Some(Effect::Redraw);
+        }
+        None
     }
 
     fn reply(&mut self, reply: &Reply, cx: &mut Cx) -> bool {
@@ -368,7 +422,10 @@ impl Panel for Wifi {
             cx.lanes
                 .quick(|_| Reply::QuickControl(controls::read(), None));
         }
-        (false, Some(now + Duration::from_secs(1)))
+        // The radio every second; the scroll's glide and fade at frame rate while they run.
+        let (scrolled, next) = self.scroll.tick(now);
+        let second = now + Duration::from_secs(1);
+        (scrolled, Some(next.map_or(second, |n| n.min(second))))
     }
 }
 

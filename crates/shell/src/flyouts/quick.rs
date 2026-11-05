@@ -15,12 +15,11 @@ use mypaper_bars::network::{self, Kind as Link, NetworkInfo};
 use mypaper_bars::system::{self, Battery};
 use mypaper_bars::wake::Msg;
 use mypaper_ui::icons::Icon;
-use mypaper_ui::kit::Frame;
 use mypaper_ui::layout::{self, Align, Stack};
-use mypaper_ui::{HitId, Rect, TextRole, Tile};
+use mypaper_ui::{HitId, TextRole, Tile};
 
 use super::controls;
-use super::kit::Kit;
+use super::kit::{Kit, slider_card, slider_card_height, volume_icon};
 use super::toggles::Toggle;
 use super::{Cx, Effect, Kind, Panel, Reply};
 
@@ -244,27 +243,6 @@ impl Quick {
         tiles
     }
 
-    /// A card with a title row (and buttons at its right) over a Control Center slider.
-    fn slider_card(
-        f: &mut Frame,
-        rect: Rect,
-        title: &str,
-        buttons: &[(HitId, Icon, &str)],
-        slider: (HitId, f32, &str, Icon),
-    ) {
-        let c = f.theme.color;
-        let inner = f.card(rect);
-        let (head, rest) = inner.take_top(f.px(24.0), f.px(6.0));
-        let mut label = head;
-        for &(id, icon, name) in buttons.iter().rev() {
-            let (button, left) = label.take_right(f.px(26.0), f.px(2.0));
-            f.icon_button(id, button, icon, 26.0, name, false);
-            label = left;
-        }
-        f.text_in(label, title, TextRole::Headline, c.label, Align::Start);
-        let (id, value, name, icon) = slider;
-        f.slider(id, rest, value, name, Some(icon));
-    }
 }
 
 /// Request consent in a UI context, wait and write off-thread, and always read back the OS
@@ -328,9 +306,9 @@ impl Panel for Quick {
                 f.tile(&tile, layout::grid(grid, 2, gap, height, i));
             }
             // Display and Sound, each a card with a Control Center slider.
-            let card = f.px(24.0) + f.px(6.0) + f.px(28.0) + 2.0 * f.px(f.theme.metrics.pad);
+            let card = slider_card_height(f);
             if let Some(level) = brightness {
-                Self::slider_card(
+                slider_card(
                     f,
                     column.next(card),
                     "Display",
@@ -340,13 +318,9 @@ impl Panel for Quick {
             }
             if let Some(volume) = volume {
                 let level = if volume.muted { 0.0 } else { volume.level };
-                let icon = if volume.muted || level == 0.0 {
-                    Icon::Mute
-                } else {
-                    Icon::Volume(((level * 3.0).ceil() as u8).min(3))
-                };
+                let icon = volume_icon(level, volume.muted);
                 let mute = if volume.muted { "Unmute" } else { "Mute" };
-                Self::slider_card(
+                slider_card(
                     f,
                     column.next(card),
                     "Sound",

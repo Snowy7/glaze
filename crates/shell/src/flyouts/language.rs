@@ -3,9 +3,11 @@
 
 use mypaper_bars::flyouts::language::{self, Layout};
 use mypaper_bars::system;
-use mypaper_ui::HitId;
+use mypaper_ui::icons::Icon;
+use mypaper_ui::layout::Stack;
+use mypaper_ui::{Accessory, HitId, Lead, ListRow};
 
-use super::kit::{Icon, Kit, Row, glyph};
+use super::kit::Kit;
 use super::{Cx, Effect, LIST, Panel};
 
 const SETTINGS: HitId = 1;
@@ -39,23 +41,30 @@ impl Panel for Language {
     }
 
     fn view(&self, kit: &mut Kit) {
-        kit.caption("Keyboard layout");
-        if self.layouts.is_empty() {
-            kit.notice("No keyboard layouts");
-        }
-        for (i, layout) in self.layouts.iter().enumerate() {
-            let current = self.current.as_deref() == Some(layout.id.as_str());
-            kit.row(Row {
-                id: LIST + i as HitId,
-                icon: Icon::Glyph(glyph::KEYBOARD),
-                title: &layout.language,
-                detail: Some(&layout.layout),
-                trailing: current.then_some(glyph::CHECK),
-                selected: current,
-                enabled: true,
-            });
-        }
-        kit.footer_link(SETTINGS, "Language settings");
+        kit.frame(|f, area| {
+            let mut column = Stack::column(area, f.px(2.0));
+            f.section_header(column.next(f.px(24.0)), "Keyboard layout", None);
+            if self.layouts.is_empty() {
+                let h = f.empty(column.rest(), Some(Icon::Keyboard), "No keyboard layouts", None);
+                column.next(h);
+            }
+            for (i, layout) in self.layouts.iter().enumerate() {
+                let current = self.current.as_deref() == Some(layout.id.as_str());
+                let row = ListRow {
+                    id: LIST + i as HitId,
+                    lead: Lead::Badge(Icon::Keyboard, current),
+                    title: &layout.language,
+                    subtitle: Some(&layout.layout),
+                    accessory: if current { Accessory::Check } else { Accessory::None },
+                    selected: false,
+                    enabled: true,
+                };
+                let h = f.row_height(&row);
+                f.row(&row, column.next(h));
+            }
+            super::kit::footer(f, &mut column, SETTINGS, "Language settings");
+            area.top + column.used()
+        });
     }
 
     fn opened(&mut self, _: &mut Cx) -> bool {
@@ -81,3 +90,4 @@ impl Panel for Language {
         Effect::Close
     }
 }
+
