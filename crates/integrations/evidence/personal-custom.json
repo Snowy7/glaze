@@ -1,0 +1,33 @@
+{
+  "examples": [
+    {
+      "error": null,
+      "id": "custom-welcome",
+      "layout": "Text",
+      "multipleInstances": true,
+      "value": "Build complex things as simply as possible.\n\nOne useful thing at a time."
+    },
+    {
+      "error": null,
+      "id": "custom-github-release",
+      "layout": "Stat",
+      "multipleInstances": true,
+      "value": "1.99.1"
+    },
+    {
+      "error": null,
+      "id": "custom-reading-list",
+      "layout": "List",
+      "multipleInstances": true,
+      "value": "The Pragmatic Programmer\nA Philosophy of Software Design\nDesigning Data-Intensive Applications"
+    },
+    {
+      "error": null,
+      "id": "custom-disk-space",
+      "layout": "Gauge",
+      "multipleInstances": true,
+      "value": 88
+    }
+  ],
+  "folder": "C:\\WINDOWS\\TEMP\\mypaper-custom-verify-6eb30addb01a49fd8f8095593e0fbbe4\\mypaper\\widgets"
+}

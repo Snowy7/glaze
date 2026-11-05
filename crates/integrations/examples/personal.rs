@@ -1,4 +1,5 @@
 //! Read-only live qualification. Never requests consent, sends a message, or changes vendor state.
+#![windows_subsystem = "windows"]
 use mypaper_integrations::{Availability, Data, Hub, Provider, config::Config};
 use serde_json::json;
 use std::time::Duration;

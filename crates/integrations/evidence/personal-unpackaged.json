@@ -1,0 +1,23 @@
+{
+  "at": "2026-11-05T13:56:40.722635300+00:00",
+  "calendar": {
+    "availability": "Cached",
+    "events": 0,
+    "sources": {
+      "Google": "Not connected",
+      "Microsoft": "Not connected",
+      "Windows": "0 events"
+    }
+  },
+  "discord": {
+    "availability": "Cached",
+    "botMessages": 0,
+    "call": false,
+    "notifications": 0,
+    "status": {
+      "bot": "Add a bot to your server for history and sending",
+      "voice": "Connect a registered Discord RPC app (personal testers supported)"
+    }
+  },
+  "packaged": false
+}
