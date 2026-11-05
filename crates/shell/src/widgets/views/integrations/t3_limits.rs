@@ -141,10 +141,10 @@ pub(super) fn view(f: &mut Frame<'_>, state: &Snapshot, l: &Areas, now_ms: i64) 
                 f.theme.color.label,
                 number.width(),
             );
-            // Ahead of an even burn (more left than time left) trends up.
+            // As T3: burning faster than an even pace (less left than time left) points up.
             let trend = match pace {
-                Some(p) if avg + 0.02 < p => " left ↘",
-                Some(_) => " left ↗",
+                Some(p) if avg + 0.02 < p => " left ↗",
+                Some(_) => " left ↘",
                 None => " left",
             };
             let caption = f.line(TextRole::Callout);
@@ -174,7 +174,7 @@ pub(super) fn view(f: &mut Frame<'_>, state: &Snapshot, l: &Areas, now_ms: i64) 
                         pace,
                         fill: brand(driver),
                         badge: badge.as_deref(),
-                        label: (accounts.len() > 1 || each / f.s > 160.0).then_some(label.as_str()),
+                        label: (accounts.len() > 1).then_some(label.as_str()),
                         reset: reset.as_deref().filter(|_| each / f.s > 120.0),
                     },
                 );

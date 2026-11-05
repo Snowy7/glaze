@@ -138,12 +138,19 @@ pub(super) fn view(f: &mut Frame<'_>, state: &Snapshot, l: &Areas) {
         let amount_w = f.text.measure(&amount, &style).0;
         let (value, label) = line.take_right(amount_w, f.px(8.0));
         f.text_in(value, &amount, TextRole::Body, f.theme.color.label, Align::End);
-        let title = if p.sessions > 0 {
-            format!("{} · {} sessions", name(&p.provider), p.sessions)
-        } else {
-            name(&p.provider).to_owned()
-        };
-        f.text_in(label, &title, TextRole::Body, f.theme.color.label, Align::Start);
+        // The name, then its session count in a quieter caption, as T3 lists them.
+        let title = name(&p.provider);
+        let title_w = f.text.measure(title, &style).0.min(label.width());
+        f.text_in(label, title, TextRole::Body, f.theme.color.label, Align::Start);
+        if p.sessions > 0 && label.width() - title_w > f.px(40.0) {
+            f.text_in(
+                Rect::new(label.left + title_w + f.px(6.0), label.top, label.width() - title_w - f.px(6.0), label.height()),
+                &format!("{} sessions", p.sessions),
+                TextRole::Caption,
+                f.theme.color.secondary,
+                Align::Start,
+            );
+        }
         let share = if cost == 0 {
             0.0
         } else {
