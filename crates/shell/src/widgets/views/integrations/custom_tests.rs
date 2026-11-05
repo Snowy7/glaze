@@ -166,7 +166,7 @@ fn personal_widgets_dense_sizes_and_size_sheets() {
             color: Rgba::rgb8([22, 29, 40], 1.0),
         });
         for (pixels, x) in [((180, 180), 20.0), ((360, 225), 220.0), ((450, 360), 600.0)] {
-            let mut m = fixture(id);
+            let m = fixture(id);
             add(&mut ui, &mut sheet, &m, pixels, x, 20.0);
         }
         if id == "calendar" {
