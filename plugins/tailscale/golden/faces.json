@@ -1,0 +1,1007 @@
+{
+  "connection": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "positive",
+                "kind": "text",
+                "role": "title2",
+                "text": "Connected"
+              },
+              {
+                "action": "disconnect",
+                "kind": "button",
+                "label": "Disconnect",
+                "primary": false
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "100.64.0.24 · 3 of 4 peers online"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Exit node · home-server"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "↓ 1.1 GiB · ↑ 58.0 MiB"
+          },
+          {
+            "action": "exit:none",
+            "kind": "button",
+            "label": "Stop using exit node",
+            "primary": false
+          },
+          {
+            "children": [
+              {
+                "action": "exit:none",
+                "detail": "Linux · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "home-server",
+                "trailing": "Exit node"
+              },
+              {
+                "detail": "macOS · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "macbook",
+                "trailing": "Online"
+              },
+              {
+                "detail": "iOS · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "phone",
+                "trailing": "Online"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "stack"
+          }
+        ],
+        "gap": 3.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "positive",
+                "kind": "text",
+                "role": "title2",
+                "text": "Connected"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "100.64.0.24"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "3 of 4 peers online"
+              },
+              {
+                "action": "disconnect",
+                "kind": "button",
+                "label": "Disconnect",
+                "primary": false
+              }
+            ],
+            "gap": 4.0,
+            "kind": "stack"
+          },
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "Exit node · home-server"
+              },
+              {
+                "children": [
+                  {
+                    "action": "exit:none",
+                    "detail": "Linux · Online",
+                    "icon": "desktop",
+                    "kind": "list_row",
+                    "title": "home-server",
+                    "trailing": "Exit node"
+                  },
+                  {
+                    "detail": "macOS · Online",
+                    "icon": "desktop",
+                    "kind": "list_row",
+                    "title": "macbook",
+                    "trailing": "Online"
+                  }
+                ],
+                "gap": 0.0,
+                "kind": "stack"
+              }
+            ],
+            "gap": 3.0,
+            "kind": "stack"
+          }
+        ],
+        "kind": "row"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "positive",
+            "kind": "text",
+            "role": "title2",
+            "text": "Connected"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "3 of 4 peers online"
+          },
+          {
+            "action": "disconnect",
+            "kind": "button",
+            "label": "Disconnect",
+            "primary": false
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    }
+  },
+  "disconnected": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "title2",
+                "text": "Disconnected"
+              },
+              {
+                "action": "connect",
+                "kind": "button",
+                "label": "Connect",
+                "primary": false
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "100.64.0.24 · 3 of 4 peers online"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Exit node · home-server"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "↓ 1.1 GiB · ↑ 58.0 MiB"
+          },
+          {
+            "action": "exit:none",
+            "kind": "button",
+            "label": "Stop using exit node",
+            "primary": false
+          },
+          {
+            "children": [
+              {
+                "action": "exit:none",
+                "detail": "Linux · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "home-server",
+                "trailing": "Exit node"
+              },
+              {
+                "detail": "macOS · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "macbook",
+                "trailing": "Online"
+              },
+              {
+                "detail": "iOS · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "phone",
+                "trailing": "Online"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "stack"
+          }
+        ],
+        "gap": 3.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "title2",
+                "text": "Disconnected"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "100.64.0.24"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "3 of 4 peers online"
+              },
+              {
+                "action": "connect",
+                "kind": "button",
+                "label": "Connect",
+                "primary": false
+              }
+            ],
+            "gap": 4.0,
+            "kind": "stack"
+          },
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "Exit node · home-server"
+              },
+              {
+                "children": [
+                  {
+                    "action": "exit:none",
+                    "detail": "Linux · Online",
+                    "icon": "desktop",
+                    "kind": "list_row",
+                    "title": "home-server",
+                    "trailing": "Exit node"
+                  },
+                  {
+                    "detail": "macOS · Online",
+                    "icon": "desktop",
+                    "kind": "list_row",
+                    "title": "macbook",
+                    "trailing": "Online"
+                  }
+                ],
+                "gap": 0.0,
+                "kind": "stack"
+              }
+            ],
+            "gap": 3.0,
+            "kind": "stack"
+          }
+        ],
+        "kind": "row"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "title2",
+            "text": "Disconnected"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "3 of 4 peers online"
+          },
+          {
+            "action": "connect",
+            "kind": "button",
+            "label": "Connect",
+            "primary": false
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    }
+  },
+  "empty": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "title2",
+                "text": "Disconnected"
+              },
+              {
+                "action": "connect",
+                "kind": "button",
+                "label": "Connect",
+                "primary": false
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "No address · 0 of 0 peers online"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Exit node · None"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "↓ Unavailable · ↑ Unavailable"
+          },
+          {
+            "children": [],
+            "gap": 0.0,
+            "kind": "stack"
+          }
+        ],
+        "gap": 3.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "title2",
+                "text": "Disconnected"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "No address"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "0 of 0 peers online"
+              },
+              {
+                "action": "connect",
+                "kind": "button",
+                "label": "Connect",
+                "primary": false
+              }
+            ],
+            "gap": 4.0,
+            "kind": "stack"
+          },
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "Exit node · None"
+              },
+              {
+                "children": [],
+                "gap": 0.0,
+                "kind": "stack"
+              }
+            ],
+            "gap": 3.0,
+            "kind": "stack"
+          }
+        ],
+        "kind": "row"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "title2",
+            "text": "Disconnected"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "0 of 0 peers online"
+          },
+          {
+            "action": "connect",
+            "kind": "button",
+            "label": "Connect",
+            "primary": false
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    }
+  },
+  "peers": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "3 of 4 peers online"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Exit node · home-server"
+          },
+          {
+            "action": "exit:none",
+            "kind": "button",
+            "label": "Stop using exit node",
+            "primary": false
+          },
+          {
+            "children": [
+              {
+                "action": "exit:none",
+                "detail": "Linux · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "home-server",
+                "trailing": "Exit node"
+              },
+              {
+                "detail": "macOS · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "macbook",
+                "trailing": "Online"
+              },
+              {
+                "detail": "iOS · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "phone",
+                "trailing": "Online"
+              },
+              {
+                "detail": "Windows · Seen 1d ago",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "workstation",
+                "trailing": "Offline"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "stack"
+          }
+        ],
+        "gap": 3.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "3 of 4 peers online"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Exit node · home-server"
+          },
+          {
+            "action": "exit:none",
+            "kind": "button",
+            "label": "Stop using exit node",
+            "primary": false
+          },
+          {
+            "children": [
+              {
+                "action": "exit:none",
+                "detail": "Linux · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "home-server",
+                "trailing": "Exit node"
+              },
+              {
+                "detail": "macOS · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "macbook",
+                "trailing": "Online"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "stack"
+          }
+        ],
+        "gap": 3.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "positive",
+            "kind": "text",
+            "role": "title2",
+            "text": "Connected"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "3 of 4 peers online"
+          },
+          {
+            "action": "disconnect",
+            "kind": "button",
+            "label": "Disconnect",
+            "primary": false
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    }
+  },
+  "traffic": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "kind": "stat",
+                "label": "Received",
+                "value": "1.1 GiB"
+              },
+              {
+                "kind": "stat",
+                "label": "Sent",
+                "value": "58.0 MiB"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Peer totals · snapshot on refresh"
+          },
+          {
+            "children": [
+              {
+                "action": "exit:none",
+                "detail": "↓ 100.0 MiB · ↑ 8.0 MiB",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "home-server",
+                "trailing": "Exit node"
+              },
+              {
+                "detail": "↓ 1.0 GiB · ↑ 50.0 MiB",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "macbook",
+                "trailing": "Online"
+              },
+              {
+                "detail": "↓ 1.0 KiB · ↑ 2.0 KiB",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "phone",
+                "trailing": "Online"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "stack"
+          }
+        ],
+        "gap": 5.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "kind": "stat",
+                "label": "Received",
+                "value": "1.1 GiB"
+              },
+              {
+                "kind": "stat",
+                "label": "Sent",
+                "value": "58.0 MiB"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Peer totals · snapshot on refresh"
+          },
+          {
+            "children": [
+              {
+                "action": "exit:none",
+                "detail": "↓ 100.0 MiB · ↑ 8.0 MiB",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "home-server",
+                "trailing": "Exit node"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "stack"
+          }
+        ],
+        "gap": 5.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "positive",
+            "kind": "text",
+            "role": "title2",
+            "text": "Connected"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "↓ 1.1 GiB · ↑ 58.0 MiB"
+          },
+          {
+            "action": "disconnect",
+            "kind": "button",
+            "label": "Disconnect",
+            "primary": false
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "Snapshot · refresh for peers and traffic",
+      "refresh": true
+    }
+  },
+  "unavailable": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "title2",
+                "text": "Status unavailable"
+              },
+              {
+                "action": "disconnect",
+                "kind": "button",
+                "label": "Disconnect",
+                "primary": false
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "100.64.0.24 · 3 of 4 peers online"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Exit node · home-server"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "↓ 1.1 GiB · ↑ 58.0 MiB"
+          },
+          {
+            "action": "exit:none",
+            "kind": "button",
+            "label": "Stop using exit node",
+            "primary": false
+          },
+          {
+            "children": [
+              {
+                "action": "exit:none",
+                "detail": "Linux · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "home-server",
+                "trailing": "Exit node"
+              },
+              {
+                "detail": "macOS · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "macbook",
+                "trailing": "Online"
+              },
+              {
+                "detail": "iOS · Online",
+                "icon": "desktop",
+                "kind": "list_row",
+                "title": "phone",
+                "trailing": "Online"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "stack"
+          }
+        ],
+        "gap": 3.0,
+        "kind": "stack"
+      },
+      "footer": "Tailscale service is unavailable",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "title2",
+                "text": "Status unavailable"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "100.64.0.24"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "3 of 4 peers online"
+              },
+              {
+                "action": "disconnect",
+                "kind": "button",
+                "label": "Disconnect",
+                "primary": false
+              }
+            ],
+            "gap": 4.0,
+            "kind": "stack"
+          },
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "Exit node · home-server"
+              },
+              {
+                "children": [
+                  {
+                    "action": "exit:none",
+                    "detail": "Linux · Online",
+                    "icon": "desktop",
+                    "kind": "list_row",
+                    "title": "home-server",
+                    "trailing": "Exit node"
+                  },
+                  {
+                    "detail": "macOS · Online",
+                    "icon": "desktop",
+                    "kind": "list_row",
+                    "title": "macbook",
+                    "trailing": "Online"
+                  }
+                ],
+                "gap": 0.0,
+                "kind": "stack"
+              }
+            ],
+            "gap": 3.0,
+            "kind": "stack"
+          }
+        ],
+        "kind": "row"
+      },
+      "footer": "Tailscale service is unavailable",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "title2",
+            "text": "Status unavailable"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "3 of 4 peers online"
+          },
+          {
+            "action": "disconnect",
+            "kind": "button",
+            "label": "Disconnect",
+            "primary": false
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "Tailscale service is unavailable",
+      "refresh": true
+    }
+  }
+}

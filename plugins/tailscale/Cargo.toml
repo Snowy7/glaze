@@ -1,0 +1,26 @@
+[package]
+name = "mypaper-plugin-tailscale"
+description = "Tailscale LocalAPI connection, peers, exit nodes and traffic for mypaper."
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+name = "tailscale"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+
+[workspace]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

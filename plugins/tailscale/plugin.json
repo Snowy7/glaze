@@ -1,0 +1,14 @@
+{
+  "id": "tailscale",
+  "name": "Tailscale",
+  "version": "0.1.0",
+  "api": "0.1",
+  "component": "tailscale.wasm",
+  "faces": [
+    { "id": "connection", "name": "Connection", "icon": "globe", "size": { "default": [8, 5], "min": [4, 3], "max": [12, 10] } },
+    { "id": "peers", "name": "Peers", "icon": "globe", "size": { "default": [8, 5], "min": [4, 3], "max": [12, 10] } },
+    { "id": "traffic", "name": "Traffic", "icon": "globe", "size": { "default": [8, 5], "min": [4, 3], "max": [12, 10] } }
+  ],
+  "permissions": ["pipe:ProtectedPrefix\\Administrators\\Tailscale\\tailscaled"],
+  "limits": { "memory_mb": 16 }
+}
