@@ -1,7 +1,7 @@
 //! Goldens and hit tests use exactly the panels registered in the native flyout controller.
 use super::*;
 use crate::flyouts::{build, look::Look};
-use mypaper_integrations::{docker, media, notifications, obs, t3};
+use mypaper_integrations::{media, notifications, obs, t3};
 use mypaper_ui::{Point, render};
 
 fn fixtures() -> Vec<(&'static str, Provider, Data)> {
@@ -84,27 +84,6 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
                 streaming: false,
                 scene: "Desktop + camera".into(),
                 paused: false,
-                ..Default::default()
-            }),
-        ),
-        (
-            "docker",
-            Provider::Docker,
-            Data::Docker(docker::Snapshot {
-                containers: vec![
-                    docker::Container {
-                        id: "web".into(),
-                        name: "mypaper-web".into(),
-                        state: "running".into(),
-                        failed: false,
-                    },
-                    docker::Container {
-                        id: "worker".into(),
-                        name: "background-worker".into(),
-                        state: "exited".into(),
-                        failed: true,
-                    },
-                ],
                 ..Default::default()
             }),
         ),
@@ -224,7 +203,6 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         s.config.notifications.enabled = true;
         s.config.t3.enabled = true;
         s.config.obs.enabled = true;
-        s.config.docker.enabled = true;
         for (_, provider, data) in fixtures() {
             s.fixtures.insert(
                 provider,
