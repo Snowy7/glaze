@@ -59,6 +59,8 @@ pub const WM_EDIT: u32 = WM_APP + 100;
 pub const WM_OVERLAY: u32 = WM_APP + 101;
 pub const WM_LAYOUT: u32 = WM_APP + 102;
 pub const WM_DATA: u32 = WM_APP + 103;
+/// Explicit read-only performance checkpoint; never scheduled by the host.
+pub const WM_DIAGNOSTICS: u32 = WM_APP + 104;
 
 struct Entry {
     surface: Surface,
@@ -143,6 +145,7 @@ pub struct Widgets {
     hidden: bool,
     reconcile_needed: bool,
     order_due: Option<Instant>,
+    startup_release: Option<Instant>,
     foreground: HWND,
     plates: BTreeMap<String, Vec<Plate>>,
     skin: look::Skin,
@@ -246,6 +249,7 @@ impl Widgets {
             hidden: false,
             reconcile_needed: true,
             order_due: None,
+            startup_release: Some(Instant::now() + Duration::from_secs(30)),
             foreground: HWND::default(),
             plates: BTreeMap::new(),
             skin,
@@ -278,6 +282,20 @@ impl Widgets {
     }
     pub fn handle(&mut self, ui: &mut Ui, msg: inbox::Msg) {
         match msg.message {
+            WM_DIAGNOSTICS => {
+                log::info!(
+                    "widget checkpoint presents={:?} costs={:?}",
+                    self.counters(),
+                    self.costs
+                );
+                for (id, entry) in &self.entries {
+                    log::info!(
+                        "widget checkpoint id={id} rect={:?} visible={}",
+                        entry.rect,
+                        entry.model.visible
+                    );
+                }
+            }
             WM_EDIT => {
                 let on = mode(msg.lparam, self.editing);
                 self.set_editing(ui, on);
@@ -382,6 +400,7 @@ impl Widgets {
                 self.stats.deadline(),
                 self.plugins.deadline(),
                 self.order_due,
+                self.startup_release,
             ])
             .flatten()
             .min()
@@ -393,6 +412,10 @@ impl Widgets {
         self.costs.polls += 1;
         let instant = Instant::now();
         let now = Stamp::now();
+        if self.startup_release.is_some_and(|at| at <= instant) {
+            self.startup_release = None;
+            release_startup_heap();
+        }
         self.costs.clock_us += instant.elapsed().as_micros() as u64;
         let measured = Instant::now();
         let mut plates_changed = false;
@@ -2422,6 +2445,31 @@ impl Drop for Widgets {
             self.counters().0,
             self.counters().1
         );
+    }
+}
+
+/// Return free startup allocation caches to Windows once providers/fonts have settled. Live
+/// widget data and renderer caches remain allocated; this never becomes an idle polling task.
+fn release_startup_heap() {
+    use windows::Win32::System::Memory::{HeapOptimizeResources, HeapSetInformation};
+    use windows::Win32::System::SystemServices::{
+        HEAP_OPTIMIZE_RESOURCES_CURRENT_VERSION, HEAP_OPTIMIZE_RESOURCES_INFORMATION,
+    };
+    let info = HEAP_OPTIMIZE_RESOURCES_INFORMATION {
+        Version: HEAP_OPTIMIZE_RESOURCES_CURRENT_VERSION,
+        Flags: 0,
+    };
+    // SAFETY: a documented process-wide LFH cache optimization, with a complete versioned
+    // structure. Windows decommits only unused heap memory, without moving live allocations.
+    if let Err(error) = unsafe {
+        HeapSetInformation(
+            None,
+            HeapOptimizeResources,
+            Some(std::ptr::from_ref(&info).cast()),
+            size_of_val(&info),
+        )
+    } {
+        log::debug!("widget startup heap release: {error}");
     }
 }
 
