@@ -4,37 +4,12 @@
       "body": {
         "children": [
           {
-            "align": "start",
-            "kind": "text",
-            "role": "title1",
-            "text": "1"
-          },
-          {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "need your input · 1 thread"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-0",
-                "detail": "GPT-6.1 Sol",
-                "icon": "message",
-                "kind": "list_row",
-                "title": "Review desktop permissions",
-                "trailing": ""
-              },
-              {
-                "color": "#fcd34d",
-                "dot": false,
-                "kind": "tag",
-                "label": "Pending Approval"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-0",
+            "detail": "Opus 5.5 · waiting 4m",
+            "kind": "item",
+            "tag": "Approve",
+            "title": "Review desktop permissions",
+            "tone": "warning"
           },
           {
             "children": [
@@ -58,33 +33,21 @@
           }
         ],
         "gap": 2.0,
-        "kind": "stack"
+        "kind": "list"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "1 thread need you",
       "refresh": true
     },
     "medium": {
       "body": {
         "children": [
           {
-            "children": [
-              {
-                "action": "thread:thread-0",
-                "detail": "GPT-6.1 Sol",
-                "icon": "message",
-                "kind": "list_row",
-                "title": "Review desktop permissions",
-                "trailing": ""
-              },
-              {
-                "color": "#fcd34d",
-                "dot": false,
-                "kind": "tag",
-                "label": "Pending Approval"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-0",
+            "detail": "Opus 5.5 · waiting 4m",
+            "kind": "item",
+            "tag": "Approve",
+            "title": "Review desktop permissions",
+            "tone": "warning"
           },
           {
             "children": [
@@ -108,9 +71,9 @@
           }
         ],
         "gap": 2.0,
-        "kind": "stack"
+        "kind": "list"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "1 thread need you",
       "refresh": true
     },
     "small": {
@@ -120,33 +83,18 @@
             "kind": "spacer"
           },
           {
-            "children": [
-              {
-                "align": "start",
-                "color": "warning",
-                "kind": "text",
-                "role": "large_title",
-                "text": "1"
-              },
-              {
-                "color": "#fcd34d",
-                "dot": true,
-                "kind": "tag",
-                "label": "Pending Approval"
-              },
-              {
-                "kind": "spacer"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "align": "start",
+            "color": "warning",
+            "kind": "text",
+            "role": "large_title",
+            "text": "1"
           },
           {
             "align": "start",
             "color": "secondary",
             "kind": "text",
             "role": "caption",
-            "text": "need your input"
+            "text": "need you"
           },
           {
             "kind": "spacer"
@@ -155,7 +103,7 @@
         "gap": 2.0,
         "kind": "stack"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "1 thread need you",
       "refresh": true
     }
   },
@@ -166,225 +114,96 @@
           {
             "children": [
               {
-                "color": "label",
-                "icon": "dot",
-                "kind": "icon",
-                "size": 10.0
+                "children": [
+                  {
+                    "color": "#d97757",
+                    "icon": "dot",
+                    "kind": "icon",
+                    "size": 8.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "subheadline",
+                    "text": "Claude"
+                  }
+                ],
+                "gap": 6.0,
+                "kind": "row"
               },
               {
-                "align": "start",
-                "kind": "text",
-                "role": "headline",
-                "text": "Codex"
+                "color": "warning",
+                "fraction": 0.13999998569488525,
+                "kind": "meter",
+                "label": "Weekly · sn",
+                "mark": 0.4285714328289032,
+                "note": "resets in 3d",
+                "value": "14% left"
               }
             ],
-            "gap": 8.0,
-            "kind": "row"
+            "gap": 6.0,
+            "kind": "stack"
           },
           {
-            "child": {
-              "children": [
-                {
-                  "children": [
-                    {
-                      "align": "start",
-                      "color": "secondary",
-                      "kind": "text",
-                      "role": "callout",
-                      "text": "Weekly"
-                    },
-                    {
-                      "align": "start",
-                      "kind": "text",
-                      "role": "title1",
-                      "text": "34% left"
-                    }
-                  ],
-                  "gap": 2.0,
-                  "kind": "stack"
-                },
-                {
-                  "children": [
-                    {
-                      "kind": "spacer"
-                    },
-                    {
-                      "children": [
-                        {
-                          "color": "#606062",
-                          "kind": "limit_bar",
-                          "left": 0.3399999737739563,
-                          "pace": 0.7222222089767456,
-                          "reset": "5d 1h"
-                        }
-                      ],
-                      "gap": 8.0,
-                      "kind": "row"
-                    },
-                    {
-                      "kind": "spacer"
-                    }
-                  ],
-                  "kind": "stack"
-                }
-              ],
-              "columns": 2,
-              "gap": 14.0,
-              "kind": "grid"
-            },
-            "kind": "card"
+            "fraction": 0.5699999928474426,
+            "kind": "meter",
+            "label": "Weekly · snowy7",
+            "note": "resets in 3d",
+            "value": "57% left"
+          },
+          {
+            "fraction": 1.0,
+            "kind": "meter",
+            "label": "Weekly · Fable · snowy7",
+            "note": "full",
+            "value": "100% left"
+          },
+          {
+            "fraction": 1.0,
+            "kind": "meter",
+            "label": "Weekly · Fable · sn",
+            "note": "full",
+            "value": "100% left"
           },
           {
             "children": [
               {
-                "color": "#d97757",
-                "icon": "dot",
-                "kind": "icon",
-                "size": 10.0
+                "children": [
+                  {
+                    "color": "secondary",
+                    "icon": "dot",
+                    "kind": "icon",
+                    "size": 8.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "subheadline",
+                    "text": "Codex"
+                  }
+                ],
+                "gap": 6.0,
+                "kind": "row"
               },
               {
-                "align": "start",
-                "kind": "text",
-                "role": "headline",
-                "text": "Claude"
+                "fraction": 0.26999998092651367,
+                "kind": "meter",
+                "label": "Weekly",
+                "mark": 0.6845238208770752,
+                "note": "resets in 4d 19h",
+                "value": "27% left"
               }
             ],
-            "gap": 8.0,
-            "kind": "row"
-          },
-          {
-            "child": {
-              "children": [
-                {
-                  "children": [
-                    {
-                      "align": "start",
-                      "color": "secondary",
-                      "kind": "text",
-                      "role": "callout",
-                      "text": "Weekly"
-                    },
-                    {
-                      "align": "start",
-                      "kind": "text",
-                      "role": "title1",
-                      "text": "64% left"
-                    }
-                  ],
-                  "gap": 2.0,
-                  "kind": "stack"
-                },
-                {
-                  "children": [
-                    {
-                      "kind": "spacer"
-                    },
-                    {
-                      "children": [
-                        {
-                          "badge": "ON",
-                          "color": "#542e25",
-                          "kind": "limit_bar",
-                          "label": "57%",
-                          "left": 0.5699999928474426,
-                          "pace": 0.579365074634552,
-                          "reset": "4d 1h"
-                        },
-                        {
-                          "badge": "TW",
-                          "color": "#542e25",
-                          "kind": "limit_bar",
-                          "label": "71%",
-                          "left": 0.7100000381469727,
-                          "pace": 0.579365074634552,
-                          "reset": "4d 1h"
-                        }
-                      ],
-                      "gap": 8.0,
-                      "kind": "row"
-                    },
-                    {
-                      "kind": "spacer"
-                    }
-                  ],
-                  "kind": "stack"
-                }
-              ],
-              "columns": 2,
-              "gap": 14.0,
-              "kind": "grid"
-            },
-            "kind": "card"
-          },
-          {
-            "child": {
-              "children": [
-                {
-                  "children": [
-                    {
-                      "align": "start",
-                      "color": "secondary",
-                      "kind": "text",
-                      "role": "callout",
-                      "text": "Weekly · Fable"
-                    },
-                    {
-                      "align": "start",
-                      "kind": "text",
-                      "role": "title1",
-                      "text": "100% left"
-                    }
-                  ],
-                  "gap": 2.0,
-                  "kind": "stack"
-                },
-                {
-                  "children": [
-                    {
-                      "kind": "spacer"
-                    },
-                    {
-                      "children": [
-                        {
-                          "badge": "ON",
-                          "color": "#542e25",
-                          "kind": "limit_bar",
-                          "label": "100%",
-                          "left": 1.0,
-                          "pace": 0.579365074634552,
-                          "reset": "4d 1h"
-                        },
-                        {
-                          "badge": "TW",
-                          "color": "#542e25",
-                          "kind": "limit_bar",
-                          "label": "100%",
-                          "left": 1.0,
-                          "pace": 0.579365074634552,
-                          "reset": "4d 1h"
-                        }
-                      ],
-                      "gap": 8.0,
-                      "kind": "row"
-                    },
-                    {
-                      "kind": "spacer"
-                    }
-                  ],
-                  "kind": "stack"
-                }
-              ],
-              "columns": 2,
-              "gap": 14.0,
-              "kind": "grid"
-            },
-            "kind": "card"
+            "gap": 6.0,
+            "kind": "stack"
           }
         ],
         "gap": 10.0,
-        "kind": "stack"
+        "kind": "list"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "Live from T3 Code",
       "refresh": true
     },
     "medium": {
@@ -393,189 +212,96 @@
           {
             "children": [
               {
-                "color": "label",
-                "icon": "dot",
-                "kind": "icon",
-                "size": 10.0
+                "children": [
+                  {
+                    "color": "#d97757",
+                    "icon": "dot",
+                    "kind": "icon",
+                    "size": 8.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "subheadline",
+                    "text": "Claude"
+                  }
+                ],
+                "gap": 6.0,
+                "kind": "row"
               },
               {
-                "align": "start",
-                "kind": "text",
-                "role": "headline",
-                "text": "Codex"
+                "color": "warning",
+                "fraction": 0.13999998569488525,
+                "kind": "meter",
+                "label": "Weekly · sn",
+                "mark": 0.4285714328289032,
+                "note": "resets in 3d",
+                "value": "14% left"
               }
             ],
-            "gap": 8.0,
-            "kind": "row"
+            "gap": 6.0,
+            "kind": "stack"
           },
           {
-            "child": {
-              "children": [
-                {
-                  "children": [
-                    {
-                      "align": "start",
-                      "color": "secondary",
-                      "kind": "text",
-                      "role": "callout",
-                      "text": "Weekly"
-                    },
-                    {
-                      "align": "start",
-                      "kind": "text",
-                      "role": "title1",
-                      "text": "34% left"
-                    }
-                  ],
-                  "gap": 2.0,
-                  "kind": "stack"
-                },
-                {
-                  "children": [
-                    {
-                      "color": "#606062",
-                      "kind": "limit_bar",
-                      "left": 0.3399999737739563,
-                      "pace": 0.7222222089767456,
-                      "reset": "5d 1h"
-                    }
-                  ],
-                  "gap": 8.0,
-                  "kind": "row"
-                }
-              ],
-              "gap": 6.0,
-              "kind": "stack"
-            },
-            "kind": "card"
+            "fraction": 0.5699999928474426,
+            "kind": "meter",
+            "label": "Weekly · snowy7",
+            "note": "resets in 3d",
+            "value": "57% left"
+          },
+          {
+            "fraction": 1.0,
+            "kind": "meter",
+            "label": "Weekly · Fable · snowy7",
+            "note": "full",
+            "value": "100% left"
+          },
+          {
+            "fraction": 1.0,
+            "kind": "meter",
+            "label": "Weekly · Fable · sn",
+            "note": "full",
+            "value": "100% left"
           },
           {
             "children": [
               {
-                "color": "#d97757",
-                "icon": "dot",
-                "kind": "icon",
-                "size": 10.0
+                "children": [
+                  {
+                    "color": "secondary",
+                    "icon": "dot",
+                    "kind": "icon",
+                    "size": 8.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "subheadline",
+                    "text": "Codex"
+                  }
+                ],
+                "gap": 6.0,
+                "kind": "row"
               },
               {
-                "align": "start",
-                "kind": "text",
-                "role": "headline",
-                "text": "Claude"
+                "fraction": 0.26999998092651367,
+                "kind": "meter",
+                "label": "Weekly",
+                "mark": 0.6845238208770752,
+                "note": "resets in 4d 19h",
+                "value": "27% left"
               }
             ],
-            "gap": 8.0,
-            "kind": "row"
-          },
-          {
-            "child": {
-              "children": [
-                {
-                  "children": [
-                    {
-                      "align": "start",
-                      "color": "secondary",
-                      "kind": "text",
-                      "role": "callout",
-                      "text": "Weekly"
-                    },
-                    {
-                      "align": "start",
-                      "kind": "text",
-                      "role": "title1",
-                      "text": "64% left"
-                    }
-                  ],
-                  "gap": 2.0,
-                  "kind": "stack"
-                },
-                {
-                  "children": [
-                    {
-                      "badge": "ON",
-                      "color": "#542e25",
-                      "kind": "limit_bar",
-                      "label": "57%",
-                      "left": 0.5699999928474426,
-                      "pace": 0.579365074634552,
-                      "reset": "4d 1h"
-                    },
-                    {
-                      "badge": "TW",
-                      "color": "#542e25",
-                      "kind": "limit_bar",
-                      "label": "71%",
-                      "left": 0.7100000381469727,
-                      "pace": 0.579365074634552,
-                      "reset": "4d 1h"
-                    }
-                  ],
-                  "gap": 8.0,
-                  "kind": "row"
-                }
-              ],
-              "gap": 6.0,
-              "kind": "stack"
-            },
-            "kind": "card"
-          },
-          {
-            "child": {
-              "children": [
-                {
-                  "children": [
-                    {
-                      "align": "start",
-                      "color": "secondary",
-                      "kind": "text",
-                      "role": "callout",
-                      "text": "Weekly · Fable"
-                    },
-                    {
-                      "align": "start",
-                      "kind": "text",
-                      "role": "title1",
-                      "text": "100% left"
-                    }
-                  ],
-                  "gap": 2.0,
-                  "kind": "stack"
-                },
-                {
-                  "children": [
-                    {
-                      "badge": "ON",
-                      "color": "#542e25",
-                      "kind": "limit_bar",
-                      "label": "100%",
-                      "left": 1.0,
-                      "pace": 0.579365074634552,
-                      "reset": "4d 1h"
-                    },
-                    {
-                      "badge": "TW",
-                      "color": "#542e25",
-                      "kind": "limit_bar",
-                      "label": "100%",
-                      "left": 1.0,
-                      "pace": 0.579365074634552,
-                      "reset": "4d 1h"
-                    }
-                  ],
-                  "gap": 8.0,
-                  "kind": "row"
-                }
-              ],
-              "gap": 6.0,
-              "kind": "stack"
-            },
-            "kind": "card"
+            "gap": 6.0,
+            "kind": "stack"
           }
         ],
         "gap": 10.0,
-        "kind": "stack"
+        "kind": "list"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "Live from T3 Code",
       "refresh": true
     },
     "small": {
@@ -586,17 +312,17 @@
           },
           {
             "align": "start",
-            "color": "label",
+            "color": "warning",
             "kind": "text",
             "role": "large_title",
-            "text": "34%"
+            "text": "14%"
           },
           {
             "align": "start",
             "color": "secondary",
             "kind": "text",
             "role": "caption",
-            "text": "Codex · Weekly left"
+            "text": "Claude · Weekly left"
           },
           {
             "kind": "spacer"
@@ -605,7 +331,7 @@
         "gap": 2.0,
         "kind": "stack"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "Live from T3 Code",
       "refresh": true
     }
   },
@@ -656,7 +382,7 @@
         "gap": 8.0,
         "kind": "stack"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "Live from T3 Code",
       "refresh": true
     },
     "medium": {
@@ -698,7 +424,7 @@
         "gap": 8.0,
         "kind": "stack"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "Live from T3 Code",
       "refresh": true
     },
     "small": {
@@ -722,7 +448,7 @@
         "gap": 10.0,
         "kind": "stack"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "Live from T3 Code",
       "refresh": true
     }
   },
@@ -731,833 +457,268 @@
       "body": {
         "children": [
           {
-            "align": "start",
-            "kind": "text",
-            "role": "title1",
-            "text": "20"
+            "action": "thread:thread-0",
+            "detail": "Opus 5.5 · waiting 4m",
+            "kind": "item",
+            "tag": "Approve",
+            "title": "Review desktop permissions",
+            "tone": "warning"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "running · 20 threads"
+            "action": "thread:thread-3",
+            "detail": "Codex · running 1m",
+            "kind": "item",
+            "tag": "Starting",
+            "title": "Decode server.getConfig without a Value tree",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-0",
-                "detail": "GPT-6.1 Sol",
-                "icon": "message",
-                "kind": "list_row",
-                "title": "Review desktop permissions",
-                "trailing": ""
-              },
-              {
-                "color": "#fcd34d",
-                "dot": false,
-                "kind": "tag",
-                "label": "Pending Approval"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-1",
+            "detail": "Opus 5.5 · running 12m · 4 agents",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Redesign the T3 faces in mypaper's own style",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-1",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 2",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:agent-0",
+            "kind": "item",
+            "nested": true,
+            "tag": "Working",
+            "title": "Check size sheet cell 1",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-2",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 3",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:agent-1",
+            "kind": "item",
+            "nested": true,
+            "tag": "Working",
+            "title": "Check size sheet cell 2",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-3",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 4",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:agent-2",
+            "kind": "item",
+            "nested": true,
+            "tag": "Working",
+            "title": "Check size sheet cell 3",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-4",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 5",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-2",
+            "detail": "GPT-6.1 Sol · running 25m",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Fix half-size plugin layout",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-5",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 6",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-6",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 6",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-6",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 7",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-7",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 7",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-7",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 8",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-8",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 8",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-8",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 9",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-9",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 9",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-9",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 10",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-10",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 10",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-10",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 11",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-11",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 11",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-11",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 12",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-12",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 12",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-12",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 13",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-13",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 13",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-13",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 14",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-4",
+            "detail": "GPT-6.1 Sol · 18m ago",
+            "kind": "item",
+            "tag": "Done",
+            "title": "Wire the dock magnification spring",
+            "tone": "positive"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-14",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 15",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-15",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 16",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-16",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 17",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-17",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 18",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-18",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 19",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-19",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 20",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-5",
+            "detail": "Codex · 1h ago",
+            "kind": "item",
+            "tag": "Failed",
+            "title": "Port Discord notifications",
+            "tone": "destructive"
           }
         ],
         "gap": 2.0,
-        "kind": "stack"
+        "kind": "list"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "12 threads running · 4 agents",
       "refresh": true
     },
     "medium": {
       "body": {
         "children": [
           {
-            "children": [
-              {
-                "action": "thread:thread-0",
-                "detail": "GPT-6.1 Sol",
-                "icon": "message",
-                "kind": "list_row",
-                "title": "Review desktop permissions",
-                "trailing": ""
-              },
-              {
-                "color": "#fcd34d",
-                "dot": false,
-                "kind": "tag",
-                "label": "Pending Approval"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-0",
+            "detail": "Opus 5.5 · waiting 4m",
+            "kind": "item",
+            "tag": "Approve",
+            "title": "Review desktop permissions",
+            "tone": "warning"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-1",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 2",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-3",
+            "detail": "Codex · running 1m",
+            "kind": "item",
+            "tag": "Starting",
+            "title": "Decode server.getConfig without a Value tree",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-2",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 3",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-1",
+            "detail": "Opus 5.5 · running 12m · 4 agents",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Redesign the T3 faces in mypaper's own style",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-3",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 4",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-2",
+            "detail": "GPT-6.1 Sol · running 25m",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Fix half-size plugin layout",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-4",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 5",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-6",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 6",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-5",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 6",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-7",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 7",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-6",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 7",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-8",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 8",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-7",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 8",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-9",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 9",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-8",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 9",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-10",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 10",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-9",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 10",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-11",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 11",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-10",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 11",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-12",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 12",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-11",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 12",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-13",
+            "detail": "Codex · running 1h",
+            "kind": "item",
+            "tag": "Working",
+            "title": "Build native widget 13",
+            "tone": "secondary"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-12",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 13",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-4",
+            "detail": "GPT-6.1 Sol · 18m ago",
+            "kind": "item",
+            "tag": "Done",
+            "title": "Wire the dock magnification spring",
+            "tone": "positive"
           },
           {
-            "children": [
-              {
-                "action": "thread:thread-13",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 14",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-14",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 15",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-15",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 16",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-16",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 17",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-17",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 18",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-18",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 19",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
-          },
-          {
-            "children": [
-              {
-                "action": "thread:thread-19",
-                "detail": "GPT-6.1 Sol",
-                "icon": "terminal",
-                "kind": "list_row",
-                "title": "Build native widget 20",
-                "trailing": ""
-              },
-              {
-                "color": "#7dd3fc",
-                "dot": false,
-                "kind": "tag",
-                "label": "Working"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "action": "thread:thread-5",
+            "detail": "Codex · 1h ago",
+            "kind": "item",
+            "tag": "Failed",
+            "title": "Port Discord notifications",
+            "tone": "destructive"
           }
         ],
         "gap": 2.0,
-        "kind": "stack"
+        "kind": "list"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "12 threads running · 4 agents",
       "refresh": true
     },
     "small": {
@@ -1567,33 +728,18 @@
             "kind": "spacer"
           },
           {
-            "children": [
-              {
-                "align": "start",
-                "color": "label",
-                "kind": "text",
-                "role": "large_title",
-                "text": "20"
-              },
-              {
-                "color": "#fcd34d",
-                "dot": true,
-                "kind": "tag",
-                "label": "Pending Approval"
-              },
-              {
-                "kind": "spacer"
-              }
-            ],
-            "gap": 6.0,
-            "kind": "row"
+            "align": "start",
+            "color": "label",
+            "kind": "text",
+            "role": "large_title",
+            "text": "12"
           },
           {
             "align": "start",
             "color": "secondary",
             "kind": "text",
             "role": "caption",
-            "text": "20 threads"
+            "text": "running · 4 agents"
           },
           {
             "kind": "spacer"
@@ -1602,7 +748,7 @@
         "gap": 2.0,
         "kind": "stack"
       },
-      "footer": "Live from your local T3 Code",
+      "footer": "12 threads running · 4 agents",
       "refresh": true
     }
   },
@@ -1611,43 +757,30 @@
       "body": {
         "children": [
           {
-            "align": "start",
-            "kind": "text",
-            "role": "large_title",
-            "text": "$16,113.46"
-          },
-          {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "1022 sessions · 30 days"
-          },
-          {
-            "detail": "386 sessions · 69.9% of cost · 37.5B tokens",
-            "kind": "list_row",
-            "title": "Claude Code",
-            "trailing": "$11,256.61"
-          },
-          {
-            "detail": "636 sessions · 30.1% of cost · 11.7B tokens",
-            "kind": "list_row",
-            "title": "Codex",
-            "trailing": "$4,856.85"
-          },
-          {
-            "align": "start",
-            "color": "label",
-            "kind": "text",
-            "role": "subheadline",
-            "text": "Daily cost"
+            "children": [
+              {
+                "align": "start",
+                "kind": "text",
+                "role": "large_title",
+                "text": "$16,113.46"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "footnote",
+                "text": "1022 sessions · 30 days"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "stack"
           },
           {
             "kind": "area_chart",
             "series": [
               {
-                "color": "#542e25",
-                "label": "claudeAgent",
+                "color": "#d97757",
+                "label": "Claude Code",
                 "values": [
                   0.0,
                   386.5306091308594,
@@ -1682,8 +815,8 @@
                 ]
               },
               {
-                "color": "#606062",
-                "label": "codex",
+                "color": "label",
+                "label": "Codex",
                 "values": [
                   240.88955688476562,
                   227.32435607910156,
@@ -1723,9 +856,21 @@
               "10-22",
               "11-05"
             ]
+          },
+          {
+            "detail": "386 sessions · 37.5B tokens",
+            "kind": "list_row",
+            "title": "Claude Code",
+            "trailing": "$11,256.61"
+          },
+          {
+            "detail": "636 sessions · 11.7B tokens",
+            "kind": "list_row",
+            "title": "Codex",
+            "trailing": "$4,856.85"
           }
         ],
-        "gap": 4.0,
+        "gap": 6.0,
         "kind": "stack"
       },
       "footer": "30 days to 2026-11-05 · UTC",
@@ -1735,26 +880,41 @@
       "body": {
         "children": [
           {
-            "align": "start",
-            "kind": "text",
-            "role": "large_title",
-            "text": "$16,113.46"
+            "children": [
+              {
+                "align": "start",
+                "kind": "text",
+                "role": "large_title",
+                "text": "$16,113.46"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "footnote",
+                "text": "1022 sessions · 30 days"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "stack"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "1022 sessions · 30 days"
-          },
-          {
-            "detail": "386 sessions · 69.9% of cost · 37.5B tokens",
+            "detail": "386 sessions · 37.5B tokens",
             "kind": "list_row",
             "title": "Claude Code",
             "trailing": "$11,256.61"
+          },
+          {
+            "detail": "636 sessions · 11.7B tokens",
+            "kind": "list_row",
+            "title": "Codex",
+            "trailing": "$4,856.85"
+          },
+          {
+            "kind": "spacer"
           }
         ],
-        "gap": 4.0,
+        "gap": 6.0,
         "kind": "stack"
       },
       "footer": "30 days to 2026-11-05 · UTC",

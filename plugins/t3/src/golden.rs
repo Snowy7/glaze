@@ -1,6 +1,7 @@
-//! View goldens: every face at every size class from the same fixture the shell's native T3
-//! faces were checked with. `golden/faces.json` is what the plugin sends; the shell renders it
-//! into `plugin-t3-sizes.png` (crates/shell, `views::plugin_tests`). `MYPAPER_BLESS=1` rewrites.
+//! View goldens: every face at every size class, for the main fixture (`golden/faces.json`) and
+//! for the edge cases (`golden/edges.json`). The shell renders both into size sheets
+//! (`plugin-t3-sizes.png`, `plugin-t3-edges.png`; crates/shell, `views::plugin_tests`).
+//! `MYPAPER_BLESS=1` rewrites.
 use crate::t3::{self, History, Limit, ProviderHistory, Status, Thread, ThreadDetail};
 use crate::{Availability, Data, Snapshot};
 use mypaper_plugin_sdk::SizeClass;
@@ -9,6 +10,11 @@ use std::collections::BTreeMap;
 
 /// 2026-11-05 08:00 UTC, the native fixture's clock.
 const NOW: i64 = 1_793_875_200_000;
+
+/// `mins` before [`NOW`], as T3 writes it.
+fn before(mins: i64) -> String {
+    chrono::DateTime::from_timestamp_millis(NOW - mins * 60_000).unwrap().to_rfc3339()
+}
 
 fn history() -> History {
     let days: Vec<String> = (7..=31)
@@ -40,84 +46,184 @@ fn history() -> History {
     }
 }
 
-pub fn fixture() -> Snapshot {
-    let threads: Vec<Thread> = (0..20)
-        .map(|i| Thread {
-            id: format!("thread-{i}"),
-            project_id: "paper".into(),
-            title: if i == 0 { "Review desktop permissions".into() } else { format!("Build native widget {}", i + 1) },
-            provider_instance_id: "codex".into(),
-            status: if i == 0 { Status::Waiting } else { Status::Running },
-            latest_run_id: Some(format!("run-{i}")),
-            active_run_id: Some(format!("run-{i}")),
-            pending_runtime_request: (i == 0).then(|| t3::Request { id: "approval".into(), kind: "command".into() }),
-            updated_at: "2026-11-05".into(),
-        })
-        .collect();
-    let details = threads
-        .iter()
-        .map(|t| (t.id.clone(), ThreadDetail { model: "GPT-6.1 Sol".into(), agent: t.id != "thread-0", ..Default::default() }))
-        .collect();
-    let limit = |driver: &str, provider: &str, account: &str, window: &str, used_permille, resets: &str| Limit {
+fn thread(id: &str, title: &str, status: Status, mins_ago: Option<i64>) -> Thread {
+    Thread {
+        id: id.into(),
+        project_id: "paper".into(),
+        title: title.into(),
+        provider_instance_id: "codex".into(),
+        status,
+        latest_run_id: Some(format!("run-{id}")),
+        active_run_id: Some(format!("run-{id}")),
+        pending_runtime_request: None,
+        updated_at: mins_ago.map(before).unwrap_or_else(|| "2026-11-05".into()),
+    }
+}
+
+fn limit(driver: &str, provider: &str, account: &str, window: &str, used_permille: u32, resets_in_mins: Option<i64>) -> Limit {
+    Limit {
         driver: driver.into(),
         provider: provider.into(),
-        instance: account.into(),
+        instance: format!("{driver}-{account}"),
         account: account.into(),
         window: window.into(),
         used_permille,
-        resets_at: Some(resets.into()),
+        resets_at: resets_in_mins.map(|m| before(-m)),
         duration_mins: Some(7 * 24 * 60),
-    };
-    let mut limits = vec![limit("codex", "Codex", "alex@example.test", "Weekly", 660, "2026-11-10T12:00:00.000Z")];
-    for (account, used) in [("one@example.test", 430), ("two@example.test", 290)] {
-        for (window, used) in [("Weekly", used), ("Weekly · Fable", 0)] {
-            limits.push(limit("claudeAgent", "Claude", account, window, used, "2026-11-09T12:00:00.000Z"));
-        }
     }
+}
+
+fn snapshot(availability: Availability, threads: Vec<Thread>, details: Vec<(&str, ThreadDetail)>, limits: Vec<Limit>, history: Option<History>) -> Snapshot {
     Snapshot {
-        availability: Availability::Live,
+        availability,
         data: Some(Data::T3(t3::Snapshot {
             threads,
-            details,
+            details: details.into_iter().map(|(id, d)| (id.into(), d)).collect(),
             projects: BTreeMap::from([("paper".into(), "mypaper".into())]),
             environment_id: Some("fixture".into()),
-            models: vec![t3::ModelChoice {
-                provider: "codex".into(),
-                provider_name: "Codex".into(),
-                model: "sol".into(),
-                name: "GPT-6.1 Sol".into(),
-            }],
+            models: vec![t3::ModelChoice { provider: "codex".into(), provider_name: "Codex".into(), model: "sol".into(), name: "GPT-6.1 Sol".into() }],
             permissions: vec!["orchestration:read".into(), "orchestration:operate".into(), "diagnostics:read".into()],
             usage_day: Some("2026-11-05".into()),
-            history: Some(history()),
+            history,
             limits,
             ..Default::default()
         })),
     }
 }
 
-/// `{ face: { size: Face } }` for every face and size class.
-pub fn faces() -> Value {
-    let snapshot = fixture();
-    let mut out = Map::new();
-    for face in ["running", "usage", "limits", "attention", "new"] {
-        let sizes: Map<String, Value> = [("small", SizeClass::Small), ("medium", SizeClass::Medium), ("large", SizeClass::Large)]
-            .into_iter()
-            .map(|(name, size)| (name.into(), json!(crate::faces::face(face, size, &snapshot, &crate::faces::Pick::default(), NOW))))
-            .collect();
-        out.insert(face.into(), sizes.into());
-    }
-    out.into()
+fn model(m: &str) -> ThreadDetail {
+    ThreadDetail { model: m.into(), ..Default::default() }
 }
 
-#[test]
-fn faces_match_the_view_golden() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden/faces.json");
-    let actual = serde_json::to_string_pretty(&faces()).unwrap() + "\n";
+fn agent_of(parent: &str) -> ThreadDetail {
+    ThreadDetail { model: "GPT-6.1 Sol".into(), parent_id: Some(parent.into()), agent: true, ..Default::default() }
+}
+
+/// The everyday state: an approval waiting, threads with subagents, recent completions, and the
+/// user's own limits (Codex, and Claude reported for two accounts plus one duplicate).
+pub fn fixture() -> Snapshot {
+    let mut approval = thread("thread-0", "Review desktop permissions", Status::Waiting, Some(4));
+    approval.pending_runtime_request = Some(t3::Request { id: "approval".into(), kind: "command".into() });
+    let mut threads = vec![
+        approval,
+        thread("thread-1", "Redesign the T3 faces in mypaper's own style", Status::Running, Some(12)),
+        thread("thread-2", "Fix half-size plugin layout", Status::Running, Some(25)),
+        thread("thread-3", "Decode server.getConfig without a Value tree", Status::Starting, Some(1)),
+        thread("thread-4", "Wire the dock magnification spring", Status::Completed, Some(18)),
+        thread("thread-5", "Port Discord notifications", Status::Failed, Some(64)),
+    ];
+    threads.extend((0..4).map(|i| thread(&format!("agent-{i}"), &format!("Check size sheet cell {}", i + 1), Status::Running, Some(6))));
+    threads.extend((6..14).map(|i| thread(&format!("thread-{i}"), &format!("Build native widget {i}"), Status::Running, Some(90 + i))));
+    let mut details: Vec<(&str, ThreadDetail)> = vec![("thread-0", model("Opus 5.5")), ("thread-1", model("Opus 5.5")), ("thread-2", model("GPT-6.1 Sol")), ("thread-4", model("GPT-6.1 Sol"))];
+    details.extend(["agent-0", "agent-1", "agent-2", "agent-3"].map(|id| (id, agent_of("thread-1"))));
+    let days = |d: i64| Some(d * 24 * 60);
+    let limits = vec![
+        limit("codex", "Codex", "you@example.com", "Weekly", 730, Some(4 * 24 * 60 + 19 * 60)),
+        limit("claudeAgent", "Claude", "you@example.com", "Weekly", 430, days(3)),
+        limit("claudeAgent", "Claude", "you@example.com", "Weekly", 860, days(3)),
+        limit("claudeAgent", "Claude", "you@example.com", "Weekly", 430, days(3)),
+        limit("claudeAgent", "Claude", "you@example.com", "Weekly · Fable", 0, days(3)),
+        limit("claudeAgent", "Claude", "you@example.com", "Weekly · Fable", 0, days(3)),
+    ];
+    snapshot(Availability::Live, threads, details, limits, Some(history()))
+}
+
+/// The edge cases, each a named snapshot.
+pub fn edges() -> Vec<(&'static str, Snapshot)> {
+    let long = "Investigate why the dock's liquid glass rim flickers on the secondary monitor after a DPI change while a fullscreen app is open";
+    let one = snapshot(
+        Availability::Live,
+        vec![thread("solo", long, Status::Running, None)],
+        vec![],
+        vec![
+            limit("claudeAgent", "Claude", "", "5-hour", 1000, Some(95)),
+            limit("claudeAgent", "Claude", "", "Weekly", 880, Some(2 * 24 * 60)),
+            limit("codex", "Codex", "", "Weekly", 0, None),
+        ],
+        None,
+    );
+    let mut many_limits = Vec::new();
+    for (i, account) in ["a.very.long.address.for.work@an-extremely-long-company-domain.example", "alex@home.example", "alex@work.example", "ops@team.example", "ci@team.example", "bot@team.example"].iter().enumerate() {
+        many_limits.push(limit("claudeAgent", "Claude", account, "Weekly", 150 + i as u32 * 140, Some(30 * (i as i64 + 1))));
+    }
+    // The same label twice with different numbers: two orgs behind one login.
+    many_limits.push(limit("codex", "Codex", "you@example.com", "5-hour", 950, Some(40)));
+    many_limits.push(limit("codex", "Codex", "you@example.com", "5-hour", 200, Some(40)));
+    let many = snapshot(
+        Availability::Live,
+        (0..30).map(|i| thread(&format!("t{i}"), &format!("Thread number {i}"), if i % 7 == 0 { Status::Waiting } else { Status::Running }, Some(i * 3))).map(|mut t| {
+            if t.status == Status::Waiting {
+                t.pending_runtime_request = Some(t3::Request { id: "q".into(), kind: "user_input".into() });
+            }
+            t
+        }).collect(),
+        vec![],
+        many_limits,
+        Some(history()),
+    );
+    let mut stale = fixture();
+    stale.availability = Availability::Stale("socket closed".into());
+    vec![
+        ("empty", snapshot(Availability::Live, vec![], vec![], vec![], None)),
+        ("one", one),
+        ("many", many),
+        ("stale", stale),
+        ("connecting", Snapshot { availability: Availability::Connecting, data: None }),
+        ("unavailable", Snapshot { availability: Availability::Unavailable("T3 Code isn't running on this PC.".into()), data: None }),
+    ]
+}
+
+const FACES: [&str; 5] = ["running", "usage", "limits", "attention", "new"];
+const SIZES: [(&str, SizeClass); 3] = [("small", SizeClass::Small), ("medium", SizeClass::Medium), ("large", SizeClass::Large)];
+
+fn sheet(snapshot: &Snapshot, faces: &[&str]) -> Map<String, Value> {
+    let mut out = Map::new();
+    for face in faces {
+        let sizes: Map<String, Value> = SIZES
+            .into_iter()
+            .map(|(name, size)| (name.into(), json!(crate::faces::face(face, size, snapshot, &crate::faces::Pick::default(), NOW))))
+            .collect();
+        out.insert((*face).into(), sizes.into());
+    }
+    out
+}
+
+/// `{ face: { size: Face } }` for every face and size class.
+pub fn faces() -> Value {
+    sheet(&fixture(), &FACES).into()
+}
+
+/// `{ case: { face: { size: Face } } }` for the faces each edge case is about.
+pub fn edge_faces() -> Value {
+    let faces = ["running", "attention", "limits", "usage"];
+    edges().into_iter().map(|(name, s)| (name.to_owned(), Value::from(sheet(&s, &faces)))).collect::<Map<_, _>>().into()
+}
+
+fn check(name: &str, actual: Value) {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden").join(name);
+    let actual = serde_json::to_string_pretty(&actual).unwrap() + "\n";
     if std::env::var_os("MYPAPER_BLESS").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, &actual).unwrap();
     }
     let golden = std::fs::read_to_string(&path).expect("run with MYPAPER_BLESS=1 to write the golden");
-    assert_eq!(golden.replace("\r\n", "\n"), actual, "T3 faces changed; check plugin-t3-sizes.png and bless");
+    assert_eq!(golden.replace("\r\n", "\n"), actual, "T3 faces changed; check the size sheets and bless");
+}
+
+#[test]
+fn faces_match_the_view_golden() {
+    check("faces.json", faces());
+    check("edges.json", edge_faces());
+}
+
+#[test]
+fn identical_reports_collapse_and_duplicate_labels_stay_apart() {
+    let json = serde_json::to_string(&faces()["limits"]["large"]).unwrap();
+    // Two Claude accounts by their names (never initials), the duplicate report folded away.
+    assert_eq!(json.matches("Weekly · snowy7").count(), 1, "{json}");
+    assert_eq!(json.matches("Weekly · sn\"").count(), 1, "{json}");
+    let edges = edge_faces();
+    let many = serde_json::to_string(&edges["many"]["limits"]["large"]).unwrap();
+    assert!(many.contains("snowy7 (2)"), "{many}");
+    assert!(many.contains("4 more accounts"), "{many}");
 }

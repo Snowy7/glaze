@@ -1,0 +1,2820 @@
+{
+  "connecting": {
+    "attention": {
+      "large": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      }
+    },
+    "limits": {
+      "large": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      }
+    },
+    "running": {
+      "large": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      }
+    },
+    "usage": {
+      "large": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "detail": "Waiting for your local T3 Code",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Connecting…"
+        },
+        "refresh": true
+      }
+    }
+  },
+  "empty": {
+    "attention": {
+      "large": {
+        "body": {
+          "detail": "Approvals and questions show up here.",
+          "icon": "check",
+          "kind": "empty",
+          "title": "All caught up"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Approvals and questions show up here.",
+          "icon": "check",
+          "kind": "empty",
+          "title": "All caught up"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "label",
+              "kind": "text",
+              "role": "large_title",
+              "text": "0"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "need you"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      }
+    },
+    "limits": {
+      "large": {
+        "body": {
+          "detail": "Limits show once a provider reports them.",
+          "icon": "gauge",
+          "kind": "empty",
+          "title": "No limits reported"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Limits show once a provider reports them.",
+          "icon": "gauge",
+          "kind": "empty",
+          "title": "No limits reported"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "detail": "Limits show once a provider reports them.",
+          "icon": "gauge",
+          "kind": "empty",
+          "title": "No limits reported"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      }
+    },
+    "running": {
+      "large": {
+        "body": {
+          "detail": "Threads you start in T3 Code show up here.",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Nothing running"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Threads you start in T3 Code show up here.",
+          "icon": "terminal",
+          "kind": "empty",
+          "title": "Nothing running"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "label",
+              "kind": "text",
+              "role": "large_title",
+              "text": "0"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "running"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      }
+    },
+    "usage": {
+      "large": {
+        "body": {
+          "detail": "Usage appears after T3 reports it.",
+          "icon": "activity",
+          "kind": "empty",
+          "title": "No usage yet"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Usage appears after T3 reports it.",
+          "icon": "activity",
+          "kind": "empty",
+          "title": "No usage yet"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "detail": "Usage appears after T3 reports it.",
+          "icon": "activity",
+          "kind": "empty",
+          "title": "No usage yet"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      }
+    }
+  },
+  "many": {
+    "attention": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:t0",
+              "detail": "Codex · waiting <1m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 0",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t7",
+              "detail": "Codex · waiting 21m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 7",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t14",
+              "detail": "Codex · waiting 42m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 14",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t21",
+              "detail": "Codex · waiting 1h",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 21",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t28",
+              "detail": "Codex · waiting 1h",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 28",
+              "tone": "warning"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "5 threads need you",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:t0",
+              "detail": "Codex · waiting <1m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 0",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t7",
+              "detail": "Codex · waiting 21m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 7",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t14",
+              "detail": "Codex · waiting 42m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 14",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t21",
+              "detail": "Codex · waiting 1h",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 21",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t28",
+              "detail": "Codex · waiting 1h",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 28",
+              "tone": "warning"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "5 threads need you",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "warning",
+              "kind": "text",
+              "role": "large_title",
+              "text": "5"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "need you"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "5 threads need you",
+        "refresh": true
+      }
+    },
+    "limits": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "secondary",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Codex"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "color": "warning",
+                  "fraction": 0.050000011920928955,
+                  "kind": "meter",
+                  "label": "5-hour · snowy7",
+                  "note": "resets in 40m",
+                  "value": "5% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            {
+              "fraction": 0.800000011920929,
+              "kind": "meter",
+              "label": "5-hour · snowy7 (2)",
+              "note": "resets in 40m",
+              "value": "80% left"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "#d97757",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Claude"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "color": "warning",
+                  "fraction": 0.1499999761581421,
+                  "kind": "meter",
+                  "label": "Weekly · bot@team.example",
+                  "note": "resets in 3h",
+                  "value": "15% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            {
+              "fraction": 0.2900000214576721,
+              "kind": "meter",
+              "label": "Weekly · ci@team.example",
+              "note": "resets in 2h 30m",
+              "value": "29% left"
+            },
+            {
+              "align": "start",
+              "color": "tertiary",
+              "kind": "text",
+              "role": "footnote",
+              "text": "4 more accounts, all 43% left or more"
+            }
+          ],
+          "gap": 10.0,
+          "kind": "list"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "secondary",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Codex"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "color": "warning",
+                  "fraction": 0.050000011920928955,
+                  "kind": "meter",
+                  "label": "5-hour · snowy7",
+                  "note": "resets in 40m",
+                  "value": "5% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            {
+              "fraction": 0.800000011920929,
+              "kind": "meter",
+              "label": "5-hour · snowy7 (2)",
+              "note": "resets in 40m",
+              "value": "80% left"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "#d97757",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Claude"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "color": "warning",
+                  "fraction": 0.1499999761581421,
+                  "kind": "meter",
+                  "label": "Weekly · bot@team.example",
+                  "note": "resets in 3h",
+                  "value": "15% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            {
+              "fraction": 0.2900000214576721,
+              "kind": "meter",
+              "label": "Weekly · ci@team.example",
+              "note": "resets in 2h 30m",
+              "value": "29% left"
+            },
+            {
+              "align": "start",
+              "color": "tertiary",
+              "kind": "text",
+              "role": "footnote",
+              "text": "4 more accounts, all 43% left or more"
+            }
+          ],
+          "gap": 10.0,
+          "kind": "list"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "warning",
+              "kind": "text",
+              "role": "large_title",
+              "text": "5%"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "Codex · 5-hour left"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      }
+    },
+    "running": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:t0",
+              "detail": "Codex · waiting <1m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 0",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t7",
+              "detail": "Codex · waiting 21m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 7",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t14",
+              "detail": "Codex · waiting 42m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 14",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t21",
+              "detail": "Codex · waiting 1h",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 21",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t28",
+              "detail": "Codex · waiting 1h",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 28",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t1",
+              "detail": "Codex · running 3m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 1",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t2",
+              "detail": "Codex · running 6m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 2",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t3",
+              "detail": "Codex · running 9m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 3",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t4",
+              "detail": "Codex · running 12m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 4",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t5",
+              "detail": "Codex · running 15m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 5",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t6",
+              "detail": "Codex · running 18m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 6",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t8",
+              "detail": "Codex · running 24m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 8",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t9",
+              "detail": "Codex · running 27m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 9",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t10",
+              "detail": "Codex · running 30m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 10",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t11",
+              "detail": "Codex · running 33m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 11",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t12",
+              "detail": "Codex · running 36m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 12",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t13",
+              "detail": "Codex · running 39m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 13",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t15",
+              "detail": "Codex · running 45m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 15",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t16",
+              "detail": "Codex · running 48m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 16",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t17",
+              "detail": "Codex · running 51m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 17",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t18",
+              "detail": "Codex · running 54m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 18",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t19",
+              "detail": "Codex · running 57m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 19",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t20",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 20",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t22",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 22",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t23",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 23",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t24",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 24",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t25",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 25",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t26",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 26",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t27",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 27",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t29",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 29",
+              "tone": "secondary"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "30 threads running",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:t0",
+              "detail": "Codex · waiting <1m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 0",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t7",
+              "detail": "Codex · waiting 21m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 7",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t14",
+              "detail": "Codex · waiting 42m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 14",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t21",
+              "detail": "Codex · waiting 1h",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 21",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t28",
+              "detail": "Codex · waiting 1h",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Thread number 28",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:t1",
+              "detail": "Codex · running 3m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 1",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t2",
+              "detail": "Codex · running 6m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 2",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t3",
+              "detail": "Codex · running 9m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 3",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t4",
+              "detail": "Codex · running 12m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 4",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t5",
+              "detail": "Codex · running 15m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 5",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t6",
+              "detail": "Codex · running 18m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 6",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t8",
+              "detail": "Codex · running 24m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 8",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t9",
+              "detail": "Codex · running 27m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 9",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t10",
+              "detail": "Codex · running 30m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 10",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t11",
+              "detail": "Codex · running 33m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 11",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t12",
+              "detail": "Codex · running 36m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 12",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t13",
+              "detail": "Codex · running 39m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 13",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t15",
+              "detail": "Codex · running 45m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 15",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t16",
+              "detail": "Codex · running 48m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 16",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t17",
+              "detail": "Codex · running 51m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 17",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t18",
+              "detail": "Codex · running 54m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 18",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t19",
+              "detail": "Codex · running 57m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 19",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t20",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 20",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t22",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 22",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t23",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 23",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t24",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 24",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t25",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 25",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t26",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 26",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t27",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 27",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:t29",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Thread number 29",
+              "tone": "secondary"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "30 threads running",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "label",
+              "kind": "text",
+              "role": "large_title",
+              "text": "30"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "running"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "30 threads running",
+        "refresh": true
+      }
+    },
+    "usage": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "align": "start",
+                  "kind": "text",
+                  "role": "large_title",
+                  "text": "$16,113.46"
+                },
+                {
+                  "align": "start",
+                  "color": "secondary",
+                  "kind": "text",
+                  "role": "footnote",
+                  "text": "1022 sessions · 30 days"
+                }
+              ],
+              "gap": 0.0,
+              "kind": "stack"
+            },
+            {
+              "kind": "area_chart",
+              "series": [
+                {
+                  "color": "#d97757",
+                  "label": "Claude Code",
+                  "values": [
+                    0.0,
+                    386.5306091308594,
+                    591.2698364257812,
+                    517.9256591796875,
+                    200.99288940429688,
+                    210.46994018554688,
+                    522.9454956054688,
+                    589.4715576171875,
+                    378.7599792480469,
+                    10.088339805603027,
+                    394.19195556640625,
+                    592.9009399414062,
+                    512.7593383789062,
+                    191.4590301513672,
+                    219.88746643066406,
+                    527.8174438476562,
+                    587.5066528320312,
+                    370.88226318359375,
+                    20.173828125,
+                    401.7418518066406,
+                    594.3644409179688,
+                    507.4480895996094,
+                    181.87100219726562,
+                    229.2428436279297,
+                    532.5402221679688,
+                    585.3756103515625,
+                    362.8996887207031,
+                    30.253612518310547,
+                    409.17816162109375,
+                    595.6598510742188
+                  ]
+                },
+                {
+                  "color": "label",
+                  "label": "Codex",
+                  "values": [
+                    240.88955688476562,
+                    227.32435607910156,
+                    106.844970703125,
+                    63.885276794433594,
+                    204.56927490234375,
+                    249.04115295410156,
+                    176.3850860595703,
+                    20.772350311279297,
+                    144.6099395751953,
+                    241.97991943359375,
+                    225.54295349121094,
+                    103.02962493896484,
+                    67.9401626586914,
+                    206.9566192626953,
+                    248.6381378173828,
+                    173.3812713623047,
+                    16.580474853515625,
+                    148.0183868408203,
+                    243.0018768310547,
+                    223.69778442382812,
+                    99.18514251708984,
+                    71.975830078125,
+                    209.2854461669922,
+                    248.1648406982422,
+                    170.3284454345703,
+                    12.383910179138184,
+                    151.3849639892578,
+                    243.95513916015625,
+                    221.7893829345703,
+                    95.3126220703125
+                  ]
+                }
+              ],
+              "x_labels": [
+                "10-07",
+                "10-22",
+                "11-05"
+              ]
+            },
+            {
+              "detail": "386 sessions · 37.5B tokens",
+              "kind": "list_row",
+              "title": "Claude Code",
+              "trailing": "$11,256.61"
+            },
+            {
+              "detail": "636 sessions · 11.7B tokens",
+              "kind": "list_row",
+              "title": "Codex",
+              "trailing": "$4,856.85"
+            }
+          ],
+          "gap": 6.0,
+          "kind": "stack"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "align": "start",
+                  "kind": "text",
+                  "role": "large_title",
+                  "text": "$16,113.46"
+                },
+                {
+                  "align": "start",
+                  "color": "secondary",
+                  "kind": "text",
+                  "role": "footnote",
+                  "text": "1022 sessions · 30 days"
+                }
+              ],
+              "gap": 0.0,
+              "kind": "stack"
+            },
+            {
+              "detail": "386 sessions · 37.5B tokens",
+              "kind": "list_row",
+              "title": "Claude Code",
+              "trailing": "$11,256.61"
+            },
+            {
+              "detail": "636 sessions · 11.7B tokens",
+              "kind": "list_row",
+              "title": "Codex",
+              "trailing": "$4,856.85"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 6.0,
+          "kind": "stack"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "label",
+              "kind": "text",
+              "role": "large_title",
+              "text": "$16,113.46"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "1022 sessions · 30 days"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      }
+    }
+  },
+  "one": {
+    "attention": {
+      "large": {
+        "body": {
+          "detail": "Approvals and questions show up here.",
+          "icon": "check",
+          "kind": "empty",
+          "title": "All caught up"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Approvals and questions show up here.",
+          "icon": "check",
+          "kind": "empty",
+          "title": "All caught up"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "label",
+              "kind": "text",
+              "role": "large_title",
+              "text": "0"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "need you"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      }
+    },
+    "limits": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "#d97757",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Claude"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "color": "destructive",
+                  "fraction": 0.0,
+                  "kind": "meter",
+                  "label": "5-hour",
+                  "note": "resets in 1h 35m",
+                  "value": "0% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            {
+              "color": "warning",
+              "fraction": 0.12000000476837158,
+              "kind": "meter",
+              "label": "Weekly",
+              "mark": 0.2857142984867096,
+              "note": "resets in 2d",
+              "value": "12% left"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "secondary",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Codex"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "fraction": 1.0,
+                  "kind": "meter",
+                  "label": "Weekly",
+                  "value": "100% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            }
+          ],
+          "gap": 10.0,
+          "kind": "list"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "#d97757",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Claude"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "color": "destructive",
+                  "fraction": 0.0,
+                  "kind": "meter",
+                  "label": "5-hour",
+                  "note": "resets in 1h 35m",
+                  "value": "0% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            {
+              "color": "warning",
+              "fraction": 0.12000000476837158,
+              "kind": "meter",
+              "label": "Weekly",
+              "mark": 0.2857142984867096,
+              "note": "resets in 2d",
+              "value": "12% left"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "secondary",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Codex"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "fraction": 1.0,
+                  "kind": "meter",
+                  "label": "Weekly",
+                  "value": "100% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            }
+          ],
+          "gap": 10.0,
+          "kind": "list"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "destructive",
+              "kind": "text",
+              "role": "large_title",
+              "text": "0%"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "Claude · 5-hour left"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      }
+    },
+    "running": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:solo",
+              "detail": "Codex",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Investigate why the dock's liquid glass rim flickers on the secondary monitor after a DPI change while a fullscreen app is open",
+              "tone": "secondary"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "1 thread running",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:solo",
+              "detail": "Codex",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Investigate why the dock's liquid glass rim flickers on the secondary monitor after a DPI change while a fullscreen app is open",
+              "tone": "secondary"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "1 thread running",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "label",
+              "kind": "text",
+              "role": "large_title",
+              "text": "1"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "running"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "1 thread running",
+        "refresh": true
+      }
+    },
+    "usage": {
+      "large": {
+        "body": {
+          "detail": "Usage appears after T3 reports it.",
+          "icon": "activity",
+          "kind": "empty",
+          "title": "No usage yet"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Usage appears after T3 reports it.",
+          "icon": "activity",
+          "kind": "empty",
+          "title": "No usage yet"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "detail": "Usage appears after T3 reports it.",
+          "icon": "activity",
+          "kind": "empty",
+          "title": "No usage yet"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      }
+    }
+  },
+  "stale": {
+    "attention": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:thread-0",
+              "detail": "Opus 5.5 · waiting 4m",
+              "kind": "item",
+              "tag": "Approve",
+              "title": "Review desktop permissions",
+              "tone": "warning"
+            },
+            {
+              "children": [
+                {
+                  "action": "approve:thread-0:approval",
+                  "icon": "check",
+                  "kind": "button",
+                  "label": "Approve",
+                  "primary": false
+                },
+                {
+                  "action": "deny:thread-0:approval",
+                  "kind": "button",
+                  "label": "Deny",
+                  "primary": false
+                }
+              ],
+              "columns": 2,
+              "gap": 6.0,
+              "kind": "grid"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:thread-0",
+              "detail": "Opus 5.5 · waiting 4m",
+              "kind": "item",
+              "tag": "Approve",
+              "title": "Review desktop permissions",
+              "tone": "warning"
+            },
+            {
+              "children": [
+                {
+                  "action": "approve:thread-0:approval",
+                  "icon": "check",
+                  "kind": "button",
+                  "label": "Approve",
+                  "primary": false
+                },
+                {
+                  "action": "deny:thread-0:approval",
+                  "kind": "button",
+                  "label": "Deny",
+                  "primary": false
+                }
+              ],
+              "columns": 2,
+              "gap": 6.0,
+              "kind": "grid"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "warning",
+              "kind": "text",
+              "role": "large_title",
+              "text": "1"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "need you"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      }
+    },
+    "limits": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "#d97757",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Claude"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "color": "warning",
+                  "fraction": 0.13999998569488525,
+                  "kind": "meter",
+                  "label": "Weekly · sn",
+                  "mark": 0.4285714328289032,
+                  "note": "resets in 3d",
+                  "value": "14% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            {
+              "fraction": 0.5699999928474426,
+              "kind": "meter",
+              "label": "Weekly · snowy7",
+              "note": "resets in 3d",
+              "value": "57% left"
+            },
+            {
+              "fraction": 1.0,
+              "kind": "meter",
+              "label": "Weekly · Fable · snowy7",
+              "note": "full",
+              "value": "100% left"
+            },
+            {
+              "fraction": 1.0,
+              "kind": "meter",
+              "label": "Weekly · Fable · sn",
+              "note": "full",
+              "value": "100% left"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "secondary",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Codex"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "fraction": 0.26999998092651367,
+                  "kind": "meter",
+                  "label": "Weekly",
+                  "mark": 0.6845238208770752,
+                  "note": "resets in 4d 19h",
+                  "value": "27% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            }
+          ],
+          "gap": 10.0,
+          "kind": "list"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "#d97757",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Claude"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "color": "warning",
+                  "fraction": 0.13999998569488525,
+                  "kind": "meter",
+                  "label": "Weekly · sn",
+                  "mark": 0.4285714328289032,
+                  "note": "resets in 3d",
+                  "value": "14% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            {
+              "fraction": 0.5699999928474426,
+              "kind": "meter",
+              "label": "Weekly · snowy7",
+              "note": "resets in 3d",
+              "value": "57% left"
+            },
+            {
+              "fraction": 1.0,
+              "kind": "meter",
+              "label": "Weekly · Fable · snowy7",
+              "note": "full",
+              "value": "100% left"
+            },
+            {
+              "fraction": 1.0,
+              "kind": "meter",
+              "label": "Weekly · Fable · sn",
+              "note": "full",
+              "value": "100% left"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "color": "secondary",
+                      "icon": "dot",
+                      "kind": "icon",
+                      "size": 8.0
+                    },
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "subheadline",
+                      "text": "Codex"
+                    }
+                  ],
+                  "gap": 6.0,
+                  "kind": "row"
+                },
+                {
+                  "fraction": 0.26999998092651367,
+                  "kind": "meter",
+                  "label": "Weekly",
+                  "mark": 0.6845238208770752,
+                  "note": "resets in 4d 19h",
+                  "value": "27% left"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            }
+          ],
+          "gap": 10.0,
+          "kind": "list"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "warning",
+              "kind": "text",
+              "role": "large_title",
+              "text": "14%"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "Claude · Weekly left"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      }
+    },
+    "running": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:thread-0",
+              "detail": "Opus 5.5 · waiting 4m",
+              "kind": "item",
+              "tag": "Approve",
+              "title": "Review desktop permissions",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:thread-3",
+              "detail": "Codex · running 1m",
+              "kind": "item",
+              "tag": "Starting",
+              "title": "Decode server.getConfig without a Value tree",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-1",
+              "detail": "Opus 5.5 · running 12m · 4 agents",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Redesign the T3 faces in mypaper's own style",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:agent-0",
+              "kind": "item",
+              "nested": true,
+              "tag": "Working",
+              "title": "Check size sheet cell 1",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:agent-1",
+              "kind": "item",
+              "nested": true,
+              "tag": "Working",
+              "title": "Check size sheet cell 2",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:agent-2",
+              "kind": "item",
+              "nested": true,
+              "tag": "Working",
+              "title": "Check size sheet cell 3",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-2",
+              "detail": "GPT-6.1 Sol · running 25m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Fix half-size plugin layout",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-6",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 6",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-7",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 7",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-8",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 8",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-9",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 9",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-10",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 10",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-11",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 11",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-12",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 12",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-13",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 13",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-4",
+              "detail": "GPT-6.1 Sol · 18m ago",
+              "kind": "item",
+              "tag": "Done",
+              "title": "Wire the dock magnification spring",
+              "tone": "positive"
+            },
+            {
+              "action": "thread:thread-5",
+              "detail": "Codex · 1h ago",
+              "kind": "item",
+              "tag": "Failed",
+              "title": "Port Discord notifications",
+              "tone": "destructive"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:thread-0",
+              "detail": "Opus 5.5 · waiting 4m",
+              "kind": "item",
+              "tag": "Approve",
+              "title": "Review desktop permissions",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:thread-3",
+              "detail": "Codex · running 1m",
+              "kind": "item",
+              "tag": "Starting",
+              "title": "Decode server.getConfig without a Value tree",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-1",
+              "detail": "Opus 5.5 · running 12m · 4 agents",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Redesign the T3 faces in mypaper's own style",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-2",
+              "detail": "GPT-6.1 Sol · running 25m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Fix half-size plugin layout",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-6",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 6",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-7",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 7",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-8",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 8",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-9",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 9",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-10",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 10",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-11",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 11",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-12",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 12",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-13",
+              "detail": "Codex · running 1h",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Build native widget 13",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:thread-4",
+              "detail": "GPT-6.1 Sol · 18m ago",
+              "kind": "item",
+              "tag": "Done",
+              "title": "Wire the dock magnification spring",
+              "tone": "positive"
+            },
+            {
+              "action": "thread:thread-5",
+              "detail": "Codex · 1h ago",
+              "kind": "item",
+              "tag": "Failed",
+              "title": "Port Discord notifications",
+              "tone": "destructive"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "label",
+              "kind": "text",
+              "role": "large_title",
+              "text": "12"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "running · 4 agents"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      }
+    },
+    "usage": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "align": "start",
+                  "kind": "text",
+                  "role": "large_title",
+                  "text": "$16,113.46"
+                },
+                {
+                  "align": "start",
+                  "color": "secondary",
+                  "kind": "text",
+                  "role": "footnote",
+                  "text": "1022 sessions · 30 days"
+                }
+              ],
+              "gap": 0.0,
+              "kind": "stack"
+            },
+            {
+              "kind": "area_chart",
+              "series": [
+                {
+                  "color": "#d97757",
+                  "label": "Claude Code",
+                  "values": [
+                    0.0,
+                    386.5306091308594,
+                    591.2698364257812,
+                    517.9256591796875,
+                    200.99288940429688,
+                    210.46994018554688,
+                    522.9454956054688,
+                    589.4715576171875,
+                    378.7599792480469,
+                    10.088339805603027,
+                    394.19195556640625,
+                    592.9009399414062,
+                    512.7593383789062,
+                    191.4590301513672,
+                    219.88746643066406,
+                    527.8174438476562,
+                    587.5066528320312,
+                    370.88226318359375,
+                    20.173828125,
+                    401.7418518066406,
+                    594.3644409179688,
+                    507.4480895996094,
+                    181.87100219726562,
+                    229.2428436279297,
+                    532.5402221679688,
+                    585.3756103515625,
+                    362.8996887207031,
+                    30.253612518310547,
+                    409.17816162109375,
+                    595.6598510742188
+                  ]
+                },
+                {
+                  "color": "label",
+                  "label": "Codex",
+                  "values": [
+                    240.88955688476562,
+                    227.32435607910156,
+                    106.844970703125,
+                    63.885276794433594,
+                    204.56927490234375,
+                    249.04115295410156,
+                    176.3850860595703,
+                    20.772350311279297,
+                    144.6099395751953,
+                    241.97991943359375,
+                    225.54295349121094,
+                    103.02962493896484,
+                    67.9401626586914,
+                    206.9566192626953,
+                    248.6381378173828,
+                    173.3812713623047,
+                    16.580474853515625,
+                    148.0183868408203,
+                    243.0018768310547,
+                    223.69778442382812,
+                    99.18514251708984,
+                    71.975830078125,
+                    209.2854461669922,
+                    248.1648406982422,
+                    170.3284454345703,
+                    12.383910179138184,
+                    151.3849639892578,
+                    243.95513916015625,
+                    221.7893829345703,
+                    95.3126220703125
+                  ]
+                }
+              ],
+              "x_labels": [
+                "10-07",
+                "10-22",
+                "11-05"
+              ]
+            },
+            {
+              "detail": "386 sessions · 37.5B tokens",
+              "kind": "list_row",
+              "title": "Claude Code",
+              "trailing": "$11,256.61"
+            },
+            {
+              "detail": "636 sessions · 11.7B tokens",
+              "kind": "list_row",
+              "title": "Codex",
+              "trailing": "$4,856.85"
+            }
+          ],
+          "gap": 6.0,
+          "kind": "stack"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "children": [
+                {
+                  "align": "start",
+                  "kind": "text",
+                  "role": "large_title",
+                  "text": "$16,113.46"
+                },
+                {
+                  "align": "start",
+                  "color": "secondary",
+                  "kind": "text",
+                  "role": "footnote",
+                  "text": "1022 sessions · 30 days"
+                }
+              ],
+              "gap": 0.0,
+              "kind": "stack"
+            },
+            {
+              "detail": "386 sessions · 37.5B tokens",
+              "kind": "list_row",
+              "title": "Claude Code",
+              "trailing": "$11,256.61"
+            },
+            {
+              "detail": "636 sessions · 11.7B tokens",
+              "kind": "list_row",
+              "title": "Codex",
+              "trailing": "$4,856.85"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 6.0,
+          "kind": "stack"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "label",
+              "kind": "text",
+              "role": "large_title",
+              "text": "$16,113.46"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "1022 sessions · 30 days"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "Disconnected · showing last state",
+        "refresh": true
+      }
+    }
+  },
+  "unavailable": {
+    "attention": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      }
+    },
+    "limits": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      }
+    },
+    "running": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      }
+    },
+    "usage": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "detail": "T3 Code isn't running on this PC.",
+              "icon": "terminal",
+              "kind": "empty",
+              "title": "Connect T3 Code"
+            },
+            {
+              "action": "retry",
+              "kind": "button",
+              "label": "Retry",
+              "primary": false
+            }
+          ],
+          "kind": "stack"
+        },
+        "refresh": true
+      }
+    }
+  }
+}
