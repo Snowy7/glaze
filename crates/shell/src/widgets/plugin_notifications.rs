@@ -27,18 +27,26 @@ impl Notifications {
         let subscribers: Vec<String> = plugins.notification_instances().into_iter().filter(|i|visible(i)).map(str::to_owned).collect();
         let generation = crate::integrations::generation();
         if subscribers.is_empty() || self.generation!=Some(generation) {
-            self.lease=None; self.cards.clear(); self.revision=None;
+            self.lease=None; self.revision=None;
         }
         self.generation=Some(generation);
         if subscribers.is_empty() {self.subscribers.clear();return;}
-        if self.subscribers!=subscribers {self.cards.clear();self.revision=None;self.subscribers=subscribers;}
+        let replay = self.subscribers!=subscribers || self.lease.is_none();
+        if self.subscribers!=subscribers {self.revision=None;self.subscribers=subscribers;}
         if self.lease.is_none() {self.lease=crate::integrations::acquire(Provider::Notifications).ok();}
         let Some(snapshot) = self.lease.as_ref().map(Lease::snapshot) else {return};
         if self.revision==Some(snapshot.revision) {return;}
         self.revision=Some(snapshot.revision);
         let Some(Data::Notifications(snapshot)) = snapshot.data else {return};
         let cards: BTreeMap<_,_> = snapshot.cards.into_iter().map(|c|(c.id,c)).collect();
-        for event in changes(&self.cards,&cards) {plugins.system_event(SystemEvent::Notification(event.to_string()));}
+        let mut outgoing=changes(&self.cards,&cards);
+        if replay {
+            // Keep the last identities across a released lease, so removals during a hold
+            // reach returning subscribers too. New subscribers also receive every retained card.
+            outgoing.retain(|event|event["kind"]=="removed");
+            outgoing.extend(cards.values().map(|c|json!({"kind":"added","id":c.id,"card":card(c)})));
+        }
+        for event in outgoing {plugins.system_event(SystemEvent::Notification(event.to_string()));}
         self.cards=cards;
     }
 }
