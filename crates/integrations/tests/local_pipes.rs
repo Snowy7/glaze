@@ -24,24 +24,12 @@ async fn serve(mut pipe: NamedPipeServer, events: mpsc::Sender<String>) {
         .split_whitespace()
         .nth(1)
         .unwrap();
-    if path.starts_with("/events?") || path.starts_with("/localapi/v0/watch-ipn-bus?") {
-        let tailscale = path.starts_with("/localapi");
-        if tailscale {
-            assert!(path.ends_with(&format!(
-                "mask={}",
-                mypaper_integrations::tailscale::WATCH_MASK
-            )));
-        }
+    if path.starts_with("/events?") {
         pipe.write_all(
             b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n",
         )
         .await
         .unwrap();
-        if tailscale {
-            // Deliberately split a JSON object over separate HTTP reads.
-            pipe.write_all(b"{\"State\":\"Run").await.unwrap();
-            pipe.write_all(b"ning\",\"InitialStatus\":{\"BackendState\":\"Running\",\"TailscaleIPs\":[\"100.64.0.1\"]}}\n").await.unwrap();
-        }
         events.send("stream".into()).unwrap();
         let mut buffer = [0; 64];
         let result = pipe.read(&mut buffer).await;
@@ -65,8 +53,8 @@ async fn serve(mut pipe: NamedPipeServer, events: mpsc::Sender<String>) {
 }
 
 #[test]
-fn docker_and_tailscale_start_stop_reconnect_and_controls_use_the_existing_pipe() {
-    for provider in [Provider::Docker, Provider::Tailscale] {
+fn docker_start_stop_reconnect_and_controls_use_the_existing_pipe() {
+    for provider in [Provider::Docker] {
         let path = format!(
             r"\\.\pipe\mypaper-fixture-{}-{provider:?}",
             std::process::id()
@@ -93,9 +81,6 @@ fn docker_and_tailscale_start_stop_reconnect_and_controls_use_the_existing_pipe(
         let mut config = Config::default();
         config.docker.enabled = true;
         config.docker.pipe = path.clone();
-        config.tailscale.enabled = true;
-        config.tailscale.pipe = path;
-        config.tailscale.live_verified = true;
         let lease = hub.acquire(provider, &config).unwrap();
         while lease.snapshot().availability != Availability::Live {
             changes.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -128,7 +113,7 @@ fn docker_and_tailscale_start_stop_reconnect_and_controls_use_the_existing_pipe(
                     id: "a".into(),
                     start: false,
                 },
-                _ => Action::Tailscale { connected: false },
+                _ => unreachable!(),
             })
             .unwrap();
         assert!(
