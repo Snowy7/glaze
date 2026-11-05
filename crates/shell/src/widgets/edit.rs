@@ -182,8 +182,28 @@ pub fn ghost_view(size: (u32, u32), scale: f32, valid: bool) -> DisplayList {
     }
 }
 
+/// The old toolbar policy: use the bottom when widgets block the top and the bottom is clear.
+pub fn palette_origin(bounds: Rect, size: (u32, u32), scale: f32, widgets: &[Rect]) -> (i32, i32) {
+    let x = bounds.left + (bounds.width() - size.0 as f32) / 2.0;
+    let top = bounds.top + 10.0 * scale;
+    let bottom = (bounds.bottom - size.1 as f32 - 10.0 * scale).max(bounds.top);
+    let blocked = |y| {
+        let bar = Rect::new(x, y, size.0 as f32, size.1 as f32);
+        widgets.iter().any(|r| r.intersects(&bar))
+    };
+    let y = if blocked(top) && !blocked(bottom) {
+        bottom
+    } else {
+        top
+    };
+    (x.round() as i32, y.ceil() as i32)
+}
+
 pub fn overlaps(a: [u32; 2], size: [u32; 2], b: [u32; 2], other: [u32; 2]) -> bool {
-    (0..2).all(|i| a[i] < b[i] + other[i] && b[i] < a[i] + size[i])
+    (0..2).all(|i| {
+        u64::from(a[i]) < u64::from(b[i]) + u64::from(other[i])
+            && u64::from(b[i]) < u64::from(a[i]) + u64::from(size[i])
+    })
 }
 pub fn free(
     grid: &Grid,
@@ -667,7 +687,7 @@ mod tests {
         };
         let mut layout = Layout::default();
         let stable = layout.add("notes", "m", [4, 2], [4, 4]);
-        let clamped = layout.add("weather", "m", [7, 5], [5, 6]);
+        let clamped = layout.add("weather", "m", [9, 5], [2, 2]);
         let next = constrain(&grid, &layout.instances, "m", &registry);
         assert_eq!(
             next.iter().find(|i| i.instance == stable),
@@ -678,6 +698,14 @@ mod tests {
             grid.clamp(weather.cell, weather.size),
             (weather.cell, weather.size)
         );
+        assert!(free(
+            &grid,
+            weather.cell,
+            weather.size,
+            &next,
+            "m",
+            Some(&weather.instance)
+        ));
         // There is no room for a 5x6 beside a 4x4: bounds still win; ordinary collision
         // resolution refuses a gesture atomically rather than cascading unrelated widgets.
         assert!(
@@ -692,6 +720,14 @@ mod tests {
             )
             .is_none()
         );
+    }
+    #[test]
+    fn palette_uses_a_clear_edge_inside_the_usable_area() {
+        let area = Rect::new(0.0, 48.0, 2560.0, 1322.0);
+        let size = (954, 200);
+        assert_eq!(palette_origin(area, size, 1.0, &[]), (803, 58));
+        let widgets = [Rect::new(1072.0, 64.0, 415.0, 210.0)];
+        assert_eq!(palette_origin(area, size, 1.0, &widgets), (803, 1160));
     }
     #[test]
     fn tiny_usable_areas_never_expand_back_to_the_nominal_icon_cell() {

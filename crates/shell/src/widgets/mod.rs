@@ -62,6 +62,7 @@ pub const WM_LAYOUT: u32 = WM_APP + 102;
 pub const WM_DATA: u32 = WM_APP + 103;
 /// Explicit read-only performance checkpoint; never scheduled by the host.
 pub const WM_DIAGNOSTICS: u32 = WM_APP + 104;
+const WM_BOUNDS: u32 = WM_APP + 105;
 
 struct Entry {
     surface: Surface,
@@ -232,7 +233,7 @@ impl Widgets {
             .ok();
         let _bars_watcher = bars_config::path()
             .ok()
-            .and_then(|p| FileWatch::new(&p, || inbox::post(WM_APP + 105, 0)).ok());
+            .and_then(|p| FileWatch::new(&p, || inbox::post(WM_BOUNDS, 0)).ok());
         let (tx, rx) = mpsc::channel();
         let wake = Waker::for_window(tx, window, WM_DATA);
         let config = Config::load().unwrap_or_default();
@@ -367,7 +368,7 @@ impl Widgets {
                     self.reconcile_needed = true;
                 }
             },
-            message if message == WM_APP + 105 => {
+            WM_BOUNDS => {
                 if let Ok(bars) = bars_config::path().and_then(|p| BarsConfig::load(&p)) {
                     self.cancel_drag();
                     self.settling.clear();
@@ -545,6 +546,11 @@ impl Widgets {
             self.stats.set_held(held, instant);
             self.plugins.set_held(held);
             for entry in self.entries.values_mut() {
+                // Services may not have subscribed when the shell started paused. Resume
+                // through the visibility path without discarding cached widget content.
+                if !held {
+                    entry.model.visible = false;
+                }
                 entry.model.next = None;
                 entry.model.fetch_at = None;
                 entry.model.dirty = true;
@@ -2159,10 +2165,13 @@ impl Widgets {
                 &Default::default(),
                 &mut ui.text,
             );
-            let origin = (
-                (bounds.left + (bounds.width() - size.0 as f32) / 2.0).round() as i32,
-                (bounds.top + 10.0 * scale).ceil() as i32,
-            );
+            let widgets: Vec<_> = self
+                .entries
+                .values()
+                .filter(|e| e.monitor == index && e.model.visible)
+                .map(|e| e.rect)
+                .collect();
+            let origin = edit::palette_origin(bounds, size, scale, &widgets);
             let mut surface = Surface::new(
                 Kind::DesktopChild {
                     parent: host.icons_parent(),
