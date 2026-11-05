@@ -68,6 +68,14 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
   foreach ($plugin in "weather", "rss") {
     if (Test-Path "$From\$plugin.exe") { Copy-Item "$From\$plugin.exe" "$repo\plugins\$plugin\$plugin.exe" -Force }
   }
+  # The WebAssembly plugin runtime (docs/plugins.md), and the bundled components' AOT cache
+  # (scripts/build-plugins.ps1 builds the .wasm files into their plugin folders).
+  if (Test-Path -LiteralPath "$From\mypaper-plugins.exe") {
+    if ([IO.Path]::GetFullPath("$From\mypaper-plugins.exe") -ne [IO.Path]::GetFullPath("$destination\mypaper-plugins.exe")) {
+      Copy-Item -LiteralPath "$From\mypaper-plugins.exe" -Destination "$destination\mypaper-plugins.exe" -Force
+    }
+    Start-Process -FilePath "$destination\mypaper-plugins.exe" -ArgumentList "--compile", "`"$repo\plugins`"" -Wait -WindowStyle Hidden
+  }
   & "$PSScriptRoot\package\register.ps1" -PackagePath $identity -ExternalLocation $destination -Development
   Start-Process -FilePath "$destination\mypaper-core.exe" -WorkingDirectory $destination -WindowStyle Hidden
   Start-Sleep 6

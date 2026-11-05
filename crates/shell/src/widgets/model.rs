@@ -564,12 +564,23 @@ pub struct PluginFace {
     pub icon: String,
 }
 
+/// A widget id `<plugin>.<face>` (what the "+" picker places for component plugins) names the face
+/// directly, so it never collides with a built-in of the plugin's name.
 pub fn plugin_face(placed: &Placed) -> Option<PluginFace> {
-    let (manifest, _) = mypaper_widgets::registry::find_plugin(&placed.widget)?;
-    let wanted = placed.settings.get("variant").and_then(Value::as_str);
-    let face = wanted
-        .and_then(|w| manifest.faces.iter().find(|f| f.id == w))
-        .or(manifest.faces.first())?;
+    let (plugin, named) = match placed.widget.split_once('.') {
+        Some((plugin, face)) => (plugin, Some(face)),
+        None => (placed.widget.as_str(), None),
+    };
+    let (manifest, _) = mypaper_widgets::registry::find_plugin(plugin)?;
+    let face = match named {
+        Some(named) => manifest.faces.iter().find(|f| f.id == named)?,
+        None => {
+            let wanted = placed.settings.get("variant").and_then(Value::as_str);
+            wanted
+                .and_then(|w| manifest.faces.iter().find(|f| f.id == w))
+                .or(manifest.faces.first())?
+        }
+    };
     Some(PluginFace {
         plugin: manifest.id.clone(),
         face: face.id.clone(),

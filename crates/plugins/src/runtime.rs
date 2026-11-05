@@ -64,7 +64,8 @@ pub struct Manifest {
     pub limits: Limits,
 }
 
-const WORDS: [&str; 6] = ["launch", "notifications", "secrets", "storage", "windows", "native-code"];
+/// `location` is the legacy native weather exe's; no WIT capability uses it.
+const WORDS: [&str; 7] = ["launch", "notifications", "secrets", "storage", "windows", "native-code", "location"];
 pub const SURFACES: [&str; 6] = ["top-bar", "dock", "panel", "menu", "widget", "glass"];
 
 impl Manifest {

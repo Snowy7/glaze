@@ -31,6 +31,7 @@ use crate::bridge::{ErrorCode, Out, Target, WidgetError};
 use crate::manifest::PluginManifest;
 use crate::rpc::{self, Incoming, Pending, RpcError};
 use crate::wake::{Msg, Waker};
+use mypaper_plugin_api::wire;
 use mypaper_plugin_sdk::protocol::{self as sdk, FromPlugin, HostMessage, HostRequest};
 use mypaper_plugin_sdk::{Face, SizeClass};
 
@@ -176,6 +177,34 @@ struct Slot {
     size: SizeClass,
     settings: Value,
     view: Option<Face>,
+    /// A WebAssembly component's face (runs in the shared helper): its plugin folder.
+    component: Option<std::path::PathBuf>,
+}
+
+/// The `Msg::Plugin` id of the shared WebAssembly runtime (`mypaper-plugins`); never a plugin id.
+pub const HELPER: &str = "\0mypaper-plugins";
+
+/// The one `mypaper-plugins` process that runs every component plugin (docs/plugins.md, "Shell ↔
+/// helper protocol"). Frames are decoded on its reader thread into `inbox`; the main loop is
+/// woken through `Msg::Plugin { id: HELPER, line: Some("") }` and drains it.
+struct Helper {
+    child: Child,
+    generation: u64,
+    frames: Sender<wire::HostMsg>,
+    inbox: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wire::HelperMsg>>>,
+    idle_since: Option<Instant>,
+}
+
+/// The helper frame that opens (or re-sizes) a component face.
+fn component_open(instance: &str, slot: &Slot) -> wire::HostMsg {
+    let dir = slot.component.as_deref().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
+    wire::HostMsg::Open { plugin: slot.plugin.clone(), dir, instance: instance.into(), face: slot.face.clone(), size: slot.size, settings: slot.settings.to_string() }
+}
+
+/// `mypaper-plugins.exe` beside the running exe.
+fn helper_exe() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?.with_file_name("mypaper-plugins.exe");
+    exe.is_file().then_some(exe)
 }
 
 /// How a placed face is doing, for the chrome's footer.
@@ -249,6 +278,13 @@ pub struct Plugins {
     waker: Waker,
     held: bool,
     next_generation: u64,
+    helper: Option<Helper>,
+    /// When to start the helper again after it died with faces placed, and the next delay.
+    helper_retry: Option<(Instant, Duration)>,
+    /// Component plugins' statuses, from the helper.
+    component_status: HashMap<String, wire::Status>,
+    /// Style patches from component plugins, by `(plugin, surface)` (docs/plugins.md, "Styling").
+    styles: BTreeMap<(String, String), wire::StylePatch>,
 }
 
 impl Plugins {
@@ -265,6 +301,10 @@ impl Plugins {
             waker,
             held: false,
             next_generation: 0,
+            helper: None,
+            helper_retry: None,
+            component_status: HashMap::new(),
+            styles: BTreeMap::new(),
         }
     }
 
@@ -326,7 +366,180 @@ impl Plugins {
     }
 
     fn listened(&self, plugin: &str) -> bool {
-        self.subs.values().any(|(p, _)| p == plugin) || self.faces.values().any(|s| s.plugin == plugin)
+        self.subs.values().any(|(p, _)| p == plugin) || self.faces.values().any(|s| s.plugin == plugin && s.component.is_none())
+    }
+
+    /// A plugin's manifest and folder, from `roots` or the installed and bundled folders.
+    fn find(&self, id: &str) -> Option<(PluginManifest, std::path::PathBuf)> {
+        match &self.roots {
+            Some(roots) => roots.iter().map(|root| root.join(id)).find_map(|dir| PluginManifest::load(&dir).ok().map(|manifest| (manifest, dir))),
+            None => crate::registry::find_plugin(id),
+        }
+    }
+
+    /// Style patches component plugins applied, for the bars and theme (docs/plugins.md, "Styling").
+    pub fn style_patches(&self) -> impl Iterator<Item = &wire::StylePatch> {
+        self.styles.values()
+    }
+
+    /// Sends a frame to the helper, starting it if it isn't running (and isn't backing off).
+    fn to_helper(&mut self, message: wire::HostMsg, now: Instant) -> Result<(), WidgetError> {
+        if let Some(helper) = &mut self.helper {
+            helper.idle_since = None;
+            let _ = helper.frames.send(message);
+            return Ok(());
+        }
+        if self.helper_retry.is_some_and(|(at, _)| now < at) {
+            return Ok(()); // it opens every placed face when it's back
+        }
+        // Starting it opens every placed component face, including this one.
+        self.start_helper().map_err(|e| unavailable(format!("the plugin runtime didn't start: {e:#}")))
+    }
+
+    fn start_helper(&mut self) -> Result<()> {
+        use std::sync::{Arc, Mutex};
+        let exe = helper_exe().context("mypaper-plugins.exe isn't installed beside the shell")?;
+        let mut child = Command::new(exe)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .creation_flags(CREATE_NO_WINDOW.0)
+            .spawn()
+            .context("running mypaper-plugins")?;
+        if self.job.is_none() {
+            self.job = Job::new().inspect_err(|e| log::warn!("no job object for plugins: {e:#}")).ok();
+        }
+        if let Some(job) = &self.job
+            && let Err(e) = job.assign(&child)
+        {
+            log::warn!("the plugin runtime isn't in the job object: {e:#}");
+        }
+        self.next_generation += 1;
+        let generation = self.next_generation;
+        let stdout = child.stdout.take().context("no stdout")?;
+        let stderr = child.stderr.take().context("no stderr")?;
+        let mut stdin = child.stdin.take().context("no stdin")?;
+        let inbox = Arc::new(Mutex::new(std::collections::VecDeque::new()));
+        let (queue, waker) = (Arc::clone(&inbox), self.waker.clone());
+        std::thread::Builder::new().name("plugins out".into()).spawn(move || {
+            let wake = |line| waker.send(Msg::Plugin { id: HELPER.into(), generation, line });
+            let mut stdout = BufReader::new(stdout);
+            while let Ok(Some(message)) = wire::read::<wire::HelperMsg>(&mut stdout) {
+                let first = {
+                    let mut queue = queue.lock().expect("plugin inbox");
+                    queue.push_back(message);
+                    queue.len() == 1
+                };
+                if first {
+                    wake(Some(String::new()));
+                }
+            }
+            wake(None);
+        })?;
+        std::thread::Builder::new().name("plugins err".into()).spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                log::info!("[plugins] {line}");
+            }
+        })?;
+        let (frames, rx) = mpsc::channel::<wire::HostMsg>();
+        std::thread::Builder::new().name("plugins in".into()).spawn(move || {
+            for message in rx {
+                if wire::write(&mut stdin, &message).is_err() {
+                    break;
+                }
+            }
+        })?;
+        if self.held {
+            let _ = frames.send(wire::HostMsg::Held(true));
+        }
+        for (instance, slot) in self.faces.iter().filter(|(_, s)| s.component.is_some()) {
+            let _ = frames.send(component_open(instance, slot));
+        }
+        log::info!("plugin runtime started");
+        self.helper = Some(Helper { child, generation, frames, inbox, idle_since: None });
+        Ok(())
+    }
+
+    /// Frames from the helper (`line: Some`), or its exit (`None`).
+    fn on_helper(&mut self, generation: u64, line: Option<String>, now: Instant) -> Vec<Out> {
+        let Some(helper) = self.helper.as_mut().filter(|h| h.generation == generation) else {
+            return Vec::new();
+        };
+        if line.is_none() {
+            let mut helper = self.helper.take().expect("just found");
+            let _ = helper.child.wait();
+            if self.faces.values().any(|s| s.component.is_some()) {
+                let delay = self.helper_retry.map_or(RESTART_DELAY, |(_, d)| d);
+                log::warn!("the plugin runtime exited; restarting it in {delay:?}");
+                self.helper_retry = Some((now + delay, (delay * 2).min(Duration::from_secs(60))));
+            }
+            self.component_status.clear();
+            let placed = self.faces.iter().filter(|(_, s)| s.component.is_some()).map(|(i, _)| i.clone());
+            self.changed.extend(placed.collect::<Vec<_>>());
+            return Vec::new();
+        }
+        let messages: Vec<_> = helper.inbox.lock().expect("plugin inbox").drain(..).collect();
+        for message in messages {
+            match message {
+                wire::HelperMsg::View { instance, face, .. } => match serde_json::from_slice::<Face>(&face) {
+                    Ok(face) => {
+                        if let Some(slot) = self.faces.get_mut(&instance).filter(|s| s.component.is_some()) {
+                            slot.view = Some(face);
+                            self.changed.push(instance);
+                        }
+                    }
+                    Err(e) => log::warn!("plugin view for {instance}: {e}"),
+                },
+                wire::HelperMsg::Status { plugin, status } => {
+                    if status == wire::Status::Live {
+                        self.helper_retry = None;
+                    }
+                    self.component_status.insert(plugin.clone(), status);
+                    self.mark(&plugin);
+                }
+                wire::HelperMsg::Style { plugin, surface, patch } => {
+                    log::info!("plugin {plugin} {} the {surface} style", if patch.is_some() { "patched" } else { "reset" });
+                    match patch {
+                        Some(patch) => self.styles.insert((plugin, surface), patch),
+                        None => self.styles.remove(&(plugin, surface)),
+                    };
+                }
+                wire::HelperMsg::Stats { .. } => {}
+            }
+        }
+        Vec::new()
+    }
+
+    /// Stops an idle helper and starts a dead one again when faces need it.
+    fn tick_helper(&mut self, now: Instant) {
+        let placed = self.faces.values().any(|s| s.component.is_some());
+        if let Some(helper) = &mut self.helper {
+            if placed {
+                helper.idle_since = None;
+            } else if now >= *helper.idle_since.get_or_insert(now) + IDLE_STOP {
+                log::info!("no component plugin placed; stopping the plugin runtime");
+                let helper = self.helper.take().expect("just matched");
+                let _ = helper.frames.send(wire::HostMsg::Shutdown);
+                self.dying.push((helper.child, now + SHUTDOWN_GRACE * 3));
+            }
+        } else if placed
+            && !self.held
+            && let Some((at, delay)) = self.helper_retry
+            && now >= at
+        {
+            if let Err(e) = self.start_helper() {
+                log::warn!("restarting the plugin runtime: {e:#}");
+                self.helper_retry = Some((now + delay, (delay * 2).min(Duration::from_secs(60))));
+            }
+        }
+    }
+
+    fn helper_deadline(&self) -> Option<Instant> {
+        match &self.helper {
+            Some(helper) => helper.idle_since.map(|t| t + IDLE_STOP),
+            None if self.held => None,
+            None => self.helper_retry.map(|(at, _)| at).filter(|_| self.faces.values().any(|s| s.component.is_some())),
+        }
     }
 
     /// Looks plugins up in `roots` only (tests and harnesses).
@@ -348,6 +561,32 @@ impl Plugins {
         settings: Value,
         now: Instant,
     ) -> Result<(), WidgetError> {
+        if let Some(slot) = self.faces.get_mut(instance)
+            && slot.plugin == plugin
+            && slot.face == face
+            && slot.component.is_some()
+        {
+            if slot.size != size || slot.settings != settings {
+                slot.size = size;
+                slot.settings = settings;
+                let message = component_open(instance, slot);
+                self.to_helper(message, now)?;
+            }
+            return Ok(());
+        }
+        if !self.faces.contains_key(instance)
+            && let Some((manifest, dir)) = self.find(plugin).filter(|(m, _)| m.component.is_some())
+        {
+            if !manifest.faces.iter().chain(&manifest.bars).chain(&manifest.panels).any(|f| f.id == face) {
+                let message = format!("plugin {plugin:?} has no face {face:?}");
+                return Err(WidgetError::new(ErrorCode::NotFound, message));
+            }
+            let slot = Slot { plugin: plugin.into(), face: face.into(), size, settings, view: None, component: Some(dir) };
+            let message = component_open(instance, &slot);
+            self.faces.insert(instance.into(), slot);
+            self.changed.push(instance.into());
+            return self.to_helper(message, now);
+        }
         if let Some(slot) = self.faces.get_mut(instance)
             && slot.plugin == plugin
             && slot.face == face
@@ -379,6 +618,7 @@ impl Plugins {
             size,
             settings,
             view: None,
+            component: None,
         };
         self.faces.insert(instance.into(), slot);
         let process = match self.running(plugin, now) {
@@ -403,6 +643,12 @@ impl Plugins {
     /// The instance went away; the plugin stops 30 s after its last face closes.
     pub fn close_face(&mut self, instance: &str) {
         let Some(slot) = self.faces.remove(instance) else { return };
+        if slot.component.is_some() {
+            if let Some(helper) = &self.helper {
+                let _ = helper.frames.send(wire::HostMsg::Close { instance: instance.into() });
+            }
+            return;
+        }
         if let Some(process) = self.procs.get(&slot.plugin).filter(|p| matches!(p.state, State::Ready)) {
             process.write(sdk::host_message(&HostMessage::Close { instance: instance.into() }));
         }
@@ -411,6 +657,12 @@ impl Plugins {
     /// A click on a view's `action` (or a submitted field's `value`).
     pub fn face_action(&mut self, instance: &str, action: &str, value: Option<String>) {
         let Some(slot) = self.faces.get(instance) else { return };
+        if slot.component.is_some() {
+            if let Some(helper) = &self.helper {
+                let _ = helper.frames.send(wire::HostMsg::Action { instance: instance.into(), action: action.into(), value });
+            }
+            return;
+        }
         if let Some(process) = self.procs.get(&slot.plugin).filter(|p| matches!(p.state, State::Ready)) {
             let message = HostMessage::Action {
                 instance: instance.into(),
@@ -428,6 +680,16 @@ impl Plugins {
 
     pub fn face_status(&self, instance: &str) -> Option<FaceStatus> {
         let slot = self.faces.get(instance)?;
+        if slot.component.is_some() {
+            return Some(match self.component_status.get(&slot.plugin) {
+                _ if self.helper.is_none() && self.helper_retry.is_some() => FaceStatus::Restarting,
+                Some(wire::Status::Live | wire::Status::Unloaded) => FaceStatus::Live,
+                Some(wire::Status::Restarting(_)) => FaceStatus::Restarting,
+                Some(wire::Status::Stopped(why)) => FaceStatus::Failed(why.clone()),
+                None if slot.view.is_some() => FaceStatus::Live,
+                None => FaceStatus::Starting,
+            });
+        }
         Some(match self.procs.get(&slot.plugin).map(|p| &p.state) {
             Some(State::Ready) => FaceStatus::Live,
             Some(_) => FaceStatus::Starting,
@@ -568,6 +830,9 @@ impl Plugins {
         line: Option<String>,
         now: Instant,
     ) -> Vec<Out> {
+        if id == HELPER {
+            return self.on_helper(generation, line, now);
+        }
         let Some(process) = self
             .procs
             .get_mut(id)
@@ -685,12 +950,13 @@ impl Plugins {
         process.pending.len()
             + process.queued.len()
             + self.subs.values().filter(|(p, _)| p == id).count()
-            + self.faces.values().filter(|s| s.plugin == id).count()
+            + self.faces.values().filter(|s| s.plugin == id && s.component.is_none()).count()
     }
 
     /// Timeouts, idle stops, kills after the grace period, and restarts.
     pub fn tick(&mut self, now: Instant) -> Vec<Out> {
         let mut out = Vec::new();
+        self.tick_helper(now);
         let ids: Vec<String> = self.procs.keys().cloned().collect();
         for id in ids {
             let users = self.users(&id, &self.procs[&id]);
@@ -770,7 +1036,7 @@ impl Plugins {
             .filter(|(id, _)| !self.held && self.listened(id))
             .map(|(_, (at, _))| Some(*at));
         let dying = self.dying.iter().map(|(_, deadline)| Some(*deadline));
-        per_process.chain(restarts).chain(dying).flatten().min()
+        per_process.chain(restarts).chain(dying).chain([self.helper_deadline()]).flatten().min()
     }
 
     /// Sends `suspend` / `resume` to running plugins.
@@ -779,6 +1045,9 @@ impl Plugins {
             return;
         }
         self.held = held;
+        if let Some(helper) = &self.helper {
+            let _ = helper.frames.send(wire::HostMsg::Held(held));
+        }
         let note = rpc::notification(if held { "suspend" } else { "resume" });
         for process in self
             .procs
@@ -803,6 +1072,10 @@ impl Plugins {
             .drain()
             .map(|(_, p)| p.child)
             .chain(self.dying.drain(..).map(|(c, _)| c))
+            .chain(self.helper.take().map(|helper| {
+                let _ = helper.frames.send(wire::HostMsg::Shutdown);
+                helper.child
+            }))
             .collect();
         let deadline = now + SHUTDOWN_GRACE;
         while Instant::now() < deadline

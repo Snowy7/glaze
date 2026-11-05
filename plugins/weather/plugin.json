@@ -2,10 +2,13 @@
   "$schema": "../../packages/widget-sdk/schema/plugin.schema.json",
   "id": "weather",
   "name": "Weather",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "command": "weather.exe",
   "args": [],
   "methods": ["current", "forecast", "locate", "search"],
   "events": ["updated"],
+  "component": "weather.wasm",
+  "api": "0.1",
+  "faces": [{ "id": "now", "name": "Now", "icon": "cloud-sun", "size": { "default": [2, 2], "min": [2, 2], "max": [4, 4] } }],
   "permissions": ["location", "network:https://api.open-meteo.com", "network:https://geocoding-api.open-meteo.com", "network:https://ipwho.is", "network:https://api.bigdatacloud.net"]
 }

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "component": "hello.wasm",
   "api": "0.1",
-  "faces": [{ "id": "main", "name": "Hello", "icon": "sparkles", "size": { "default": [2, 2], "min": [2, 2], "max": [4, 4] } }],
+  "faces": [{ "id": "main", "name": "Demo", "icon": "sparkles", "size": { "default": [2, 2], "min": [2, 2], "max": [4, 4] } }],
   "bars": [{ "id": "clock", "name": "Hello clock", "size": { "default": [1, 1] } }],
   "styles": ["top-bar"],
   "permissions": ["network:https://api.open-meteo.com"]

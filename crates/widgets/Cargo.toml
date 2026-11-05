@@ -13,6 +13,7 @@ mypaper-config.workspace = true
 mypaper-theme.workspace = true
 mypaper-integrations = { path = "../integrations" }
 mypaper-plugin-sdk = { path = "../plugin-sdk" }
+mypaper-plugin-api = { path = "../plugin-api" }
 
 anyhow.workspace = true
 log.workspace = true

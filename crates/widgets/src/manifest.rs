@@ -1036,8 +1036,25 @@ pub struct PluginManifest {
     pub name: String,
     #[serde(default)]
     pub version: Option<String>,
-    /// The executable: in the plugin folder, else on `PATH`.
+    /// The executable: in the plugin folder, else on `PATH`. Empty for component-only plugins.
+    #[serde(default)]
     pub command: String,
+    /// The WebAssembly component (docs/plugins.md); its faces run in `mypaper-plugins`.
+    #[serde(default)]
+    pub component: Option<String>,
+    /// The WIT package `"<major>.<minor>"` a component was built against.
+    #[serde(default)]
+    pub api: Option<String>,
+    /// Surfaces a component may restyle, desktop-menu items, commands and its own limits; the
+    /// runtime checks these (`crates/plugins`).
+    #[serde(default)]
+    pub styles: Vec<String>,
+    #[serde(default)]
+    pub menu: Vec<Value>,
+    #[serde(default)]
+    pub commands: Vec<Value>,
+    #[serde(default)]
+    pub limits: Option<Value>,
     #[serde(default)]
     pub args: Vec<String>,
     #[serde(default)]
@@ -1084,10 +1101,20 @@ impl PluginManifest {
             manifest.id
         );
         ensure!(
-            inside(&manifest.command),
+            !manifest.command.is_empty() || manifest.component.is_some(),
+            "a plugin needs a \"command\" or a \"component\""
+        );
+        ensure!(
+            manifest.command.is_empty() || inside(&manifest.command),
             "command {:?} must be a path inside the plugin folder or a program on PATH",
             manifest.command
         );
+        if let Some(component) = &manifest.component {
+            ensure!(
+                component.ends_with(".wasm") && !component.contains(['/', '\\']),
+                "component {component:?} must be a .wasm file in the plugin folder"
+            );
+        }
         if let Some(reserved) = manifest
             .methods
             .iter()
@@ -1103,8 +1130,8 @@ impl PluginManifest {
             );
         }
         ensure!(
-            manifest.sdk.is_some() || manifest.faces.is_empty(),
-            "faces need an \"sdk\" version"
+            manifest.sdk.is_some() || manifest.component.is_some() || manifest.faces.is_empty(),
+            "faces need an \"sdk\" version or a \"component\""
         );
         for face in &manifest.faces {
             ensure!(valid_id(&face.id), "face id {:?} must be lowercase [a-z0-9-]", face.id);

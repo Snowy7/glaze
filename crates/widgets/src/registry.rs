@@ -147,7 +147,43 @@ pub fn builtins() -> Registry {
             Err(error) => log::warn!("Custom widget {id}: {error}"),
         }
     }
+    for (id, manifest) in component_faces() {
+        widgets.entry(id).or_insert(Installed { manifest });
+    }
     Registry { widgets }
+}
+
+/// Every WebAssembly component plugin's faces as widgets `<plugin>.<face>` (docs/plugins.md), so
+/// the "+" picker, sizing and Studio treat them like any widget; the shell draws them as
+/// `Widget::Plugin`. User installs shadow bundled ones.
+fn component_faces() -> Vec<(String, WidgetManifest)> {
+    let mut out: Vec<(String, WidgetManifest)> = Vec::new();
+    let dirs = plugin_roots().into_iter().filter_map(|root| std::fs::read_dir(root).ok()).flat_map(|d| d.flatten().map(|e| e.path()));
+    for dir in dirs.filter(|d| d.join(PLUGIN_MANIFEST).is_file()) {
+        let Ok(plugin) = PluginManifest::load(&dir) else { continue };
+        if plugin.component.is_none() {
+            continue;
+        }
+        for face in &plugin.faces {
+            let id = format!("{}.{}", plugin.id, face.id);
+            if out.iter().any(|(known, _)| *known == id) {
+                continue;
+            }
+            let size = &face.size;
+            let manifest = serde_json::json!({
+                "id": id,
+                "name": format!("{} · {}", plugin.name, face.name),
+                "description": format!("From the {} plugin", plugin.name),
+                "category": "Plugins",
+                "size": { "default": size.default, "min": size.min.unwrap_or(size.default), "max": size.max },
+            });
+            match serde_json::from_value::<WidgetManifest>(manifest) {
+                Ok(manifest) => out.push((id, manifest)),
+                Err(e) => log::warn!("plugin {} face {}: {e}", plugin.id, face.id),
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
