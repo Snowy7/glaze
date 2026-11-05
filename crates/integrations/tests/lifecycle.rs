@@ -10,7 +10,7 @@ fn obs_shared_start_stop_and_explicit_reconnect_release_the_socket() {
     let endpoint = format!("ws://{}", listener.local_addr().unwrap());
     let (events, rx) = mpsc::channel();
     let server = std::thread::spawn(move || {
-        for _ in 0..3 {
+        for connection in 0..3 {
             let (stream, _) = listener.accept().unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(5)))
@@ -53,6 +53,25 @@ fn obs_shared_start_stop_and_explicit_reconnect_release_the_socket() {
                     .unwrap();
             }
             events.send("connected").unwrap();
+            if connection == 0 {
+                for expected in ["SetCurrentProgramScene", "SetInputMute"] {
+                    let request: serde_json::Value =
+                        serde_json::from_str(socket.read().unwrap().to_text().unwrap()).unwrap();
+                    assert_eq!(request["d"]["requestType"], expected);
+                    if expected == "SetCurrentProgramScene" {
+                        assert_eq!(request["d"]["requestData"]["sceneName"], "Camera");
+                    } else {
+                        assert_eq!(request["d"]["requestData"]["inputName"], "Desk microphone");
+                        assert_eq!(request["d"]["requestData"]["inputMuted"], false);
+                    }
+                    let mut reply = request["d"].clone();
+                    reply["requestStatus"] = json!({"result":true});
+                    socket
+                        .send(Message::Text(json!({"op":7,"d":reply}).to_string().into()))
+                        .unwrap();
+                }
+                events.send("controlled").unwrap();
+            }
             assert!(socket.read().is_err()); // No outgoing ping, state read, or retry is permitted while idle.
             events.send("closed").unwrap();
         }
@@ -79,6 +98,21 @@ fn obs_shared_start_stop_and_explicit_reconnect_release_the_socket() {
     assert_eq!(snapshot.scenes, ["Desktop", "Camera"]);
     assert_eq!(snapshot.microphones[0].name, "Desk microphone");
     assert!(snapshot.microphones[0].muted);
+    a.action(mypaper_integrations::Action::Obs(
+        mypaper_integrations::obs::Action::SwitchScene("Camera".into()),
+    ))
+    .unwrap();
+    a.action(mypaper_integrations::Action::Obs(
+        mypaper_integrations::obs::Action::MuteInput {
+            name: "Desk microphone".into(),
+            muted: false,
+        },
+    ))
+    .unwrap();
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+        "controlled"
+    );
     drop(a);
     assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
     b.retry();

@@ -115,17 +115,15 @@ pub(super) fn setup(
             if layout.large { 4 } else { 2 },
         );
     }
+    let connecting =
+        m.integration.busy() || m.integration.snapshot.availability == Availability::Connecting;
     f.button(
         CONNECT,
         button,
-        if m.integration.busy() {
-            "Connecting…"
-        } else {
-            title
-        },
+        if connecting { "Connecting…" } else { title },
         Some(icon),
         ButtonKind::Tinted,
-        !m.integration.busy(),
+        !connecting,
     );
     footer(f, m, layout.footer, "Ready when you are");
 }

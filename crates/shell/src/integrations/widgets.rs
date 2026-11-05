@@ -76,6 +76,11 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
             } else {
                 Vec::new()
             };
+            state.snapshot.availability = if state.routines.is_empty() {
+                Availability::Unavailable("Add a saved routine in Settings".into())
+            } else {
+                Availability::Live
+            };
         } else if let Some(provider) = provider(widget.kind) {
             state.snapshot = match super::acquire(provider) {
                 Ok(lease) => {
@@ -84,7 +89,12 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
                 }
                 Err(_) => Snapshot {
                     availability: Availability::Unavailable(
-                        "Connect this integration in Settings".into(),
+                        if widget.kind == Widget::T3 {
+                            "Read-only pairing required"
+                        } else {
+                            "Connect this integration in Settings"
+                        }
+                        .into(),
                     ),
                     ..Default::default()
                 },

@@ -396,7 +396,13 @@ fn obs_clock_stops_when_paused_or_disconnected_and_discord_filters_exact_app_ide
     let mut docker = model("docker", [4, 4]);
     docker.integration.snapshot.availability = Availability::Stale("fixture disconnect".into());
     let stale = draw(&mut ui, &docker, (360, 360), 1.0);
-    assert!(stale.hits.iter().filter(|hit| hit.id >= crate::integrations::widgets::ITEM).all(|hit| !hit.enabled));
+    assert!(
+        stale
+            .hits
+            .iter()
+            .filter(|hit| hit.id >= crate::integrations::widgets::ITEM)
+            .all(|hit| !hit.enabled)
+    );
     let list = draw(&mut ui, &model("discord", [4, 4]), (360, 360), 1.0);
     assert!(
         !list

@@ -121,18 +121,40 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, now_ms: i64) {
                 "PAUSED"
             } else if state.recording {
                 "REC"
+            } else if state.streaming {
+                "LIVE"
             } else {
                 "STANDBY"
             },
-            &record,
-            state.recording,
+            if !state.recording && state.streaming {
+                &stream
+            } else {
+                &record
+            },
+            state.recording || state.streaming,
         );
-        let (scene, mic) = details.take_top(f.px(27.0), f.px(3.0));
+        let (scene, rest) = details.take_top(f.px(18.0), f.px(1.0));
         f.text_in(
             scene,
             &state.scene,
             TextRole::Headline,
             f.theme.color.label,
+            Align::Start,
+        );
+        let (stream_state, mic) = rest.take_top(f.px(17.0), f.px(1.0));
+        f.text_in(
+            stream_state,
+            &if state.streaming {
+                format!("Live · {stream}")
+            } else {
+                "Stream offline".into()
+            },
+            TextRole::Caption,
+            if state.streaming {
+                f.theme.color.destructive
+            } else {
+                f.theme.color.tertiary
+            },
             Align::Start,
         );
         if let Some(input) = state.microphones.first() {
