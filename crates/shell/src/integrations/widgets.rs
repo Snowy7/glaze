@@ -256,25 +256,6 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
                     .and_then(|lease| lease.action(Action::Obs(command)))
             })
         }
-        (Some(Data::Docker(snapshot)), Widget::Docker) if state.actionable() => {
-            if let Some(container) = hit
-                .checked_sub(ITEM)
-                .and_then(|index| snapshot.containers.get(index as usize))
-            {
-                state
-                    .lease
-                    .as_ref()
-                    .ok_or_else(|| anyhow::anyhow!("Docker is disconnected"))
-                    .and_then(|lease| {
-                        lease.action(Action::Docker {
-                            id: container.id.clone(),
-                            start: container.state != "running",
-                        })
-                    })
-            } else {
-                Ok(())
-            }
-        }
         _ => Ok(()),
     };
     state.notice = result.err().map(|error| error.to_string());
