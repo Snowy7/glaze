@@ -1879,6 +1879,7 @@ dependencies = [
  "mypaper-plugin-sdk",
  "serde",
  "serde_json",
+ "url",
  "wasmtime",
  "wasmtime-wasi",
  "windows",
