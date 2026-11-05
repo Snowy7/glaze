@@ -1,7 +1,7 @@
-//! Visible widgets lease the same providers as bars and panels. Only OBS's active clocks tick.
+//! Visible built-in widgets lease the same providers as bars and panels.
 use crate::widgets::model::{Model as WidgetModel, Widget};
 use mypaper_integrations::{
-    Action, Availability, Data, Lease, Provider, Snapshot, launcher, obs,
+    Action, Availability, Data, Lease, Provider, Snapshot, launcher,
 };
 use mypaper_ui::HitId;
 
@@ -9,8 +9,6 @@ pub const CONNECT: HitId = 6000;
 pub const REFRESH: HitId = 6001;
 pub const PRIMARY: HitId = 6002;
 pub const SECONDARY: HitId = 6003;
-pub const MIC: HitId = 6100;
-pub const SCENE: HitId = 6200;
 pub const ITEM: HitId = 6400;
 
 pub struct Model {
@@ -58,10 +56,6 @@ impl Model {
             Availability::Live | Availability::Cached
         )
     }
-    pub fn clock_running(&self) -> bool {
-        self.snapshot.availability == Availability::Live
-            && matches!(&self.snapshot.data, Some(Data::Obs(state)) if state.recording && !state.paused || state.streaming)
-    }
 }
 
 pub fn provider(kind: Widget) -> Option<Provider> {
@@ -69,7 +63,6 @@ pub fn provider(kind: Widget) -> Option<Provider> {
         Widget::Discord => Some(Provider::Discord),
         Widget::Calendar => Some(Provider::Calendar),
         Widget::T3 => Some(Provider::T3),
-        Widget::Obs => Some(Provider::Obs),
         _ => None,
     }
 }
@@ -195,39 +188,6 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
     let result = match (&state.snapshot.data, widget.kind) {
         (_, Widget::Discord) if hit == PRIMARY || (ITEM..ITEM + 512).contains(&hit) => {
             open("https://discord.com/channels/@me")
-        }
-        (Some(Data::Obs(snapshot)), Widget::Obs) if state.actionable() => {
-            let command = match hit {
-                PRIMARY => Some(if snapshot.recording {
-                    obs::Action::StopRecording
-                } else {
-                    obs::Action::StartRecording
-                }),
-                SECONDARY => Some(if snapshot.streaming {
-                    obs::Action::StopStreaming
-                } else {
-                    obs::Action::StartStreaming
-                }),
-                _ => hit
-                    .checked_sub(MIC)
-                    .and_then(|index| snapshot.microphones.get(index as usize))
-                    .map(|input| obs::Action::MuteInput {
-                        name: input.name.clone(),
-                        muted: !input.muted,
-                    })
-                    .or_else(|| {
-                        hit.checked_sub(SCENE)
-                            .and_then(|index| snapshot.scenes.get(index as usize))
-                            .map(|name| obs::Action::SwitchScene(name.clone()))
-                    }),
-            };
-            command.map_or(Ok(()), |command| {
-                state
-                    .lease
-                    .as_ref()
-                    .ok_or_else(|| anyhow::anyhow!("OBS is disconnected"))
-                    .and_then(|lease| lease.action(Action::Obs(command)))
-            })
         }
         _ => Ok(()),
     };
