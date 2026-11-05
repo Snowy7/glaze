@@ -183,7 +183,71 @@ pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> V
                 .push(Entry::action("mypaper Studio", Command::OpenStudio).with_icon(mypaper())),
         }
     }
-    tidy(items)
+    tidy(group_open(items))
+}
+
+/// Gathers the top-level "Open …" items (Open in Terminal, "Open with Visual Studio", "Open Git
+/// Bash here", …) into one "Open in" submenu where the first of them stood, each relabelled to
+/// what it opens ("Terminal", "Visual Studio", "Git Bash"). One such item stays as it is.
+fn group_open(items: Vec<Item>) -> Vec<Item> {
+    let opens = |item: &Item| short_open_label(item.label()).is_some();
+    if items.iter().filter(|item| opens(item)).count() < 2 {
+        return items;
+    }
+    let mut out = Vec::with_capacity(items.len());
+    let mut group: Vec<Item> = Vec::new();
+    let mut at = None;
+    for item in items {
+        if let Some(short) = short_open_label(item.label()) {
+            at.get_or_insert(out.len());
+            group.push(relabel(item, short));
+        } else {
+            out.push(item);
+        }
+    }
+    let submenu = Entry::Submenu {
+        label: "Open in".into(),
+        items: group,
+    }
+    .with_icon(MenuIcon::Glyph(glyph::TERMINAL));
+    out.insert(at.unwrap_or(out.len()), submenu);
+    out
+}
+
+/// "Open in Terminal" → "Terminal", "Open with Visual Studio" → "Visual Studio", "Open Git Bash
+/// here" → "Git Bash", "Open Warp in new tab" → "Warp in new tab"; `None` if it isn't an
+/// "Open …" item (or is a bare "Open").
+fn short_open_label(label: &str) -> Option<String> {
+    let rest = label.strip_prefix("Open ")?;
+    let rest = ["in ", "with "]
+        .iter()
+        .find_map(|p| rest.strip_prefix(p))
+        .unwrap_or(rest);
+    let rest = rest.strip_suffix(" here").unwrap_or(rest).trim();
+    (!rest.is_empty()).then(|| rest.to_string())
+}
+
+/// The same entry under a new label, keeping its icon, command and state.
+fn relabel(item: Item, new: String) -> Item {
+    match item {
+        Entry::Iconic { icon, item } => Entry::Iconic {
+            icon,
+            item: Box::new(relabel(*item, new)),
+        },
+        Entry::Action {
+            command,
+            checked,
+            enabled,
+            ..
+        } => Entry::Action {
+            label: new,
+            command,
+            checked,
+            enabled,
+        },
+        Entry::Submenu { items, .. } => Entry::Submenu { label: new, items },
+        other => other,
+    }
 }
 
 /// No leading, trailing or doubled separators.
@@ -446,8 +510,7 @@ mod tests {
                 "",
                 "Paste",
                 "",
-                "Open in Terminal",
-                "Open Git Bash here",
+                "Open in",
                 "",
                 "NVIDIA App",
                 "",
@@ -468,7 +531,13 @@ mod tests {
                 .iter()
                 .all(|i| matches!(i, Entry::Separator) || i.icon().is_some())
         );
-        let git = items.iter().find(|i| i.label() == "Open Git Bash here");
+        // The "Open …" items share one submenu, labelled by what they open.
+        let open = items.iter().find(|i| i.label() == "Open in").unwrap();
+        let Entry::Submenu { items: open, .. } = open.plain() else {
+            panic!("Open in is a submenu")
+        };
+        assert_eq!(labels(open), ["Terminal", "Git Bash"]);
+        let git = open.iter().find(|i| i.label() == "Git Bash");
         assert!(matches!(
             git.map(Item::plain),
             Some(Entry::Action {
@@ -485,6 +554,17 @@ mod tests {
             panic!("New is a submenu")
         };
         assert_eq!(labels(new), ["Folder", "Shortcut", "", "Text Document"]);
+    }
+
+    #[test]
+    fn open_items_are_named_by_what_they_open() {
+        let short = |s| short_open_label(s);
+        assert_eq!(short("Open in Terminal").as_deref(), Some("Terminal"));
+        assert_eq!(short("Open with Visual Studio").as_deref(), Some("Visual Studio"));
+        assert_eq!(short("Open Git GUI here").as_deref(), Some("Git GUI"));
+        assert_eq!(short("Open Warp in new tab").as_deref(), Some("Warp in new tab"));
+        assert_eq!(short("Open"), None);
+        assert_eq!(short("NVIDIA App"), None);
     }
 
     #[test]
