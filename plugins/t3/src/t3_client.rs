@@ -168,6 +168,7 @@ pub async fn request(address: &str, tag: &str, payload: Value) -> Result<Value> 
     }).await.map_err(|_| anyhow::anyhow!("T3 did not respond. Check that T3 Code is running, then retry."))?
 }
 
+#[allow(dead_code)] // the shell's Advanced settings check; kept for the settings face
 pub fn check_blocking(address: &str) -> Result<()> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -176,6 +177,7 @@ pub fn check_blocking(address: &str) -> Result<()> {
 }
 
 /// A click/Enter in mypaper is the only caller. The server still enforces its client's grant.
+#[allow(dead_code)] // wired once the host's text field sends `send` with a value
 pub fn launch_blocking(
     address: &str,
     project: &str,

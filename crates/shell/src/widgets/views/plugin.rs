@@ -10,6 +10,8 @@ use mypaper_ui::{HitId, Point, Rect, Rgba, icons::Icon, theme::TextRole};
 /// Hit ids of a face's actions: `ACTION + n` for the nth action in tree order.
 pub const ACTION: HitId = 800_000;
 const MAX_ACTIONS: HitId = 10_000;
+/// The header's refresh button (`Face::refresh`).
+const REFRESH: HitId = ACTION - 1;
 
 /// How the face is doing, shown in the footer when it isn't live.
 pub enum Status<'a> {
@@ -21,6 +23,9 @@ pub enum Status<'a> {
 
 /// The plugin action behind hit `hit` in `face`, if any.
 pub fn action_at(face: &Face, hit: HitId) -> Option<String> {
+    if hit == REFRESH && face.refresh {
+        return Some("refresh".into());
+    }
     let n = hit.checked_sub(ACTION).filter(|n| *n < MAX_ACTIONS)? as usize;
     let mut actions = Vec::new();
     collect(&face.body, &mut actions);
@@ -115,6 +120,13 @@ pub fn draw(f: &mut Frame<'_>, rect: Rect, title: &str, header: Icon, face: Opti
     let (head, mut body) = inner.take_top(f.px(22.0), f.px(8.0));
     let (symbol, label) = head.take_left(f.px(17.0), f.px(6.0));
     f.icon(symbol, header, 16.0, f.theme.color.accent);
+    let label = if face.is_some_and(|face| face.refresh) {
+        let (control, label) = label.take_right(f.px(22.0), f.px(3.0));
+        f.icon_button(REFRESH, control, Icon::Refresh, 15.0, "Retry or refresh", false);
+        label
+    } else {
+        label
+    };
     f.text_in(label, title, TextRole::Subheadline, f.theme.color.secondary, Align::Start);
     let footer = (rect.height() / f.s >= 170.0).then(|| {
         let (footer, rest) = body.take_bottom(f.px(16.0), f.px(6.0));
@@ -170,8 +182,9 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
             rows.iter().sum::<f32>() + gap * rows.len().saturating_sub(1) as f32
         }
         View::Card { title, child } => {
+            let pad = f.px(f.theme.metrics.pad) * 2.0;
             let header = title.as_ref().map_or(0.0, |_| f.line(TextRole::Subheadline) + f.px(6.0));
-            header + height(f, child, width - f.px(24.0)) + f.px(24.0)
+            header + height(f, child, width - pad) + pad
         }
         View::Text { role: r, .. } => f.line(role(*r)),
         View::Icon { size, .. } => f.px(size.unwrap_or(16.0)),
@@ -215,7 +228,10 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             let mut top = rect.top;
             for child in children {
                 let h = if flexible(child) { spare / flex.max(1) as f32 } else { height(f, child, rect.width()) };
-                let h = h.min((rect.bottom - top).max(0.0));
+                // What doesn't fit isn't drawn (no clipped half rows over the footer).
+                if !flexible(child) && top + h > rect.bottom + 1.0 {
+                    break;
+                }
                 node(f, Rect::new(rect.left, top, rect.width(), h), child, next);
                 top += h + gap;
             }
@@ -247,6 +263,9 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             let mut top = rect.top;
             for row in children.chunks(columns) {
                 let h = row.iter().map(|c| height(f, c, cell)).fold(0.0, f32::max);
+                if top + h > rect.bottom + 1.0 {
+                    break;
+                }
                 for (i, child) in row.iter().enumerate() {
                     node(f, Rect::new(rect.left + i as f32 * (cell + gap), top, cell, h), child, next);
                 }
@@ -276,7 +295,13 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
         }
         View::Icon { icon: name, size, color } => {
             let ink = tone(f, color.as_ref(), f.theme.color.secondary);
-            f.icon(rect, icon(name), size.unwrap_or(16.0), ink);
+            if name == "dot" {
+                // A status dot: a filled circle, centred.
+                let d = f.px(size.unwrap_or(8.0));
+                f.fill(rect.place(d, d, Align::Center, Align::Center), d / 2.0, ink);
+            } else {
+                f.icon(rect, icon(name), size.unwrap_or(16.0), ink);
+            }
         }
         View::Button { label, icon: i, primary, .. } => {
             let kind = if *primary { ButtonKind::Filled } else { ButtonKind::Gray };

@@ -88,6 +88,7 @@ pub fn fixture() -> Snapshot {
                 model: "sol".into(),
                 name: "GPT-6.1 Sol".into(),
             }],
+            permissions: vec!["orchestration:read".into(), "orchestration:operate".into(), "diagnostics:read".into()],
             usage_day: Some("2026-11-05".into()),
             history: Some(history()),
             limits,

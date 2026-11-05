@@ -197,6 +197,9 @@ pub struct Face {
     pub body: View,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub footer: Option<String>,
+    /// A refresh button in the header; clicking it sends the action `"refresh"`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub refresh: bool,
 }
 
 impl View {
@@ -254,6 +257,7 @@ impl View {
         Face {
             body: self,
             footer: None,
+            refresh: false,
         }
     }
 }

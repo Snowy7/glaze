@@ -12,7 +12,9 @@ pub const SCOPES: [&str; 3] = [
     "orchestration:operate",
     "diagnostics:read",
 ];
-const LABEL: &str = "mypaper";
+/// Its own label, so revoking "other sessions" never touches the shell's built-in T3 session
+/// while both exist (the built-in uses `mypaper`).
+const LABEL: &str = "mypaper-plugin";
 /// Renew once less than this is left of the 30-day grant.
 const RENEW_BEFORE_DAYS: i64 = 3;
 

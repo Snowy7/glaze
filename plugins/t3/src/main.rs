@@ -253,8 +253,22 @@ impl Plugin for T3Plugin {
                 }
             }
             Event::Action { instance, action, .. } => {
-                if action == "retry" && !self.running {
-                    self.start(ctx);
+                match action.split_once(':') {
+                    // Approvals run off the loop; the shell stream reports the outcome.
+                    Some((verb @ ("approve" | "deny"), target)) => {
+                        if let Some((thread, request)) = target.split_once(':') {
+                            let (thread, request, approve) = (thread.to_owned(), request.to_owned(), verb == "approve");
+                            let sender = ctx.sender();
+                            std::thread::spawn(move || {
+                                let endpoint = t3_client::DEFAULT_ENDPOINT;
+                                if let Err(e) = t3_client::respond_blocking(endpoint, &thread, &request, approve) {
+                                    sender.send(Msg::Ended(format!("Action failed · {e:#}")));
+                                }
+                            });
+                        }
+                    }
+                    _ if (action == "retry" || action == "refresh") && !self.running => self.start(ctx),
+                    _ => {}
                 }
                 self.draw(ctx, &instance);
             }

@@ -26,7 +26,27 @@ pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, now_ms: i64) -> Fa
             _ => View::empty("terminal", "Connecting…", "Waiting for your local T3 Code"),
         },
     };
-    Face { body, footer: Some(footer) }
+    Face { body, footer: Some(footer), refresh: true }
+}
+
+fn status(thread: &Thread) -> &'static str {
+    use crate::t3::Status;
+    if let Some(request) = &thread.pending_runtime_request {
+        return if matches!(request.kind.as_str(), "user_input" | "user-input") { "Question for you" } else { "Approval needed" };
+    }
+    match thread.status {
+        Status::Idle => "Idle",
+        Status::Queued => "Queued",
+        Status::Preparing => "Preparing",
+        Status::Starting => "Starting",
+        Status::Running => "Working",
+        Status::Waiting => "Waiting",
+        Status::Completed => "Completed",
+        Status::Failed => "Failed",
+        Status::Cancelled => "Cancelled",
+        Status::Interrupted => "Interrupted",
+        Status::RolledBack => "Rolled back",
+    }
 }
 
 fn footer(face: &str, snapshot: &Snapshot) -> String {
@@ -99,21 +119,52 @@ fn threads(state: &State, size: SizeClass, attention: bool) -> View {
             View::empty("terminal", "No work running", "Threads you start in T3 Code show up here.")
         };
     }
-    let rows = groups.iter().map(|(top, agents)| {
-        let project = state.projects.get(&top.project_id).cloned().unwrap_or_default();
-        let detail = match agents.len() {
-            0 => project,
-            n => format!("{project} · {}", plural(n, "agent")),
+    let mut children = Vec::new();
+    if size == SizeClass::Large {
+        let caption = if attention {
+            format!("need your input · {}", plural(count, "thread"))
+        } else {
+            format!("running · {}", plural(count, "thread"))
         };
-        View::ListRow {
+        children.push(View::text(count.to_string(), Role::Title1));
+        children.push(View::tinted(caption, Role::Caption, Tone::Secondary));
+    }
+    for (top, agents) in &groups {
+        let model = state
+            .details
+            .get(&top.id)
+            .map(|d| d.model.clone())
+            .filter(|m| !m.is_empty())
+            .unwrap_or_else(|| top.provider_instance_id.clone());
+        let working = agents.iter().filter(|a| a.running()).count();
+        let agents_note = match agents.len() {
+            0 => String::new(),
+            n if attention => format!(" · {} needs you", plural(n, "agent")),
+            n if working == n => format!(" · {} working", plural(n, "agent")),
+            n => format!(" · {} ({working} working)", plural(n, "agent")),
+        };
+        children.push(View::ListRow {
             title: top.title.clone(),
-            detail: Some(detail),
-            icon: Some(if top.attention() { "bell" } else { "activity" }.into()),
-            trailing: top.attention().then(|| "Needs you".into()),
+            detail: Some(format!("{} · {model}{agents_note}", status(top))),
+            icon: Some(if top.attention() { "message" } else { "terminal" }.into()),
+            trailing: None,
             action: Some(format!("thread:{}", top.id)),
+        });
+        if attention
+            && state.can_operate()
+            && let Some(request) = top.pending_runtime_request.as_ref().filter(|r| r.approvable())
+        {
+            let target = format!("{}:{}", top.id, request.id);
+            children.push(View::Row {
+                children: vec![
+                    View::Button { label: "Approve".into(), action: format!("approve:{target}"), icon: Some("check".into()), primary: false },
+                    View::Button { label: "Deny".into(), action: format!("deny:{target}"), icon: None, primary: false },
+                ],
+                gap: Some(6.0),
+            });
         }
-    });
-    View::Stack { children: rows.collect(), gap: Some(0.0) }
+    }
+    View::Stack { children, gap: Some(2.0) }
 }
 
 fn left(limit: &Limit) -> f32 {
@@ -201,42 +252,66 @@ fn limits(state: &State, size: SizeClass, now_ms: i64) -> View {
         let dot = if driver.contains("claude") { Tone::Hex("#d97757".into()) } else { Tone::Label };
         children.push(View::Row {
             children: vec![
-                View::Icon { icon: "dot".into(), size: Some(8.0), color: Some(dot) },
+                View::Icon { icon: "dot".into(), size: Some(10.0), color: Some(dot) },
                 View::text(*provider, Role::Headline),
             ],
             gap: Some(8.0),
         });
         for (window, accounts) in windows {
             let avg = accounts.iter().map(|a| left(a)).sum::<f32>() / accounts.len() as f32;
+            // One account: the card's number says it all; several: a badge and percent each.
+            let several = accounts.len() > 1;
             let bars = accounts.iter().map(|a| {
                 let (reset, pace) = timing(a, now_ms);
                 View::LimitBar {
                     left: left(a),
                     pace,
                     color: Some(brand(&a.driver)),
-                    badge: Some(initials(&a.account)),
-                    label: Some(format!("{:.0}%", left(a) * 100.0)),
+                    badge: several.then(|| initials(&a.account)),
+                    label: several.then(|| format!("{:.0}%", left(a) * 100.0)),
                     reset: reset.map(countdown),
                 }
             });
             let stat = View::Stack {
                 children: vec![
                     View::tinted(*window, Role::Callout, Tone::Secondary),
-                    View::text(format!("{:.0}%", avg * 100.0), Role::Title1),
+                    View::text(format!("{:.0}% left", avg * 100.0), Role::Title1),
                 ],
                 gap: Some(2.0),
             };
-            let mut rows = vec![stat];
-            rows.extend(bars);
-            children.push(View::Card { title: None, child: Box::new(View::Stack { children: rows, gap: Some(6.0) }) });
+            // Wide tiles: the stat beside the bars, accounts side by side (T3's limits page).
+            let bars = View::Row { children: bars.collect(), gap: Some(8.0) };
+            let card = if size == SizeClass::Large {
+                View::Grid { children: vec![stat, View::Stack { children: vec![View::Spacer, bars, View::Spacer], gap: None }], columns: 2, gap: Some(14.0) }
+            } else {
+                View::Stack { children: vec![stat, bars], gap: Some(6.0) }
+            };
+            children.push(View::Card { title: None, child: Box::new(card) });
         }
     }
     View::Stack { children, gap: Some(10.0) }
 }
 
+/// `$16,113.46`
 fn dollars(micro: u64) -> String {
-    let d = micro as f64 / 1e6;
-    if d >= 100.0 { format!("${d:.0}") } else { format!("${d:.2}") }
+    let cents = (micro + 5_000) / 10_000;
+    let whole = (cents / 100).to_string();
+    let mut grouped = String::new();
+    for (i, c) in whole.chars().enumerate() {
+        if i > 0 && (whole.len() - i) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(c);
+    }
+    format!("${grouped}.{:02}", cents % 100)
+}
+
+fn provider_name(provider: &str) -> &str {
+    match provider {
+        p if p.contains("claude") => "Claude Code",
+        p if p.contains("codex") => "Codex",
+        p => p,
+    }
 }
 
 fn tokens(n: u64) -> String {
@@ -255,12 +330,32 @@ fn usage(state: &State, size: SizeClass) -> View {
         return View::empty("activity", "No usage yet", why);
     };
     let total: u64 = history.providers.iter().flat_map(|p| &p.cost).sum();
-    let processed: u64 = history.providers.iter().flat_map(|p| &p.tokens).sum();
     if size == SizeClass::Small {
-        return metric(dollars(total), format!("{} tokens · 30 days", tokens(processed)), Tone::Label);
+        let sessions: u64 = history.providers.iter().map(|p| p.sessions).sum();
+        return metric(dollars(total), format!("{sessions} sessions · 30 days"), Tone::Label);
     }
     let mut providers: Vec<_> = history.providers.iter().collect();
     providers.sort_by_key(|p| std::cmp::Reverse(p.cost.iter().sum::<u64>()));
+    let sessions: u64 = providers.iter().map(|p| p.sessions).sum();
+    let mut children = vec![
+        View::text(dollars(total), Role::LargeTitle),
+        View::tinted(format!("{sessions} sessions · 30 days"), Role::Caption, Tone::Secondary),
+    ];
+    let shown = if size == SizeClass::Large { providers.len() } else { 1 };
+    for p in providers.iter().take(shown) {
+        let cost: u64 = p.cost.iter().sum();
+        let share = cost as f64 * 100.0 / total.max(1) as f64;
+        children.push(View::ListRow {
+            title: provider_name(&p.provider).into(),
+            detail: Some(format!("{} sessions · {share:.1}% of cost · {} tokens", p.sessions, tokens(p.tokens.iter().sum()))),
+            icon: None,
+            trailing: Some(dollars(cost)),
+            action: None,
+        });
+    }
+    if size != SizeClass::Large {
+        return View::Stack { children, gap: Some(4.0) };
+    }
     let series = providers
         .iter()
         .map(|p| Series {
@@ -271,24 +366,9 @@ fn usage(state: &State, size: SizeClass) -> View {
         .collect();
     let day = |i: usize| history.days.get(i).map(|d| d.get(5..).unwrap_or(d).to_owned()).unwrap_or_default();
     let n = history.days.len();
-    View::Stack {
-        children: vec![
-            View::Row {
-                children: vec![
-                    View::Stat { label: "Spend".into(), value: dollars(total), detail: None },
-                    View::Stat { label: "Tokens".into(), value: tokens(processed), detail: None },
-                    View::Stat { label: "Cache savings".into(), value: dollars(history.savings_microusd), detail: None },
-                ],
-                gap: Some(12.0),
-            },
-            View::AreaChart {
-                series,
-                x_labels: [day(0), day(n / 2), day(n.saturating_sub(1))],
-                unit: Some(String::new()),
-            },
-        ],
-        gap: Some(10.0),
-    }
+    children.push(View::tinted("Daily cost", Role::Subheadline, Tone::Label));
+    children.push(View::AreaChart { series, x_labels: [day(0), day(n / 2), day(n.saturating_sub(1))], unit: None });
+    View::Stack { children, gap: Some(4.0) }
 }
 
 /// Start a thread: the project and model T3 would use, and the prompt field.
