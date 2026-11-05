@@ -27,16 +27,43 @@ fn save_exchange(endpoint: &str, code: &str, scope: &str) -> Result<()> {
 /// Existing pairing is reused. New pairing uses T3's supported native one-time code;
 /// its browser OAuth tokens are MCP-only and cannot authorize the live /ws stream.
 pub fn connect_t3_blocking(endpoint: &str) -> Result<bool> {
+    connect_t3(endpoint, true)
+}
+
+pub fn reauthorize_t3_blocking(endpoint: &str) -> Result<bool> {
+    connect_t3(endpoint, false)
+}
+
+fn connect_t3(endpoint: &str, reuse: bool) -> Result<bool> {
     let endpoint = crate::t3_client::endpoint(endpoint);
-    if crate::credentials::read("t3").is_ok() && crate::t3_client::check_blocking(endpoint).is_ok() {
+    if reuse
+        && crate::credentials::read("t3").is_ok()
+        && crate::t3_client::check_blocking(endpoint).is_ok()
+    {
         return Ok(true);
     }
     let uri = crate::transport::loopback_url(endpoint)?;
     let host = uri.host().unwrap_or("127.0.0.1").trim_matches(['[', ']']);
-    let addresses: Vec<_> = std::net::ToSocketAddrs::to_socket_addrs(&(host, uri.port_u16().unwrap_or(80)))?.collect();
-    ensure!(addresses.iter().any(|address| std::net::TcpStream::connect_timeout(address, std::time::Duration::from_secs(2)).is_ok()), "T3 Code is not running. Open it, then Connect again.");
-    let Some(code) = crate::credentials::prompt_t3_pairing()? else {return Ok(false)};
-    save_exchange(endpoint, code.text()?, "orchestration:read orchestration:operate diagnostics:read")?;
+    let addresses: Vec<_> =
+        std::net::ToSocketAddrs::to_socket_addrs(&(host, uri.port_u16().unwrap_or(80)))?.collect();
+    ensure!(
+        addresses
+            .iter()
+            .any(|address| std::net::TcpStream::connect_timeout(
+                address,
+                std::time::Duration::from_secs(2)
+            )
+            .is_ok()),
+        "T3 Code is not running. Open it, then Connect again."
+    );
+    let Some(code) = crate::credentials::prompt_t3_pairing()? else {
+        return Ok(false);
+    };
+    save_exchange(
+        endpoint,
+        code.text()?,
+        "orchestration:read orchestration:operate diagnostics:read",
+    )?;
     Ok(true)
 }
 
@@ -100,13 +127,13 @@ async fn exchange_scoped(endpoint: &str, code: &str, requested_scope: &str) -> R
                 parsed.map_err(|_| anyhow::anyhow!("T3 pairing response is invalid"))?;
             ensure!(
                 response["token_type"] == "Bearer"
-                    && response["scope"]
-                        .as_str()
-                        .is_some_and(|scope| {
-                            let granted: std::collections::BTreeSet<_> = scope.split_whitespace().collect();
-                            let requested: std::collections::BTreeSet<_> = requested_scope.split_whitespace().collect();
-                            granted == requested
-                        }),
+                    && response["scope"].as_str().is_some_and(|scope| {
+                        let granted: std::collections::BTreeSet<_> =
+                            scope.split_whitespace().collect();
+                        let requested: std::collections::BTreeSet<_> =
+                            requested_scope.split_whitespace().collect();
+                        granted == requested
+                    }),
                 "T3 did not grant the requested access"
             );
             let Value::String(token) = response["access_token"].take() else {

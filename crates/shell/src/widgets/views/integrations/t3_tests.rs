@@ -6,87 +6,310 @@ use mypaper_widgets::{layout::Placed, storage::Storage};
 use serde_json::{Map, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
-const NOW: i64=1_793_875_200_000;
-fn fixture(id:&str,variant:&str)->Model {
-    let placed=Placed{instance:format!("{id}-{variant}"),widget:id.into(),cell:[0,0],size:[8,5],settings:Map::from_iter([("variant".into(),json!(variant))]),appearance:Map::new(),own:Map::new()};
-    let mut model=Model::new(placed,&mut Storage::new(std::env::temp_dir().join("mypaper-t3-grok-fixture")),Stamp::at(NOW)).unwrap();
-    model.visible=true;
-    let threads:Vec<_>=(0..20).map(|i|t3::Thread{id:format!("thread-{i}"),project_id:"paper".into(),title:if i==0 {"Review desktop permissions".into()}else{format!("Build native widget {}",i+1)},provider_instance_id:"codex".into(),status:if i==0{t3::Status::Waiting}else{t3::Status::Running},latest_run_id:Some(format!("run-{i}")),active_run_id:Some(format!("run-{i}")),pending_runtime_request:if i==0 {Some(t3::Request{id:"approval".into(),kind:"command".into()})}else{None},updated_at:"2026-11-05".into()}).collect();
-    let details=threads.iter().map(|thread|(thread.id.clone(),t3::ThreadDetail{model:"GPT-6.1 Sol".into(),agent:thread.id!="thread-0",..Default::default()})).collect();
-    model.integration.snapshot=Snapshot{availability:Availability::Live,data:if id=="t3"{Some(Data::T3(t3::Snapshot{threads,details,projects:BTreeMap::from([("paper".into(),"mypaper".into())]),environment_id:Some("fixture".into()),models:vec![t3::ModelChoice{provider:"codex".into(),provider_name:"Codex".into(),model:"sol".into(),name:"GPT-6.1 Sol".into()}],permissions:vec!["orchestration:read".into(),"orchestration:operate".into(),"diagnostics:read".into()],usage:Some(vec![t3::Usage{provider:"Codex".into(),model:"GPT-6.1 Sol".into(),tokens:1_240_000,cost_microusd:4_560_000,unpriced:false},t3::Usage{provider:"Claude".into(),model:"Opus".into(),tokens:820_000,cost_microusd:7_200_000,unpriced:false}]),usage_day:Some("2026-11-05".into()),..Default::default()}))}else{None},..Default::default()};
-    if id=="grok" {
-        model.integration.grok.discovery=grok::Discovery{installed:true,running:true,signed_in:true};
-        model.integration.routines=["Morning brief","Review my calendar","Research watchlist"].iter().enumerate().map(|(i,title)|config::Routine{id:format!("routine-{i}"),title:(*title).into(),url:"https://example.test/routine".into(),input:json!({})}).collect();
-        model.integration.runs=vec![launcher::RoutineRun{id:"routine-0".into(),title:"Morning brief".into(),state:launcher::RoutineState::Accepted,at_ms:NOW},launcher::RoutineRun{id:"routine-1".into(),title:"Review my calendar".into(),state:launcher::RoutineState::Sending,at_ms:NOW},launcher::RoutineRun{id:"routine-2".into(),title:"Research watchlist".into(),state:launcher::RoutineState::Failed,at_ms:NOW}];
+const NOW: i64 = 1_793_875_200_000;
+fn fixture(id: &str, variant: &str) -> Model {
+    let placed = Placed {
+        instance: format!("{id}-{variant}"),
+        widget: id.into(),
+        cell: [0, 0],
+        size: [8, 5],
+        settings: Map::from_iter([("variant".into(), json!(variant))]),
+        appearance: Map::new(),
+        own: Map::new(),
+    };
+    let mut model = Model::new(
+        placed,
+        &mut Storage::new(std::env::temp_dir().join("mypaper-t3-grok-fixture")),
+        Stamp::at(NOW),
+    )
+    .unwrap();
+    model.visible = true;
+    let threads: Vec<_> = (0..20)
+        .map(|i| t3::Thread {
+            id: format!("thread-{i}"),
+            project_id: "paper".into(),
+            title: if i == 0 {
+                "Review desktop permissions".into()
+            } else {
+                format!("Build native widget {}", i + 1)
+            },
+            provider_instance_id: "codex".into(),
+            status: if i == 0 {
+                t3::Status::Waiting
+            } else {
+                t3::Status::Running
+            },
+            latest_run_id: Some(format!("run-{i}")),
+            active_run_id: Some(format!("run-{i}")),
+            pending_runtime_request: if i == 0 {
+                Some(t3::Request {
+                    id: "approval".into(),
+                    kind: "command".into(),
+                })
+            } else {
+                None
+            },
+            updated_at: "2026-11-05".into(),
+        })
+        .collect();
+    let details = threads
+        .iter()
+        .map(|thread| {
+            (
+                thread.id.clone(),
+                t3::ThreadDetail {
+                    model: "GPT-6.1 Sol".into(),
+                    agent: thread.id != "thread-0",
+                    ..Default::default()
+                },
+            )
+        })
+        .collect();
+    model.integration.snapshot = Snapshot {
+        availability: Availability::Live,
+        data: if id == "t3" {
+            Some(Data::T3(t3::Snapshot {
+                threads,
+                details,
+                projects: BTreeMap::from([("paper".into(), "mypaper".into())]),
+                environment_id: Some("fixture".into()),
+                models: vec![t3::ModelChoice {
+                    provider: "codex".into(),
+                    provider_name: "Codex".into(),
+                    model: "sol".into(),
+                    name: "GPT-6.1 Sol".into(),
+                }],
+                permissions: vec![
+                    "orchestration:read".into(),
+                    "orchestration:operate".into(),
+                    "diagnostics:read".into(),
+                ],
+                usage: Some(vec![
+                    t3::Usage {
+                        provider: "Codex".into(),
+                        model: "GPT-6.1 Sol".into(),
+                        tokens: 1_240_000,
+                        cost_microusd: 4_560_000,
+                        unpriced: false,
+                    },
+                    t3::Usage {
+                        provider: "Claude".into(),
+                        model: "Opus".into(),
+                        tokens: 820_000,
+                        cost_microusd: 7_200_000,
+                        unpriced: false,
+                    },
+                ]),
+                usage_day: Some("2026-11-05".into()),
+                ..Default::default()
+            }))
+        } else {
+            None
+        },
+        ..Default::default()
+    };
+    if id == "grok" {
+        model.integration.grok.discovery = grok::Discovery {
+            installed: true,
+            running: true,
+            signed_in: true,
+        };
+        model.integration.routines = ["Morning brief", "Review my calendar", "Research watchlist"]
+            .iter()
+            .enumerate()
+            .map(|(i, title)| config::Routine {
+                id: format!("routine-{i}"),
+                title: (*title).into(),
+                url: "https://example.test/routine".into(),
+                input: json!({}),
+            })
+            .collect();
+        model.integration.runs = vec![
+            launcher::RoutineRun {
+                id: "routine-0".into(),
+                title: "Morning brief".into(),
+                state: launcher::RoutineState::Accepted,
+                at_ms: NOW,
+            },
+            launcher::RoutineRun {
+                id: "routine-1".into(),
+                title: "Review my calendar".into(),
+                state: launcher::RoutineState::Sending,
+                at_ms: NOW,
+            },
+            launcher::RoutineRun {
+                id: "routine-2".into(),
+                title: "Research watchlist".into(),
+                state: launcher::RoutineState::Failed,
+                at_ms: NOW,
+            },
+        ];
     }
     model
 }
 
-fn draw(ui:&mut Ui,model:&Model,size:(u32,u32),scale:f32)->DisplayList {
-    views::view(model,&Tokens::default(),views::Frame{size,scale,now:Stamp::at(NOW),instant:Instant::now(),editing:false},&mut ui.text)
+fn draw(ui: &mut Ui, model: &Model, size: (u32, u32), scale: f32) -> DisplayList {
+    views::view(
+        model,
+        &Tokens::default(),
+        views::Frame {
+            size,
+            scale,
+            now: Stamp::at(NOW),
+            instant: Instant::now(),
+            editing: false,
+        },
+        &mut ui.text,
+    )
 }
 
-fn label(sheet:&mut DisplayList,x:f32,y:f32,text:&str) {
-    sheet.ops.push(Op::Text{rect:Rect::new(x,y,1000.0,24.0),text:text.into(),style:TextStyle::new("Segoe UI Variable",14.0),color:Rgba::rgb8([220,228,240],1.0)});
+fn label(sheet: &mut DisplayList, x: f32, y: f32, text: &str) {
+    sheet.ops.push(Op::Text {
+        rect: Rect::new(x, y, 1000.0, 24.0),
+        text: text.into(),
+        style: TextStyle::new("Segoe UI Variable", 14.0),
+        color: Rgba::rgb8([220, 228, 240], 1.0),
+    });
 }
-fn add(ui:&mut Ui,sheet:&mut DisplayList,model:&Model,size:(u32,u32),x:f32,y:f32) {
-    let list=draw(ui,model,size,1.0);
-    let image=render(ui,&list,size.0,size.1).unwrap();
-    let rect=Rect::new(x,y,size.0 as f32,size.1 as f32);
-    sheet.ops.push(Op::Fill{rect,radius:22.0,color:Rgba::rgb8([44,52,64],1.0)});
-    sheet.ops.push(Op::Image{rect,image:Arc::new(image),opacity:1.0,source:None});
+fn add(ui: &mut Ui, sheet: &mut DisplayList, model: &Model, size: (u32, u32), x: f32, y: f32) {
+    let list = draw(ui, model, size, 1.0);
+    let image = render(ui, &list, size.0, size.1).unwrap();
+    let rect = Rect::new(x, y, size.0 as f32, size.1 as f32);
+    sheet.ops.push(Op::Fill {
+        rect,
+        radius: 22.0,
+        color: Rgba::rgb8([44, 52, 64], 1.0),
+    });
+    sheet.ops.push(Op::Image {
+        rect,
+        image: Arc::new(image),
+        opacity: 1.0,
+        source: None,
+    });
 }
-fn sheet(ui:&mut Ui,id:&str,variants:&[&str])->Image {
-    let height=variants.len() as u32*380+285;
-    let mut sheet=DisplayList::default();
-    sheet.ops.push(Op::Fill{rect:Rect::new(0.0,0.0,1176.0,height as f32),radius:0.0,color:Rgba::rgb8([20,25,33],1.0)});
-    for (row,variant) in variants.iter().enumerate() {
-        let y=20.0+row as f32*380.0;
-        label(&mut sheet,24.0,y,&format!("{id} / {variant} — compact · regular · large"));
-        let model=fixture(id,variant);
-        for (x,size) in [(24.0,(180,132)),(228.0,(360,220)),(612.0,(540,330))] {add(ui,&mut sheet,&model,size,x,y+30.0);}
+fn sheet(ui: &mut Ui, id: &str, variants: &[&str]) -> Image {
+    let height = variants.len() as u32 * 380 + 285;
+    let mut sheet = DisplayList::default();
+    sheet.ops.push(Op::Fill {
+        rect: Rect::new(0.0, 0.0, 1176.0, height as f32),
+        radius: 0.0,
+        color: Rgba::rgb8([20, 25, 33], 1.0),
+    });
+    for (row, variant) in variants.iter().enumerate() {
+        let y = 20.0 + row as f32 * 380.0;
+        label(
+            &mut sheet,
+            24.0,
+            y,
+            &format!("{id} / {variant} — compact · regular · large"),
+        );
+        let model = fixture(id, variant);
+        for (x, size) in [(24.0, (180, 132)), (228.0, (360, 220)), (612.0, (540, 330))] {
+            add(ui, &mut sheet, &model, size, x, y + 30.0);
+        }
     }
-    let y=variants.len() as f32*380.0+20.0;
-    for (index,(x,title)) in [(24.0,"SETUP"),(412.0,"DISCONNECTED"),(800.0,"PERMISSION / NO ROUTINES")].into_iter().enumerate() {
-        label(&mut sheet,x,y,title);
-        let mut m=fixture(id,if id=="t3"{"usage"}else{"routines"});
-        if index==0 {m.integration.snapshot=Snapshot{availability:Availability::Unavailable("opaque protocol error".into()),..Default::default()};m.integration.routines.clear();m.integration.grok.discovery=Default::default();}
-        else if index==1 {m.integration.snapshot.availability=Availability::Stale("raw socket error".into());}
-        else {if let Some(Data::T3(state))=&mut m.integration.snapshot.data {state.usage=None;state.permissions.clear();}m.integration.routines.clear();}
-        add(ui,&mut sheet,&m,(352,220),x,y+30.0);
+    let y = variants.len() as f32 * 380.0 + 20.0;
+    for (index, (x, title)) in [
+        (24.0, "SETUP"),
+        (412.0, "DISCONNECTED"),
+        (800.0, "PERMISSION / NO ROUTINES"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        label(&mut sheet, x, y, title);
+        let mut m = fixture(id, if id == "t3" { "usage" } else { "routines" });
+        if index == 0 {
+            m.integration.snapshot = Snapshot {
+                availability: Availability::Unavailable("opaque protocol error".into()),
+                ..Default::default()
+            };
+            m.integration.routines.clear();
+            m.integration.grok.discovery = Default::default();
+        } else if index == 1 {
+            m.integration.snapshot.availability = Availability::Stale("raw socket error".into());
+        } else {
+            if let Some(Data::T3(state)) = &mut m.integration.snapshot.data {
+                state.usage = None;
+                state.permissions.clear();
+            }
+            m.integration.routines.clear();
+        }
+        add(ui, &mut sheet, &m, (352, 220), x, y + 30.0);
     }
-    render(ui,&sheet,1176,height).unwrap()
+    render(ui, &sheet, 1176, height).unwrap()
 }
 
 #[test]
 fn t3_grok_dense_sizes_and_sheets() {
-    let mut ui=Ui::new().unwrap();
-    for (id,variants) in [("t3",&["running","usage","attention","new"][..]),("grok",&["routines","recent","prompt"][..])] {
+    let mut ui = Ui::new().unwrap();
+    for (id, variants) in [
+        ("t3", &["running", "usage", "attention", "new"][..]),
+        ("grok", &["routines", "recent", "prompt"][..]),
+    ] {
         for variant in variants {
-            for width in 4..=12 {for height in 3..=10 {for scale in [1.0,1.5] {
-                let size=((width as f32*44.0*scale)as u32,(height as f32*44.0*scale)as u32);
-                let m=fixture(id,variant);
-                let list=draw(&mut ui,&m,size,scale);
-                assert!(list.damage(&draw(&mut ui,&m,size,scale)).is_none(),"{id}/{variant} idle damage");
-                for hit in &list.hits {assert!(hit.rect.left>=0.0&&hit.rect.top>=0.0&&hit.rect.right<=size.0 as f32&&hit.rect.bottom<=size.1 as f32,"{id}/{variant}/{width}x{height}: {} {:?}",hit.label,hit.rect);}
-            }}}
+            for width in 4..=12 {
+                for height in 3..=10 {
+                    for scale in [1.0, 1.5] {
+                        let size = (
+                            (width as f32 * 44.0 * scale) as u32,
+                            (height as f32 * 44.0 * scale) as u32,
+                        );
+                        let m = fixture(id, variant);
+                        let list = draw(&mut ui, &m, size, scale);
+                        assert!(
+                            list.damage(&draw(&mut ui, &m, size, scale)).is_none(),
+                            "{id}/{variant} idle damage"
+                        );
+                        for hit in &list.hits {
+                            assert!(
+                                hit.rect.left >= 0.0
+                                    && hit.rect.top >= 0.0
+                                    && hit.rect.right <= size.0 as f32
+                                    && hit.rect.bottom <= size.1 as f32,
+                                "{id}/{variant}/{width}x{height}: {} {:?}",
+                                hit.label,
+                                hit.rect
+                            );
+                        }
+                    }
+                }
+            }
         }
-        let path=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("src/widgets/views/integrations/{id}-sizes.png"));
-        golden::check(&sheet(&mut ui,id,variants),&path).unwrap();
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("src/widgets/views/integrations/{id}-sizes.png"));
+        golden::check(&sheet(&mut ui, id, variants), &path).unwrap();
     }
 }
 
 #[test]
 fn t3_scrolling_reaches_the_last_agent_and_stale_approvals_are_disabled() {
-    let mut ui=Ui::new().unwrap();
-    let mut m=fixture("t3","running");
-    draw(&mut ui,&m,(360,360),1.0);
-    m.scroll=m.scroll_max.get();
-    let list=draw(&mut ui,&m,(360,360),1.0);
-    assert!(list.hits.iter().any(|hit|hit.id==crate::integrations::t3_widgets::THREAD+19));
-    m.placed.settings.insert("variant".into(),json!("attention"));
-    m.integration.snapshot.availability=Availability::Stale("socket detail must stay hidden".into());
-    let list=draw(&mut ui,&m,(360,360),1.0);
-    assert!(list.hits.iter().filter(|hit|(100_000..140_000).contains(&hit.id)).all(|hit|!hit.enabled));
-    assert!(!list.ops.iter().any(|op|matches!(op,Op::Text{text,..} if text.contains("socket detail"))));
+    let mut ui = Ui::new().unwrap();
+    let mut m = fixture("t3", "running");
+    draw(&mut ui, &m, (360, 360), 1.0);
+    m.scroll = m.scroll_max.get();
+    let list = draw(&mut ui, &m, (360, 360), 1.0);
+    assert!(
+        list.hits
+            .iter()
+            .any(|hit| hit.id == crate::integrations::t3_widgets::THREAD + 19)
+    );
+    m.placed
+        .settings
+        .insert("variant".into(), json!("attention"));
+    m.integration.snapshot.availability =
+        Availability::Stale("socket detail must stay hidden".into());
+    let list = draw(&mut ui, &m, (360, 360), 1.0);
+    assert!(
+        list.hits
+            .iter()
+            .filter(|hit| (100_000..140_000).contains(&hit.id))
+            .all(|hit| !hit.enabled)
+    );
+    assert!(
+        !list
+            .ops
+            .iter()
+            .any(|op| matches!(op,Op::Text{text,..} if text.contains("socket detail")))
+    );
 }
