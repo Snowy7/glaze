@@ -57,7 +57,8 @@ unsafe extern "system" {
     fn GetProcAddress(module: Handle, name: *const c_char) -> *mut c_void;
     fn SetDefaultDllDirectories(flags: u32) -> i32;
     fn SetErrorMode(mode: u32) -> u32;
-    pub fn ExitProcess(code: u32) -> !;
+    fn GetCurrentProcess() -> Handle;
+    fn TerminateProcess(process: Handle, code: u32) -> i32;
     fn CreateJobObjectW(security: *const c_void, name: *const u16) -> Handle;
     fn SetInformationJobObject(job: Handle, class: i32, info: *const c_void, size: u32) -> i32;
     fn AssignProcessToJobObject(job: Handle, process: Handle) -> i32;
@@ -72,6 +73,15 @@ fn ok(value: i32) -> io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+/// Skip vendor DLL detach handlers, which can deadlock while a call holds locks.
+pub fn terminate(code: u32) -> ! {
+    // SAFETY: terminate only this disposable host, using its own process handle.
+    unsafe {
+        TerminateProcess(GetCurrentProcess(), code);
+    }
+    std::process::abort()
 }
 
 #[repr(C)]

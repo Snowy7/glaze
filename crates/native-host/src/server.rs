@@ -104,10 +104,7 @@ fn watchdog() -> mpsc::Sender<Option<Instant>> {
             match next {
                 Ok(at) => armed = at,
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    // SAFETY: this is the disposable native host, never the plugin runtime.
-                    unsafe { windows::ExitProcess(124) }
-                }
+                Err(mpsc::RecvTimeoutError::Timeout) => windows::terminate(124),
             }
         }
     });
