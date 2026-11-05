@@ -338,6 +338,16 @@ impl Docs {
         Ok(Some(label))
     }
 
+    /// Writes `id`'s file again, byte for byte, so the programs watching it reload what it
+    /// points at (an icon pack's folder changed). Nothing is written while it doesn't exist.
+    pub fn touch(&self, id: DocId) -> Result<()> {
+        let Some(path) = &self.doc(id).path else { return Ok(()) };
+        match std::fs::read(path) {
+            Ok(bytes) => write_atomic(path, &bytes),
+            Err(_) => Ok(()),
+        }
+    }
+
     /// Reads `id` again after an outside change. Returns whether anything changed. A file that
     /// stopped parsing keeps its last good values on screen, with the error shown.
     pub fn reload(&mut self, id: DocId) -> bool {

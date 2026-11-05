@@ -275,6 +275,11 @@ pub enum Action {
     // Look
     LookTab(bool),
     LookScope(bool),
+    /// Make a new, empty icon pack of your own and use it.
+    IconPackNew,
+    /// Give an app its own icon in the current pack (asks for the app, then the picture).
+    IconPackAdd,
+    IconPackRemove(usize),
     SetStyle(Option<Style>),
     WindowsLook(usize),
     LookReset,

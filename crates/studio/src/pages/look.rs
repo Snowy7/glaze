@@ -4,6 +4,9 @@
 //! scope switch edits your look, or the look the wallpaper brings (your own wallpapers'; a
 //! built-in's needs a copy).
 
+use std::path::PathBuf;
+
+use mypaper_bars::icon_pack::{self, IconPack};
 use mypaper_config::look::Style;
 use mypaper_ui::controls::{Align, ButtonKind, Font, key};
 use mypaper_ui::{Rect, Rgba};
@@ -236,6 +239,58 @@ fn icon_pack(app: &App, b: &mut B, c: &mut Col) {
         current: Some(current.map_or(Value::Null, Value::String)),
     }));
     c.y += h + b.px(4.0);
+    // Your own pack: the apps it gives an icon, and adding one.
+    if let Some((dir, pack)) = own_pack(app) {
+        let body = b.font(Font::Body);
+        for (i, entry) in pack.entries.iter().enumerate() {
+            let r = Rect::new(c.x, c.y, c.w, b.px(36.0));
+            let icon = Rect::new(r.left + b.px(2.0), r.top + b.px(8.0), b.px(20.0), b.px(20.0));
+            match app.images.borrow_mut().get(&dir.join(&entry.icon), (64, 64)) {
+                Some(image) => crate::stage::image_cover(b, icon, &image, 1.0),
+                None => b.icon(icon, glyph::APP, 14.0, b.p.ink3),
+            }
+            let what = [&entry.path, &entry.umid, &entry.extension, &entry.key].into_iter().flatten().next().map_or("", String::as_str);
+            b.text_in(Rect::new(r.left + b.px(32.0), r.top, r.width() - b.px(68.0), r.height()), what, &body, b.p.ink1, Align::Start);
+            let remove = Rect::new(r.right - b.px(30.0), r.top + b.px(4.0), b.px(28.0), b.px(28.0));
+            b.icon_button(key(("pack-remove", i)), remove, glyph::DELETE, &format!("Remove {what}"), false, true, Action::IconPackRemove(i));
+            c.y += b.px(36.0);
+        }
+        let w = b.button_width("An app's icon", true, true);
+        b.button(key("pack-add"), Rect::new(c.x, c.y + b.px(4.0), w, b.px(28.0)), "An app's icon", Some(glyph::ADD), ButtonKind::Secondary, true, Action::IconPackAdd);
+        c.y += b.px(40.0);
+    } else {
+        let w = b.button_width("Start your own", true, true);
+        b.button(key("pack-new"), Rect::new(c.x, c.y + b.px(4.0), w, b.px(28.0)), "Start your own", Some(glyph::ADD), ButtonKind::Secondary, true, Action::IconPackNew);
+        c.y += b.px(40.0);
+    }
+}
+
+/// Where your icon packs are (`%APPDATA%\mypaper\icons`).
+fn packs_dir() -> Option<PathBuf> {
+    mypaper_config::dir().ok().map(|d| d.join("icons"))
+}
+
+/// The pack in use, when it's one of your own folders.
+fn own_pack(app: &App) -> Option<(PathBuf, IconPack)> {
+    let name = app.get(DocId::Config, "/look/text/icon_pack")?.as_str()?;
+    let dir = packs_dir()?.join(name);
+    IconPack::load(&dir).ok().map(|pack| (dir, pack))
+}
+
+/// Writes a pack's manifest (checked first), then has the bars reload it.
+fn save_pack(app: &mut App, dir: &std::path::Path, pack: &IconPack) {
+    let written = serde_json::to_string_pretty(pack)
+        .map_err(anyhow::Error::from)
+        .and_then(|text| IconPack::parse(&text).map(|_| text))
+        .and_then(|text| {
+            std::fs::create_dir_all(dir)?;
+            crate::docs::write_atomic(&dir.join(icon_pack::MANIFEST), text.as_bytes())
+        })
+        .and_then(|()| app.docs.touch(DocId::Bars));
+    if let Err(e) = written {
+        app.alert(format!("{e:#}"));
+    }
+    app.dirty = true;
 }
 
 /// The wallpaper's accent (its palette), for "From wallpaper" swatches.
@@ -521,6 +576,40 @@ pub fn run(app: &mut App, action: Action) {
         Action::LookTab(windows) => {
             app.go(Page::Look);
             app.nav.look_windows = windows;
+        }
+        Action::IconPackNew => {
+            let Some(root) = packs_dir() else { return };
+            let Some(name) = (1..100).map(|n| if n == 1 { "My icons".to_owned() } else { format!("My icons {n}") }).find(|n| !root.join(n).exists()) else { return };
+            save_pack(app, &root.join(&name), &IconPack { name: name.clone(), mono: false, missing: None, entries: Vec::new() });
+            app.set(&Edit::new(DocId::Config, "/look/text/icon_pack", "Icon pack"), json!(name));
+        }
+        Action::IconPackAdd => {
+            let Some((dir, mut pack)) = own_pack(app) else { return };
+            let Some(exe) = crate::dialogs::pick(app.window, "Choose the app", false, crate::dialogs::PROGRAMS) else { return };
+            let Some(picture) = crate::dialogs::pick(app.window, "Choose its icon", false, crate::dialogs::ICONS) else { return };
+            let (Some(stem), Some(ext), Some(exe_name)) = (
+                exe.file_stem().map(|s| s.to_string_lossy().to_lowercase()),
+                picture.extension().map(|s| s.to_string_lossy().to_lowercase()),
+                exe.file_name().map(|s| s.to_string_lossy().to_lowercase()),
+            ) else {
+                return;
+            };
+            let icon = format!("{stem}.{ext}");
+            if let Err(e) = std::fs::create_dir_all(&dir).and_then(|()| std::fs::copy(&picture, dir.join(&icon))) {
+                app.alert(format!("Couldn't copy the picture: {e}"));
+                return;
+            }
+            // By file name, so it matches the app wherever it's installed.
+            pack.entries.retain(|e| e.path.as_deref() != Some(exe_name.as_str()));
+            pack.entries.push(icon_pack::Entry { path: Some(exe_name), icon, ..Default::default() });
+            save_pack(app, &dir, &pack);
+        }
+        Action::IconPackRemove(i) => {
+            let Some((dir, mut pack)) = own_pack(app) else { return };
+            if i < pack.entries.len() {
+                pack.entries.remove(i);
+                save_pack(app, &dir, &pack);
+            }
         }
         Action::LookScope(theme) => {
             app.go(Page::Look);

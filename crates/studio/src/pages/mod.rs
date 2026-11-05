@@ -76,7 +76,15 @@ pub fn run(app: &mut App, action: Action) {
         | Action::CopyWallpaper(_)
         | Action::RemoveWallpaper(_)
         | Action::WallpapersOwn => wallpapers::run(app, action),
-        Action::LookTab(_) | Action::LookScope(_) | Action::SetStyle(_) | Action::WindowsLook(_) | Action::LookReset | Action::StageReal(_) => {
+        Action::LookTab(_)
+        | Action::LookScope(_)
+        | Action::SetStyle(_)
+        | Action::WindowsLook(_)
+        | Action::LookReset
+        | Action::StageReal(_)
+        | Action::IconPackNew
+        | Action::IconPackAdd
+        | Action::IconPackRemove(_) => {
             look::run(app, action)
         }
         Action::Display(i) => {
