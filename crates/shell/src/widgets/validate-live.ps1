@@ -121,7 +121,8 @@ try {
     $widgetLiveFixture.WaitForExit(20000) | Out-Null
     Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log')
     if (-not $widgetLiveFixture.HasExited) {throw 'Fixture did not stop before startup measurements'}
-    if ($widgetLiveFixture.ExitCode -ne 0) {throw 'Fixture failed; these measurements are not a passing gate'}
+    [IO.File]::WriteAllText((Join-Path $widgetLiveEvidence 'fixture-exit-code.txt'),[string]$widgetLiveFixture.ExitCode)
+    if ($widgetLiveFixture.ExitCode -ne 0) {throw "Fixture failed (exit $($widgetLiveFixture.ExitCode)); these measurements are not a passing gate"}
     if (-not $Profile -and -not $Interactions) {
         $checkpoints=@(Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log') | Where-Object {$_ -match 'N4_CHECKPOINT'})
         if ($checkpoints.Count -ne 2 -or @($checkpoints -notmatch 'visible=6/6(?: |$)').Count -ne 0) {throw 'Missing visible-widget checkpoints around the measurement windows'}
