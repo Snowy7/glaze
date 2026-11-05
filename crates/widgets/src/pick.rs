@@ -335,7 +335,11 @@ pub fn copy_instance(root: &Path, from: &str, to: &str) {
 
 /// Native duplication must report a failed copy rather than saving a broken photo instance.
 pub fn copy_instance_checked(root: &Path, from: &str, to: &str) -> anyhow::Result<()> {
-    anyhow::ensure!(valid_id(from) && valid_id(to) && from != to, "invalid duplicate ids");
+    anyhow::ensure!(
+        valid_id(from) && valid_id(to) && from != to,
+        "invalid duplicate ids"
+    );
+    anyhow::ensure!(!root.join(to).exists(), "duplicate files already exist");
     let (source, target) = (files_dir(root, from), files_dir(root, to));
     let entries = match std::fs::read_dir(source) {
         Ok(entries) => entries,
