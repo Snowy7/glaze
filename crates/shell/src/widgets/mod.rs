@@ -11,7 +11,6 @@ pub(crate) mod model;
 mod tests;
 pub(crate) mod time;
 pub(crate) mod view;
-mod watch;
 
 use crate::glass::{self, Material, Plate};
 use crate::inbox;
@@ -27,8 +26,8 @@ use mypaper_desktop::hold::{Fact, Holds, Reason};
 use mypaper_desktop::{DesktopEvents, DesktopHost, Monitor, covered_monitors, monitor_infos};
 use mypaper_theme::{Color, Paint, TextTone};
 use mypaper_ui::{
-    Button, Colors, Event, HitId, Kind, Rect, Rgba, Role, Surface, SurfaceId, TextField, TextStyle,
-    Ticker, Tokens, Ui,
+    Button, Colors, Event, FileWatch, HitId, Kind, Rect, Rgba, Role, Surface, SurfaceId, TextField,
+    TextStyle, Ticker, Tokens, Ui,
 };
 use mypaper_widgets::{
     appicon::Icons,
@@ -50,7 +49,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 use time::Stamp;
-use watch::FileWatch;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_SZ, RegGetValueW};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, SetFocus};

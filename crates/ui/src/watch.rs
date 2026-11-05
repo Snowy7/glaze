@@ -1,5 +1,5 @@
-//! File reloads use native change signals. The generic Windows notify backend wakes at 10 Hz
-//! per watcher; these workers sleep until a directory changes or the owner drops the watch.
+//! File reloads use native change signals. Workers sleep until a directory changes or the
+//! owner drops the watch; callbacks run only when the file's bytes change, including removal.
 use anyhow::{Context, Result};
 use std::{path::Path, thread::JoinHandle};
 use windows::Win32::{
@@ -11,6 +11,7 @@ use windows::Win32::{
     System::Threading::{CreateEventW, INFINITE, SetEvent, WaitForMultipleObjects},
 };
 
+/// Watch one file across writes, atomic replacements, removals and recreations.
 pub struct FileWatch {
     stop: HANDLE,
     worker: Option<JoinHandle<()>>,
@@ -36,7 +37,7 @@ impl FileWatch {
             let path = path.to_owned();
             let (signal_id, stop_id) = (signal.0 as usize, stop.0 as usize);
             let worker = std::thread::Builder::new()
-                .name("widget-file-change".into())
+                .name("ui-file-change".into())
                 .stack_size(256 * 1024)
                 .spawn(move || {
                     let (signal, stop) = (HANDLE(signal_id as _), HANDLE(stop_id as _));
