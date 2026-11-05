@@ -14,6 +14,8 @@ use mypaper_native_host::{HostConfig, Isolation, PluginSpec, Supervisor};
 use crate::host::Input;
 
 pub enum Job {
+    /// Reaches this barrier only after queued native calls and deactivation have finished.
+    Removed(String),
     Activate { plugin: String, folder: PathBuf, native: Vec<String>, permissions: Vec<String> },
     Deactivate(String),
     Call { plugin: String, id: u64, module: String, method: String, bytes: Vec<u8> },
@@ -47,6 +49,7 @@ impl Lane {
         std::thread::Builder::new().name("native".into()).stack_size(256 << 10).spawn(move || {
             for job in rx {
                 match job {
+                    Job::Removed(plugin) => { if tx.send(Input::Removed(plugin)).is_err() { break; } }
                     Job::Activate { plugin, folder, native, permissions } => {
                         let spec = PluginSpec { id: plugin.clone(), folder, native, permissions, isolation: Isolation::Shared };
                         if let Err(e) = supervisor.activate(spec) {

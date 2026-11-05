@@ -12,6 +12,7 @@ pub mod media;
 pub mod net;
 pub mod pick;
 pub mod plugins;
+pub mod plugin_manager;
 pub mod registry;
 pub mod rpc;
 pub mod stats;

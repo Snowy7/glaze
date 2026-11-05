@@ -584,3 +584,56 @@ round-trips, events, permission/containment checks, shared and isolated lifecycl
 crash recovery, automatic isolation, and hang deadlines. It never drives the
 user's desktop. Measurements and the reproducible harness live in
 `crates/native-host/MEASUREMENTS.md`.
+
+## Studio packages and installation (`.mypaper-plugin`)
+
+The current Studio package format is **`.mypaper-plugin`**, a ZIP archive (the earlier
+`.mpplugin` name in Packaging above was a proposal). Put the plugin files directly at the
+archive root, without an enclosing folder:
+
+```text
+example.mypaper-plugin
+  plugin.json
+  example.wasm
+  module.dll          (optional; declare in native)
+  vendor.dll          (optional dependency of a native module)
+  assets/...         (optional)
+```
+
+`plugin.json` uses the manifest described above, with optional `author` and `version`
+metadata. `component` names the root `.wasm`; `api` must be compatible with this host's
+`0.1` API. If `sdk` is present, its major must also match the supported SDK. Native modules
+must appear in `native` and require `native-code`. Settings use the widget settings schema
+(`boolean`, `number`, `slider`, `select`, `string`, and the other types in `docs/widgets.md`).
+
+1. In **Studio → Integrations → Plugins**, choose **Install from file…** for a package or
+   **Folder…** for an unpacked plugin. The folder's name may differ from its manifest id.
+2. Studio validates and stages a private copy, then shows the author, version, network
+   origins, local pipes, storage/secrets access, native modules and styling permissions.
+   **Cancel installs nothing.** No component or native module executes during this review.
+3. Choose **Allow and install**. Only then is the staged copy installed to
+   `%APPDATA%\mypaper\plugins\<id>\`. Studio invokes
+   `mypaper-plugins --compile <installed-plugin-folder>` and checks its exit status.
+   Compilation validates imports without executing plugin code. A failed compilation removes
+   the installed copy and reports the error. An existing user installation must be uninstalled
+   before replacing it, so new permissions are always reviewed again.
+4. The plugin appears in the list, initially unloaded until a contribution is used. Its
+   details list permissions, widgets, bar modules, panels, menu items, commands and settings.
+
+Archives are limited to 128 MiB unpacked and 4096 entries. Absolute paths, parent traversal,
+duplicate paths and symlinks are refused; folder installs also refuse junctions and symlinks.
+Packages targeting a newer or incompatible SDK/API are refused with an update message.
+
+The list refreshes only while Studio is in front on Plugins. **CPU µs** is the runtime's
+cumulative plugin execution time, **Memory** its WebAssembly linear memory, and the detail
+view includes its event count. These are plugin counters, not whole-helper working set or
+native-module memory. Legacy executable plugins show their lifecycle status and a dash for
+counters the component runtime does not provide.
+
+**Disable** stops a plugin and preserves its data; **Enable** permits its placed contributions
+to load again. **Uninstall** waits for the runtime and native modules to release the plugin,
+then removes its user installation, `%LOCALAPPDATA%\mypaper\plugins\cache\<id>-*.cwasm`,
+`%APPDATA%\mypaper\plugin-data\<id>\` and the complete Credential Manager namespace
+`mypaper/integrations/plugin/<id>/`. A bundled plugin is hidden and disabled for this user;
+its shipped files stay with the application. Plugin preferences live in
+`%APPDATA%\mypaper\plugin-manager.json`; secrets never go into this file.

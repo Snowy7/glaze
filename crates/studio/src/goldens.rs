@@ -127,6 +127,12 @@ macro_rules! screens {
 }
 
 screens! {
+    plugins: |app: &mut App| {
+        app.nav.page = Some(Page::Integrations);
+        app.nav.plugins = true;
+        crate::pages::plugins::fixture(&mut app.plugins);
+    };
+    plugins_consent: |app: &mut App| crate::pages::plugins::consent_fixture(app);
     home: |app: &mut App| app.nav.page = Some(Page::Home);
     wallpapers: |app: &mut App| {
         app.nav.page = Some(Page::Wallpapers);

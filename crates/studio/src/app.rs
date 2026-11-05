@@ -36,6 +36,7 @@ pub struct Nav {
     pub module: Option<Slot>,
     pub panel: Option<Panel>,
     pub integration: usize,
+    pub plugins: bool,
     pub more: HashSet<Key>,
     pub scroll: HashMap<Key, f32>,
 }
@@ -97,6 +98,8 @@ pub enum Drag {
 /// The overlay over the page (one at a time).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Overlay {
+    PluginConsent,
+    PluginUninstall(String),
     Palette { selected: usize },
     AddWallpaper { source: Option<Source>, picked: Option<String> },
     AddWidget,
@@ -121,6 +124,8 @@ pub struct Field {
 
 /// Messages from Studio's worker threads and the file watcher.
 pub enum Msg {
+    PluginPrepared(Result<mypaper_widgets::plugin_manager::Package, String>),
+    PluginInstalled(Result<String, String>),
     Files(Vec<crate::watch::Change>),
     Image(crate::images::Loaded),
     Places(u64, Result<Vec<serde_json::Value>, String>),
@@ -131,6 +136,7 @@ pub enum Msg {
 pub const WM_STUDIO: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 41;
 
 pub struct App {
+    pub plugins: crate::pages::plugins::State,
     pub docs: Docs,
     pub theme: Theme,
     pub scale: f32,
@@ -246,6 +252,7 @@ impl App {
 
     fn with(docs: Docs, theme: Theme, library: Library, scale: f32, size: (u32, u32), fixture: bool) -> Self {
         Self {
+            plugins: Default::default(),
             docs,
             theme,
             scale,
@@ -911,6 +918,14 @@ impl App {
     }
 
     fn field_initial(&self, id: &FieldId) -> String {
+        if let FieldId::Text(DocId::Studio, path) = id
+            && let Some(rest) = path.strip_prefix("/plugins/setting/")
+            && let Some((plugin, key)) = rest.split_once('/') {
+            let key = key.replace("~1", "/").replace("~0", "~");
+            let schema = self.plugins.installed.iter().find(|m| m.id == plugin).and_then(|m| m.settings.iter().find(|s| s["key"].as_str() == Some(&key)));
+            let value = self.plugins.preferences.settings.get(plugin).and_then(|v| v.get(&key)).or_else(|| schema.map(|s| &s["default"]));
+            return value.map(|v| v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string())).unwrap_or_default();
+        }
         match id {
             FieldId::Text(doc, path) => self
                 .get(*doc, path)
@@ -1245,7 +1260,7 @@ impl App {
                 // SAFETY: a read-only query.
                 (unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() }) == w
             })
-            && matches!(self.nav.page(), Page::Home | Page::Settings)
+            && (matches!(self.nav.page(), Page::Home | Page::Settings) || self.nav.page() == Page::Integrations && self.nav.plugins)
     }
 
     /// Timers: expire the toast and flash, refresh live status.
@@ -1267,6 +1282,7 @@ impl App {
         }
         if self.watching_status() && self.system.poll_due(now) {
             self.system.refresh();
+            if self.nav.page() == Page::Integrations && self.nav.plugins { self.plugins.refresh(); }
             self.dirty = true;
         }
     }
@@ -1274,6 +1290,22 @@ impl App {
     /// A message from a worker or the watcher.
     pub fn message(&mut self, msg: Msg) {
         match msg {
+            Msg::PluginPrepared(result) => {
+                self.plugins.busy = None;
+                match result {
+                    Ok(package) => { self.plugins.pending = Some(package); self.overlay = Some(Overlay::PluginConsent); }
+                    Err(error) => self.alert(error),
+                }
+                self.dirty = true;
+            }
+            Msg::PluginInstalled(result) => {
+                self.plugins.busy = None;
+                match result {
+                    Ok(id) => { let _ = mypaper_widgets::plugin_manager::send(&mypaper_widgets::plugin_manager::Request::Enable(id.clone())); self.plugins.refresh(); self.plugins.selected = Some(id); self.toast("Plugin installed", None); }
+                    Err(error) => self.alert(error),
+                }
+                self.dirty = true;
+            }
             Msg::Files(changes) => {
                 for change in changes {
                     match change {
@@ -1387,6 +1419,7 @@ impl App {
             Action::Choose(choices) => self.choose(choices),
             Action::Field(id) => self.focus_field(id),
             Action::Dismiss => {
+                if matches!(self.overlay, Some(Overlay::PluginConsent)) { self.plugins.pending = None; }
                 if matches!(self.overlay, Some(Overlay::FirstRun { .. })) {
                     self.run(Action::FirstRunSkip);
                     return;

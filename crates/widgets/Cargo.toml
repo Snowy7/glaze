@@ -22,6 +22,7 @@ png = "0.18"
 serde.workspace = true
 serde_json.workspace = true
 quick-xml = { version = "0.42.0", default-features = false }
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
 [dependencies.windows]
 workspace = true
@@ -38,9 +39,11 @@ features = [
   "Win32_Networking_WinSock",
   "Win32_Security",
   "Win32_Security_Authentication_Identity",
+  "Win32_Security_Credentials",
   "Win32_Storage_FileSystem",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
+  "Win32_System_DataExchange",
   "Win32_System_JobObjects",
   "Win32_System_LibraryLoader",
   "Win32_System_Performance",

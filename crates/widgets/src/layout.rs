@@ -125,7 +125,14 @@ impl Layout {
         if let Some(version) = newer_version(json) {
             bail!("{NEWER} (layout version {version}; this mypaper reads up to {VERSION})");
         }
-        let layout: Self = serde_json::from_str(json)?;
+        let mut layout: Self = serde_json::from_str(json)?;
+        layout.instances.retain(|instance| {
+            let valid = valid_id(&instance.instance) && valid_id(&instance.widget);
+            if !valid {
+                log::error!("widgets.json: skipping instance {:?} (widget {:?}): instance and widget ids must match [a-z0-9-], start with a letter or digit, and be at most 64 characters; other widgets remain editable", instance.instance, instance.widget);
+            }
+            valid
+        });
         layout.validate()?;
         Ok(layout)
     }
@@ -595,6 +602,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn invalid_ids_skip_only_the_bad_instance_and_edits_still_work() {
+        let mut layout = Layout::parse(r#"{"instances":[
+            {"instance":"bad-1","widget":"weather.now","monitor":"x","cell":[0,0],"size":[1,1]},
+            {"instance":"also.bad","widget":"clock","monitor":"x","cell":[0,0],"size":[1,1]},
+            {"instance":"clock-1","widget":"clock","monitor":"x","cell":[0,0],"size":[1,1]}
+        ]}"#).unwrap();
+        assert_eq!(layout.instances.len(), 1);
+        assert_eq!(layout.instances[0].instance, "clock-1");
+        layout.apply(&[("clock-1".into(), [2, 3], [2, 1])]).unwrap();
+        layout.validate().unwrap();
+        assert_eq!(layout.instances[0].cell, [2, 3]);
+        let root = crate::files::temp_dir("invalid-layout-instance");
+        let path = root.join("widgets.json");
+        layout.save(&path).unwrap();
+        assert_eq!(Layout::load(&path).unwrap().instances.len(), 1);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn saving_after_external_corruption_preserves_the_exact_file_and_backup() {
         let dir = crate::files::temp_dir("invalid-layout-save");
         let path = dir.join("widgets.json");
@@ -782,7 +808,6 @@ mod tests {
             ),
             (LAYOUT.replace("\"cell\": 0", "\"cell\": 4"), "tiny cell"),
             (LAYOUT.replace("\"gap\": 8", "\"gap\": -1"), "negative gap"),
-            (LAYOUT.replace("clock-1", "Clock 1"), "instance id"),
             (LAYOUT.replace("[2, 1]", "[0, 1]"), "zero size"),
             (
                 LAYOUT.replace("\"settings\"", "\"setings\""),

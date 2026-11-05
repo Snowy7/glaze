@@ -198,3 +198,30 @@ fn warm_loads_come_from_the_aot_cache() {
     assert!(rt.component(&manifest, &dir).unwrap().1, "second load is cached");
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[test]
+fn removal_acknowledges_only_after_the_instance_is_dropped() {
+    let root=root("remove", &["hello"]);
+    let mut host=host(&root);
+    open(&mut host,&root,"hello","h1");
+    frames(&mut host);
+    host.on_host(HostMsg::Remove {plugin:"hello".into(),acknowledge:true},Instant::now());
+    assert_eq!(host.loaded(),0);
+    let out=frames(&mut host);
+    assert!(out.iter().any(|m|matches!(m,HelperMsg::Removed{plugin} if plugin=="hello")));
+    act(&mut host,"h1","click");
+    assert_eq!(host.loaded(),0,"stale actions cannot reload an uninstalled plugin");
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn compile_accepts_a_single_plugin_and_reports_refusals() {
+    let root=root("compile-install", &["hello"]);
+    let rt=Runtime::new(root.join("cache"),root.join("data")).unwrap();
+    let dir=root.join("plugins/hello");
+    assert_eq!(crate::host::plugin_dirs(std::slice::from_ref(&dir)),vec![dir.clone()]);
+    crate::host::compile_all(&rt,std::slice::from_ref(&dir)).unwrap();
+    std::fs::write(dir.join("hello.wasm"),b"invalid wasm").unwrap();
+    assert!(crate::host::compile_all(&rt,&[dir]).is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}

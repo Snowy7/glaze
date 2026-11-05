@@ -744,8 +744,19 @@ impl Runtime {
         self.data.join(id)
     }
 
+    /// Checks imports without executing plugin code, during installation.
+    pub fn validate_component(&self, component: &Component) -> Result<()> {
+        self.linker.instantiate_pre(component)?;
+        Ok(())
+    }
+
     /// Instantiates and initializes a plugin with its saved state.
     pub fn instantiate(&self, manifest: &Manifest, component: &Component, state: Option<Vec<u8>>) -> Result<Instance> {
+        self.instantiate_with_settings(manifest, component, state, "{}")
+    }
+
+    /// Initializes with the plugin settings reviewed and saved in Studio.
+    pub fn instantiate_with_settings(&self, manifest: &Manifest, component: &Component, state: Option<Vec<u8>>, settings: &str) -> Result<Instance> {
         let wasi = WasiCtxBuilder::new().inherit_stderr().build();
         let data = State {
             wasi,
@@ -768,7 +779,7 @@ impl Runtime {
         store.limiter(|state| &mut state.limiter);
         store.set_epoch_deadline(EVENT_TICKS * 4);
         let bindings = Plugin::instantiate(&mut store, component, &self.linker)?;
-        let info = InitInfo { plugin: manifest.id.clone(), settings: "{}".into(), state };
+        let info = InitInfo { plugin: manifest.id.clone(), settings: settings.into(), state };
         self.ticker.set(true);
         let result = bindings.mypaper_plugin_lifecycle().call_init(&mut store, &info);
         self.ticker.set(false);

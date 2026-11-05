@@ -5,6 +5,7 @@ pub mod bars;
 pub mod first_run;
 pub mod home;
 pub mod integrations;
+pub mod plugins;
 pub mod look;
 pub mod settings;
 pub mod wallpapers;
@@ -18,6 +19,7 @@ use crate::ui::B;
 
 pub fn view(app: &App, b: &mut B, body: Rect) {
     match app.nav.page() {
+        Page::Integrations if app.nav.plugins => plugins::view(app, b, body),
         Page::Home => home::view(app, b, body),
         Page::Wallpapers => wallpapers::view(app, b, body),
         Page::Look => look::view(app, b, body),
@@ -31,6 +33,7 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
 /// The page bar's title and its one line of context.
 pub fn title(app: &App) -> (String, String) {
     match app.nav.page() {
+        Page::Integrations if app.nav.plugins => ("Plugins".into(), String::new()),
         Page::Home => home::title(app),
         Page::Wallpapers => wallpapers::title(app),
         Page::Look => ("Look".into(), String::new()),
@@ -44,6 +47,7 @@ pub fn title(app: &App) -> (String, String) {
 /// Anything drawn right after the title (Look's scope switch); returns where the detail goes.
 pub fn title_extra(app: &App, b: &mut B, rect: Rect) -> f32 {
     match app.nav.page() {
+        Page::Integrations => plugins::tabs(app, b, rect),
         Page::Look => look::scope(app, b, rect),
         _ => rect.left,
     }
@@ -52,6 +56,7 @@ pub fn title_extra(app: &App, b: &mut B, rect: Rect) -> f32 {
 /// The page's own page-bar cluster, right to left from `right`; returns the new right edge.
 pub fn bar_actions(app: &App, b: &mut B, bar: Rect, right: f32) -> f32 {
     match app.nav.page() {
+        Page::Integrations if app.nav.plugins => plugins::bar(app, b, bar, right),
         Page::Home => home::bar(app, b, bar, right),
         Page::Wallpapers => wallpapers::bar(app, b, bar, right),
         Page::Look => look::bar(app, b, bar, right),
@@ -128,6 +133,7 @@ pub fn run(app: &mut App, action: Action) {
         | Action::RestartStudio => settings::run(app, action),
         Action::SelectIntegration(i) => {
             app.go(Page::Integrations);
+            app.nav.plugins = false;
             app.nav.integration = *i;
         }
         Action::FirstRunPick(_) | Action::FirstRunTaskbar(_) | Action::FirstRunNext | Action::FirstRunSkip => {
@@ -140,6 +146,7 @@ pub fn run(app: &mut App, action: Action) {
 /// Edits that aren't a document's: a wallpaper's own `theme.json` (`/theme:<folder>/…`) and
 /// the Add wallpaper sheet's choices. Returns whether it handled `path`.
 pub fn intercept(app: &mut App, path: &str, value: Option<serde_json::Value>) -> bool {
+    if path.starts_with("/plugins/") { return plugins::intercept(app, path, value); }
     use crate::actions::FieldId;
     use crate::docs::DocId;
     if let Some(rest) = path.strip_prefix("/theme:") {

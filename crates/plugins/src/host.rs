@@ -33,6 +33,7 @@ const STRIKE_WINDOW: Duration = Duration::from_secs(300);
 
 /// What reaches the loop: shell frames and I/O completions from worker threads.
 pub enum Input {
+    Removed(String),
     Host(HostMsg),
     Http { plugin: String, id: u64, result: Result<crate::caps::Fetched, String> },
     Native { plugin: String, id: u64, result: Result<Vec<u8>, String> },
@@ -195,6 +196,17 @@ impl<W: Write> Host<W> {
                 }
                 return false;
             }
+            HostMsg::Remove { plugin, acknowledge } => {
+                let native = self.plugins.get(&plugin).is_some_and(|p| !p.manifest.native.is_empty());
+                self.unload(&plugin);
+                self.plugins.remove(&plugin);
+                self.owners.retain(|_, owner| owner != &plugin);
+                self.timers.retain(|_, (owner, ..)| owner != &plugin);
+                if acknowledge {
+                    if native && let Some(lane) = &self.native { lane.send(crate::native::Job::Removed(plugin)); }
+                    else { self.send(HelperMsg::Removed { plugin }); }
+                }
+            }
             HostMsg::System(event) => self.on_system(event, now),
         }
         true
@@ -259,6 +271,7 @@ impl<W: Write> Host<W> {
     /// A worker's I/O completion.
     pub fn on_input(&mut self, input: Input, now: Instant) -> bool {
         match input {
+            Input::Removed(plugin) => { self.send(HelperMsg::Removed { plugin }); true }
             Input::Host(message) => self.on_host(message, now),
             Input::Http { plugin, id, result } => {
                 if self.plugins.get(&plugin).is_some_and(|p| p.instance.is_some()) {
@@ -359,7 +372,8 @@ impl<W: Write> Host<W> {
         }
         let state_path = self.rt.data_dir(plugin).join("state.bin");
         let state = std::fs::read(&state_path).ok();
-        let loaded = self.rt.component(&entry.manifest, &entry.dir).and_then(|(component, _)| self.rt.instantiate(&entry.manifest, &component, state));
+        let settings = entry.faces.values().next().map_or("{}", |face| face.settings.as_str());
+        let loaded = self.rt.component(&entry.manifest, &entry.dir).and_then(|(component, _)| self.rt.instantiate_with_settings(&entry.manifest, &component, state, settings));
         let mut instance = match loaded {
             Ok(instance) => instance,
             Err(e) => {
@@ -584,21 +598,26 @@ pub fn wait(deadline: Option<Instant>, now: Instant) -> Option<Duration> {
 
 /// Opens every installed WASM plugin's folders (bundled, then user) for `--compile`.
 pub fn plugin_dirs(roots: &[PathBuf]) -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = roots.iter().filter_map(|r| std::fs::read_dir(r).ok()).flat_map(|d| d.flatten().map(|e| e.path())).filter(|p| p.join("plugin.json").is_file()).collect();
+    let mut dirs: Vec<PathBuf> = roots.iter().flat_map(|root| {
+        if root.join("plugin.json").is_file() { vec![root.clone()] }
+        else { std::fs::read_dir(root).ok().into_iter().flatten().flatten().map(|entry| entry.path()).filter(|path| path.join("plugin.json").is_file()).collect() }
+    }).collect();
     dirs.sort();
     dirs
 }
 
 pub fn compile_all(rt: &Runtime, roots: &[PathBuf]) -> Result<()> {
+    let mut errors = Vec::new();
     for dir in plugin_dirs(roots) {
         let text = std::fs::read_to_string(dir.join("plugin.json")).unwrap_or_default();
         if !text.contains("\"component\"") {
             continue;
         }
-        match Manifest::load(&dir).and_then(|m| rt.component(&m, &dir).map(|(_, warm)| (m, warm))) {
+        match Manifest::load(&dir).and_then(|m| rt.component(&m, &dir).and_then(|(component, warm)| { rt.validate_component(&component)?; Ok((m, warm)) })) {
             Ok((m, warm)) => println!("{}: {}", m.id, if warm { "cached" } else { "compiled" }),
-            Err(e) => println!("{}: refused: {e:#}", dir.display()),
+            Err(e) => { errors.push(format!("{}: refused: {e:#}", dir.display())); }
         }
     }
+    anyhow::ensure!(errors.is_empty(), "{}", errors.join("\n"));
     Ok(())
 }

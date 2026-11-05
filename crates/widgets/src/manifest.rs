@@ -683,7 +683,7 @@ impl Setting {
         ok.then(|| value.clone())
     }
 
-    fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> Result<()> {
         let key = self.key();
         ensure!(!key.is_empty(), "a setting has an empty key");
         ensure!(
@@ -1034,6 +1034,8 @@ pub struct PluginManifest {
     _schema: Option<IgnoredAny>,
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub author: Option<String>,
     #[serde(default)]
     pub version: Option<String>,
     /// The executable: in the plugin folder, else on `PATH`. Empty for component-only plugins.

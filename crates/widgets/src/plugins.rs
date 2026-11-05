@@ -261,6 +261,9 @@ fn serve(manifest: &PluginManifest, id: &Value, request: HostRequest) -> String 
 }
 
 pub struct Plugins {
+    studio: crate::plugin_manager::Snapshot,
+    preferences: crate::plugin_manager::Preferences,
+    uninstalling: std::collections::BTreeSet<String>,
     procs: HashMap<String, Process>,
     /// Placed faces of SDK plugins, by instance.
     faces: BTreeMap<String, Slot>,
@@ -288,8 +291,94 @@ pub struct Plugins {
 }
 
 impl Plugins {
+    fn publish_studio(&self) {
+        if self.roots.is_none() { self.studio.publish(); }
+    }
+    fn studio_request(&mut self, line: &str, now: Instant) {
+        use crate::plugin_manager::Request;
+        let result = (|| -> anyhow::Result<()> {
+            let request: Request = serde_json::from_str(line)?;
+            self.studio.error = None;
+            match request {
+                Request::Refresh => {
+                    if let Some(helper) = &self.helper { let _ = helper.frames.send(wire::HostMsg::Stats); }
+                    for (id, process) in &self.procs {
+                        if process.manifest.component.is_some() && self.component_status.contains_key(id) { continue; }
+                        self.studio.plugins.entry(id.clone()).or_default().status = match process.state {
+                            State::Ready => "Live", State::Starting { .. } => "Restarting", State::Stopping { .. } => "Unloaded",
+                        }.into();
+                    }
+                }
+                Request::Disable(id) | Request::Uninstall(id) => {
+                    anyhow::ensure!(crate::manifest::valid_id(&id), "Invalid plugin id");
+                    let uninstall = matches!(serde_json::from_str::<Request>(line)?, Request::Uninstall(_));
+                    let mut prefs = self.preferences.clone();
+                    prefs.disabled.insert(id.clone());
+                    prefs.save()?;
+                    self.preferences = prefs;
+                    self.restarts.remove(&id);
+                    if let Some(mut process) = self.procs.remove(&id) { let _ = process.child.kill(); let _ = process.child.wait(); }
+                    self.styles.retain(|(plugin, _), _| plugin != &id);
+                    self.component_status.insert(id.clone(), wire::Status::Stopped("Disabled".into()));
+                    self.studio.plugins.entry(id.clone()).or_default().status = if uninstall { "Uninstalling…" } else { "Stopped: Disabled" }.into();
+                    self.mark(&id);
+                    if let Some(helper) = &self.helper {
+                        helper.frames.send(wire::HostMsg::Remove { plugin: id.clone(), acknowledge: uninstall })?;
+                        if uninstall { self.uninstalling.insert(id); }
+                    } else if uninstall { self.finish_uninstall(&id); }
+                }
+                Request::Enable(id) => {
+                    anyhow::ensure!(crate::manifest::valid_id(&id), "Invalid plugin id");
+                    anyhow::ensure!(!self.uninstalling.contains(&id), "Wait for this plugin to finish uninstalling");
+                    let mut prefs = self.preferences.clone(); prefs.disabled.remove(&id); prefs.uninstalled.remove(&id); prefs.save()?;
+                    self.preferences = prefs;
+                    self.component_status.remove(&id);
+                    self.studio.plugins.entry(id.clone()).or_default().status = "Unloaded".into();
+                    let opens: Vec<_> = self.faces.iter().filter(|(_, s)| s.plugin == id && s.component.is_some()).map(|(instance, slot)| component_open(instance, slot)).collect();
+                    for message in opens { self.to_helper(message, now).map_err(|e| anyhow::anyhow!(e.message))?; }
+                    self.mark(&id);
+                }
+                Request::Settings(id, settings) => {
+                    anyhow::ensure!(crate::manifest::valid_id(&id) && settings.is_object(), "Invalid plugin settings");
+                    anyhow::ensure!(!self.uninstalling.contains(&id), "Wait for this plugin to finish uninstalling");
+                    let (manifest, _) = self.find(&id).ok_or_else(|| anyhow::anyhow!("Plugin {id} is not installed"))?;
+                    let settings = crate::plugin_manager::resolve_settings(&manifest, &settings)?;
+                    let mut prefs = self.preferences.clone(); prefs.settings.insert(id.clone(), settings.clone()); prefs.save()?; self.preferences = prefs;
+                    let mut opens = Vec::new();
+                    for (instance, slot) in self.faces.iter_mut().filter(|(_, s)| s.plugin == id) {
+                        if let (Some(current), Some(saved)) = (slot.settings.as_object_mut(), settings.as_object()) { current.extend(saved.clone()); }
+                        if slot.component.is_some() { opens.push(component_open(instance, slot)); }
+                    }
+                    if !self.preferences.disabled.contains(&id) {
+                        for message in opens { self.to_helper(message, now).map_err(|e| anyhow::anyhow!(e.message))?; }
+                    }
+                }
+            }
+            Ok(())
+        })();
+        if let Err(error) = result { self.studio.error = Some(format!("{error:#}")); }
+        self.publish_studio();
+    }
+
+    fn finish_uninstall(&mut self, id: &str) {
+        match crate::plugin_manager::uninstall(id) {
+            Ok(()) => {
+                self.studio.plugins.remove(id);
+                self.preferences.uninstalled.insert(id.into());
+                self.preferences.settings.remove(id);
+                if let Err(error) = self.preferences.save() { self.studio.error = Some(format!("Uninstall {id}: {error:#}")); }
+            }
+            Err(error) => { self.studio.error = Some(format!("Uninstall {id}: {error:#}")); }
+        }
+        self.publish_studio();
+    }
+
     pub fn new(waker: Waker) -> Self {
+        crate::plugin_manager::connect(waker.clone());
         Self {
+            studio: Default::default(),
+            preferences: crate::plugin_manager::Preferences::load(),
+            uninstalling: Default::default(),
             procs: HashMap::new(),
             faces: BTreeMap::new(),
             changed: Vec::new(),
@@ -452,7 +541,7 @@ impl Plugins {
         if self.held {
             let _ = frames.send(wire::HostMsg::Held(true));
         }
-        for (instance, slot) in self.faces.iter().filter(|(_, s)| s.component.is_some()) {
+        for (instance, slot) in self.faces.iter().filter(|(_, s)| s.component.is_some() && !self.preferences.disabled.contains(&s.plugin)) {
             let _ = frames.send(component_open(instance, slot));
         }
         log::info!("plugin runtime started");
@@ -474,12 +563,18 @@ impl Plugins {
                 self.helper_retry = Some((now + delay, (delay * 2).min(Duration::from_secs(60))));
             }
             self.component_status.clear();
+            for metrics in self.studio.plugins.values_mut() { metrics.memory = 0; metrics.status = "Restarting: runtime exited".into(); }
+            let pending: Vec<_> = self.uninstalling.iter().cloned().collect();
+            self.uninstalling.clear();
+            for plugin in pending { self.finish_uninstall(&plugin); }
+            self.publish_studio();
             let placed = self.faces.iter().filter(|(_, s)| s.component.is_some()).map(|(i, _)| i.clone());
             self.changed.extend(placed.collect::<Vec<_>>());
             return Vec::new();
         }
         let messages: Vec<_> = helper.inbox.lock().expect("plugin inbox").drain(..).collect();
         for message in messages {
+            if self.studio.route(&message) { self.publish_studio(); }
             match message {
                 wire::HelperMsg::View { instance, face, .. } => match serde_json::from_slice::<Face>(&face) {
                     Ok(face) => {
@@ -505,6 +600,9 @@ impl Plugins {
                     };
                 }
                 wire::HelperMsg::Stats { .. } => {}
+                wire::HelperMsg::Removed { plugin } => {
+                    if self.uninstalling.remove(&plugin) { self.finish_uninstall(&plugin); }
+                }
             }
         }
         Vec::new()
@@ -512,7 +610,7 @@ impl Plugins {
 
     /// Stops an idle helper and starts a dead one again when faces need it.
     fn tick_helper(&mut self, now: Instant) {
-        let placed = self.faces.values().any(|s| s.component.is_some());
+        let placed = self.faces.values().any(|s| s.component.is_some() && !self.preferences.disabled.contains(&s.plugin));
         if let Some(helper) = &mut self.helper {
             if placed {
                 helper.idle_since = None;
@@ -538,7 +636,7 @@ impl Plugins {
         match &self.helper {
             Some(helper) => helper.idle_since.map(|t| t + IDLE_STOP),
             None if self.held => None,
-            None => self.helper_retry.map(|(at, _)| at).filter(|_| self.faces.values().any(|s| s.component.is_some())),
+            None => self.helper_retry.map(|(at, _)| at).filter(|_| self.faces.values().any(|s| s.component.is_some() && !self.preferences.disabled.contains(&s.plugin))),
         }
     }
 
@@ -546,6 +644,7 @@ impl Plugins {
     pub fn with_roots(waker: Waker, roots: Vec<std::path::PathBuf>) -> Self {
         Self {
             roots: Some(roots),
+            preferences: Default::default(),
             ..Self::new(waker)
         }
     }
@@ -561,6 +660,16 @@ impl Plugins {
         settings: Value,
         now: Instant,
     ) -> Result<(), WidgetError> {
+        if self.preferences.disabled.contains(plugin) { return Err(unavailable(format!("plugin {plugin} is disabled"))); }
+        let mut settings = settings;
+        if let Some((manifest, _)) = self.find(plugin) {
+            let saved = self.preferences.settings.get(plugin).cloned().unwrap_or_else(|| json!({}));
+            if let Ok(Value::Object(defaults)) = crate::plugin_manager::resolve_settings(&manifest, &json!({}))
+                && let Some(values) = settings.as_object_mut() {
+                for (key, value) in defaults { values.entry(key).or_insert(value); }
+                if let Some(saved) = saved.as_object() { values.extend(saved.clone()); }
+            }
+        }
         if let Some(slot) = self.faces.get_mut(instance)
             && slot.plugin == plugin
             && slot.face == face
@@ -680,6 +789,7 @@ impl Plugins {
 
     pub fn face_status(&self, instance: &str) -> Option<FaceStatus> {
         let slot = self.faces.get(instance)?;
+        if self.preferences.disabled.contains(&slot.plugin) { return Some(FaceStatus::Failed("Disabled".into())); }
         if slot.component.is_some() {
             return Some(match self.component_status.get(&slot.plugin) {
                 _ if self.helper.is_none() && self.helper_retry.is_some() => FaceStatus::Restarting,
@@ -710,6 +820,7 @@ impl Plugins {
 
     /// The process for `id`, started if it isn't running.
     fn running(&mut self, id: &str, now: Instant) -> Result<&mut Process, WidgetError> {
+        if self.preferences.disabled.contains(id) { return Err(unavailable(format!("plugin {id} is disabled"))); }
         if let Some(process) = self.procs.remove(id) {
             if let State::Stopping { deadline } = process.state {
                 self.dying.push((process.child, deadline)); // let it finish; start afresh
@@ -830,6 +941,10 @@ impl Plugins {
         line: Option<String>,
         now: Instant,
     ) -> Vec<Out> {
+        if id == crate::plugin_manager::STUDIO {
+            if let Some(line) = line { self.studio_request(&line, now); }
+            return Vec::new();
+        }
         if id == HELPER {
             return self.on_helper(generation, line, now);
         }
@@ -1105,6 +1220,24 @@ impl Plugins {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn helper_stats_reach_the_studio_snapshot_through_the_shell_bridge() {
+        let (tx, _rx) = mpsc::channel();
+        let mut plugins = Plugins::with_roots(Waker::new(tx, 0), Vec::new());
+        let (frames, _requests) = mpsc::channel();
+        let inbox = std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::from([
+            wire::HelperMsg::Status { plugin: "test".into(), status: wire::Status::Live },
+            wire::HelperMsg::Stats { plugin: "test".into(), memory: 1048576, cpu_us: 1234, events: 56 },
+        ])));
+        let child = Command::new("cmd").args(["/c", "exit", "0"]).creation_flags(CREATE_NO_WINDOW.0).spawn().unwrap();
+        plugins.helper = Some(Helper { child, generation: 17, frames, inbox, idle_since: None });
+        plugins.on_line(HELPER, 17, Some(String::new()), Instant::now());
+        let stats = &plugins.studio.plugins["test"];
+        assert_eq!((stats.memory, stats.cpu_us, stats.events), (1048576, 1234, 56));
+        assert_eq!(stats.status, "Live");
+        let mut helper = plugins.helper.take().unwrap(); helper.child.wait().unwrap();
+    }
 
     #[test]
     fn plugin_errors_map_to_widget_codes() {

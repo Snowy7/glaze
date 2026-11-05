@@ -37,6 +37,8 @@ pub mod wire {
         /// A system event; the helper delivers it only to plugins that subscribed to its topic and
         /// hold its permission (`windows` for window events), and coalesces moves to one a frame.
         System(SystemEvent),
+        /// Drop a plugin and its outstanding work before uninstalling its files.
+        Remove { plugin: String, acknowledge: bool },
     }
 
     /// How a plugin is doing, shown in its faces' footer.
@@ -99,6 +101,7 @@ pub mod wire {
         /// `None` resets the surface.
         Style { plugin: String, surface: String, patch: Option<StylePatch> },
         Stats { plugin: String, memory: u64, cpu_us: u64, events: u64 },
+        Removed { plugin: String },
     }
 
     pub fn write<T: Serialize>(out: &mut impl Write, message: &T) -> io::Result<()> {

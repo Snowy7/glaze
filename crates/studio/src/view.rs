@@ -90,6 +90,8 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     let regions = vec![r.sidebar, r.bar, r.body];
     let overlay_from = b.targets.len();
     match &app.overlay {
+        Some(Overlay::PluginConsent) => crate::pages::plugins::consent(app, &mut b),
+        Some(Overlay::PluginUninstall(id)) => crate::pages::plugins::uninstall_sheet(app, &mut b, id),
         Some(Overlay::Palette { selected }) => crate::search::view(app, &mut b, *selected),
         Some(Overlay::AddWallpaper { .. }) => crate::pages::wallpapers::add_sheet(app, &mut b),
         Some(Overlay::AddWidget) => crate::pages::widgets::add_sheet(app, &mut b),

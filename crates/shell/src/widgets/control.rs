@@ -82,6 +82,15 @@ unsafe extern "system" fn proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    if message == WM_COPYDATA && lparam.0 != 0 {
+        // SAFETY: WM_COPYDATA's buffer is valid only during this call; receive copies it.
+        let data = unsafe { &*(lparam.0 as *const windows::Win32::System::DataExchange::COPYDATASTRUCT) };
+        if data.dwData == mypaper_widgets::plugin_manager::COPY_TAG && data.cbData <= 64 << 10 && !data.lpData.is_null() {
+            // SAFETY: bounded synchronous WM_COPYDATA payload, copied before returning.
+            let bytes = unsafe { std::slice::from_raw_parts(data.lpData.cast::<u8>(), data.cbData as usize) };
+            return LRESULT(isize::from(mypaper_widgets::plugin_manager::receive(bytes)));
+        }
+    }
     let (edit, overlay) = *MESSAGES.get().expect("registered before window");
     if message == edit || (message == WM_HOTKEY && wparam.0 == 1) {
         crate::inbox::post(
