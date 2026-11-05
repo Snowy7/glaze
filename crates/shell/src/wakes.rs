@@ -1,6 +1,6 @@
 //! Counts the shell loop's wake-ups by cause and logs them once a minute, on a wake (it never
-//! adds one). Quiet unless the shell woke more than once a second on average; `MYPAPER_WAKES=1`
-//! logs every minute. Counting is a few integer bumps per wake.
+//! adds one). Quiet unless the loop's work ran more than 20 times a second on average (a stuck
+//! ticker, say); `MYPAPER_WAKES=1` logs every minute. Counting is a few integer bumps per wake.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -27,6 +27,8 @@ pub enum Cause {
 pub struct Wakes {
     since: Instant,
     wakes: u32,
+    /// Wakes that ran the loop's work (not coalesced).
+    worked: u32,
     causes: HashMap<Cause, u32>,
     /// Posted messages by (message, window, timer id).
     messages: HashMap<(u32, isize, usize), u32>,
@@ -40,6 +42,7 @@ impl Wakes {
         Self {
             since: Instant::now(),
             wakes: 0,
+            worked: 0,
             causes: HashMap::new(),
             messages: HashMap::new(),
             spent: HashMap::new(),
@@ -59,6 +62,11 @@ impl Wakes {
         *self.causes.entry(cause).or_default() += 1;
     }
 
+    /// This wake runs the loop's work.
+    pub fn worked(&mut self) {
+        self.worked += 1;
+    }
+
     pub fn message(&mut self, msg: &MSG) {
         let timer = if msg.message == WM_TIMER { msg.wParam.0 } else { 0 };
         *self
@@ -73,7 +81,7 @@ impl Wakes {
         if elapsed < PERIOD {
             return;
         }
-        if self.always || self.wakes as f32 > elapsed.as_secs_f32() {
+        if self.always || self.worked as f32 > 20.0 * elapsed.as_secs_f32() {
             let mut causes: Vec<_> = self
                 .causes
                 .iter()
@@ -109,9 +117,10 @@ impl Wakes {
                 .map(|(part, d)| format!("{part} {:.1} ms", d.as_secs_f64() * 1e3))
                 .collect();
             log::info!(
-                "wakes in {:.0} s: {} ({}); work: {}; {}",
+                "wakes in {:.0} s: {}, {} ran the work ({}); work: {}; {}",
                 elapsed.as_secs_f32(),
                 self.wakes,
+                self.worked,
                 top.join(", "),
                 spent.join(", "),
                 detail()
@@ -119,6 +128,7 @@ impl Wakes {
         }
         self.since = Instant::now();
         self.wakes = 0;
+        self.worked = 0;
         self.causes.clear();
         self.messages.clear();
         self.spent.clear();

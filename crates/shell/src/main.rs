@@ -200,6 +200,7 @@ fn run() -> Result<()> {
             continue;
         }
         coalesced = None;
+        wakes.worked();
         at = shell.drain(&mut ui, &mut wakes, at);
         shell.bars.tick(&mut ui);
         wakes.spent("bars.tick", at);
