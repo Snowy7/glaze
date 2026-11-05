@@ -1,0 +1,1607 @@
+{
+  "bot": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": true
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "action": "channel",
+            "kind": "select",
+            "label": "Channel",
+            "options": [
+              {
+                "label": "#42",
+                "value": "42"
+              },
+              {
+                "label": "#43",
+                "value": "43"
+              }
+            ],
+            "selected": "42"
+          },
+          {
+            "action": "send",
+            "kind": "field",
+            "placeholder": "Send as bot…"
+          },
+          {
+            "children": [
+              {
+                "action": "reply:100",
+                "detail": "The native widget layouts are ready.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Ada · Design room"
+              },
+              {
+                "action": "reply:101",
+                "detail": "I left notes on the calendar.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Lin · Desktop"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Sends as bot · mentions disabled",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": true
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "action": "channel",
+            "kind": "select",
+            "label": "Channel",
+            "options": [
+              {
+                "label": "#42",
+                "value": "42"
+              },
+              {
+                "label": "#43",
+                "value": "43"
+              }
+            ],
+            "selected": "42"
+          },
+          {
+            "action": "send",
+            "kind": "field",
+            "placeholder": "Send as bot…"
+          },
+          {
+            "children": [
+              {
+                "action": "reply:100",
+                "detail": "The native widget layouts are ready.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Ada · Design room"
+              },
+              {
+                "action": "reply:101",
+                "detail": "I left notes on the calendar.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Lin · Desktop"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Sends as bot · mentions disabled",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Chat",
+                "primary": true
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "action": "channel",
+            "kind": "select",
+            "label": "Channel",
+            "options": [
+              {
+                "label": "#42",
+                "value": "42"
+              },
+              {
+                "label": "#43",
+                "value": "43"
+              }
+            ],
+            "selected": "42"
+          },
+          {
+            "action": "send",
+            "kind": "field",
+            "placeholder": "Send as bot…"
+          },
+          {
+            "children": [
+              {
+                "action": "reply:100",
+                "detail": "The native widget layouts are ready.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Ada · Design room"
+              },
+              {
+                "action": "reply:101",
+                "detail": "I left notes on the calendar.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Lin · Desktop"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 4.0,
+        "kind": "stack"
+      },
+      "footer": "Sends as bot · mentions disabled",
+      "refresh": true
+    }
+  },
+  "empty": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": true
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "detail": "Windows notifications appear here. Add a bot token and channel IDs for history and sending.",
+            "icon": "message",
+            "kind": "empty",
+            "title": "No recent messages"
+          },
+          {
+            "action": "setup",
+            "kind": "button",
+            "label": "Set up Discord",
+            "primary": false
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Windows notifications · not unread counts",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": true
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "detail": "Windows notifications appear here. Add a bot token and channel IDs for history and sending.",
+            "icon": "message",
+            "kind": "empty",
+            "title": "No recent messages"
+          },
+          {
+            "action": "setup",
+            "kind": "button",
+            "label": "Set up Discord",
+            "primary": false
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Windows notifications · not unread counts",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Chat",
+                "primary": true
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "detail": "",
+            "icon": "message",
+            "kind": "empty",
+            "title": "No recent messages"
+          },
+          {
+            "action": "setup",
+            "kind": "button",
+            "label": "Set up Discord",
+            "primary": false
+          }
+        ],
+        "gap": 4.0,
+        "kind": "stack"
+      },
+      "footer": "Windows notifications · not unread counts",
+      "refresh": true
+    }
+  },
+  "messages": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": true
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "children": [
+              {
+                "detail": "The native widget layouts are ready.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Ada · Design room"
+              },
+              {
+                "detail": "I left notes on the calendar.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Lin · Desktop"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          {
+            "action": "setup",
+            "kind": "button",
+            "label": "Set up Discord",
+            "primary": false
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Windows notifications · not unread counts",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": true
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "children": [
+              {
+                "detail": "The native widget layouts are ready.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Ada · Design room"
+              },
+              {
+                "detail": "I left notes on the calendar.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Lin · Desktop"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          {
+            "action": "setup",
+            "kind": "button",
+            "label": "Set up Discord",
+            "primary": false
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Windows notifications · not unread counts",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Chat",
+                "primary": true
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "children": [
+              {
+                "detail": "The native widget layouts are ready.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Ada · Design room"
+              },
+              {
+                "detail": "I left notes on the calendar.",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Lin · Desktop"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          {
+            "action": "setup",
+            "kind": "button",
+            "label": "Set up Discord",
+            "primary": false
+          }
+        ],
+        "gap": 4.0,
+        "kind": "stack"
+      },
+      "footer": "Windows notifications · not unread counts",
+      "refresh": true
+    }
+  },
+  "readonly": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": false
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": true
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "align": "start",
+            "kind": "text",
+            "role": "headline",
+            "text": "Design room"
+          },
+          {
+            "children": [
+              {
+                "action": "mute",
+                "enabled": false,
+                "icon": "mic",
+                "kind": "icon_button",
+                "label": "Mute"
+              },
+              {
+                "action": "deafen",
+                "enabled": false,
+                "icon": "headphones",
+                "kind": "icon_button",
+                "label": "Deafen"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "color": "positive",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "positive",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Alex"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Speaking"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Ada"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Muted"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Lin"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": ""
+                  }
+                ],
+                "kind": "row"
+              }
+            ],
+            "gap": 4.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Read only · rpc.voice.write required",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": false
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": true
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "align": "start",
+            "kind": "text",
+            "role": "headline",
+            "text": "Design room"
+          },
+          {
+            "children": [
+              {
+                "action": "mute",
+                "enabled": false,
+                "icon": "mic",
+                "kind": "icon_button",
+                "label": "Mute"
+              },
+              {
+                "action": "deafen",
+                "enabled": false,
+                "icon": "headphones",
+                "kind": "icon_button",
+                "label": "Deafen"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "color": "positive",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "positive",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Alex"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Speaking"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Ada"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Muted"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Lin"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": ""
+                  }
+                ],
+                "kind": "row"
+              }
+            ],
+            "gap": 4.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Read only · rpc.voice.write required",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Chat",
+                "primary": false
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": true
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "align": "start",
+            "kind": "text",
+            "role": "callout",
+            "text": "Design room"
+          },
+          {
+            "children": [
+              {
+                "action": "mute",
+                "enabled": false,
+                "icon": "mic",
+                "kind": "icon_button",
+                "label": "Mute"
+              },
+              {
+                "action": "deafen",
+                "enabled": false,
+                "icon": "headphones",
+                "kind": "icon_button",
+                "label": "Deafen"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "color": "positive",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "positive",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Alex"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Speaking"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Ada"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Muted"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Lin"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": ""
+                  }
+                ],
+                "kind": "row"
+              }
+            ],
+            "gap": 4.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 4.0,
+        "kind": "stack"
+      },
+      "footer": "Read only · rpc.voice.write required",
+      "refresh": true
+    }
+  },
+  "setup": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": false
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "action": "bot-token",
+            "kind": "field",
+            "placeholder": "Store bot token…"
+          },
+          {
+            "action": "client-secret",
+            "kind": "field",
+            "placeholder": "Store RPC client secret…"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Set application and channel IDs in widget settings. Bot messages are sent as your bot. Calls require a registered app and tester access."
+          },
+          {
+            "children": [
+              {
+                "action": "authorize",
+                "kind": "button",
+                "label": "Connect call",
+                "primary": false
+              },
+              {
+                "action": "forget",
+                "kind": "button",
+                "label": "Forget credentials",
+                "primary": false
+              }
+            ],
+            "kind": "row"
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Credentials stay in Windows Credential Manager",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": false
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "action": "bot-token",
+            "kind": "field",
+            "placeholder": "Store bot token…"
+          },
+          {
+            "action": "client-secret",
+            "kind": "field",
+            "placeholder": "Store RPC client secret…"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Set application and channel IDs in widget settings. Bot messages are sent as your bot. Calls require a registered app and tester access."
+          },
+          {
+            "children": [
+              {
+                "action": "authorize",
+                "kind": "button",
+                "label": "Connect call",
+                "primary": false
+              },
+              {
+                "action": "forget",
+                "kind": "button",
+                "label": "Forget credentials",
+                "primary": false
+              }
+            ],
+            "kind": "row"
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Credentials stay in Windows Credential Manager",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Chat",
+                "primary": false
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": false
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "action": "bot-token",
+            "kind": "field",
+            "placeholder": "Store bot token…"
+          },
+          {
+            "action": "client-secret",
+            "kind": "field",
+            "placeholder": "Store RPC client secret…"
+          }
+        ],
+        "gap": 4.0,
+        "kind": "stack"
+      },
+      "footer": "Credentials stay in Windows Credential Manager",
+      "refresh": true
+    }
+  },
+  "voice": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": false
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": true
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "align": "start",
+            "kind": "text",
+            "role": "headline",
+            "text": "Design room"
+          },
+          {
+            "children": [
+              {
+                "action": "mute",
+                "enabled": true,
+                "icon": "mic",
+                "kind": "icon_button",
+                "label": "Mute"
+              },
+              {
+                "action": "deafen",
+                "enabled": true,
+                "icon": "headphones",
+                "kind": "icon_button",
+                "label": "Deafen"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "color": "positive",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "positive",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Alex"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Speaking"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Ada"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Muted"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Lin"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": ""
+                  }
+                ],
+                "kind": "row"
+              }
+            ],
+            "gap": 4.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Connected · call controls",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Messages",
+                "primary": false
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": true
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "align": "start",
+            "kind": "text",
+            "role": "headline",
+            "text": "Design room"
+          },
+          {
+            "children": [
+              {
+                "action": "mute",
+                "enabled": true,
+                "icon": "mic",
+                "kind": "icon_button",
+                "label": "Mute"
+              },
+              {
+                "action": "deafen",
+                "enabled": true,
+                "icon": "headphones",
+                "kind": "icon_button",
+                "label": "Deafen"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "color": "positive",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "positive",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Alex"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Speaking"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Ada"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Muted"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Lin"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": ""
+                  }
+                ],
+                "kind": "row"
+              }
+            ],
+            "gap": 4.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 6.0,
+        "kind": "stack"
+      },
+      "footer": "Connected · call controls",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "action": "messages",
+                "kind": "button",
+                "label": "Chat",
+                "primary": false
+              },
+              {
+                "action": "voice",
+                "kind": "button",
+                "label": "Call",
+                "primary": true
+              },
+              {
+                "action": "setup",
+                "enabled": true,
+                "icon": "info",
+                "kind": "icon_button",
+                "label": "Discord setup"
+              }
+            ],
+            "columns": 3,
+            "gap": 4.0,
+            "kind": "grid"
+          },
+          {
+            "align": "start",
+            "kind": "text",
+            "role": "callout",
+            "text": "Design room"
+          },
+          {
+            "children": [
+              {
+                "action": "mute",
+                "enabled": true,
+                "icon": "mic",
+                "kind": "icon_button",
+                "label": "Mute"
+              },
+              {
+                "action": "deafen",
+                "enabled": true,
+                "icon": "headphones",
+                "kind": "icon_button",
+                "label": "Deafen"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "color": "positive",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "positive",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Alex"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Speaking"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Ada"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Muted"
+                  }
+                ],
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "color": "tertiary",
+                    "icon": "user",
+                    "kind": "icon",
+                    "size": 16.0
+                  },
+                  {
+                    "align": "start",
+                    "color": "label",
+                    "kind": "text",
+                    "role": "callout",
+                    "text": "Lin"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": ""
+                  }
+                ],
+                "kind": "row"
+              }
+            ],
+            "gap": 4.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 4.0,
+        "kind": "stack"
+      },
+      "footer": "Connected · call controls",
+      "refresh": true
+    }
+  }
+}
