@@ -119,7 +119,6 @@ impl Integration {
             Provider::Media => "Now playing",
             Provider::T3 => "T3 Code",
             Provider::Obs => "OBS Studio",
-            Provider::Docker => "Docker Desktop",
             Provider::Calendar => "Calendar",
             Provider::Discord => "Discord",
         }
