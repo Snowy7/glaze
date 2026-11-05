@@ -1,6 +1,6 @@
 //! Production renderer size sheets and dense-size interaction bounds for the T3/Grok faces.
 use crate::widgets::{model::Model, time::Stamp, views};
-use mypaper_integrations::{Availability, Data, Snapshot, config, grok, launcher, t3};
+use mypaper_integrations::{Availability, Data, Snapshot, config, t3};
 use mypaper_ui::{DisplayList, Image, Op, Rect, Rgba, TextStyle, Tokens, Ui, golden, render};
 use mypaper_widgets::{layout::Placed, storage::Storage};
 use serde_json::{Map, json};
@@ -138,43 +138,6 @@ fn fixture(id: &str, variant: &str) -> Model {
         },
         ..Default::default()
     };
-    if id == "grok" {
-        model.integration.grok.discovery = grok::Discovery {
-            installed: true,
-            running: true,
-            signed_in: true,
-        };
-        model.integration.routines = ["Morning brief", "Review my calendar", "Research watchlist"]
-            .iter()
-            .enumerate()
-            .map(|(i, title)| config::Routine {
-                id: format!("routine-{i}"),
-                title: (*title).into(),
-                url: "https://example.test/routine".into(),
-                input: json!({}),
-            })
-            .collect();
-        model.integration.runs = vec![
-            launcher::RoutineRun {
-                id: "routine-0".into(),
-                title: "Morning brief".into(),
-                state: launcher::RoutineState::Accepted,
-                at_ms: NOW,
-            },
-            launcher::RoutineRun {
-                id: "routine-1".into(),
-                title: "Review my calendar".into(),
-                state: launcher::RoutineState::Sending,
-                at_ms: NOW,
-            },
-            launcher::RoutineRun {
-                id: "routine-2".into(),
-                title: "Research watchlist".into(),
-                state: launcher::RoutineState::Failed,
-                at_ms: NOW,
-            },
-        ];
-    }
     model
 }
 
@@ -292,8 +255,6 @@ fn sheet(ui: &mut Ui, id: &str, variants: &[&str]) -> Image {
                 availability: Availability::Unavailable("opaque protocol error".into()),
                 ..Default::default()
             };
-            m.integration.routines.clear();
-            m.integration.grok.discovery = Default::default();
         } else if index == 1 {
             m.integration.snapshot.availability = Availability::Stale("raw socket error".into());
         } else {
@@ -302,7 +263,6 @@ fn sheet(ui: &mut Ui, id: &str, variants: &[&str]) -> Image {
                 state.history = None;
                 state.permissions.clear();
             }
-            m.integration.routines.clear();
         }
         add(ui, &mut sheet, &m, (352, 220), x, y + 30.0);
     }
@@ -317,7 +277,6 @@ fn t3_grok_dense_sizes_and_sheets() {
             "t3",
             &["running", "usage", "limits", "attention", "new"][..],
         ),
-        ("grok", &["routines", "recent", "prompt"][..]),
     ] {
         for variant in variants {
             for width in 4..=12 {
