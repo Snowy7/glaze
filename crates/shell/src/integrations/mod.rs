@@ -209,7 +209,6 @@ fn provider(module: &ModuleRef) -> Option<Provider> {
         ModuleRef::Builtin(Module::T3) => Some(Provider::T3),
         ModuleRef::Builtin(Module::Obs) => Some(Provider::Obs),
         ModuleRef::Builtin(Module::Docker) => Some(Provider::Docker),
-        ModuleRef::Builtin(Module::Tailscale) => Some(Provider::Tailscale),
         _ => None,
     }
 }
@@ -230,7 +229,6 @@ pub fn bar_subscriptions<'a>(modules: impl Iterator<Item = &'a ModuleRef>, dock:
         wanted.retain(|p| match p {
             Provider::Notifications => state.config.notifications.live_verified,
             Provider::T3 => state.config.t3.live_verified,
-            Provider::Tailscale => state.config.tailscale.live_verified,
             _ => true,
         });
         if state.locked || state.display_off {
@@ -314,13 +312,11 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
                 ""
             }
         ),
-        Some(Data::Tailscale(s)) => s.state.clone(),
         _ => match provider {
             Provider::Notifications => "Notifications",
             Provider::T3 => "T3",
             Provider::Obs => "OBS",
             Provider::Docker => "Docker",
-            Provider::Tailscale => "Tailscale",
             Provider::Media => "Media",
             Provider::Calendar => "Calendar",
             Provider::Discord => "Discord",
@@ -334,7 +330,6 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
             Provider::T3 => "\u{e8f2}",
             Provider::Obs => "\u{e714}",
             Provider::Docker => "\u{e7b8}",
-            Provider::Tailscale => "\u{e72e}",
             Provider::Media => "\u{e768}",
             Provider::Calendar => "\u{e787}",
             Provider::Discord => "\u{e8f2}",
