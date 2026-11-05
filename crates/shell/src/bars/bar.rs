@@ -25,6 +25,22 @@ use std::{
 
 thread_local! { static REPAINTS: Cell<u64> = const { Cell::new(0) }; }
 
+/// Logs the dock's mean rebuild and present time every 240
+/// rebuilt frames (a magnification sweep's split between the view and the renderer).
+fn dock_timing(build: Duration, present: Duration) {
+    thread_local!(static SUM: Cell<(u32, Duration, Duration)> = const { Cell::new((0, Duration::ZERO, Duration::ZERO)) });
+    SUM.with(|sum| {
+        let (n, b, p) = sum.get();
+        let (n, b, p) = (n + 1, b + build, p + present);
+        if n == 240 {
+            log::info!("dock timing: build {:?} present {:?} per frame", b / n, p / n);
+            sum.set((0, Duration::ZERO, Duration::ZERO));
+        } else {
+            sum.set((n, b, p));
+        }
+    });
+}
+
 pub(super) fn total_repaints() -> u64 {
     REPAINTS.with(Cell::get)
 }
@@ -451,6 +467,7 @@ impl Bar {
             .collect();
         moving |= !self.animations.is_empty();
         let rebuilt = self.dirty || zoom_changed || had_animation;
+        let timing = Instant::now();
         if rebuilt {
             let scale = self.scale();
             let hot = mypaper_ui::Interaction {
@@ -493,9 +510,13 @@ impl Bar {
             self.frame.list.focus = self.focus;
             self.dirty = false;
         }
+        let built = timing.elapsed();
         if rebuilt || previous_slide != self.slide.value || self.presentation_dirty {
             self.present(ui)?;
             self.presentation_dirty = false;
+        }
+        if rebuilt && self.kind == BarKind::Dock {
+            dock_timing(built, timing.elapsed() - built);
         }
         if self.slide.value >= 0.999 && self.config.dock.autohide && self.kind == BarKind::Dock {
             if self.surface.is_visible() {
@@ -576,7 +597,6 @@ impl Bar {
             } else {
                 &mut self.islands[i - 1]
             };
-            surface.set_glass(glass.filter(|_| visible));
             surface.set_click_activates(
                 self.frame
                     .list
@@ -606,6 +626,10 @@ impl Bar {
                     self.redraws
                 );
             }
+            // After the move: the surface opens or places its glass at the origin it has now.
+            // Before it, glass opened at the previous frame's origin, ~a magnified dock's headroom
+            // too high, and the engine's asynchronous open could miss the correcting place.
+            surface.set_glass(glass.filter(|_| visible));
             if visible {
                 if !surface.is_visible() {
                     surface.show();

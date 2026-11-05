@@ -1015,18 +1015,25 @@ pub fn dock(
         let half = size * factor / 2.0;
         (centre - half, centre + half)
     };
-    // Icons, fetched before drawing at exactly the size they're drawn: the resting size, or the
-    // fully magnified one while the pointer is over the dock (the renderer shrinks it smoothly).
+    // Icons come in size buckets from resting to fully magnified, all built while the dock rests
+    // (so a magnification sweep never decodes or rasterizes one); a frame draws each icon from the
+    // smallest bucket at or above its size, so the renderer scales it by at most one step.
+    const STEPS: usize = 3;
+    let buckets: [u32; STEPS + 1] = std::array::from_fn(|k| {
+        (size * (1.0 + (magnified - 1.0) * k as f32 / STEPS as f32)).round() as u32
+    });
     let icons: Vec<Option<Arc<Image>>> = apps
         .iter()
         .enumerate()
         .map(|(i, app)| {
             let factor = zoom.get(i).map_or(1.0, |z| z.0);
-            let at = if factor > 1.001 {
-                (size * magnified).round()
-            } else {
-                size
-            } as u32;
+            if factor <= 1.001 {
+                for &bucket in &buckets[1..] {
+                    app_icon(ui, images, app, c.label, bucket);
+                }
+            }
+            let want = (size * factor).round() as u32;
+            let at = buckets.into_iter().find(|&b| b >= want).unwrap_or(buckets[STEPS]);
             app_icon(ui, images, app, c.label, at)
         })
         .collect();
