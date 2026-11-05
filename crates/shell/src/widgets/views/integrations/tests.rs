@@ -10,7 +10,7 @@ use serde_json::{Map, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
 const NOW: i64 = 1_793_875_200_000;
-const IDS: [&str; 5] = ["discord", "t3", "obs", "grok"];
+const IDS: &[&str] = &["discord", "t3", "obs", "grok"];
 
 fn model(id: &str, size: [u32; 2]) -> Model {
     let placed = Placed {
@@ -153,7 +153,7 @@ fn draw(ui: &mut Ui, model: &Model, size: (u32, u32), scale: f32) -> DisplayList
 #[test]
 fn size_sheets_have_pure_frames_bounded_hits_and_no_idle_deadlines() {
     let mut ui = Ui::new().unwrap();
-    for id in IDS {
+    for &id in IDS {
         for (grid, pixels) in [
             ([2, 2], (180, 180)),
             ([4, 2], (360, 180)),
@@ -315,7 +315,7 @@ fn export_integration_catalog_goldens() {
     };
     let mut ui = Ui::new().unwrap();
     let registry = registry::builtins();
-    for id in IDS {
+    for &id in IDS {
         let manifest = &registry.get(id).unwrap().manifest;
         let mut layout = Layout::default();
         let instance = layout.add(id, "fixture", [0, 0], manifest.size.default);
