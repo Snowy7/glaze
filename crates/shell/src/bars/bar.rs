@@ -55,7 +55,16 @@ pub struct Bar {
     pub band: DesktopRect,
     pub edge_surface: Option<Surface>,
     slide: Value,
-    zoom: Vec<(Value, Value)>,
+    /// The dock's magnification, as macOS's: how far in it is (one spring, 0 to 1, on enter and
+    /// leave) and the pointer's place along the dock; each slot's (scale, shift) follows the
+    /// pointer directly, so icons never trail it.
+    presence: Value,
+    along: Option<f32>,
+    zoom: Vec<(f32, f32)>,
+    zoom_due: bool,
+    zoomed_at: Instant,
+    /// Most of one display refresh: the zoom is laid out at most this often.
+    frame_interval: Duration,
     pub animate: bool,
     /// Explorer has accepted this bar's current work-area reservation.
     pub reserved: bool,
@@ -125,6 +134,7 @@ impl Bar {
                 targets: vec![],
                 shapes: vec![],
                 size: (1, 1),
+                rest: vec![],
             },
             items: vec![],
             hover: None,
@@ -143,7 +153,16 @@ impl Bar {
             band,
             edge_surface,
             slide,
+            presence: {
+                let mut v = Value::new(0.0);
+                v.settings = magnify_settings.clone();
+                v
+            },
+            along: None,
             zoom: vec![],
+            zoom_due: false,
+            zoomed_at: Instant::now(),
+            frame_interval: mypaper_ui::display_frame().mul_f32(0.85),
             animate: slide_settings.enabled,
             reserved: autohide,
             magnify_animate: magnify_settings.enabled,
@@ -238,6 +257,8 @@ impl Bar {
         let slide = motion::settings(motion, dock, false, animate);
         self.magnify_settings = motion::settings(motion, dock, true, animate);
         self.magnify_animate = self.magnify_settings.enabled;
+        self.presence.settings = self.magnify_settings.clone();
+        self.zoom_due = true;
         self.animate = slide.enabled;
         self.slide.settings = slide;
         self.config = config;
@@ -303,50 +324,53 @@ impl Bar {
         let enabled = self.config.dock.style == DockStyle::Floating
             && self.config.dock.magnify.enabled
             && self.magnify_animate;
-        let scale = self.scale();
-        let size = self.config.dock.size() as f32 * scale;
-        // Base centers are anchored in screen-independent envelope coordinates.
-        let centers: Vec<_> = self
-            .frame
-            .targets
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| matches!(t, view::Target::Dock(_)))
-            .filter_map(|(i, _)| self.frame.list.hits.iter().find(|h| h.id == i as u32 + 1))
-            .enumerate()
-            .map(|(i, h)| {
-                (if self.horizontal() {
-                    (h.rect.left + h.rect.right) / 2.0
-                } else {
-                    (h.rect.top + h.rect.bottom) / 2.0
-                }) - self.zoom.get(i).map_or(0.0, |v| v.1.value)
-            })
-            .collect();
-        let coordinates = pointer
-            .filter(|_| enabled)
-            .map(|p| if self.horizontal() { p.x } else { p.y });
-        let target = coordinates.map(|p| {
-            motion::magnify(
-                &centers,
+        match pointer.filter(|_| enabled) {
+            Some(p) => {
+                self.along = Some(if self.horizontal() { p.x } else { p.y });
+                self.presence.target(1.0, true, now);
+            }
+            // The pointer's last place holds while the dock settles back, as the Dock's does.
+            None => self.presence.target(0.0, true, now),
+        }
+        self.zoom_due = true;
+    }
+
+    /// Steps the enter/leave spring and lays the slots out under the pointer, at most once per
+    /// display frame (mouse moves come faster). Returns whether the zoom changed.
+    fn step_zoom(&mut self, now: Instant, moving: &mut bool) -> bool {
+        if self.kind != BarKind::Dock {
+            return false;
+        }
+        let before = self.presence.value;
+        let springing = self.presence.step(now);
+        *moving |= springing;
+        if !self.zoom_due && before == self.presence.value {
+            return false;
+        }
+        if now.saturating_duration_since(self.zoomed_at) < self.frame_interval {
+            // A tick is due within the frame; the pointer's latest place is drawn then.
+            *moving = true;
+            return false;
+        }
+        self.zoom_due = false;
+        self.zoomed_at = now;
+        let size = self.config.dock.size() as f32 * self.scale();
+        let presence = self.presence.value.clamp(0.0, 1.2);
+        let max = 1.0 + (self.config.dock.magnify.scale as f32 - 1.0) * presence;
+        let rest = &self.frame.rest;
+        let next = match self.along {
+            Some(p) if presence > 0.001 => motion::magnify(
+                rest,
                 p,
                 size,
-                self.config.dock.magnify.scale as f32,
+                max,
                 self.config.dock.magnify.range as f32 * size,
-            )
-        });
-        self.zoom
-            .resize_with(self.items.len(), || (Value::new(1.0), Value::new(0.0)));
-        for (i, (factor, shift)) in self.zoom.iter_mut().enumerate() {
-            let (s, x) = target
-                .as_ref()
-                .and_then(|t| t.get(i))
-                .copied()
-                .unwrap_or((1.0, 0.0));
-            factor.settings = self.magnify_settings.clone();
-            shift.settings = self.magnify_settings.clone();
-            factor.target(s, self.magnify_animate, now);
-            shift.target(x, self.magnify_animate, now);
-        }
+            ),
+            _ => vec![(1.0, 0.0); rest.len()],
+        };
+        let changed = next != self.zoom;
+        self.zoom = next;
+        changed
     }
 
     pub fn animate_item(&mut self, key: String, launch: bool, now: Instant) {
@@ -392,12 +416,7 @@ impl Bar {
         }
         let previous_slide = self.slide.value;
         let mut moving = self.slide.step(now);
-        let mut zoom_changed = false;
-        for (scale, shift) in &mut self.zoom {
-            let before = (scale.value, shift.value);
-            moving |= scale.step(now) | shift.step(now);
-            zoom_changed |= before != (scale.value, shift.value);
-        }
+        let zoom_changed = self.step_zoom(now, &mut moving);
         let had_animation = !self.animations.is_empty();
         let attention = self.config.dock.attention;
         self.animations.retain(|key, (start, launch)| {
@@ -452,7 +471,7 @@ impl Bar {
                     Some(&hot),
                 )
             } else {
-                let zoom: Vec<_> = self.zoom.iter().map(|(s, x)| (s.value, x.value)).collect();
+                let zoom = self.zoom.clone();
                 view::dock(
                     &self.config,
                     model,

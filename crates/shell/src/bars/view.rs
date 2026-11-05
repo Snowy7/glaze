@@ -57,6 +57,8 @@ pub struct Frame {
     pub targets: Vec<Target>,
     pub shapes: Vec<(Rect, f32)>,
     pub size: (u32, u32),
+    /// The dock's magnifiable slots (apps, then extras): their resting centres along it.
+    pub rest: Vec<f32>,
 }
 
 impl Frame {
@@ -105,6 +107,7 @@ impl Out {
             targets: self.targets,
             shapes: self.shapes,
             size,
+            rest: vec![],
         }
     }
 }
@@ -990,12 +993,27 @@ pub fn dock(
         (envelope - base) / 2.0
     }
     .round();
-    let minimum = zoom.iter().map(|v| v.1).fold(0.0, f32::min);
-    let maximum = zoom.iter().map(|v| v.1).fold(0.0, f32::max);
     // Where app `i` starts along the dock, past the dividers before it.
     let along_at = |i: usize, shift: f32| {
         start + pad + i as f32 * (length + gap) + shift
             + split.filter(|&s| i >= s).map_or(0.0, |_| divider)
+    };
+    let count = apps.len();
+    let first_extra = along_at(count, 0.0) - gap + if extras_divider { divider } else { 0.0 } + gap;
+    // The magnifiable slots' resting centres: the apps, then the extras. `zoom` gives each its
+    // scale and the shift of its centre, so a magnified icon pushes its neighbours (and the
+    // dividers between them) along instead of growing over them.
+    let rest: Vec<f32> = (0..count)
+        .map(|i| along_at(i, 0.0) + length / 2.0)
+        .chain((0..d.extras.len()).map(|e| first_extra + e as f32 * (size + gap) + size / 2.0))
+        .collect();
+    let zoomed = |k: usize| zoom.get(k).copied().unwrap_or((1.0, 0.0));
+    // Where slot `k`'s icon spans along the dock, magnified and pushed.
+    let span = |k: usize| {
+        let (factor, shift) = zoomed(k);
+        let centre = rest.get(k).copied().unwrap_or(start) + shift;
+        let half = size * factor / 2.0;
+        (centre - half, centre + half)
     };
     // Icons, fetched before drawing at exactly the size they're drawn: the resting size, or the
     // fully magnified one while the pointer is over the dock (the renderer shrinks it smoothly).
@@ -1036,32 +1054,28 @@ pub fn dock(
     let input = hot.cloned().unwrap_or_default();
     let mut out = Out::default();
     let mut f = kit::Frame::new(&mut ui.text, theme, scale, &input);
-    let panel_start = if taskbar { 0.0 } else { start + minimum };
-    let panel_length = if taskbar {
-        envelope
+    // The plate hugs the magnified run, as the Dock's does: from the first icon to the last.
+    let (panel_start, panel_length) = if taskbar {
+        (0.0, envelope)
+    } else if rest.is_empty() {
+        (start, base)
     } else {
-        base + maximum - minimum
+        let from = span(0).0 - pad;
+        (from, span(rest.len() - 1).1 + pad - from)
     };
     let plate = |a: f32, length: f32| convert(a, edge - pad, length, size + pad * 2.0);
     if islands {
         // Pinned apps, the other running apps, the extras: each its own plate.
-        let count = apps.len();
         let s = split.unwrap_or(count);
-        let first = |i: usize| along_at(i, zoom.get(i).map_or(0.0, |z| z.1));
-        let last = |i: usize| first(i) + length;
         let mut runs = Vec::new();
         if s > 0 {
-            runs.push((first(0), last(s - 1)));
+            runs.push((span(0).0, span(s - 1).1));
         }
         if s < count {
-            runs.push((first(s), last(count - 1)));
+            runs.push((span(s).0, span(count - 1).1));
         }
         if !d.extras.is_empty() {
-            let after = along_at(count, maximum) - gap
-                + if extras_divider { divider } else { 0.0 }
-                + gap;
-            let n = d.extras.len() as f32;
-            runs.push((after, after + n * size + (n - 1.0) * gap));
+            runs.push((span(count).0, span(rest.len() - 1).1));
         }
         for (from, to) in runs {
             panel(&mut f, &mut out, plate(from - pad, to - from + 2.0 * pad), px(tokens.radius), tokens);
@@ -1227,12 +1241,12 @@ pub fn dock(
         let inset = f.px(theme.metrics.item);
         (edge + inset, edge + size - inset)
     };
+    // Dividers sit midway between their neighbours' magnified edges, so nothing covers one.
+    let between = |k: usize| ((span(k - 1).1 + span(k).0) / 2.0).round();
     if let Some(s) = split.filter(|_| !islands) {
-        let at = along_at(s, zoom.get(s).map_or(0.0, |z| z.1)) - divider / 2.0 - gap / 2.0;
         let (from, to) = across_line(&f);
-        divide(&mut f, horizontal, from, to, at);
+        divide(&mut f, horizontal, from, to, between(s));
     }
-    let after_apps = along_at(apps.len(), maximum) - gap;
     for (i, extra) in d.extras.iter().enumerate() {
         let label = if *extra == Extra::Desktop {
             "Show desktop"
@@ -1252,13 +1266,15 @@ pub fn dock(
             f.hit(id, rect, Role::Button, label, true, None);
             continue;
         }
-        let first = after_apps + if extras_divider { divider } else { 0.0 } + gap;
-        let a = (first + i as f32 * (size + gap)).round();
+        let k = count + i;
         if i == 0 && extras_divider && !islands {
             let (from, to) = across_line(&f);
-            divide(&mut f, horizontal, from, to, first - gap - divider / 2.0);
+            divide(&mut f, horizontal, from, to, between(k));
         }
-        let rect = convert(a, edge, size, size);
+        // The extras magnify with the apps, growing away from the screen edge.
+        let s = (size * zoomed(k).0).round();
+        let b = if forward { edge } else { edge + size - s };
+        let rect = convert(span(k).0.round(), b.round(), s, s);
         let id = out.add(Target::Extra(*extra));
         let state = f.state(id, true);
         let sink = (rect.width() * (1.0 - state.press_scale()) / 2.0).round();
@@ -1280,7 +1296,7 @@ pub fn dock(
                     c.label
                 };
                 let ink = if state == State::Pressed { c.secondary } else { ink };
-                f.icon(shown, *icon, d.size() as f32 * 0.5, ink);
+                f.icon(shown, *icon, d.size() as f32 * 0.5 * zoomed(k).0, ink);
             }
             _ => {}
         }
@@ -1292,7 +1308,9 @@ pub fn dock(
     for (i, icon_rect) in badges {
         crate::integrations::dock_badge(&mut list, ui, &apps[i], icon_rect, scale);
     }
-    out.finish(list, dimensions)
+    let mut frame = out.finish(list, dimensions);
+    frame.rest = rest;
+    frame
 }
 
 /// Where `image` draws in `slot`: its longer side the slot's, centred on whole pixels. Images

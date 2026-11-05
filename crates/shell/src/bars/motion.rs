@@ -55,6 +55,9 @@ pub fn settings(root: &Motion, dock: bool, magnify: bool, system_animations: boo
     }
     let spring = match &curve {
         Curve::Spring(s) => Some(Spring::new(s.mass, s.stiffness, s.damping)),
+        // The magnification springs only on enter and leave (it follows the pointer between):
+        // quick and without bounce, as the Dock's.
+        Curve::Named(n) if n == "spring" && magnify => Some(Spring::apple(0.22, 0.0)),
         Curve::Named(n) if n == "spring" => Some(Spring::DEFAULT),
         Curve::Named(n) if n == "spring-soft" => Some(Spring::SOFT),
         Curve::Named(n) if n == "spring-bouncy" => Some(Spring::BOUNCY),
