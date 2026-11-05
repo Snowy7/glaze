@@ -102,6 +102,8 @@ pub mod wire {
         Style { plugin: String, surface: String, patch: Option<StylePatch> },
         Stats { plugin: String, memory: u64, cpu_us: u64, events: u64 },
         Removed { plugin: String },
+        /// Visible notification subscribers, already checked against manifest permissions.
+        Notifications { plugins: Vec<String> },
     }
 
     pub fn write<T: Serialize>(out: &mut impl Write, message: &T) -> io::Result<()> {
