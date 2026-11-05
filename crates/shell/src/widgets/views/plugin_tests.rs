@@ -82,3 +82,6 @@ fn t3_plugin_faces_render_on_the_kit() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/widgets/views/plugin-t3-sizes.png");
     golden::check(&render(&mut ui, &sheet, 1176, height).unwrap(), &path).unwrap();
 }
+
+#[path = "../../../../../plugins/discord/src/host_tests.rs"]
+mod discord;
