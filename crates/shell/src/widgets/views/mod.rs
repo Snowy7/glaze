@@ -31,6 +31,8 @@ mod toggles;
 mod weather;
 mod integrations;
 pub(crate) mod plugin;
+#[cfg(test)]
+mod plugin_tests;
 
 use super::model::{Model, Widget};
 use super::time::Stamp;

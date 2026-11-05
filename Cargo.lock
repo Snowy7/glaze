@@ -1441,6 +1441,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-plugin-t3"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "log",
+ "mypaper-plugin-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "mypaper-plugin-weather"
 version = "0.1.0"
 dependencies = [

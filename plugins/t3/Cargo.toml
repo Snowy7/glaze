@@ -1,0 +1,29 @@
+[package]
+name = "mypaper-plugin-t3"
+description = "T3 Code for mypaper on the plugin SDK: running threads, approvals, limits and usage from your local T3 Code."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# plugin.json says `"command": "t3-plugin.exe"` (not `t3.exe`: that name is T3 Code's own CLI).
+[[bin]]
+name = "t3-plugin"
+path = "src/main.rs"
+
+[dependencies]
+mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
+anyhow.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+tokio = { version = "1", features = ["rt", "net", "sync", "time", "io-util", "macros"] }
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "handshake"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+
+[lints]
+workspace = true

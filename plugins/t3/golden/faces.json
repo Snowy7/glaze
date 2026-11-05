@@ -1,0 +1,1093 @@
+{
+  "attention": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "action": "thread:thread-0",
+            "detail": "mypaper",
+            "icon": "bell",
+            "kind": "list_row",
+            "title": "Review desktop permissions",
+            "trailing": "Needs you"
+          }
+        ],
+        "gap": 0.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "action": "thread:thread-0",
+            "detail": "mypaper",
+            "icon": "bell",
+            "kind": "list_row",
+            "title": "Review desktop permissions",
+            "trailing": "Needs you"
+          }
+        ],
+        "gap": 0.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "kind": "spacer"
+          },
+          {
+            "align": "start",
+            "color": "warning",
+            "kind": "text",
+            "role": "large_title",
+            "text": "1"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "need your input"
+          },
+          {
+            "kind": "spacer"
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    }
+  },
+  "limits": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "color": "label",
+                "icon": "dot",
+                "kind": "icon",
+                "size": 8.0
+              },
+              {
+                "align": "start",
+                "kind": "text",
+                "role": "headline",
+                "text": "Codex"
+              }
+            ],
+            "gap": 8.0,
+            "kind": "row"
+          },
+          {
+            "child": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "callout",
+                      "text": "Weekly"
+                    },
+                    {
+                      "align": "start",
+                      "kind": "text",
+                      "role": "title1",
+                      "text": "34%"
+                    }
+                  ],
+                  "gap": 2.0,
+                  "kind": "stack"
+                },
+                {
+                  "badge": "IS",
+                  "color": "#606062",
+                  "kind": "limit_bar",
+                  "label": "34%",
+                  "left": 0.3399999737739563,
+                  "pace": 0.7222222089767456,
+                  "reset": "5d 1h"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            "kind": "card"
+          },
+          {
+            "children": [
+              {
+                "color": "#d97757",
+                "icon": "dot",
+                "kind": "icon",
+                "size": 8.0
+              },
+              {
+                "align": "start",
+                "kind": "text",
+                "role": "headline",
+                "text": "Claude"
+              }
+            ],
+            "gap": 8.0,
+            "kind": "row"
+          },
+          {
+            "child": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "callout",
+                      "text": "Weekly"
+                    },
+                    {
+                      "align": "start",
+                      "kind": "text",
+                      "role": "title1",
+                      "text": "64%"
+                    }
+                  ],
+                  "gap": 2.0,
+                  "kind": "stack"
+                },
+                {
+                  "badge": "ON",
+                  "color": "#542e25",
+                  "kind": "limit_bar",
+                  "label": "57%",
+                  "left": 0.5699999928474426,
+                  "pace": 0.579365074634552,
+                  "reset": "4d 1h"
+                },
+                {
+                  "badge": "TW",
+                  "color": "#542e25",
+                  "kind": "limit_bar",
+                  "label": "71%",
+                  "left": 0.7100000381469727,
+                  "pace": 0.579365074634552,
+                  "reset": "4d 1h"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            "kind": "card"
+          },
+          {
+            "child": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "callout",
+                      "text": "Weekly · Fable"
+                    },
+                    {
+                      "align": "start",
+                      "kind": "text",
+                      "role": "title1",
+                      "text": "100%"
+                    }
+                  ],
+                  "gap": 2.0,
+                  "kind": "stack"
+                },
+                {
+                  "badge": "ON",
+                  "color": "#542e25",
+                  "kind": "limit_bar",
+                  "label": "100%",
+                  "left": 1.0,
+                  "pace": 0.579365074634552,
+                  "reset": "4d 1h"
+                },
+                {
+                  "badge": "TW",
+                  "color": "#542e25",
+                  "kind": "limit_bar",
+                  "label": "100%",
+                  "left": 1.0,
+                  "pace": 0.579365074634552,
+                  "reset": "4d 1h"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            "kind": "card"
+          }
+        ],
+        "gap": 10.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "color": "label",
+                "icon": "dot",
+                "kind": "icon",
+                "size": 8.0
+              },
+              {
+                "align": "start",
+                "kind": "text",
+                "role": "headline",
+                "text": "Codex"
+              }
+            ],
+            "gap": 8.0,
+            "kind": "row"
+          },
+          {
+            "child": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "callout",
+                      "text": "Weekly"
+                    },
+                    {
+                      "align": "start",
+                      "kind": "text",
+                      "role": "title1",
+                      "text": "34%"
+                    }
+                  ],
+                  "gap": 2.0,
+                  "kind": "stack"
+                },
+                {
+                  "badge": "IS",
+                  "color": "#606062",
+                  "kind": "limit_bar",
+                  "label": "34%",
+                  "left": 0.3399999737739563,
+                  "pace": 0.7222222089767456,
+                  "reset": "5d 1h"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            "kind": "card"
+          },
+          {
+            "children": [
+              {
+                "color": "#d97757",
+                "icon": "dot",
+                "kind": "icon",
+                "size": 8.0
+              },
+              {
+                "align": "start",
+                "kind": "text",
+                "role": "headline",
+                "text": "Claude"
+              }
+            ],
+            "gap": 8.0,
+            "kind": "row"
+          },
+          {
+            "child": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "callout",
+                      "text": "Weekly"
+                    },
+                    {
+                      "align": "start",
+                      "kind": "text",
+                      "role": "title1",
+                      "text": "64%"
+                    }
+                  ],
+                  "gap": 2.0,
+                  "kind": "stack"
+                },
+                {
+                  "badge": "ON",
+                  "color": "#542e25",
+                  "kind": "limit_bar",
+                  "label": "57%",
+                  "left": 0.5699999928474426,
+                  "pace": 0.579365074634552,
+                  "reset": "4d 1h"
+                },
+                {
+                  "badge": "TW",
+                  "color": "#542e25",
+                  "kind": "limit_bar",
+                  "label": "71%",
+                  "left": 0.7100000381469727,
+                  "pace": 0.579365074634552,
+                  "reset": "4d 1h"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            "kind": "card"
+          },
+          {
+            "child": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "align": "start",
+                      "color": "secondary",
+                      "kind": "text",
+                      "role": "callout",
+                      "text": "Weekly · Fable"
+                    },
+                    {
+                      "align": "start",
+                      "kind": "text",
+                      "role": "title1",
+                      "text": "100%"
+                    }
+                  ],
+                  "gap": 2.0,
+                  "kind": "stack"
+                },
+                {
+                  "badge": "ON",
+                  "color": "#542e25",
+                  "kind": "limit_bar",
+                  "label": "100%",
+                  "left": 1.0,
+                  "pace": 0.579365074634552,
+                  "reset": "4d 1h"
+                },
+                {
+                  "badge": "TW",
+                  "color": "#542e25",
+                  "kind": "limit_bar",
+                  "label": "100%",
+                  "left": 1.0,
+                  "pace": 0.579365074634552,
+                  "reset": "4d 1h"
+                }
+              ],
+              "gap": 6.0,
+              "kind": "stack"
+            },
+            "kind": "card"
+          }
+        ],
+        "gap": 10.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "kind": "spacer"
+          },
+          {
+            "align": "start",
+            "color": "label",
+            "kind": "text",
+            "role": "large_title",
+            "text": "34%"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Codex · Weekly left"
+          },
+          {
+            "kind": "spacer"
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    }
+  },
+  "new": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "callout",
+            "text": "mypaper · GPT-6.1 Sol"
+          },
+          {
+            "action": "send",
+            "kind": "field",
+            "placeholder": "Ask T3 Code…"
+          },
+          {
+            "kind": "spacer"
+          }
+        ],
+        "gap": 8.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "callout",
+            "text": "mypaper · GPT-6.1 Sol"
+          },
+          {
+            "action": "send",
+            "kind": "field",
+            "placeholder": "Ask T3 Code…"
+          },
+          {
+            "kind": "spacer"
+          }
+        ],
+        "gap": 8.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    },
+    "small": {
+      "body": {
+        "action": "new",
+        "kind": "button",
+        "label": "New thread",
+        "primary": false
+      },
+      "footer": "Live from your local T3 Code"
+    }
+  },
+  "running": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "action": "thread:thread-0",
+            "detail": "mypaper",
+            "icon": "bell",
+            "kind": "list_row",
+            "title": "Review desktop permissions",
+            "trailing": "Needs you"
+          },
+          {
+            "action": "thread:thread-1",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 2"
+          },
+          {
+            "action": "thread:thread-2",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 3"
+          },
+          {
+            "action": "thread:thread-3",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 4"
+          },
+          {
+            "action": "thread:thread-4",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 5"
+          },
+          {
+            "action": "thread:thread-5",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 6"
+          },
+          {
+            "action": "thread:thread-6",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 7"
+          },
+          {
+            "action": "thread:thread-7",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 8"
+          },
+          {
+            "action": "thread:thread-8",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 9"
+          },
+          {
+            "action": "thread:thread-9",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 10"
+          },
+          {
+            "action": "thread:thread-10",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 11"
+          },
+          {
+            "action": "thread:thread-11",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 12"
+          },
+          {
+            "action": "thread:thread-12",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 13"
+          },
+          {
+            "action": "thread:thread-13",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 14"
+          },
+          {
+            "action": "thread:thread-14",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 15"
+          },
+          {
+            "action": "thread:thread-15",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 16"
+          },
+          {
+            "action": "thread:thread-16",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 17"
+          },
+          {
+            "action": "thread:thread-17",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 18"
+          },
+          {
+            "action": "thread:thread-18",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 19"
+          },
+          {
+            "action": "thread:thread-19",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 20"
+          }
+        ],
+        "gap": 0.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "action": "thread:thread-0",
+            "detail": "mypaper",
+            "icon": "bell",
+            "kind": "list_row",
+            "title": "Review desktop permissions",
+            "trailing": "Needs you"
+          },
+          {
+            "action": "thread:thread-1",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 2"
+          },
+          {
+            "action": "thread:thread-2",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 3"
+          },
+          {
+            "action": "thread:thread-3",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 4"
+          },
+          {
+            "action": "thread:thread-4",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 5"
+          },
+          {
+            "action": "thread:thread-5",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 6"
+          },
+          {
+            "action": "thread:thread-6",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 7"
+          },
+          {
+            "action": "thread:thread-7",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 8"
+          },
+          {
+            "action": "thread:thread-8",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 9"
+          },
+          {
+            "action": "thread:thread-9",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 10"
+          },
+          {
+            "action": "thread:thread-10",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 11"
+          },
+          {
+            "action": "thread:thread-11",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 12"
+          },
+          {
+            "action": "thread:thread-12",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 13"
+          },
+          {
+            "action": "thread:thread-13",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 14"
+          },
+          {
+            "action": "thread:thread-14",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 15"
+          },
+          {
+            "action": "thread:thread-15",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 16"
+          },
+          {
+            "action": "thread:thread-16",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 17"
+          },
+          {
+            "action": "thread:thread-17",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 18"
+          },
+          {
+            "action": "thread:thread-18",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 19"
+          },
+          {
+            "action": "thread:thread-19",
+            "detail": "mypaper",
+            "icon": "activity",
+            "kind": "list_row",
+            "title": "Build native widget 20"
+          }
+        ],
+        "gap": 0.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "kind": "spacer"
+          },
+          {
+            "align": "start",
+            "color": "label",
+            "kind": "text",
+            "role": "large_title",
+            "text": "20"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "20 threads"
+          },
+          {
+            "kind": "spacer"
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "Live from your local T3 Code"
+    }
+  },
+  "usage": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "kind": "stat",
+                "label": "Spend",
+                "value": "$16113"
+              },
+              {
+                "kind": "stat",
+                "label": "Tokens",
+                "value": "49.2B"
+              },
+              {
+                "kind": "stat",
+                "label": "Cache savings",
+                "value": "$271003"
+              }
+            ],
+            "gap": 12.0,
+            "kind": "row"
+          },
+          {
+            "kind": "area_chart",
+            "series": [
+              {
+                "color": "#542e25",
+                "label": "claudeAgent",
+                "values": [
+                  0.0,
+                  386.5306091308594,
+                  591.2698364257812,
+                  517.9256591796875,
+                  200.99288940429688,
+                  210.46994018554688,
+                  522.9454956054688,
+                  589.4715576171875,
+                  378.7599792480469,
+                  10.088339805603027,
+                  394.19195556640625,
+                  592.9009399414062,
+                  512.7593383789062,
+                  191.4590301513672,
+                  219.88746643066406,
+                  527.8174438476562,
+                  587.5066528320312,
+                  370.88226318359375,
+                  20.173828125,
+                  401.7418518066406,
+                  594.3644409179688,
+                  507.4480895996094,
+                  181.87100219726562,
+                  229.2428436279297,
+                  532.5402221679688,
+                  585.3756103515625,
+                  362.8996887207031,
+                  30.253612518310547,
+                  409.17816162109375,
+                  595.6598510742188
+                ]
+              },
+              {
+                "color": "#606062",
+                "label": "codex",
+                "values": [
+                  240.88955688476562,
+                  227.32435607910156,
+                  106.844970703125,
+                  63.885276794433594,
+                  204.56927490234375,
+                  249.04115295410156,
+                  176.3850860595703,
+                  20.772350311279297,
+                  144.6099395751953,
+                  241.97991943359375,
+                  225.54295349121094,
+                  103.02962493896484,
+                  67.9401626586914,
+                  206.9566192626953,
+                  248.6381378173828,
+                  173.3812713623047,
+                  16.580474853515625,
+                  148.0183868408203,
+                  243.0018768310547,
+                  223.69778442382812,
+                  99.18514251708984,
+                  71.975830078125,
+                  209.2854461669922,
+                  248.1648406982422,
+                  170.3284454345703,
+                  12.383910179138184,
+                  151.3849639892578,
+                  243.95513916015625,
+                  221.7893829345703,
+                  95.3126220703125
+                ]
+              }
+            ],
+            "unit": "",
+            "x_labels": [
+              "10-07",
+              "10-22",
+              "11-05"
+            ]
+          }
+        ],
+        "gap": 10.0,
+        "kind": "stack"
+      },
+      "footer": "30 days to 2026-11-05 · UTC"
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "kind": "stat",
+                "label": "Spend",
+                "value": "$16113"
+              },
+              {
+                "kind": "stat",
+                "label": "Tokens",
+                "value": "49.2B"
+              },
+              {
+                "kind": "stat",
+                "label": "Cache savings",
+                "value": "$271003"
+              }
+            ],
+            "gap": 12.0,
+            "kind": "row"
+          },
+          {
+            "kind": "area_chart",
+            "series": [
+              {
+                "color": "#542e25",
+                "label": "claudeAgent",
+                "values": [
+                  0.0,
+                  386.5306091308594,
+                  591.2698364257812,
+                  517.9256591796875,
+                  200.99288940429688,
+                  210.46994018554688,
+                  522.9454956054688,
+                  589.4715576171875,
+                  378.7599792480469,
+                  10.088339805603027,
+                  394.19195556640625,
+                  592.9009399414062,
+                  512.7593383789062,
+                  191.4590301513672,
+                  219.88746643066406,
+                  527.8174438476562,
+                  587.5066528320312,
+                  370.88226318359375,
+                  20.173828125,
+                  401.7418518066406,
+                  594.3644409179688,
+                  507.4480895996094,
+                  181.87100219726562,
+                  229.2428436279297,
+                  532.5402221679688,
+                  585.3756103515625,
+                  362.8996887207031,
+                  30.253612518310547,
+                  409.17816162109375,
+                  595.6598510742188
+                ]
+              },
+              {
+                "color": "#606062",
+                "label": "codex",
+                "values": [
+                  240.88955688476562,
+                  227.32435607910156,
+                  106.844970703125,
+                  63.885276794433594,
+                  204.56927490234375,
+                  249.04115295410156,
+                  176.3850860595703,
+                  20.772350311279297,
+                  144.6099395751953,
+                  241.97991943359375,
+                  225.54295349121094,
+                  103.02962493896484,
+                  67.9401626586914,
+                  206.9566192626953,
+                  248.6381378173828,
+                  173.3812713623047,
+                  16.580474853515625,
+                  148.0183868408203,
+                  243.0018768310547,
+                  223.69778442382812,
+                  99.18514251708984,
+                  71.975830078125,
+                  209.2854461669922,
+                  248.1648406982422,
+                  170.3284454345703,
+                  12.383910179138184,
+                  151.3849639892578,
+                  243.95513916015625,
+                  221.7893829345703,
+                  95.3126220703125
+                ]
+              }
+            ],
+            "unit": "",
+            "x_labels": [
+              "10-07",
+              "10-22",
+              "11-05"
+            ]
+          }
+        ],
+        "gap": 10.0,
+        "kind": "stack"
+      },
+      "footer": "30 days to 2026-11-05 · UTC"
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "kind": "spacer"
+          },
+          {
+            "align": "start",
+            "color": "label",
+            "kind": "text",
+            "role": "large_title",
+            "text": "$16113"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "49.2B tokens · 30 days"
+          },
+          {
+            "kind": "spacer"
+          }
+        ],
+        "gap": 2.0,
+        "kind": "stack"
+      },
+      "footer": "30 days to 2026-11-05 · UTC"
+    }
+  }
+}
