@@ -882,52 +882,66 @@ impl Canvas {
                     opacity,
                     source,
                 } => {
-                    // CreateBitmap reads the whole supplied buffer. Public Image values must be
-                    // checked before passing a pointer to that FFI call.
-                    if image.width == 0
-                        || image.height == 0
-                        || image
-                            .width
-                            .checked_mul(image.height)
-                            .and_then(|n| n.checked_mul(4))
-                            .is_none_or(|n| n as usize != image.pixels.len())
-                    {
-                        return;
-                    }
-                    let key = Arc::as_ptr(image) as usize;
-                    let mut cache = self.images.borrow_mut();
-                    if !cache.contains_key(&key) {
-                        if cache.len() >= 128 {
-                            cache.clear();
-                        }
-                        let properties = D2D1_BITMAP_PROPERTIES {
-                            pixelFormat: D2D1_PIXEL_FORMAT {
-                                format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
-                            },
-                            dpiX: 96.0,
-                            dpiY: 96.0,
-                        };
-                        let size = windows::Win32::Graphics::Direct2D::Common::D2D_SIZE_U {
-                            width: image.width,
-                            height: image.height,
-                        };
-                        if let Ok(bitmap) = t.CreateBitmap(
-                            size,
-                            Some(image.pixels.as_ptr().cast()),
-                            image.width * 4,
-                            &properties,
-                        ) {
-                            cache.insert(key, (image.clone(), bitmap));
-                        }
-                    }
-                    if let Some((_, bitmap)) = cache.get(&key) {
+                    if let Some(bitmap) = self.bitmap(image) {
                         t.DrawBitmap(
-                            bitmap,
+                            &bitmap,
                             Some(&d2d(*rect)),
                             *opacity,
                             D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
                             source.map(d2d).as_ref().map(|r| r as *const _),
+                        );
+                    }
+                }
+                Op::RoundedImage {
+                    rect,
+                    image,
+                    opacity,
+                    source,
+                    radius,
+                } => {
+                    use windows::Win32::Graphics::Direct2D::{
+                        D2D1_BITMAP_BRUSH_PROPERTIES, D2D1_BRUSH_PROPERTIES,
+                        D2D1_EXTEND_MODE_CLAMP,
+                    };
+                    let Some(bitmap) = self.bitmap(image) else {
+                        return;
+                    };
+                    // The brush maps `source` (bitmap pixels) onto `rect`; the rounded fill
+                    // is the clip, antialiased like any other fill.
+                    let src = source.unwrap_or(Rect::new(
+                        0.0,
+                        0.0,
+                        image.width as f32,
+                        image.height as f32,
+                    ));
+                    let (sx, sy) = (rect.width() / src.width(), rect.height() / src.height());
+                    let transform = windows_numerics::Matrix3x2 {
+                        M11: sx,
+                        M12: 0.0,
+                        M21: 0.0,
+                        M22: sy,
+                        M31: rect.left - src.left * sx,
+                        M32: rect.top - src.top * sy,
+                    };
+                    if let Ok(fill) = t.CreateBitmapBrush(
+                        &bitmap,
+                        Some(&D2D1_BITMAP_BRUSH_PROPERTIES {
+                            extendModeX: D2D1_EXTEND_MODE_CLAMP,
+                            extendModeY: D2D1_EXTEND_MODE_CLAMP,
+                            interpolationMode: D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+                        }),
+                        Some(&D2D1_BRUSH_PROPERTIES {
+                            opacity: *opacity,
+                            transform,
+                        }),
+                    ) {
+                        t.FillRoundedRectangle(
+                            &D2D1_ROUNDED_RECT {
+                                rect: d2d(*rect),
+                                radiusX: *radius,
+                                radiusY: *radius,
+                            },
+                            &fill,
                         );
                     }
                 }
@@ -1063,6 +1077,56 @@ impl Canvas {
 
     /// # Safety
     /// Must run between `BeginDraw` and `EndDraw`.
+    /// `image` as a Direct2D bitmap, cached by its allocation (frames share an `Arc`).
+    ///
+    /// # Safety
+    /// Must run between `BeginDraw` and `EndDraw`.
+    unsafe fn bitmap(&self, image: &Arc<Image>) -> Option<ID2D1Bitmap> {
+        // CreateBitmap reads the whole supplied buffer. Public Image values must be checked
+        // before passing a pointer to that FFI call.
+        if image.width == 0
+            || image.height == 0
+            || image
+                .width
+                .checked_mul(image.height)
+                .and_then(|n| n.checked_mul(4))
+                .is_none_or(|n| n as usize != image.pixels.len())
+        {
+            return None;
+        }
+        let key = Arc::as_ptr(image) as usize;
+        let mut cache = self.images.borrow_mut();
+        if !cache.contains_key(&key) {
+            if cache.len() >= 128 {
+                cache.clear();
+            }
+            let properties = D2D1_BITMAP_PROPERTIES {
+                pixelFormat: D2D1_PIXEL_FORMAT {
+                    format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                    alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
+                },
+                dpiX: 96.0,
+                dpiY: 96.0,
+            };
+            let size = windows::Win32::Graphics::Direct2D::Common::D2D_SIZE_U {
+                width: image.width,
+                height: image.height,
+            };
+            // SAFETY: the buffer was checked to hold width × height × 4 bytes above.
+            if let Ok(bitmap) = unsafe {
+                self.target.CreateBitmap(
+                    size,
+                    Some(image.pixels.as_ptr().cast()),
+                    image.width * 4,
+                    &properties,
+                )
+            } {
+                cache.insert(key, (image.clone(), bitmap));
+            }
+        }
+        cache.get(&key).map(|(_, bitmap)| bitmap.clone())
+    }
+
     unsafe fn fill(&self, rect: Rect, radius: f32) {
         // SAFETY: per this function's contract.
         unsafe {
@@ -1189,6 +1253,29 @@ mod tests {
         let [b, g, r, a] = image.pixel(1, 1);
         assert_eq!((b, g), (0, 0));
         assert!(r.abs_diff(128) <= 1 && a.abs_diff(128) <= 1);
+    }
+
+    #[test]
+    fn a_rounded_image_clears_its_corners_and_maps_its_source_crop() {
+        let mut ui = Ui::new().unwrap();
+        // Left half red, right half blue; the op shows only the right half, rounded.
+        let pixels = (0..8 * 8)
+            .flat_map(|i| if i % 8 < 4 { [0, 0, 255, 255] } else { [255, 0, 0, 255] })
+            .collect();
+        let list = DisplayList {
+            ops: vec![Op::RoundedImage {
+                rect: Rect::new(0.0, 0.0, 32.0, 32.0),
+                image: Arc::new(Image { width: 8, height: 8, pixels }),
+                opacity: 1.0,
+                source: Some(Rect::new(4.0, 0.0, 4.0, 8.0)),
+                radius: 10.0,
+            }],
+            ..Default::default()
+        };
+        let image = render(&mut ui, &list, 32, 32).unwrap();
+        assert_eq!(image.pixel(0, 0), [0, 0, 0, 0], "the corner is clipped clean");
+        assert_eq!(image.pixel(16, 16), [255, 0, 0, 255], "the centre shows the cropped half");
+        assert_eq!(image.pixel(6, 16), [255, 0, 0, 255], "the crop's left side is blue too");
     }
 
     #[test]

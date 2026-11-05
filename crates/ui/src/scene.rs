@@ -43,6 +43,15 @@ pub enum Op {
         opacity: f32,
         source: Option<Rect>,
     },
+    /// [`Op::Image`] clipped to a rounded rectangle of `radius` (antialiased in one primitive:
+    /// no specks at the corners), for pictures inside rounded cards and tiles.
+    RoundedImage {
+        rect: Rect,
+        image: Arc<crate::Image>,
+        opacity: f32,
+        source: Option<Rect>,
+        radius: f32,
+    },
     /// A snapshot of a field's revision, so edits invalidate its bounds without an idle tick.
     TextField {
         rect: Rect,
@@ -117,7 +126,9 @@ impl Op {
                 radius * 2.0,
             )
             .inflate(width / 2.0 + 1.0),
-            Self::Image { rect, .. } | Self::TextField { rect, .. } => rect.inflate(1.0),
+            Self::Image { rect, .. }
+            | Self::RoundedImage { rect, .. }
+            | Self::TextField { rect, .. } => rect.inflate(1.0),
             Self::Fill { rect, .. } => rect.inflate(1.0),
             Self::Icon { rect, weight, .. } => rect.inflate(weight + 1.0),
             Self::Stroke { rect, width, .. } => rect.inflate(width / 2.0 + 1.0),
@@ -187,6 +198,7 @@ impl DisplayList {
                         to.y += dy;
                     }
                     Op::Image { rect, .. }
+                    | Op::RoundedImage { rect, .. }
                     | Op::TextField { rect, .. }
                     | Op::Fill { rect, .. }
                     | Op::Icon { rect, .. }

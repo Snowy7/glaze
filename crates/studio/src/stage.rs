@@ -715,6 +715,7 @@ pub fn offset(ops: &[Op], dx: f32, dy: f32) -> impl Iterator<Item = Op> + '_ {
         Some(match op.clone() {
             Op::Arc { center, radius, sweep, width, color } => Op::Arc { center: p(center), radius, sweep, width, color },
             Op::Image { rect, image, opacity, source } => Op::Image { rect: r(rect), image, opacity, source },
+            Op::RoundedImage { rect, image, opacity, source, radius } => Op::RoundedImage { rect: r(rect), image, opacity, source, radius },
             Op::TextField { .. } => return None,
             Op::Fill { rect, radius, color } => Op::Fill { rect: r(rect), radius, color },
             Op::Icon { rect, icon, weight, color } => Op::Icon { rect: r(rect), icon, weight, color },
@@ -828,6 +829,7 @@ fn dim(op: Op, by: f32) -> Op {
         Op::Clipped {rect,ops}=>Op::Clipped {rect,ops:ops.iter().cloned().map(|op|dim(op,by)).collect::<Vec<_>>().into()},
         Op::Line { from, to, width, color } => Op::Line { from, to, width, color: fade(color) },
         Op::Image { rect, image, opacity, source } => Op::Image { rect, image, opacity: opacity * by, source },
+        Op::RoundedImage { rect, image, opacity, source, radius } => Op::RoundedImage { rect, image, opacity: opacity * by, source, radius },
         other => other,
     }
 }
