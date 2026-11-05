@@ -167,7 +167,7 @@ pub fn intercept(app: &mut App, path: &str, value: Option<serde_json::Value>) ->
     }
     let text = value.as_ref().and_then(|v| v.as_str()).unwrap_or("").to_owned();
     match path {
-        "/add_module_list" | "/new_custom" | "/menu_label" | "/menu_command" | "/routine_title" | "/routine_url" => {
+        "/add_module_list" | "/new_custom" | "/menu_label" | "/menu_command" => {
             app.texts.insert(FieldId::Text(DocId::Studio, path.into()), text);
         }
         p if p.starts_with("/list_new") => {
