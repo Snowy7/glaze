@@ -1,0 +1,61 @@
+﻿{
+    "label":  "grok-wasm-cutover",
+    "at":  "2026-11-06T00:35:43",
+    "rows":  [
+                 {
+                     "part":  "mypaper-plugins",
+                     "pid":  45296,
+                     "cpu_core_pct":  0,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  7,
+                     "ws_mb":  16
+                 },
+                 {
+                     "part":  "mypaper-core",
+                     "pid":  75700,
+                     "cpu_core_pct":  0.08,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  3,
+                     "ws_mb":  17
+                 },
+                 {
+                     "part":  "mypaper-shell",
+                     "pid":  63232,
+                     "cpu_core_pct":  1.17,
+                     "gpu3d_pct":  0.01,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  38,
+                     "ws_mb":  101
+                 },
+                 {
+                     "part":  "mypaper-wallpaper",
+                     "pid":  31712,
+                     "cpu_core_pct":  3.75,
+                     "gpu3d_pct":  1.85,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  144,
+                     "private_mb":  170,
+                     "ws_mb":  32
+                 }
+             ],
+    "total":  {
+                  "part":  "TOTAL",
+                  "procs":  4,
+                  "cpu_core_pct":  5,
+                  "gpu3d_pct":  1.86,
+                  "gpu_video_pct":  0,
+                  "gpu_mem_mb":  144,
+                  "private_mb":  218,
+                  "ws_mb":  166
+              },
+    "theme":  "rain-city"
+}

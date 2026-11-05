@@ -10,12 +10,22 @@ pub struct Discovery {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Marker { version: u32, signed_in: bool }
+struct Marker {
+    version: u32,
+    signed_in: bool,
+}
 
 impl Discovery {
     pub fn from_marker(installed: bool, running: bool, marker: Option<&str>) -> Self {
-        let signed_in = running && marker.and_then(|s| serde_json::from_str::<Marker>(s).ok()).is_some_and(|m| m.version == 1 && m.signed_in);
-        Self { installed: installed || running, running, signed_in }
+        let signed_in = running
+            && marker
+                .and_then(|s| serde_json::from_str::<Marker>(s).ok())
+                .is_some_and(|m| m.version == 1 && m.signed_in);
+        Self {
+            installed: installed || running,
+            running,
+            signed_in,
+        }
     }
 }
 
@@ -27,7 +37,9 @@ mod tests {
         let marker = r#"{"version":1,"signedIn":true}"#;
         assert!(Discovery::from_marker(true, true, Some(marker)).signed_in);
         assert!(!Discovery::from_marker(true, false, Some(marker)).signed_in);
-        assert!(!Discovery::from_marker(true, true, Some(r#"{"version":2,"signedIn":true}"#)).signed_in);
+        assert!(
+            !Discovery::from_marker(true, true, Some(r#"{"version":2,"signedIn":true}"#)).signed_in
+        );
         assert!(!Discovery::from_marker(true, true, Some("garbage")).signed_in);
     }
 }

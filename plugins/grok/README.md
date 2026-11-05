@@ -40,3 +40,10 @@ Release measurement (2026-11-06, `golden/runtime-memory.txt`): the routines face
 of guest linear memory and added 1.20 MiB of process private memory. Cached load took 1.27 ms;
 install-time AOT compilation plus first load took 448.5 ms. The benchmark process finished at
 8.0 MiB private memory including its shared engine. The component is 284 KiB.
+
+The release workspace was built from the committed `581f522` archive and deployed with
+`scripts/deploy-local.ps1` under the desktop lock. A concurrent port deployed a newer desktop
+immediately afterward; its runtime successfully validated Grok's cached component. The 20-second
+desktop sample is `golden/desktop-memory.json` (shared helper: 7 MiB private, 0% of one CPU core).
+No Grok face was placed in the user's layout during that sample; use the component benchmark
+above for Grok's active memory cost.
