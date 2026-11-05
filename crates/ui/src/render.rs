@@ -31,6 +31,84 @@ use crate::geom::{PixelRect, Rect, Rgba};
 use crate::scene::{DisplayList, Op};
 use crate::text::Text;
 
+#[cfg(test)]
+#[test]
+fn sparse_meter_updates_match_a_complete_render() {
+    let mut ui = Ui::new().unwrap();
+    let canvas = Canvas::new(&ui, 120, 120).unwrap();
+    let frame = |fraction| DisplayList {
+        ops: vec![
+            Op::Fill {
+                rect: Rect::new(0.0, 0.0, 120.0, 120.0),
+                radius: 12.0,
+                color: Rgba::rgb8([30, 40, 50], 1.0),
+            },
+            Op::Stroke {
+                rect: Rect::new(1.0, 1.0, 118.0, 118.0),
+                radius: 12.0,
+                width: 1.0,
+                color: Rgba::rgb8([80, 90, 100], 1.0),
+            },
+            Op::Arc {
+                center: crate::Point::new(60.0, 60.0),
+                radius: 40.0,
+                sweep: std::f32::consts::TAU,
+                width: 3.0,
+                color: Rgba::rgb8([70, 80, 90], 1.0),
+            },
+            Op::Arc {
+                center: crate::Point::new(60.0, 60.0),
+                radius: 40.0,
+                sweep: fraction * std::f32::consts::TAU,
+                width: 3.0,
+                color: Rgba::rgb8([130, 190, 255], 1.0),
+            },
+            Op::Text {
+                rect: Rect::new(42.0, 48.0, 36.0, 22.0),
+                text: format!("{:.0}%", fraction * 100.0).into(),
+                style: crate::TextStyle::new("Segoe UI", 14.0),
+                color: Rgba::rgb8([220, 230, 240], 1.0),
+            },
+        ],
+        ..Default::default()
+    };
+    let full = PixelRect::full(120, 120);
+    let mut before = frame(0.20);
+    canvas.draw(&mut ui.text, &before, full).unwrap();
+    for fraction in [0.21, 0.25, 0.76, 1.0, 0.0, 0.99]
+        .into_iter()
+        .chain((0..=100).map(|n| n as f32 / 100.0))
+        .chain((0..=100).rev().map(|n| n as f32 / 100.0))
+    {
+        let after = frame(fraction);
+        let regions: Vec<_> = after
+            .damage_regions(&before)
+            .iter()
+            .filter_map(|r| r.pixels(120, 120))
+            .collect();
+        canvas.draw_regions(&mut ui.text, &after, &regions).unwrap();
+        let expected = render(&mut ui, &after, 120, 120).unwrap();
+        let mut pixels = Vec::new();
+        canvas
+            .read(full, |_, bytes| pixels.extend_from_slice(bytes))
+            .unwrap();
+        let changed: Vec<_> = pixels
+            .iter()
+            .zip(&expected.pixels)
+            .enumerate()
+            .filter(|(_, (a, b))| a != b)
+            .map(|(i, (a, b))| (i / 4 % 120, i / 4 / 120, *a, *b))
+            .collect();
+        assert!(
+            changed.is_empty(),
+            "fraction {fraction}: {} changed bytes, first {:?}",
+            changed.len(),
+            changed.first()
+        );
+        before = after;
+    }
+}
+
 /// The UI of one thread: the factories, the text cache, and what every surface shares.
 /// Create one per UI thread; surfaces and the menu borrow it to draw.
 pub struct Ui {
@@ -254,18 +332,30 @@ impl Canvas {
 
     /// Redraws `area` (cleared first) with the operations of `list` that touch it.
     pub(crate) fn draw(&self, text: &mut Text, list: &DisplayList, area: PixelRect) -> Result<()> {
-        let clip = area.to_rect();
+        self.draw_regions(text, list, &[area])
+    }
+
+    /// Flush Direct2D once for a set of disjoint dashboard changes.
+    pub(crate) fn draw_regions(
+        &self,
+        text: &mut Text,
+        list: &DisplayList,
+        areas: &[PixelRect],
+    ) -> Result<()> {
         let t = &self.target;
         // SAFETY: drawing calls between BeginDraw and EndDraw on this thread's target; every
         // object passed in is alive for the call.
         unsafe {
             t.BeginDraw();
-            t.PushAxisAlignedClip(&d2d(clip), D2D1_ANTIALIAS_MODE_ALIASED);
-            t.Clear(Some(&color(Rgba::TRANSPARENT)));
-            for op in list.ops.iter().filter(|op| op.bounds().intersects(&clip)) {
-                self.op(text, op);
+            for area in areas {
+                let clip = area.to_rect();
+                t.PushAxisAlignedClip(&d2d(clip), D2D1_ANTIALIAS_MODE_ALIASED);
+                t.Clear(Some(&color(Rgba::TRANSPARENT)));
+                for op in list.ops.iter().filter(|op| touches(op, clip)) {
+                    self.op(text, op, clip);
+                }
+                t.PopAxisAlignedClip();
             }
-            t.PopAxisAlignedClip();
             t.EndDraw(None, None).context("drawing")?;
         }
         Ok(())
@@ -301,11 +391,60 @@ impl Canvas {
 
     /// # Safety
     /// Must run between `BeginDraw` and `EndDraw`.
-    unsafe fn op(&self, text: &mut Text, op: &Op) {
+    unsafe fn op(&self, text: &mut Text, op: &Op, damage: Rect) {
         let (t, brush) = (&self.target, &self.brush);
         // SAFETY: per this function's contract.
         unsafe {
             match op {
+                Op::Clip { rect, ops } => {
+                    t.PushAxisAlignedClip(&d2d(*rect), D2D1_ANTIALIAS_MODE_ALIASED);
+                    for child in ops
+                        .iter()
+                        .filter(|op| touches(op, *rect) && touches(op, damage))
+                    {
+                        self.op(text, child, damage);
+                    }
+                    t.PopAxisAlignedClip();
+                }
+                Op::Emphasis {
+                    rect,
+                    text: string,
+                    style,
+                    color: c,
+                    italic,
+                    strike,
+                } => {
+                    use windows::Win32::Graphics::DirectWrite::{
+                        DWRITE_FONT_STYLE_ITALIC, DWRITE_FONT_STYLE_NORMAL, DWRITE_TEXT_RANGE,
+                    };
+                    if let Some(layout) = text.layout(string, style) {
+                        let range = DWRITE_TEXT_RANGE {
+                            startPosition: 0,
+                            length: string.encode_utf16().count() as u32,
+                        };
+                        let _ = layout.SetFontStyle(
+                            if *italic {
+                                DWRITE_FONT_STYLE_ITALIC
+                            } else {
+                                DWRITE_FONT_STYLE_NORMAL
+                            },
+                            range,
+                        );
+                        let _ = layout.SetStrikethrough(*strike, range);
+                        brush.SetColor(&color(*c));
+                        t.DrawTextLayout(
+                            Vector2 {
+                                X: rect.left,
+                                Y: rect.top,
+                            },
+                            layout,
+                            brush,
+                            D2D1_DRAW_TEXT_OPTIONS_NONE,
+                        );
+                        let _ = layout.SetFontStyle(DWRITE_FONT_STYLE_NORMAL, range);
+                        let _ = layout.SetStrikethrough(false, range);
+                    }
+                }
                 Op::Arc {
                     center,
                     radius,
@@ -317,7 +456,7 @@ impl Canvas {
                         D2D_SIZE_F, D2D1_FIGURE_BEGIN_HOLLOW, D2D1_FIGURE_END_OPEN,
                     };
                     use windows::Win32::Graphics::Direct2D::{
-                        D2D1_ARC_SEGMENT, D2D1_ARC_SIZE_LARGE, D2D1_ARC_SIZE_SMALL, D2D1_ELLIPSE,
+                        D2D1_ARC_SEGMENT, D2D1_ARC_SIZE_SMALL, D2D1_ELLIPSE,
                         D2D1_SWEEP_DIRECTION_CLOCKWISE,
                     };
                     brush.SetColor(&color(*c));
@@ -346,24 +485,25 @@ impl Canvas {
                             },
                             D2D1_FIGURE_BEGIN_HOLLOW,
                         );
-                        let angle = sweep - std::f32::consts::FRAC_PI_2;
-                        sink.AddArc(&D2D1_ARC_SEGMENT {
-                            point: Vector2 {
-                                X: center.x + radius * angle.cos(),
-                                Y: center.y + radius * angle.sin(),
-                            },
-                            size: D2D_SIZE_F {
-                                width: *radius,
-                                height: *radius,
-                            },
-                            rotationAngle: 0.0,
-                            sweepDirection: D2D1_SWEEP_DIRECTION_CLOCKWISE,
-                            arcSize: if *sweep > std::f32::consts::PI {
-                                D2D1_ARC_SIZE_LARGE
-                            } else {
-                                D2D1_ARC_SIZE_SMALL
-                            },
-                        });
+                        // Canonical quarter-turn prefixes allow a meter to repaint only
+                        // changed quarters without moving the unchanged curve's pixels.
+                        let count = (sweep / std::f32::consts::FRAC_PI_2).ceil() as u32;
+                        for quarter in 1..=count {
+                            let angle = (quarter as f32 * std::f32::consts::FRAC_PI_2).min(*sweep);
+                            sink.AddArc(&D2D1_ARC_SEGMENT {
+                                point: Vector2 {
+                                    X: center.x + radius * angle.sin(),
+                                    Y: center.y - radius * angle.cos(),
+                                },
+                                size: D2D_SIZE_F {
+                                    width: *radius,
+                                    height: *radius,
+                                },
+                                rotationAngle: 0.0,
+                                sweepDirection: D2D1_SWEEP_DIRECTION_CLOCKWISE,
+                                arcSize: D2D1_ARC_SIZE_SMALL,
+                            });
+                        }
                         sink.EndFigure(D2D1_FIGURE_END_OPEN);
                         if sink.Close().is_ok() {
                             t.DrawGeometry(&path, brush, *width, None);
@@ -381,7 +521,21 @@ impl Canvas {
                     color: c,
                 } => {
                     brush.SetColor(&color(*c));
-                    self.fill(*rect, *radius);
+                    let inset = radius.max(0.0);
+                    let inside = damage.left >= rect.left
+                        && damage.top >= rect.top
+                        && damage.right <= rect.right
+                        && damage.bottom <= rect.bottom;
+                    let flat = (damage.left >= rect.left + inset
+                        && damage.right <= rect.right - inset)
+                        || (damage.top >= rect.top + inset && damage.bottom <= rect.bottom - inset);
+                    if inside && flat {
+                        // Meter text is inside the plate's flat interior. Avoid tessellating
+                        // the entire rounded outline just to refill this small dirty rectangle.
+                        t.FillRectangle(&d2d(damage), brush);
+                    } else {
+                        self.fill(*rect, *radius);
+                    }
                 }
                 Op::Stroke {
                     rect,
@@ -513,6 +667,48 @@ impl Canvas {
                 self.target.FillRectangle(&d2d(rect), &self.brush);
             }
         }
+    }
+}
+
+/// Bounding boxes include a ring's empty middle and a frame's empty interior. Avoid sending
+/// those unchanged outlines through Direct2D when only a meter's central label changed.
+fn touches(op: &Op, damage: Rect) -> bool {
+    if !op.bounds().intersects(&damage) {
+        return false;
+    }
+    match op {
+        Op::Arc {
+            center,
+            radius,
+            width,
+            ..
+        } => {
+            let near_x = center.x - center.x.clamp(damage.left, damage.right);
+            let near_y = center.y - center.y.clamp(damage.top, damage.bottom);
+            let far_x = (center.x - damage.left)
+                .abs()
+                .max((center.x - damage.right).abs());
+            let far_y = (center.y - damage.top)
+                .abs()
+                .max((center.y - damage.bottom).abs());
+            let outer = radius + width / 2.0 + 2.0;
+            let inner = (radius - width / 2.0 - 2.0).max(0.0);
+            near_x * near_x + near_y * near_y <= outer * outer
+                && far_x * far_x + far_y * far_y >= inner * inner
+        }
+        Op::Stroke {
+            rect,
+            radius,
+            width,
+            ..
+        } => {
+            let inside = rect.inflate(-radius.max(width / 2.0 + 2.0));
+            !(damage.left >= inside.left
+                && damage.top >= inside.top
+                && damage.right <= inside.right
+                && damage.bottom <= inside.bottom)
+        }
+        _ => true,
     }
 }
 

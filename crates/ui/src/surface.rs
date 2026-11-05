@@ -95,6 +95,8 @@ pub enum Event {
     DoubleClick(Pointer, Button),
     /// A key went down (a virtual-key code).
     Key(u16),
+    /// A desktop surface activated; Explorer may finish reordering its band afterwards.
+    Activated,
     /// The surface lost the activation (another window was clicked or focused).
     Deactivated,
     /// Assistive technology invoked a hit item.
@@ -243,7 +245,9 @@ impl Surface {
             ),
             Kind::DesktopChild { .. } => (
                 WS_POPUP,
-                WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+                // Receive normal click activation for keyboard editing. WM_WINDOWPOSCHANGING
+                // below prevents activation from raising the surface out of its desktop band.
+                WS_EX_LAYERED | WS_EX_TOOLWINDOW,
                 None,
             ),
         };
@@ -388,21 +392,57 @@ impl Surface {
         size: (u32, u32),
         list: DisplayList,
     ) -> Result<bool> {
+        self.present_damage(ui, origin, size, list, false)
+    }
+
+    /// Paint disjoint changed regions (widget meters) with one layered-window present.
+    pub fn present_sparse(
+        &mut self,
+        ui: &mut Ui,
+        origin: (i32, i32),
+        size: (u32, u32),
+        list: DisplayList,
+    ) -> Result<bool> {
+        self.present_damage(ui, origin, size, list, true)
+    }
+
+    fn present_damage(
+        &mut self,
+        ui: &mut Ui,
+        origin: (i32, i32),
+        size: (u32, u32),
+        list: DisplayList,
+        sparse: bool,
+    ) -> Result<bool> {
         let resized = self.pixels.is_none() || size != self.size;
         if resized {
             self.pixels = None; // the old bitmaps go before the new ones come
             self.pixels = Some((Canvas::new(ui, size.0, size.1)?, Dib::new(size.0, size.1)?));
             self.size = size;
         }
-        let dirty = if resized {
-            Some(PixelRect::full(size.0, size.1))
+        let regions = if resized {
+            vec![PixelRect::full(size.0, size.1)]
+        } else if sparse {
+            list.damage_regions(&self.shown)
+                .into_iter()
+                .filter_map(|rect| rect.pixels(size.0, size.1))
+                .collect::<Vec<_>>()
         } else {
             list.damage(&self.shown)
                 .and_then(|rect| rect.pixels(size.0, size.1))
+                .into_iter()
+                .collect()
         };
-        if let (Some(area), Some((canvas, dib))) = (dirty, &mut self.pixels) {
-            canvas.draw(&mut ui.text, &list, area)?;
-            canvas.read(area, |row, bytes| dib.put_row(area, row, bytes))?;
+        let dirty = regions
+            .iter()
+            .map(|r| r.to_rect())
+            .reduce(|a, b| a.union(b))
+            .and_then(|r| r.pixels(size.0, size.1));
+        if let (Some(_), Some((canvas, dib))) = (dirty, &mut self.pixels) {
+            canvas.draw_regions(&mut ui.text, &list, &regions)?;
+            for region in regions {
+                canvas.read(region, |row, bytes| dib.put_row(region, row, bytes))?;
+            }
         }
         if dirty.is_some() || origin != self.origin {
             let source = dirty.map(|area| (self.dib_dc(), area, resized));
@@ -836,10 +876,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 WM_IME_STARTCOMPOSITION | WM_IME_ENDCOMPOSITION | WM_IME_COMPOSITION
             )
             || (WM_IME_SETCONTEXT..=WM_IME_KEYUP).contains(&msg);
-        let in_field = field.contains(
-            i32::from(lparam.0 as i16),
-            i32::from((lparam.0 >> 16) as i16),
-        );
+        let mut field_point = POINT {
+            x: i32::from(lparam.0 as i16),
+            y: i32::from((lparam.0 >> 16) as i16),
+        };
+        if msg == WM_MOUSEWHEEL {
+            // SAFETY: wheel messages carry screen pixels; RichEdit's hit region is client-local.
+            let _ = unsafe { ScreenToClient(hwnd, &mut field_point) };
+        }
+        let in_field = field.contains(field_point.x, field_point.y);
         if msg == WM_LBUTTONDOWN && in_field && !focused {
             field.focus();
         }
@@ -943,6 +988,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         windows::Win32::UI::WindowsAndMessaging::WM_CANCELMODE => push(id, Event::Cancelled),
         WM_ACTIVATE if (wparam.0 & 0xFFFF) as u32 == WA_INACTIVE => push(id, Event::Deactivated),
+        WM_ACTIVATE if shared.desktop.is_some() => push(id, Event::Activated),
         WM_A11Y_ACTION => {
             let hit = lparam.0 as HitId;
             push(
