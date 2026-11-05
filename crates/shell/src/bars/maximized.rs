@@ -78,15 +78,16 @@ impl Foreground {
                 fullscreen,
             };
             let mut frame = RECT::default();
-            if DwmGetWindowAttribute(
-                hwnd,
-                DWMWA_EXTENDED_FRAME_BOUNDS,
-                (&raw mut frame).cast(),
-                size_of_val(&frame) as u32,
-            )
-            .is_err()
-            {
-                GetWindowRect(hwnd, &mut frame).ok()?;
+            // DWM's painted frame can still be animating when the foreground/maximize
+            // event arrives. The native rect already has the maximized target bounds.
+            if GetWindowRect(hwnd, &mut frame).is_err() {
+                DwmGetWindowAttribute(
+                    hwnd,
+                    DWMWA_EXTENDED_FRAME_BOUNDS,
+                    (&raw mut frame).cast(),
+                    size_of_val(&frame) as u32,
+                )
+                .ok()?;
             }
             let mut info = MONITORINFO {
                 cbSize: size_of::<MONITORINFO>() as u32,
@@ -173,6 +174,36 @@ mod tests {
             true,
             true
         ));
+    }
+
+    #[test]
+    fn maximized_frame_overshoot_and_negative_monitor_coordinates() {
+        let monitor = Rect {
+            x: -2560,
+            y: 0,
+            width: 2560,
+            height: 1440,
+        };
+        let mut foreground = Foreground {
+            facts: maximized(),
+            monitor,
+            work: Rect {
+                x: -2560,
+                y: 24,
+                width: 2560,
+                height: 1342,
+            },
+            frame: Rect {
+                x: -2568,
+                y: 16,
+                width: 2576,
+                height: 1358,
+            },
+        };
+        assert!(foreground.hides(monitor));
+        assert!(!foreground.hides(Rect { x: 0, ..monitor }));
+        foreground.frame.width = 900;
+        assert!(!foreground.hides(monitor));
     }
 
     #[test]

@@ -87,6 +87,7 @@ pub struct Bars {
     config_due: Option<Instant>,
     display_due: Option<Instant>,
     reservation_due: Option<Instant>,
+    maximized_due: Option<Instant>,
     explorer_due: Option<Instant>,
     rehide_due: Option<Instant>,
     asleep: bool,
@@ -156,6 +157,7 @@ impl Bars {
             config_due: None,
             display_due: None,
             reservation_due: None,
+            maximized_due: None,
             explorer_due: None,
             rehide_due: None,
             asleep: false,
@@ -241,6 +243,7 @@ impl Bars {
             self.config_due,
             self.display_due,
             self.reservation_due,
+            self.maximized_due,
             self.explorer_due,
             self.rehide_due,
             self.services.deadline(),
@@ -281,6 +284,7 @@ impl Bars {
             (self.config_due, "bars.config"),
             (self.display_due, "bars.display"),
             (self.reservation_due, "bars.reservation"),
+            (self.maximized_due, "bars.maximized_settle"),
             (self.explorer_due, "bars.explorer"),
             (self.rehide_due, "bars.rehide"),
             (self.services.deadline(), "bars.services"),
@@ -537,7 +541,14 @@ impl Bars {
         {
             providers::taskbar::hide_visible();
         }
-        if changes.windows || changes.moved || max_config || max_display {
+        let maximized_event = changes.windows || changes.moved || max_config || max_display;
+        let maximized_settled = services::take_due(&mut self.maximized_due, now);
+        if maximized_event {
+            // One follow-up snapshot also covers focus/maximize arriving before the shared
+            // source has attached its location hook to the newly foreground process.
+            self.maximized_due.get_or_insert(now + Duration::from_millis(150));
+        }
+        if maximized_event || maximized_settled {
             let foreground = maximized::Foreground::read(self.fullscreen.is_some());
             for b in &mut self.bars {
                 let hide = b.hide_when_maximized()
