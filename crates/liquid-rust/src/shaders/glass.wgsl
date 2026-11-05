@@ -1,3 +1,5 @@
+// Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
 // Liquid Glass surface. One instanced quad per glass group; the group's shapes are
 // smooth-unioned into one signed distance field, so neighbours fuse like liquid. Each shape
 // brings its own material, blended across the liquid neck with the same weights.
@@ -34,7 +36,7 @@ struct Material {
     optics: vec4f,      // refraction, light/dark adaptivity, dispersion, frost sigma (px)
     lighting: vec4f,    // splay, specular, rim, rim shade
     edge: vec4f,        // inner hairline, outer edge burn, contrast border, dim
-    shadow: vec4f,      // offset y (px), sigma (px), opacity, unused
+    shadow: vec4f,      // offset y (px), sigma (px), opacity, scheme (mypaper: 1 light, 0 dark)
     light_a: vec4f,     // light tone: lift, luminance, luminance mix, lighten
     light_b: vec4f,     // light tone: darken to, darken, unused, unused
     dark_a: vec4f,      // dark tone
@@ -354,7 +356,8 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
             let side_l = coverage(sdg_group(p + vec2f(1.25 * pt, 0.0), grp).x + grow);
             let side_r = coverage(sdg_group(p - vec2f(1.25 * pt, 0.0), grp).x + grow);
             let burn = mat.edge.y * (ring + 0.92 * max(side_l, side_r) * (1.0 - cov));
-            let under = encode(textureLoad(src, vec2i(p), 0).rgb);
+            // mypaper: sampled by uv, not loaded by pixel: the content may be another size.
+            let under = encode(textureSampleLevel(src, samp, p * globals.viewport.zw, 0.0).rgb);
             let burnt = max(under - vec3f(burn), vec3f(0.0));
             let darkening = 1.0 - luminance(decode(burnt)) / max(luminance(decode(under)), 1e-4);
             // The kit's linear burn defines the edge over light content. Over dark content a
@@ -399,7 +402,8 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
     // to flip, until (adaptivity 0) it never does and follows the scheme. Moving the threshold,
     // rather than blending scheme and content by adaptivity, keeps the face fully light or
     // fully dark: a 50/50 blend of the two faces is the flat grey Apple's glass never shows.
-    let scheme_edge = select(1.2, -0.2, globals.misc.z > 0.5);
+    // mypaper: the scheme is per glass (`mat.shadow.w`), not `globals.misc.z`.
+    let scheme_edge = select(1.2, -0.2, mat.shadow.w > 0.5);
     let flip = mix(scheme_edge, 0.36, mat.optics.y);
     // Narrow, so content only briefly sits in between, where the faces blend toward grey.
     let lightness = smoothstep(flip - 0.06, flip + 0.06, bg);

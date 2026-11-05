@@ -1,3 +1,5 @@
+// Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
 //! wgpu renderer: packs a [`Scene`] into GPU buffers and draws it over your content.
 //!
 //! Per frame:
@@ -36,6 +38,10 @@ pub struct Frame<'a> {
     /// blur pyramid is reused, wherever the glass moves (zero blur cost over static
     /// wallpapers). `true` is always correct, only slower.
     pub content_changed: bool,
+    /// mypaper: `true` (upstream) copies `content` into `target` first. `false` draws the glass
+    /// over whatever `target` already holds: the wallpaper the engine restored, or a transparent
+    /// clear for a premultiplied overlay. `content` may then be a different size than `target`.
+    pub copy_content: bool,
 }
 
 #[repr(C)]
@@ -219,7 +225,10 @@ fn pack(scene: &Scene, layers: Layers, scale: f32, viewport: Vec2, out: &mut Pac
             let along = 1.0 + g.stretch;
             // Each shape's own material at its own size: a 52 pt bar fused to a 400 pt
             // panel stays thin glass, a tinted button next to a plain one stays tinted.
-            let resolved = scene.material_of(&scene.nodes[member.id]).resolve(g.half.min_element() * 2.0, &scene.appearance);
+            let node = &scene.nodes[member.id];
+            // mypaper: each glass may bring its own appearance.
+            let appearance = node.glass.appearance.as_ref().unwrap_or(&scene.appearance);
+            let resolved = scene.material_of(node).resolve(g.half.min_element() * 2.0, appearance);
             let m = resolved.material;
             let depth = (m.depth * s).min(g.half.min_element() * s).max(1.0);
             out.shapes.push(ShapeGpu {
@@ -228,7 +237,7 @@ fn pack(scene: &Scene, layers: Layers, scale: f32, viewport: Vec2, out: &mut Pac
                 stretch: [along, 1.0 / along, g.exponent, 0.0],
                 extra: [depth, 0.0, 0.0, 0.0],
             });
-            out.materials.push(material_gpu(&resolved, p, press, s));
+            out.materials.push(material_gpu(&resolved, p, press, s, appearance.dark));
             margin = margin.max(m.shadow.offset_y.abs() * s + 1.5 * m.shadow.blur * s);
             out.reach = out.reach.max(depth * 1.2 * m.refraction + 8.0 * m.frost * 0.5 * s * p + 8.0);
             let c = g.center * s;
@@ -256,7 +265,7 @@ fn pack(scene: &Scene, layers: Layers, scale: f32, viewport: Vec2, out: &mut Pac
 
 /// GPU form of a resolved material. Strengths scale with the group's `presence`, so glass
 /// materializes by ramping its lensing in; the specular brightens with `press`.
-fn material_gpu(resolved: &crate::material::Resolved, presence: f32, press: f32, scale: f32) -> MaterialGpu {
+fn material_gpu(resolved: &crate::material::Resolved, presence: f32, press: f32, scale: f32, dark: bool) -> MaterialGpu {
     let (m, p, s) = (resolved.material, presence, scale);
     let tone_a = |t: crate::Tone| [t.lift * p, t.luminance, t.luminance_mix * p, t.lighten * p];
     let tone_b = |t: crate::Tone| [t.darken_to, t.darken * p, 0.0, 0.0];
@@ -269,7 +278,8 @@ fn material_gpu(resolved: &crate::material::Resolved, presence: f32, press: f32,
         optics: [m.refraction * p, resolved.adapt, m.dispersion * p, m.frost * 0.5 * s * p],
         lighting: [m.splay, m.specular * p * (1.0 + 0.6 * press), m.rim * p, m.rim_shade * p],
         edge: [m.hairline * p, m.edge * p, resolved.contrast * p, m.dim * p],
-        shadow: [m.shadow.offset_y * s, m.shadow.blur * 0.5 * s, m.shadow.opacity * p, 0.0],
+        // mypaper: the scheme rides in the unused slot (1 light, 0 dark), per glass.
+        shadow: [m.shadow.offset_y * s, m.shadow.blur * 0.5 * s, m.shadow.opacity * p, if dark { 0.0 } else { 1.0 }],
         light_a: tone_a(m.light_tone),
         light_b: tone_b(m.light_tone),
         dark_a: tone_a(m.dark_tone),
@@ -294,6 +304,8 @@ fn scissor(pass: &mut wgpu::RenderPass<'_>, b: Bounds, size: (u32, u32)) -> bool
     true
 }
 
+// mypaper: `Clone`, so [`Renderer::fork`] can share compiled pipelines.
+#[derive(Clone)]
 struct Pipelines {
     glass: wgpu::RenderPipeline,
     blit: wgpu::RenderPipeline,
@@ -548,6 +560,11 @@ impl Renderer {
                 ..Default::default()
             }),
         };
+        Self::with_pipelines(device, format, pipelines)
+    }
+
+    /// mypaper: [`Renderer::new`]'s body after the pipelines, shared with [`Renderer::fork`].
+    fn with_pipelines(device: &wgpu::Device, format: wgpu::TextureFormat, pipelines: Pipelines) -> Self {
         Self {
             format,
             globals: device.create_buffer(&wgpu::BufferDescriptor {
@@ -569,6 +586,12 @@ impl Renderer {
             binds: Binds { blit: BindCache::new(), down_first: BindCache::new(), glass: BindCache::new() },
             rebuild: Vec::new(),
         }
+    }
+
+    /// mypaper: a new renderer (own buffers, blur pyramid and caches) that shares this one's
+    /// compiled pipelines, so a short-lived one (an overlay) costs no shader compile.
+    pub fn fork(&self, device: &wgpu::Device) -> Self {
+        Self::with_pipelines(device, self.format, self.pipelines.clone())
     }
 
     /// Texture format this renderer draws into.
@@ -596,9 +619,9 @@ impl Renderer {
     /// #     content: &wgpu::TextureView, middle: &wgpu::TextureView, target: &wgpu::TextureView) {
     /// # use liquid_rust::Frame;
     /// # let (size, scale) = ((1206, 2622), 3.0);
-    /// lower.render_layers(device, queue, encoder, &Frame { content, target: middle, size, scale, content_changed: false }, scene, ..2);
+    /// lower.render_layers(device, queue, encoder, &Frame { content, target: middle, size, scale, content_changed: false, copy_content: true }, scene, ..2);
     /// // ... draw the labels of layers 0 and 1 into `middle` ...
-    /// upper.render_layers(device, queue, encoder, &Frame { content: middle, target, size, scale, content_changed: true }, scene, 2..);
+    /// upper.render_layers(device, queue, encoder, &Frame { content: middle, target, size, scale, content_changed: true, copy_content: true }, scene, 2..);
     /// # }
     /// ```
     ///
@@ -622,8 +645,10 @@ impl Renderer {
         }
         self.upload(device, queue, frame, scene);
         let pipelines = &self.pipelines;
-        let copy = self.binds.blit.get(frame.content.clone(), |src| blit_bind_group(device, pipelines, src));
-        blit(pipelines, encoder, &copy, frame.target, None, size);
+        if frame.copy_content {
+            let copy = self.binds.blit.get(frame.content.clone(), |src| blit_bind_group(device, pipelines, src));
+            blit(pipelines, encoder, &copy, frame.target, None, size);
+        }
         if self.packed.layers.is_empty() {
             return;
         }
@@ -875,6 +900,21 @@ mod tests {
         let groups = cluster(&scene, ALL_LAYERS);
         assert_eq!(groups.last().map(|g| g.len()), Some(2), "the menu's group is drawn after the pill");
         assert!(groups.iter().any(|g| g.iter().any(|m| m.id == pill)));
+    }
+
+    // mypaper: per-glass appearance reaches the material (scheme and transparency).
+    #[test]
+    fn a_glass_brings_its_own_appearance() {
+        let mut scene = Scene::new();
+        let dark = crate::Appearance { dark: true, transparency: 1.0, ..Default::default() };
+        scene.add(Glass::new(Rect::new(0.0, 0.0, 200.0, 200.0)).appearance(dark));
+        scene.add(Glass::new(Rect::new(300.0, 0.0, 200.0, 200.0)));
+        while scene.update(1.0 / 60.0) {}
+        let mut packed = Packed::default();
+        pack(&scene, ALL_LAYERS, 1.0, Vec2::new(600.0, 300.0), &mut packed);
+        let [own, scene_wide] = [&packed.materials[0], &packed.materials[1]];
+        assert_eq!((own.shadow[3], scene_wide.shadow[3]), (0.0, 1.0), "dark glass in a light scene");
+        assert!(own.dark_b[1] > scene_wide.dark_b[1], "its slider tints it further");
     }
 
     #[test]

@@ -2,14 +2,30 @@
 
 Source: <https://github.com/al1h3n/liquid-rust>, commit `2073cd96c48458093ae3ea23e14e1162e84d5e80`
 (crate version 0.2.5), by al1h3n. Licensed under either of MIT (`LICENSE-MIT`) or Apache-2.0
-(`LICENSE-APACHE`), at your option; both licence texts are kept here unchanged.
+(`LICENSE-APACHE`), at your option; both licence texts are kept here unchanged, and every
+vendored file starts with an attribution header.
 
-`src/` is the upstream `src/` copied as-is. mypaper's engine draws all Liquid Glass through it
-(`crates/wallpaper/src/glass_pass.rs` for plates, `crates/wallpaper/src/overlay/glass.rs` for
-overlays). Upstream's examples, GPU tests and web wrapper are not copied.
+`src/` is upstream's `src/`, copied as-is (commit `17cc402` in this repo), then changed only where
+mypaper's architecture forces it. mypaper's engine draws all Liquid Glass through it:
+`crates/wallpaper/src/glass_pass.rs` for plates in the wallpaper frame, and
+`crates/wallpaper/src/overlay/glass.rs` for overlays over app windows. Upstream's examples, GPU
+tests and web wrapper are not copied.
 
 ## Local changes
 
-Only what mypaper's architecture forces. Each is marked `mypaper:` in the source.
+Each is marked `mypaper:` in the source.
 
-(none yet)
+- `Frame::copy_content`: `false` skips the content-to-target blit. Plates draw over the
+  swapchain image the engine has already restored, whose kept wallpaper can be another size.
+  Overlays draw over a transparent clear, so DirectComposition shows only the glass and its
+  shadow (premultiplied).
+- `glass.wgsl` samples the content by uv for the edge burn instead of `textureLoad` by pixel, so
+  the content can be another size than the target.
+- `Glass::appearance` / `Scene::set_appearance`: per-glass colour scheme and transparency slider.
+  One engine scene holds bars and widgets from different styles. The scheme rides in
+  `MaterialGpu.shadow.w` (unused upstream), and `glass.wgsl` reads it there instead of
+  `globals.misc.z`.
+- `Renderer::fork`: a renderer that shares compiled pipelines, so opening an overlay compiles no
+  shaders.
+- `Material::outset`: how far glass draws or samples past its frame, which sizes an overlay's
+  window.

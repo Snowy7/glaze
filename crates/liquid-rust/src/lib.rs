@@ -1,3 +1,5 @@
+// Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
 //! # Liquid Rust
 //!
 //! Apple-style Liquid Glass for [`wgpu`], on native GPUs and on the web through WebGPU.
@@ -20,7 +22,7 @@
 //! let animating = scene.update(1.0 / 120.0);
 //! let mut encoder = device.create_command_encoder(&Default::default());
 //! renderer.render(device, queue, &mut encoder, &Frame {
-//!     content, target, size: (1206, 2622), scale: 3.0, content_changed: false,
+//!     content, target, size: (1206, 2622), scale: 3.0, content_changed: false, copy_content: true,
 //! }, &scene);
 //! queue.submit([encoder.finish()]);
 //! # let _ = animating;

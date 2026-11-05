@@ -1,3 +1,5 @@
+// Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
 //! Glass materials: Apple's presets (regular, clear, tinted, identity) and the knobs
 //! behind them, named after Figma's GLASS panel so values can be copied from a design.
 
@@ -417,6 +419,17 @@ impl Material {
             0.0
         };
         Resolved { material: m, adapt, contrast }
+    }
+
+    /// mypaper: how far past its frame glass whose smaller side is `min_side` points draws its
+    /// drop shadow, or samples its backdrop (the bevel's refraction plus two sigmas of frost),
+    /// in points, as the renderer's `pack` bounds a group. An overlay's window grows by this.
+    pub fn outset(&self, min_side: f32, appearance: &Appearance) -> f32 {
+        let m = self.resolve(min_side, appearance).material;
+        let depth = m.depth.min(min_side * 0.5).max(1.0);
+        let shadow = (m.shadow.offset_y.abs() + 1.5 * m.shadow.blur).max(2.0);
+        let sample = depth * 1.2 * m.refraction + 2.0 * m.frost * 0.5;
+        shadow.max(sample) + 1.0
     }
 }
 
