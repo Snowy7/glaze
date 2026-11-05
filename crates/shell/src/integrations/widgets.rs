@@ -1,7 +1,7 @@
 //! Visible widgets lease the same providers as bars and panels. Only OBS's active clocks tick.
 use crate::widgets::model::{Model as WidgetModel, Widget};
 use mypaper_integrations::{
-    Action, Availability, Data, Lease, Provider, Snapshot, config, launcher, obs,
+    Action, Availability, Data, Lease, Provider, Snapshot, launcher, obs,
 };
 use mypaper_ui::HitId;
 
@@ -12,19 +12,15 @@ pub const SECONDARY: HitId = 6003;
 pub const MIC: HitId = 6100;
 pub const SCENE: HitId = 6200;
 pub const ITEM: HitId = 6400;
-pub const RUN: HitId = 6800;
 
 pub struct Model {
     pub t3: super::t3_widgets::State,
-    pub grok: super::grok::Model,
     pub calendar: super::calendar::Model,
     pub discord: super::discord::Model,
     pub custom: super::custom::Model,
     pub(super) lease: Option<Lease>,
     pub(super) generation: Option<u64>,
     pub snapshot: Snapshot,
-    pub routines: Vec<config::Routine>,
-    pub runs: Vec<launcher::RoutineRun>,
     pub(super) task: Option<super::Task<()>>,
     pub notice: Option<String>,
     pub thread_links: std::collections::BTreeMap<String, String>,
@@ -34,7 +30,6 @@ impl Default for Model {
     fn default() -> Self {
         Self {
             t3: Default::default(),
-            grok: Default::default(),
             calendar: Default::default(),
             discord: Default::default(),
             custom: Default::default(),
@@ -46,8 +41,6 @@ impl Default for Model {
                 ),
                 ..Default::default()
             },
-            routines: Vec::new(),
-            runs: Vec::new(),
             task: None,
             notice: None,
             thread_links: Default::default(),
@@ -83,12 +76,11 @@ pub fn provider(kind: Widget) -> Option<Provider> {
 
 /// Runs on provider/UI wakes, never installs a deadline. Hidden/held instances release demand.
 pub fn sync(widget: &mut WidgetModel, active: bool) {
-    if widget.kind == Widget::Grok {super::grok::sync(widget, active);}
     if widget.kind == Widget::Custom {
         super::custom::sync(widget, active);
         return;
     }
-    if provider(widget.kind).is_none() && widget.kind != Widget::Grok {
+    if provider(widget.kind).is_none() {
         return;
     }
     let state = &mut widget.integration;
@@ -106,18 +98,7 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
         state.generation = Some(generation);
         let config = super::config();
         state.thread_links = config.t3.thread_links.clone();
-        if widget.kind == Widget::Grok {
-            state.routines = if config.grok.enabled {
-                config.grok.routines
-            } else {
-                Vec::new()
-            };
-            state.snapshot.availability = if state.grok.discovery.running {
-                Availability::Live
-            } else {
-                Availability::Cached
-            };
-        } else if let Some(provider) = provider(widget.kind) {
+        if let Some(provider) = provider(widget.kind) {
             state.snapshot = match super::acquire(provider) {
                 Ok(lease) => {
                     state.lease = Some(lease);
@@ -177,13 +158,6 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
         super::discord::sync(widget);
     }
     let state = &mut widget.integration;
-    if widget.kind == Widget::Grok {
-        let runs = launcher::routine_runs();
-        if state.runs != runs {
-            state.runs = runs;
-            widget.dirty = true;
-        }
-    }
 }
 
 pub(super) fn open(target: &str) -> anyhow::Result<()> {
@@ -197,11 +171,10 @@ pub(super) fn open(target: &str) -> anyhow::Result<()> {
 /// Explicit hits only; verification never invokes vendor actions.
 pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
     if widget.kind == Widget::T3 && hit != REFRESH {return super::t3_widgets::action(widget, hit);}
-    if widget.kind == Widget::Grok && super::grok::action(widget, hit) {return true;}
     if widget.kind == Widget::Custom { return super::custom::action(widget, hit); }
     if widget.kind == Widget::Calendar { return super::calendar::action(widget, hit); }
     if widget.kind == Widget::Discord { return super::discord::action(widget, hit); }
-    if provider(widget.kind).is_none() && widget.kind != Widget::Grok {
+    if provider(widget.kind).is_none() {
         return false;
     }
     let state = &mut widget.integration;
