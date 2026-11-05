@@ -14,7 +14,6 @@ pub const ITEM: HitId = 6400;
 pub struct Model {
     pub t3: super::t3_widgets::State,
     pub calendar: super::calendar::Model,
-    pub discord: super::discord::Model,
     pub custom: super::custom::Model,
     pub(super) lease: Option<Lease>,
     pub(super) generation: Option<u64>,
@@ -29,7 +28,6 @@ impl Default for Model {
         Self {
             t3: Default::default(),
             calendar: Default::default(),
-            discord: Default::default(),
             custom: Default::default(),
             lease: None,
             generation: None,
@@ -60,7 +58,6 @@ impl Model {
 
 pub fn provider(kind: Widget) -> Option<Provider> {
     match kind {
-        Widget::Discord => Some(Provider::Discord),
         Widget::Calendar => Some(Provider::Calendar),
         Widget::T3 => Some(Provider::T3),
         _ => None,
@@ -78,14 +75,12 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
     }
     let state = &mut widget.integration;
     if !active {
-        state.discord.notifications = None;
         state.lease = None;
         state.generation = None;
         return;
     }
     let generation = super::generation();
     if state.generation != Some(generation) {
-        state.discord.notifications = None;
         state.calendar.invalidate();
         state.lease = None;
         state.generation = Some(generation);
@@ -147,8 +142,7 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
     }
     if widget.kind == Widget::Calendar {
         super::calendar::sync(widget);
-    } else if widget.kind == Widget::Discord {
-        super::discord::sync(widget);
+
     }
     let state = &mut widget.integration;
 }
@@ -166,7 +160,6 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
     if widget.kind == Widget::T3 && hit != REFRESH {return super::t3_widgets::action(widget, hit);}
     if widget.kind == Widget::Custom { return super::custom::action(widget, hit); }
     if widget.kind == Widget::Calendar { return super::calendar::action(widget, hit); }
-    if widget.kind == Widget::Discord { return super::discord::action(widget, hit); }
     if provider(widget.kind).is_none() {
         return false;
     }
@@ -186,9 +179,6 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
         return true;
     }
     let result = match (&state.snapshot.data, widget.kind) {
-        (_, Widget::Discord) if hit == PRIMARY || (ITEM..ITEM + 512).contains(&hit) => {
-            open("https://discord.com/channels/@me")
-        }
         _ => Ok(()),
     };
     state.notice = result.err().map(|error| error.to_string());
