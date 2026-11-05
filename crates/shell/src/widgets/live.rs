@@ -69,6 +69,9 @@ fn main() -> Result<()> {
     )?;
     let mut ui = Ui::new()?;
     let _media_pause = PausedMedia::new();
+    if std::env::var_os("MYPAPER_N4_SEED_ONLY").is_some() {
+        return seed_only(seconds, monitors.len());
+    }
     let inbox = inbox::Inbox::new()?;
     let mut host = widgets::Widgets::new(&mut ui, inbox.hwnd(), &[])?;
     let mut menu = Menu::<u8>::new("N4 fixture menu")?;
@@ -320,6 +323,38 @@ fn main() -> Result<()> {
         let _ = windows::Win32::Foundation::CloseHandle(stop);
         let _ = windows::Win32::Foundation::CloseHandle(snapshot);
     }
+    Ok(())
+}
+
+/// Seed the same six-instance fixture and hold its paused-media/visible-desktop guards while
+/// the actual shell is measured. This helper creates no widget, bar or menu windows.
+fn seed_only(seconds: u64, monitors: usize) -> Result<()> {
+    let _visible = VisibleDesktop::new()?;
+    // SAFETY: this helper owns its named stop event until the bounded wait ends.
+    let stop = unsafe {
+        windows::Win32::System::Threading::CreateEventW(
+            None,
+            true,
+            false,
+            &windows::core::HSTRING::from(format!(
+                "Local\\mypaper-n4-fixture-stop-{}",
+                std::process::id()
+            )),
+        )
+    }?;
+    println!(
+        "N4_READY pid={} monitors={monitors} seconds={seconds} seed_only=true",
+        std::process::id()
+    );
+    // SAFETY: the event remains open during this bounded wait; no UI windows need pumping.
+    unsafe {
+        windows::Win32::System::Threading::WaitForSingleObject(
+            stop,
+            seconds.saturating_mul(1000).min(u64::from(u32::MAX - 1)) as u32,
+        );
+        let _ = windows::Win32::Foundation::CloseHandle(stop);
+    }
+    println!("N4_DONE drivers={:?}", mypaper_ui::modules::gpu_drivers());
     Ok(())
 }
 
