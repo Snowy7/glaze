@@ -389,6 +389,12 @@ pub enum Outcome<C> {
     Closed,
 }
 
+/// On glass, how long a panel's content waits for the engine's glass (its usual "open to
+/// glass"), and the engine's fade-in, which the content's fade follows (the wallpaper's
+/// `overlay::window::FADE`). The flyouts follow the same curve.
+const GLASS_DELAY: std::time::Duration = std::time::Duration::from_millis(90);
+const GLASS_FADE: std::time::Duration = std::time::Duration::from_millis(300);
+
 struct Panel<C> {
     surface: Surface,
     items: Vec<Entry<C>>,
@@ -397,6 +403,8 @@ struct Panel<C> {
     scroll: f32,
     motion: Option<crate::Tween>,
     frames: Option<crate::surface::AnimationFrames>,
+    /// When it opened (on glass, its fade follows the glass from there).
+    opened: std::time::Instant,
     /// The body's top-left on screen.
     origin: (i32, i32),
     hover: Option<usize>,
@@ -518,15 +526,25 @@ impl<C: Clone> Menu<C> {
                     let now = std::time::Instant::now();
                     let progress = motion.value(now).clamp(0.0, 1.0);
                     let edge = margin(&self.tokens, p.layout.scale) as i32;
+                    // On glass: in place, fading in on the engine's curve once its glass is
+                    // there. A sliding window makes the engine re-render its glass at each
+                    // step (it blinked), and content shown at once sat over the bare app
+                    // behind it first (a flash).
+                    let (alpha, slide, fading) = if self.tokens.glass.is_some() {
+                        let since = now.saturating_duration_since(p.opened);
+                        let x = (since.saturating_sub(GLASS_DELAY).as_secs_f32()
+                            / GLASS_FADE.as_secs_f32())
+                        .clamp(0.0, 1.0);
+                        (1.0 - (1.0 - x).powi(3), 0, x < 1.0)
+                    } else {
+                        let slide = ((1.0 - progress) * 6.0 * p.layout.scale).round() as i32;
+                        ((0.45 + progress * 0.8).min(1.0), slide, false)
+                    };
+                    let _ = p.surface.set_alpha((alpha * 255.0).round() as u8);
                     let _ = p
                         .surface
-                        .set_alpha(((0.45 + progress * 0.8).min(1.0) * 255.0).round() as u8);
-                    let _ = p.surface.move_to((
-                        p.origin.0 - edge,
-                        p.origin.1 - edge
-                            + ((1.0 - progress) * 6.0 * p.layout.scale).round() as i32,
-                    ));
-                    if motion.done(now) {
+                        .move_to((p.origin.0 - edge, p.origin.1 - edge + slide));
+                    if motion.done(now) && !fading {
                         p.motion = None;
                         p.frames = None;
                     }
@@ -745,6 +763,7 @@ impl<C: Clone> Menu<C> {
             scroll: 0.0,
             motion: None,
             frames: None,
+            opened: std::time::Instant::now(),
             origin,
             hover: None,
             opened_by,
@@ -765,19 +784,23 @@ impl<C: Clone> Menu<C> {
             return Ok(());
         }
         let spring = crate::Spring::new(1.0, 420.0, 36.0);
+        let glass = self.tokens.glass.is_some();
         p.motion = Some(crate::Tween::new(
             0.0,
             1.0,
             spring,
             std::time::Instant::now(),
         ));
+        let mut length = spring.settle(0.001) + 0.05;
+        if glass {
+            length = length.max((GLASS_DELAY + GLASS_FADE).as_secs_f32() + 0.05);
+        }
         p.frames = Some(
             p.surface
-                .animation_frames(std::time::Duration::from_secs_f32(
-                    spring.settle(0.001) + 0.05,
-                )),
+                .animation_frames(std::time::Duration::from_secs_f32(length)),
         );
-        p.surface.set_alpha(115)?;
+        // On glass the content waits for its glass (see `GLASS_DELAY`); a drawn fill shows at once.
+        p.surface.set_alpha(if glass { 0 } else { 115 })?;
         Ok(())
     }
 
