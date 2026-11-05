@@ -306,7 +306,7 @@ impl DesktopMenu {
             shell: snapshot.as_ref(),
             mypaper: self.icon.as_ref(),
         };
-        let items = items::build(&self.settings.menu, state, sources);
+        let items = items::build_with(&self.settings.menu, state, sources);
         if items.is_empty() {
             replay_right_click(at);
             return;

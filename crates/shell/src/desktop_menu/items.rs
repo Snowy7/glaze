@@ -133,10 +133,15 @@ fn default_slots() -> Vec<Slot<'static>> {
     slots
 }
 
+/// The menu for `config` in `state` with mypaper's built-ins only (Studio's preview).
+pub fn build(config: &DesktopMenu, state: ViewState) -> Vec<Item> {
+    build_with(config, state, Sources::default())
+}
+
 /// The menu for `config` (hidden items left out, no stray separators) in `state`. With the
 /// default config it is Windows 11's full menu; in a configured one, `more` stands for the shell
 /// extensions and `new` lists every registered type.
-pub fn build(config: &DesktopMenu, state: ViewState, sources: Sources) -> Vec<Item> {
+pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> Vec<Item> {
     let slots = if config.items == default_items() {
         default_slots()
     } else {
@@ -431,7 +436,7 @@ mod tests {
             shell: Some(&shell),
             mypaper: None,
         };
-        let items = build(&DesktopMenu::default(), ViewState::default(), sources);
+        let items = build_with(&DesktopMenu::default(), ViewState::default(), sources);
         assert_eq!(
             labels(&items),
             [
@@ -484,7 +489,7 @@ mod tests {
 
     #[test]
     fn without_the_shells_menu_the_built_ins_open_at_once() {
-        let items = build(
+        let items = build_with(
             &DesktopMenu::default(),
             ViewState::default(),
             Sources::default(),
@@ -499,7 +504,7 @@ mod tests {
 
     #[test]
     fn hidden_items_leave_no_gap_and_custom_commands_carry_their_arguments() {
-        let items = build(
+        let items = build_with(
             &config(vec![
                 Configured::Builtin(Builtin::Separator),
                 Configured::Builtin(Builtin::Refresh),
@@ -532,7 +537,7 @@ mod tests {
             sort: Some((SortKey::Modified, false)),
             can_paste: false,
         };
-        let items = build(&DesktopMenu::default(), state, Sources::default());
+        let items = build_with(&DesktopMenu::default(), state, Sources::default());
         let marks = |item: &Item| -> Vec<(String, Option<bool>, bool)> {
             let Entry::Submenu { items, .. } = item.plain() else {
                 panic!("a submenu")
@@ -599,7 +604,7 @@ mod tests {
             shell: Some(&shell),
             mypaper: None,
         };
-        let root = build(&DesktopMenu::default(), state, sources);
+        let root = build_with(&DesktopMenu::default(), state, sources);
         let Entry::Submenu { items: view, .. } = root[0].plain() else {
             panic!("View is a submenu")
         };
