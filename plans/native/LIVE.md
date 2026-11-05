@@ -33,6 +33,20 @@ lock, leave the desktop restored, kill headless browsers) still applies.
 - Verify visually with DPI-aware screenshots (PNG) of the live desktop. Look at them yourself
   before calling anything done.
 
+## The kit (`crates/ui`) is shared
+
+Everything is rebuilt on the kit (`docs/ui.md` › "The kit"). Several agents use it at once, so
+changes to `crates/ui` are additive only: new components, icons, tokens or helpers, committed
+immediately in small commits so others pick them up. Never change an existing signature or how an
+existing component looks; if you think one is wrong, say so in your report instead.
+
+## The user is at the desktop
+
+The user works on this machine while we test. Before any synthetic click or key, check that the
+target point is a mypaper window (`WindowFromPoint` → process is `mypaper-*`) and that the
+foreground isn't one of their apps you'd type into; otherwise skip that step. Never minimize or
+move their windows.
+
 ## Speed
 
 The user wants this done in hours, not days. Prefer the simplest correct design, test what
