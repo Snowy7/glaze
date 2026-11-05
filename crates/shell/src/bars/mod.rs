@@ -967,8 +967,9 @@ impl Bars {
                     if let Some((_, Target::Dock(app))) = b.frame.target(p.at) {
                         self.preview_close = None;
                         if app.windows.is_empty() {
-                            // An app with no windows here has no previews: the open ones (the
-                            // previous app's) close as they do off the icons.
+                            // An app with no windows here has no previews: the previous app's,
+                            // pending or open, don't show over it (they close as off the icons).
+                            self.preview_due = None;
                             if self.preview.is_some() {
                                 self.preview_close = Some(now + Duration::from_millis(280));
                             }
