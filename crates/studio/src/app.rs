@@ -1403,6 +1403,7 @@ impl App {
                     self.run(action);
                 }
             }
+            Action::Open(target) if target == "mypaper-custom:new" => crate::pages::widgets::new_custom(self),
             Action::Open(target) => crate::system::open(&target),
             Action::Reveal(path) => crate::system::reveal(&path),
             other => crate::pages::run(self, other),

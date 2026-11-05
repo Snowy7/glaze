@@ -95,7 +95,9 @@ pub fn new_custom(app: &mut App) {
             let path = folder.join(format!("widget-{index}.json"));
             match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
                 Ok(mut file) => {
-                    file.write_all(mypaper_widgets::custom::EXAMPLES[0].1.as_bytes())?;
+                    let mut definition: Value=serde_json::from_str(mypaper_widgets::custom::EXAMPLES[0].1)?;
+                    definition["title"]=json!(format!("Custom widget {index}"));
+                    file.write_all(&serde_json::to_vec_pretty(&definition)?)?;
                     return Ok(path);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {},

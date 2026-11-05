@@ -124,6 +124,7 @@ pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
             .get("radius")
             .and_then(Value::as_f64)
             .unwrap_or(22.0) as f32;
+        // The style shapes the corners: Windows 11's widgets are 8 px, One UI's rounder.
         let radius = match mypaper_ui::theme::active() {
             Style::Fluent => radius.min(8.0),
             Style::OneUi => radius.max(26.0),
@@ -168,6 +169,7 @@ pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
         lit.then(|| color(&model.placed.appearance))
             .flatten()
     });
+    // The user's style (`config.json` › `look`, set by the widget host).
     let mut theme = Theme::new(
         mypaper_ui::theme::active(),
         if dark { Scheme::Dark } else { Scheme::Light },
@@ -233,6 +235,7 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
         "solid" => c.f.fill(rect, radius, tokens.material.tint.with_alpha(1.0)),
         "tint" => c.f.fill(rect, radius, tokens.material.tint),
         "none" => {}
+        // A glass widget in a style without glass (Solid, Mono) draws the style's own body.
         _ if theme.glass.is_none() => c.f.fill(rect, radius, theme.color.surface),
         _ => {}
     }
@@ -265,7 +268,10 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
 fn content(c: &mut Ctx, body: Rect) {
     match c.m.kind {
         Widget::Clock => clock::draw(c, body),
-        Widget::Calendar => calendar::draw(c, body),
+        Widget::Calendar => {
+            let body = integrations::calendar::controls(c, body);
+            if !body.is_empty() { calendar::draw(c, body); }
+        },
         Widget::Media => media::draw(c, body),
         Widget::Weather => weather::draw(c, body),
         Widget::QuickToggles => toggles::draw(c, body),
@@ -286,6 +292,7 @@ fn content(c: &mut Ctx, body: Rect) {
         Widget::Docker => integrations::docker::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Tailscale => integrations::tailscale::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Grok => integrations::grok::view(&mut c.f, c.m, c.rect, c.now.ms),
+        Widget::Custom => integrations::custom::view(&mut c.f, c.m, c.rect),
     }
 }
 

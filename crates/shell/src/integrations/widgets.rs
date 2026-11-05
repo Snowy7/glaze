@@ -15,12 +15,17 @@ pub const ITEM: HitId = 6400;
 pub const RUN: HitId = 6800;
 
 pub struct Model {
-    lease: Option<Lease>,
-    generation: Option<u64>,
+    pub t3: super::t3_widgets::State,
+    pub grok: super::grok::Model,
+    pub calendar: super::calendar::Model,
+    pub discord: super::discord::Model,
+    pub custom: super::custom::Model,
+    pub(super) lease: Option<Lease>,
+    pub(super) generation: Option<u64>,
     pub snapshot: Snapshot,
     pub routines: Vec<config::Routine>,
     pub runs: Vec<launcher::RoutineRun>,
-    task: Option<super::Task<()>>,
+    pub(super) task: Option<super::Task<()>>,
     pub notice: Option<String>,
     pub thread_links: std::collections::BTreeMap<String, String>,
     pub observed_at_ms: i64,
@@ -28,6 +33,11 @@ pub struct Model {
 impl Default for Model {
     fn default() -> Self {
         Self {
+            t3: Default::default(),
+            grok: Default::default(),
+            calendar: Default::default(),
+            discord: Default::default(),
+            custom: Default::default(),
             lease: None,
             generation: None,
             snapshot: Snapshot {
@@ -63,7 +73,8 @@ impl Model {
 
 pub fn provider(kind: Widget) -> Option<Provider> {
     match kind {
-        Widget::Discord => Some(Provider::Notifications),
+        Widget::Discord => Some(Provider::Discord),
+        Widget::Calendar => Some(Provider::Calendar),
         Widget::T3 => Some(Provider::T3),
         Widget::Obs => Some(Provider::Obs),
         Widget::Docker => Some(Provider::Docker),
@@ -74,17 +85,25 @@ pub fn provider(kind: Widget) -> Option<Provider> {
 
 /// Runs on provider/UI wakes, never installs a deadline. Hidden/held instances release demand.
 pub fn sync(widget: &mut WidgetModel, active: bool) {
+    if widget.kind == Widget::Grok {super::grok::sync(widget, active);}
+    if widget.kind == Widget::Custom {
+        super::custom::sync(widget, active);
+        return;
+    }
     if provider(widget.kind).is_none() && widget.kind != Widget::Grok {
         return;
     }
     let state = &mut widget.integration;
     if !active {
+        state.discord.notifications = None;
         state.lease = None;
         state.generation = None;
         return;
     }
     let generation = super::generation();
     if state.generation != Some(generation) {
+        state.discord.notifications = None;
+        state.calendar.invalidate();
         state.lease = None;
         state.generation = Some(generation);
         let config = super::config();
@@ -95,10 +114,10 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
             } else {
                 Vec::new()
             };
-            state.snapshot.availability = if state.routines.is_empty() {
-                Availability::Unavailable("Add a saved routine in Settings".into())
-            } else {
+            state.snapshot.availability = if state.grok.discovery.running {
                 Availability::Live
+            } else {
+                Availability::Cached
             };
         } else if let Some(provider) = provider(widget.kind) {
             state.snapshot = match super::acquire(provider) {
@@ -130,10 +149,23 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
         }
     }
     if let Some(result) = state.task.as_ref().and_then(super::Task::take) {
+        if widget.kind == Widget::T3 && state.t3.submitted {
+            if result.is_ok() {
+                state.t3.draft.clear();
+                if let Some(field) = &widget.field {let _ = field.set_text("");}
+            }
+            state.t3.submitted = false;
+        }
         state.notice = result.err();
         state.task = None;
         widget.dirty = true;
     }
+    if widget.kind == Widget::Calendar {
+        super::calendar::sync(widget);
+    } else if widget.kind == Widget::Discord {
+        super::discord::sync(widget);
+    }
+    let state = &mut widget.integration;
     if widget.kind == Widget::Grok {
         let runs = launcher::routine_runs();
         if state.runs != runs {
@@ -143,7 +175,7 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
     }
 }
 
-fn open(target: &str) -> anyhow::Result<()> {
+pub(super) fn open(target: &str) -> anyhow::Result<()> {
     launcher::open(&launcher::Recent {
         title: String::new(),
         target: target.into(),
@@ -153,39 +185,17 @@ fn open(target: &str) -> anyhow::Result<()> {
 
 /// Explicit hits only; verification never invokes vendor actions.
 pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
+    if widget.kind == Widget::T3 && hit != REFRESH {return super::t3_widgets::action(widget, hit);}
+    if widget.kind == Widget::Grok && super::grok::action(widget, hit) {return true;}
+    if widget.kind == Widget::Custom { return super::custom::action(widget, hit); }
+    if widget.kind == Widget::Calendar { return super::calendar::action(widget, hit); }
+    if widget.kind == Widget::Discord { return super::discord::action(widget, hit); }
     if provider(widget.kind).is_none() && widget.kind != Widget::Grok {
         return false;
     }
     let state = &mut widget.integration;
     state.notice = None;
     if hit == CONNECT {
-        if widget.kind == Widget::T3 {
-            if state.task.is_none() {
-                state.task = Some(super::Task::spawn(|| {
-                    let Some(code) = mypaper_integrations::credentials::prompt_t3_pairing()? else {
-                        return Ok(());
-                    };
-                    let mut config = super::load()?;
-                    let endpoint = if config.t3.endpoint.is_empty() {
-                        "ws://127.0.0.1:3773/ws"
-                    } else {
-                        &config.t3.endpoint
-                    };
-                    mypaper_integrations::pairing::t3_blocking(endpoint, code.text()?)?;
-                    // Re-read after the dialog/exchange so a concurrent Settings edit survives.
-                    config = super::load()?;
-                    config.t3.enabled = true;
-                    if config.t3.endpoint.is_empty() {
-                        config.t3.endpoint = "ws://127.0.0.1:3773/ws".into();
-                    }
-                    mypaper_widgets::files::write_atomic(
-                        &super::config_path(),
-                        &serde_json::to_vec_pretty(&config)?,
-                    )
-                }));
-            }
-            return true;
-        }
         // Studio owns credential entry and consent. A widget never places a token in settings.
         crate::apps::open_studio();
         return true;
@@ -208,20 +218,6 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
     let result = match (&state.snapshot.data, widget.kind) {
         (_, Widget::Discord) if hit == PRIMARY || (ITEM..ITEM + 512).contains(&hit) => {
             open("https://discord.com/channels/@me")
-        }
-        (Some(Data::T3(snapshot)), Widget::T3) => {
-            if let Some(thread) = hit
-                .checked_sub(ITEM)
-                .and_then(|index| snapshot.threads.get(index as usize))
-            {
-                state
-                    .thread_links
-                    .get(&thread.id)
-                    .ok_or_else(|| anyhow::anyhow!("Add this thread's copied link in Settings"))
-                    .and_then(|link| open(link))
-            } else {
-                Ok(())
-            }
         }
         (Some(Data::Obs(snapshot)), Widget::Obs) if state.actionable() => {
             let command = match hit {

@@ -19,7 +19,12 @@ pub enum Template {
     Gauge,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum Source {
     Static {
         value: Value,
@@ -314,6 +319,7 @@ fn command(program: &str, args: &[String], cwd: &Path) -> Result<Vec<u8>> {
         .context("Could not run custom widget command")?;
     // SAFETY: child owns a valid process handle. If assignment fails, terminate it before returning.
     if let Err(e) = unsafe { AssignProcessToJobObject(job.0, HANDLE(child.as_raw_handle())) } {
+        // SAFETY: std::process::Child still owns this live process handle.
         unsafe {
             let _ = TerminateProcess(HANDLE(child.as_raw_handle()), 1);
         }
@@ -449,6 +455,10 @@ mod tests {
         );
         assert_eq!(select(&value, "$['a.b']").unwrap(), 7);
         assert!(select(&value, "$..name").is_err());
+        let definition=Definition::parse(r#"{"title":"Local JSON","layout":"stat","source":{"type":"file","path":"data.json","jsonPath":"$.value"}}"#).unwrap();
+        assert!(
+            matches!(definition.source,Source::File{json_path:Some(ref path),..}if path=="$.value")
+        );
     }
     #[test]
     fn examples_are_individual_multi_instance_catalog_entries() {

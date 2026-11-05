@@ -14,6 +14,7 @@ pub(crate) mod views;
 pub(crate) use views as view;
 
 use crate::glass::{self, Material, Plate};
+use mypaper_ui::theme::Knobs;
 use crate::inbox;
 use crate::integrations::media::WidgetMedia as Media;
 use anyhow::Result;
@@ -190,6 +191,8 @@ pub struct Widgets {
     foreground: HWND,
     plates: BTreeMap<String, Vec<Plate>>,
     skin: look::Skin,
+    /// The user's material controls for widgets (`config.json` › `look`, [`plate_material`]).
+    knobs: Knobs,
     presents: u64,
     clock_presents: u64,
     costs: WorkCosts,
@@ -310,6 +313,7 @@ impl Widgets {
             foreground: HWND::default(),
             plates: BTreeMap::new(),
             skin,
+            knobs: glass::knobs(&config.look, glass::Family::Widgets),
             presents: 0,
             clock_presents: 0,
             costs: WorkCosts::default(),
@@ -381,6 +385,7 @@ impl Widgets {
                     }
                 }
                 Ok((mut layout, upgraded)) => {
+                    self.registry = registry::builtins();
                     self.layout_error = None;
                     if (layout.migrate(|id| self.registry.replacement(id)) | upgraded)
                         && let Err(e) = layout.save(&self.path)
@@ -434,6 +439,13 @@ impl Widgets {
                     entry.model.dirty = true;
                 }
                 self.publish_plates(true);
+            }
+            // A material change is the plates' alone: the same windows and content, and the
+            // engine fades each plate to its new material.
+            let knobs = glass::knobs(&config.look, glass::Family::Widgets);
+            if knobs != self.knobs {
+                self.knobs = knobs;
+                self.publish_plates(false);
             }
             self.skin = load_skin(&config);
             self.accent = palette_accent(&config);
@@ -1732,6 +1744,10 @@ impl Widgets {
         let entry = self.entries.get_mut(id).unwrap();
         let m = &mut entry.model;
         m.dirty = true;
+        if matches!(m.kind, Widget::T3 | Widget::Grok | Widget::Discord) && hit == view::FIELD {
+            self.open_field(id, None);
+            return;
+        }
         if crate::integrations::widgets::action(m, hit) {
             return;
         }
@@ -2010,6 +2026,8 @@ impl Widgets {
             Ok(field) => {
                 let text = if m.kind == Widget::Notes {
                     m.note.as_str()
+                } else if m.kind == Widget::T3 {
+                    m.integration.t3.draft.as_str()
                 } else if m.kind == Widget::Calendar {
                     index
                         .and_then(|i| m.events.get(i))
@@ -2043,6 +2061,17 @@ impl Widgets {
         let Ok(text) = field.text() else {
             return;
         };
+        if m.kind == Widget::Discord {
+            crate::integrations::discord::action(m, crate::integrations::discord::SEND);
+            m.dirty = true;
+            return;
+        }
+        if matches!(m.kind, Widget::T3 | Widget::Grok) {
+            crate::integrations::t3_widgets::submit(m, &text);
+            crate::integrations::grok::submit(m, &text);
+            m.dirty = true;
+            return;
+        }
         if m.kind == Widget::Calendar {
             self.event_action(id, view::PRIMARY);
             return;
@@ -3094,47 +3123,12 @@ impl Widgets {
                     if matches!(surface, "none" | "solid" | "tint") {
                         return None;
                     }
-                    let liquid = look::liquid(&self.skin);
-                    let tint = a
-                        .get("tint")
-                        .and_then(Value::as_str)
-                        .and_then(Color::parse)
-                        .unwrap_or(look::DEFAULT_TINT);
-                    let opacity = a.get("opacity").and_then(Value::as_f64).unwrap_or(0.46) as f32;
-                    // The user's style picks the material (`theme::material`): none for Solid
-                    // and Mono (the view draws their body), flat frosted glass for One UI and
-                    // Fluent, Liquid Glass tuned by the theme's skin below.
-                    let style = mypaper_ui::theme::active();
-                    let base = mypaper_ui::theme::material(style, Rgba::rgb8(tint.0, opacity))?;
-                    let dpi = monitor.dpi as f32 / 96.0;
-                    let material = if !mypaper_ui::theme::lensed(style) {
-                        Material {
-                            clarity: base.clarity,
-                            blur: base.blur * dpi,
-                            refraction: 0.0,
-                            highlight: 0.0,
-                            tint: base.tint,
-                        }
-                    } else {
-                        Material {
-                            clarity: 1.0
-                                - (liquid.tint.unwrap_or(0.06)
-                                    * a.get("opacity").and_then(Value::as_f64).unwrap_or(0.46)
-                                        as f32
-                                    / 0.46)
-                                    .clamp(0.0, 1.0),
-                            blur: (a.get("blur").and_then(Value::as_f64).unwrap_or(12.0) as f32
-                                * liquid.blur.unwrap_or(12.0)
-                                / 12.0)
-                                * monitor.dpi as f32
-                                / 96.0,
-                            refraction: liquid.refraction.unwrap_or(0.6)
-                                * liquid.intensity.unwrap_or(1.0),
-                            highlight: liquid.highlight.unwrap_or(0.55)
-                                * liquid.intensity.unwrap_or(1.0),
-                            tint: Rgba::rgb8(tint.0, liquid.tint.unwrap_or(0.06)),
-                        }
-                    };
+                    let material = plate_material(
+                        &e.model.placed,
+                        &self.skin,
+                        &self.knobs,
+                        monitor.dpi as f32 / 96.0,
+                    )?;
                     Some(Plate {
                         id: e.surface.hwnd().0 as usize as u64,
                         rect: e
@@ -3430,7 +3424,9 @@ fn finish_field(entry: &mut Entry, storage: &mut Storage) {
     }
     if let Some(field) = entry.model.field.take() {
         if let Ok(text) = field.text() {
-            if entry.model.kind == Widget::Notes {
+            if entry.model.kind == Widget::T3 {
+                entry.model.integration.t3.draft = text;
+            } else if entry.model.kind == Widget::Notes {
                 entry.model.note = text;
             } else if entry.model.kind == Widget::Todo
                 && let Some(index) = entry.model.task_edit.take()
@@ -3453,6 +3449,55 @@ fn finish_field(entry: &mut Entry, storage: &mut Storage) {
         log::error!("widget storage: {e:#}");
     }
 }
+/// A glass widget's plate material in physical px, or `None` in a style without glass (the view
+/// draws the body). The user's style (`theme::material`) at the widget's own default (Liquid's
+/// from the wallpaper's skin), under the user's controls (`config.json` › `look.widgets`, else
+/// `look`) by the kit's one rule (`GlassMaterial::tuned`), as the bars and flyouts. A widget's
+/// own `blur` or `opacity` (its `appearance` in `widgets.json`) overrides the look for it alone.
+fn plate_material(
+    placed: &mypaper_widgets::layout::Placed,
+    skin: &look::Skin,
+    knobs: &Knobs,
+    scale: f32,
+) -> Option<Material> {
+    let number = |map: &serde_json::Map<String, Value>, key| {
+        map.get(key).and_then(Value::as_f64).map(|v| v as f32)
+    };
+    let a = &placed.appearance;
+    let tint = a
+        .get("tint")
+        .and_then(Value::as_str)
+        .and_then(Color::parse)
+        .unwrap_or(look::DEFAULT_TINT);
+    let opacity = number(a, "opacity").unwrap_or(0.46);
+    let style = mypaper_ui::theme::active();
+    let base = mypaper_ui::theme::material(style, Rgba::rgb8(tint.0, opacity))?;
+    let base = if mypaper_ui::theme::lensed(style) {
+        let liquid = look::liquid(skin);
+        let intensity = liquid.intensity.unwrap_or(1.0);
+        let skin_tint = liquid.tint.unwrap_or(0.06);
+        Material {
+            clarity: 1.0 - (skin_tint * opacity / 0.46).clamp(0.0, 1.0),
+            blur: number(a, "blur").unwrap_or(12.0) * liquid.blur.unwrap_or(12.0) / 12.0,
+            refraction: liquid.refraction.unwrap_or(0.6) * intensity,
+            highlight: liquid.highlight.unwrap_or(0.55) * intensity,
+            tint: Rgba::rgb8(tint.0, skin_tint),
+        }
+    } else {
+        base
+    };
+    let own = Knobs {
+        clarity: number(&placed.own, "opacity").map(|o| 1.0 - o),
+        blur: number(&placed.own, "blur"),
+        ..Knobs::default()
+    };
+    let m = base.tuned(style, &own.over(*knobs));
+    Some(Material {
+        blur: m.blur * scale,
+        ..m
+    })
+}
+
 /// Makes the user's style (`look.widgets.style`, else `look.style`) the kit's active one, which
 /// widgets draw in; `true` when it changed.
 fn apply_style(config: &Config) -> bool {

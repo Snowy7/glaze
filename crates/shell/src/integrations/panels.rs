@@ -121,6 +121,8 @@ impl Integration {
             Provider::Obs => "OBS Studio",
             Provider::Docker => "Docker Desktop",
             Provider::Tailscale => "Tailscale",
+            Provider::Calendar => "Calendar",
+            Provider::Discord => "Discord",
         }
     }
     fn action(&mut self, action: Action) -> Effect {
@@ -381,7 +383,7 @@ impl Panel for Integration {
                     f.text_in(title, &state.title, TextRole::Headline, c.label, Align::Start);
                     f.text_in(artist, &state.artist, TextRole::Callout, c.secondary, Align::Start);
                 }
-                None => {}
+                Some(Data::Calendar(_) | Data::Discord(_)) | None => {}
             }
             area.top + column.used()
         });

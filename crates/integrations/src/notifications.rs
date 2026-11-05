@@ -119,6 +119,9 @@ fn log_snapshot_mode(reason: &str) {
     ONCE.call_once(|| log::info!("notifications: snapshot mode ({reason}); no polling"));
 }
 pub fn read(listener: &UserNotificationListener, show_text: bool) -> Result<Snapshot> {
+    read_scoped(listener,show_text,false)
+}
+fn read_scoped(listener:&UserNotificationListener,show_text:bool,discord_previews:bool)->Result<Snapshot>{
     ensure!(
         listener.GetAccessStatus()? == UserNotificationListenerAccessStatus::Allowed,
         "notification access is off; allow mypaper in Windows Settings > Privacy & security > Notifications"
@@ -136,7 +139,7 @@ pub fn read(listener: &UserNotificationListener, show_text: bool) -> Result<Snap
         let app_id = info.AppUserModelId()?.to_string();
         *state.counts.entry(app_id.clone()).or_default() += 1;
         let mut texts = Vec::new();
-        if show_text
+        if (show_text || discord_previews && crate::discord::is_discord_app_id(&app_id))
             && let Ok(binding) = notification
                 .Notification()?
                 .Visual()?
@@ -217,15 +220,16 @@ pub(crate) async fn run(
     };
     publish.set(
         availability.clone(),
-        Some(Data::Notifications(read(
+        Some(Data::Notifications(read_scoped(
             &subscription.listener,
             config.show_text,
+            config.discord_previews,
         )?)),
     );
     loop {
         tokio::select! {
             _ = changed.notified(), if token.is_some() => {
-                publish.set(availability.clone(), Some(Data::Notifications(read(&subscription.listener, config.show_text)?)));
+                publish.set(availability.clone(), Some(Data::Notifications(read_scoped(&subscription.listener, config.show_text,config.discord_previews)?)));
             }
             Some(action) = commands.recv() => if matches!(action, crate::Action::Dismiss(_) | crate::Action::RefreshNotifications) {
                 if let crate::Action::Dismiss(ids) = action {
@@ -238,7 +242,7 @@ pub(crate) async fn run(
                     }
                     publish.action_result(error.map_or(Ok(()), Err));
                 }
-                publish.set(availability.clone(), Some(Data::Notifications(read(&subscription.listener, config.show_text)?)));
+                publish.set(availability.clone(), Some(Data::Notifications(read_scoped(&subscription.listener, config.show_text,config.discord_previews)?)));
             }
         }
     }

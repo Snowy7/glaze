@@ -30,6 +30,7 @@
     <rescap:Capability Name="runFullTrust"/>
     <rescap:Capability Name="unvirtualizedResources"/>
     <uap3:Capability Name="userNotificationListener"/>
+    <uap:Capability Name="appointments"/>
     <DeviceCapability Name="radios"/>
     <DeviceCapability Name="wiFiControl"/>
   </Capabilities>

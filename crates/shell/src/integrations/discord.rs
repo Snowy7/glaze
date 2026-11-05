@@ -32,6 +32,7 @@ impl Model {
     }
 }
 pub fn sync(widget: &mut WidgetModel) {
+    let configured_id = widget.str("appId", "com.squirrel.Discord.Discord");
     let state = &mut widget.integration;
     let config = super::config();
     if state.discord.checked_generation != Some(super::generation()) {
@@ -50,7 +51,10 @@ pub fn sync(widget: &mut WidgetModel) {
             let cards = notifications
                 .cards
                 .into_iter()
-                .filter(|card| mypaper_integrations::discord::is_discord_card(card))
+                .filter(|card| {
+                    mypaper_integrations::discord::is_discord_card(card)
+                        || card.app_id.eq_ignore_ascii_case(&configured_id)
+                })
                 .collect::<Vec<_>>();
             if state.discord.cards != cards {
                 state.discord.cards = cards;
@@ -61,13 +65,22 @@ pub fn sync(widget: &mut WidgetModel) {
     if let Some(result) = state.discord.task.as_ref().and_then(super::Task::take) {
         state.discord.notice = match result {
             Ok(()) => {
-                if let Some(sent)=state.discord.sent_text.take(){
-                    if let Some(field)=&widget.field && field.text().is_ok_and(|text|text==sent){let _=field.set_text("");}
-                    state.discord.reply_to=None;
+                if let Some(sent) = state.discord.sent_text.take() {
+                    if let Some(field) = &widget.field
+                        && field.text().is_ok_and(|text| text == sent)
+                    {
+                        let _ = field.set_text("");
+                    }
+                    state.discord.reply_to = None;
                     Some("Sent as your bot".into())
-                }else{None}
+                } else {
+                    None
+                }
             }
-            Err(e) => {state.discord.sent_text=None;Some(e)},
+            Err(e) => {
+                state.discord.sent_text = None;
+                Some(e)
+            }
         };
         state.discord.task = None;
         if let Some(lease) = &state.lease {
@@ -96,8 +109,7 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
                 let mut settings = super::load()?;
                 settings.discord.enabled = true;
                 settings.notifications.enabled = true;
-                // Connecting the recent-message view is explicit consent to show its notification text.
-                settings.notifications.show_text = true;
+                settings.notifications.discord_previews = true;
                 mypaper_widgets::files::write_atomic(
                     &super::config_path(),
                     &serde_json::to_vec_pretty(&settings)?,
@@ -119,13 +131,25 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
             MESSAGES => state.discord.voice = false,
             SETUP => state.discord.setup = !state.discord.setup,
             BOT if !state.discord.busy() => {
-                let id=config.discord.client_id.clone();
-                state.discord.task=Some(super::Task::spawn(move||{
-                    let id=if id.is_empty()||mypaper_integrations::credentials::read("discord/bot").is_err(){
-                        let Some(id)=mypaper_integrations::discord::configure_bot(&id)?else{return Ok(());};id
-                    }else{id};
-                    let mut config=super::load()?;config.discord.client_id=id.clone();config.discord.enabled=true;
-                    mypaper_widgets::files::write_atomic(&super::config_path(),&serde_json::to_vec_pretty(&config)?)?;
+                let id = config.discord.client_id.clone();
+                state.discord.task = Some(super::Task::spawn(move || {
+                    let id = if id.is_empty()
+                        || mypaper_integrations::credentials::read("discord/bot").is_err()
+                    {
+                        let Some(id) = mypaper_integrations::discord::configure_bot(&id)? else {
+                            return Ok(());
+                        };
+                        id
+                    } else {
+                        id
+                    };
+                    let mut config = super::load()?;
+                    config.discord.client_id = id.clone();
+                    config.discord.enabled = true;
+                    mypaper_widgets::files::write_atomic(
+                        &super::config_path(),
+                        &serde_json::to_vec_pretty(&config)?,
+                    )?;
                     open(&mypaper_integrations::discord::invite_url(&id)?)
                 }));
             }
@@ -159,7 +183,7 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
                     .ok_or_else(|| anyhow::anyhow!("Enter a message first"))?
                     .text()?;
                 let reply = state.discord.reply_to.clone();
-                state.discord.sent_text=Some(text.clone());
+                state.discord.sent_text = Some(text.clone());
                 state.discord.task = Some(super::Task::spawn(move || {
                     mypaper_integrations::discord::send(&channel, &text, reply.as_deref())
                 }));
@@ -190,10 +214,18 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
                 let mut discord = config.discord.clone();
                 discord.rpc = true;
                 state.discord.task = Some(super::Task::spawn(move || {
-                    let Some(id)=mypaper_integrations::discord::configure_voice(&discord.client_id)?else{return Ok(());};
-                    discord.client_id=id.clone();
-                    let mut config=super::load()?;config.discord.client_id=id;
-                    mypaper_widgets::files::write_atomic(&super::config_path(), &serde_json::to_vec_pretty(&config)?)?;
+                    let Some(id) =
+                        mypaper_integrations::discord::configure_voice(&discord.client_id)?
+                    else {
+                        return Ok(());
+                    };
+                    discord.client_id = id.clone();
+                    let mut config = super::load()?;
+                    config.discord.client_id = id;
+                    mypaper_widgets::files::write_atomic(
+                        &super::config_path(),
+                        &serde_json::to_vec_pretty(&config)?,
+                    )?;
                     mypaper_integrations::discord::connect(&discord)?;
                     let mut config = super::load()?;
                     config.discord.enabled = true;

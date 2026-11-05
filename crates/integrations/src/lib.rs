@@ -1,6 +1,11 @@
 //! One connection per provider, reference counted across every visible shell surface.
 //! Workers sleep in IO/completion ports; disconnections await a real retry, never a timer.
 pub mod config;
+pub mod calendar;
+pub mod calendar_http;
+pub mod calendar_oauth;
+pub mod calendar_setup;
+pub mod discord;
 pub mod credentials;
 pub mod docker;
 pub mod launcher;
@@ -9,6 +14,8 @@ pub mod notifications;
 pub mod obs;
 pub mod pairing;
 pub mod t3;
+pub mod t3_client;
+pub mod grok;
 pub mod tailscale;
 mod transport;
 
@@ -30,15 +37,19 @@ pub enum Provider {
     Obs,
     Docker,
     Tailscale,
+    Calendar,
+    Discord,
 }
 impl Provider {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 8] = [
         Self::Notifications,
         Self::Media,
         Self::T3,
         Self::Obs,
         Self::Docker,
         Self::Tailscale,
+        Self::Calendar,
+        Self::Discord,
     ];
     pub fn enabled(self, c: &config::Config) -> bool {
         match self {
@@ -48,6 +59,8 @@ impl Provider {
             Self::Obs => c.obs.enabled,
             Self::Docker => c.docker.enabled,
             Self::Tailscale => c.tailscale.enabled,
+            Self::Calendar => c.calendar.enabled,
+            Self::Discord => c.discord.enabled,
         }
     }
 }
@@ -68,6 +81,8 @@ pub enum Data {
     Obs(obs::Snapshot),
     Docker(docker::Snapshot),
     Tailscale(tailscale::Snapshot),
+    Calendar(calendar::Snapshot),
+    Discord(discord::Snapshot),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Snapshot {
@@ -89,6 +104,7 @@ impl Default for Snapshot {
 
 #[derive(Clone, Debug)]
 pub enum Action {
+    DiscordVoice { muted: Option<bool>, deafened: Option<bool> },
     Dismiss(Vec<u32>),
     /// Refresh a cached toast snapshot while its center is visible.
     RefreshNotifications,
@@ -247,6 +263,8 @@ impl Hub {
                             Provider::Obs => obs::run(&config.obs, &publish, &mut commands).await,
                             Provider::Docker => docker::run(&config.docker, &publish, &mut commands).await,
                             Provider::Tailscale => tailscale::run(&config.tailscale, &publish, &mut commands).await,
+                            Provider::Calendar => calendar::run(&config.calendar, &publish, &mut commands).await,
+                            Provider::Discord => discord::run(&config.discord, &publish, &mut commands).await,
                         }
                     };
                     tokio::select! {
@@ -309,6 +327,7 @@ impl Lease {
                     | (Provider::Docker, Action::Docker { .. })
                     | (Provider::Docker, Action::DockerMetrics)
                     | (Provider::Tailscale, Action::Tailscale { .. })
+                    | (Provider::Discord, Action::DiscordVoice { .. })
             ),
             "action does not belong to this provider"
         );

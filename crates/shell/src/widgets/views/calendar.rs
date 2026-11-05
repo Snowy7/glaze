@@ -18,10 +18,9 @@ pub fn event_color(index: usize) -> Rgba {
 
 /// Imported calendars keep their provider colour; local events use the picker palette.
 fn source_color(event: &Value) -> Rgba {
-    if let Some(rgb) = event["calendarColor"].as_array().filter(|v| v.len() == 3) {
-        if let (Some(r), Some(g), Some(b)) = (rgb[0].as_u64(), rgb[1].as_u64(), rgb[2].as_u64()) {
-            return Rgba::rgb8([r.min(255) as u8, g.min(255) as u8, b.min(255) as u8], 1.0);
-        }
+    if let Some(rgb) = event["calendarColor"].as_array().filter(|v| v.len() == 3)
+        && let (Some(r), Some(g), Some(b)) = (rgb[0].as_u64(), rgb[1].as_u64(), rgb[2].as_u64()) {
+        return Rgba::rgb8([r.min(255) as u8, g.min(255) as u8, b.min(255) as u8], 1.0);
     }
     event_color(event["color"].as_u64().unwrap_or(0) as usize)
 }
@@ -38,9 +37,7 @@ fn week_start(c: &Ctx) -> u32 {
 /// Events on `date`, with their indices.
 fn on(m: &Model, date: Date) -> Vec<(usize, &Value)> {
     let key = date.key();
-    m.events
-        .iter()
-        .enumerate()
+    crate::integrations::calendar::events(m)
         .filter(|(_, e)| e["date"].as_str() == Some(key.as_str()))
         .collect()
 }
@@ -298,12 +295,13 @@ fn day_events(c: &mut Ctx, r: Rect, events: &[(usize, &Value)]) {
 /// An event: its colour dot, time, title, and a delete button that shows on hover.
 fn event_row(c: &mut Ctx, row: Rect, index: usize, event: &Value, date: Option<&str>) {
     let color = c.color();
+    let read_only=event["readOnly"]==true;
     let edit = EDIT_TASK + index as u32;
     let delete = DELETE_TASK + index as u32;
     let radius = c.px(8.0);
     let hovered = matches!(c.m.hover, Some(h) if h == edit || h == delete);
-    let (del, main) = row.take_right(row.height(), 0.0);
-    c.control(edit, main, radius, Role::Button, "Edit event", None);
+    let (del, main) = if read_only{(Rect::default(),row)}else{row.take_right(row.height(), 0.0)};
+    if !read_only{c.control(edit, main, radius, Role::Button, "Edit event", None);}
     let inner = main.inset(mypaper_ui::Insets::xy(c.px(6.0), 0.0));
     let (dot, rest) = inner.take_left(c.px(7.0), c.px(8.0));
     let tint = source_color(event);
@@ -320,6 +318,7 @@ fn event_row(c: &mut Ctx, row: Rect, index: usize, event: &Value, date: Option<&
     let (when_box, title) = rest.take_left(when_w, c.px(8.0));
     c.text(when_box, &when, TextRole::Footnote, if time.is_some() { color.secondary } else { color.tertiary }, Align::Start);
     c.text(title, event["title"].as_str().unwrap_or("Event"), TextRole::Callout, color.label, Align::Start);
+    if read_only{return;}
     // The delete button is always in the list; its glyph shows only while the row is hovered.
     let d = row.height() - c.px(6.0);
     let at = del.place(d, d, Align::Center, Align::Center);
@@ -345,11 +344,7 @@ fn agenda(c: &mut Ctx, r: Rect) {
     c.styled(Rect::new(title.left, title.top + a, title.width(), b), &date, &small, color.secondary, Align::Start, Align::Center);
     c.hit(TODAY, title, Role::Button, "Return to today");
     let today = now.date.key();
-    let mut events: Vec<_> = c
-        .m
-        .events
-        .iter()
-        .enumerate()
+    let mut events: Vec<_> = crate::integrations::calendar::events(c.m)
         .filter(|(_, e)| e["date"].as_str().is_some_and(|d| d >= today.as_str()))
         .collect();
     events.sort_by_key(|(_, e)| format!("{} {}", e["date"], e["time"]));
@@ -425,10 +420,7 @@ fn tile(c: &mut Ctx, r: Rect) {
         ..number
     };
     let caps = c.f.font(TextRole::Subheadline);
-    let next = c
-        .m
-        .events
-        .iter()
+    let next = crate::integrations::calendar::events(c.m).map(|(_,event)|event)
         .filter(|e| e["date"].as_str().is_some_and(|d| d >= now.date.key().as_str()))
         .min_by_key(|e| format!("{} {}", e["date"], e["time"]));
     c.hit(TODAY, r, Role::Button, "Return to today");

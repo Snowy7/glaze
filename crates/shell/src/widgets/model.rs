@@ -34,6 +34,7 @@ pub enum Widget {
     Docker,
     Tailscale,
     Grok,
+    Custom,
 }
 impl Widget {
     pub fn of(id: &str) -> Option<Self> {
@@ -60,6 +61,7 @@ impl Widget {
             "docker" => Self::Docker,
             "tailscale" => Self::Tailscale,
             "grok" => Self::Grok,
+            custom if custom.starts_with("custom-") => Self::Custom,
             _ => return None,
         })
     }
@@ -425,6 +427,7 @@ impl Model {
             None
         } else {
             match self.kind {
+                Widget::Custom => self.integration.custom.next,
                 Widget::Obs if self.integration.clock_running() => {
                     Some(instant + time::boundary(now.ms, 1000))
                 }

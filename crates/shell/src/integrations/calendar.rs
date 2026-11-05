@@ -16,6 +16,7 @@ pub const DISCONNECT_MICROSOFT: HitId = 7106;
 
 #[derive(Default)]
 pub struct Model {
+    pub events: Vec<serde_json::Value>,
     revision: Option<u64>,
     task: Option<super::Task<()>>,
     pub show_sources: bool,
@@ -35,10 +36,7 @@ pub fn sync(widget: &mut WidgetModel) {
     if state.calendar.revision != Some(state.snapshot.revision) {
         state.calendar.revision = Some(state.snapshot.revision);
         if let Some(Data::Calendar(snapshot)) = &state.snapshot.data {
-            widget.events.retain(|event| event["source"] != "calendar");
-            widget
-                .events
-                .extend(mypaper_integrations::calendar::view_events(snapshot));
+            state.calendar.events = mypaper_integrations::calendar::view_events(snapshot);
             widget.dirty = true;
         }
     }
@@ -54,10 +52,23 @@ pub fn sync(widget: &mut WidgetModel) {
     }
 }
 
+/// Local event indices keep referring to local storage; imported rows never acquire edit actions.
+pub fn events(widget: &WidgetModel) -> impl Iterator<Item = (usize, &serde_json::Value)> {
+    widget.events.iter().enumerate().chain(
+        widget
+            .integration
+            .calendar
+            .events
+            .iter()
+            .enumerate()
+            .map(|(index, event)| (widget.events.len() + index, event)),
+    )
+}
+
 /// Keep ordinary month/day/editor actions with the calendar; consume imported edit attempts.
 pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
     use crate::widgets::views::{DELETE_TASK, EDIT_TASK};
-    if hit < SOURCES || hit > DISCONNECT_MICROSOFT {
+    if !(SOURCES..=DISCONNECT_MICROSOFT).contains(&hit) {
         let index = if (EDIT_TASK..EDIT_TASK + 2000).contains(&hit) {
             Some((hit - EDIT_TASK) as usize)
         } else if (DELETE_TASK..EDIT_TASK).contains(&hit) {
@@ -99,13 +110,27 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
                 config.calendar.microsoft_client_id
             };
             state.calendar.task = Some(super::Task::spawn(move || {
-                let Some(id)=mypaper_integrations::calendar_setup::configure(service,&id)? else{return Ok(());};
-                let mut config=super::load()?;
-                if service==Service::Google{config.calendar.google_client_id=id.clone();}else{config.calendar.microsoft_client_id=id.clone();}
-                mypaper_widgets::files::write_atomic(&super::config_path(), &serde_json::to_vec_pretty(&config)?)?;
+                let Some(id) = mypaper_integrations::calendar_setup::configure(service, &id)?
+                else {
+                    return Ok(());
+                };
+                let mut config = super::load()?;
+                if service == Service::Google {
+                    config.calendar.google_client_id = id.clone();
+                } else {
+                    config.calendar.microsoft_client_id = id.clone();
+                }
+                mypaper_widgets::files::write_atomic(
+                    &super::config_path(),
+                    &serde_json::to_vec_pretty(&config)?,
+                )?;
                 calendar_oauth::connect(service, &id)?;
-                let mut config=super::load()?;config.calendar.enabled=true;
-                mypaper_widgets::files::write_atomic(&super::config_path(), &serde_json::to_vec_pretty(&config)?)
+                let mut config = super::load()?;
+                config.calendar.enabled = true;
+                mypaper_widgets::files::write_atomic(
+                    &super::config_path(),
+                    &serde_json::to_vec_pretty(&config)?,
+                )
             }));
         }
         DISCONNECT_GOOGLE | DISCONNECT_MICROSOFT if !state.calendar.busy() => {

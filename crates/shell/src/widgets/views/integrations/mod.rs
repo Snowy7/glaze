@@ -1,5 +1,7 @@
 //! Integration faces use the public kit directly. No provider reads or side effects in a view.
 pub(crate) mod discord;
+pub(crate) mod calendar;
+pub(crate) mod custom;
 pub(crate) mod docker;
 pub(crate) mod grok;
 pub(crate) mod obs;
@@ -7,6 +9,8 @@ pub(crate) mod t3;
 pub(crate) mod tailscale;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod custom_tests;
 
 use crate::integrations::widgets::{CONNECT, REFRESH};
 use crate::widgets::model::Model;

@@ -14,7 +14,7 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect) {
     let state = &m.integration.custom;
     let class = SizeClass::of(rect.width() / f.s, rect.height() / f.s);
     if rect.height() / f.s < 110.0 || rect.width() / f.s < 110.0 {
-        tiny(f,m,rect);
+        tiny(f, m, rect);
         return;
     }
     let inner = rect.inset(Insets::all(f.px(if class == SizeClass::Compact {
@@ -211,28 +211,97 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect) {
     }
 }
 
-fn tiny(f:&mut Frame<'_>,m:&Model,rect:Rect){
-    let state=&m.integration.custom;
-    let inner=rect.inset(Insets::all(f.px(6.0)));
-    let (header,body)=inner.take_top(f.px(16.0),f.px(3.0));
-    let (refresh,title)=header.take_right(f.px(16.0),f.px(2.0));
-    f.icon_button(REFRESH,refresh,Icon::Refresh,14.0,"Refresh custom widget",false);
-    f.text_in(title,state.definition.as_ref().map_or("Custom",|d|d.title.as_str()),TextRole::Caption,f.theme.color.secondary,Align::Start);
-    let Some(definition)=&state.definition else{f.text_in(body,"…",TextRole::Body,f.theme.color.tertiary,Align::Start);return;};
-    match definition.layout{
-        Template::Image=>if let Some(image)=&state.image{
-            let scale=(body.width()/image.width as f32).min(body.height()/image.height as f32);
-            f.push(Op::Image{rect:body.place(image.width as f32*scale,image.height as f32*scale,Align::Center,Align::Center),image:image.clone(),opacity:1.0,source:None});
-        },
-        Template::Gauge=>{
-            let number=state.value.as_f64().or_else(||state.value.as_str()?.parse().ok()).or(state.value["value"].as_f64()).unwrap_or(0.0);
-            let (label,track)=body.take_top(f.px(20.0).min(body.height()),f.px(2.0));
-            f.text_in(label,&format!("{number:.0}{}",definition.suffix),TextRole::Headline,f.theme.color.label,Align::Start);
-            if track.height()>=f.px(3.0){f.progress(track.place(track.width(),f.px(3.0),Align::Start,Align::Center),(number/100.0)as f32,Some(f.theme.color.accent));}
+fn tiny(f: &mut Frame<'_>, m: &Model, rect: Rect) {
+    let state = &m.integration.custom;
+    let inner = rect.inset(Insets::all(f.px(6.0)));
+    let (header, body) = inner.take_top(f.px(16.0), f.px(3.0));
+    let (refresh, title) = header.take_right(f.px(16.0), f.px(2.0));
+    f.icon_button(
+        REFRESH,
+        refresh,
+        Icon::Refresh,
+        14.0,
+        "Refresh custom widget",
+        false,
+    );
+    f.text_in(
+        title,
+        state
+            .definition
+            .as_ref()
+            .map_or("Custom", |d| d.title.as_str()),
+        TextRole::Caption,
+        f.theme.color.secondary,
+        Align::Start,
+    );
+    let Some(definition) = &state.definition else {
+        f.text_in(
+            body,
+            "…",
+            TextRole::Body,
+            f.theme.color.tertiary,
+            Align::Start,
+        );
+        return;
+    };
+    match definition.layout {
+        Template::Image => {
+            if let Some(image) = &state.image {
+                let scale =
+                    (body.width() / image.width as f32).min(body.height() / image.height as f32);
+                f.push(Op::Image {
+                    rect: body.place(
+                        image.width as f32 * scale,
+                        image.height as f32 * scale,
+                        Align::Center,
+                        Align::Center,
+                    ),
+                    image: image.clone(),
+                    opacity: 1.0,
+                    source: None,
+                });
+            }
         }
-        _=>{
-            let text=if let Some(values)=state.value.as_array(){values.first().map(value).unwrap_or_default()}else{value(&state.value)};
-            f.text_in(body,&format!("{}{}",text,definition.suffix),if definition.layout==Template::Stat{TextRole::Headline}else{TextRole::Caption},f.theme.color.label,Align::Start);
+        Template::Gauge => {
+            let number = state
+                .value
+                .as_f64()
+                .or_else(|| state.value.as_str()?.parse().ok())
+                .or(state.value["value"].as_f64())
+                .unwrap_or(0.0);
+            let (label, track) = body.take_top(f.px(20.0).min(body.height()), f.px(2.0));
+            f.text_in(
+                label,
+                &format!("{number:.0}{}", definition.suffix),
+                TextRole::Headline,
+                f.theme.color.label,
+                Align::Start,
+            );
+            if track.height() >= f.px(3.0) {
+                f.progress(
+                    track.place(track.width(), f.px(3.0), Align::Start, Align::Center),
+                    (number / 100.0) as f32,
+                    Some(f.theme.color.accent),
+                );
+            }
+        }
+        _ => {
+            let text = if let Some(values) = state.value.as_array() {
+                values.first().map(value).unwrap_or_default()
+            } else {
+                value(&state.value)
+            };
+            f.text_in(
+                body,
+                &format!("{}{}", text, definition.suffix),
+                if definition.layout == Template::Stat {
+                    TextRole::Headline
+                } else {
+                    TextRole::Caption
+                },
+                f.theme.color.label,
+                Align::Start,
+            );
         }
     }
 }

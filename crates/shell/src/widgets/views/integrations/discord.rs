@@ -12,14 +12,34 @@ use mypaper_ui::{
 };
 
 pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
-    let inner=rect.inset(Insets::all(f.px(12.0)));
-    let (header,content)=inner.take_top(f.px(20.0),f.px(4.0));
-    let (refresh,title)=header.take_right(f.px(22.0),f.px(3.0));
-    let (settings,title)=title.take_right(f.px(22.0),f.px(3.0));
-    f.text_in(title,"Discord",TextRole::Subheadline,f.theme.color.secondary,Align::Start);
-    f.icon_button(crate::integrations::widgets::REFRESH,refresh,Icon::Refresh,20.0,"Refresh Discord",false);
-    f.icon_button(SETUP,settings,Icon::Settings,20.0,"Discord setup",false);
-    let (footer,body)=content.take_bottom(f.px(14.0),f.px(3.0));
+    let inner = rect.inset(Insets::all(f.px(12.0)));
+    let (header, content) = inner.take_top(f.px(20.0), f.px(4.0));
+    let (refresh, title) = header.take_right(f.px(22.0), f.px(3.0));
+    let (settings, title) = title.take_right(f.px(22.0), f.px(3.0));
+    f.text_in(
+        title,
+        "Discord",
+        TextRole::Subheadline,
+        f.theme.color.secondary,
+        Align::Start,
+    );
+    f.icon_button(
+        crate::integrations::widgets::REFRESH,
+        refresh,
+        Icon::Refresh,
+        20.0,
+        "Refresh Discord",
+        false,
+    );
+    f.icon_button(
+        SETUP,
+        settings,
+        Icon::Settings,
+        20.0,
+        "Discord setup",
+        false,
+    );
+    let (footer, body) = content.take_bottom(f.px(14.0), f.px(3.0));
     let state = &m.integration.discord;
     let class = SizeClass::of(rect.width() / f.s, rect.height() / f.s);
     let compact = class == SizeClass::Compact;
@@ -63,7 +83,15 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
     let status = state.notice.as_deref().unwrap_or_else(|| {
         if state.voice {
             snapshot.map_or("RPC application and tester access required", |s| {
-                s.voice_status.as_str()
+                if let Some(call) = &s.call {
+                    if call.can_control {
+                        "Call controls reset when RPC disconnects"
+                    } else {
+                        "Read-only call · controls require rpc.voice.write"
+                    }
+                } else {
+                    s.voice_status.as_str()
+                }
             })
         } else if state.can_send {
             "Sends as bot · Windows toasts are not unread counts"
@@ -142,7 +170,11 @@ fn call_view(f: &mut Frame<'_>, m: &Model, body: Rect, compact: bool) {
         f.theme.color.label,
         Align::Start,
     );
-    let row = f.px(if compact || rows.height()/f.s < 37.0 { 22.0 } else { 37.0 });
+    let row = f.px(if compact || rows.height() / f.s < 37.0 {
+        22.0
+    } else {
+        37.0
+    });
     for (index, participant) in call
         .participants
         .iter()
@@ -296,13 +328,13 @@ fn messages(f: &mut Frame<'_>, m: &Model, body: Rect, compact: bool) {
     if has_bot {
         if let Some(Data::Discord(snapshot)) = &m.integration.snapshot.data {
             let selected = state.channels.get(state.channel);
-            let mut position = 0;
-            for (index, message) in snapshot
+            for (position, (index, message)) in snapshot
                 .messages
                 .iter()
                 .enumerate()
                 .filter(|(_, m)| selected.is_none_or(|id| id == &m.channel_id))
                 .take(count)
+                .enumerate()
             {
                 f.row(
                     &Row {
@@ -325,7 +357,6 @@ fn messages(f: &mut Frame<'_>, m: &Model, body: Rect, compact: bool) {
                         row,
                     ),
                 );
-                position += 1;
             }
         }
     } else if state.cards.is_empty() {

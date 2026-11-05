@@ -14,6 +14,8 @@ pub struct Config {
     pub docker: Docker,
     pub tailscale: Tailscale,
     pub grok: Grok,
+    pub calendar: Calendar,
+    pub discord: Discord,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -26,6 +28,8 @@ impl Default for Config {
             docker: Docker::default(),
             tailscale: Tailscale::default(),
             grok: Grok::default(),
+            calendar: Calendar::default(),
+            discord: Discord::default(),
         }
     }
 }
@@ -36,11 +40,39 @@ pub struct Switch {
     pub enabled: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct Calendar {
+    pub enabled: bool,
+    pub windows: bool,
+    pub google_client_id: String,
+    pub microsoft_client_id: String,
+}
+impl Default for Calendar {
+    fn default() -> Self {
+        Self { enabled: true, windows: true, google_client_id: option_env!("MYPAPER_GOOGLE_CLIENT_ID").unwrap_or("").into(), microsoft_client_id: option_env!("MYPAPER_MICROSOFT_CLIENT_ID").unwrap_or("").into() }
+    }
+}
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct Discord {
+    pub enabled: bool,
+    pub client_id: String,
+    /// Only one explicitly configured local pipe; no discovery scan.
+    pub pipe: String,
+    pub rpc: bool,
+    /// Request write scope only when the user explicitly enables voice controls.
+    pub voice_controls: bool,
+    pub channel_ids: Vec<String>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct Notifications {
     pub enabled: bool,
     pub show_text: bool,
+    /// Discord's Connect click opts into previews for recognized Discord identities only.
+    pub discord_previews: bool,
     /// Only set after the packaged listener has passed foreground/background delivery checks.
     pub live_verified: bool,
     /// Executable/pin identity -> Windows AUMID, for apps that do not publish window AUMIDs.
@@ -61,7 +93,7 @@ impl Default for T3 {
     fn default() -> Self {
         Self {
             enabled: false,
-            endpoint: String::new(),
+            endpoint: crate::t3_client::DEFAULT_ENDPOINT.into(),
             protocol_version: 2,
             live_verified: false,
             thread_links: BTreeMap::new(),
@@ -134,6 +166,11 @@ impl Config {
             "integrations.json exceeds 256 KiB"
         );
         let config: Self = serde_json::from_str(text)?;
+        ensure!(config.discord.channel_ids.len() <= 8, "Choose at most eight Discord channels");
+        for id in config.discord.channel_ids.iter().chain(std::iter::once(&config.discord.client_id)).filter(|s| !s.is_empty()) {
+            ensure!(id.len() <= 20 && id.bytes().all(|b| b.is_ascii_digit()), "Discord IDs must be numeric snowflakes");
+        }
+        ensure!(config.discord.pipe.is_empty() || config.discord.pipe.strip_prefix(r"\\.\pipe\discord-ipc-").is_some_and(|s| s.len() == 1 && s.as_bytes()[0].is_ascii_digit()), "Expected a local Discord IPC pipe");
         for endpoint in [&config.t3.endpoint, &config.obs.endpoint]
             .into_iter()
             .filter(|s| !s.is_empty())
