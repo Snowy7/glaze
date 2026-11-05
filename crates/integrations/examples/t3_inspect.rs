@@ -14,6 +14,9 @@ fn shape(value: &Value) -> Value {
     }
 }
 fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--limits") {
+        return inspect_limits();
+    }
     tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
         if std::env::args().nth(1).as_deref()==Some("--features") {
             let metadata=mypaper_integrations::t3_client::metadata("").await?;
@@ -41,4 +44,32 @@ fn main() -> Result<()> {
         socket.close(None).await?;
         Ok(())
     })
+}
+
+/// Verify the production subscription without printing account identities, titles or secrets.
+fn inspect_limits() -> Result<()> {
+    use mypaper_integrations::{Availability, Data, Hub, Provider, config::Config};
+    use std::{collections::{BTreeMap, BTreeSet}, sync::mpsc, time::{Duration, Instant}};
+    let (tx, rx) = mpsc::channel();
+    let hub = Hub::new(move |_| { let _ = tx.send(()); });
+    let mut config = Config::default();
+    config.t3.enabled = true;
+    config.t3.live_verified = true;
+    let lease = hub.acquire(Provider::T3, &config)?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).is_ok() {
+        let snapshot = lease.snapshot();
+        anyhow::ensure!(!matches!(snapshot.availability, Availability::Stale(_) | Availability::Unavailable(_)), "T3 limits subscription failed: {:?}", snapshot.availability);
+        let Some(Data::T3(state)) = snapshot.data else { continue };
+        let mut accounts: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        for limit in &state.limits {
+            accounts.entry(&limit.driver).or_default().insert(&limit.instance);
+        }
+        if accounts.iter().any(|(driver, ids)| driver.contains("claude") && ids.len() >= 2) {
+            let providers: BTreeMap<_, _> = accounts.iter().map(|(driver, ids)| (*driver, ids.len())).collect();
+            println!("{}", json!({"availability":format!("{:?}",snapshot.availability),"providerAccounts":providers,"limitWindows":state.limits.len(),"usageDistinct":state.history.as_ref().map(|h| h.providers.iter().all(|p| p.sessions_distinct))}));
+            return Ok(());
+        }
+    }
+    anyhow::bail!("T3 did not report both Claude accounts before the read deadline")
 }

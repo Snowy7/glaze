@@ -79,7 +79,7 @@ pub(super) fn view(f: &mut Frame<'_>, state: &Snapshot, l: &Areas) {
     let cost: u64 = providers.iter().map(|p| p.1).sum();
     let sessions: u64 = providers.iter().map(|p| p.0.sessions).sum();
     let headline = dollars(cost);
-    let caption = if sessions > 0 {
+    let caption = if sessions > 0 && providers.iter().all(|p| p.0.sessions_distinct) {
         format!("{sessions} sessions · 30 days")
     } else {
         "30 days · API estimate".into()
@@ -137,15 +137,40 @@ pub(super) fn view(f: &mut Frame<'_>, state: &Snapshot, l: &Areas) {
         let style = f.font(TextRole::Body);
         let amount_w = f.text.measure(&amount, &style).0;
         let (value, label) = line.take_right(amount_w, f.px(8.0));
-        f.text_in(value, &amount, TextRole::Body, f.theme.color.label, Align::End);
+        f.text_in(
+            value,
+            &amount,
+            TextRole::Body,
+            f.theme.color.label,
+            Align::End,
+        );
         // The name, then its session count in a quieter caption, as T3 lists them.
         let title = name(&p.provider);
         let title_w = f.text.measure(title, &style).0.min(label.width());
-        f.text_in(label, title, TextRole::Body, f.theme.color.label, Align::Start);
+        f.text_in(
+            label,
+            title,
+            TextRole::Body,
+            f.theme.color.label,
+            Align::Start,
+        );
         if p.sessions > 0 && label.width() - title_w > f.px(40.0) {
             f.text_in(
-                Rect::new(label.left + title_w + f.px(6.0), label.top, label.width() - title_w - f.px(6.0), label.height()),
-                &format!("{} sessions", p.sessions),
+                Rect::new(
+                    label.left + title_w + f.px(6.0),
+                    label.top,
+                    label.width() - title_w - f.px(6.0),
+                    label.height(),
+                ),
+                &format!(
+                    "{} {}",
+                    p.sessions,
+                    if p.sessions_distinct {
+                        "sessions"
+                    } else {
+                        "daily/model entries"
+                    }
+                ),
                 TextRole::Caption,
                 f.theme.color.secondary,
                 Align::Start,
@@ -187,7 +212,13 @@ pub(super) fn view(f: &mut Frame<'_>, state: &Snapshot, l: &Areas) {
     if chart_bottom - chart_top >= f.px(70.0) {
         let (title, plot) = Rect::new(rest.left, chart_top, rest.width(), chart_bottom - chart_top)
             .take_top(f.line(TextRole::Callout), f.px(4.0));
-        f.text_in(title, "Daily cost", TextRole::Callout, f.theme.color.label, Align::Start);
+        f.text_in(
+            title,
+            "Daily cost",
+            TextRole::Callout,
+            f.theme.color.label,
+            Align::Start,
+        );
         let values: Vec<Vec<f64>> = providers
             .iter()
             .map(|(p, ..)| p.cost.iter().map(|c| *c as f64 / 1_000_000.0).collect())
@@ -203,7 +234,9 @@ pub(super) fn view(f: &mut Frame<'_>, state: &Snapshot, l: &Areas) {
         let days = &history.days;
         let labels = [
             days.first().map(|d| day_label(d)).unwrap_or_default(),
-            days.get(days.len() / 2).map(|d| day_label(d)).unwrap_or_default(),
+            days.get(days.len() / 2)
+                .map(|d| day_label(d))
+                .unwrap_or_default(),
             days.last().map(|d| day_label(d)).unwrap_or_default(),
         ];
         area_chart(
@@ -224,7 +257,12 @@ pub(super) fn view(f: &mut Frame<'_>, state: &Snapshot, l: &Areas) {
         totals(
             f,
             history,
-            Rect::new(l.body.left, l.body.bottom - totals_h + f.px(10.0), l.body.width(), totals_h - f.px(10.0)),
+            Rect::new(
+                l.body.left,
+                l.body.bottom - totals_h + f.px(10.0),
+                l.body.width(),
+                totals_h - f.px(10.0),
+            ),
         );
     }
 }
@@ -244,9 +282,26 @@ fn totals(f: &mut Frame<'_>, history: &History, rect: Rect) {
     let fit = ((rect.width() / f.px(84.0)).floor() as usize).clamp(2, cells.len());
     let each = rect.width() / fit as f32;
     for (i, (label, value)) in cells.iter().take(fit).enumerate() {
-        let cell = Rect::new(rect.left + i as f32 * each, rect.top, each - f.px(6.0), rect.height());
+        let cell = Rect::new(
+            rect.left + i as f32 * each,
+            rect.top,
+            each - f.px(6.0),
+            rect.height(),
+        );
         let (top, bottom) = cell.take_top(f.line(TextRole::Caption), f.px(0.0));
-        f.text_in(top, label, TextRole::Caption, f.theme.color.secondary, Align::Start);
-        f.text_in(bottom, value, TextRole::Headline, f.theme.color.label, Align::Start);
+        f.text_in(
+            top,
+            label,
+            TextRole::Caption,
+            f.theme.color.secondary,
+            Align::Start,
+        );
+        f.text_in(
+            bottom,
+            value,
+            TextRole::Headline,
+            f.theme.color.label,
+            Align::Start,
+        );
     }
 }

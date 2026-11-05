@@ -102,7 +102,7 @@ fn fixture(id: &str, variant: &str) -> Model {
                 ]),
                 usage_day: Some("2026-11-05".into()),
                 history: Some(history()),
-                limits: vec![t3::Limit {
+                limits: std::iter::once(t3::Limit {
                     driver: "codex".into(),
                     provider: "Codex".into(),
                     instance: "codex".into(),
@@ -111,7 +111,26 @@ fn fixture(id: &str, variant: &str) -> Model {
                     used_permille: 660,
                     resets_at: Some("2026-11-10T12:00:00.000Z".into()),
                     duration_mins: Some(7 * 24 * 60),
-                }],
+                })
+                .chain(
+                    [("one@example.test", 430), ("two@example.test", 290)]
+                        .into_iter()
+                        .flat_map(|(account, used)| {
+                            [("Weekly", used), ("Weekly · Fable", 0)].into_iter().map(
+                                move |(window, used_permille)| t3::Limit {
+                                    driver: "claudeAgent".into(),
+                                    provider: "Claude".into(),
+                                    instance: account.into(),
+                                    account: account.into(),
+                                    window: window.into(),
+                                    used_permille,
+                                    resets_at: Some("2026-11-09T12:00:00.000Z".into()),
+                                    duration_mins: Some(7 * 24 * 60),
+                                },
+                            )
+                        }),
+                )
+                .collect(),
                 ..Default::default()
             }))
         } else {
@@ -178,12 +197,14 @@ fn history() -> t3::History {
                 cost: wave(0.0, 600_000_000.0),
                 tokens: wave(0.0, 2_000_000_000.0),
                 sessions: 386,
+                sessions_distinct: true,
             },
             t3::ProviderHistory {
                 provider: "codex".into(),
                 cost: wave(1.3, 250_000_000.0),
                 tokens: wave(1.3, 600_000_000.0),
                 sessions: 636,
+                sessions_distinct: true,
             },
         ],
         uncached: 261_000_000,
@@ -292,7 +313,10 @@ fn sheet(ui: &mut Ui, id: &str, variants: &[&str]) -> Image {
 fn t3_grok_dense_sizes_and_sheets() {
     let mut ui = Ui::new().unwrap();
     for (id, variants) in [
-        ("t3", &["running", "usage", "limits", "attention", "new"][..]),
+        (
+            "t3",
+            &["running", "usage", "limits", "attention", "new"][..],
+        ),
         ("grok", &["routines", "recent", "prompt"][..]),
     ] {
         for variant in variants {
@@ -328,6 +352,91 @@ fn t3_grok_dense_sizes_and_sheets() {
             .join(format!("src/widgets/views/integrations/{id}-sizes.png"));
         golden::check(&sheet(&mut ui, id, variants), &path).unwrap();
     }
+}
+
+#[test]
+fn t3_limits_renders_claude_accounts_side_by_side() {
+    let mut ui = Ui::new().unwrap();
+    let m = fixture("t3", "limits");
+    let list = draw(&mut ui, &m, (960, 480), 1.0);
+    let labels: Vec<_> = list
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            Op::Text { text, .. } => Some(text.as_ref()),
+            _ => None,
+        })
+        .collect();
+    for label in ["Claude", "57%", "71%", "Weekly · Fable"] {
+        assert!(labels.contains(&label), "missing {label}");
+    }
+    let mut screenshot = DisplayList::default();
+    screenshot.ops.push(Op::Fill {
+        rect: Rect::new(0.0, 0.0, 960.0, 480.0),
+        radius: 0.0,
+        color: Rgba::rgb8([20, 25, 33], 1.0),
+    });
+    screenshot.ops.extend(list.ops);
+    let image = render(&mut ui, &screenshot, 960, 480).unwrap();
+    golden::check(
+        &image,
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/integrations/golden/t3-limits-claude.png"),
+    )
+    .unwrap();
+}
+
+#[test]
+fn t3_pairing_draft_is_masked_in_the_display_list() {
+    let mut ui = Ui::new().unwrap();
+    let mut m = fixture("t3", "limits");
+    m.integration.snapshot = Snapshot {
+        availability: Availability::Unavailable("Connect using a pairing code".into()),
+        ..Default::default()
+    };
+    m.integration.t3.draft = "fixture-private-pairing-code".into();
+    let list = draw(&mut ui, &m, (540, 330), 1.0);
+    assert!(
+        list.ops
+            .iter()
+            .any(|op| matches!(op, Op::Text {text, ..} if text.contains('•')))
+    );
+    assert!(
+        !list
+            .ops
+            .iter()
+            .any(|op| matches!(op, Op::Text {text, ..} if text.contains(&m.integration.t3.draft)))
+    );
+    // Exercise an active native input without focusing it or sending desktop input.
+    let surface = mypaper_ui::Surface::new(
+        mypaper_ui::Kind::Popup { activate: false },
+        "T3 pairing test",
+        mypaper_ui::Role::TextInput,
+    )
+    .unwrap();
+    let field = mypaper_ui::TextField::new(
+        surface.hwnd(),
+        Rect::new(0.0, 0.0, 300.0, 30.0),
+        false,
+        13.0,
+        Rgba::rgb8([255, 255, 255], 1.0),
+    )
+    .unwrap();
+    field.set_text("active-private-pairing-code").unwrap();
+    m.field = Some(field);
+    let list = draw(&mut ui, &m, (540, 330), 1.0);
+    assert!(!list.ops.iter().any(|op| matches!(op, Op::TextField { .. })));
+    assert!(
+        list.ops
+            .iter()
+            .any(|op| matches!(op, Op::Text {text, ..} if text.contains('•')))
+    );
+    assert!(
+        !list
+            .ops
+            .iter()
+            .any(|op| matches!(op, Op::Text {text, ..} if text.contains("active-private")))
+    );
 }
 
 #[test]

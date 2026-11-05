@@ -2,8 +2,7 @@
 use super::*;
 use crate::integrations::{
     t3_widgets::{
-        APPROVE, DENY, MODEL, MODEL_CHOICE, PROJECT, PROJECT_CHOICE, Picker, SEND,
-        THREAD,
+        APPROVE, DENY, MODEL, MODEL_CHOICE, PROJECT, PROJECT_CHOICE, Picker, SEND, THREAD,
     },
     widgets::{CONNECT, REFRESH},
 };
@@ -436,6 +435,8 @@ fn threads(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas, attention:
 
 pub(super) fn prompt_field(f: &mut Frame<'_>, m: &Model, rect: Rect, hint: &str) {
     let field = m.field.as_ref();
+    let pairing = m.kind == crate::widgets::model::Widget::T3
+        && !matches!(m.integration.snapshot.data, Some(Data::T3(_)));
     let draft = if m.kind == crate::widgets::model::Widget::T3 {
         m.integration.t3.draft.as_str()
     } else {
@@ -448,7 +449,22 @@ pub(super) fn prompt_field(f: &mut Frame<'_>, m: &Model, rect: Rect, hint: &str)
         field.is_some(),
         Some(Icon::Edit),
     );
-    if let Some(field) = field {
+    if pairing {
+        // Input still belongs to RichEdit; only bullets enter the display list, focused or not.
+        let text = field
+            .and_then(|f| f.text().ok())
+            .unwrap_or_else(|| draft.into());
+        if let Some(field) = field {
+            field.set_rect(inner);
+        }
+        f.text_in(
+            inner,
+            &"•".repeat(text.chars().count().min(32)),
+            TextRole::Body,
+            f.theme.color.label,
+            Align::Start,
+        );
+    } else if let Some(field) = field {
         field.set_rect(inner);
         f.push(Op::TextField {
             rect: inner,

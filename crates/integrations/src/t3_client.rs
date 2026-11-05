@@ -11,8 +11,67 @@ pub const DEFAULT_ENDPOINT: &str = "ws://127.0.0.1:3773/ws";
 pub struct Metadata {
     pub environment: Environment,
     pub providers: Vec<ProviderModels>,
+    pub usage_limit_sources: Vec<LimitSource>,
     pub shell_older_settled: bool,
     pub shell_thread_families: bool,
+}
+/// Stream-only accounts, including accounts without an installed provider instance.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+pub struct LimitSource {
+    pub id: String,
+    pub accounts: Vec<LimitAccount>,
+}
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LimitAccount {
+    pub id: String,
+    pub driver: String,
+    pub email: Option<String>,
+    pub usage_limits: UsageLimits,
+}
+#[derive(Deserialize)]
+pub(crate) struct ConfigEvent {
+    #[serde(rename = "type")]
+    kind: String,
+    config: Option<Metadata>,
+    #[serde(default)]
+    payload: ConfigUpdate,
+}
+// A direct typed decode skips settings/skills instead of buffering an internally tagged enum.
+#[derive(Default, Deserialize)]
+struct ConfigUpdate {
+    providers: Option<Vec<ProviderModels>>,
+    sources: Option<Vec<LimitSource>>,
+}
+impl Metadata {
+    /// Config snapshots omit sources; only a source event replaces their current set.
+    pub(crate) fn apply(&mut self, event: ConfigEvent) -> bool {
+        match (event.kind.as_str(), event.config, event.payload) {
+            ("snapshot", Some(mut config), _) => {
+                config.usage_limit_sources = std::mem::take(&mut self.usage_limit_sources);
+                *self = config;
+            }
+            (
+                "providerStatuses",
+                _,
+                ConfigUpdate {
+                    providers: Some(providers),
+                    ..
+                },
+            ) => self.providers = providers,
+            (
+                "usageLimitSourcesUpdated",
+                _,
+                ConfigUpdate {
+                    sources: Some(sources),
+                    ..
+                },
+            ) => self.usage_limit_sources = sources,
+            _ => return false,
+        }
+        true
+    }
 }
 #[derive(Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]

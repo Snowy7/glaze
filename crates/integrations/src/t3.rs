@@ -19,7 +19,8 @@ struct ShellEnvelope {
     tag: String,
     request_id: Option<String>,
     #[serde(default)]
-    values: Vec<ShellItem>,
+    // Route by request id before decoding. An untagged enum buffers even discarded previews.
+    values: Vec<Box<serde_json::value::RawValue>>,
 }
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -168,7 +169,7 @@ pub struct Snapshot {
     pub usage_day: Option<String>,
     pub omit_older_settled: bool,
     pub omit_idle_subagents: bool,
-    /// One row per provider account and limit window, from `server.getConfig`.
+    /// One row per provider account and limit window, from the live config stream.
     pub limits: Vec<Limit>,
     /// The last 30 UTC days of `server.getUsageSummary`, oldest first.
     pub history: Option<History>,
@@ -203,8 +204,9 @@ pub struct ProviderHistory {
     pub provider: String,
     pub cost: Vec<u64>,
     pub tokens: Vec<u64>,
-    /// Sessions over the whole window, when T3 reports them.
+    /// Distinct sessions when available; otherwise summed daily/model bucket counts.
     pub sessions: u64,
+    pub sessions_distinct: bool,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ThreadDetail {
@@ -266,17 +268,14 @@ impl Snapshot {
             );
         }
     }
-    fn configure(&mut self, value: crate::t3_client::Metadata) {
+    fn configure(&mut self, value: &crate::t3_client::Metadata) {
         self.omit_older_settled = value.shell_older_settled;
         self.omit_idle_subagents = value.shell_thread_families;
-        self.environment_id = Some(value.environment.environment_id).filter(|s| !s.is_empty());
+        self.environment_id =
+            Some(value.environment.environment_id.clone()).filter(|s| !s.is_empty());
         self.models.clear();
         self.limits.clear();
-        for provider in value
-            .providers
-            .into_iter()
-            .filter(|p| p.enabled && p.installed)
-        {
+        for provider in value.providers.iter().filter(|p| p.enabled && p.installed) {
             let account = provider
                 .auth
                 .label
@@ -300,13 +299,46 @@ impl Snapshot {
                     duration_mins: window.window_duration_mins,
                 });
             }
-            for model in provider.models.into_iter().take(256) {
+            for model in provider.models.iter().take(256) {
                 if !model.slug.is_empty() {
                     self.models.push(ModelChoice {
                         provider: provider.instance_id.clone(),
                         provider_name: provider.display_name.clone(),
-                        model: model.slug,
-                        name: model.name,
+                        model: model.slug.clone(),
+                        name: model.name.clone(),
+                    });
+                }
+            }
+        }
+        for source in &value.usage_limit_sources {
+            for account in &source.accounts {
+                let provider = self
+                    .limits
+                    .iter()
+                    .find(|l| l.driver == account.driver)
+                    .map(|l| l.provider.clone())
+                    .unwrap_or_else(|| match account.driver.as_str() {
+                        "claudeAgent" | "claude" => "Claude".into(),
+                        "codex" => "Codex".into(),
+                        driver => driver.into(),
+                    });
+                for window in &account.usage_limits.windows {
+                    self.limits.push(Limit {
+                        driver: account.driver.clone(),
+                        provider: provider.clone(),
+                        instance: format!("{}/{}", source.id, account.id),
+                        account: account
+                            .email
+                            .as_deref()
+                            .unwrap_or(&account.id)
+                            .chars()
+                            .take(128)
+                            .collect(),
+                        window: window.label.chars().take(64).collect(),
+                        used_permille: (window.used_percent.clamp(0.0, 100.0) * 10.0).round()
+                            as u32,
+                        resets_at: window.resets_at.clone(),
+                        duration_mins: window.window_duration_mins,
                     });
                 }
             }
@@ -319,10 +351,6 @@ impl Snapshot {
             ..Default::default()
         };
         let mut today_buckets = Vec::new();
-        // Field names only (no values), once per read, to confirm the wire shape.
-        if let Some(first) = value["buckets"].as_array().and_then(|b| b.first()).and_then(Value::as_object) {
-            log::info!("T3 usage bucket keys: {:?}", first.keys().collect::<Vec<_>>());
-        }
         for bucket in value["buckets"].as_array().into_iter().flatten() {
             let day = ["day", "date", "bucketDay", "startDay"]
                 .iter()
@@ -345,7 +373,10 @@ impl Snapshot {
             history.cache_write += n("cacheCreationTokens");
             history.output += n("outputTokens");
             history.savings_microusd += micro(&bucket["cacheSavingsUsd"]);
-            for (slot, key) in ["input", "cacheRead", "cacheWrite", "output"].iter().enumerate() {
+            for (slot, key) in ["input", "cacheRead", "cacheWrite", "output"]
+                .iter()
+                .enumerate()
+            {
                 history.cost_by_type[slot] += micro(&bucket["categoryCostUsd"][*key]);
             }
             if let (Some(index), Some(provider)) = (
@@ -353,7 +384,11 @@ impl Snapshot {
                 bucket["provider"].as_str(),
             ) {
                 let len = history.days.len();
-                let row = match history.providers.iter().position(|p| p.provider == provider) {
+                let row = match history
+                    .providers
+                    .iter()
+                    .position(|p| p.provider == provider)
+                {
                     Some(i) => &mut history.providers[i],
                     None => {
                         history.providers.push(ProviderHistory {
@@ -361,6 +396,7 @@ impl Snapshot {
                             cost: vec![0; len],
                             tokens: vec![0; len],
                             sessions: 0,
+                            sessions_distinct: false,
                         });
                         history.providers.last_mut().unwrap()
                     }
@@ -374,6 +410,26 @@ impl Snapshot {
             }
             if day == today {
                 today_buckets.push(bucket.clone());
+            }
+        }
+        // Sources deduplicate sessions spanning days/models. Older servers lack this field.
+        for row in &mut history.providers {
+            let sources: Vec<_> = value["sources"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|s| s["fingerprint"]["provider"] == row.provider)
+                .collect();
+            if !sources.is_empty()
+                && sources
+                    .iter()
+                    .all(|s| s["distinctSessions"].as_u64().is_some())
+            {
+                row.sessions = sources
+                    .iter()
+                    .filter_map(|s| s["distinctSessions"].as_u64())
+                    .sum();
+                row.sessions_distinct = true;
             }
         }
         self.usage(&json!({ "buckets": today_buckets }));
@@ -619,12 +675,14 @@ async fn subscribe(
     )
     .await?;
     let mut state = Snapshot::default();
+    let mut metadata = crate::t3_client::Metadata::default();
     if live {
         state.permissions = crate::t3_client::permissions(&config.endpoint)
             .await
             .unwrap_or_default();
         if let Ok(value) = crate::t3_client::metadata(&config.endpoint).await {
-            state.configure(value);
+            metadata = value;
+            state.configure(&metadata);
         }
         refresh_usage(config, &mut state).await;
     }
@@ -636,6 +694,9 @@ async fn subscribe(
         payload["omitIdleSubagents"] = json!(true);
     }
     transport::send(&mut socket,json!({"_tag":"Request","id":"1","tag":"orchestration.subscribeShell","payload":payload,"headers":[]})).await?;
+    if live {
+        transport::send(&mut socket, json!({"_tag":"Request","id":"config","tag":"subscribeServerConfig","payload":{"usageLimitSources":true},"headers":[]})).await?;
+    }
     let mut baseline = false;
     let mut last_usage_transition = None;
     loop {
@@ -649,11 +710,27 @@ async fn subscribe(
         for frame in frames {
             match frame.tag.as_str() {
                 "Chunk" => {
+                    if frame.request_id.as_deref() == Some("config") {
+                        let mut changed = false;
+                        for item in frame.values {
+                            changed |= metadata.apply(serde_json::from_str(item.get())?);
+                        }
+                        if changed {
+                            state.configure(&metadata);
+                            if baseline {
+                                publish.set(Availability::Live, Some(Data::T3(state.clone())));
+                            }
+                        }
+                        transport::send(&mut socket, json!({"_tag":"Ack","requestId":"config"}))
+                            .await?;
+                        continue;
+                    }
                     ensure!(
                         frame.request_id.as_deref() == Some("1"),
                         "unexpected T3 request id"
                     );
                     for item in frame.values {
+                        let item: ShellItem = serde_json::from_str(item.get())?;
                         ensure!(
                             baseline || item.kind == "snapshot",
                             "T3 delta arrived before its baseline"
@@ -668,10 +745,6 @@ async fn subscribe(
                         .map(|t| (t.run_id.clone(), t.status));
                     if transition.is_some() && transition != last_usage_transition {
                         last_usage_transition = transition;
-                        // A finished run moves the limit windows too; getConfig carries them.
-                        if let Ok(value) = crate::t3_client::metadata(&config.endpoint).await {
-                            state.configure(value);
-                        }
                         refresh_usage(config, &mut state).await;
                     }
                     publish.set(
@@ -707,7 +780,11 @@ async fn refresh_usage(config: &crate::config::T3, state: &mut Snapshot) {
     let now = chrono::Utc::now().date_naive();
     let days: Vec<String> = (0..30)
         .rev()
-        .map(|back| (now - chrono::Days::new(back)).format("%Y-%m-%d").to_string())
+        .map(|back| {
+            (now - chrono::Days::new(back))
+                .format("%Y-%m-%d")
+                .to_string()
+        })
         .collect();
     let day = days[29].clone();
     match crate::t3_client::request(
@@ -731,6 +808,77 @@ mod tests {
     use futures_util::{SinkExt, StreamExt};
     use std::sync::{Arc, Mutex};
     use tokio_tungstenite::tungstenite::Message;
+    #[test]
+    fn config_stream_keeps_both_claude_accounts_across_provider_updates() {
+        let mut metadata = crate::t3_client::Metadata::default();
+        let mut state = Snapshot::default();
+        let provider = json!({"instanceId":"codex","driver":"codex","displayName":"Codex","installed":true,"enabled":true,
+            "usageLimits":{"windows":[{"label":"Weekly","usedPercent":66}]}});
+        for event in [
+            json!({"type":"snapshot","config":{"providers":[provider.clone()]}}),
+            json!({"type":"usageLimitSourcesUpdated","payload":{"sources":[{"id":"hub","accounts":[
+                {"id":"c1","driver":"claudeAgent","email":"one@example.test","usageLimits":{"windows":[{"label":"Weekly","usedPercent":43}]}},
+                {"id":"c2","driver":"claudeAgent","email":"two@example.test","usageLimits":{"windows":[{"label":"Weekly","usedPercent":29}]}}
+            ]}]}}),
+            json!({"type":"providerStatuses","payload":{"providers":[provider.clone()]}}),
+            json!({"type":"snapshot","config":{"providers":[provider]}}),
+        ] {
+            let frame: ShellEnvelope = serde_json::from_value(
+                json!({"_tag":"Chunk","requestId":"config","values":[event]}),
+            )
+            .unwrap();
+            for item in frame.values {
+                assert!(metadata.apply(serde_json::from_str(item.get()).unwrap()));
+            }
+            state.configure(&metadata);
+        }
+        assert_eq!(state.limits.len(), 3);
+        let claude: Vec<_> = state
+            .limits
+            .iter()
+            .filter(|l| l.driver == "claudeAgent")
+            .collect();
+        assert_eq!(claude.len(), 2);
+        assert_eq!(
+            (&claude[0].account, claude[0].used_permille),
+            (&"one@example.test".to_owned(), 430)
+        );
+        assert_eq!(
+            (&claude[1].account, claude[1].used_permille),
+            (&"two@example.test".to_owned(), 290)
+        );
+        assert!(
+            metadata.apply(
+                serde_json::from_value(
+                    json!({"type":"usageLimitSourcesUpdated","payload":{"sources":[]}})
+                )
+                .unwrap()
+            )
+        );
+        state.configure(&metadata);
+        assert_eq!(state.limits.len(), 1);
+        assert_eq!(state.limits[0].driver, "codex");
+    }
+
+    #[test]
+    fn usage_prefers_source_distinct_sessions_and_marks_older_bucket_counts() {
+        let mut state = Snapshot::default();
+        let days = vec!["2026-11-04".into(), "2026-11-05".into()];
+        let mut summary = json!({"buckets":[
+            {"day":"2026-11-04","provider":"codex","sessions":3},
+            {"day":"2026-11-05","provider":"codex","sessions":3},
+            {"day":"2026-11-05","provider":"codex","sessions":2}
+        ],"sources":[{"fingerprint":{"provider":"codex"},"distinctSessions":4}]});
+        state.history(&summary, days.clone(), "2026-11-05");
+        let row = &state.history.as_ref().unwrap().providers[0];
+        assert_eq!(row.sessions, 4);
+        assert!(row.sessions_distinct);
+        summary["sources"] = json!([]);
+        state.history(&summary, days, "2026-11-05");
+        let row = &state.history.as_ref().unwrap().providers[0];
+        assert_eq!(row.sessions, 8);
+        assert!(!row.sessions_distinct);
+    }
     #[test]
     fn usage_groups_models_and_does_not_double_count_reasoning() {
         let mut state = Snapshot::default();
