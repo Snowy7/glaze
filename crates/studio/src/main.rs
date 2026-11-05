@@ -11,6 +11,7 @@
 
 mod actions;
 mod app;
+mod dialogs;
 mod docs;
 mod glass;
 mod images;
@@ -49,6 +50,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::w;
 
 use crate::app::{App, Msg, WM_STUDIO};
+use mypaper_bars::wake as mypaper_bars_wake;
 
 const TITLE: &str = "mypaper Studio";
 
@@ -242,6 +244,16 @@ fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
                 if msg.hwnd.is_invalid() {
                     match msg.message {
                         WM_STUDIO => continue,
+                        // The shell's icon service (in the stage) has news.
+                        mypaper_bars_wake::WM_WAKE => {
+                            let s = studio.borrow();
+                            let rebuilt = s.app.stage.borrow_mut().icons_arrived();
+                            drop(s);
+                            if rebuilt {
+                                studio.borrow_mut().app.dirty = true;
+                            }
+                            continue;
+                        }
                         peek::WM_PEEK_END => {
                             studio.borrow_mut().app.message(Msg::PeekEnded);
                             continue;

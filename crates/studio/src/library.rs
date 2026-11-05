@@ -333,6 +333,33 @@ fn preview(dir: &Path, loaded: Option<&LoadedTheme>) -> Option<PathBuf> {
         })
 }
 
+/// Changes one value of your own wallpaper's `theme.json` (`@both` writes it for both the
+/// widgets' and the bars' look; `glass/clarity` is stored as the glass's tint, 1 - clarity),
+/// checked by the theme's own parser before it's written.
+pub fn edit_theme(dir: &Path, pointer: &str, value: Option<serde_json::Value>) -> Result<()> {
+    let user = mypaper_config::user_themes_dir()?;
+    if canonical(dir).parent() != Some(canonical(&user).as_path()) {
+        bail!("a built-in wallpaper can't be changed: make a copy first");
+    }
+    let file = dir.join(MANIFEST);
+    let text = std::fs::read_to_string(&file).with_context(|| format!("reading {}", file.display()))?;
+    let mut root: serde_json::Value = serde_json::from_str(&text)?;
+    let (pointer, value) = match pointer.strip_suffix("/glass/clarity") {
+        Some(base) => (format!("{base}/glass/tint"), value.and_then(|v| v.as_f64()).map(|c| json!(((1.0 - c) * 1000.0).round() / 1000.0))),
+        None => (pointer.to_owned(), value),
+    };
+    let targets: Vec<String> = match pointer.strip_prefix("/@both") {
+        Some(rest) => vec![format!("/widgets{rest}"), format!("/bars{rest}")],
+        None => vec![pointer],
+    };
+    for path in targets {
+        crate::docs::apply_op(&mut root, &crate::docs::Op { doc: crate::docs::DocId::Studio, path, value: value.clone() });
+    }
+    let new = serde_json::to_string_pretty(&root)? + "\n";
+    LoadedTheme::parse(dir.to_path_buf(), &new).context("that change isn't valid")?;
+    crate::docs::write_atomic(&file, new.as_bytes())
+}
+
 // --- Adding your own ----------------------------------------------------------------------------
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "bmp", "gif", "tif", "tiff", "webp", "heic", "heif"];

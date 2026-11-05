@@ -51,8 +51,13 @@ impl DocId {
         let effective = match self {
             DocId::Config => serde_json::to_value(mypaper_config::Config::parse(text)?)?,
             DocId::Bars => {
-                mypaper_bars::BarsConfig::parse(text)?;
-                mypaper_bars::presets::layered(raw.as_object().expect("checked"))?
+                // The parsed config has every default; the layered JSON adds each bar's look and
+                // motion (which the config doesn't write out).
+                let config = mypaper_bars::BarsConfig::parse(text)?;
+                let mut effective = serde_json::to_value(&config)?;
+                let layered = mypaper_bars::presets::layered(raw.as_object().expect("checked"))?;
+                mypaper_bars::presets::merge(&mut effective, &layered);
+                effective
             }
             DocId::Widgets => {
                 mypaper_widgets::layout::Layout::parse(text)?;

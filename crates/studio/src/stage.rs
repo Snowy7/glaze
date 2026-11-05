@@ -73,6 +73,26 @@ pub struct Cache {
     key: u64,
     pub content: Content,
     images: Option<shell::bars::Images>,
+    /// The shell's app-icon service (names and icons of pinned apps), started on first use.
+    icons: Option<(mypaper_bars::icons::Icons, std::sync::mpsc::Receiver<mypaper_bars::wake::Msg>)>,
+}
+
+impl Cache {
+    /// Takes what the icon service found; returns whether the stage must be rebuilt.
+    pub fn icons_arrived(&mut self) -> bool {
+        let Some((icons, rx)) = &mut self.icons else { return false };
+        let mut any = false;
+        while let Ok(msg) = rx.try_recv() {
+            if let mypaper_bars::wake::Msg::Described(source, described) = msg {
+                icons.on_described(source, described);
+                any = true;
+            }
+        }
+        if any {
+            self.key = 0;
+        }
+        any
+    }
 }
 
 /// Where the stage sits in `area`: the display's shape, as large as fits.
@@ -107,11 +127,26 @@ pub fn prepare(app: &App, ui: &mut Ui, size: (u32, u32), show: Show) {
         return;
     }
     cache.key = key;
-    let images = cache.images.get_or_insert_with(shell::bars::Images::default);
-    cache.content = build(app, ui, images, size, show);
+    if cache.icons.is_none() && !app.fixture && app.thread != 0 {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let dir = mypaper_bars::files::local("icons").unwrap_or_default();
+        let waker = mypaper_bars::wake::Waker::new(tx, app.thread);
+        cache.icons = Some((mypaper_bars::icons::Icons::new(waker, dir), rx));
+    }
+    let Cache { images, icons, .. } = &mut *cache;
+    let images = images.get_or_insert_with(shell::bars::Images::default);
+    let icons = icons.as_mut().map(|(i, _)| i);
+    cache.content = build(app, ui, images, icons, size, show);
 }
 
-fn build(app: &App, ui: &mut Ui, images: &mut shell::bars::Images, size: (u32, u32), show: Show) -> Content {
+fn build(
+    app: &App,
+    ui: &mut Ui,
+    images: &mut shell::bars::Images,
+    mut icons: Option<&mut mypaper_bars::icons::Icons>,
+    size: (u32, u32),
+    show: Show,
+) -> Content {
     let Some(monitor) = app.display().cloned() else {
         return Content::default();
     };
@@ -162,7 +197,7 @@ fn build(app: &App, ui: &mut Ui, images: &mut shell::bars::Images, size: (u32, u
         }
         if config.dock.enabled && config.dock.monitors.includes(&monitor.device, monitor.primary) {
             let tokens = shell::bars::Tokens::resolve(&config.dock.look, &appearance, &system);
-            let apps = dock_apps(&config);
+            let apps = dock_apps(&config, icons.as_deref_mut());
             let frame = shell::bars::dock(&config, &model, &apps, &tokens, scale, size, &[], &[], ui, images, None);
             let (w, h) = (frame.size.0 as f32, frame.size.1 as f32);
             let margin = config.dock.margin.unwrap_or(6.0) as f32 * scale;
@@ -198,7 +233,7 @@ fn bars_config(app: &App, monitor: &mypaper_desktop::Monitor) -> anyhow::Result<
 }
 
 /// The pinned apps as dock items (no windows: a calm preview).
-fn dock_apps(config: &BarsConfig) -> Vec<mypaper_bars::apps::Item> {
+fn dock_apps(config: &BarsConfig, mut icons: Option<&mut mypaper_bars::icons::Icons>) -> Vec<mypaper_bars::apps::Item> {
     config
         .dock
         .pinned
@@ -207,12 +242,19 @@ fn dock_apps(config: &BarsConfig) -> Vec<mypaper_bars::apps::Item> {
         .into_iter()
         .take(12)
         .map(|pin| {
-            let name = pin.name.clone().unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path));
+            let described = icons
+                .as_deref_mut()
+                .and_then(|i| i.get(&mypaper_bars::icons::Source::Path(pin.path.clone())).cloned());
+            let name = pin
+                .name
+                .clone()
+                .or_else(|| described.as_ref().and_then(|d| d.name.clone()))
+                .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path));
             mypaper_bars::apps::Item {
                 key: mypaper_bars::apps::pin_key(&pin.path),
                 name,
                 path: pin.path,
-                icon: None,
+                icon: described.and_then(|d| d.icon),
                 pinned: true,
                 windows: vec![],
                 aumid: None,

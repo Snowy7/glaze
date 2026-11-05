@@ -156,6 +156,8 @@ pub struct App {
     pub flash: Option<(&'static str, Instant)>,
     /// A setting the palette opened: scrolled to once its row is drawn.
     pub pending_reveal: Option<&'static str>,
+    /// A drag on a value Studio writes only at the end (a wallpaper's own file).
+    pub pending_value: Option<(Edit, Value)>,
     /// Where setting rows were drawn this frame (moved into `frame` after it).
     pub anchors: RefCell<HashMap<&'static str, (Key, f32)>>,
     pub field_rect: RefCell<Option<Rect>>,
@@ -265,6 +267,7 @@ impl App {
             glass: RefCell::new(crate::glass::Glass::default()),
             flash: None,
             pending_reveal: None,
+            pending_value: None,
             anchors: RefCell::new(HashMap::new()),
             field_rect: RefCell::new(None),
             field: None,
@@ -610,6 +613,10 @@ impl App {
         self.dirty = true;
         match drag {
             Some(Drag::Slider { edit, .. }) => {
+                if let Some((edit, value)) = self.pending_value.take() {
+                    self.set(&edit, value);
+                    return;
+                }
                 if let Err(e) = self.docs.commit_live(&edit.label) {
                     self.alert(format!("{e:#}"));
                 }
@@ -990,7 +997,7 @@ impl App {
                         Some(Value::String(text.trim().to_owned()))
                     };
                     let label = Setting::get_by_path(*doc, path).map_or("Text", |s| s.label);
-                    self.apply(label, vec![Op { doc: *doc, path: path.to_string(), value }]);
+                    self.set(&Edit::new(*doc, path.clone(), label), value.unwrap_or(Value::Null));
                 }
             }
             FieldId::Hex(path) => {
@@ -1035,6 +1042,10 @@ impl App {
     /// Sets a value as one undoable step (a click, a key).
     pub fn set(&mut self, edit: &Edit, value: Value) {
         let value = (!value.is_null()).then_some(value);
+        if edit.doc == DocId::Studio && crate::pages::intercept(self, &edit.path, value.clone()) {
+            self.dirty = true;
+            return;
+        }
         self.apply(&edit.label, vec![Op {
             doc: edit.doc,
             path: edit.path.to_string(),
@@ -1044,6 +1055,12 @@ impl App {
 
     /// Sets a value during a drag (written once, at the end).
     fn set_live(&mut self, edit: &Edit, value: Value) {
+        if edit.doc == DocId::Studio {
+            // A wallpaper's own file: written when the drag ends.
+            self.pending_value = Some((edit.clone(), value));
+            self.dirty = true;
+            return;
+        }
         let mut ops = vec![Op {
             doc: edit.doc,
             path: edit.path.to_string(),
@@ -1303,6 +1320,9 @@ impl App {
                 self.go(Page::Settings);
                 self.nav.section = Some(section);
                 self.input.focus = None;
+                if section == Section::Performance && !self.fixture {
+                    self.system.gpus();
+                }
             }
             Action::Back => crate::pages::back(self),
             Action::Palette => {
