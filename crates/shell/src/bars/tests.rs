@@ -615,3 +615,71 @@ fn headless_bar_renders() {
         }
     }
 }
+
+/// The README's desktop scene, bars half (`docs/media/readme`): the macOS preset's top bar and
+/// dock on a 2560×1440 screen at 150 %, dark, content only on transparency, plus their glass
+/// plates in the frame lab's `MYPAPER_LAB_PLATES` form (each bar's own material). Run with
+/// `MYPAPER_README_SCENE=<dir>` (the widgets half is in `widgets::tests`).
+#[test]
+#[ignore = "writes images: MYPAPER_README_SCENE=<dir>"]
+fn readme_scene_bars() {
+    let Ok(dir) = std::env::var("MYPAPER_README_SCENE") else {
+        return;
+    };
+    let dir = std::path::PathBuf::from(dir);
+    let (width, height, scale) = (2560_u32, 1440_u32, 1.5_f32);
+    let mut ui = Ui::new().unwrap();
+    let mut model = model();
+    model.notifications = None;
+    let mut config = BarsConfig::parse(
+        r#"{"preset":"macos","look":{"style":"liquid","scheme":"dark"},
+            "dock":{"enabled":true,"extras":["desktop","trash"],"magnify":false}}"#,
+    )
+    .unwrap();
+    config.resolve(Vec::new);
+    let system = providers::accent::read();
+    let top_tokens = look::Tokens::resolve(&config.top.look, &Appearance::default(), &system);
+    let dock_tokens = look::Tokens::resolve(&config.dock.look, &Appearance::default(), &system);
+    let mut images = view::Images::default();
+    let top = view::top(width, &config, &model, &top_tokens, scale, &mut ui, &mut images, None);
+    let dock = view::dock(
+        &config, &model, &apps(), &dock_tokens, scale, (width, 400), &[], &[], &mut ui,
+        &mut images, None,
+    );
+    let mut list = mypaper_ui::DisplayList::default();
+    let mut plates = String::new();
+    let dock_y = height as f32 - dock.size.1 as f32;
+    for (frame, tokens, dy) in [(&top, &top_tokens, 0.0), (&dock, &dock_tokens, dock_y)] {
+        let dx = ((width - frame.size.0) / 2) as f32;
+        // The bar's own material where it resolves one (blur in physical pixels), else the
+        // engine's default glass.
+        let m = tokens.material.map_or_else(mypaper_glass_ipc::Material::default, |m| {
+            mypaper_glass_ipc::Material {
+                clarity: m.clarity,
+                blur: m.blur * scale,
+                refraction: m.refraction,
+                highlight: m.highlight,
+                tint: [m.tint.r, m.tint.g, m.tint.b, m.tint.a],
+            }
+        });
+        for &(rect, radius) in &frame.shapes {
+            let (r, [tr, tg, tb, ta]) = (rect.offset(dx, dy), m.tint);
+            plates.push_str(&format!(
+                "{},{},{},{},{radius},{},{},{},{},{tr},{tg},{tb},{ta}\n",
+                r.left,
+                r.top,
+                r.width(),
+                r.height(),
+                m.clarity,
+                m.blur,
+                m.refraction,
+                m.highlight
+            ));
+        }
+        list.ops.extend(frame.list.translated(dx, dy).ops);
+    }
+    let image = render(&mut ui, &list, width, height).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    mypaper_ui::golden::write(&image, &dir.join("bars.png")).unwrap();
+    std::fs::write(dir.join("bars.plates"), plates).unwrap();
+}

@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/readme/hero-desktop.jpg" alt="The rain-city wallpaper with mypaper's top bar, dock and widgets (calendar, system, now playing, T3 limits, clock, weather)" width="100%">
+  <img src="docs/media/readme/hero-desktop.jpg" alt="The rain-city wallpaper with mypaper's top bar, dock and widgets (clock, weather, system, calendar, now playing) on Liquid Glass" width="100%">
 </p>
 
 - **Every wallpaper kind** on one wgpu engine: shaders, images, slideshows, hardware-decoded video,
@@ -55,8 +55,8 @@ settings, per wallpaper too; `auto` renders on the card that drives your screens
 
 <table>
   <tr>
-    <td align="center"><img src="docs/media/readme/glass-before.png" width="420"><br>Before: CSS-style plates with outlines</td>
-    <td align="center"><img src="docs/media/readme/glass-after.png" width="420"><br>After: engine-drawn glass (content hidden)</td>
+    <td align="center"><img src="docs/media/readme/glass-before.jpg" width="420"><br>A flat tint, without the engine's glass</td>
+    <td align="center"><img src="docs/media/readme/glass-after.jpg" width="420"><br>Liquid Glass from the engine, under the same widgets</td>
   </tr>
 </table>
 
@@ -70,7 +70,7 @@ crop. See [docs/glass.md](docs/glass.md).
 ### Top bar and dock
 
 <p align="center">
-  <img src="docs/media/readme/dock.jpg" alt="The dock over rain-city, with a live window preview of mypaper Studio" width="70%">
+  <img src="docs/media/readme/dock.jpg" alt="The dock on Liquid Glass over rain-city" width="70%">
 </p>
 
 A native top bar and dock replace the taskbar (keep it, auto-hide it, or hide it; it's always
@@ -82,7 +82,7 @@ Tailscale. See [docs/bars.md](docs/bars.md).
 ### Five styles
 
 <p align="center">
-  <img src="docs/media/readme/styles-grid.jpg" alt="Every bar preset (rows) in every style (columns: liquid, oneui, fluent, solid, mono)" width="100%">
+  <img src="docs/media/readme/styles-grid.jpg" alt="Every bar preset (rows) in every style (columns: liquid, oneui, fluent, solid, mono), dark, over rain-city" width="100%">
 </p>
 
 **liquid** (Liquid Glass, the default), **oneui** (frosted), **fluent** (acrylic, 8 px corners),
@@ -123,10 +123,7 @@ float above apps as overlays.
 
 <table>
   <tr>
-    <td align="center"><img src="docs/media/readme/edit-mode.jpg" width="560"><br><b>Edit mode</b> (Ctrl+Alt+Shift+W): drag and resize on the grid, then <b>+</b> or Done</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/media/readme/add-widgets.png" width="560"><br><b>+</b> opens the widget picker</td>
+    <td align="center"><img src="docs/media/readme/edit-mode.jpg" width="560"><br><b>Edit mode</b> (Ctrl+Alt+Shift+W): drag and resize on the grid; <b>+</b> opens the widget picker</td>
   </tr>
 </table>
 

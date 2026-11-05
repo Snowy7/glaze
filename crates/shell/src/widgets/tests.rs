@@ -1095,3 +1095,66 @@ fn calendar_views_and_the_event_editor_give_every_hit_its_own_id() {
         }
     }
 }
+
+/// The README's desktop scene, widgets half (`docs/media/readme`): a few built-in widgets at
+/// their default sizes on a 2560×1440 screen at 150 %, content only on transparency, plus their
+/// glass plates in the frame lab's `MYPAPER_LAB_PLATES` form, so the engine's real glass can be
+/// drawn under them; `widgets-editing.png` is the same in edit mode. Run with `MYPAPER_README_SCENE=<dir>` (the bars half is in `bars::tests`).
+#[test]
+#[ignore = "writes images: MYPAPER_README_SCENE=<dir>"]
+fn readme_scene_widgets() {
+    let Ok(dir) = std::env::var("MYPAPER_README_SCENE") else {
+        return;
+    };
+    let dir = PathBuf::from(dir);
+    const SCALE: f32 = 1.5;
+    let px = |n: u32| ((n as f32 * 44.0 + (n - 1) as f32 * 8.0) * SCALE).round() as u32;
+    let mut ui = Ui::new().unwrap();
+    let root = temp("readme-scene");
+    let registry = registry::builtins();
+    // Two columns from the top-left, like a desktop: (widget, column, row order).
+    let columns: [&[&str]; 2] = [&["clock", "weather", "system-monitor"], &["calendar", "now-playing"]];
+    let (left, top, gap) = (60.0_f32, 110.0_f32, 36.0_f32);
+    let (mut list, mut editing_list) = (DisplayList::default(), DisplayList::default());
+    let mut plates = String::new();
+    let material = mypaper_glass_ipc::Material::default();
+    let mut x = left;
+    for column in columns {
+        let mut y = top;
+        let mut column_w = 0.0_f32;
+        for id in column {
+            let installed = &registry.widgets[*id];
+            let mut m = fixture(id, root.clone());
+            m.placed.size = installed.manifest.size.default;
+            m.placed.appearance.insert("text".into(), json!("light"));
+            let size = (px(m.placed.size[0]), px(m.placed.size[1]));
+            let tokens = tokens(&m.placed.appearance);
+            for (editing, list) in [(false, &mut list), (true, &mut editing_list)] {
+                let frame = view::Frame { size, scale: SCALE, now: now(), instant: Instant::now(), editing };
+                list.ops.extend(view::view(&m, &tokens, frame, &mut ui.text).translated(x, y).ops);
+            }
+            let rect = Rect::new(x, y, size.0 as f32, size.1 as f32);
+            let radius = view::plate_radius(&m, Rect::new(0.0, 0.0, rect.width(), rect.height()), SCALE);
+            let [r, g, b, a] = material.tint;
+            plates.push_str(&format!(
+                "{x},{y},{},{},{radius},{},{},{},{},{r},{g},{b},{a}\n",
+                rect.width(),
+                rect.height(),
+                material.clarity,
+                material.blur,
+                material.refraction,
+                material.highlight
+            ));
+            y += size.1 as f32 + gap;
+            column_w = column_w.max(size.0 as f32);
+        }
+        x += column_w + gap;
+    }
+    let image = render(&mut ui, &list, 2560, 1440).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    golden::write(&image, &dir.join("widgets.png")).unwrap();
+    let image = render(&mut ui, &editing_list, 2560, 1440).unwrap();
+    golden::write(&image, &dir.join("widgets-editing.png")).unwrap();
+    std::fs::write(dir.join("widgets.plates"), plates).unwrap();
+    let _ = std::fs::remove_dir_all(root);
+}
