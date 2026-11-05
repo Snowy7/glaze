@@ -23,10 +23,33 @@ pub struct Environment {
 #[serde(default, rename_all = "camelCase")]
 pub struct ProviderModels {
     pub instance_id: String,
+    pub driver: String,
     pub display_name: String,
+    pub auth: Auth,
+    pub usage_limits: Option<UsageLimits>,
     pub installed: bool,
     pub enabled: bool,
     pub models: Vec<ProviderModel>,
+}
+#[derive(Default, Deserialize)]
+#[serde(default)]
+pub struct Auth {
+    pub email: Option<String>,
+    pub label: Option<String>,
+}
+/// A provider account's rate-limit windows, as T3's own limits page reads them.
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct UsageLimits {
+    pub windows: Vec<LimitWindow>,
+}
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LimitWindow {
+    pub label: String,
+    pub used_percent: f64,
+    pub resets_at: Option<String>,
+    pub window_duration_mins: Option<u64>,
 }
 #[derive(Default, Deserialize)]
 #[serde(default)]

@@ -168,6 +168,41 @@ pub struct Snapshot {
     pub usage_day: Option<String>,
     pub omit_older_settled: bool,
     pub omit_idle_subagents: bool,
+    /// One row per provider account and limit window, from `server.getConfig`.
+    pub limits: Vec<Limit>,
+    /// The last 30 UTC days of `server.getUsageSummary`, oldest first.
+    pub history: Option<History>,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Limit {
+    pub driver: String,
+    pub provider: String,
+    pub instance: String,
+    pub account: String,
+    pub window: String,
+    /// Used, in tenths of a percent.
+    pub used_permille: u32,
+    pub resets_at: Option<String>,
+    pub duration_mins: Option<u64>,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct History {
+    pub days: Vec<String>,
+    /// Per provider: cost (micro-USD) and processed tokens for each day in `days`.
+    pub providers: Vec<ProviderHistory>,
+    pub uncached: u64,
+    pub cached: u64,
+    pub cache_write: u64,
+    pub output: u64,
+    pub savings_microusd: u64,
+    /// Input, cache read, cache write, output, in micro-USD.
+    pub cost_by_type: [u64; 4],
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProviderHistory {
+    pub provider: String,
+    pub cost: Vec<u64>,
+    pub tokens: Vec<u64>,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ThreadDetail {
@@ -234,11 +269,35 @@ impl Snapshot {
         self.omit_idle_subagents = value.shell_thread_families;
         self.environment_id = Some(value.environment.environment_id).filter(|s| !s.is_empty());
         self.models.clear();
+        self.limits.clear();
         for provider in value
             .providers
             .into_iter()
             .filter(|p| p.enabled && p.installed)
         {
+            let account = provider
+                .auth
+                .label
+                .clone()
+                .or_else(|| provider.auth.email.clone())
+                .unwrap_or_else(|| provider.display_name.clone());
+            for window in provider
+                .usage_limits
+                .iter()
+                .flat_map(|u| u.windows.iter())
+                .take(16)
+            {
+                self.limits.push(Limit {
+                    driver: provider.driver.clone(),
+                    provider: provider.display_name.clone(),
+                    instance: provider.instance_id.clone(),
+                    account: account.chars().take(128).collect(),
+                    window: window.label.chars().take(64).collect(),
+                    used_permille: (window.used_percent.clamp(0.0, 100.0) * 10.0).round() as u32,
+                    resets_at: window.resets_at.clone(),
+                    duration_mins: window.window_duration_mins,
+                });
+            }
             for model in provider.models.into_iter().take(256) {
                 if !model.slug.is_empty() {
                     self.models.push(ModelChoice {
@@ -250,6 +309,64 @@ impl Snapshot {
                 }
             }
         }
+    }
+    /// The 30-day history, and today's per-model totals for the existing usage face.
+    fn history(&mut self, value: &Value, days: Vec<String>, today: &str) {
+        let mut history = History {
+            days,
+            ..Default::default()
+        };
+        let mut today_buckets = Vec::new();
+        for bucket in value["buckets"].as_array().into_iter().flatten() {
+            let day = ["day", "date", "bucketDay", "startDay"]
+                .iter()
+                .find_map(|k| bucket[*k].as_str())
+                .unwrap_or(today);
+            let t = &bucket["totals"];
+            let n = |k: &str| t[k].as_u64().unwrap_or(0);
+            let tokens = n("uncachedInputTokens")
+                + n("cachedInputTokens")
+                + n("cacheCreationTokens")
+                + n("outputTokens");
+            let micro = |v: &Value| {
+                v.as_f64()
+                    .filter(|n| n.is_finite() && *n >= 0.0)
+                    .map_or(0, |n| (n * 1_000_000.0).round() as u64)
+            };
+            let cost = micro(&bucket["costUsd"]);
+            history.uncached += n("uncachedInputTokens");
+            history.cached += n("cachedInputTokens");
+            history.cache_write += n("cacheCreationTokens");
+            history.output += n("outputTokens");
+            history.savings_microusd += micro(&bucket["cacheSavingsUsd"]);
+            for (slot, key) in ["input", "cacheRead", "cacheWrite", "output"].iter().enumerate() {
+                history.cost_by_type[slot] += micro(&bucket["categoryCostUsd"][*key]);
+            }
+            if let (Some(index), Some(provider)) = (
+                history.days.iter().position(|d| d == day),
+                bucket["provider"].as_str(),
+            ) {
+                let len = history.days.len();
+                let row = match history.providers.iter().position(|p| p.provider == provider) {
+                    Some(i) => &mut history.providers[i],
+                    None => {
+                        history.providers.push(ProviderHistory {
+                            provider: provider.into(),
+                            cost: vec![0; len],
+                            tokens: vec![0; len],
+                        });
+                        history.providers.last_mut().unwrap()
+                    }
+                };
+                row.cost[index] += cost;
+                row.tokens[index] += tokens;
+            }
+            if day == today {
+                today_buckets.push(bucket.clone());
+            }
+        }
+        self.usage(&json!({ "buckets": today_buckets }));
+        self.history = Some(history);
     }
     fn usage(&mut self, value: &Value) {
         let mut groups: BTreeMap<(String, String), Usage> = BTreeMap::new();
@@ -507,6 +624,10 @@ async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -
                         .map(|t| (t.run_id.clone(), t.status));
                     if transition.is_some() && transition != last_usage_transition {
                         last_usage_transition = transition;
+                        // A finished run moves the limit windows too; getConfig carries them.
+                        if let Ok(value) = crate::t3_client::metadata(&config.endpoint).await {
+                            state.configure(value);
+                        }
                         refresh_usage(config, &mut state).await;
                     }
                     publish.set(
@@ -539,16 +660,21 @@ async fn refresh_usage(config: &crate::config::T3, state: &mut Snapshot) {
         state.usage_notice = Some("Usage needs diagnostics access. Reconnect with a T3 pairing code that includes diagnostics:read.".into());
         return;
     }
-    let day = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let now = chrono::Utc::now().date_naive();
+    let days: Vec<String> = (0..30)
+        .rev()
+        .map(|back| (now - chrono::Days::new(back)).format("%Y-%m-%d").to_string())
+        .collect();
+    let day = days[29].clone();
     match crate::t3_client::request(
         &config.endpoint,
         "server.getUsageSummary",
-        json!({"sinceDay":day,"untilDay":day,"timeZone":"UTC","resolution":"day"}),
+        json!({"sinceDay":days[0],"untilDay":day,"timeZone":"UTC","resolution":"day"}),
     )
     .await
     {
         Ok(value) => {
-            state.usage(&value);
+            state.history(&value, days, &day);
             state.usage_day = Some(day);
         }
         Err(_) => state.usage_notice = Some("Usage is unavailable. Refresh to try again.".into()),
