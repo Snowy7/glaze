@@ -253,6 +253,10 @@ impl Bars {
             services::wait_ms(at.saturating_duration_since(Instant::now()))
         })
     }
+    /// Time spent in each part of [`tick`](Self::tick) since the last call (diagnostics).
+    pub fn take_tick_costs() -> Vec<(&'static str, Duration)> {
+        TICK_COSTS.with_borrow_mut(std::mem::take)
+    }
     /// Which deadline [`timeout`](Self::timeout) waits for, for the shell loop's wake counts.
     pub fn timeout_source(&self) -> &'static str {
         [
@@ -363,12 +367,16 @@ impl Bars {
 
     /// All drawing is gated by data changes or active animation. The ticker cancels at rest.
     pub fn tick(&mut self, ui: &mut Ui) {
+        let mut at = Instant::now();
         if let Some(menu) = &mut self.tray_menu {
             menu.process(ui);
         }
+        at = tick_spent("tray_menu", at);
         let now = Instant::now();
         self.hover_tick(ui, now);
+        at = tick_spent("hover", at);
         let changes = self.services.tick(now);
+        at = tick_spent("services", at);
         if changes.config || changes.theme {
             self.config_changed();
         }
@@ -428,10 +436,12 @@ impl Bars {
             }
             self.schedule_reservations();
         }
+        at = tick_spent("due", at);
         if changes.data {
             self.update_items();
             self.dirty();
         }
+        at = tick_spent("items", at);
         if changes.data || changes.moved {
             let windows: Vec<_> = self
                 .services
@@ -490,6 +500,7 @@ impl Bars {
         {
             providers::taskbar::hide_visible();
         }
+        at = tick_spent("windows", at);
         let mut visibility_changed = false;
         for b in &mut self.bars {
             let hidden = self.asleep || self.fullscreen.as_deref() == Some(&b.monitor.device);
@@ -528,9 +539,11 @@ impl Bars {
                         .ok();
             }
         }
+        at = tick_spent("preview", at);
         if let Err(e) = self.paint(ui, now) {
             log::error!("painting bars: {e:#}");
         }
+        tick_spent("paint", at);
     }
 
     /// Delayed hover work has no recurring timer and never runs on pointer-down.
@@ -1736,4 +1749,17 @@ fn builtin_flyout(action: BuiltinAction) -> Option<flyouts::Kind> {
         Mixer => Some(flyouts::Kind::Mixer),
         _ => Option::None,
     }
+}
+
+thread_local! {
+    static TICK_COSTS: std::cell::RefCell<Vec<(&'static str, Duration)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+/// Adds the time since `start` to `part`; returns now.
+fn tick_spent(part: &'static str, start: Instant) -> Instant {
+    let now = Instant::now();
+    TICK_COSTS.with_borrow_mut(|costs| match costs.iter_mut().find(|c| c.0 == part) {
+        Some(c) => c.1 += now - start,
+        None => costs.push((part, now - start)),
+    });
+    now
 }

@@ -89,6 +89,9 @@ fn run() -> Result<()> {
     // Bars::new has already presented its first frame. Yield through the message loop before
     // any widget windows, fonts, providers or fetchers are initialized.
     let mut widgets_pending = true;
+    // The work after wakes that only ran sent messages and WinEvent callbacks, until the next
+    // other wake or this deadline (see COALESCE).
+    let mut coalesced: Option<Instant> = None;
     'run: loop {
         let start = Instant::now();
         // Order matters: the parent, then the widgets' frame timer, then the bars' handles.
@@ -104,19 +107,22 @@ fn run() -> Result<()> {
         );
         handles.push((shell.flyouts.handle(), "flyouts.ticker"));
         let raw: Vec<HANDLE> = handles.iter().map(|h| h.0).collect();
-        // The nearest deadline, and whose it is (0 widgets, 1 bars, 2 flyouts).
+        // The nearest deadline, and whose it is (0 widgets, 1 bars, 2 flyouts, 3 coalesced).
         let (timeout, due) = if widgets_pending {
-            (0, 3)
+            (0, 4)
         } else {
             [
                 shell.widgets.as_ref().map_or(INFINITE, widgets::Widgets::timeout_ms),
                 shell.bars.timeout(),
                 shell.flyouts.timeout_ms(),
+                coalesced.map_or(INFINITE, |at| {
+                    wait_ms(at.saturating_duration_since(Instant::now()))
+                }),
             ]
             .into_iter()
             .zip(0..)
             .min()
-            .unwrap_or((INFINITE, 3))
+            .unwrap_or((INFINITE, 4))
         };
         wakes.spent("wait setup", start);
         // SAFETY: the parent's handle stays open for the whole loop.
@@ -144,6 +150,7 @@ fn run() -> Result<()> {
                 0 => "widgets",
                 1 => shell.bars.timeout_source(),
                 2 => "flyouts",
+                3 => "coalesced",
                 _ => "startup",
             }))
         } else {
@@ -176,8 +183,23 @@ fn run() -> Result<()> {
             }
         }
         at = wakes.spent("pump", at);
+        let sent_only = cause.is_none();
         wakes.wake(cause.unwrap_or(Cause::Sent));
-        wakes.report(|| format!("widgets since start: {:?}", shell.widgets.as_ref().map(widgets::Widgets::costs)));
+        wakes.report(|| {
+            let bars: Vec<_> = bars::Bars::take_tick_costs()
+                .iter()
+                .map(|(part, d)| format!("{part} {:.1}", d.as_secs_f64() * 1e3))
+                .collect();
+            format!(
+                "bars.tick ms: {}; widgets since start: {:?}",
+                bars.join(", "),
+                shell.widgets.as_ref().map(widgets::Widgets::costs)
+            )
+        });
+        if sent_only && *coalesced.get_or_insert(at + COALESCE) > at {
+            continue;
+        }
+        coalesced = None;
         at = shell.drain(&mut ui, &mut wakes, at);
         shell.bars.tick(&mut ui);
         wakes.spent("bars.tick", at);
@@ -199,6 +221,18 @@ fn run() -> Result<()> {
     }
     log::info!("stopped");
     Ok(())
+}
+
+/// How long the loop's work may wait after a wake that only ran sent messages and WinEvent
+/// callbacks. The bars' and widgets' location hooks follow the app under the pointer, so every
+/// cursor move calls back (about 125 a second while the mouse moves); what those callbacks set
+/// is debounced 50 ms further on anyway. Posted messages (input), handles and deadlines still run
+/// the work at once.
+const COALESCE: std::time::Duration = std::time::Duration::from_millis(25);
+
+/// A wait in whole milliseconds, rounded up so a deadline has passed when it returns.
+fn wait_ms(duration: std::time::Duration) -> u32 {
+    duration.as_nanos().div_ceil(1_000_000).min(u128::from(INFINITE - 1)) as u32
 }
 
 /// What the shell hosts.
