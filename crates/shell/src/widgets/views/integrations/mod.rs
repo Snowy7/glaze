@@ -1,5 +1,4 @@
 //! Integration faces use the public kit directly. No provider reads or side effects in a view.
-pub(crate) mod discord;
 pub(crate) mod calendar;
 pub(crate) mod custom;
 pub(crate) mod t3;
