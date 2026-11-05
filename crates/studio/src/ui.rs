@@ -391,8 +391,9 @@ pub fn tiles(
             let y = col.y + r as f32 * (h + b.px(32.0));
             let pic = Rect::new(x, y, w, h);
             let k = key((group, i));
+            let pad = b.px(4.0);
+            b.plate(k, Rect::new(x - pad, y - pad, w + pad * 2.0, h + b.px(24.0) + pad * 2.0), b.px(8.0) + pad, *selected);
             draw(b, i, pic);
-            b.tile_frame(k, pic, b.px(8.0), *selected, p.chrome);
             b.text_in(
                 Rect::new(x, y + h + b.px(6.0), w, b.px(18.0)),
                 label,
@@ -461,13 +462,16 @@ pub fn swatches(
     col.y += b.px(34.0);
 }
 
-/// A swatch's selection ring. A swatch too close to the inspector behind it (a near-white on
-/// light) gets a faint edge so it doesn't vanish.
+/// A swatch's selection: a check inside it in whichever of black or white reads on the
+/// colour (macOS's accent picker), never a ring. A swatch too close to the inspector behind it
+/// (a near-white on light) gets a faint edge so it doesn't vanish.
 fn swatch_frame(b: &mut B, r: Rect, color: Rgba, on: bool, p: mypaper_ui::controls::Palette) {
-    if on {
-        b.stroke(r.inflate(b.px(4.0)), r.width() / 2.0 + b.px(4.0), b.px(2.0), p.ink1);
-    } else if mypaper_ui::theme::contrast(color, p.chrome) < 1.35 {
+    if mypaper_ui::theme::contrast(color, p.chrome) < 1.35 {
         b.stroke(r, r.width() / 2.0, 1.0, p.edge);
+    }
+    if on {
+        let ink = if mypaper_ui::theme::luminance(color) > 0.4 { Rgba::new(0.0, 0.0, 0.0, 0.85) } else { Rgba::new(1.0, 1.0, 1.0, 1.0) };
+        b.icon(r, mypaper_ui::icons::Icon::Check, 13.0, ink);
     }
 }
 

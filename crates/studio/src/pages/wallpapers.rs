@@ -14,7 +14,7 @@ use crate::actions::{Action, Choices, Edit, FieldId, Page, Source};
 use crate::app::{App, Overlay};
 use crate::docs::{DocId, Op, token};
 use crate::library::{CATEGORIES, Kind, NewWallpaper, Origin, Wallpaper};
-use crate::stage::image_cover;
+use crate::stage::image_round;
 use crate::theme::glyph;
 use crate::ui::{B, Col, inspector, section, text_field};
 use crate::view::split;
@@ -135,12 +135,16 @@ fn card(app: &App, b: &mut B, i: usize, pic: Rect, selected: bool) {
     let k = key(("wallpaper", i));
     let hot = b.hovered(k) || b.input.pointer.is_some_and(|pt| pic.contains(pt));
     let size = ((pic.width() * 1.5) as u32, (pic.height() * 1.5) as u32);
+    // Selection and hover are a plate behind the picture and its two lines, never a ring.
+    let pad = b.px(6.0);
+    let plate = Rect::new(pic.left - pad, pic.top - pad, pic.width() + pad * 2.0, pic.height() + b.px(43.0) + pad * 2.0);
+    if selected {
+        b.fill(plate, b.px(10.0) + pad, p.selected);
+    } else if hot {
+        b.fill(plate, b.px(10.0) + pad, p.hover);
+    }
     match w.preview.as_ref().or(w.video.as_ref()).and_then(|path| app.images.borrow_mut().get(path, size)) {
-        Some(image) => {
-            b.fill(pic, b.px(10.0), p.panel);
-            image_cover(b, pic, &image, 1.0);
-            b.stroke(pic.inflate(b.px(3.0)), b.px(13.0), b.px(6.0), p.bg);
-        }
+        Some(image) => image_round(b, pic, &image, 1.0, b.px(10.0)),
         None => {
             b.fill(pic, b.px(10.0), p.panel);
             b.icon(pic, kind_glyph(w.kind), 22.0, p.ink4);
@@ -151,11 +155,6 @@ fn card(app: &App, b: &mut B, i: usize, pic: Rect, selected: bool) {
         b.icon(Rect::new(pic.left, pic.top, pic.width(), pic.height() - b.px(16.0)), glyph::ALERT, 18.0, Rgba::new(1.0, 1.0, 1.0, 0.9));
         let caption = b.font(Font::Caption);
         b.text_in(Rect::new(pic.left, pic.top + pic.height() / 2.0 + b.px(4.0), pic.width(), b.px(18.0)), "Can't load", &caption, Rgba::new(1.0, 1.0, 1.0, 0.9), Align::Center);
-    }
-    if selected {
-        b.stroke(pic.inflate(b.px(4.0)), b.px(14.0), b.px(2.0), p.ink1);
-    } else if hot {
-        b.stroke(pic.inflate(b.px(4.0)), b.px(14.0), b.px(2.0), p.selected);
     }
     if w.active {
         b.badge(pic.left + b.px(8.0), pic.top + b.px(8.0), "On desktop", None, true);
@@ -211,10 +210,7 @@ fn details(app: &App, b: &mut B, col: &mut Col, i: usize) {
     let mut y = col.y + b.px(16.0);
     let pic = Rect::new(x, y, cw, cw * 10.0 / 16.0);
     match w.preview.as_ref().or(w.video.as_ref()).and_then(|path| app.images.borrow_mut().get(path, ((pic.width() * 1.5) as u32, (pic.height() * 1.5) as u32))) {
-        Some(image) => {
-            image_cover(b, pic, &image, 1.0);
-            b.stroke(pic.inflate(b.px(3.0)), b.px(11.0), b.px(6.0), p.chrome);
-        }
+        Some(image) => image_round(b, pic, &image, 1.0, b.px(8.0)),
         None => b.fill(pic, b.px(8.0), p.panel),
     }
     y = pic.bottom + b.px(14.0);
@@ -597,7 +593,8 @@ pub fn add_sheet(app: &App, b: &mut B) {
             b.fill(r, b.px(12.0), p.well);
             b.wash(k, r, b.px(12.0));
             if on {
-                b.stroke(r, b.px(12.0), b.px(2.0), p.ink1);
+                b.fill(r, b.px(12.0), p.selected);
+                b.check_mark(r);
             }
             let icon = Rect::new(r.left + b.px(18.0), r.top + (th - b.px(48.0)) / 2.0, b.px(48.0), b.px(48.0));
             b.fill(icon, b.px(12.0), p.fill);

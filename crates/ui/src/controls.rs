@@ -11,7 +11,7 @@
 //! identities ([`key`]), so focus and hover survive rebuilding the list every frame.
 //!
 //! The look is the kit's: surfaces and controls are fills, never outlines (the only strokes
-//! are the keyboard focus ring and a selected tile's ring). The switch, slider, segmented
+//! are the keyboard focus ring and a focused field's ring; selection is a [`Builder::plate`]). The switch, slider, segmented
 //! control, list row and section header are the kit's own components ([`Frame`]), drawn with
 //! [`Palette::theme`], a monochrome [`Theme`] over these grays.
 
@@ -1271,7 +1271,8 @@ impl<'a, A: Clone> Builder<'a, A> {
 
     /// A tile's frame around `rect` (its picture drawn by the caller): selected is a 2 px
     /// ink-1 ring outside a `gap`-coloured one; hover a 2 px ring of the hover wash. At rest,
-    /// nothing: the picture is its own edge.
+    /// nothing: the picture is its own edge. Studio draws selection with [`Self::plate`]
+    /// instead; this stays for callers that still want a ring.
     pub fn tile_frame(&mut self, key: Key, rect: Rect, radius: f32, selected: bool, gap: Rgba) {
         let p = *self.p;
         if selected {
@@ -1348,9 +1349,37 @@ impl<'a, A: Clone> Builder<'a, A> {
         (if subtitle { m.row } else { m.row_single } * self.s).round()
     }
 
-    /// The kit's section header: a small semibold title in the secondary ink.
+    /// A section's heading: the 14/600 heading in ink-1, so it reads first on the page (the
+    /// kit's 12/600 secondary header is for glass panels; on an opaque app window it was too
+    /// faint to find sections by).
     pub fn section_header(&mut self, rect: Rect, title: &str) {
-        self.kit(&[], |_| {}, |f, _| f.section_header(rect, title, None));
+        let style = self.font(Font::Heading);
+        self.text_in(rect, title, &style, self.p.ink1, Align::Start);
+    }
+
+    /// The plate behind a selectable picture tile and its label, drawn **before** them: the
+    /// selected wash when `selected`, the hover wash when hovered, nothing at rest. Selection
+    /// is a fill, never a ring.
+    pub fn plate(&mut self, key: Key, rect: Rect, radius: f32, selected: bool) {
+        let p = *self.p;
+        if selected {
+            self.fill(rect, radius, p.selected);
+        } else if self.hovered(key) {
+            self.fill(rect, radius, p.hover);
+        }
+    }
+
+    /// A selected card's mark: a 20 px solid circle with a check, top-right inside `card`.
+    pub fn check_mark(&mut self, card: Rect) {
+        let p = *self.p;
+        let r = Rect::new(
+            card.right - self.px(32.0),
+            card.top + self.px(12.0),
+            self.px(20.0),
+            self.px(20.0),
+        );
+        self.fill(r, self.px(10.0), p.solid);
+        self.icon(r, Icon::Check, 12.0, p.on_solid);
     }
 
     /// A card: the panel fill at `radius`, no edge.
@@ -1405,7 +1434,8 @@ impl<'a, A: Clone> Builder<'a, A> {
             let bar = Rect::new(track.left, y, track.width(), len);
             let k = crate::controls::key((key, "thumb"));
             let hot = self.hovered(k) || self.pressed(k);
-            self.fill(bar, w / 2.0, p.ink1.with_alpha(if hot { 0.5 } else { 0.26 }));
+            // Quiet at rest (it is always there: no fade timer in an app window), clear on hover.
+            self.fill(bar, w / 2.0, p.ink1.with_alpha(if hot { 0.45 } else { 0.16 }));
             self.hit(
                 k,
                 bar.inflate(self.px(3.0)),

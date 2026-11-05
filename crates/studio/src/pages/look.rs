@@ -309,11 +309,10 @@ fn style_tile(app: &App, b: &mut B, s: Style, pic: Rect) {
     if let Some(still) = app.library.active().and_then(|i| app.library.items[i].preview.clone())
         && let Some(image) = app.images.borrow_mut().get(&still, (pic.width() as u32 * 2, pic.height() as u32 * 2))
     {
-        crate::stage::image_cover(b, pic, &image, 1.0);
+        crate::stage::image_round(b, pic, &image, 1.0, b.px(8.0));
     } else {
         b.fill(pic, b.px(8.0), Rgba::rgb8([0x2a, 0x30, 0x4a], 1.0));
     }
-    b.stroke(pic.inflate(b.px(3.0)), b.px(11.0), b.px(6.0), b.p.chrome);
     let white = Rgba::new(1.0, 1.0, 1.0, 1.0);
     let (fill, rim, radius, weight) = match s {
         Style::Liquid => (Rgba::new(1.0, 1.0, 1.0, 0.08), Rgba::new(1.0, 1.0, 1.0, 0.45), 9.0, 300),
@@ -457,11 +456,10 @@ fn window_tile(app: &App, b: &mut B, i: usize, pic: Rect) {
     if let Some(still) = app.library.active().and_then(|i| app.library.items[i].preview.clone())
         && let Some(image) = app.images.borrow_mut().get(&still, (pic.width() as u32 * 2, pic.height() as u32 * 2))
     {
-        crate::stage::image_cover(b, pic, &image, 1.0);
+        crate::stage::image_round(b, pic, &image, 1.0, b.px(8.0));
     } else {
         b.fill(pic, b.px(8.0), Rgba::rgb8([0x2a, 0x30, 0x4a], 1.0));
     }
-    b.stroke(pic.inflate(b.px(3.0)), b.px(11.0), b.px(6.0), b.p.chrome);
     let win = Rect::new(pic.left + pic.width() * 0.18, pic.top + pic.height() * 0.22, pic.width() * 0.64, pic.height() * 0.6);
     let s = b.s;
     let (fill, edge, radius) = match i {

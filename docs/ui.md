@@ -329,7 +329,10 @@ validated when available; physical-pixel fixtures alone cannot establish that be
 `Ui::decode_image(bytes: &[u8], max_size: (u32, u32)) -> Result<Image>` uses WIC, scales before
 converting to premultiplied BGRA, and bounds decoded dimensions. `Op::Image { rect, image:
 Arc<Image>, opacity, source: Option<Rect> }` shares pixel storage between frames. `source` crops
-in source pixels; `None` uses the full image. `Op::Arc { center, radius, sweep, width, color }`
+in source pixels; `None` uses the full image. `Op::RoundedImage { rect, image, opacity, source,
+radius }` is the same picture clipped to a rounded rectangle (a bitmap brush filling it), for
+pictures inside rounded cards; layered widget surfaces pre-round their bitmaps at load instead
+(`widgets::round_corners`). `Op::Arc { center, radius, sweep, width, color }`
 draws a clockwise ring segment starting at twelve o'clock, with `sweep` in radians. These ops
 participate in normal damage detection. Crossfades arm the ticker only for their finite duration.
 
@@ -484,7 +487,8 @@ Studio ([studio-ux.md](studio-ux.md)) is the one ordinary app window. What it ad
   `set_frame(dark, border)` (DWM dark mode and border colour), `set_icon_png`. Events:
   `Event::Resized(w, h)`, `Event::Close` (the app decides), `Event::SettingChanged` (light/dark,
   accent or contrast changed). Windows' size/move loop stops the app's own; `set_modal_hook`
-  lets the app render from inside it.
+  lets the app render from inside it. Studio calls `set_frame` again whenever its palette
+  changes (before each frame it draws), so the border and caption follow light/dark live.
 - **Clips:** `Op::Clip { rect }` and `Op::Unclip` bracket ops drawn inside a scroll view
   (`PushAxisAlignedClip`); damage treats the clip's rectangle as the bounds.
 - **`Text::set_capacity(layouts)`:** a window with a few hundred labels on screen keeps them all
@@ -499,9 +503,26 @@ Studio ([studio-ux.md](studio-ux.md)) is the one ordinary app window. What it ad
   state and hands it back as `Input { hover, pressed, focus, focus_visible, pointer }`; `key(..)`
   makes stable identities, so focus survives rebuilding the list every frame. The controls:
   `button`, `icon_button`, `switch`, `segmented`, `slider`, `select`, `field`, `badge`, `keycap`,
-  `tile_frame`, `scroll`, and the panel helpers (`elevated`, `scrim`) that palettes, sheets,
-  popovers and toasts are drawn with. Lists, tabs, colour swatches and dialogs are Studio's
-  compositions of these (`crates/studio/src/ui.rs`).
+  `tile_frame`, `plate`, `check_mark`, `section_header`, `scroll`, and the panel helpers
+  (`elevated`, `scrim`) that palettes, sheets, popovers and toasts are drawn with. Lists, tabs,
+  colour swatches and dialogs are Studio's compositions of these (`crates/studio/src/ui.rs`).
+- **Selection is a fill, never a ring.** A picture tile (wallpapers, styles, starters) sits on
+  a `plate` drawn before it: the selected wash (`Palette::selected`) behind the picture and its
+  label, the hover wash on hover, nothing at rest. A selected card takes the selected wash and a
+  `check_mark` (a solid circle with a check). The only strokes left are the keyboard focus ring
+  and a focused field's ring.
+- **Section headings** are the 14/600 heading in ink-1 (`section_header`). The kit's 12/600
+  secondary header suits glass panels; on an opaque window it was too faint to scan by.
+- **Pictures** in tiles and cards are `Op::RoundedImage` (Studio's `stage::image_round`): the
+  bitmap fills a rounded rectangle through a bitmap brush, so the corners antialias in one
+  primitive. The old way, a ring in the page colour over a square picture, left specks where
+  two antialiased edges met. Where drawn content reaches a picture's corners (the stage's
+  bars, a starter's taskbar), the ring stays but starts a pixel inside the edge.
+- **Selects** open the kit's `Menu` under the control (a check on the current value, keys,
+  screen readers, edge flipping), on the card fill with Studio's selected wash. The app sets
+  `App::picking`; the window's loop opens the menu, routes its surfaces' events to
+  `Menu::handle` and applies `Outcome::Chosen` with `App::chose`. The menu's two windows are
+  made on first use, so they cost nothing at startup.
 
 ## `mypaper-shell`
 

@@ -65,10 +65,19 @@ pub fn view(app: &App, b: &mut B) {
             b.group(key("starters"), |b| {
                 for (i, s) in STARTERS.iter().enumerate() {
                     let pic = Rect::new(x + i as f32 * (tw + gap), y, tw, th);
-                    starter_tile(app, b, s, pic);
                     let k = key(("starter", i));
                     let on = starter == i;
-                    b.tile_frame(k, pic, b.px(10.0), on, p.bg);
+                    let pad = b.px(6.0);
+                    b.plate(k, Rect::new(pic.left - pad, pic.top - pad, tw + pad * 2.0, th + b.px(54.0) + pad * 2.0), b.px(10.0) + pad, on);
+                    // What the corners are trimmed to: the plate when there is one.
+                    let behind = if on {
+                        mypaper_ui::theme::over(p.selected, p.bg)
+                    } else if b.hovered(k) {
+                        mypaper_ui::theme::over(p.hover, p.bg)
+                    } else {
+                        p.bg
+                    };
+                    starter_tile(app, b, s, pic, behind);
                     let strong = b.font(Font::Heading);
                     b.text_at(pic.left, pic.bottom + b.px(14.0), s.name, &strong, p.ink1);
                     b.text_at(pic.left, pic.bottom + b.px(36.0), s.line, &caption, p.ink3);
@@ -94,7 +103,8 @@ pub fn view(app: &App, b: &mut B) {
                     b.fill(r, b.px(12.0), p.panel);
                     b.wash(k, r, b.px(12.0));
                     if on {
-                        b.stroke(r, b.px(12.0), b.px(2.0), p.ink1);
+                        b.fill(r, b.px(12.0), p.selected);
+                        b.check_mark(Rect::new(r.left, r.top + b.px(10.0), r.width(), r.height()));
                     }
                     let strong = b.font(Font::Strong);
                     b.text_at(r.left + b.px(18.0), r.top + b.px(13.0), title, &strong, p.ink1);
@@ -139,14 +149,15 @@ pub fn view(app: &App, b: &mut B) {
     b.text_at(kx, fy + b.px(8.0), tail, &caption, p.ink3);
 }
 
-/// A starter's mini desktop: its wallpaper, its bars' silhouette and a clock card.
-fn starter_tile(app: &App, b: &mut B, s: &Starter, pic: Rect) {
+/// A starter's mini desktop: its wallpaper, its bars' silhouette and a clock card. `behind` is
+/// the colour around the tile, which trims the bars' square ends at the rounded corners.
+fn starter_tile(app: &App, b: &mut B, s: &Starter, pic: Rect, behind: Rgba) {
     let still = app.library.items.iter().find(|w| w.id == s.wallpaper).and_then(|w| w.preview.clone().or_else(|| w.video.clone()));
+    let radius = b.px(10.0);
     match still.and_then(|path| app.images.borrow_mut().get(&path, (pic.width() as u32 * 2, pic.height() as u32 * 2))) {
-        Some(image) => crate::stage::image_cover(b, pic, &image, 1.0),
-        None => b.fill(pic, b.px(10.0), Rgba::rgb8([0x2a, 0x30, 0x4a], 1.0)),
+        Some(image) => crate::stage::image_round(b, pic, &image, 1.0, radius),
+        None => b.fill(pic, radius, Rgba::rgb8([0x2a, 0x30, 0x4a], 1.0)),
     }
-    b.stroke(pic.inflate(b.px(3.0)), b.px(13.0), b.px(6.0), b.p.bg);
     let (fill, rim, weight) = match s.style {
         "liquid" => (Rgba::new(1.0, 1.0, 1.0, 0.1), Rgba::new(1.0, 1.0, 1.0, 0.45), 300),
         "oneui" => (Rgba::rgb8([40, 44, 56], 0.62), Rgba::TRANSPARENT, 700),
@@ -174,6 +185,9 @@ fn starter_tile(app: &App, b: &mut B, s: &Starter, pic: Rect) {
     let mut font = b.font(Font::Body).scaled(15.0 / 14.0);
     font.weight = weight;
     b.text_in(Rect::new(card.left + b.px(8.0), card.top, card.width(), card.height() * 0.75), "10:42", &font, Rgba::new(1.0, 1.0, 1.0, 1.0), Align::Start);
+    // A full-width bar reaches the corners: trim it, from a pixel inside the edge (no seam).
+    let t = b.px(3.0);
+    b.stroke(pic.inflate(t - 0.5), radius + t - 0.5, t * 2.0 + 1.0, behind);
 }
 
 pub fn run(app: &mut App, action: Action) {

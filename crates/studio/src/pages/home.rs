@@ -108,16 +108,12 @@ fn strip(app: &App, b: &mut B, rect: Rect) {
             let w = &app.library.items[i];
             let pic = Rect::new(x, y, tw, th);
             let k = key(("strip", i));
+            let pad = b.px(5.0);
+            b.plate(k, Rect::new(x - pad, y - pad, tw + pad * 2.0, th + b.px(22.0) + pad * 2.0), b.px(8.0) + pad, w.active);
             match w.preview.as_ref().or(w.video.as_ref()).and_then(|path| app.images.borrow_mut().get(path, (tw as u32 * 2, th as u32 * 2))) {
-                Some(image) => {
-                    b.fill(pic, b.px(8.0), p.panel);
-                    stage::image_cover(b, pic, &image, 1.0);
-                    // Round the picture's corners with a ring in the page colour.
-                    b.stroke(pic.inflate(b.px(3.0)), b.px(11.0), b.px(6.0), p.bg);
-                }
+                Some(image) => stage::image_round(b, pic, &image, 1.0, b.px(8.0)),
                 None => b.fill(pic, b.px(8.0), p.panel),
             }
-            b.tile_frame(k, pic, b.px(8.0), w.active, p.bg);
             b.text_in(Rect::new(x, pic.bottom + b.px(6.0), tw, b.px(16.0)), &w.name, &small, if w.active { p.ink1 } else { p.ink3 }, Align::Start);
             b.hit_checked(k, Rect::new(x, y, tw, th + b.px(24.0)), Role::Button, &format!("Use {}", w.name), Some(w.active), Action::UseWallpaper(i), mypaper_ui::controls::Behavior::Click);
             b.focus_ring(k, pic, b.px(8.0));

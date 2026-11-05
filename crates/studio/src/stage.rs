@@ -756,11 +756,12 @@ pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<
     };
     let glass = if app.fixture { None } else { app.glass.borrow_mut().image(&request) };
     let engine = glass.is_some();
+    let r = b.px(12.0);
     match glass {
-        Some(image) => image_cover(b, frame, &image, 1.0),
+        Some(image) => image_round(b, frame, &image, 1.0, r),
         None => match c.still.as_ref().and_then(|s| app.images.borrow_mut().get(s, size)) {
-            Some(still) => image_cover(b, frame, &still, 1.0),
-            None => b.fill(frame, 0.0, Rgba::rgb8([0x1d, 0x22, 0x2c], 1.0)),
+            Some(still) => image_round(b, frame, &still, 1.0, r),
+            None => b.fill(frame, r, Rgba::rgb8([0x1d, 0x22, 0x2c], 1.0)),
         },
     }
     if show == Show::Widgets {
@@ -771,10 +772,10 @@ pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<
         stand_in(b, &c.shapes, frame.left, frame.top);
     }
     b.list.ops.extend(offset(&c.ops, frame.left, frame.top));
-    // Rounded corners: a ring in the page colour covers the picture's square corners.
-    let r = b.px(12.0);
+    // The picture is rounded; bars and widgets drawn over it can reach its corners, so a ring
+    // in the page colour trims them, starting a pixel inside the edge (no antialiased seam).
     let t = b.px(6.0);
-    b.stroke(frame.inflate(t), r + t, t * 2.0, p.bg);
+    b.stroke(frame.inflate(t - 0.5), r + t - 0.5, t * 2.0 + 1.0, p.bg);
     // Items: the bare wallpaper first (so items win), then each.
     let items: Vec<Item> = c
         .items
@@ -834,17 +835,33 @@ fn dim(op: Op, by: f32) -> Op {
     }
 }
 
-/// `image` filling `rect`, cropped to its shape (cover).
-pub fn image_cover(b: &mut B, rect: Rect, image: &Arc<Image>, opacity: f32) {
+/// The centred crop of `image` that covers `rect` without stretching.
+fn cover_source(rect: Rect, image: &Image) -> Rect {
     let (iw, ih) = (image.width as f32, image.height as f32);
     let scale = (rect.width() / iw).max(rect.height() / ih);
     let (sw, sh) = (rect.width() / scale, rect.height() / scale);
-    let source = Rect::new((iw - sw) / 2.0, (ih - sh) / 2.0, sw, sh);
+    Rect::new((iw - sw) / 2.0, (ih - sh) / 2.0, sw, sh)
+}
+
+/// `image` filling `rect`, cropped to its shape (cover).
+pub fn image_cover(b: &mut B, rect: Rect, image: &Arc<Image>, opacity: f32) {
     b.list.ops.push(Op::Image {
         rect,
         image: image.clone(),
         opacity,
-        source: Some(source),
+        source: Some(cover_source(rect, image)),
+    });
+}
+
+/// [`image_cover`] with its corners rounded to `radius` (device px), clipped clean: pictures in
+/// tiles and cards.
+pub fn image_round(b: &mut B, rect: Rect, image: &Arc<Image>, opacity: f32, radius: f32) {
+    b.list.ops.push(Op::RoundedImage {
+        rect,
+        image: image.clone(),
+        opacity,
+        source: Some(cover_source(rect, image)),
+        radius,
     });
 }
 

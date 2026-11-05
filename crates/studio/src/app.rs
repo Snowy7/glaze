@@ -161,6 +161,9 @@ pub struct App {
     pub places: Vec<Value>,
     pub places_query: u64,
     pub window: Option<windows::Win32::Foundation::HWND>,
+    /// A select asked for its menu: the control's rect (client pixels) and its options. The
+    /// window's loop opens the kit's menu there and answers with [`App::chose`].
+    pub picking: Option<(Rect, Choices)>,
     pub dirty: bool,
     pub quit: bool,
     /// Goldens fix the clock and leave out live data.
@@ -269,6 +272,7 @@ impl App {
             places: Vec::new(),
             places_query: 0,
             window: None,
+            picking: None,
             dirty: true,
             quit: false,
             fixture,
@@ -1430,20 +1434,18 @@ impl App {
         }
     }
 
-    /// A select's menu: the native popup menu at the control.
+    /// A select's menu: asks the window for the kit's menu under the control (`picking`).
     fn choose(&mut self, choices: Choices) {
         let Some(rect) = self.input.focus.and_then(|k| self.target(k)).map(|t| t.rect) else {
             return;
         };
-        let Some(hwnd) = self.window else { return };
-        let labels: Vec<(String, bool)> = choices
-            .options
-            .iter()
-            .map(|(v, l)| (l.clone(), choices.current.as_ref() == Some(v)))
-            .collect();
-        if let Some(i) = crate::menu::pick(hwnd, rect, &labels) {
-            let value = choices.options[i].0.clone();
-            self.set(&choices.edit, value);
+        self.picking = Some((rect, choices));
+    }
+
+    /// The select's menu chose option `i` of `choices`.
+    pub fn chose(&mut self, choices: &Choices, i: usize) {
+        if let Some((value, _)) = choices.options.get(i) {
+            self.set(&choices.edit, value.clone());
         }
     }
 }

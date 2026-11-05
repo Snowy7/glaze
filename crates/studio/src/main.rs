@@ -17,7 +17,6 @@ mod glass;
 mod images;
 mod library;
 mod look;
-mod menu;
 mod pages;
 mod peek;
 mod search;
@@ -77,6 +76,12 @@ struct Studio {
     app: App,
     ui: Ui,
     surface: Surface,
+    /// The selects' menu (the kit's), made on first use so it costs nothing at startup, and
+    /// the options it is showing.
+    menu: Option<mypaper_ui::Menu<usize>>,
+    picking: Option<actions::Choices>,
+    /// The DWM frame last set: dark, border colour.
+    frame: Option<(bool, mypaper_ui::Rgba)>,
 }
 
 impl Studio {
@@ -85,7 +90,8 @@ impl Studio {
         if !self.app.dirty {
             return;
         }
-        let Studio { app, ui, surface } = self;
+        self.sync_frame();
+        let Studio { app, ui, surface, .. } = self;
         let size = surface.client_size();
         if size.0 == 0 || size.1 == 0 {
             return;
@@ -125,10 +131,84 @@ impl Studio {
         surface.set_cursor(if over_field { mypaper_ui::Cursor::Text } else { mypaper_ui::Cursor::Arrow });
     }
 
+    /// The window's border and caption follow the palette (light/dark, contrast) live. DWM
+    /// wants an opaque border: the edge wash over the window's chrome.
+    fn sync_frame(&mut self) {
+        let p = self.app.theme.palette;
+        let frame = (p.dark, mypaper_ui::theme::over(p.edge, p.chrome));
+        if self.frame != Some(frame) {
+            self.surface.set_frame(frame.0, frame.1);
+            self.frame = Some(frame);
+        }
+    }
+
+    /// Opens the kit's menu under the select that asked for it.
+    fn open_picker(&mut self) {
+        let Some((rect, choices)) = self.app.picking.take() else {
+            return;
+        };
+        if self.menu.is_none() {
+            self.menu = mypaper_ui::Menu::new("Options")
+                .inspect_err(|e| log::error!("select menu: {e:#}"))
+                .ok();
+        }
+        let Some(menu) = self.menu.as_mut() else { return };
+        let items = choices
+            .options
+            .iter()
+            .enumerate()
+            .map(|(i, (value, label))| mypaper_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value)))
+            .collect();
+        let mut at = windows::Win32::Foundation::POINT {
+            x: rect.left as i32,
+            y: (rect.bottom + self.app.px(4.0)) as i32,
+        };
+        // SAFETY: our own window; `at` is a valid out pointer.
+        let _ = unsafe { windows::Win32::Graphics::Gdi::ClientToScreen(self.surface.hwnd(), &mut at) };
+        let p = self.app.theme.palette;
+        let mut tokens = p.theme().tokens();
+        // A popover over the window: the card fill, Studio's selected wash, no hairline in dark.
+        tokens.material.tint = p.panel;
+        tokens.colors.hover = p.selected;
+        let screen = mypaper_ui::menu::screen_at(at.x, at.y);
+        match menu.open(&mut self.ui, items, (at.x, at.y), screen, &tokens) {
+            Ok(()) => self.picking = Some(choices),
+            Err(e) => log::error!("select menu: {e:#}"),
+        }
+    }
+
+    /// The select menu closed: apply the choice and give the window its focus back (unless
+    /// the user clicked into another app).
+    fn picked(&mut self, outcome: mypaper_ui::menu::Outcome<usize>) {
+        let choices = self.picking.take();
+        if let (mypaper_ui::menu::Outcome::Chosen(i), Some(choices)) = (&outcome, &choices) {
+            self.app.chose(choices, *i);
+        }
+        use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+        // SAFETY: plain window queries; activating our own window while it is ours to give.
+        unsafe {
+            let front = GetForegroundWindow();
+            let mut pid = 0;
+            GetWindowThreadProcessId(front, Some(&mut pid));
+            if front.is_invalid() || pid == std::process::id() {
+                let _ = SetForegroundWindow(self.surface.hwnd());
+            }
+        }
+        self.app.dirty = true;
+    }
+
     /// Handles the window's queued input.
     fn drain(&mut self) {
         let id = self.surface.id();
         while let Some((of, event)) = next_event() {
+            if let Some(menu) = self.menu.as_mut()
+                && menu.owns(of)
+            {
+                if let Some(outcome) = menu.handle(&mut self.ui, of, &event) {
+                    self.picked(outcome);
+                }
+                continue;
+            }
             if of != id {
                 continue;
             }
@@ -140,6 +220,7 @@ impl Studio {
             self.app.event(event);
             // An event may have opened or closed the live field: attach it to the window.
             self.sync_field();
+            self.open_picker();
         }
     }
 
@@ -179,12 +260,10 @@ fn run() -> Result<()> {
     surface.set_icon_png(include_bytes!("../assets/icon-32.png"));
     let (bounds, maximized) = placement(&app, scale);
     surface.place(bounds);
-    let p = app.theme.palette;
-    // DWM wants an opaque border: the edge wash over the window's chrome.
-    surface.set_frame(p.dark, mypaper_ui::theme::over(p.edge, p.chrome));
-    let studio = Rc::new(RefCell::new(Studio { app, ui, surface }));
+    let studio = Rc::new(RefCell::new(Studio { app, ui, surface, menu: None, picking: None, frame: None }));
     {
         let mut s = studio.borrow_mut();
+        s.sync_frame();
         s.app.size = s.surface.client_size();
         s.render();
         s.surface.show_active(maximized);

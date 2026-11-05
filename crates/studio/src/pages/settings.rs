@@ -134,14 +134,10 @@ fn performance(app: &App, b: &mut B, col: &mut Col) {
             let on = current == id;
             b.fill(r, b.px(12.0), p.panel);
             b.wash(k, r, b.px(12.0));
-            if on {
-                b.stroke(r, b.px(12.0), b.px(2.0), p.ink1);
-            }
             b.icon(Rect::new(r.left + b.px(14.0), r.top + b.px(14.0), b.px(20.0), b.px(20.0)), g, 17.0, if on { p.ink1 } else { p.ink2 });
             if on {
-                let check = Rect::new(r.right - b.px(32.0), r.top + b.px(12.0), b.px(20.0), b.px(20.0));
-                b.fill(check, b.px(10.0), p.solid);
-                b.icon(check, glyph::CHECK, 10.0, p.on_solid);
+                b.fill(r, b.px(12.0), p.selected);
+                b.check_mark(r);
             }
             let strong = b.font(Font::Heading);
             let small = b.font(Font::Caption);
@@ -230,11 +226,10 @@ fn menu_items(app: &App, b: &mut B, c: &mut Col) {
     if let Some(still) = app.library.active().and_then(|i| app.library.items[i].preview.clone())
         && let Some(image) = app.images.borrow_mut().get(&still, (preview.width() as u32, preview.height() as u32))
     {
-        crate::stage::image_cover(b, preview, &image, 1.0);
+        crate::stage::image_round(b, preview, &image, 1.0, b.px(8.0));
     } else {
         b.fill(preview, b.px(8.0), mypaper_ui::Rgba::rgb8([0x2a, 0x30, 0x4a], 1.0));
     }
-    b.stroke(preview.inflate(b.px(3.0)), b.px(11.0), b.px(6.0), p.panel);
     b.list.ops.push(mypaper_ui::Op::Clip { rect: preview });
     b.list.ops.extend(crate::stage::offset(&list.ops, preview.left + b.px(4.0), preview.top + b.px(4.0)));
     b.list.ops.push(mypaper_ui::Op::Unclip);
