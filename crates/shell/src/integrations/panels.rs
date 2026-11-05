@@ -119,7 +119,6 @@ impl Integration {
             Provider::Media => "Now playing",
             Provider::T3 => "T3 Code",
             Provider::Calendar => "Calendar",
-            Provider::Discord => "Discord",
         }
     }
     fn action(&mut self, action: Action) -> Effect {
@@ -278,7 +277,7 @@ impl Panel for Integration {
                     f.text_in(title, &state.title, TextRole::Headline, c.label, Align::Start);
                     f.text_in(artist, &state.artist, TextRole::Callout, c.secondary, Align::Start);
                 }
-                Some(Data::Calendar(_) | Data::Discord(_)) | None => {}
+                Some(Data::Calendar(_)) | None => {}
             }
             area.top + column.used()
         });
