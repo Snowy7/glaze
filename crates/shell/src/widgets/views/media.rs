@@ -397,8 +397,8 @@ fn pill(c: &mut Ctx, t: &Track) {
     }
     let (art, rest) = inner.take_left(art_side, c.px(10.0));
     cover(c, art);
-    let play = (rect.height() * 0.52).min(cap_h + c.px(6.0)).round();
-    let skip = (rect.height() * 0.44).min(cap_h).round();
+    let play = (rect.height() * 0.52).min(cap_h + c.px(6.0)).min(c.px(40.0)).round();
+    let skip = (rect.height() * 0.44).min(cap_h).min(c.px(32.0)).round();
     let mini = variant == "mini";
     let skips = !mini && rect.width() / s > 260.0;
     let gap = c.px(2.0);

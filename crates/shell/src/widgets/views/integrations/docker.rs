@@ -18,7 +18,7 @@ fn container_row(f: &mut Frame<'_>, m: &Model, rect: Rect, index: usize, contain
         }),
         _ => None,
     };
-    let (button, label) = rect.take_right(f.px(44.0), f.px(1.0));
+    let (button, label) = rect.take_right(f.px(28.0), f.px(3.0));
     f.row(
         &Row {
             id: 0,
@@ -39,12 +39,16 @@ fn container_row(f: &mut Frame<'_>, m: &Model, rect: Rect, index: usize, contain
         },
         label,
     );
-    f.button(
+    icon_action(
+        f,
         ITEM + index as u32,
         button,
-        if running { "Stop" } else { "Start" },
-        None,
-        ButtonKind::Plain,
+        if running { Icon::Pause } else { Icon::Play },
+        if running {
+            "Stop container"
+        } else {
+            "Start container"
+        },
         m.integration.actionable(),
     );
 }

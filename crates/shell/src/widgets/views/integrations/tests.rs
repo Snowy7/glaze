@@ -1,6 +1,6 @@
 //! Size sheets render the production dispatch, including disconnected and setup states.
 use super::*;
-use crate::widgets::{model::Widget, time::Stamp, views};
+use crate::widgets::{time::Stamp, views};
 use mypaper_integrations::{
     Data, Snapshot, config, docker, launcher, notifications, obs, t3, tailscale,
 };
@@ -410,5 +410,70 @@ fn obs_clock_stops_when_paused_or_disconnected_and_discord_filters_exact_app_ide
             .iter()
             .any(|op| matches!(op, Op::Text { text, .. } if text.contains("Never shown")))
     );
-    let _ = Widget::T3;
+}
+
+/// The shared catalog test uses a plain initial model. Export just our six baselines without
+/// blessing another agent's widget images while they are editing the same checkout.
+#[test]
+#[ignore = "exports only the six integration catalog goldens"]
+fn export_integration_catalog_goldens() {
+    use mypaper_widgets::{
+        layout::{self, Grid, Layout, RectF},
+        look, registry,
+    };
+    let mut ui = Ui::new().unwrap();
+    let registry = registry::builtins();
+    for id in IDS {
+        let manifest = &registry.get(id).unwrap().manifest;
+        let mut layout = Layout::default();
+        let instance = layout.add(id, "fixture", [0, 0], manifest.size.default);
+        let grid = Grid::new(
+            &layout.grid,
+            [96.0; 2],
+            RectF {
+                x: 0.0,
+                y: 0.0,
+                width: 2560.0,
+                height: 1440.0,
+            },
+        );
+        let placed = layout::place(
+            layout.get(&instance).unwrap(),
+            manifest,
+            &grid,
+            &look::defaults(),
+        );
+        let m = Model::new(
+            placed,
+            &mut Storage::new(std::env::temp_dir().join("mypaper-widget-catalog")),
+            Stamp::at(NOW),
+        )
+        .unwrap();
+        let mut list = views::view(
+            &m,
+            &crate::widgets::tokens(&m.placed.appearance),
+            views::Frame {
+                size: (360, 240),
+                scale: 1.0,
+                now: Stamp::at(NOW),
+                instant: Instant::now(),
+                editing: false,
+            },
+            &mut ui.text,
+        );
+        list.ops.insert(
+            0,
+            Op::Fill {
+                rect: Rect::new(0.0, 0.0, 360.0, 240.0),
+                radius: 0.0,
+                color: Rgba::rgb8([36, 43, 53], 1.0),
+            },
+        );
+        let image = render(&mut ui, &list, 360, 240).unwrap();
+        golden::write(
+            &image,
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("src/widgets/golden/{id}.png")),
+        )
+        .unwrap();
+    }
 }

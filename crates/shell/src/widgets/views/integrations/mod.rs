@@ -12,7 +12,7 @@ use crate::integrations::widgets::{CONNECT, REFRESH};
 use crate::widgets::model::Model;
 use mypaper_integrations::Availability;
 use mypaper_ui::{
-    Rect, Rgba,
+    HitId, Rect, Rgba, Role,
     icons::Icon,
     kit::{ButtonKind, Frame},
     layout::{Align, Insets},
@@ -142,4 +142,30 @@ pub(super) fn metric(f: &mut Frame<'_>, rect: Rect, value: &str, caption: &str, 
 
 pub(super) fn pill(f: &mut Frame<'_>, rect: Rect, text: &str, color: Rgba) {
     f.badge(rect.left, rect.center().y, text, Some(color));
+}
+
+/// Compact actions need a disabled state as well as an accessible label.
+pub(super) fn icon_action(
+    f: &mut Frame<'_>,
+    id: HitId,
+    rect: Rect,
+    icon: Icon,
+    label: &str,
+    enabled: bool,
+) {
+    let rect = rect.place(f.px(28.0), f.px(28.0), Align::Center, Align::Center);
+    let radius = rect.width() * 0.5;
+    f.wash(id, rect, radius, enabled);
+    f.icon(
+        rect,
+        icon,
+        16.0,
+        if enabled {
+            f.theme.color.label
+        } else {
+            f.theme.color.quaternary
+        },
+    );
+    f.focus_ring(id, rect, radius);
+    f.hit(id, rect, Role::Button, label, enabled, None);
 }

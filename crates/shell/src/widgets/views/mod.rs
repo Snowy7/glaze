@@ -15,8 +15,19 @@
 
 mod calendar;
 mod clock;
-mod legacy;
+mod countdown;
+mod crypto;
+mod heatmap;
+mod launcher;
 mod media;
+mod notes;
+mod photo;
+mod quote;
+mod rss;
+mod system;
+mod timer;
+mod todo;
+mod toggles;
 mod weather;
 mod integrations;
 
@@ -179,9 +190,6 @@ pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
 }
 
 pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> DisplayList {
-    if !ported(model.kind) {
-        return legacy::view(model, tokens, frame, text);
-    }
     let Frame {
         size,
         scale,
@@ -246,25 +254,6 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
     list
 }
 
-/// Widgets drawn by this module; the rest still come from `legacy` while they move.
-fn ported(kind: Widget) -> bool {
-    !matches!(
-        kind,
-        Widget::QuickToggles
-            | Widget::Launcher
-            | Widget::System
-            | Widget::Timer
-            | Widget::Countdown
-            | Widget::Photo
-            | Widget::Notes
-            | Widget::Todo
-            | Widget::Rss
-            | Widget::Crypto
-            | Widget::Heatmap
-            | Widget::Quote
-    )
-}
-
 /// One widget's content inside its padded body. One line per widget.
 fn content(c: &mut Ctx, body: Rect) {
     match c.m.kind {
@@ -272,15 +261,25 @@ fn content(c: &mut Ctx, body: Rect) {
         Widget::Calendar => calendar::draw(c, body),
         Widget::Media => media::draw(c, body),
         Widget::Weather => weather::draw(c, body),
+        Widget::QuickToggles => toggles::draw(c, body),
+        Widget::Launcher => launcher::draw(c, body),
+        Widget::System => system::draw(c, body),
+        Widget::Timer => timer::draw(c, body),
+        Widget::Countdown => countdown::draw(c, body),
+        Widget::Photo => photo::draw(c, body),
+        Widget::Notes => notes::draw(c, body),
+        Widget::Todo => todo::draw(c, body),
+        Widget::Rss => rss::draw(c, body),
+        Widget::Crypto => crypto::draw(c, body),
+        Widget::Heatmap => heatmap::draw(c, body),
+        Widget::Quote => quote::draw(c, body),
         Widget::Discord => integrations::discord::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::T3 => integrations::t3::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Obs => integrations::obs::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Docker => integrations::docker::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Tailscale => integrations::tailscale::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Grok => integrations::grok::view(&mut c.f, c.m, c.rect, c.now.ms),
-        _ => {}
     }
-    let _ = body;
 }
 
 /// One widget's list being built: the kit's frame plus the widget's inputs.
@@ -440,6 +439,30 @@ impl Ctx<'_> {
             w / 2.0,
             if shown { color } else { Rgba::TRANSPARENT },
         );
+    }
+
+    /// A header line (icon and title) when the widget is tall enough; the rest.
+    pub fn header(&mut self, r: Rect, icon: Icon, title: &str) -> Rect {
+        if self.rect.height() <= self.px(120.0) {
+            return r;
+        }
+        let color = self.color();
+        let (head, rest) = r.take_top(self.f.line(TextRole::Subheadline), self.px(8.0));
+        let (glyph, text) = head.take_left(self.px(16.0), self.px(6.0));
+        self.icon(glyph, icon, 14.0, color.accent);
+        self.text(text, title, TextRole::Subheadline, color.secondary, Align::Start);
+        rest
+    }
+
+    /// A footer line for errors and freshness; the rest above it.
+    pub fn footer(&mut self, r: Rect, text: &str) -> Rect {
+        if text.is_empty() {
+            return r;
+        }
+        let color = self.color();
+        let (foot, rest) = r.take_bottom(self.f.line(TextRole::Caption), self.px(6.0));
+        self.text(foot, text, TextRole::Caption, color.tertiary, Align::Start);
+        rest
     }
 
     /// A quiet message centred in `rect`: an icon when there is room, a title and a detail.

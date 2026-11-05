@@ -301,10 +301,12 @@ fn widget_styles_preserve_none_solid_and_explicit_text_controls() {
                 if surface == "none" { 1 } else { 255 },
                 "{style}/{surface}"
             );
+            // The text tone picks the theme's scheme; its label is what the words are drawn in.
+            let label = view::theme(&m, &tokens).color.label;
             assert!(
                 list.ops
                     .iter()
-                    .any(|op| matches!(op,Op::Text {color,..} if *color==tokens.colors.text)),
+                    .any(|op| matches!(op,Op::Text {color,..} if *color==label)),
                 "{style}: explicit text colors survive"
             );
         }
@@ -494,7 +496,9 @@ fn widget_size_sheets() {
     let only = std::env::var("MYPAPER_SHEET").ok();
     let registry = registry::builtins();
     for (id, installed) in &registry.widgets {
-        if only.as_deref().is_some_and(|o| o != id) {
+        // The integration widgets keep their own goldens (`views/integrations`).
+        let integration = ["discord", "t3", "obs", "docker", "tailscale", "grok"].contains(&id.as_str());
+        if integration || only.as_deref().is_some_and(|o| o != id) {
             continue;
         }
         let mut sizes = installed.manifest.size.allowed.clone();
