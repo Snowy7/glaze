@@ -2,7 +2,6 @@
 pub(crate) mod discord;
 pub(crate) mod calendar;
 pub(crate) mod custom;
-pub(crate) mod docker;
 pub(crate) mod grok;
 pub(crate) mod obs;
 pub(crate) mod t3;
