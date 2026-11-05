@@ -24,26 +24,33 @@ pub const MAX_PLATES: usize = 96;
 const WORDS: usize = 15;
 const CHANNEL: &str = "Local\\mypaper.glass.v1";
 
-/// Clear glass defaults: a lightly blurred, mostly clear face and an inward bevel, no shadow.
-/// All values except blur (physical pixels, 0..=32) are in 0..=1. Clarity 1 is clear;
-/// clarity 0 compresses backdrop luminance and increases the adaptive tint.
+/// A plate's Liquid Glass material (plan, "Material controls"). The engine draws it as
+/// liquid-rust's `Glass.regular` with these knobs (`crates/wallpaper/src/material.rs`,
+/// `docs/glass.md`). All values except blur are in 0..=1.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Material {
+    /// Clear (1) to tinted (0): iOS 27's Liquid Glass slider, reversed.
     pub clarity: f32,
+    /// Frost, physical pixels (points once divided by the screen's scale).
     pub blur: f32,
+    /// How far the bevel bends what is behind it (Figma *Refraction*).
     pub refraction: f32,
+    /// The specular rim light (0.75 is the kit's 30 % *Light*).
     pub highlight: f32,
-    /// Straight sRGB RGBA; alpha controls the coloured wash.
+    /// Straight sRGB RGBA. The colour sets the scheme (a dark tint takes the dark face); alpha
+    /// is a stained-glass tint's strength.
     pub tint: [f32; 4],
 }
 
 impl Default for Material {
+    /// Apple's kit `Glass.regular` on a 150 % screen: the slider's middle, 10 pt of frost,
+    /// refraction 70 %, light 30 %, dark scheme.
     fn default() -> Self {
         Self {
-            clarity: 1.0,
-            blur: 0.75,
-            refraction: 0.65,
-            highlight: 0.55,
+            clarity: 0.5,
+            blur: 15.0,
+            refraction: 0.7,
+            highlight: 0.75,
             tint: [0.0, 0.0, 0.0, 0.0],
         }
     }

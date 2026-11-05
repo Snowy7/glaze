@@ -237,6 +237,16 @@ impl GlassPass {
         true
     }
 
+    /// Lands every spring now (the lab's fixed frames show settled glass).
+    #[cfg(test)]
+    pub fn settle(&mut self) {
+        for screen in &mut self.screens {
+            screen.scene.physics = false;
+            screen.scene.update(0.0);
+            screen.scene.physics = true;
+        }
+    }
+
     /// How many screens draw glass from `texture`.
     fn shared_by(&self, texture: &wgpu::Texture) -> usize {
         self.screens.iter().filter(|s| s.source.as_ref() == Some(texture)).count()

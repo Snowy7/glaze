@@ -235,6 +235,7 @@ fn lab() {
     let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
     let mut lab = Lab::new(&root.join(parts[0]));
     lab.glass.set_plates(fixture(0.0));
+    lab.glass.settle();
 
     let mut files = Vec::new();
     for (i, &t) in times.iter().enumerate() {
