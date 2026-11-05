@@ -424,15 +424,16 @@ impl Grid {
         // stretched so the grid spans the full area, edge to edge (no
         // leftover strip on the right or bottom).
         let span = |length: f64, nominal: f64| {
-            let usable = (length - 2.0 * spec.margin).max(nominal);
+            let margin = spec.margin.min((length - 1.0).max(0.0) / 2.0);
+            let usable = (length - 2.0 * margin).max(1.0);
             let count = (((usable + spec.gap) / (nominal + spec.gap)).floor() as u32).max(1);
             let size = (usable - f64::from(count - 1) * spec.gap) / f64::from(count);
-            (count, size)
+            (count, size, margin)
         };
-        let (cols, cell_w) = span(work.width, cell[0]);
-        let (rows, cell_h) = span(work.height, cell[1]);
+        let (cols, cell_w, margin_x) = span(work.width, cell[0]);
+        let (rows, cell_h, margin_y) = span(work.height, cell[1]);
         Self {
-            origin: [work.x + spec.margin, work.y + spec.margin],
+            origin: [work.x + margin_x, work.y + margin_y],
             cell: [cell_w, cell_h],
             gap: spec.gap,
             cols,
@@ -487,7 +488,10 @@ pub fn place(
     grid: &Grid,
     resolved: &Appearance,
 ) -> Placed {
-    let (cell, size) = grid.clamp(instance.cell, manifest.clamp_size(instance.size));
+    let size = manifest
+        .fit_size(instance.size.map(f64::from), [grid.cols, grid.rows])
+        .unwrap_or(manifest.size.default);
+    let (cell, size) = grid.clamp(instance.cell, size);
     Placed {
         instance: instance.instance.clone(),
         widget: instance.widget.clone(),

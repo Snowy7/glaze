@@ -791,6 +791,9 @@ pub struct SizeSpec {
     pub min: [u32; 2],
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<[u32; 2]>,
+    /// Native view sizes in cells. Older external schemas may still use min/max alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed: Vec<[u32; 2]>,
 }
 
 fn one_by_one() -> [u32; 2] {
@@ -874,7 +877,12 @@ impl WidgetManifest {
             "entry {:?} must be a path inside the widget folder",
             self.entry
         );
-        let SizeSpec { default, min, max } = &self.size;
+        let SizeSpec {
+            default,
+            min,
+            max,
+            allowed,
+        } = &self.size;
         let fits = |low: &[u32; 2], high: &[u32; 2]| low[0] <= high[0] && low[1] <= high[1];
         ensure!(
             min[0] >= 1 && min[1] >= 1,
@@ -885,6 +893,16 @@ impl WidgetManifest {
             max.is_none_or(|max| fits(default, &max)),
             "size: default must be <= max"
         );
+        ensure!(
+            allowed.is_empty() || allowed.contains(default),
+            "size.allowed must contain default"
+        );
+        for size in allowed {
+            ensure!(
+                fits(min, size) && max.is_none_or(|max| fits(size, &max)),
+                "size.allowed must fit min/max"
+            );
+        }
         for plugin in &self.plugins {
             ensure!(
                 valid_id(plugin),
@@ -940,11 +958,40 @@ impl WidgetManifest {
     /// A size in cells the manifest allows: `default` when not resizable,
     /// else clamped to `min`/`max`.
     pub fn clamp_size(&self, size: [u32; 2]) -> [u32; 2] {
+        self.fit_size(size.map(f64::from), [u32::MAX; 2])
+            .expect("validated manifest has a default size")
+    }
+
+    /// Closest supported size that fits the available cells. Ties grow, like cell snapping.
+    pub fn fit_size(&self, requested: [f64; 2], limits: [u32; 2]) -> Option<[u32; 2]> {
         if !self.resizable {
-            return self.size.default;
+            return (0..2)
+                .all(|i| self.size.default[i] <= limits[i])
+                .then_some(self.size.default);
         }
-        let max = self.size.max.unwrap_or([u32::MAX; 2]);
-        [0, 1].map(|i| size[i].clamp(self.size.min[i], max[i]))
+        if self.size.allowed.is_empty() {
+            let max = self.size.max.unwrap_or([u32::MAX; 2]);
+            let hi = [0, 1].map(|i| max[i].min(limits[i]));
+            return (0..2).all(|i| self.size.min[i] <= hi[i]).then(|| {
+                [0, 1]
+                    .map(|i| (requested[i].round().max(0.0) as u32).clamp(self.size.min[i], hi[i]))
+            });
+        }
+        self.size
+            .allowed
+            .iter()
+            .copied()
+            .filter(|s| (0..2).all(|i| s[i] <= limits[i]))
+            .min_by(|a, b| {
+                let distance = |s: [u32; 2]| {
+                    (0..2)
+                        .map(|i| (f64::from(s[i]) - requested[i]).powi(2))
+                        .sum::<f64>()
+                };
+                distance(*a)
+                    .total_cmp(&distance(*b))
+                    .then_with(|| (b[0] + b[1]).cmp(&(a[0] + a[1])))
+            })
     }
 
     pub fn setting(&self, key: &str) -> Option<&Setting> {

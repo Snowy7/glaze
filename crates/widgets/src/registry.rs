@@ -128,6 +128,30 @@ pub fn builtins() -> Registry {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_native_view_declares_sizes_and_weather_can_show_a_full_forecast() {
+        for installed in super::builtins().widgets.values() {
+            let manifest = &installed.manifest;
+            assert!(!manifest.size.allowed.is_empty(), "{}", manifest.id);
+            assert!(manifest.size.allowed.contains(&manifest.size.default));
+            for size in &manifest.size.allowed {
+                assert_eq!(manifest.fit_size(size.map(f64::from), *size), Some(*size));
+            }
+        }
+        let registry = super::builtins();
+        let weather = &registry.get("weather").unwrap().manifest;
+        for size in [[2, 2], [4, 2], [4, 4], [4, 5], [5, 5], [5, 6]] {
+            assert_eq!(weather.clamp_size(size), size);
+        }
+        let timer = &registry.get("timer").unwrap().manifest;
+        assert_eq!(
+            timer.clamp_size([4, 3]),
+            [4, 4],
+            "an undeclared intermediate size is never persisted"
+        );
+        assert_eq!(weather.fit_size([5.0, 6.0], [4, 5]), Some([4, 5]));
+        assert_eq!(weather.fit_size([2.0, 2.0], [1, 1]), None);
+    }
     use super::*;
     #[test]
     fn every_builtin_schema_and_replacement_survives_without_html() {
