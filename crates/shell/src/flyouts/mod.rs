@@ -403,6 +403,10 @@ impl Lanes {
 const LINGER: Duration = Duration::from_secs(5);
 /// The open motion: about 0.3 s, a hint of overshoot.
 const OPEN: Spring = Spring::new(1.0, 420.0, 36.0);
+/// On glass: how long the content waits for the engine's glass (its usual "open to glass"),
+/// and the engine's fade-in, which the content's fade follows (wallpaper `overlay::window::FADE`).
+const GLASS_DELAY: Duration = Duration::from_millis(90);
+const GLASS_FADE: Duration = Duration::from_millis(300);
 
 /// The open flyout.
 struct Open {
@@ -419,6 +423,8 @@ struct Open {
     below: bool,
     /// Open progress, 0 to 1, while it moves.
     motion: Option<Tween>,
+    /// When its motion started (the fade follows the glass from there).
+    opened_at: Instant,
     hover: Option<HitId>,
     pressed: Option<HitId>,
     focus: Option<HitId>,
@@ -854,6 +860,7 @@ impl Flyouts {
             size: (0, 0),
             below: center_y < monitor_mid,
             motion: None,
+            opened_at: Instant::now(),
             hover: None,
             pressed: None,
             focus: None,
@@ -876,6 +883,7 @@ impl Flyouts {
         let Some(open) = &mut self.open else { return };
         // Shown at its first frame of motion, then focused (keys, and a click elsewhere closes).
         open.motion = Some(Tween::new(0.0, 1.0, OPEN, Instant::now()));
+        open.opened_at = Instant::now();
         self.animate(Instant::now());
         self.surface.show();
         let shown = started.elapsed();
@@ -1008,16 +1016,19 @@ impl Flyouts {
             return;
         };
         let p = motion.value(now);
-        // On glass, the content fades in with its glass: the engine's glass shows some 25-60 ms
-        // after the window and fades in over 300 ms, so content shown at once would sit over the
-        // bare app behind it first (a flash). A drawn fill is visible from the first frame.
-        let alpha = if mypaper_ui::glass::style().is_some() {
-            (p - 0.12) * 1.3
+        // On glass, the content fades in with its glass, on the engine's own curve: its glass
+        // shows some 25-110 ms after the window (it must be shown, at alpha 0, to get one) and
+        // fades in over 300 ms, ease-out. Content shown at once would sit over the bare app
+        // behind it first (a flash). A drawn fill is visible from the first frame.
+        let since = now.saturating_duration_since(open.opened_at);
+        let (alpha, fading) = if mypaper_ui::glass::style().is_some() {
+            let x = (since.saturating_sub(GLASS_DELAY).as_secs_f32() / GLASS_FADE.as_secs_f32())
+                .clamp(0.0, 1.0);
+            (1.0 - (1.0 - x).powi(3), x < 1.0)
         } else {
-            0.45 + p * 0.8
-        }
-        .clamp(0.0, 1.0);
-        if motion.done(now) {
+            ((0.45 + p * 0.8).clamp(0.0, 1.0), false)
+        };
+        if motion.done(now) && !fading {
             open.motion = None;
         }
         let at = position(open, now);
