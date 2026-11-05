@@ -134,6 +134,24 @@ pub enum View {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
     },
+    /// A value above its caption, matching the native integration summaries.
+    Metric {
+        value: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        color: Option<Tone>,
+        /// Fixed column width when used in a row; otherwise shares the available width.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        width: Option<f32>,
+    },
+    /// A compact action with an accessible label and a disabled state.
+    IconButton {
+        icon: String,
+        label: String,
+        action: String,
+        #[serde(default = "enabled_by_default")]
+        enabled: bool,
+    },
     Ring {
         fraction: f32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -190,6 +208,8 @@ pub enum View {
     #[serde(other)]
     Unknown,
 }
+
+fn enabled_by_default() -> bool { true }
 
 /// What a face shows: the body tree plus the chrome's footer caption.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

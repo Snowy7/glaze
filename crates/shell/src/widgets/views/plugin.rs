@@ -45,7 +45,7 @@ fn collect(view: &View, out: &mut Vec<Hit>) {
             children.iter().for_each(|c| collect(c, out))
         }
         View::Card { child, .. } => collect(child, out),
-        View::Button { action, .. } => out.push(Hit::Action(action.clone())),
+        View::Button { action, .. } | View::IconButton { action, .. } => out.push(Hit::Action(action.clone())),
         View::Field { action, .. } => out.push(Hit::Field(action.clone())),
         View::ListRow { action: Some(action), .. } => out.push(Hit::Action(action.clone())),
         _ => {}
@@ -212,6 +212,8 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
         View::Stat { detail, .. } => {
             f.line(TextRole::Caption) + f.line(TextRole::Title2) + detail.as_ref().map_or(0.0, |_| f.line(TextRole::Caption))
         }
+        View::Metric { .. } => f.px(36.0) + f.line(TextRole::Caption),
+        View::IconButton { .. } => f.px(28.0),
         View::Ring { .. } => f.px(48.0),
         View::LimitBar { .. } => f.px(22.0),
         View::SegmentedBar { .. } => f.px(8.0),
@@ -250,6 +252,8 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             let natural = |f: &mut Frame<'_>, c: &View| match c {
                 View::Icon { size, .. } => Some(f.px(size.unwrap_or(16.0))),
                 View::Button { label, icon: i, .. } => Some(f.button_size(label, i.is_some()).0),
+                View::IconButton { .. } => Some(f.px(28.0)),
+                View::Metric { width: Some(width), .. } => Some(f.px(*width)),
                 View::Spacer => None,
                 _ => None,
             };
@@ -346,6 +350,22 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             if let Some(detail) = detail {
                 f.text_in(rest, detail, TextRole::Caption, f.theme.color.tertiary, Align::Start);
             }
+        }
+        View::Metric { value, label, color, .. } => {
+            let (number, caption) = rect.take_top(f.px(35.0), f.px(1.0));
+            let ink = tone(f, color.as_ref(), f.theme.color.label);
+            f.text_in(number, value, TextRole::LargeTitle, ink, Align::Start);
+            f.text_in(caption, label, TextRole::Caption, f.theme.color.secondary, Align::Start);
+        }
+        View::IconButton { icon: name, label, enabled, .. } => {
+            let id = take_hit();
+            let control = rect.place(f.px(28.0), f.px(28.0), Align::Center, Align::Center);
+            let radius = control.width() / 2.0;
+            f.wash(id, control, radius, *enabled);
+            let ink = if *enabled { f.theme.color.label } else { f.theme.color.quaternary };
+            f.icon(control, icon(name), 16.0, ink);
+            f.focus_ring(id, control, radius);
+            f.hit(id, control, mypaper_ui::Role::Button, label, *enabled, None);
         }
         View::Ring { fraction, label, color } => {
             let radius = rect.height().min(rect.width()) / 2.0 - f.px(3.0);
