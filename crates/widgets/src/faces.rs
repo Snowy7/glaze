@@ -19,6 +19,7 @@ pub struct FaceMove {
 
 /// Each port adds its own rows; the first matching row wins.
 pub const MOVED: &[FaceMove] = &[
+    FaceMove { widget: "docker", variant: None, face: "docker--containers" },
     FaceMove { widget: "tailscale", variant: None, face: "tailscale--connection" },];
 
 /// The face an instance of `widget` with `settings` moves to, if a row matches.
