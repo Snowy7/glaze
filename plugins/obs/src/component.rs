@@ -96,6 +96,9 @@ impl Plugin for Obs {
                         else { self.fail("Couldn't save the OBS password"); }
                     }
                 } else if a.action == "refresh" { self.stop(); self.connect(); }
+                else if a.action == "scene.select" {
+                    if let Some(name) = a.value && let Some(message) = self.connection.action(obs::Action::SwitchScene(name), now()) { self.send(vec![message]); }
+                }
                 else if let Some(action) = faces::action(&a.action, self.snapshot.data.as_ref()) && let Some(message) = self.connection.action(action, now()) { self.send(vec![message]); }
             }
             Event::Socket(websocket::SocketEvent::Message((id, websocket::Message::Text(text)))) if self.socket == Some(id) => {

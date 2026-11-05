@@ -54,6 +54,46 @@ fn obs_component_uses_scoped_websocket_and_renders_offline_without_controls() {
     assert!(memory <= 8 * 1024 * 1024);
     instance.event(&Event::Close("obs-fixture".into())).unwrap();
     drop(instance);
+    drop(component);
     drop(runtime);
+    std::fs::remove_dir_all(&scratch).unwrap();
+}
+
+#[test]
+fn obs_closed_server_shows_clean_empty_state_through_the_host() {
+    use crate::host::Host;
+    use mypaper_plugin_api::wire::{self, HelperMsg, HostMsg};
+    use std::{net::TcpListener, sync::mpsc, time::{Duration, Instant}};
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let scratch = std::env::temp_dir().join(format!("mypaper-obs-closed-{}", std::process::id()));
+    let runtime = Runtime::new(scratch.join("cache"), scratch.join("data")).unwrap();
+    let (tx, rx) = mpsc::channel();
+    let mut host = Host::new(runtime, vec![], tx);
+    host.on_host(HostMsg::Open {
+        plugin: "obs".into(), dir: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/obs").to_string_lossy().into_owned(),
+        instance: "closed-obs".into(), face: "controls".into(), size: mypaper_plugin_api::SizeClass::Medium,
+        settings: json!({"port":port}).to_string(),
+    }, Instant::now());
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut offline = false;
+    while Instant::now() < deadline && !offline {
+        if let Ok(input) = rx.recv_timeout(Duration::from_millis(50)) { host.on_input(input, Instant::now()); }
+        host.tick(Instant::now());
+        let bytes = std::mem::take(host.out());
+        let mut bytes = bytes.as_slice();
+        while let Some(frame) = wire::read::<HelperMsg>(&mut bytes).unwrap() {
+            if let HelperMsg::View { face, .. } = frame {
+                let face = String::from_utf8(face).unwrap();
+                offline |= face.contains("OBS isn't running");
+                if offline { assert!(!face.contains("record.start")); }
+            }
+        }
+    }
+    assert!(offline, "a refused local connection must show the clean offline face");
+    println!("OBS disconnected linear memory: {} bytes", host.memory("obs").unwrap());
+    host.on_host(HostMsg::Shutdown, Instant::now());
+    drop(host);
     std::fs::remove_dir_all(&scratch).unwrap();
 }

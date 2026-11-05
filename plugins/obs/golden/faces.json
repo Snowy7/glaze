@@ -81,6 +81,26 @@
             "kind": "row"
           },
           {
+            "action": "scene.select",
+            "kind": "select",
+            "label": "Scene",
+            "options": [
+              {
+                "label": "Desktop + camera",
+                "value": "Desktop + camera"
+              },
+              {
+                "label": "Camera",
+                "value": "Camera"
+              },
+              {
+                "label": "Be right back",
+                "value": "Be right back"
+              }
+            ],
+            "selected": "Desktop + camera"
+          },
+          {
             "action": "scene:0",
             "icon": "layers",
             "kind": "list_row",
@@ -92,12 +112,6 @@
             "icon": "layers",
             "kind": "list_row",
             "title": "Camera"
-          },
-          {
-            "action": "scene:2",
-            "icon": "layers",
-            "kind": "list_row",
-            "title": "Be right back"
           }
         ],
         "gap": 6.0,
@@ -133,10 +147,24 @@
               {
                 "children": [
                   {
-                    "align": "start",
-                    "kind": "text",
-                    "role": "headline",
-                    "text": "Desktop + camera"
+                    "action": "scene.select",
+                    "kind": "select",
+                    "label": "Scene",
+                    "options": [
+                      {
+                        "label": "Desktop + camera",
+                        "value": "Desktop + camera"
+                      },
+                      {
+                        "label": "Camera",
+                        "value": "Camera"
+                      },
+                      {
+                        "label": "Be right back",
+                        "value": "Be right back"
+                      }
+                    ],
+                    "selected": "Desktop + camera"
                   },
                   {
                     "align": "start",

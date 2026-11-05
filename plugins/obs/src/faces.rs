@@ -24,6 +24,11 @@ fn stats(state: &obs::Stats) -> String {
     let dropped = state.dropped_frames.map(|v| format!("{v} dropped"));
     [cpu, bitrate, dropped].into_iter().flatten().collect::<Vec<_>>().join(" · ")
 }
+fn scenes(state: &obs::Snapshot) -> View {
+    View::Select { label: "Scene".into(), action: "scene.select".into(),
+        options: state.scenes.iter().map(|name| mypaper_plugin_sdk::view::SelectOption { label: name.clone(), value: name.clone() }).collect(),
+        selected: Some(state.scene.clone()) }
+}
 
 /// Three bodies, using the native fixture's clocks, scene list and microphone controls.
 pub fn face(size: SizeClass, snapshot: &Snapshot, now: i64) -> Face {
@@ -46,7 +51,7 @@ pub fn face(size: SizeClass, snapshot: &Snapshot, now: i64) -> Face {
         SizeClass::Small => vec![timer(label, clock, state.recording || state.streaming, at)],
         SizeClass::Medium => vec![View::row([
             timer(label, clock, state.recording || state.streaming, at),
-            stack(vec![View::text(&state.scene, Role::Headline),
+            stack(vec![scenes(state),
                 View::tinted(if state.streaming { format!("Live · {}", duration(state.stream_clock.elapsed(at))) } else { "Stream offline".into() }, Role::Caption, Tone::Secondary)], 2.0),
         ])],
         SizeClass::Large => vec![View::row([
@@ -68,7 +73,8 @@ pub fn face(size: SizeClass, snapshot: &Snapshot, now: i64) -> Face {
         }
     }
     if size == SizeClass::Large {
-        for (index, name) in state.scenes.iter().take(3).enumerate() {
+        if live { children.push(scenes(state)); }
+        for (index, name) in state.scenes.iter().take(2).enumerate() {
             children.push(View::ListRow { title: name.clone(), detail: None, icon: Some("layers".into()),
                 trailing: (name == &state.scene).then(|| "✓".into()),
                 action: live.then(|| format!("scene:{index}")) });
