@@ -1723,6 +1723,16 @@ mod tests {
         for dir in folders("plugins", PLUGIN_MANIFEST) {
             PluginManifest::load(&dir).unwrap();
         }
-        assert_eq!(widgets.widgets.len(), 23);
+        // Every manifest in the catalog folder made it into the registry.
+        for entry in std::fs::read_dir(repo.join("crates/widgets/src/catalog")).unwrap().flatten() {
+            let path = entry.path();
+            if path.extension().is_none_or(|x| x != "json") {
+                continue;
+            }
+            let json: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let id = json["id"].as_str().unwrap_or_default();
+            assert!(widgets.widgets.contains_key(id), "{} is not registered", path.display());
+        }
     }
 }
