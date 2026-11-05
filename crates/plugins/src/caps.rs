@@ -477,6 +477,14 @@ pub fn notify(plugin_name: &str, title: &str, body: &str) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     #[test]
+    fn scoped_credentials_keep_legacy_keys_without_cross_plugin_access() {
+        let target = |plugin, key| super::credential(plugin,key).map(|v| String::from_utf16_lossy(&v));
+        assert_eq!(target("grok","grok/morning").unwrap(), "mypaper/integrations/grok/morning\0");
+        assert_eq!(target("other","grok/morning").unwrap(), "mypaper/integrations/plugin/other/grok/morning\0");
+        for invalid in ["../other","grok//key","grok/../key","/key","key/"] { assert!(target("grok",invalid).is_err()); }
+        for invalid in ["../Grok Bot", "Grok Bot/secret", "Grok Bot\\secret", ""] { assert!(super::desktop_status(invalid).is_err()); }
+    }
+    #[test]
     fn toasts_escape_text_and_attribute_the_plugin() {
         let xml = super::toast_xml("T3 <Code>", "Build & ship", "done \"now\"");
         assert!(xml.contains("<text>Build &amp; ship</text>") && xml.contains("done &quot;now&quot;"), "{xml}");

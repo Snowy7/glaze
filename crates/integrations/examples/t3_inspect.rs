@@ -21,7 +21,7 @@ fn main() -> Result<()> {
         if std::env::args().nth(1).as_deref()==Some("--features") {
             let metadata=mypaper_integrations::t3_client::metadata("").await?;
             let permissions=mypaper_integrations::t3_client::permissions("").await?;
-            println!("{}",json!({"omitOlderSettled":metadata.shell_older_settled,"environmentKnown":!metadata.environment.environment_id.is_empty(),"modelCount":metadata.providers.iter().map(|p|p.models.len()).sum::<usize>(),"permissions":permissions,"grok":format!("{:?}",mypaper_integrations::grok::discover())}));
+            println!("{}",json!({"omitOlderSettled":metadata.shell_older_settled,"environmentKnown":!metadata.environment.environment_id.is_empty(),"modelCount":metadata.providers.iter().map(|p|p.models.len()).sum::<usize>(),"permissions":permissions}));
             return Ok(());
         }
         let secret=credentials::read("t3")?;
