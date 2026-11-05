@@ -624,3 +624,79 @@ mod probe {
         print(&snapshot.items, 0);
     }
 }
+
+#[cfg(test)]
+mod live {
+    use super::super::items::{self, Sources};
+    use mypaper_ui::{Entry, Tokens, Ui, icons, menu};
+
+    /// `cargo test -p mypaper-shell shell_menu::live -- --ignored --nocapture`: draws this
+    /// machine's full desktop menu (its shell extensions, their icons, the desktop's state) and
+    /// its View, Sort by and New submenus to `%TEMP%\mypaper-desktop-menu-*.png`, as the shell
+    /// draws them, and times building it.
+    #[test]
+    #[ignore]
+    fn draw_this_machines_desktop_menu() {
+        let shell = super::ShellMenu::start(16).unwrap();
+        let started = std::time::Instant::now();
+        while shell.snapshot().is_none() && started.elapsed().as_secs() < 10 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let snapshot = shell.snapshot().expect("a snapshot");
+        let exe = std::path::Path::new(r"C:\mypaper-targets\main\release\mypaper-studio.exe");
+        let mypaper = super::file_icon(exe, 16);
+        let state = super::super::view_state();
+        let mut ui = Ui::new().unwrap();
+        let theme = mypaper_ui::Theme::new(
+            mypaper_ui::Style::Liquid,
+            mypaper_ui::Scheme::Dark,
+            mypaper_ui::theme::SYSTEM_BLUE,
+        );
+        let tokens = Tokens {
+            icons: icons::system_family(&ui.text),
+            glass: None,
+            ..theme.tokens()
+        };
+        let built = std::time::Instant::now();
+        let root = items::build_with(
+            &mypaper_config::DesktopMenu::default(),
+            state,
+            Sources {
+                shell: Some(&snapshot),
+                mypaper: mypaper.as_ref(),
+            },
+        );
+        let sub = |label: &str| {
+            root.iter()
+                .find(|i| i.label() == label)
+                .and_then(|i| match i.plain() {
+                    Entry::Submenu { items, .. } => Some(items.clone()),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        let panels = [
+            ("root", root.clone(), Some(2)),
+            ("view", sub("View"), None),
+            ("sort", sub("Sort by"), None),
+            ("new", sub("New"), None),
+        ];
+        for (name, items, hover) in panels {
+            let layout = menu::layout(&items, &tokens, 1.0, &mut ui.text);
+            let list = menu::view(&items, &layout, hover, &tokens);
+            let edge = tokens.menu.shadow.ceil() as u32;
+            let (w, h) = layout.size();
+            let image =
+                mypaper_ui::render(&mut ui, &list, w as u32 + 2 * edge, h as u32 + 2 * edge)
+                    .unwrap();
+            let path = std::env::temp_dir().join(format!("mypaper-desktop-menu-{name}.png"));
+            mypaper_ui::golden::write(&image, &path).unwrap();
+            println!("{}", path.display());
+        }
+        println!(
+            "shell items built (worker, off the UI thread) in {:?}; items + layout + 4 panels drawn in {:?}",
+            snapshot.took,
+            built.elapsed()
+        );
+    }
+}
