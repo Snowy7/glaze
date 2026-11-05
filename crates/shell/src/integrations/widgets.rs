@@ -77,7 +77,6 @@ pub fn provider(kind: Widget) -> Option<Provider> {
         Widget::Calendar => Some(Provider::Calendar),
         Widget::T3 => Some(Provider::T3),
         Widget::Obs => Some(Provider::Obs),
-        Widget::Docker => Some(Provider::Docker),
         _ => None,
     }
 }
@@ -214,14 +213,7 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
     }
     if hit == REFRESH {
         if let Some(lease) = &state.lease {
-            if widget.kind == Widget::Docker && state.actionable() {
-                state.notice = lease
-                    .action(Action::DockerMetrics)
-                    .err()
-                    .map(|error| error.to_string());
-            } else {
-                lease.retry();
-            }
+            lease.retry();
         } else {
             state.generation = None;
         }
