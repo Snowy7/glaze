@@ -7,7 +7,6 @@ pub mod calendar_oauth;
 pub mod calendar_setup;
 pub mod discord;
 pub mod credentials;
-pub mod docker;
 pub mod launcher;
 pub mod media;
 pub mod notifications;
@@ -35,17 +34,15 @@ pub enum Provider {
     Media,
     T3,
     Obs,
-    Docker,
     Calendar,
     Discord,
 }
 impl Provider {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 6] = [
         Self::Notifications,
         Self::Media,
         Self::T3,
         Self::Obs,
-        Self::Docker,
         Self::Calendar,
         Self::Discord,
     ];
@@ -55,7 +52,6 @@ impl Provider {
             Self::Media => c.media.enabled,
             Self::T3 => c.t3.enabled,
             Self::Obs => c.obs.enabled,
-            Self::Docker => c.docker.enabled,
             Self::Calendar => c.calendar.enabled,
             Self::Discord => c.discord.enabled,
         }
@@ -76,7 +72,6 @@ pub enum Data {
     Media(media::Snapshot),
     T3(t3::Snapshot),
     Obs(obs::Snapshot),
-    Docker(docker::Snapshot),
     Calendar(calendar::Snapshot),
     Discord(discord::Snapshot),
 }
@@ -106,12 +101,6 @@ pub enum Action {
     RefreshNotifications,
     Media(media::Action),
     Obs(obs::Action),
-    Docker {
-        id: String,
-        start: bool,
-    },
-    /// One bounded stats sample after an explicit widget refresh; never a stats stream.
-    DockerMetrics,
 }
 
 #[derive(Default)]
@@ -254,7 +243,6 @@ impl Hub {
                             Provider::Media => media::run(&publish, &mut commands).await,
                             Provider::T3 => t3::run(&config.t3, &publish).await,
                             Provider::Obs => obs::run(&config.obs, &publish, &mut commands).await,
-                            Provider::Docker => docker::run(&config.docker, &publish, &mut commands).await,
                             Provider::Calendar => calendar::run(&config.calendar, &publish, &mut commands).await,
                             Provider::Discord => discord::run(&config.discord, &publish, &mut commands).await,
                         }
@@ -316,8 +304,6 @@ impl Lease {
                     Action::Dismiss(_) | Action::RefreshNotifications
                 ) | (Provider::Media, Action::Media(_))
                     | (Provider::Obs, Action::Obs(_))
-                    | (Provider::Docker, Action::Docker { .. })
-                    | (Provider::Docker, Action::DockerMetrics)
                     | (Provider::Discord, Action::DiscordVoice { .. })
             ),
             "action does not belong to this provider"
