@@ -1,7 +1,7 @@
 //! Render the actual dispatch at every dense size and inspect representative size sheets.
 use super::*;
 use crate::widgets::{time::Stamp, views};
-use mypaper_integrations::{Data, Snapshot, calendar, discord, notifications};
+use mypaper_integrations::{Data, Snapshot, calendar};
 use mypaper_ui::{DisplayList, Op, Tokens, Ui, golden, render};
 use mypaper_widgets::{
     custom::{Definition, Template},
@@ -46,59 +46,6 @@ fn fixture(id: &str) -> Model {
             })),
             ..Default::default()
         };
-    } else if id == "discord" {
-        m.integration.discord.notifications_enabled = true;
-        m.integration.discord.cards = vec![
-            notifications::Card {
-                id: 1,
-                app_id: "com.squirrel.Discord.Discord".into(),
-                app: "Discord".into(),
-                title: "Ada · Design room".into(),
-                body: "The native widget layouts are ready.".into(),
-                at: 0,
-            },
-            notifications::Card {
-                id: 2,
-                app_id: "com.squirrel.Discord.Discord".into(),
-                app: "Discord".into(),
-                title: "Lin · Desktop".into(),
-                body: "I left notes on the calendar.".into(),
-                at: 0,
-            },
-        ];
-        m.integration.snapshot = Snapshot {
-            availability: Availability::Live,
-            data: Some(Data::Discord(discord::Snapshot {
-                voice_status: "Connected to Discord RPC".into(),
-                call: Some(discord::Call {
-                    channel_id: "42".into(),
-                    channel: "Design room".into(),
-                    participants: vec![
-                        discord::Participant {
-                            id: "1".into(),
-                            name: "Alex".into(),
-                            speaking: true,
-                            ..Default::default()
-                        },
-                        discord::Participant {
-                            id: "2".into(),
-                            name: "Ada".into(),
-                            muted: true,
-                            ..Default::default()
-                        },
-                        discord::Participant {
-                            id: "3".into(),
-                            name: "Lin".into(),
-                            ..Default::default()
-                        },
-                    ],
-                    can_control: true,
-                    ..Default::default()
-                }),
-                ..Default::default()
-            })),
-            ..Default::default()
-        };
     } else {
         m.integration.custom.definition =
             Some(Definition::parse(mypaper_widgets::custom::EXAMPLES[0].1).unwrap());
@@ -134,7 +81,7 @@ fn add(ui: &mut Ui, sheet: &mut DisplayList, m: &Model, pixels: (u32, u32), x: f
 #[test]
 fn personal_widgets_dense_sizes_and_size_sheets() {
     let mut ui = Ui::new().unwrap();
-    for id in ["discord", "calendar", "custom-fixture"] {
+    for id in ["calendar", "custom-fixture"] {
         let min = if id == "custom-fixture" {
             [2, 2]
         } else if id == "calendar" {
@@ -162,19 +109,6 @@ fn personal_widgets_dense_sizes_and_size_sheets() {
                         hit.label,
                         hit.rect
                     );
-                }
-                if id == "discord" {
-                    let mut call = fixture(id);
-                    call.integration.discord.voice = true;
-                    let list = draw(&mut ui, &call, pixels, 1.0);
-                    for hit in &list.hits {
-                        assert!(
-                            hit.rect.top >= 0.0 && hit.rect.bottom <= pixels.1 as f32,
-                            "{id} call {w}×{h}: {} {:?}",
-                            hit.label,
-                            hit.rect
-                        );
-                    }
                 }
                 if id == "custom-fixture" {
                     for template in [
@@ -233,9 +167,6 @@ fn personal_widgets_dense_sizes_and_size_sheets() {
         });
         for (pixels, x) in [((180, 180), 20.0), ((360, 225), 220.0), ((450, 360), 600.0)] {
             let mut m = fixture(id);
-            if id == "discord" && pixels.0 == 450 {
-                m.integration.discord.voice = true;
-            }
             add(&mut ui, &mut sheet, &m, pixels, x, 20.0);
         }
         if id == "calendar" {
@@ -245,26 +176,6 @@ fn personal_widgets_dense_sizes_and_size_sheets() {
             m.integration.calendar.show_sources = false;
             m.placed.settings.insert("variant".into(), json!("agenda"));
             add(&mut ui, &mut sheet, &m, (360, 300), 410.0, 410.0);
-        } else if id == "discord" {
-            let mut m = fixture(id);
-            m.integration.discord.setup = true;
-            add(&mut ui, &mut sheet, &m, (360, 300), 20.0, 410.0);
-            m.integration.discord.setup = false;
-            m.integration.discord.voice = true;
-            add(&mut ui, &mut sheet, &m, (180, 180), 410.0, 410.0);
-            m.integration.discord.voice = false;
-            m.integration.discord.can_send = true;
-            m.integration.discord.channels = vec!["42".into()];
-            if let Some(Data::Discord(s)) = &mut m.integration.snapshot.data {
-                s.messages = vec![discord::Message {
-                    id: "100".into(),
-                    channel_id: "42".into(),
-                    author: "Ada".into(),
-                    content: "Ready for the next iteration.".into(),
-                    timestamp: String::new(),
-                }];
-            }
-            add(&mut ui, &mut sheet, &m, (360, 300), 700.0, 410.0);
         } else {
             for (template, x) in [
                 (Template::Stat, 20.0),

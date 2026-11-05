@@ -9,6 +9,7 @@ mod metrics;
 pub(crate) mod model;
 mod plugin_faces;
 mod plugin_notifications;
+mod discord_migration;
 #[cfg(test)]
 mod tests;
 pub(crate) mod time;
@@ -1850,7 +1851,7 @@ impl Widgets {
             self.plugin_action(ui, id, hit);
             return;
         }
-        if matches!(m.kind, Widget::T3 | Widget::Discord) && hit == view::FIELD {
+        if matches!(m.kind, Widget::T3) && hit == view::FIELD {
             self.open_field(id, None);
             return;
         }
@@ -2174,11 +2175,6 @@ impl Widgets {
         };
         if m.kind == Widget::Plugin {
             self.submit_plugin_field(id, text);
-            return;
-        }
-        if m.kind == Widget::Discord {
-            crate::integrations::discord::action(m, crate::integrations::discord::SEND);
-            m.dirty = true;
             return;
         }
         if m.kind == Widget::T3 {
@@ -3856,7 +3852,7 @@ fn grid_for(layout: &Layout, monitor: &Monitor) -> Grid {
 /// the file as it was beside it (`widgets.json.faces`) before the first moved write.
 fn moved_faces(layout: &mut Layout, path: &std::path::Path) -> bool {
     use mypaper_widgets::faces;
-    let moved = faces::migrate(layout, faces::MOVED, faces::face_installed);
+    let moved = discord_migration::migrate(layout) | faces::migrate(layout, faces::MOVED, faces::face_installed);
     if moved && let Ok(bytes) = std::fs::read(path) {
         let _ = files::backup_tagged(path, "faces", &bytes);
     }

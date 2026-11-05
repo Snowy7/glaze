@@ -123,9 +123,6 @@ pub fn builtins() -> Registry {
     let manifest = WidgetManifest::parse(include_str!("catalog/weather.json"), "weather")
         .expect("built-in schema");
     widgets.insert("weather".into(), Installed { manifest });
-    let manifest = WidgetManifest::parse(include_str!("catalog/discord.json"), "discord")
-        .expect("built-in schema");
-    widgets.insert("discord".into(), Installed { manifest });
     let manifest =
         WidgetManifest::parse(include_str!("catalog/t3.json"), "t3").expect("built-in schema");
     widgets.insert("t3".into(), Installed { manifest });

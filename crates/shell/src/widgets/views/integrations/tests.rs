@@ -10,7 +10,7 @@ use serde_json::{Map, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
 const NOW: i64 = 1_793_875_200_000;
-const IDS: &[&str] = &["discord", "t3"];
+const IDS: &[&str] = &["t3"];
 
 fn model(id: &str, size: [u32; 2]) -> Model {
     let placed = Placed {
@@ -196,7 +196,6 @@ fn sheet(ui: &mut Ui, id: &str) -> Image {
             _ => {
                 m.integration.snapshot.data = match id {
                     "t3" => Some(Data::T3(Default::default())),
-                    "discord" => Some(Data::Notifications(Default::default())),
                     _ => None,
                 };
             }
@@ -230,17 +229,6 @@ fn add_widget(
     });
 }
 
-#[test]
-fn stale_controls_are_disabled_and_discord_filters_exact_app_identity() {
-    let mut ui = Ui::new().unwrap();
-    let list = draw(&mut ui, &model("discord", [4, 4]), (360, 360), 1.0);
-    assert!(
-        !list
-            .ops
-            .iter()
-            .any(|op| matches!(op, Op::Text { text, .. } if text.contains("Never shown")))
-    );
-}
 
 /// The shared catalog test uses a plain initial model. Export just our six baselines without
 /// blessing another agent's widget images while they are editing the same checkout.
