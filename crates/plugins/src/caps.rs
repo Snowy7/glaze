@@ -116,7 +116,8 @@ fn credential(plugin: &str, key: &str) -> Result<Vec<u16>, String> {
         return Err("keys contain 1-96 character [A-Za-z0-9_-] segments".into());
     }
     // Scoped first-party keys preserve credentials entered in Studio before plugin migration.
-    let target = if key.starts_with(&format!("{plugin}/")) {
+    // A bare key equal to the plugin id is the old single credential (OBS's "obs" password).
+    let target = if key == plugin || key.starts_with(&format!("{plugin}/")) {
         format!("mypaper/integrations/{key}\0")
     } else {
         format!("mypaper/integrations/plugin/{plugin}/{key}\0")
