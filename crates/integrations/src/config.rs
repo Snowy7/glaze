@@ -199,7 +199,9 @@ impl Config {
                 "invalid routine id"
             );
             ensure!(ids.insert(&routine.id), "duplicate routine id");
-            super::launcher::routine_url(&routine.url)?;
+            let uri: hyper::Uri = routine.url.parse()?;
+            ensure!(uri.scheme_str() == Some("https") && uri.host().is_some(), "routine webhook must use HTTPS");
+            ensure!(uri.authority().is_some_and(|a| !a.as_str().contains('@')) && uri.query().is_none() && !routine.url.contains('#'), "webhook credentials belong in Credential Manager, not the URL");
         }
         for link in config.t3.thread_links.values() {
             ensure!(
