@@ -83,6 +83,7 @@ pub struct Services {
 
 pub struct Changes {
     pub data: bool,
+    pub stats: bool,
     pub config: bool,
     pub theme: bool,
     pub moved: bool,
@@ -310,18 +311,25 @@ impl Services {
             self.clock_due = Some(now + next_tick(self.seconds));
             changed = true;
         }
+        let mut stats_changed = false;
         if take_due(&mut self.stats_due, now)
             && let Some(s) = &mut self.sampler
         {
-            self.model.stats = Some(s.sample());
+            let stats = s.sample();
+            stats_changed = self
+                .model
+                .stats
+                .as_ref()
+                .is_none_or(|old| displayed_stats(old) != displayed_stats(&stats));
+            self.model.stats = Some(stats);
             self.stats_due = Some(now + Duration::from_secs(2));
-            changed = true;
         }
         if take_due(&mut self.custom_due, now) {
             self.custom_due = self.model.custom.tick(now);
         }
         Changes {
             data: changed,
+            stats: stats_changed,
             config,
             theme,
             moved: bits & hooks::MOVED != 0,
@@ -491,6 +499,38 @@ impl Services {
                     .collect()
             })
             .collect()
+    }
+}
+
+/// Match the integer percentages in the stats item, including formatting's rounding.
+fn displayed_stats(stats: &Stats) -> String {
+    let memory = 100.0 * stats.memory.used as f64 / stats.memory.total.max(1) as f64;
+    format!("CPU {:.0}%  RAM {memory:.0}%", stats.cpu)
+}
+
+#[cfg(test)]
+mod stats_tests {
+    use super::*;
+    use mypaper_bars::system::Memory;
+
+    #[test]
+    fn stats_invalidation_follows_the_rendered_integer_percentages() {
+        let mut stats = Stats {
+            cpu: 3.1,
+            memory: Memory {
+                used: 701,
+                total: 1000,
+            },
+        };
+        let before = displayed_stats(&stats);
+        stats.cpu = 3.4;
+        stats.memory.used = 704;
+        assert_eq!(before, displayed_stats(&stats));
+        stats.cpu = 3.6;
+        assert_ne!(before, displayed_stats(&stats));
+        stats.cpu = 3.1;
+        stats.memory.used = 706;
+        assert_ne!(before, displayed_stats(&stats));
     }
 }
 

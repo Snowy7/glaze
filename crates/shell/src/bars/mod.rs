@@ -441,6 +441,13 @@ impl Bars {
             self.update_items();
             self.dirty();
         }
+        if changes.stats {
+            for bar in &mut self.bars {
+                if bar.topics().contains(&providers::actions::Topic::Stats) {
+                    bar.dirty = true;
+                }
+            }
+        }
         at = tick_spent("items", at);
         if changes.data || changes.moved {
             let windows: Vec<_> = self

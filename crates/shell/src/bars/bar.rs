@@ -565,7 +565,7 @@ impl Bar {
                     .map(|h| h.rect.offset(-offset.x, -offset.y))
                     .collect(),
             );
-            if surface.present(
+            if surface.present_sparse(
                 ui,
                 (origin.0 + offset.x as i32, origin.1 + offset.y as i32),
                 size,
