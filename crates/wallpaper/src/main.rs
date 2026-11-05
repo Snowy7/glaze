@@ -27,6 +27,7 @@ mod lab;
 #[allow(dead_code)]
 mod overlay;
 mod palette;
+mod preview;
 mod snapshot;
 mod sources;
 mod timing;

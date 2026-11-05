@@ -7,7 +7,9 @@
 //! window messages. [`Menu`] is the first component built on it.
 
 mod a11y;
+pub mod app_window;
 pub mod calendar;
+pub mod controls;
 pub mod focus;
 pub mod geom;
 pub mod glass;
@@ -24,6 +26,7 @@ mod text;
 pub mod text_field;
 mod tokens;
 
+pub use app_window::{Chrome, Cursor, set_modal_hook};
 pub use geom::{PixelRect, Point, Rect, Rgba};
 pub use glass::{Glass, GlassMaterial};
 pub use menu::{Entry, Menu, Outcome, Screen, screen_at};

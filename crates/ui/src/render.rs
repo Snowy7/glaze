@@ -262,8 +262,26 @@ impl Canvas {
             t.BeginDraw();
             t.PushAxisAlignedClip(&d2d(clip), D2D1_ANTIALIAS_MODE_ALIASED);
             t.Clear(Some(&color(Rgba::TRANSPARENT)));
-            for op in list.ops.iter().filter(|op| op.bounds().intersects(&clip)) {
-                self.op(text, op);
+            // Clip markers always apply, so what they enclose stays inside them; an unbalanced
+            // list is closed at the end.
+            let mut pushed = 0usize;
+            for op in &list.ops {
+                match op {
+                    Op::Clip { rect } => {
+                        t.PushAxisAlignedClip(&d2d(*rect), D2D1_ANTIALIAS_MODE_ALIASED);
+                        pushed += 1;
+                    }
+                    Op::Unclip if pushed > 0 => {
+                        t.PopAxisAlignedClip();
+                        pushed -= 1;
+                    }
+                    Op::Unclip => {}
+                    op if op.bounds().intersects(&clip) => self.op(text, op),
+                    _ => {}
+                }
+            }
+            for _ in 0..pushed {
+                t.PopAxisAlignedClip();
             }
             t.PopAxisAlignedClip();
             t.EndDraw(None, None).context("drawing")?;
@@ -477,6 +495,8 @@ impl Canvas {
                         );
                     }
                 }
+                // Applied by `draw`, around the ops they enclose.
+                Op::Clip { .. } | Op::Unclip => {}
                 Op::Shadow {
                     rect,
                     radius,

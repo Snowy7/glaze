@@ -76,6 +76,8 @@ pub struct Engine {
     snapshot: Snapshot,
     /// Liquid glass under the widgets' (and bars') plates, when they ask for it.
     glass: GlassPass,
+    /// Studio's preview requests (D3): idle unless Studio asks.
+    preview: crate::preview::Preview,
     timing: Option<crate::timing::Timing>,
     renderer_config: EngineConfig,
     render_settings: RenderSettings,
@@ -145,6 +147,7 @@ impl Engine {
             backdrop,
             snapshot,
             glass,
+            preview: crate::preview::Preview::new(),
             timing,
             renderer_config,
             render_settings,
@@ -165,7 +168,9 @@ impl Engine {
 
     /// Named plate event plus the current writer's exit handle, both owned by GlassPass.
     pub fn glass_handles(&self) -> Vec<windows::Win32::Foundation::HANDLE> {
-        self.glass.wait_handles()
+        let mut handles = self.glass.wait_handles();
+        handles.extend(self.preview.handle());
+        handles
     }
 
     /// Follows `static_snapshot`: on, the theme's first frame becomes the Windows wallpaper;
@@ -306,6 +311,8 @@ impl Engine {
 
         self.sync_visibility();
         self.glass.reload();
+        let kept = self.screens.first().and_then(|s| s.kept.as_ref());
+        self.preview.serve(&self.gpu, kept.map(|k| &k.texture));
         for (index, screen) in self.screens.iter_mut().enumerate() {
             screen.dirty |= self.source.take_dirty(index);
             screen.glass_dirty |= self.glass.take_dirty(index);

@@ -272,108 +272,9 @@ impl Appearance {
     }
 }
 
-/// An sRGB color, written `"#rrggbb"` in theme files.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Color(pub [u8; 3]);
-
-impl<'de> Deserialize<'de> for Color {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        Color::parse(&text)
-            .ok_or_else(|| serde::de::Error::custom(format!("expected \"#rrggbb\", got {text:?}")))
-    }
-}
-
-impl Color {
-    pub fn parse(text: &str) -> Option<Self> {
-        let hex = text.strip_prefix('#').filter(|h| h.len() == 6)?;
-        let channel = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok();
-        Some(Self([channel(0)?, channel(2)?, channel(4)?]))
-    }
-
-    /// `"#rrggbb"`.
-    pub fn hex(self) -> String {
-        let [r, g, b] = self.0;
-        format!("#{r:02x}{g:02x}{b:02x}")
-    }
-}
-
-impl Serialize for Color {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.hex())
-    }
-}
-
-impl Serialize for Paint {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Paint::Auto => serializer.serialize_str("auto"),
-            Paint::Color(color) => color.serialize(serializer),
-        }
-    }
-}
-
-/// A color, or one derived from the wallpaper (`"auto"`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Paint {
-    /// Picked from the wallpaper's palette.
-    Auto,
-    Color(Color),
-}
-
-impl<'de> Deserialize<'de> for Paint {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        if text == "auto" {
-            return Ok(Paint::Auto);
-        }
-        Color::parse(&text).map(Paint::Color).ok_or_else(|| {
-            serde::de::Error::custom(format!("expected \"auto\" or \"#rrggbb\", got {text:?}"))
-        })
-    }
-}
-
-/// Native styling for windows (DWM) and the system accent. Every field is
-/// optional: unset means "leave Windows' own setting alone".
-#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct WindowsStyle {
-    /// System accent color (taskbar, Start, highlights).
-    pub accent: Option<Paint>,
-    /// Window border color.
-    pub border: Option<Paint>,
-    /// Title bar background color.
-    pub caption: Option<Color>,
-    /// Title bar text color.
-    pub caption_text: Option<Color>,
-    pub corners: Option<Corners>,
-    pub backdrop: Option<Backdrop>,
-    /// Force dark (`true`) or light (`false`) mode for apps and the system.
-    pub dark_mode: Option<bool>,
-    /// A mouse cursor set: the name of a built-in or user set (`mypaper-dark`,
-    /// `mypaper-light`, a folder under `%APPDATA%\mypaper\cursors`), or a
-    /// folder of `.cur`/`.ani` files (absolute, or relative to the theme).
-    pub cursors: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Corners {
-    Default,
-    Round,
-    Small,
-    Square,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Backdrop {
-    Auto,
-    None,
-    Mica,
-    Acrylic,
-    Tabbed,
-}
+// Colours and Windows styling live in `mypaper_config` (the user's look layers over a
+// theme's `windows` section, D2); re-exported so themes keep their names.
+pub use mypaper_config::{Backdrop, Color, Corners, Paint, WindowsStyle};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -698,6 +599,40 @@ fn check_scale(scale: f32) -> Result<()> {
         bail!("wallpaper.scale must be between 0.25 and 1, got {scale}");
     }
     Ok(())
+}
+
+/// D2's one-time migration: Windows styling used to live only in a theme file, so a user who
+/// styled Windows did it in their own copy of a theme. If the user's look has no Windows layer
+/// yet and the active theme is one of their own with a `windows` section, that section becomes
+/// their layer (`look.windows`). Nothing on screen changes; the theme file is left as it is
+/// (now the layer below). Returns whether `config` changed.
+pub fn migrate_windows(config: &mut mypaper_config::Config) -> bool {
+    match mypaper_config::user_themes_dir() {
+        Ok(root) => migrate_windows_in(config, &root),
+        Err(_) => false,
+    }
+}
+
+/// [`migrate_windows`] with the user themes folder given.
+fn migrate_windows_in(config: &mut mypaper_config::Config, user_root: &Path) -> bool {
+    if !config.look.windows.is_empty() {
+        return false;
+    }
+    let Ok(dir) = locate(Some(&config.theme)) else {
+        return false;
+    };
+    let canonical = |p: &Path| std::fs::canonicalize(p).ok();
+    let own = canonical(&dir).and_then(|d| d.parent().map(Path::to_path_buf));
+    if own.is_none() || own != canonical(user_root) {
+        return false;
+    }
+    match LoadedTheme::load(&dir).map(|t| t.theme.windows) {
+        Ok(Some(style)) if style != WindowsStyle::default() => {
+            config.look.windows = mypaper_config::look::WindowsLayer::adopt(&style);
+            true
+        }
+        _ => false,
+    }
 }
 
 /// Relative paths may not climb out of the theme folder.
@@ -1174,5 +1109,35 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_user_themes_windows_styling_becomes_the_users_once() {
+        let root = std::env::temp_dir().join(format!("mypaper-theme-d2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mine = root.join("mine");
+        std::fs::create_dir_all(&mine).unwrap();
+        std::fs::write(
+            mine.join(MANIFEST),
+            r##"{ "name": "Mine", "wallpaper": { "kind": "image", "source": "a.png" },
+                 "windows": { "corners": "square", "dark_mode": true } }"##,
+        )
+        .unwrap();
+        let mut config = mypaper_config::Config {
+            theme: mine.display().to_string(),
+            ..Default::default()
+        };
+        assert!(migrate_windows_in(&mut config, &root));
+        let style = config.look.windows_style(None).unwrap();
+        assert_eq!(style.corners, Some(Corners::Square));
+        assert_eq!(style.dark_mode, Some(true));
+        assert!(!migrate_windows_in(&mut config, &root), "only once");
+        // A theme outside the user's folder (a built-in) is never adopted.
+        let mut builtin = mypaper_config::Config {
+            theme: mine.display().to_string(),
+            ..Default::default()
+        };
+        assert!(!migrate_windows_in(&mut builtin, &root.join("elsewhere")));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

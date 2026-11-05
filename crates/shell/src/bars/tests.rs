@@ -6,13 +6,31 @@ use mypaper_bars::{
 };
 use mypaper_ui::{Image, Op, Rgba, render};
 
-/// Runs the real shell from the test binary for the exclusive-desktop performance harness.
 #[test]
-#[ignore = "takes over the desktop; launch only under IMPLEMENTING.md's desktop lock"]
-fn live_desktop_fixture() {
-    mypaper_desktop::init_logging();
-    mypaper_desktop::enable_dpi_awareness();
-    crate::run().unwrap();
+fn studio_fields_reach_the_shared_preview_and_native_bar_views() {
+    use crate::preview::bars as shared;
+    let mut ui = Ui::new().unwrap();
+    let mut config = BarsConfig::parse(r##"{
+        "top":{"left":["app"],"center":[],"right":[]},
+        "modules":{"app":{"style":{"size":18,"weight":800,"color":"#112233","border":{"width":3}}}},
+        "dock":{"style":"taskbar","titles":true,"button":212,"pinned":[]}
+    }"##).unwrap();
+    config.resolve(Vec::new);
+    let system = providers::accent::read();
+    let tokens = shared::Tokens::resolve(&config.top.look, &Appearance::default(), &system);
+    let mut model = shared::sample_model(model().clock, "Studio fields");
+    model.app_icon = None;
+    let mut images = shared::Images::default();
+    let top = shared::top(1280, &config, &model, &tokens, 1.0, &mut ui, &mut images, None);
+    assert!(top.list.ops.iter().any(|op| matches!(op, Op::Text { text, style, color, .. }
+        if text.as_ref() == "Studio fields" && style.weight == 800 && style.size == 18.0
+        && *color == Rgba::rgb8([0x11,0x22,0x33], 1.0))));
+    assert!(top.list.ops.iter().any(|op| matches!(op, Op::Stroke { width, color, .. }
+        if *width == 3.0 && *color == tokens.rim)), "a width-only module edge follows the bar");
+    let dock = shared::dock(&config, &model, &apps(), &tokens, 1.0, (1280, 80), &[], &[], &mut ui, &mut images, None);
+    let index = dock.targets.iter().position(|target| matches!(target, shared::Target::Dock(_))).unwrap();
+    let hit = dock.list.hits.iter().find(|hit| hit.id == index as u32 + 1).unwrap();
+    assert_eq!(hit.rect.width(), 212.0, "explicit button length wins over the titled default");
 }
 
 #[test]

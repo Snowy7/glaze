@@ -475,16 +475,20 @@ fn item(
             color: look::resolve_color(c, tokens.ink, tokens.accent),
         });
     }
-    if let Some(border) = options.and_then(|o| o.style.border.as_ref())
-        && let Some(Paint::Color(color)) = &border.color
-    {
+    if let Some(border) = options.and_then(|o| o.style.border.as_ref()) {
         let width = border.width.unwrap_or(1.0) * scale;
-        frame.list.ops.push(Op::Stroke {
-            rect: rect.inflate(-width / 2.0),
-            radius,
-            width,
-            color: look::resolve_color(color, tokens.ink, tokens.accent),
-        });
+        let color = match &border.color {
+            Some(Paint::Color(color)) => look::resolve_color(color, tokens.ink, tokens.accent),
+            _ => tokens.rim,
+        };
+        if width > 0.0 {
+            frame.list.ops.push(Op::Stroke {
+                rect: rect.inflate(-width / 2.0),
+                radius,
+                width,
+                color,
+            });
+        }
     }
     if Some(id) == hover {
         frame.list.ops.push(Op::Fill {

@@ -1,6 +1,6 @@
 //! Native top bar and dock. Windows services live in `mypaper-bars`; UI and motion live here.
 mod bar;
-mod icons;
+pub(crate) mod icons;
 pub(crate) mod look;
 mod motion;
 mod preview;

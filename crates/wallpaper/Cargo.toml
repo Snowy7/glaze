@@ -69,6 +69,7 @@ features = [
   "Win32_System_Com_StructuredStorage",
   "Win32_System_JobObjects",
   "Win32_System_LibraryLoader",
+  "Win32_System_Memory",
   "Win32_System_Power",
   "Win32_System_ProcessStatus",
   "Win32_System_RemoteDesktop",

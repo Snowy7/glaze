@@ -615,20 +615,9 @@ fn list_themes(roots: &[PathBuf]) -> Vec<String> {
         .collect()
 }
 
-/// The studio app: beside this exe, or in a dev build of `apps/studio`
-/// under this exe's folder or any parent.
+/// The studio app (`crates/studio`), built beside this exe like the other components.
 fn find_studio(exe: &Path) -> Option<PathBuf> {
-    let beside = exe.with_file_name(STUDIO_EXE);
-    let dev = exe.ancestors().skip(1).flat_map(|dir| {
-        ["release", "debug"].map(|profile| {
-            dir.join("apps/studio/src-tauri/target")
-                .join(profile)
-                .join(STUDIO_EXE)
-        })
-    });
-    std::iter::once(beside)
-        .chain(dev)
-        .find(|path| path.is_file())
+    Some(exe.with_file_name(STUDIO_EXE)).filter(|path| path.is_file())
 }
 
 /// Copies the stock menu model; the shell presents the same command ids and checks.
@@ -930,19 +919,13 @@ mod tests {
     }
 
     #[test]
-    fn finds_studio_beside_exe_or_in_a_dev_build() {
+    fn finds_studio_beside_exe() {
         let root = Scratch::new("studio");
         let exe = root.0.join("target/debug/mypaper-core.exe");
         assert_eq!(find_studio(&exe), None);
 
-        root.touch("apps/studio/src-tauri/target/debug/mypaper-studio.exe");
-        assert_eq!(
-            find_studio(&exe),
-            Some(
-                root.0
-                    .join("apps/studio/src-tauri/target/debug/mypaper-studio.exe")
-            )
-        );
+        root.touch("target/release/mypaper-studio.exe");
+        assert_eq!(find_studio(&exe), None);
 
         root.touch("target/debug/mypaper-studio.exe");
         assert_eq!(

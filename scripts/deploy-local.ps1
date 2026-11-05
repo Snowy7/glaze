@@ -1,7 +1,6 @@
 # Swaps a fresh release build into the repo's target\release and restarts mypaper,
 # with mypaper down only for the copy (build first, elsewhere):
 #   $env:CARGO_TARGET_DIR = "C:\mypaper-targets\main"; cargo build --release --workspace
-#   pnpm -C widgets/shell build; pnpm -C bars/shell build
 #   powershell -NoProfile -File scripts/deploy-local.ps1 [-From C:\mypaper-targets\main\release]
 param([string]$From = "C:\mypaper-targets\main\release")
 $ErrorActionPreference = "Stop"
@@ -22,7 +21,7 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
   foreach ($c in Get-Process mypaper-core -ErrorAction SilentlyContinue) {
     foreach ($t in $c.Threads) { [DeployQuit]::PostThreadMessage([uint32]$t.Id, 0x12, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
   }
-  $names = "mypaper-core", "mypaper-wallpaper", "mypaper-widgets", "mypaper-bars"
+  $names = "mypaper-core", "mypaper-wallpaper", "mypaper-shell", "mypaper-studio"
   $deadline = (Get-Date).AddSeconds(20)
   while ((Get-Process $names -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
   if (Get-Process $names -ErrorAction SilentlyContinue) { throw "mypaper did not stop" }
