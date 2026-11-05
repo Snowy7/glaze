@@ -282,6 +282,20 @@ fn silhouette(app: &App, b: &mut B, preset: &str, pic: Rect) {
     }
 }
 
+/// This longer explanation wraps within the inspector instead of clipping a one-line hint.
+fn maximized_setting(app: &App, b: &mut B, col: &mut Col, id: &'static str) {
+    let Some(s) = crate::settings::Setting::get(id) else { return; };
+    crate::ui::anchor(app, id, col.view, col.y);
+    let on = app.value(s).as_bool().unwrap_or(false);
+    let body = b.font(Font::Body);
+    let caption = b.font(Font::Caption);
+    let h = b.paragraph(col.x, col.y, col.w - b.px(48.0), s.label, &body, b.px(18.0), b.p.ink1).max(b.px(20.0));
+    b.switch(key(("setting", id)), Point::new(col.right() - b.px(36.0), col.y + (h - b.px(20.0)) / 2.0), on, s.label, Action::Toggle(Edit::new(s.doc, s.path, s.label), on));
+    col.y += h + b.px(4.0);
+    col.y += b.paragraph(col.x, col.y, col.w, s.hint, &caption, b.px(16.0), b.p.ink3);
+    col.y += b.px(12.0);
+}
+
 fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: Bar) {
     let (name, detail) = match bar {
         Bar::Top => ("Top bar", design_name(app, Bar::Top)),
@@ -307,7 +321,11 @@ fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: 
     section(b, col, "Layout", |b, c| {
         let ids: &[&str] = if bar == Bar::Top { &["top_edge", "top_height", "top_shape", "top_hide_maximized"] } else { &["dock_style", "dock_edge", "dock_size", "dock_autohide", "dock_hide_maximized", "dock_magnify"] };
         for id in ids {
-            setting(app, b, c, id);
+            if matches!(*id, "top_hide_maximized" | "dock_hide_maximized") {
+                maximized_setting(app, b, c, id);
+            } else {
+                setting(app, b, c, id);
+            }
         }
     });
     if bar == Bar::Dock {
