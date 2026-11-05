@@ -250,12 +250,14 @@ fn pack(scene: &Scene, layers: Layers, scale: f32, viewport: Vec2, out: &mut Pac
             let appearance = node.glass.appearance.as_ref().unwrap_or(&scene.appearance);
             let resolved = scene.material_of(node).resolve(g.half.min_element() * 2.0, appearance);
             let m = resolved.material;
-            let depth = (m.depth * s).min(g.half.min_element() * s).max(1.0);
+            // mypaper: thin glass gets a shallow lens and narrow rims (`material::lens`).
+            let (lens, rims) = crate::material::lens(m.depth, g.half.min_element() * 2.0);
+            let depth = (lens * s).min(g.half.min_element() * s).max(1.0);
             out.shapes.push(ShapeGpu {
                 center_half: [g.center.x * s, g.center.y * s, g.half.x * s, g.half.y * s],
                 params: [g.radius * s, shrink * s, g.axis.x, g.axis.y],
                 stretch: [along, 1.0 / along, g.exponent, 0.0],
-                extra: [depth, 0.0, 0.0, 0.0],
+                extra: [depth, rims, 0.0, 0.0],
             });
             let material = material_gpu(&resolved, p, press, s, appearance.dark);
             margin = margin.max(m.shadow.offset_y.abs() * s + 1.5 * m.shadow.blur * s);

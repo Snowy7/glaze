@@ -10,7 +10,8 @@ keep its shaders, pipeline and parameter values as they are.
 
 1. **Lensing, not blur, carries the look.** The backdrop is refracted through a squircle bevel
    (Snell's law, η 1.5). Content bends strongly at the rim and lies flat in the middle. The bevel
-   is `depth` deep (30 pt, more for large glass), with a small per-channel dispersion.
+   is `depth` deep (30 pt, more for large glass), with a small per-channel dispersion. Thin glass
+   gets a shallow lens (mypaper, below): at most a fifth of its smaller side.
 2. **Frost is light.** One blur pyramid (13-tap downsample, B-spline reads at a continuous level)
    serves every radius. The kit's regular glass uses 10 pt, its clear glass 6 pt.
 3. **Clear vs tinted** is iOS 27's slider: clear fades every fill and thins the frost; tinted
@@ -133,10 +134,42 @@ rendering there is that busy time at its idle clocks.
 Studio shows the choice as "Your screens' card" with the adapter's name, beside Integrated and
 High performance, and the frame rate as before.
 
+## Thin glass: a lens to scale (5 November 2026)
+
+The kit's 30 pt lens is deeper than a 24 pt menu bar is tall. The bevel was clamped only to half
+the bar, so the whole bar was curved, and the rim light (5 pt blur, offset 40 pt) and rim shade
+(15 pt) met in the middle: the labels sat on the highlight. iOS gives thin glass (menu bars,
+pills, small buttons) a shallow lens with a flat face.
+
+Now the lens is at most a fifth of the smaller side (`liquid_rust::material::lens`,
+`LENS_PER_SIDE`), capped at the material's own depth; the rim light, rim shade and their offset
+narrow by the same factor. The cap applies from about 166 pt for regular glass (150 pt for
+clear), where the factor is exactly 1, so large glass draws exactly as before. A 24 pt bar
+gets a 4.8 pt lens and rims at 0.16 of the kit's.
+
+Proof (frame lab, iGPU, rain-city at 3 s and 12 s, `MYPAPER_LAB_PLATES` with the 2560 x 24
+strip, small pills and buttons, the seven live widget plates and two large panels; each plate's
+pixels plus an 8 px ring, other plates' pixels left out):
+
+| Plates | Largest difference |
+|---|---:|
+| 180, 206, 313 and 400 pt (six plates) | **0/255** (bit-identical) |
+| 150 pt | 4/255 in about 1% of its pixels |
+| 99 pt widgets | 11-19/255 |
+| 24-56 pt bar, pills and buttons | 9-17/255 |
+
+Brightness down the bar (mean of 1100 columns, rows 0-23): before 95.8 at the top edge, falling
+to 77.3 mid-bar and rising to 95.7 at the bottom, a gradient under every label; after, a crisp
+top line (90.3), a flat face (77-79) from row 2 to row 21, and the bottom rim in rows 22-23. The
+glass costs no more: glass-only frames 2.39 ms median on the iGPU (2.48 ms before, the fixture's
+40 pt bar now has a shallower lens).
+
 ## Images
 
 - Before (two outlines, one less rounded): `media/native/glass-before-widgets.png`
 - After, widgets (one engine edge, frost, rim light, shadow): `media/native/glass-after-widgets.png`
 - After, Quick flyout over an app (overlay): `media/native/glass-after-flyout.png`
 - Lab render over rain-city at the kit's defaults: `media/native/glass-lab-rain.png`
+- Top bar (24 pt) before/after the thin-glass lens, the bar's ends at 3x, glass alone and with
+  its content: `media/native/glass-topbar-bevel.png`
 - Apple references: `C:\mypaper-targets\refs\liquid-glass` (macOS Tahoe Control Center, iOS 26).

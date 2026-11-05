@@ -43,3 +43,8 @@ Each is marked `mypaper:` in the source.
   The cache keeps rects per level, so content that holds still adds only what newly moved glass
   reads (a second screen sharing the content adds its own part), and is blurred whole once its
   cache passes 16 rects per level. Same pixels as a full rebuild.
+- Thin glass gets a lens to scale (`material::lens`): the bevel is at most a fifth of the smaller
+  side, capped at the material's depth, and the rim light, rim shade and their offset narrow by
+  the same factor (`ShapeGpu.extra.y`, blended with the depth as shapes fuse). Upstream's 30 pt
+  lens covered a 24 pt menu bar edge to edge. The factor is exactly 1 from about 166 pt, so large
+  glass is bit-identical (`docs/glass.md`, Thin glass).

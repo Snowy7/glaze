@@ -22,7 +22,7 @@ struct Shape {
     center_half: vec4f, // center (px), half size (px)
     params: vec4f,      // corner radius, inward shrink, stretch axis (x, y)
     stretch: vec4f,     // scale along axis, scale across axis, corner exponent, unused
-    extra: vec4f,       // bevel depth (px), unused, unused, unused
+    extra: vec4f,       // bevel depth (px), rim scale (mypaper: thin glass), unused, unused
 };
 
 struct Group {
@@ -149,7 +149,7 @@ fn sdg_group(p: vec2f, grp: Group) -> vec3f {
 
 struct Field {
     dg: vec3f,    // distance and normal, as sdg_group
-    attrs: vec3f, // bevel depth (px) and centre (px), blended as the shapes fuse
+    attrs: vec4f, // bevel depth (px), centre (px) and rim scale, blended as the shapes fuse
     mat: Material, // material, blended the same way
 };
 
@@ -162,7 +162,7 @@ fn mix_material(a: Material, b: Material, t: f32) -> Material {
 fn field_group(p: vec2f, grp: Group) -> Field {
     let first = shapes[grp.info.x];
     var dg = sdg_shape(p, first);
-    var attrs = vec3f(first.extra.x, first.center_half.xy);
+    var attrs = vec4f(first.extra.x, first.center_half.xy, first.extra.y);
     var mat = materials[grp.info.x];
     // Same for every pixel of the quad, so the branch costs nothing; a row of equal buttons
     // skips the material loads entirely.
@@ -172,7 +172,7 @@ fn field_group(p: vec2f, grp: Group) -> Field {
         let b = sdg_shape(p, s);
         let w = smin_w(dg.x, b.x, grp.geo.x);
         dg = vec3f(w.x, mix(dg.yz, b.yz, w.y));
-        attrs = mix(attrs, vec3f(s.extra.x, s.center_half.xy), w.y);
+        attrs = mix(attrs, vec4f(s.extra.x, s.center_half.xy, s.extra.y), w.y);
         if blend {
             mat = mix_material(mat, materials[grp.info.x + i], w.y);
         }
@@ -474,9 +474,12 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
     g = mix(g, highlight, clamp(line * dir * mat.lighting.y * 2.5, 0.0, 1.0));
 
     // Inner shadows from the kit, skipped deep inside where they vanish.
-    let rim_sigma = 5.0 * pt;
+    // mypaper: thin glass narrows them with its lens (`rims` is exactly 1 for glass the kit's
+    // depth fits, so large glass is unchanged).
+    let rims = field.attrs.w;
+    let rim_sigma = 5.0 * pt * rims;
     if -d < 45.0 * pt {
-        let o = KIT_OFFSET * pt;
+        let o = KIT_OFFSET * pt * rims;
         let away = -to_light * o; // shadow offset that lights the edge facing the light
         // mypaper: the lit rim and the rim shade share one hole (inner_shadow's distance).
         let hole = sdg_group(p - away, grp).x - o;
@@ -485,7 +488,7 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
             g += vec3f(mat.lighting.z * rims);
         }
         if mat.lighting.w > 0.0 {
-            g -= vec3f(mat.lighting.w * phi(hole, 15.0 * pt));
+            g -= vec3f(mat.lighting.w * phi(hole, 15.0 * pt * rims));
         }
         if mat.edge.x > 0.0 {
             let h = -to_light * 1.25 * pt;

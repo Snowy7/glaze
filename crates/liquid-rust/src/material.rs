@@ -322,6 +322,20 @@ pub(crate) struct Resolved {
     pub contrast: f32,
 }
 
+/// mypaper: how much of its smaller side the bevel of thin glass may take. The kit's 30 pt
+/// lens is deeper than a 24 pt menu bar is tall, so the rim's refraction and light covered the
+/// whole bar; iOS gives thin glass (menu bars, pills, small buttons) a shallow lens.
+pub(crate) const LENS_PER_SIDE: f32 = 0.2;
+
+/// mypaper: the bevel depth of glass whose smaller side is `min_side` points, at most the
+/// material's `depth` (resolved, so adaptive glass's thicker lens counts), and the factor its
+/// rim light, rim shade and inner-shadow offset scale by: exactly 1 once the cap applies, from
+/// about 166 pt for regular glass, so large glass draws exactly as before.
+pub(crate) fn lens(depth: f32, min_side: f32) -> (f32, f32) {
+    let lens = depth.min(min_side * LENS_PER_SIDE);
+    (lens, if depth > 0.0 { lens / depth } else { 1.0 })
+}
+
 /// How "thick" adaptive glass is, `0..=1`, from its smaller side in points.
 pub(crate) fn thickness(min_side: f32) -> f32 {
     smoothstep(44.0, 320.0, min_side)
@@ -426,7 +440,7 @@ impl Material {
     /// in points, as the renderer's `pack` bounds a group. An overlay's window grows by this.
     pub fn outset(&self, min_side: f32, appearance: &Appearance) -> f32 {
         let m = self.resolve(min_side, appearance).material;
-        let depth = m.depth.min(min_side * 0.5).max(1.0);
+        let depth = lens(m.depth, min_side).0.min(min_side * 0.5).max(1.0);
         let shadow = (m.shadow.offset_y.abs() + 1.5 * m.shadow.blur).max(2.0);
         let sample = depth * 1.2 * m.refraction + 2.0 * m.frost * 0.5;
         shadow.max(sample) + 1.0
@@ -436,6 +450,20 @@ impl Material {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thin_glass_gets_a_shallow_lens_and_large_glass_keeps_the_kits() {
+        let a = Appearance::default();
+        for material in [Material::regular(), Material::clear()] {
+            for side in [180.0, 250.0, 400.0, 1000.0] {
+                let depth = material.resolve(side, &a).material.depth;
+                assert_eq!(lens(depth, side), (depth, 1.0), "{side} pt draws exactly as before");
+            }
+        }
+        let depth = Material::regular().resolve(24.0, &a).material.depth;
+        let (bevel, rims) = lens(depth, 24.0);
+        assert!((bevel - 4.8).abs() < 1e-4 && (rims - 0.16).abs() < 1e-4, "a 24 pt menu bar");
+    }
 
     #[test]
     fn lerp_hits_both_ends_and_fades_a_tint() {
