@@ -208,7 +208,6 @@ fn provider(module: &ModuleRef) -> Option<Provider> {
         ModuleRef::Builtin(Module::Notifications) => Some(Provider::Notifications),
         ModuleRef::Builtin(Module::T3) => Some(Provider::T3),
         ModuleRef::Builtin(Module::Obs) => Some(Provider::Obs),
-        ModuleRef::Builtin(Module::Docker) => Some(Provider::Docker),
         _ => None,
     }
 }
@@ -316,7 +315,6 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
             Provider::Notifications => "Notifications",
             Provider::T3 => "T3",
             Provider::Obs => "OBS",
-            Provider::Docker => "Docker",
             Provider::Media => "Media",
             Provider::Calendar => "Calendar",
             Provider::Discord => "Discord",
@@ -329,7 +327,6 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
             Provider::Notifications => "\u{ea8f}",
             Provider::T3 => "\u{e8f2}",
             Provider::Obs => "\u{e714}",
-            Provider::Docker => "\u{e7b8}",
             Provider::Media => "\u{e768}",
             Provider::Calendar => "\u{e787}",
             Provider::Discord => "\u{e8f2}",
