@@ -70,6 +70,11 @@ impl Sprites {
         }
         let mut previous: Option<&Op> = None;
         for op in &list.ops {
+            // Nothing to show (the focus ring without keyboard focus), at fractional places
+            // that would draw a new sprite every frame.
+            if invisible(op) {
+                continue;
+            }
             let (index, rect, opacity) = match op {
                 Op::Fill {
                     rect,
@@ -198,6 +203,9 @@ impl Sprites {
             return Ok((i, at));
         }
         self.misses += 1;
+        if self.misses <= 3 {
+            log::info!("dock sprite drawn: {key}");
+        }
         let list = DisplayList {
             ops: vec![moved],
             ..Default::default()
@@ -206,6 +214,20 @@ impl Sprites {
         let sprite = self.compositor.sprite(&image)?;
         self.cache.push((Key::Op(key), sprite, true));
         Ok((self.cache.len() - 1, at))
+    }
+}
+
+fn invisible(op: &Op) -> bool {
+    match op {
+        Op::Fill { color, .. }
+        | Op::Stroke { color, .. }
+        | Op::Line { color, .. }
+        | Op::Text { color, .. }
+        | Op::Icon { color, .. }
+        | Op::Arc { color, .. }
+        | Op::Shadow { color, .. } => color.a <= 0.0,
+        Op::Image { opacity, .. } | Op::RoundedImage { opacity, .. } => *opacity <= 0.0,
+        _ => false,
     }
 }
 

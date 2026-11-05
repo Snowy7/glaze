@@ -708,6 +708,19 @@ impl Bar {
         let t = &self.tokens;
         let glass_plate = t.bare
             || (t.fill.is_none() && t.material.is_some() && t.theme.glass.is_some());
+        // Off by default: with the exact hit mask still re-uploaded each frame, a sweep cost more
+        // CPU than drawing it all (27.6 % vs 20.1 %, 2026-11-05). `MYPAPER_DOCK_SPRITES=1` turns
+        // it on; `=full` also keeps the whole window hit while composing (measures the floor).
+        static MODE: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
+        let mode = *MODE.get_or_init(|| match std::env::var("MYPAPER_DOCK_SPRITES").as_deref() {
+            Ok("1") => Some(false),
+            Ok("full") => Some(true),
+            _ => None,
+        });
+        let Some(full_mask) = mode else {
+            self.sprites = None;
+            return self.frame.list.clone();
+        };
         if self.sprites_failed || self.config.dock.style != DockStyle::Floating || !glass_plate {
             self.sprites = None;
             return self.frame.list.clone();
@@ -724,6 +737,15 @@ impl Bar {
         }
         let sprites = self.sprites.as_mut().expect("made above");
         match sprites.update(ui, &self.frame.list) {
+            Ok(Some(mut mask)) if full_mask => {
+                let (w, h) = self.frame.size;
+                mask.ops = vec![mypaper_ui::Op::Fill {
+                    rect: Rect::new(0.0, 0.0, w as f32, h as f32),
+                    radius: 0.0,
+                    color: mypaper_ui::Rgba::HIT,
+                }];
+                mask
+            }
             Ok(Some(mask)) => mask,
             Ok(None) => self.frame.list.clone(),
             Err(e) => {
