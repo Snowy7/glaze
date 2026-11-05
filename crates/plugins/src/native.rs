@@ -26,7 +26,11 @@ pub struct Lane {
 impl Lane {
     /// Starts the lane threads; the supervisor starts a host process only on `Activate`.
     pub fn start(tx: Sender<Input>) -> std::io::Result<Self> {
-        let exe = std::env::current_exe()?.with_file_name("mypaper-native-host.exe");
+        // The sibling exe; `MYPAPER_NATIVE_HOST` points the tests at a freshly built one.
+        let exe = match std::env::var_os("MYPAPER_NATIVE_HOST") {
+            Some(path) => PathBuf::from(path),
+            None => std::env::current_exe()?.with_file_name("mypaper-native-host.exe"),
+        };
         let supervisor = Arc::new(Supervisor::new(exe, HostConfig::default()));
         let (events, posts) = (Arc::clone(&supervisor), tx.clone());
         std::thread::Builder::new().name("native events".into()).stack_size(128 << 10).spawn(move || {

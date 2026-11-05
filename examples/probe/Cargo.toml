@@ -1,0 +1,23 @@
+# The capability probe (src/lib.rs): a WebAssembly test plugin the `crates/plugins` tests build
+# for wasm32-wasip2 and install with each test's permissions. Its own workspace, like the guests.
+[package]
+name = "probe"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
+
+[workspace]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

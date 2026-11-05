@@ -19,6 +19,8 @@ mod io;
 mod native;
 mod runtime;
 #[cfg(test)]
+mod caps_tests;
+#[cfg(test)]
 mod tests;
 
 use std::io::{BufWriter, Read};

@@ -3,7 +3,7 @@
 //! `cargo build --release --target wasm32-wasip2`.
 //!
 //! Capabilities are the WIT imports, re-exported typed: [`ui`], [`style`], [`timers`],
-//! [`events`], [`http`], [`launch`], [`notify`], [`secrets`], [`storage`], [`system`],
+//! [`events`], [`http`], [`websocket`], [`pipes`], [`launch`], [`notify`], [`secrets`], [`storage`], [`system`],
 //! [`native`], [`log`]. I/O replies come back as [`Event`]s.
 
 use std::any::Any;
@@ -24,7 +24,7 @@ pub mod bindings {
 
 pub use bindings::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen, InitInfo};
 pub use bindings::mypaper::plugin::types::{Error, SizeClass};
-pub use bindings::mypaper::plugin::{events, http, launch, native, notify, secrets, storage, style, system, timers};
+pub use bindings::mypaper::plugin::{events, http, launch, native, notify, pipes, secrets, storage, style, system, timers, websocket};
 
 /// A plugin. One value lives for the instance's lifetime; `save` is what survives an unload.
 pub trait Plugin: Default + 'static {
@@ -97,6 +97,9 @@ pub mod ui {
     pub fn clear(instance: &str) {
         wit::clear(instance);
     }
+
+    /// Images for canvas `image` draws (BGRA8 premultiplied); `drop_image` releases one.
+    pub use wit::{drop_image, put_image};
 }
 
 /// `log::write` at info level.
