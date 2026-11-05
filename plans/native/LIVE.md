@@ -1,7 +1,8 @@
-# Working live on `native` (shared checkout)
+# Working live on `main` (shared checkout)
 
 From 2026-11-05 every agent works directly in `D:\Coding\projects\desktop\wallpaper` on branch
-`native`, several at once. No worktrees, no side branches, no merges. These rules replace the
+`main` (`native` became `main` on 2026-11-05; the WebView2 prototype is tag `v0.0.1`), several
+at once. No worktrees, no side branches, no merges. These rules replace the
 branch/merge parts of `IMPLEMENTING.md`; everything else there (YAGNI, destructive rebuild, desktop
 lock, leave the desktop restored, kill headless browsers) still applies.
 
