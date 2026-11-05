@@ -390,7 +390,7 @@ pub fn permission_text(permission: &str) -> Result<String> {
     }
     if let Some(key) = permission.strip_prefix("network:ws://127.0.0.1:{settings.").and_then(|p| p.strip_suffix('}')) {
         ensure!(!key.is_empty() && key.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-'), "Invalid network port setting");
-        return Ok(format!("Can connect to OBS on this PC using the configured {key}"));
+        return Ok(format!("Can connect to 127.0.0.1 using the configured {key}"));
     }
     if let Some(origin) = permission.strip_prefix("network:") {
         ensure!(
