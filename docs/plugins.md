@@ -183,6 +183,15 @@ calls (`secrets`, `storage`, `system`) are synchronous.
   ```
 - **`system.foreground`** (`windows`): the foreground window's handle as `id`, its title, process
   image name (`code.exe`) and rect.
+- **`process.run`** (`process:<name>`): runs an executable with arguments, with no window and empty
+  stdin, and kills it at the timeout (default 15 s, at most 60 s). `exe` is a bare name found on
+  `PATH` (`.exe`, `.cmd`, `.bat`, `.com`), or an absolute path whose file name without its
+  extension is the declared name. The result arrives as `event::http` with the returned id:
+  `status` is the exit code (65535 when it doesn't fit), `body` is stdout, and the headers
+  `exit-code` and `stderr` carry the rest. Each stream is capped at 1 MiB. T3 issues its background
+  key this way (`t3 auth session issue … --json`).
+- **`files.read`** (`file:~/<path>`): reads one file under the user's profile that the manifest
+  names exactly (no `..`, drives or streams), at most 1 MiB; `none` when it's missing.
 
 The tests in `crates/plugins/src/caps_tests.rs` drive every capability through the probe plugin
 (`examples/probe`): a refusal without the permission, a round trip against a local websocket
@@ -278,6 +287,8 @@ names are ignored. `panel` and `widget` surfaces are accepted but not applied ye
 | `storage` | `storage.*` under `%APPDATA%\mypaper\plugin-data\<id>\kv\` |
 | `windows` | window events and `system.foreground` (titles are personal) |
 | `native-code` | `native.call` into the plugin's own native modules (see [Native modules](#native-modules)) |
+| `process:<name>` | `process.run` of that executable (see above) |
+| `file:~/<path>` | `files.read` of exactly that file under the user's profile |
 
 Timers, views, styles of declared surfaces, `system.monitors/theme/power` and `log` need no
 permission. The WASI preview-2 imports a plugin gets are clocks, random, and stdout/stderr
@@ -566,6 +577,16 @@ built-in weather and RSS widgets use these). They aren't sandboxed. New plugins 
 components, and T3, OBS, Docker, Tailscale, Grok and Discord will be ported (see the status
 below). The native SDK types (`View`, `Face`, `Manifest`, `protocol`) stay in
 `mypaper_plugin_sdk` for them and for the host.
+
+## Built-ins that moved to plugins
+
+Placed built-in integration widgets move onto component faces when the layout loads
+(`crates/widgets/src/faces.rs`, `MOVED`: one row per widget and `variant`, e.g. `t3` +
+`limits` → `t3--limits`). The instance id (and its storage), cell, size, look and settings stay;
+the file keeps its layout version, so older readers still parse it, and the first moved write
+keeps the previous file as `widgets.json.faces`. A row applies only while the plugin with that
+face is installed. Top-bar modules move the same way in `crates/bars/src/config.rs` (`t3` reads
+as `custom:t3--status`), without rewriting `bars.json`.
 
 ## Status (2026-11-05)
 
