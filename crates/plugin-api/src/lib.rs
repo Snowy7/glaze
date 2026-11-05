@@ -109,9 +109,9 @@ pub mod wire {
         /// The system-event topics (`windows`, `monitors`, `media`, `power`, `theme`) at least one
         /// visible, permitted plugin subscribes to: the shell forwards only these (the lease).
         Demand { topics: Vec<String> },
-        /// A plugin opened `target` (`launch.open`, always inside a click's action). The shell,
-        /// which got the click and so may set the foreground, brings the app that handles it
-        /// forward: a single-instance app (T3 Code) handed the link can't raise itself.
+        /// A plugin asked to open `target` (`launch.open`). The shell opens it and brings the app
+        /// that handles it forward: it got the click, so it may set the foreground, and what it
+        /// starts runs in the user's context (from the helper, T3 Code dropped thread links).
         Launched { plugin: String, target: String },
     }
 
