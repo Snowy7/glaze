@@ -75,7 +75,6 @@ pub fn fixture() -> Snapshot {
         }
     }
     Snapshot {
-        revision: 1,
         availability: Availability::Live,
         data: Some(Data::T3(t3::Snapshot {
             threads,
@@ -104,7 +103,7 @@ pub fn faces() -> Value {
     for face in ["running", "usage", "limits", "attention", "new"] {
         let sizes: Map<String, Value> = [("small", SizeClass::Small), ("medium", SizeClass::Medium), ("large", SizeClass::Large)]
             .into_iter()
-            .map(|(name, size)| (name.into(), json!(crate::faces::face(face, size, &snapshot, NOW))))
+            .map(|(name, size)| (name.into(), json!(crate::faces::face(face, size, &snapshot, &crate::faces::Pick::default(), NOW))))
             .collect();
         out.insert(face.into(), sizes.into());
     }

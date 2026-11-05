@@ -1,15 +1,15 @@
 {
   "id": "t3",
   "name": "T3",
-  "version": "0.1.0",
-  "sdk": "1.0",
-  "command": "t3-plugin.exe",
+  "version": "0.2.0",
+  "component": "t3.wasm",
+  "api": "0.1",
   "faces": [
-    { "id": "running", "name": "Running now", "icon": "terminal", "size": { "default": [8, 5], "min": [4, 3], "max": [12, 10] } },
-    { "id": "attention", "name": "Needs you", "icon": "terminal", "size": { "default": [8, 5], "min": [4, 3], "max": [12, 10] } },
-    { "id": "limits", "name": "Limits", "icon": "terminal", "size": { "default": [8, 5], "min": [4, 3], "max": [12, 10] } },
-    { "id": "usage", "name": "Usage", "icon": "terminal", "size": { "default": [8, 5], "min": [4, 3], "max": [12, 10] } },
-    { "id": "new", "name": "New thread", "icon": "terminal", "size": { "default": [8, 5], "min": [4, 3], "max": [12, 10] } }
+    { "id": "running", "name": "Running now", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } },
+    { "id": "attention", "name": "Needs you", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } },
+    { "id": "limits", "name": "Limits", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } },
+    { "id": "usage", "name": "Usage", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } },
+    { "id": "new", "name": "New thread", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } }
   ],
-  "permissions": ["secrets", "process:t3", "network:ws://127.0.0.1", "network:http://127.0.0.1", "launch"]
+  "permissions": ["secrets", "launch", "process:t3", "file:~/.t3/userdata/server-runtime.json", "file:~/.t3/userdata/cli-command-path-entry", "network:ws://127.0.0.1:3773", "network:http://127.0.0.1:3773"]
 }

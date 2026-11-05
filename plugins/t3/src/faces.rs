@@ -1,17 +1,19 @@
 //! The T3 faces as declarative views: Running now, Needs you, Limits, Usage, New thread.
 //! Same structure as the shell's native faces; the host draws them with the kit.
 
-use crate::t3::{Limit, Snapshot as State, Thread};
+use crate::t3::{Limit, ModelChoice, Snapshot as State, Thread};
 use crate::{Availability, Data, Snapshot};
-use mypaper_plugin_sdk::{Align, Face, Role, Series, SizeClass, Tone, View};
+use mypaper_plugin_sdk::view::SelectOption;
+use mypaper_plugin_sdk::{Face, Role, Series, SizeClass, Tone, View};
 
-pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, now_ms: i64) -> Face {
+/// `face` at `size` from the provider's snapshot; `pick` is the New thread instance's choices.
+pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, pick: &Pick, now_ms: i64) -> Face {
     let footer = footer(face, snapshot);
     let body = match &snapshot.data {
         Some(Data::T3(state)) => match face {
             "limits" => limits(state, size, now_ms),
             "usage" => usage(state, size),
-            "new" => composer(state, size),
+            "new" => composer(state, size, pick),
             "attention" => threads(state, size, true),
             _ => threads(state, size, false),
         },
@@ -155,11 +157,13 @@ fn threads(state: &State, size: SizeClass, attention: bool) -> View {
             && let Some(request) = top.pending_runtime_request.as_ref().filter(|r| r.approvable())
         {
             let target = format!("{}:{}", top.id, request.id);
-            children.push(View::Row {
+            // Two equal halves under the row, as the native face.
+            children.push(View::Grid {
                 children: vec![
                     View::Button { label: "Approve".into(), action: format!("approve:{target}"), icon: Some("check".into()), primary: false },
                     View::Button { label: "Deny".into(), action: format!("deny:{target}"), icon: None, primary: false },
                 ],
+                columns: 2,
                 gap: Some(6.0),
             });
         }
@@ -371,19 +375,70 @@ fn usage(state: &State, size: SizeClass) -> View {
     View::Stack { children, gap: Some(4.0) }
 }
 
-/// Start a thread: the project and model T3 would use, and the prompt field.
-fn composer(state: &State, size: SizeClass) -> View {
-    let project = state.projects.values().next().cloned().unwrap_or_else(|| "No project".into());
-    let model = state.models.first().map_or("Default model".into(), |m| m.name.clone());
+/// A New thread instance's picks; `None` is T3's first project / model.
+#[derive(Clone, Debug, Default)]
+pub struct Pick {
+    pub project: Option<String>,
+    pub model: Option<String>,
+}
+
+/// A model's `select` value.
+pub fn model_key(model: &ModelChoice) -> String {
+    format!("{}/{}", model.provider, model.model)
+}
+
+impl Pick {
+    /// The project id and model a send would use: the picks if T3 still has them, else its first.
+    pub fn resolve<'a>(&self, state: &'a State) -> (Option<&'a String>, Option<&'a ModelChoice>) {
+        let project = self
+            .project
+            .as_ref()
+            .and_then(|id| state.projects.get_key_value(id).map(|(k, _)| k))
+            .or_else(|| state.projects.keys().next());
+        let model = self
+            .model
+            .as_ref()
+            .and_then(|key| state.models.iter().find(|m| model_key(m) == *key))
+            .or_else(|| state.models.first());
+        (project, model)
+    }
+}
+
+/// Start a thread: project and model menus over the prompt field (the native composer).
+fn composer(state: &State, size: SizeClass, pick: &Pick) -> View {
     if size == SizeClass::Small {
-        return View::button("New thread", "new");
+        return View::Stack {
+            children: vec![
+                View::text("Ready to build", Role::Headline),
+                View::Field { placeholder: "Write a prompt".into(), action: "send".into() },
+                View::Spacer,
+            ],
+            gap: Some(10.0),
+        };
     }
-    View::Stack {
-        children: vec![
-            View::Text { text: format!("{project} · {model}"), role: Role::Callout, color: Some(Tone::Secondary), align: Align::Start },
-            View::Field { placeholder: "Ask T3 Code…".into(), action: "send".into() },
-            View::Spacer,
-        ],
-        gap: Some(8.0),
+    let (project, model) = pick.resolve(state);
+    let projects = state
+        .projects
+        .iter()
+        .map(|(id, name)| SelectOption { label: name.clone(), value: id.clone() })
+        .collect();
+    let models = state
+        .models
+        .iter()
+        .map(|m| SelectOption { label: m.name.clone(), value: model_key(m) })
+        .collect();
+    let mut children = vec![
+        View::Select { label: "No project".into(), action: "project".into(), options: projects, selected: project.cloned() },
+        View::Select { label: "Default model".into(), action: "model".into(), options: models, selected: model.map(model_key) },
+        View::Field { placeholder: "What should we build?".into(), action: "send".into() },
+    ];
+    if size == SizeClass::Large {
+        children.push(View::tinted(
+            "Starts in the selected project. T3 asks before edits or commands.",
+            Role::Caption,
+            Tone::Secondary,
+        ));
     }
+    children.push(View::Spacer);
+    View::Stack { children, gap: Some(8.0) }
 }

@@ -1,31 +1,28 @@
 //! Effect RPC v2 shell summaries, with bounded metadata and no client ping task.
-use crate::{Availability, Data, Publish, credentials, transport};
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: u32 = 2;
-// The installed server's shell baseline is ~2.4 MiB. This is a wire bound; only
-// typed metadata is retained, never the shell's message previews or transcripts.
-pub const MESSAGE_LIMIT: usize = 32 * 1024 * 1024;
-
 // These wire structs deliberately omit preview bodies, repository identities and scripts.
 // Serde skips them on the socket buffer instead of allocating a full JSON tree for every wake.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ShellEnvelope {
+pub(crate) struct ShellEnvelope {
     #[serde(rename = "_tag")]
-    tag: String,
-    request_id: Option<String>,
+    pub(crate) tag: String,
+    pub(crate) request_id: Option<String>,
     #[serde(default)]
     // Route by request id before decoding. An untagged enum buffers even discarded previews.
-    values: Vec<Box<serde_json::value::RawValue>>,
+    pub(crate) values: Vec<Box<serde_json::value::RawValue>>,
+    /// A finished request's `{"_tag":"Success"|"Failure","value":…}`.
+    #[serde(default)]
+    pub(crate) exit: Option<Box<serde_json::value::RawValue>>,
 }
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
-struct ShellItem {
-    kind: String,
+pub(crate) struct ShellItem {
+    pub(crate) kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     snapshot: Option<ShellBaseline>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -268,7 +265,7 @@ impl Snapshot {
             );
         }
     }
-    fn configure(&mut self, value: &crate::t3_client::Metadata) {
+    pub(crate) fn configure(&mut self, value: &crate::t3_client::Metadata) {
         self.omit_older_settled = value.shell_older_settled;
         self.omit_idle_subagents = value.shell_thread_families;
         self.environment_id =
@@ -345,7 +342,7 @@ impl Snapshot {
         }
     }
     /// The 30-day history, and today's per-model totals for the existing usage face.
-    fn history(&mut self, value: &Value, days: Vec<String>, today: &str) {
+    pub(crate) fn history(&mut self, value: &Value, days: Vec<String>, today: &str) {
         let mut history = History {
             days,
             ..Default::default()
@@ -616,198 +613,9 @@ impl Snapshot {
     }
 }
 
-pub(crate) async fn run(config: &crate::config::T3, publish: &Publish) -> Result<()> {
-    ensure!(
-        config.protocol_version == PROTOCOL_VERSION,
-        "supported T3 orchestration protocol is 2"
-    );
-    ensure!(
-        config.endpoint.is_empty() || crate::transport::loopback_url(&config.endpoint).is_ok(),
-        "Use a local T3 Code address in Advanced settings."
-    );
-    // Background access first: T3's CLI issues (or renews) mypaper's token with no prompt.
-    let issue = |force| tokio::task::spawn_blocking(move || crate::t3_auth::ensure(force));
-    let auto = issue(false).await?;
-    if let Err(error) = &auto {
-        log::info!("T3 auto-connect: {error:#}");
-    }
-    let live = config.live_verified || auto.is_ok();
-    let token = credentials::read("t3").map_err(|_| match &auto {
-        Err(error) => anyhow::anyhow!("{error}"),
-        Ok(_) => anyhow::anyhow!("T3 Code access is missing"),
-    })?;
-    let mut result = subscribe(config, live, publish, token.text()?).await;
-    if result.as_ref().is_err_and(unauthorized) && crate::t3_auth::available() {
-        // The server dropped our grant (revoked or expired early): re-issue once.
-        issue(true).await??;
-        let token = credentials::read("t3")?;
-        result = subscribe(config, true, publish, token.text()?).await;
-    }
-    result.map_err(|error| {
-        log::warn!("T3 subscription: {error:#}");
-        if unauthorized(&error) {
-            anyhow::anyhow!("T3 Code no longer accepts mypaper's access")
-        } else {
-            anyhow::anyhow!("T3 disconnected. Retry to reconnect to your local T3 Code.")
-        }
-    })
-}
-
-/// A 401/403 on the socket upgrade: the bearer itself was refused.
-fn unauthorized(error: &anyhow::Error) -> bool {
-    use tokio_tungstenite::tungstenite::Error;
-    error.chain().any(|cause| {
-        matches!(cause.downcast_ref::<Error>(), Some(Error::Http(response)) if matches!(response.status().as_u16(), 401 | 403))
-    })
-}
-
-async fn subscribe(
-    config: &crate::config::T3,
-    live: bool,
-    publish: &Publish,
-    token: &str,
-) -> Result<()> {
-    let mut socket = transport::socket_with_limit(
-        crate::t3_client::endpoint(&config.endpoint),
-        Some(token),
-        Some("orchestrationProtocol=2"),
-        MESSAGE_LIMIT,
-    )
-    .await?;
-    let mut state = Snapshot::default();
-    let mut metadata = crate::t3_client::Metadata::default();
-    if live {
-        state.permissions = crate::t3_client::permissions(&config.endpoint)
-            .await
-            .unwrap_or_default();
-        if let Ok(value) = crate::t3_client::metadata(&config.endpoint).await {
-            metadata = value;
-            state.configure(&metadata);
-        }
-        refresh_usage(config, &mut state).await;
-    }
-    let mut payload = json!({"requestCompletionMarker":true});
-    if state.omit_older_settled {
-        payload["omitOlderSettled"] = json!(true);
-    }
-    if state.omit_idle_subagents {
-        payload["omitIdleSubagents"] = json!(true);
-    }
-    transport::send(&mut socket,json!({"_tag":"Request","id":"1","tag":"orchestration.subscribeShell","payload":payload,"headers":[]})).await?;
-    if live {
-        transport::send(&mut socket, json!({"_tag":"Request","id":"config","tag":"subscribeServerConfig","payload":{"usageLimitSources":true},"headers":[]})).await?;
-    }
-    let mut baseline = false;
-    let mut last_usage_transition = None;
-    loop {
-        let bytes = transport::receive_message(&mut socket).await?.into_data();
-        publish.delivered();
-        let frames: Vec<ShellEnvelope> = if bytes.first() == Some(&b'[') {
-            serde_json::from_slice(&bytes)?
-        } else {
-            vec![serde_json::from_slice(&bytes)?]
-        };
-        for frame in frames {
-            match frame.tag.as_str() {
-                "Chunk" => {
-                    if frame.request_id.as_deref() == Some("config") {
-                        let mut changed = false;
-                        for item in frame.values {
-                            changed |= metadata.apply(serde_json::from_str(item.get())?);
-                        }
-                        if changed {
-                            state.configure(&metadata);
-                            if baseline {
-                                publish.set(Availability::Live, Some(Data::T3(state.clone())));
-                            }
-                        }
-                        transport::send(&mut socket, json!({"_tag":"Ack","requestId":"config"}))
-                            .await?;
-                        continue;
-                    }
-                    ensure!(
-                        frame.request_id.as_deref() == Some("1"),
-                        "unexpected T3 request id"
-                    );
-                    for item in frame.values {
-                        let item: ShellItem = serde_json::from_str(item.get())?;
-                        ensure!(
-                            baseline || item.kind == "snapshot",
-                            "T3 delta arrived before its baseline"
-                        );
-                        state.apply(&serde_json::to_value(item)?)?;
-                        baseline = true;
-                    }
-                    let transition = state
-                        .transitions
-                        .last()
-                        .filter(|t| !t.attention)
-                        .map(|t| (t.run_id.clone(), t.status));
-                    if transition.is_some() && transition != last_usage_transition {
-                        last_usage_transition = transition;
-                        refresh_usage(config, &mut state).await;
-                    }
-                    publish.set(
-                        if live {
-                            Availability::Live
-                        } else {
-                            Availability::Cached
-                        },
-                        Some(Data::T3(state.clone())),
-                    );
-                    transport::send(&mut socket, json!({"_tag":"Ack","requestId":"1"})).await?;
-                    if !live {
-                        return Ok(());
-                    }
-                }
-                "Ping" | "Pong" => {
-                    bail!("T3 server maintenance frames detected; use snapshot-on-open")
-                }
-                "Exit" | "Defect" => bail!(
-                    "T3 subscription ended or was rejected; check pairing and protocol version"
-                ),
-                _ => bail!("unsupported Effect RPC envelope"),
-            }
-        }
-    }
-}
-
-async fn refresh_usage(config: &crate::config::T3, state: &mut Snapshot) {
-    if !state.permissions.iter().any(|p| p == "diagnostics:read") {
-        state.usage_notice = Some("Usage is unavailable. Refresh to reconnect.".into());
-        return;
-    }
-    let now = chrono::Utc::now().date_naive();
-    let days: Vec<String> = (0..30)
-        .rev()
-        .map(|back| {
-            (now - chrono::Days::new(back))
-                .format("%Y-%m-%d")
-                .to_string()
-        })
-        .collect();
-    let day = days[29].clone();
-    match crate::t3_client::request(
-        &config.endpoint,
-        "server.getUsageSummary",
-        json!({"sinceDay":days[0],"untilDay":day,"timeZone":"UTC","resolution":"day"}),
-    )
-    .await
-    {
-        Ok(value) => {
-            state.history(&value, days, &day);
-            state.usage_day = Some(day);
-        }
-        Err(_) => state.usage_notice = Some("Usage is unavailable. Refresh to try again.".into()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_util::{SinkExt, StreamExt};
-    use std::sync::{Arc, Mutex};
-    use tokio_tungstenite::tungstenite::Message;
     #[test]
     fn config_stream_keeps_both_claude_accounts_across_provider_updates() {
         let mut metadata = crate::t3_client::Metadata::default();
@@ -893,53 +701,5 @@ mod tests {
         assert_eq!(sol.tokens, 105);
         assert_eq!(sol.cost_microusd, 150_000);
         assert!(sol.unpriced);
-    }
-    #[test]
-    #[allow(
-        clippy::result_large_err,
-        reason = "tungstenite handshake callback has a fixed external error type"
-    )]
-    fn authenticated_rpc_fixture_seeds_acknowledges_stops_and_reconnects() {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        runtime.block_on(async {
-            let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let config=crate::config::T3 { enabled:true,endpoint:format!("ws://{}/ws",listener.local_addr().unwrap()),..Default::default() };
-            let server=tokio::spawn(async move {
-                for _ in 0..2 {
-                    let (stream,_)=listener.accept().await.unwrap();
-                    let mut socket=tokio_tungstenite::accept_hdr_async(stream,|request:&tokio_tungstenite::tungstenite::handshake::server::Request,response| {
-                        assert_eq!(request.uri().query(),Some("orchestrationProtocol=2"));
-                        assert_eq!(request.headers()["authorization"],"Bearer fixture-only");
-                        Ok(response)
-                    }).await.unwrap();
-                    let request:Value=serde_json::from_str(socket.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
-                    assert_eq!(request["tag"],"orchestration.subscribeShell");
-                    // Match the real failure: 996 threads and a >2 MiB single frame.
-                    let threads: Vec<_> = (0..996).map(|i| json!({
-                        "id":format!("thread-{i}"),"projectId":"p","title":"Fixture thread",
-                        "providerInstanceId":"codex","status":"running","latestRunId":null,
-                        "activeRunId":null,"pendingRuntimeRequest":null,"updatedAt":"2026-11-05",
-                        "latestVisibleMessage":{"text":"x".repeat(2400)}
-                    })).collect();
-                    let baseline=json!({"_tag":"Chunk","requestId":"1","values":[{"kind":"snapshot","snapshot":{"schemaVersion":2,"snapshotSequence":4,"projects":[],"threads":threads}}]}).to_string();
-                    assert!(baseline.len()>2*1024*1024);
-                    socket.send(Message::Text(baseline.into())).await.unwrap();
-                    let ack:Value=serde_json::from_str(socket.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
-                    assert_eq!(ack,json!({"_tag":"Ack","requestId":"1"}));
-                    assert!(socket.next().await.is_none_or(|r|r.is_err() || matches!(r,Ok(Message::Close(_)))));
-                }
-            });
-            let publish=Publish { provider:crate::Provider::T3,snapshot:Arc::new(Mutex::new(crate::Snapshot::default())),wake:Arc::new(|_|{}),counters:Arc::new(crate::Counters::default()) };
-            for _ in 0..2 {
-                subscribe(&config,false,&publish,"fixture-only").await.unwrap();
-                let snapshot=publish.snapshot.lock().unwrap();
-                assert_eq!(snapshot.availability,Availability::Cached);
-                assert!(matches!(&snapshot.data,Some(Data::T3(state)) if state.threads.len()==996));
-            }
-            server.await.unwrap();
-        });
     }
 }

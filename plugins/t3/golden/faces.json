@@ -39,8 +39,9 @@
                 "primary": false
               }
             ],
+            "columns": 2,
             "gap": 6.0,
-            "kind": "row"
+            "kind": "grid"
           }
         ],
         "gap": 2.0,
@@ -75,8 +76,9 @@
                 "primary": false
               }
             ],
+            "columns": 2,
             "gap": 6.0,
-            "kind": "row"
+            "kind": "grid"
           }
         ],
         "gap": 2.0,
@@ -571,16 +573,40 @@
       "body": {
         "children": [
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "callout",
-            "text": "mypaper · GPT-6.1 Sol"
+            "action": "project",
+            "kind": "select",
+            "label": "No project",
+            "options": [
+              {
+                "label": "mypaper",
+                "value": "paper"
+              }
+            ],
+            "selected": "paper"
+          },
+          {
+            "action": "model",
+            "kind": "select",
+            "label": "Default model",
+            "options": [
+              {
+                "label": "GPT-6.1 Sol",
+                "value": "codex/sol"
+              }
+            ],
+            "selected": "codex/sol"
           },
           {
             "action": "send",
             "kind": "field",
-            "placeholder": "Ask T3 Code…"
+            "placeholder": "What should we build?"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Starts in the selected project. T3 asks before edits or commands."
           },
           {
             "kind": "spacer"
@@ -596,16 +622,33 @@
       "body": {
         "children": [
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "callout",
-            "text": "mypaper · GPT-6.1 Sol"
+            "action": "project",
+            "kind": "select",
+            "label": "No project",
+            "options": [
+              {
+                "label": "mypaper",
+                "value": "paper"
+              }
+            ],
+            "selected": "paper"
+          },
+          {
+            "action": "model",
+            "kind": "select",
+            "label": "Default model",
+            "options": [
+              {
+                "label": "GPT-6.1 Sol",
+                "value": "codex/sol"
+              }
+            ],
+            "selected": "codex/sol"
           },
           {
             "action": "send",
             "kind": "field",
-            "placeholder": "Ask T3 Code…"
+            "placeholder": "What should we build?"
           },
           {
             "kind": "spacer"
@@ -619,10 +662,24 @@
     },
     "small": {
       "body": {
-        "action": "new",
-        "kind": "button",
-        "label": "New thread",
-        "primary": false
+        "children": [
+          {
+            "align": "start",
+            "kind": "text",
+            "role": "headline",
+            "text": "Ready to build"
+          },
+          {
+            "action": "send",
+            "kind": "field",
+            "placeholder": "Write a prompt"
+          },
+          {
+            "kind": "spacer"
+          }
+        ],
+        "gap": 10.0,
+        "kind": "stack"
       },
       "footer": "Live from your local T3 Code",
       "refresh": true

@@ -1,29 +1,29 @@
+# T3 Code as a WebAssembly component (docs/plugins.md). Its own workspace: built for
+# wasm32-wasip2 by scripts/build-plugins.ps1 into t3.wasm; `cargo test` runs the model and
+# view goldens on the host.
 [package]
-name = "mypaper-plugin-t3"
-description = "T3 Code for mypaper on the plugin SDK: running threads, approvals, limits and usage from your local T3 Code."
-version.workspace = true
-edition.workspace = true
-license.workspace = true
+name = "t3-component"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
 
-# plugin.json says `"command": "t3-plugin.exe"` (not `t3.exe`: that name is T3 Code's own CLI).
-[[bin]]
-name = "t3-plugin"
-path = "src/main.rs"
+[lib]
+name = "t3"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
-anyhow.workspace = true
-log.workspace = true
-serde.workspace = true
-serde_json = { workspace = true, features = ["raw_value"] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-tokio = { version = "1", features = ["rt", "net", "sync", "time", "io-util", "macros"] }
-tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "handshake"] }
-futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-hyper = { version = "1", features = ["client", "http1"] }
-hyper-util = { version = "0.1", features = ["tokio"] }
-http-body-util = "0.1"
-bytes = "1"
 
-[lints]
-workspace = true
+[workspace]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
