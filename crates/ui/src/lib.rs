@@ -16,6 +16,7 @@ pub mod glass;
 #[cfg(any(test, feature = "golden"))]
 pub mod golden;
 pub mod icons;
+pub mod interact;
 pub mod menu;
 pub mod modules;
 pub mod motion;
@@ -29,6 +30,7 @@ mod tokens;
 pub use app_window::{Chrome, Cursor, set_modal_hook};
 pub use geom::{PixelRect, Point, Rect, Rgba};
 pub use glass::{Glass, GlassMaterial};
+pub use interact::Interaction;
 pub use menu::{Entry, Menu, Outcome, Screen, screen_at};
 pub use motion::{Spring, Ticker, Tween};
 pub use render::{Image, Ui, render};
@@ -36,7 +38,7 @@ pub use scene::{DisplayList, Hit, HitId, Op};
 pub use surface::{Button, Event, Kind, Pointer, Surface, SurfaceId, next_event};
 pub use text::{Text, TextStyle};
 pub use text_field::TextField;
-pub use tokens::{Colors, Material, MenuMetrics, Tokens};
+pub use tokens::{Colors, Ink, Material, MenuMetrics, Step, Tokens, Typeface};
 
 /// Accessibility roles for [`Hit`] items.
 pub use accesskit::Role;
