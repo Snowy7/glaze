@@ -245,7 +245,9 @@ impl<W: Write> Host<W> {
         let Some(instance) = self.plugins.get_mut(plugin).and_then(|p| p.instance.as_mut()) else { return };
         let state = instance.store.data_mut();
         if closed {
-            state.closed(id);
+            if !state.closed(id) {
+                return;
+            }
         } else if let Some(conn) = state.conn(id) {
             conn.delivered();
         } else {

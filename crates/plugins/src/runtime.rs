@@ -174,6 +174,8 @@ pub struct State {
     sockets: HashMap<u64, io::Conn>,
     pipes: HashMap<u64, io::Conn>,
     topics: Vec<Topic>,
+    /// Connections opened and not yet reported closed (a `close` keeps the id until `closed`).
+    live: std::collections::HashSet<u64>,
     pub images: images::Images,
 }
 
@@ -206,10 +208,12 @@ impl State {
     pub fn conn(&self, id: u64) -> Option<&io::Conn> {
         self.sockets.get(&id).or_else(|| self.pipes.get(&id))
     }
-    /// Forgets a connection whose thread ended.
-    pub fn closed(&mut self, id: u64) {
+    /// Forgets a connection whose thread ended; `false` if this instance never opened it (it
+    /// belonged to an instance that trapped or unloaded).
+    pub fn closed(&mut self, id: u64) -> bool {
         self.sockets.remove(&id);
         self.pipes.remove(&id);
+        self.live.remove(&id)
     }
 }
 
@@ -351,6 +355,7 @@ impl mypaper::plugin::websocket::Host for State {
         }
         let id = self.request_id();
         self.sockets.insert(id, io::socket().map_err(failed)?);
+        self.live.insert(id);
         let headers = request.headers.into_iter().map(|h| (h.name, h.value)).collect();
         self.effects.push(Effect::Socket { id, request: io::SocketRequest { url: request.url, headers, protocols: request.protocols } });
         Ok(id)
@@ -371,6 +376,7 @@ impl mypaper::plugin::pipes::Host for State {
         }
         let id = self.request_id();
         self.pipes.insert(id, io::pipe().map_err(failed)?);
+        self.live.insert(id);
         self.effects.push(Effect::Pipe { id, name });
         Ok(id)
     }
@@ -755,6 +761,7 @@ impl Runtime {
             sockets: HashMap::new(),
             pipes: HashMap::new(),
             topics: Vec::new(),
+            live: Default::default(),
             images: images::Images::default(),
         };
         let mut store = Store::new(&self.engine, data);
