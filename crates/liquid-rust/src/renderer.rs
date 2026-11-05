@@ -117,7 +117,8 @@ struct Packed {
 /// redraws the texels glass will read (see [`Pyramid::build_reads`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Reads {
-    /// Where its frost samples: the group's bounds, px. The renderer adds its reach.
+    /// The group's bounds, px (its shapes plus the drop shadow's margin). Frost samples inside
+    /// its shapes: refraction bends each sample inward, by less than the shape is thick.
     bounds: Bounds,
     /// Its members' largest frost sigma (px, presence included): the highest level frost reads.
     sigma: f32,
@@ -394,10 +395,11 @@ impl Layout {
         ((self.size.0.div_ceil(2) >> level).max(1), (self.size.1.div_ceil(2) >> level).max(1))
     }
 
-    /// mypaper: the texels of each level that glass making `reads` samples (frost sampling up
-    /// to `reach` px past a group's bounds), each with the halo the levels above need to
-    /// compute theirs exactly, merged per level. Levels nothing reads are left out.
-    fn rects(&self, reads: &[Reads], reach: f32) -> LevelRects {
+    /// mypaper: the texels of each level that glass making `reads` samples, each with the
+    /// halo its own taps and the levels above need to compute theirs exactly, merged per level.
+    /// Levels nothing reads are left out. Upstream's region added the renderer's reach (8 sigma
+    /// of blur plus refraction) to the bounds instead, since it had no halos.
+    fn rects(&self, reads: &[Reads]) -> LevelRects {
         let top = self.levels as f32;
         let mut out: LevelRects = vec![Vec::new(); self.levels as usize];
         for r in reads {
@@ -405,7 +407,7 @@ impl Layout {
             let level = (r.sigma.max(1e-4) / PYRAMID_SIGMA0).log2() + 1.0;
             if level > 0.0 {
                 let k = if level < 1.0 { 0.0 } else { level.min(top).floor().min(top - 1.0) };
-                self.add(&mut out, expand(r.bounds, reach), k as usize);
+                self.add(&mut out, r.bounds, k as usize);
             }
             // fs_glass's backdrop statistics at the centres: shadow adaptivity, and the face of
             // glass that flips with the content (whose top level is otherwise never read).
@@ -894,7 +896,7 @@ impl Renderer {
         let profiler = &self.profiler;
         // mypaper: rebuild only the texels each group reads (upstream: the bounding box of all
         // of them, here nearly the whole screen), and keep what still content already has.
-        let needed = pyramid.layout().rects(&self.packed.reads, reach);
+        let needed = pyramid.layout().rects(&self.packed.reads);
         let build = match &mut self.cached {
             Some(cached) if !frame.content_changed => {
                 let missing: LevelRects = needed.iter().zip(cached.iter()).map(|(need, have)| need.iter().filter(|r| !have.iter().any(|h| contains(*h, **r))).copied().collect()).collect();
@@ -1168,11 +1170,11 @@ mod tests {
         let mut packed = Packed::default();
         pack(&scene, ALL_LAYERS, 1.5, Vec2::new(2560.0, 1440.0), &mut packed);
         let layout = Layout { size: (2560, 1440), levels: 7 };
-        let rects = layout.rects(&packed.reads, packed.reach);
+        let rects = layout.rects(&packed.reads);
         let texels = |level: &[Bounds]| level.iter().map(area).sum::<f32>();
         let whole = 1280.0 * 720.0;
         assert!(texels(&rects[0]) < 0.6 * whole, "level 0 is mostly skipped: {}", texels(&rects[0]) / whole);
-        let read = |r: &Reads| layout.rects(std::slice::from_ref(r), packed.reach);
+        let read = |r: &Reads| layout.rects(std::slice::from_ref(r));
         for (group, reads) in packed.reads.iter().enumerate() {
             for (level, need) in read(reads).iter().enumerate() {
                 for r in need {
