@@ -44,12 +44,12 @@ and `obs` before they're ported) keep working through the same host bridge. See
   "component": "hello.wasm",
   "api": "0.1",
   "faces":  [{ "id": "main", "name": "Hello", "size": { "default": [2, 2], "min": [1, 1] } }],
-  "bars":   [{ "id": "clock", "name": "Hello clock", "size": { "default": [1, 1] } }],
-  "panels": [],
+  "bars":   [{ "id": "clock", "name": "Hello clock", "size": { "default": [1, 1] }, "panel": "details" }],
+  "panels": [{ "id": "details", "name": "Hello", "icon": "sparkles", "size": { "default": [7, 5] } }],
   "menu":   [{ "id": "say-hi", "label": "Say hi" }],
-  "commands": [{ "id": "refresh", "label": "Refresh hello", "shortcut": "Ctrl+Alt+H" }],
+  "commands": [{ "id": "say-hi", "label": "Say hi from Hello", "shortcut": "Ctrl+Alt+Shift+H" }],
   "styles": ["top-bar"],
-  "permissions": ["network:https://api.open-meteo.com", "storage"],
+  "permissions": ["network:https://api.open-meteo.com", "storage", "desktop-menu", "shortcuts"],
   "limits": { "memory_mb": 16 }
 }
 ```
@@ -62,7 +62,8 @@ and `obs` before they're ported) keep working through the same host bridge. See
 - The contributions are `faces` (desktop widgets in the "+" picker, as `<plugin>--<face>`),
   `bars` (top-bar modules), `panels` (flyouts), `menu` (desktop context-menu items) and
   `commands` (palette and shortcuts). They are static, so the shell lists them without
-  starting the plugin.
+  starting the plugin. A bar module's `panel` names one of `panels`: a click on the module
+  opens it as a flyout (see [Panels, menu items and shortcuts](#panels-menu-items-and-shortcuts)).
 - `styles` lists the surfaces the plugin may patch. Patching any other surface is refused.
 - `limits.memory_mb` may *lower* the host's per-plugin cap, never raise it.
 
@@ -159,7 +160,9 @@ calls (`secrets`, `storage`, `system`) are synchronous.
 - **Notifications**: `notify.show` raises a Windows toast from mypaper (AppUserModelID
   `mypaper.Plugins`, display name "mypaper", registered under HKCU on first use) with the
   plugin's title and body and "via <plugin name>" as the attribution line, from a worker thread.
-  The `action` field isn't delivered back yet.
+  When the toast has an `action`, clicking it (while the helper runs) delivers `event::action`
+  with `instance` `"toast"` and that `action` to the plugin, loading it if it was unloaded. The
+  helper keeps the last 16 such toasts so their click handlers stay registered.
 - **System events**: the shell sends `HostMsg::System(SystemEvent)` frames
   (`Plugins::system_event` in `crates/widgets/src/plugins.rs`). The helper delivers each one only
   to loaded plugins subscribed to its topic, and window events only to those holding `windows`.
@@ -167,6 +170,17 @@ calls (`secrets`, `storage`, `system`) are synchronous.
   and an `opened`, `closed` or `focused` for that window replaces its pending move.
   `notification` and `media` carry JSON from the shell's notification listener and media (SMTC)
   provider.
+
+  The shell's sources (`crates/shell/src/widgets/plugin_events.rs`): window `opened` (shown),
+  `closed` (hidden or destroyed), `focused` and `moved` from the shared WinEvent hook (top-level,
+  visible, titled windows; moves only for the windows that hook follows: Explorer and the
+  foreground app); `monitors` on a display change, `power` on a power broadcast and `theme` on a
+  settings change (the broadcasts the bars already watch); `media` as
+  `{"title","artist","album","app","playing"}` from a lease on the media provider. **The lease:**
+  the helper reports `HelperMsg::Demand { topics }`, the topics some loaded plugin with a visible
+  contribution subscribes to and may receive (none while the desktop is held). The shell hooks
+  windows and holds the media lease only while their topic is demanded, and drops other events
+  whose topic isn't, so with no subscriber nothing is hooked or leased.
 - **Images**: `ui.put-image(width, height, pixels)` (BGRA8 premultiplied, `width * 4` stride,
   1–4096 px a side) copies the pixels into a pagefile-backed named mapping and returns its id.
   `drop-image(id)` releases it, and unloading releases them all. A plugin holds at most 64 images
@@ -272,8 +286,11 @@ Token names, per surface (`color` is `#rrggbb` or `#rrggbbaa`; a `tone` names a 
 | `label`, `secondary`, `tertiary`, `separator`, `surface`, `elevated`, `hover`, `pressed`, `warning`, `destructive`, `positive` | color or tone | the theme colour role | same | the menu's own | — | — |
 | `accent` | color or tone | accent | same | same | — | `appearance.accent` |
 
-The desktop and tray menus take the top bar's tokens, then the `menu` surface's colours. Unknown
-names are ignored. `panel` and `widget` surfaces are accepted but not applied yet (see Status).
+The desktop and tray menus take the top bar's tokens, then the `menu` surface's colours. The
+flyouts (built-in and plugin panels) take the `panel` surface's glass, radius, tint and font
+tokens under the user's fields, plus its `label`, `accent` and `surface`/`background` colours,
+read again when the next flyout opens. Unknown names are ignored. The `widget` surface is
+accepted but not applied yet (see Status).
 
 ## Permissions
 
@@ -289,6 +306,8 @@ names are ignored. `panel` and `widget` surfaces are accepted but not applied ye
 | `native-code` | `native.call` into the plugin's own native modules (see [Native modules](#native-modules)) |
 | `process:<name>` | `process.run` of that executable (see above) |
 | `file:~/<path>` | `files.read` of exactly that file under the user's profile |
+| `desktop-menu` | its `menu` items in the desktop's right-click menu |
+| `shortcuts` | its `commands[].shortcut` as global hotkeys |
 
 Timers, views, styles of declared surfaces, `system.monitors/theme/power` and `log` need no
 permission. The WASI preview-2 imports a plugin gets are clocks, random, and stdout/stderr
@@ -334,11 +353,13 @@ it stops when the last plugin unloads. Frames are `[u32 len][postcard(HostMsg|He
 
 - shell → helper: `Open { plugin, dir, instance, face, size, settings }` (a repeat `Open` of a
   placed instance is a resize), `Close`, `Action { instance, action, value }`,
-  `Command { plugin, id }`, `Held(bool)`, `Stats`, `Shutdown`.
+  `Command { plugin, dir, id }` (`dir` is the folder, so a command loads a plugin nothing has
+  opened; only declared `menu`/`commands` ids are delivered), `Held(bool)`, `Stats`, `Shutdown`,
+  `System(SystemEvent)`, `Remove`.
 - helper → shell: `View { instance, face, changed }` (the kit tree as JSON inside the frame,
   changed faces only; `changed` counts replaced subtrees), `Status { plugin, Live | Restarting |
   Stopped | Unloaded }`, `Style { plugin, surface, patch? }`, `Stats { plugin, memory, cpu_us,
-  events }`.
+  events }`, `Notifications { plugins }`, `Demand { topics }`.
 
 The shell reads frames on a thread, queues them, and wakes its loop once per batch through the
 existing plugin message (`Msg::Plugin` with the reserved id `HELPER`), so the shell's event loop
@@ -602,24 +623,48 @@ Shell side (2026-11-05, late): style patches restyle the top bar, dock and menus
 renderer with `ui.put-image` images (the shell opens the helper's mappings itself) and
 `animated` springs; plugin modules in Studio's Bars "Add a module" sheet.
 
-Not yet: plugin panels and flyouts opened from a module; dock modules; the `panel` and `widget`
-style surfaces; plugin `menu` items in the desktop menu and `commands` as global shortcuts (the
-helper drops `HostMsg::Command` for a plugin it hasn't opened yet, so the shell side waits on
-the helper loading a plugin by id for a command, and on a `Plugins::command` sender). The
-shell's system-event sources: `Plugins::system_event` exists, but the window hooks, monitor
-changes, notification listener, media provider, power and theme don't call it yet. A toast's
-`action` coming back as an event.
+2026-11-06: commands load a plugin on demand (`Command` carries its folder); panels from bar
+modules as flyouts; plugin dock modules; the `panel` style surface; `menu` items in the desktop
+menu and `commands` as global shortcuts; the shell's window, monitor, media, power and theme
+sources behind the helper's `Demand` lease; toast actions back to the plugin. `plugins/hello`
+shows each (a `details` panel from its clock module, "Say hi" in the desktop menu and on
+Ctrl+Alt+Shift+H, which raises a toast with an action, and logged focus events).
+
+Not yet: the `widget` style surface; text entry (`field`) inside a plugin panel (its action
+fires without a value); shortcuts of plugins installed while the shell runs register at the
+next shell start; menu items and shortcuts of a disabled plugin are still shown and registered
+(invoking them is refused with a log line).
 
 ### Bar modules
 
 A component plugin's `bars` contribution is placed in the top bar's `left`, `center` or `right`
-list as `custom:<plugin>--<bar>` (`custom:hello--clock`), the same placement model as every
-module. The shell opens it as the instance `bar:<plugin>--<bar>` (`event::open` with size
+list, or the `taskbar`-style dock's `left` or `right` list, as `custom:<plugin>--<bar>`
+(`custom:hello--clock`), the same placement model as every module. The shell opens it as the instance `bar:<plugin>--<bar>` (`event::open` with size
 `small`) while it's placed, and closes it when it's removed. The bar draws the view's text as
 the module's one line (text nodes joined, a `metric`'s or `stat`'s value) in the bar's own
 font and colours, so a plugin module looks like a built-in one under any style. A click sends
 the view's first action (a `button`'s, `icon-button`'s or `list-row`'s), or `click` when it has
 none. A `custom:<id>` with a `command` in `modules` stays a script module.
+
+### Panels, menu items and shortcuts
+
+- **Panels.** A bar module whose manifest entry names a `panel` opens that panel on a left click
+  instead of sending an action (`bars/plugin_modules.rs`, `flyouts/plugin_panel.rs`). The panel is
+  a flyout like the built-in ones (one reused popup, glass, spring motion, Escape, focus and a
+  click elsewhere close it), drawn from the plugin's view tree with the same renderer as its
+  desktop faces, under its `name` and `icon`. Its size is the panel's `size.default` in 48 px
+  cells, 300–520 × 160–560 px. While it is on screen the host opens the instance
+  `panel:<plugin>--<panel>` (size `large`), and closing the flyout closes it.
+- **Desktop-menu items** (`desktop-menu`). The desktop menu ends with one submenu per plugin
+  with `menu` items, under the plugin's name and its first face's icon (a Segoe Fluent glyph for
+  known kit names, else the app glyph). Choosing an item sends `event::command(id)`.
+- **Shortcuts** (`shortcuts`). Each `commands[].shortcut` (`Ctrl`, `Alt`, `Shift`, `Win` and a
+  letter, digit or `F1`–`F24`; it needs `Ctrl`, `Alt` or `Win`) is registered as a global hotkey
+  on the shell thread when the shell starts. One another program or mypaper already holds is
+  refused with a log line (`shortcut … refused: another hotkey already uses it`). Pressing it
+  sends `event::command(id)`.
+- Either loads the plugin if nothing of it is open (and starts the helper if needed); with
+  nothing of it visible it unloads again after 30 s.
 
 ### Canvas and animated
 
