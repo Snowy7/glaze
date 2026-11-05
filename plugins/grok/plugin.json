@@ -66,10 +66,9 @@
   "permissions": [
     "launch",
     "secrets",
-    "network:{settings.webhookOrigin}"
+    "network:https://{settings.routines[].url}"
   ],
   "settings": [
-    { "type": "string", "key": "routines", "label": "Routine webhooks (JSON)", "group": "Advanced", "default": "[]" },
-    { "type": "string", "key": "webhookOrigin", "label": "Allowed webhook origin (https://host)", "group": "Advanced", "default": "" }
+    { "type": "string", "key": "routines", "label": "Routine webhooks (JSON)", "group": "Advanced", "default": "[]" }
   ]
 }
