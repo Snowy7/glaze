@@ -1,0 +1,3 @@
+{"cpu_core_pct":0.0,"private_mib":1.3359375,"provider":"Media","run":1,"stage":"disabled"}
+{"added_private_mib":2.12890625,"attempts":0,"availability":"Live","cpu_core_pct":0.0,"deliveries":2,"private_mib":3.46484375,"provider":"Media","run":1,"snapshot_changes":2,"stage":"enabled"}
+{"private_mib":3.234375,"stage":"stopped"}

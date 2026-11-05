@@ -1,0 +1,2 @@
+{"cpu_core_pct":0.0,"private_mib":1.3515625,"provider":"T3","run":1,"stage":"disabled"}
+{"availability":"Unavailable(\"pair mypaper with T3 using orchestration:read and store the token in Credential Manager\")","provider":"T3","stage":"activation"}

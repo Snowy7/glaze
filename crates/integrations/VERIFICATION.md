@@ -153,3 +153,92 @@ are the new shell messages; ordinary `Kind::Notifications` now uses the shared p
 
 Before enabling persistent notification/T3/Tailscale modules, complete the failed/pending gates
 above. The `liveVerified` settings are qualification flags, not proof of qualification.
+
+## Desktop integration widgets — 2026-11-05
+
+Six catalog entries now have kit views and demand-owned model hookups: `discord`, `t3`, `obs`,
+`docker`, `tailscale`, and `grok`. Each declares `SizeSpec.allowed = [[2, 2], [4, 2], [4, 4]]`.
+They use kit layout, text and palette roles, vector icons, hover/press/focus states and transparent
+glass bodies. A hidden or held widget drops its lease; another visible consumer may retain the
+shared provider. No polling, reconnect timer, client heartbeat or vendor process was added.
+OBS's visible elapsed clocks schedule seconds only during active recording/streaming; paused,
+disconnected, hidden and inactive clocks have no deadline.
+
+| Widget | Implemented state and controls | Live verification / remaining setup | Reviewed size sheet |
+|---|---|---|---|
+| Discord | Exact configured Windows AUMID filter, retained toast count/cards, Open Discord. Privacy setting still controls text retention. | Real notification snapshot and zero-count desktop state. Voice participants, speaking, self-mute/deafen and exact unread mentions are unavailable through the existing provider; approved Discord RPC access is required. | [Discord](../../docs/media/native/widget-discord.png) |
+| T3 Code | Active thread/provider status, approvals/questions, recent finished threads; copied configured thread links open on click. Native masked Connect prompt exchanges a one-time pairing code for `orchestration:read`. | Real port 3773 is listening; mypaper credential is absent. Pairing, summaries and narrowing pass loopback fixtures. User must pair and supply copied HTTPS entries in `t3.threadLinks`; absent links leave rows disabled. Live subscription remains gated by `liveVerified`. | [T3 Code](../../docs/media/native/widget-t3.png) |
+| OBS | Recording/streaming state and clocks, scene switcher, first microphone mute, recording/streaming start/stop. Streaming-only medium layout uses the stream clock. | OBS was not running and port 4455 was not listening. Real obs-websocket fixtures verify initial scenes/mic mute, explicit scene/mute request payloads, sharing, cancellation and no idle requests. User must run OBS with WebSocket enabled and store its password. | [OBS](../../docs/media/native/widget-obs.png) |
+| Docker | Container lifecycle/failure state, start/stop, CPU/memory samples on explicit Refresh. Unknown CPU stays unknown. | Docker Desktop service was stopped; no vendor app or WSL was started. Named-pipe fixtures verify lifecycle/control and one-shot stats requests. User must select the existing local engine pipe. | [Docker](../../docs/media/native/widget-docker.png) |
+| Tailscale | Connection, local address, exit node, bounded online/offline peer snapshot and connect/disconnect. | Real protected local pipe read; connected state and peer names inspected on the desktop. Snapshot mode retained because the earlier IPN idle qualification failed. Peer state updates on explicit refresh; VPN controls were tested only in fixtures. | [Tailscale](../../docs/media/native/widget-tailscale.png) |
+| Grok Bot | Configured saved routines, explicit Run, session-local recent request receipts (sending/accepted/failed). | Bot process is running, but no routines/keys were configured. Desktop setup state and fixture receipts inspected. User must configure webhook routines and keys. A 200 means accepted; general Bot execution/completion status has no provider contract. No paid routine ran. | [Grok Bot](../../docs/media/native/widget-grok.png) |
+
+Media retains the existing shared now-playing/media-pill widgets: a third widget would duplicate
+their functionality. A real SMTC read succeeded; two deliveries occurred during the short active
+user-session sample, so that sample is not evidence of unchanged-state idle behavior.
+
+### Checks and measurements
+
+- Integration library tests: **12 passed**; strict all-target Clippy passed. Fixtures cover the
+  T3 bootstrap form exchange and scope narrowing without persisting a fixture token, OBS scene/mic
+  payloads and clocks, Docker one-shot CPU/memory parsing and pipe requests, Tailscale peers,
+  credentials, subscriptions and cancellation.
+- Widget library: **125 passed, 3 intentionally ignored**.
+- Full shell library, serial native rendering: **72 passed, 6 intentionally ignored**. Earlier
+  golden mismatches were resolved; all 23 catalog goldens pass. The six integration baseline
+  images were added to `crates/shell/src/widgets/golden/` for that shared test.
+- The focused widget tests check identical-input/no-damage behavior at 1× and 1.5× in all three
+  sizes, bounds, glass without outlines, exact Discord identity filtering, inactive deadlines,
+  paused/disconnected clocks and disabled stale Docker actions. The six size sheets include
+  populated, setup, stale and empty states and were opened and visually reviewed.
+- Strict shell Clippy encountered three `unnecessary_cast` warnings outside this slice, in
+  `flyouts/quick.rs` and `widgets/views/toggles.rs`; those paths were left to their owners.
+- `CARGO_TARGET_DIR=C:\mypaper-targets\main cargo build --release --workspace` passed. Deployed
+  with `scripts/deploy-local.ps1`, which owns the desktop lock. The final desktop check temporarily
+  placed all six widgets in free portions of DISPLAY2: **6/6 visible**, inspected over the live
+  glass wallpaper. Layout and integration settings were restored in `finally`; no verification
+  instances remain. No input was sent to Discord, T3, OBS, Docker, Grok or Tailscale.
+- Local live captures are `%TEMP%\mypaper-integration-widgets-live.png` and
+  `%TEMP%\mypaper-widget-deployment.png`. They include real desktop/network context and are not
+  committed. Committed size sheets use synthetic metadata.
+
+These fresh adapter samples are **one 10-second observation each**, after a one-second disabled
+baseline and finite two-second activation grace. They are not the native plan's median-of-three
+60-second full-shell gates. Raw metadata is under `evidence/widget-*.jsonl`.
+
+| Read-only provider mode | CPU, one core | Added private MiB (provider gate ≤5) | Deliveries / displayed-state changes |
+|---|---:|---:|---:|
+| Tailscale snapshot | 0.00% | 0.488 | 0 / 0 |
+| Notifications snapshot (Discord consumer) | 0.00% | 1.727 | 0 / 0 |
+| Existing SMTC, user session active | 0.00% | 2.129 | 2 / 2 |
+
+Full-shell performance, authenticated live T3/OBS/Docker qualification, Discord RPC and Grok
+completion events remain unmeasured/unavailable; the table does not claim those gates passed.
+
+### Additive APIs and shared paths
+
+- `obs::Snapshot` adds scenes, microphones and two anchored `Clock`s; actions add
+  `SwitchScene(String)` and `MuteInput { name, muted }`. Subscription mask is now **76**
+  (Outputs | Scenes | Inputs), excluding meters. Mic state is seeded through `GetInputMute` and
+  changes through `InputMuteStateChanged`; scene/input lists refresh only on their events.
+- `Action::DockerMetrics` samples at most 16 running containers with
+  `/stats?stream=false&one-shot=true`. `docker::Snapshot::usage` holds `Usage` by exact ID;
+  lifecycle reconciliation invalidates samples. A missing prior CPU delta remains `None`.
+- `tailscale::Snapshot` adds bounded peers and `peers_known`. Snapshot reads now include peers;
+  no peer polling or extra watch traffic was enabled.
+- `launcher::routine_runs()` returns at most 16 session-local receipts shared by launcher and
+  widget submissions. `RoutineState` is `Sending | Accepted | Failed`; completion is not inferred.
+- `credentials::prompt_t3_pairing()` is invoked only by an explicit Connect click. The bootstrap
+  code is not persisted. `pairing::t3_blocking(endpoint, code)` makes one bounded loopback
+  `/oauth/token` exchange and stores the resulting narrow bearer in Credential Manager.
+  Protocol source: [T3 environment HTTP contract](https://github.com/pingdotgg/t3code/blob/a21d788752695764028e6d26ba924f3963e05806/packages/contracts/src/environmentHttp.ts).
+- The host changes outside the provider/view directories are the new widget kinds and model
+  field/deadline in `widgets/model.rs`, one sync hook and one action hook in `widgets/mod.rs`,
+  and six dispatch arms plus the module declaration in shared `widgets/views/mod.rs`. The view
+  owner committed that shared dispatch. The catalog-only baseline PNGs are the other necessary
+  artifacts outside `views/integrations/`. No grid/edit, bars, flyouts, Studio or engine code was
+  edited by this widget slice.
+
+Implementation commits include `c222aa7`, `daf03e2`, `e6ae486`, `c6d6280`, `e8b84d2` and `47552cf`.
+The shared view owner's `619734a` / `a5fbe77` also include the integration dispatch and some
+concurrent integration view/artifact updates from the shared checkout. No push was made.
