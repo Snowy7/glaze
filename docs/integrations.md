@@ -88,9 +88,14 @@ Manager. Values are UTF-8, at most 2560 bytes. They are never serialized in sett
 rotation requires Refresh/reconnect or closing/reopening the consumer. Removing a stored
 credential does not revoke an already authenticated vendor session; use the vendor's revocation UI.
 
-For notification consent, call `notifications::request_access()` on Studio's **UI thread**, only
-after the user's Grant access click. Await its returned WinRT operation. Packaged delivery needs
-`userNotificationListener`; mypaper never substitutes a timer when events are unsupported.
+For notification consent, the shell calls `notifications::request_access_once(completed)` on its
+**UI thread** when Studio enables notifications, or on the enabled integration's first run.
+Completion wakes the shell and reacquires consumers. Windows retains Allowed/Denied; a per-family
+marker under `%LOCALAPPDATA%\mypaper\notification-consent` remembers a dismissed first-run prompt.
+Denied access leaves a visible unavailable state; enable access in Windows Settings > Privacy &
+security > Notifications. `notifications::request_access()` remains available for an explicit
+UI-thread Grant access action; await its returned WinRT operation. Consent belongs to the identity
+of the calling process: enabling in Studio requests it from the packaged shell.
 
 T3 must be a separately authorized client with `orchestration:read`. Its MCP audience and injected
 agent tokens are not accepted substitutes. The documented command is
@@ -102,6 +107,46 @@ never appear in URLs. No T3 config, database or existing credential store is mod
 Grok routine actions run **only on a click**. A 200 is “accepted”, not “finished”. Redirects are
 disabled so an authorization header cannot be forwarded to another endpoint. Completion and
 needs-input notices come through Grok's Windows toasts, when enabled in that application.
+
+## Notifications: package identity and live delivery
+
+Live delivery uses a sparse MSIX named `mypaper.Desktop`, with external location pointing at the
+directory containing `mypaper-shell.exe` and `mypaper-core.exe`. Both exes embed matching `<msix>`
+identity metadata. The package declares `uap3:userNotificationListener`, `runFullTrust`, and
+`unvirtualizedResources`; it keeps ordinary Win32 behavior and existing settings paths. The engine
+still uses its existing unpackaged borderless-capture permission. Local sockets, named pipes and
+Credential Manager need no additional capabilities.
+
+[`scripts/package/`](../scripts/package/README.md) builds, signs, registers and unregisters identity.
+`scripts/deploy-local.ps1` performs registration under the desktop lock before restarting the exes.
+An identical installed manifest and external location are a no-op, preserving consent. Local
+deploy increments the package revision for changed metadata/location. The development signer
+creates/reuses a non-exportable current-user key and trusts only its public leaf in
+`CurrentUser\TrustedPeople`; no machine/root
+trust is modified. Release signing replaces that key with a trusted organizational certificate or
+CI signing service, with the same publisher across the package and both embedded manifests.
+On this Windows installation the Appx deployment service rejects current-user-only signed-package
+trust (`0x800B0109`). Local deploy explicitly registers the signed MSIX's unpacked development
+layout using already-enabled Developer Mode; no machine policy changes. Release registration
+installs the trusted signed archive directly. The package README documents this distinction.
+
+The resident desktop process subscribes through `UserNotificationListener.NotificationChanged`
+before reading its initial snapshot. The callback coalesces invalidations into one provider wake;
+no persistent helper, background trigger, timer or polling loop is installed. Without identity,
+or if registration fails, it logs one snapshot-mode line per process and continues to read on
+open/Refresh/dismiss. Persistent badge display still requires `notifications.liveVerified` and
+actual `Availability::Live`; denied/unavailable never becomes a zero count.
+
+Microsoft documents [the capability, UI-thread consent and both event mechanisms](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/app-notifications/notification-listener).
+Its [matching unpackaged failure report](https://github.com/microsoft/WindowsAppSDK/issues/6172)
+reproduces `0x80070490` while reads and access requests succeed. The
+[external-location identity guide](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/grant-identity-to-nonpackaged-apps)
+documents the exact package/exe manifest relationship and registration. The foreground/background
+delivery and idle measurements for this installation are recorded in the
+[package verification report](../scripts/package/VERIFICATION.md): in-process events passed with
+another application foreground, the actual bar/card updated within 475/451 ms, and two 60-second
+provider intervals recorded 0% CPU and zero deliveries/changes. No background trigger is needed
+on the tested Windows installation. Registration success alone does not qualify live delivery.
 
 ## Data, events and actions
 

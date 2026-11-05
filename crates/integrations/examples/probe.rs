@@ -2,11 +2,12 @@
 use mypaper_integrations::{Availability, Hub, Provider, config::Config};
 use std::{
     sync::mpsc,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use windows::Win32::{
     Foundation::FILETIME,
     System::{
+        Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize},
         ProcessStatus::{
             K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
         },
@@ -55,6 +56,27 @@ fn main() -> anyhow::Result<()> {
         _ => anyhow::bail!("expected notifications, media, tailscale or t3"),
     };
     let live = args.iter().any(|s| s == "--live");
+    if args.iter().any(|s| s == "--registration-only") {
+        // SAFETY: this short-lived probe initializes COM on its only thread and balances it below.
+        unsafe {
+            CoInitializeEx(None, COINIT_MULTITHREADED).ok()?;
+        }
+        let listener = windows::UI::Notifications::Management::UserNotificationListener::Current()?;
+        let registration = listener
+            .NotificationChanged(&windows::Foundation::TypedEventHandler::new(|_, _| Ok(())));
+        println!(
+            "{}",
+            serde_json::json!({"stage":"registration", "packaged":windows::ApplicationModel::Package::Current().is_ok(), "access":listener.GetAccessStatus()?.0, "result":registration.as_ref().err().map(|e| format!("{e}")).unwrap_or_else(|| "registered".into())})
+        );
+        if let Ok(token) = registration {
+            listener.RemoveNotificationChanged(token)?;
+        }
+        // SAFETY: balances this thread's successful initialization.
+        unsafe {
+            CoUninitialize();
+        }
+        return Ok(());
+    }
     let seconds = args
         .iter()
         .find_map(|s| s.strip_prefix("--seconds="))
@@ -65,6 +87,12 @@ fn main() -> anyhow::Result<()> {
         .find_map(|s| s.strip_prefix("--runs="))
         .unwrap_or("3")
         .parse::<usize>()?;
+    let baseline_seconds = args
+        .iter()
+        .find_map(|s| s.strip_prefix("--baseline-seconds="))
+        .map(str::parse::<u64>)
+        .transpose()?
+        .unwrap_or(seconds);
     let (tx, rx) = mpsc::channel();
     let hub = Hub::new(move |_| {
         let _ = tx.send(());
@@ -80,7 +108,7 @@ fn main() -> anyhow::Result<()> {
     for run in 0..runs {
         let (cpu, base) = usage()?;
         let began = Instant::now();
-        std::thread::sleep(Duration::from_secs(seconds));
+        std::thread::sleep(Duration::from_secs(baseline_seconds));
         let (after, _) = usage()?;
         println!(
             "{}",
@@ -122,6 +150,30 @@ fn main() -> anyhow::Result<()> {
             );
             drop(lease);
             break;
+        }
+        if let Some(app_id) = args.iter().find_map(|s| s.strip_prefix("--watch-aumid=")) {
+            let watch_seconds = args
+                .iter()
+                .find_map(|s| s.strip_prefix("--watch-seconds="))
+                .unwrap_or("15")
+                .parse::<u64>()?;
+            while rx.try_recv().is_ok() {}
+            println!(
+                "{}",
+                serde_json::json!({"stage":"watch_ready", "availability":status})
+            );
+            let end = Instant::now() + Duration::from_secs(watch_seconds);
+            while let Ok(()) = rx.recv_timeout(end.saturating_duration_since(Instant::now())) {
+                let snapshot = lease.snapshot();
+                if let Some(mypaper_integrations::Data::Notifications(notifications)) =
+                    snapshot.data
+                {
+                    println!(
+                        "{}",
+                        serde_json::json!({"stage":"notification_change", "at_unix_us":SystemTime::now().duration_since(UNIX_EPOCH)?.as_micros(), "availability":format!("{:?}",snapshot.availability), "deliveries":lease.activity().deliveries, "count":notifications.counts.get(app_id).copied().unwrap_or(0), "ids":notifications.cards.iter().filter(|c| c.app_id == app_id).map(|c| c.id).collect::<Vec<_>>()})
+                    );
+                }
+            }
         }
         while rx.try_recv().is_ok() {}
         // A finite activation grace period excludes initial State/Prefs/Status deliveries from idle.
