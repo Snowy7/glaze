@@ -314,7 +314,7 @@ fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: 
     } else {
         &[
             ("Layout", &["dock_margin", "dock_padding", "dock_spacing", "dock_magnify_scale", "dock_magnify_range"]),
-            ("Taskbar", &["dock_align", "dock_titles", "dock_clock_seconds"]),
+            ("Taskbar", &["dock_align", "dock_titles", "dock_button", "dock_clock_seconds"]),
             ("Apps", &["dock_running", "dock_split", "dock_counter", "dock_previews", "dock_preview_delay", "dock_bounce", "dock_attention", "dock_indicator"]),
             ("Look", &["dock_style_own", "dock_radius"]),
             ("Motion", &["dock_motion", "dock_motion_style"]),

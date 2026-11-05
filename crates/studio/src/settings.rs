@@ -971,6 +971,19 @@ pub static SETTINGS: &[Setting] = &[
         DOCK,
     )
     .more("Taskbar"),
+    // Missing: the icon plus 16, or 168 with titles; the slider starts at the icon's.
+    sl(
+        "dock_button",
+        "Button length",
+        B,
+        "/dock/button",
+        (16.0, 240.0, 4.0),
+        "px",
+        1.0,
+        48.0,
+        DOCK,
+    )
+    .more("Taskbar"),
     sw(
         "dock_clock_seconds",
         "Clock seconds",
