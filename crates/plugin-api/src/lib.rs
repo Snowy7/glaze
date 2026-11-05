@@ -109,6 +109,10 @@ pub mod wire {
         /// The system-event topics (`windows`, `monitors`, `media`, `power`, `theme`) at least one
         /// visible, permitted plugin subscribes to: the shell forwards only these (the lease).
         Demand { topics: Vec<String> },
+        /// A plugin opened `target` (`launch.open`, always inside a click's action). The shell,
+        /// which got the click and so may set the foreground, brings the app that handles it
+        /// forward: a single-instance app (T3 Code) handed the link can't raise itself.
+        Launched { plugin: String, target: String },
     }
 
     pub fn write<T: Serialize>(out: &mut impl Write, message: &T) -> io::Result<()> {

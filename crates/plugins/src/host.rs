@@ -161,10 +161,13 @@ impl<W: Write> Host<W> {
                 }
             }
             HostMsg::Action { instance, action, value } => {
-                if let Some(plugin) = self.owners.get(&instance).cloned()
-                    && self.ensure_loaded(&plugin, now).is_some()
-                {
-                    self.deliver(&plugin, Event::Action(Action { instance, action, value }), now);
+                match self.owners.get(&instance).cloned() {
+                    Some(plugin) if self.ensure_loaded(&plugin, now).is_some() => {
+                        log::debug!("action {action:?} on {instance} -> plugin {plugin}");
+                        self.deliver(&plugin, Event::Action(Action { instance, action, value }), now);
+                    }
+                    Some(plugin) => log::warn!("action {action:?} on {instance}: plugin {plugin} didn't load"),
+                    None => log::warn!("action {action:?} on {instance}: no face open there"),
                 }
             }
             HostMsg::Command { plugin, dir, id } => {
@@ -610,10 +613,14 @@ impl<W: Write> Host<W> {
                     }
                 }
                 Effect::Launch(target) => {
+                    log::debug!("plugin {plugin}: launch {target}");
+                    // The shell raises the app that handles it (it holds the click's foreground right).
+                    self.send(HelperMsg::Launched { plugin: plugin.into(), target: target.clone() });
                     let plugin = plugin.to_owned();
                     let spawned = std::thread::Builder::new().name("launch".into()).stack_size(256 << 10).spawn(move || {
-                        if let Err(e) = crate::caps::launch(&target) {
-                            log::warn!("plugin {plugin}: launch failed: {e}");
+                        match crate::caps::launch(&target) {
+                            Ok(()) => log::debug!("plugin {plugin}: launched {target}"),
+                            Err(e) => log::warn!("plugin {plugin}: launch {target} failed: {e}"),
                         }
                     });
                     if let Err(e) = spawned {

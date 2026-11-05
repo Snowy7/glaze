@@ -615,6 +615,10 @@ impl Plugins {
                 wire::HelperMsg::Removed { plugin } => {
                     if self.uninstalling.remove(&plugin) { self.finish_uninstall(&plugin); }
                 }
+                wire::HelperMsg::Launched { plugin, target } => {
+                    log::debug!("plugin {plugin}: launched {target}; raising its app");
+                    raise_handler(&target);
+                }
             }
         }
         Vec::new()
@@ -785,19 +789,26 @@ impl Plugins {
 
     /// A click on a view's `action` (or a submitted field's `value`).
     pub fn face_action(&mut self, instance: &str, action: &str, value: Option<String>) {
-        let Some(slot) = self.faces.get(instance) else { return };
+        let Some(slot) = self.faces.get(instance) else {
+            log::warn!("plugin action {action:?} on {instance}: no face open there");
+            return;
+        };
         if slot.component.is_some() {
-            if let Some(helper) = &self.helper {
-                // The click is the user's: let the app the plugin opens for it ("open this T3
-                // thread") come to the front, instead of only flashing in the taskbar. The right
-                // lasts until the next input, so it only covers this click.
-                // SAFETY: plain Win32 call; failure only means the opened app may not come forward.
-                let _ = unsafe {
-                    windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(
-                        windows::Win32::UI::WindowsAndMessaging::ASFW_ANY,
-                    )
-                };
-                let _ = helper.frames.send(wire::HostMsg::Action { instance: instance.into(), action: action.into(), value });
+            let Some(helper) = &self.helper else {
+                log::warn!("plugin {}: action {action:?} on {instance} dropped: the plugin runtime isn't running", slot.plugin);
+                return;
+            };
+            // The click is the user's: let the app the plugin opens for it come to the front
+            // (also raised by `Launched`, see `raise_handler`). The right lasts until the next input.
+            // SAFETY: plain Win32 call; failure only means the opened app may not come forward.
+            let allowed = unsafe {
+                windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(
+                    windows::Win32::UI::WindowsAndMessaging::ASFW_ANY,
+                )
+            };
+            log::debug!("plugin {}: action {action:?} on {instance} -> helper (foreground right passed on: {allowed:?})", slot.plugin);
+            if helper.frames.send(wire::HostMsg::Action { instance: instance.into(), action: action.into(), value }).is_err() {
+                log::warn!("plugin {}: action {action:?} on {instance} lost: the runtime's pipe closed", slot.plugin);
             }
             return;
         }
@@ -1275,6 +1286,125 @@ impl Plugins {
     }
 }
 
+/// The URL scheme of a launch target (`t3code` of `t3code://threads/…`); none for a path
+/// (`C:\…` has a one-letter "scheme").
+fn scheme(target: &str) -> Option<&str> {
+    let (scheme, _) = target.split_once(':')?;
+    let valid = scheme.len() > 1 && scheme.starts_with(|c: char| c.is_ascii_alphabetic()) && scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+    valid.then_some(scheme)
+}
+
+/// Brings the app that handles a plugin's `launch.open` target to the front, from the shell (the
+/// process that got the click, so Windows lets it set the foreground). A running single-instance
+/// app (T3 Code) gets the link from its second instance and can't raise itself; one that is
+/// starting is waited for up to 5 s. Stops as soon as the foreground changes otherwise (the
+/// user moved on, or the app came forward by itself).
+fn raise_handler(target: &str) {
+    use windows::Win32::UI::Shell::{ASSOCF_IS_PROTOCOL, ASSOCSTR_EXECUTABLE, AssocQueryStringW};
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    use windows::core::{HSTRING, PWSTR};
+    let Some(scheme) = scheme(target) else { return };
+    let mut buffer = [0u16; 1024];
+    let mut len = buffer.len() as u32;
+    // SAFETY: a buffer of the length we pass.
+    let found = unsafe { AssocQueryStringW(ASSOCF_IS_PROTOCOL, ASSOCSTR_EXECUTABLE, &HSTRING::from(scheme), PCWSTR::null(), Some(PWSTR(buffer.as_mut_ptr())), &mut len) };
+    let end = buffer.iter().position(|&c| c == 0).unwrap_or(0);
+    if found.is_err() || end == 0 {
+        log::debug!("launch {scheme}: no registered app to raise");
+        return;
+    }
+    let exe = String::from_utf16_lossy(&buffer[..end]);
+    // SAFETY: read-only query.
+    let before = unsafe { GetForegroundWindow() }.0 as isize;
+    let spawned = std::thread::Builder::new().name("raise".into()).stack_size(128 << 10).spawn(move || {
+        for _ in 0..50 {
+            // SAFETY: read-only query.
+            let now = unsafe { GetForegroundWindow() }.0 as isize;
+            if now != before {
+                log::debug!("raise {exe}: the foreground changed; leaving it");
+                return;
+            }
+            if let Some(window) = window_of(&exe) {
+                let raised = bring_forward(window);
+                log::debug!("raise {exe}: {}", if raised { "brought to the front" } else { "Windows refused the foreground" });
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        log::debug!("raise {exe}: no window within 5 s");
+    });
+    if let Err(e) = spawned {
+        log::warn!("no raise thread: {e}");
+    }
+}
+
+/// The topmost visible, unowned, titled top-level window of the process running `exe`.
+fn window_of(exe: &str) -> Option<windows::Win32::Foundation::HWND> {
+    use windows::Win32::Foundation::{HWND, LPARAM};
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
+    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GW_OWNER, GetWindow, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible};
+    use windows::core::{BOOL, PWSTR};
+    struct Search<'a> {
+        exe: &'a str,
+        found: Option<HWND>,
+    }
+    unsafe extern "system" fn visit(hwnd: HWND, search: LPARAM) -> BOOL {
+        // SAFETY: `search` is the `Search` passed below, alive for the whole EnumWindows call;
+        // the rest are read-only queries on a handle from EnumWindows, and the process handle is
+        // closed before returning.
+        unsafe {
+            let search = &mut *(search.0 as *mut Search);
+            if !IsWindowVisible(hwnd).as_bool() || GetWindow(hwnd, GW_OWNER).is_ok_and(|o| !o.is_invalid()) || GetWindowTextLengthW(hwnd) == 0 {
+                return true.into();
+            }
+            let mut pid = 0;
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else { return true.into() };
+            let mut path = [0u16; 1024];
+            let mut len = path.len() as u32;
+            let ok = QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, PWSTR(path.as_mut_ptr()), &mut len).is_ok();
+            let _ = CloseHandle(process);
+            if ok && String::from_utf16_lossy(&path[..len as usize]).eq_ignore_ascii_case(search.exe) {
+                search.found = Some(hwnd);
+                return false.into();
+            }
+            true.into()
+        }
+    }
+    let mut search = Search { exe, found: None };
+    // SAFETY: the callback only runs during this call, while `search` is alive.
+    let _ = unsafe { EnumWindows(Some(visit), LPARAM(&raw mut search as isize)) };
+    search.found
+}
+
+/// Restores `window` if minimized and makes it the foreground window. If Windows refuses (the
+/// right was lost to input queues being attached), joins the foreground thread's input for the
+/// call, the standard way for the process that got the click.
+fn bring_forward(window: windows::Win32::Foundation::HWND) -> bool {
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::WindowsAndMessaging::{BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, IsGUIThread, IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow};
+    // SAFETY: window calls on a handle that may be stale (they then just fail); the thread input
+    // is detached again before returning.
+    unsafe {
+        if IsIconic(window).as_bool() {
+            let _ = ShowWindow(window, SW_RESTORE);
+        }
+        if SetForegroundWindow(window).as_bool() {
+            return true;
+        }
+        let _ = IsGUIThread(true); // AttachThreadInput needs this thread to have a queue
+        let foreground = GetWindowThreadProcessId(GetForegroundWindow(), None);
+        let me = GetCurrentThreadId();
+        let attached = foreground != 0 && foreground != me && AttachThreadInput(me, foreground, true).as_bool();
+        let _ = BringWindowToTop(window);
+        let raised = SetForegroundWindow(window).as_bool();
+        if attached {
+            let _ = AttachThreadInput(me, foreground, false);
+        }
+        raised
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1370,6 +1500,14 @@ mod tests {
         if let Ok(data) = crate::files::user("plugin-data") {
             let _ = std::fs::remove_dir_all(data.join("crashy"));
         }
+    }
+
+    /// Launch targets with a URL scheme get their handler app raised; paths don't.
+    #[test]
+    fn launch_targets_name_their_scheme() {
+        assert_eq!(super::scheme("t3code://threads/env/thread"), Some("t3code"));
+        assert_eq!(super::scheme("https://example.com"), Some("https"));
+        assert_eq!(super::scheme(r"C:\Program Files\app.exe"), None);
     }
 
     #[test]
