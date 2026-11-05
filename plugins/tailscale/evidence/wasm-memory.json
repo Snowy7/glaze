@@ -1,0 +1,34 @@
+{
+  "read_only": true,
+  "faces": [
+    "connection",
+    "peers",
+    "traffic"
+  ],
+  "baseline": {
+    "private_mib": 4.6015625,
+    "working_set_mib": 9.265625
+  },
+  "active": {
+    "private_mib": 7.83203125,
+    "working_set_mib": 18.15234375
+  },
+  "added_private_mib": 3.23046875,
+  "idle_seconds": 20.000237300002482,
+  "idle_plugin_events": 0,
+  "idle_plugin_cpu_us": 0,
+  "stats": [
+    {
+      "plugin": "tailscale",
+      "linear_memory_bytes": 1376256,
+      "cpu_us": 1408,
+      "events": 4
+    },
+    {
+      "plugin": "tailscale",
+      "linear_memory_bytes": 1376256,
+      "cpu_us": 1408,
+      "events": 4
+    }
+  ]
+}
