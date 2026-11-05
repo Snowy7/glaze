@@ -61,6 +61,9 @@ fn thread(id: &str, title: &str, status: Status, mins_ago: Option<i64>) -> Threa
         held: false,
         latest_run_completed_at: None,
         last_visited_at: None,
+        settled: false,
+        archived: false,
+        snoozed_until: None,
     }
 }
 
@@ -179,6 +182,14 @@ pub fn edges() -> Vec<(&'static str, Snapshot)> {
     let mut approval = thread("s-approval", "Wants to run cargo build", Status::Waiting, Some(1));
     approval.pending_runtime_request = Some(t3::Request { id: "a".into(), kind: "command".into() });
     let blocked = Thread { blocked_on_thread_wait: true, ..thread("s-blocked", "Waits on another thread", Status::Running, Some(9)) };
+    // Never shown: settled (even asking for input), snoozed, archived, and a settled thread's agent.
+    let mut settled = Thread { settled: true, ..thread("x-settled", "HIDDEN settled but asking", Status::Waiting, Some(2)) };
+    settled.pending_runtime_request = Some(t3::Request { id: "s".into(), kind: "user_input".into() });
+    let snoozed = Thread { snoozed_until: Some(before(-60)), ..thread("x-snoozed", "HIDDEN snoozed", Status::Running, Some(2)) };
+    let archived = Thread { archived: true, ..thread("x-archived", "HIDDEN archived", Status::Running, Some(2)) };
+    let settled_done = Thread { settled: true, ..finished("x-done", "HIDDEN settled done unread", Status::Completed, 5, Some(60)) };
+    let mut settled_agent = thread("x-agent", "HIDDEN agent of a settled thread", Status::Running, Some(1));
+    settled_agent.pending_runtime_request = Some(t3::Request { id: "g".into(), kind: "command".into() });
     let states = snapshot(
         Availability::Live,
         vec![
@@ -192,8 +203,13 @@ pub fn edges() -> Vec<(&'static str, Snapshot)> {
             finished("s-done", "Finished, not read yet", Status::Completed, 12, Some(40)),
             finished("s-failed", "Failed, never opened", Status::Failed, 20, None),
             finished("s-read", "Finished and read: hidden", Status::Completed, 30, Some(2)),
+            settled,
+            snoozed,
+            archived,
+            settled_done,
+            settled_agent,
         ],
-        vec![("s-agent-1", agent_of("s-wait")), ("s-agent-2", agent_of("s-wait")), ("s-work", model("claude-opus-5-5"))],
+        vec![("s-agent-1", agent_of("s-wait")), ("s-agent-2", agent_of("s-wait")), ("s-work", model("claude-opus-5-5")), ("x-agent", agent_of("x-settled"))],
         vec![],
         None,
     );
@@ -269,6 +285,25 @@ fn thread_states_follow_t3() {
     let running = serde_json::to_string(&edge_faces()["states"]["running"]["large"]).unwrap();
     assert!(running.contains("Finished, not read yet") && !running.contains("Finished and read"), "{running}");
     assert!(running.contains("\"tag\":\"Waiting\""), "{running}");
+}
+
+/// Settled, snoozed and archived threads (and a settled thread's agent) appear in no face, size
+/// or count, the bar module included.
+#[test]
+fn settled_snoozed_and_archived_threads_never_show() {
+    let (_, states) = edges().into_iter().find(|e| e.0 == "states").unwrap();
+    for face in ["running", "attention", "status"] {
+        for (_, size) in SIZES {
+            let json = serde_json::to_string(&crate::faces::face(face, size, &states, &crate::faces::Pick::default(), NOW)).unwrap();
+            assert!(!json.contains("HIDDEN"), "{face}/{size:?}: {json}");
+            if face == "status" {
+                // 2 need input (approval, input), 3 running (working, blocked, waiting on agents).
+                assert!(json.contains("3 running · 2 need input"), "{json}");
+            }
+        }
+    }
+    let small = serde_json::to_string(&edge_faces()["states"]["attention"]["small"]).unwrap();
+    assert!(small.contains("\"text\":\"2\""), "{small}");
 }
 
 #[test]

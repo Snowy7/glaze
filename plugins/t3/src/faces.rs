@@ -13,10 +13,13 @@ pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, pick: &Pick, now_m
     let body = match &snapshot.data {
         Some(Data::T3(state)) => match face {
             // The top-bar module: the bar draws its text.
-            "status" => View::text(
-                format!("{} running · {} need input", state.threads.iter().filter(|t| t.running()).count(), state.threads.iter().filter(|t| t.attention()).count()),
-                Role::Caption,
-            ),
+            // The top-bar module counts what the lists show (never settled or snoozed threads).
+            "status" => {
+                let groups = groups(state, now_ms);
+                let need = groups.iter().filter(|g| rank(g.1) == 0).count();
+                let running = groups.iter().filter(|g| rank(g.1) == 1).count();
+                View::text(format!("{running} running · {need} need input"), Role::Caption)
+            }
             "limits" => limits(state, size, now_ms),
             "usage" => usage(state, size),
             "new" => composer(state, size, pick),
@@ -179,13 +182,16 @@ fn parent<'a>(state: &'a State, thread: &Thread) -> Option<&'a str> {
 /// Running now / Needs you: top-level threads with their subagents grouped under them. Each
 /// state is T3's own (`Thread::pill`): Running now keeps a finished thread, tagged Done or
 /// Failed, until it's read in T3; Needs you lists approvals and questions.
-fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64, summary: &mut Option<String>) -> View {
-    let shown = |pill: Pill| if attention { rank(pill) == 0 } else { true };
-    // One pass over the threads: the tops, and each live agent under its parent. Every redraw
-    // (a click included) runs this, so it must stay linear in the thread count.
+/// A listed thread, its T3 state, and its live subagents.
+type Group<'a> = (&'a Thread, Pill, Vec<(&'a Thread, Pill)>);
+
+/// Every thread a list or count may show, grouped and ordered. Settled, archived and snoozed
+/// threads never appear (nor their subagents), whatever they wait for. One pass over the
+/// threads: every redraw (a click included) runs this, so it stays linear in the thread count.
+pub(crate) fn groups(state: &State, now_ms: i64) -> Vec<Group<'_>> {
     let mut tops: Vec<&Thread> = Vec::new();
     let mut agents_of: std::collections::HashMap<&str, Vec<(&Thread, Pill)>> = std::collections::HashMap::new();
-    for thread in &state.threads {
+    for thread in state.threads.iter().filter(|t| !t.hidden(now_ms)) {
         match parent(state, thread) {
             None => tops.push(thread),
             Some(parent) => {
@@ -195,17 +201,25 @@ fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64, summary
             }
         }
     }
-    let mut groups: Vec<(&Thread, Pill, Vec<(&Thread, Pill)>)> = tops
+    let mut groups: Vec<Group<'_>> = tops
         .into_iter()
         .filter_map(|top| {
             let agents = agents_of.remove(top.id.as_str()).unwrap_or_default();
             // A subagent asking for something makes its thread need you, as in T3.
             let asking = agents.iter().map(|a| a.1).find(|p| rank(*p) == 0);
             let pill = asking.filter(|_| top.pill(false).is_none_or(|p| rank(p) > 0)).or_else(|| top.pill(!agents.is_empty()))?;
-            shown(pill).then_some((top, pill, agents))
+            Some((top, pill, agents))
         })
         .collect();
     groups.sort_by(|a, b| rank(a.1).cmp(&rank(b.1)).then_with(|| b.0.updated_at.cmp(&a.0.updated_at)));
+    groups
+}
+
+fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64, summary: &mut Option<String>) -> View {
+    let mut groups = groups(state, now_ms);
+    if attention {
+        groups.retain(|g| rank(g.1) == 0);
+    }
     let agents: usize = groups.iter().map(|g| g.2.len()).sum();
     let count = groups.len();
     let active = groups.iter().filter(|g| rank(g.1) < 2).count();

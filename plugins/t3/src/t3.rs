@@ -83,6 +83,14 @@ struct ShellThread {
     latest_run_completed_at: Option<String>,
     #[serde(default)]
     last_visited_at: Option<String>,
+    #[serde(default)]
+    settled_override: Option<String>,
+    #[serde(default)]
+    settled_at: Option<String>,
+    #[serde(default)]
+    snoozed_until: Option<String>,
+    #[serde(default)]
+    archived_at: Option<String>,
 }
 #[derive(Default, Deserialize)]
 #[serde(default)]
@@ -118,7 +126,16 @@ impl ShellThread {
             background_tasks: self.pending_background_tasks.len(),
         };
         let held = self.pending_background_tasks.iter().any(ShellTask::holds);
+        // Settled by the user (or by T3, until they make it active again).
+        let settled = match self.settled_override.as_deref() {
+            Some("settled") => true,
+            Some("active") => false,
+            _ => self.settled_at.is_some(),
+        };
         let thread = Thread {
+            settled,
+            archived: self.archived_at.is_some(),
+            snoozed_until: self.snoozed_until,
             blocked_on_thread_wait: self.blocked_on_thread_wait,
             held,
             latest_run_completed_at: self.latest_run_completed_at,
@@ -184,6 +201,12 @@ pub struct Thread {
     /// When the user last opened it in T3 (T3's read state).
     #[serde(default)]
     pub last_visited_at: Option<String>,
+    #[serde(default)]
+    pub settled: bool,
+    #[serde(default)]
+    pub archived: bool,
+    #[serde(default)]
+    pub snoozed_until: Option<String>,
 }
 
 /// A thread's sidebar state, derived as T3's `resolveThreadStatusPill` does (approval, input,
@@ -204,6 +227,13 @@ fn instant(text: &str) -> Option<i64> {
 }
 
 impl Thread {
+    /// Off every list and count: settled or archived, or snoozed until later (T3's
+    /// `effectiveSnoozed`; a snoozed thread that asks for something comes back, as in T3).
+    pub fn hidden(&self, now_ms: i64) -> bool {
+        let snoozed = self.snoozed_until.as_deref().and_then(instant).is_some_and(|wake| wake > now_ms) && self.pending_runtime_request.is_none();
+        self.settled || self.archived || snoozed
+    }
+
     /// `agents_busy`: one of its subagents is still working, which keeps an idle parent Waiting.
     pub fn pill(&self, agents_busy: bool) -> Option<Pill> {
         if let Some(request) = &self.pending_runtime_request {
