@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! set MYPAPER_LAB=themes\rain-city;%TEMP%\mypaper-lab\before;3,12,30;150
-//! cargo test -p mypaper-wallpaper lab -- --ignored --nocapture
+//! cargo test -p mypaper-wallpaper lab::lab -- --ignored --exact --nocapture
 //! ```
 //!
 //! Fields: theme folder (from the repo root); output folder; capture times in seconds; timed
@@ -384,9 +384,9 @@ fn memory() {
         gpu.queue.submit([encoder.finish()]);
     }
     step("first frames + glass", Some(&gpu));
-    // The backdrop pyramid an animated source keeps per screen (backdrop.rs DIVISORS).
+    // Two backdrop pyramids (backdrop.rs DIVISORS), as two screens of different kept frames keep.
     let pyramids: Vec<_> = (0..2)
-        .flat_map(|_| [1, 2, 4, 8, 16, 32, 64])
+        .flat_map(|_| [2, 4, 8, 16, 32, 64])
         .map(|d: u32| {
             let size = (SIZE.0.div_ceil(d).max(1), SIZE.1.div_ceil(d).max(1));
             gpu.texture(
