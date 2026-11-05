@@ -16,7 +16,7 @@ fn obs_component_uses_scoped_websocket_and_renders_offline_without_controls() {
     let runtime = Runtime::new(scratch.join("cache"), scratch.join("data")).unwrap();
     let manifest = Manifest::load(&root).unwrap();
     let (component, _) = runtime.component(&manifest, &root).unwrap();
-    let mut instance = runtime.instantiate_with_settings(&manifest, &component, None, "{\"port\":4466}").unwrap();
+    let mut instance = runtime.instantiate_with_settings(&manifest, &component, None, "{\"port\":4466.0}").unwrap();
     let open = Event::Open(FaceOpen { instance: "obs-fixture".into(), face: "controls".into(), size: SizeClass::Large, settings: "{}".into() });
     let effects = instance.event(&open).unwrap();
     let socket = effects.iter().find_map(|e| match e {

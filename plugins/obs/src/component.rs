@@ -6,7 +6,7 @@ use crate::{Availability, Data, Snapshot, faces, obs};
 
 #[derive(Default)]
 struct Obs {
-    faces: BTreeMap<String, SizeClass>,
+    faces: BTreeMap<String, (SizeClass, bool)>,
     connection: obs::Connection,
     socket: Option<u64>,
     port: u16,
@@ -45,9 +45,9 @@ impl Obs {
         }
     }
     fn draw(&self) {
-        for (id, size) in &self.faces {
-            let mut face = faces::face(*size, &self.snapshot, now());
-            if self.needs_password {
+        for (id, (size, bar)) in &self.faces {
+            let mut face = if *bar { faces::bar(&self.snapshot).face() } else { faces::face(*size, &self.snapshot, now()) };
+            if self.needs_password && !bar {
                 face.body = mypaper_plugin_sdk::View::stack([
                     mypaper_plugin_sdk::View::empty("video", "OBS password needed", "Enter the WebSocket password to connect."),
                     mypaper_plugin_sdk::View::Field { placeholder: "Save OBS password…".into(), action: "password".into() },
@@ -61,8 +61,9 @@ impl Obs {
         if self.connection.live() {
             timers::cancel("handshake");
             self.snapshot = Snapshot { availability: Availability::Live, data: Some(Data::Obs(self.connection.state.clone())), observed_at_ms: now() };
-            let _ = timers::every("stats", 5000);
-            if self.connection.state.record_clock.advancing || self.connection.state.stream_clock.advancing { let _ = timers::every("clock", 1000); }
+            let controls_visible = self.faces.values().any(|(_, bar)| !bar);
+            if controls_visible { let _ = timers::every("stats", 5000); } else { timers::cancel("stats"); }
+            if controls_visible && (self.connection.state.record_clock.advancing || self.connection.state.stream_clock.advancing) { let _ = timers::every("clock", 1000); }
             else { timers::cancel("clock"); }
         }
     }
@@ -70,16 +71,18 @@ impl Obs {
 impl Plugin for Obs {
     fn init(&mut self, info: &guest::InitInfo, _state: Option<&[u8]>) -> Result<(), String> {
         let settings: Value = serde_json::from_str(&info.settings).map_err(|e| e.to_string())?;
-        self.port = settings["port"].as_u64().unwrap_or(4455).try_into().ok().filter(|p| *p > 0).ok_or("OBS port must be between 1 and 65535")?;
+        let port = settings["port"].as_f64().unwrap_or(4455.0);
+        if port.fract() != 0.0 || !(1.0..=65535.0).contains(&port) { return Err("OBS port must be an integer between 1 and 65535".into()); }
+        self.port = port as u16;
         Ok(())
     }
     fn on_event(&mut self, event: Event) {
         match event {
             Event::Open(open) | Event::Resize(open) => {
                 let size = match open.size { guest::SizeClass::Small => SizeClass::Small, guest::SizeClass::Medium => SizeClass::Medium, guest::SizeClass::Large => SizeClass::Large };
-                self.faces.insert(open.instance, size); self.connect();
+                self.faces.insert(open.instance, (size, open.face == "status")); self.connect(); self.sync();
             }
-            Event::Close(id) => { self.faces.remove(&id); if self.faces.is_empty() { self.stop(); } }
+            Event::Close(id) => { self.faces.remove(&id); if self.faces.is_empty() { self.stop(); } else { self.sync(); } }
             Event::Suspend => { self.suspended = true; self.stop(); }
             Event::Resume => { self.suspended = false; self.connect(); }
             Event::Timer(id) => match id.as_str() {

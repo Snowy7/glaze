@@ -30,6 +30,14 @@ fn scenes(state: &obs::Snapshot) -> View {
         selected: Some(state.scene.clone()) }
 }
 
+pub fn bar(snapshot: &Snapshot) -> View {
+    let Some(Data::Obs(state)) = snapshot.data.as_ref().filter(|_| snapshot.availability == Availability::Live) else {
+        return View::text("OBS offline", Role::Caption);
+    };
+    View::tinted(format!("{}{}{}", if state.recording { "REC · " } else { "" }, if state.streaming { "LIVE · " } else { "" }, state.scene),
+        Role::Caption, if state.recording || state.streaming { Tone::Destructive } else { Tone::Secondary })
+}
+
 /// Three bodies, using the native fixture's clocks, scene list and microphone controls.
 pub fn face(size: SizeClass, snapshot: &Snapshot, now: i64) -> Face {
     let live = snapshot.availability == Availability::Live;

@@ -7,6 +7,7 @@
   "faces": [
     { "id": "controls", "name": "Controls", "icon": "video", "size": { "default": [8, 4], "min": [4, 4], "max": [12, 8] } }
   ],
+  "bars": [{ "id": "status", "name": "OBS Studio", "icon": "video", "size": { "default": [1, 1] } }],
   "permissions": ["secrets", "network:ws://127.0.0.1:{settings.port}"],
   "limits": { "memory_mb": 8 },
   "settings": [
