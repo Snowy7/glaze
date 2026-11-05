@@ -4,6 +4,7 @@
 //! keyboard or by dragging, add, remove) or its pinned apps, then More (layout, clock, look,
 //! motion, displays). A module shows its clicks and its look; your own module its command.
 
+use mypaper_ui::controls::Glyph;
 use mypaper_bars::{BarsConfig, ModuleRef};
 use mypaper_ui::controls::{Align, ButtonKind, Font, key};
 use mypaper_ui::{Point, Rect, Role};
@@ -53,7 +54,7 @@ pub const DOCK_DESIGNS: [(&str, &str); 9] = [
 ];
 
 /// Modules, as Studio names them.
-const MODULES: [(&str, &str, char); 15] = [
+const MODULES: [(&str, &str, Glyph); 15] = [
     ("start", "Start", glyph::START),
     ("search", "Search", glyph::SEARCH),
     ("workspaces", "Desktops", glyph::LAYERS),
@@ -90,7 +91,7 @@ pub fn module_name(m: &ModuleRef) -> String {
     MODULES.iter().find(|(id, ..)| *id == k).map_or(k.clone(), |(_, n, _)| (*n).to_owned())
 }
 
-fn module_glyph(k: &str) -> char {
+fn module_glyph(k: &str) -> Glyph {
     if k.starts_with("custom:") {
         return glyph::TERMINAL;
     }
@@ -416,7 +417,7 @@ fn modules(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: Bar) {
             b.text_at(c.x, c.y, name, &caption, b.p.ink3);
             c.y += b.px(22.0);
             let rect = Rect::new(c.x, c.y, c.w, (items.len().max(1)) as f32 * b.px(36.0));
-            b.fill(rect, b.px(8.0), b.p.chrome);
+            b.fill(rect, b.px(10.0), b.p.well);
             if items.is_empty() {
                 b.text_in(rect.inflate(-b.px(12.0)), "Empty: drag a module here", &caption, b.p.ink4, Align::Start);
             }
@@ -428,7 +429,6 @@ fn modules(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: Bar) {
                     crate::ui::list_row(b, r, key(("module", bar.key(), list, i)), Some(module_glyph(&k)), &module_name(m), Action::SelectModule(Some(slot.clone())), Some(Action::RemoveModule(slot)), i + 1 == items.len());
                 }
             });
-            b.stroke(rect, b.px(8.0), 1.0, b.p.line);
             // A drop caret while dragging a module over this list.
             if let Some(Drag::Module { moved: true, .. }) = &app.drag
                 && let Some(pt) = b.input.pointer
@@ -464,7 +464,7 @@ fn pins(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, which: Pins) {
         }
         let pins = own_pins(config, which);
         let rect = Rect::new(c.x, c.y, c.w, pins.len().max(1) as f32 * b.px(36.0));
-        b.fill(rect, b.px(8.0), b.p.chrome);
+        b.fill(rect, b.px(10.0), b.p.well);
         b.group(key(("pins", which)), |b| {
             for (i, pin) in pins.iter().enumerate() {
                 let name = pin.name.clone().unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path));
@@ -472,7 +472,6 @@ fn pins(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, which: Pins) {
                 crate::ui::list_row(b, r, key(("pin", which, i)), Some(glyph::APP), &name, Action::PinRemove(which, i), Some(Action::PinRemove(which, i)), i + 1 == pins.len());
             }
         });
-        b.stroke(rect, b.px(8.0), 1.0, b.p.line);
         c.y = rect.bottom + b.px(8.0);
     });
 }
@@ -606,7 +605,7 @@ fn click(app: &App, b: &mut B, c: &mut Col, base: &str, trigger: &str, name: &st
 }
 
 fn panel_inspector(app: &App, b: &mut B, col: &mut Col, panel: Panel) {
-    let (name, g, ids): (&str, char, &[&str]) = match panel {
+    let (name, g, ids): (&str, Glyph, &[&str]) = match panel {
         Panel::Start => ("Start menu", glyph::START, &["start_layout", "start_files", "start_win_key"]),
         Panel::Calendar => ("Calendar", glyph::CALENDAR, &["calendar_first_day"]),
         Panel::Sound => ("Sound", glyph::SOUND, &["sound_switch"]),
@@ -873,7 +872,7 @@ pub fn add_sheet(app: &App, b: &mut B, bar: Bar) {
     let gap = b.px(8.0);
     let w = (rect.width() - gap * 2.0) / 3.0;
     let mut n: usize = 0;
-    let available: Vec<(String, String, char)> = MODULES
+    let available: Vec<(String, String, Glyph)> = MODULES
         .iter()
         .filter(|(id, ..)| !shown.iter().any(|s| s == id))
         .map(|(id, name, g)| ((*id).to_owned(), (*name).to_owned(), *g))
@@ -883,8 +882,8 @@ pub fn add_sheet(app: &App, b: &mut B, bar: Bar) {
         for (id, name, g) in &available {
             let r = Rect::new(rect.left + (n % 3) as f32 * (w + gap), y + (n / 3) as f32 * b.px(44.0), w, b.px(38.0));
             let k = key(("add-module", id.as_str()));
-            b.fill(r, b.px(8.0), if b.hovered(k) { p.hover } else { p.bg });
-            b.stroke(r, b.px(8.0), 1.0, p.edge);
+            b.fill(r, b.px(10.0), p.well);
+            b.wash(k, r, b.px(10.0));
             b.icon(Rect::new(r.left + b.px(10.0), r.top, b.px(18.0), r.height()), *g, 14.0, p.ink2);
             let body = b.font(Font::Body);
             b.text_in(Rect::new(r.left + b.px(36.0), r.top, r.width() - b.px(40.0), r.height()), name, &body, p.ink1, Align::Start);

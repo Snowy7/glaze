@@ -1,4 +1,4 @@
-//! Look: one editor for everything mypaper draws (the Desktop tab: style, material, colour,
+//! Look: one editor for everything mypaper draw    let seg_w = b.segmented_width(&items); (the Desktop tab: style, material, colour,
 //! text and icons, shape, "Different for") and how Windows draws its own windows (the Windows
 //! tab, D2). The stage is a specimen built from real views, or the display's own layout. The
 //! scope switch edits your look, or the look the wallpaper brings (your own wallpapers'; a
@@ -106,8 +106,7 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
     let y = frame.bottom + b.px(14.0);
     let display = format!("Display {}", app.nav.display + 1);
     let items = ["Specimen", display.as_str()];
-    let style = b.font(Font::Strong).scaled(12.5 / 13.0);
-    let seg_w: f32 = items.iter().map(|s| b.measure(s, &style).0 + b.px(20.0)).sum::<f32>() + b.px(6.0);
+    let seg_w = b.segmented_width(&items);
     let hint_w = b.px(200.0);
     let x = stage_side.left + (stage_side.width() - seg_w - hint_w) / 2.0;
     b.segmented(key("stage-mode"), Rect::new(x, y, seg_w, b.px(30.0)), &items, Some(usize::from(app.nav.stage_real)), "Stage", true, |i| Action::StageReal(i == 1));
@@ -122,8 +121,7 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
         // Desktop | Windows.
         let tabs = Rect::new(col.x + b.px(16.0), col.y + b.px(12.0), col.w - b.px(32.0), b.px(32.0));
         b.segmented(key("look-tab"), tabs, &["Desktop", "Windows"], Some(usize::from(app.nav.look_windows)), "Look", true, |i| Action::LookTab(i == 1));
-        col.y = tabs.bottom + b.px(12.0);
-        b.hline(col.x, col.x + col.w, col.y, p.line);
+        col.y = tabs.bottom + b.px(4.0);
         if app.nav.look_theme {
             theme_scope(app, b, col);
         } else if app.nav.look_windows {
@@ -150,9 +148,9 @@ fn desktop(app: &App, b: &mut B, col: &mut Col) {
         let chip = if n == 5 { format!("{} uses all five", style_name(current)) } else { format!("{} uses {}", style_name(current), if n == 1 { "only tint".into() } else { format!("{n}") }) };
         let micro = b.font(Font::Micro);
         let (cw, _) = b.measure(&chip, &micro);
-        let r = Rect::new(c.x + c.w - cw - b.px(12.0), c.y - b.px(30.0), cw + b.px(12.0), b.px(20.0));
-        b.stroke(r, b.px(4.0), 1.0, b.p.line);
-        b.text_in(r, &chip, &micro, b.p.ink3, Align::Center);
+        let r = Rect::new(c.x + c.w - cw - b.px(12.0), c.y - b.px(29.0), cw + b.px(12.0), b.px(20.0));
+        b.fill(r, b.px(5.0), b.p.fill);
+        b.text_in(r, &chip, &micro, b.p.ink2, Align::Center);
         for (id, on) in ["clarity", "blur", "refraction", "highlight"].iter().zip(uses) {
             if on {
                 setting(app, b, c, id);
@@ -335,7 +333,7 @@ fn style_tile(app: &App, b: &mut B, s: Style, pic: Rect) {
     if rim.a > 0.0 {
         b.stroke(card, radius * s_, 1.0, rim);
     }
-    let mut font = b.t.style(Font::Body, s_).scaled(15.0 / 13.0);
+    let mut font = b.t.style(Font::Body, s_).scaled(15.0 / 14.0);
     font.weight = weight;
     b.text_in(Rect::new(card.left + card.width() * 0.1, card.top + b.px(4.0), card.width(), card.height() * 0.55), "10:42", &font, white, Align::Start);
     b.fill(Rect::new(card.left + card.width() * 0.1, card.bottom - card.height() * 0.3, card.width() * 0.6 * 0.8, b.px(2.0)), 1.0, Rgba::new(1.0, 1.0, 1.0, 0.7));

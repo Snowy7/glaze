@@ -1,6 +1,7 @@
 //! What Studio's controls do: the pages, the places inside them, and every action a hit can
 //! carry. The app runs them in `App::run`.
 
+use mypaper_ui::controls::Glyph;
 use std::sync::Arc;
 
 use mypaper_config::look::Style;
@@ -43,7 +44,7 @@ impl Page {
         }
     }
 
-    pub fn glyph(self) -> char {
+    pub fn glyph(self) -> Glyph {
         use crate::theme::glyph;
         match self {
             Page::Home => glyph::HOME,
@@ -105,7 +106,7 @@ impl Section {
         }
     }
 
-    pub fn glyph(self) -> char {
+    pub fn glyph(self) -> Glyph {
         use crate::theme::glyph;
         match self {
             Section::General => glyph::SLIDERS,

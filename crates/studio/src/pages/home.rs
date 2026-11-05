@@ -125,9 +125,9 @@ fn strip(app: &App, b: &mut B, rect: Rect) {
         }
         let add = Rect::new(x, y, b.px(60.0), th);
         let k = key("strip-add");
-        b.fill(add, b.px(8.0), if b.hovered(k) { p.hover } else { p.panel });
-        b.stroke(add, b.px(8.0), 1.0, p.edge);
-        b.icon(add, glyph::ADD, 14.0, p.ink3);
+        b.fill(add, b.px(8.0), p.fill);
+        b.wash(k, add, b.px(8.0));
+        b.icon(add, glyph::ADD, 15.0, p.ink2);
         b.text_in(Rect::new(x, add.bottom + b.px(6.0), add.width(), b.px(16.0)), "Add", &small, p.ink3, Align::Start);
         b.hit(k, add, Role::Button, "Add a wallpaper", Action::AddWallpaper, mypaper_ui::controls::Behavior::Click);
         b.focus_ring(k, add, b.px(8.0));

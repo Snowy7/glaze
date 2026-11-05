@@ -4,6 +4,7 @@
 //! brings, its credit, and Show in folder or Remove. Add wallpaper is a sheet: four sources,
 //! then the details.
 
+use mypaper_ui::controls::Glyph;
 use mypaper_theme::Fit;
 use mypaper_ui::controls::{Align, ButtonKind, Font, key};
 use mypaper_ui::{Rect, Rgba, Role};
@@ -153,8 +154,8 @@ fn card(app: &App, b: &mut B, i: usize, pic: Rect, selected: bool) {
     }
     if selected {
         b.stroke(pic.inflate(b.px(4.0)), b.px(14.0), b.px(2.0), p.ink1);
-    } else {
-        b.stroke(pic.inflate(1.0), b.px(11.0), 1.0, if hot { p.control } else { p.edge });
+    } else if hot {
+        b.stroke(pic.inflate(b.px(4.0)), b.px(14.0), b.px(2.0), p.selected);
     }
     if w.active {
         b.badge(pic.left + b.px(8.0), pic.top + b.px(8.0), "On desktop", None, true);
@@ -188,7 +189,7 @@ fn card(app: &App, b: &mut B, i: usize, pic: Rect, selected: bool) {
     }
 }
 
-pub fn kind_glyph(kind: Option<Kind>) -> char {
+pub fn kind_glyph(kind: Option<Kind>) -> Glyph {
     match kind {
         Some(Kind::Image) => glyph::IMAGE,
         Some(Kind::Slideshow) => glyph::SLIDESHOW,
@@ -216,7 +217,6 @@ fn details(app: &App, b: &mut B, col: &mut Col, i: usize) {
         }
         None => b.fill(pic, b.px(8.0), p.panel),
     }
-    b.stroke(pic.inflate(1.0), b.px(9.0), 1.0, p.edge);
     y = pic.bottom + b.px(14.0);
     let t2 = b.font(Font::Title2);
     b.text_in(Rect::new(x, y, cw, b.px(20.0)), &w.name, &t2, p.ink1, Align::Start);
@@ -232,8 +232,7 @@ fn details(app: &App, b: &mut B, col: &mut Col, i: usize) {
         ("Use this wallpaper", true)
     };
     b.button(key("use-this"), Rect::new(x, y, cw, b.px(32.0)), label, None, ButtonKind::Primary, enabled, Action::UseWallpaper(i));
-    col.y = y + b.px(32.0 + 18.0);
-    b.hline(col.x, col.x + col.w, col.y, p.line);
+    col.y = y + b.px(32.0 + 10.0);
     if let Some(error) = &w.error {
         section(b, col, "Why it can't load", |b, c| {
             let caption = b.font(Font::Caption);
@@ -595,12 +594,15 @@ pub fn add_sheet(app: &App, b: &mut B) {
             let r = Rect::new(rect.left + (n % 2) as f32 * (tw + gap), y + (n / 2) as f32 * (th + gap), tw, th);
             let k = key(("source", n));
             let on = *source == Some(*s);
-            b.fill(r, b.px(12.0), p.bg);
-            b.stroke(r, b.px(12.0), 1.0, if on || b.hovered(k) { p.ink1 } else { p.edge });
+            b.fill(r, b.px(12.0), p.well);
+            b.wash(k, r, b.px(12.0));
+            if on {
+                b.stroke(r, b.px(12.0), b.px(2.0), p.ink1);
+            }
             let icon = Rect::new(r.left + b.px(18.0), r.top + (th - b.px(48.0)) / 2.0, b.px(48.0), b.px(48.0));
-            b.fill(icon, b.px(12.0), p.hover);
+            b.fill(icon, b.px(12.0), p.fill);
             b.icon(icon, *g, 20.0, p.ink1);
-            let strong = b.font(Font::Heading).scaled(14.0 / 13.0);
+            let strong = b.font(Font::Heading);
             let small = b.font(Font::Caption);
             b.text_at(icon.right + b.px(16.0), r.top + b.px(24.0), title, &strong, p.ink1);
             let lines = b.text.lines(line, &small, r.right - icon.right - b.px(32.0), 2);
@@ -614,8 +616,7 @@ pub fn add_sheet(app: &App, b: &mut B) {
     y += th * 2.0 + gap * 2.0;
     if *source == Some(Source::Web) {
         let panel = Rect::new(rect.left, y, rect.width(), b.px(60.0));
-        b.fill(panel, b.px(12.0), p.bg);
-        b.stroke(panel, b.px(12.0), 1.0, p.edge);
+        b.fill(panel, b.px(12.0), p.well);
         let bw = b.button_width("Use this page", false, false);
         let field = Rect::new(panel.left + b.px(14.0), panel.top + b.px(14.0), panel.width() - bw - b.px(38.0), b.px(32.0));
         text_field(app, b, field, FieldId::AddUrl, None, "https://", "", "Web address");
@@ -633,7 +634,6 @@ pub fn add_sheet(app: &App, b: &mut B) {
         b.text_at(rect.left + w1 + lw, y, ". Pages pause while they're covered, and glass stays live over them.", &small, p.ink3);
         y += b.px(28.0);
     }
-    b.hline(rect.left, rect.right, y + b.px(4.0), p.line);
     let small = b.font(Font::Caption);
     let mut x = rect.left;
     for (g, label) in [(glyph::IMAGE, "Image"), (glyph::SLIDESHOW, "Slideshow"), (glyph::VIDEO, "Video"), (glyph::SHADER, "Shader"), (glyph::SCENE, "3D scene"), (glyph::GLOBE, "Web"), (glyph::APP, "App")] {
@@ -675,7 +675,6 @@ fn details_step(app: &App, b: &mut B, rect: Rect, source: Option<Source>, picked
     let _ = (y, source);
     // Footer.
     let fy = rect.bottom - b.px(52.0);
-    b.hline(rect.left - b.px(24.0), rect.right + b.px(24.0), fy - b.px(10.0), p.line);
     let back = b.button_width("Back", true, false);
     b.button(key("add-back"), Rect::new(rect.left, fy, back, b.px(32.0)), "Back", Some(glyph::CHEVRON_LEFT), ButtonKind::Ghost, true, Action::AddBack);
     let use_w = b.button_width("Add and use", false, false);

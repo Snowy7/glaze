@@ -1,13 +1,19 @@
-//! Immediate-mode controls for app windows (Studio): the gray design tokens, the type ramp and
-//! the controls built on ops and hits — buttons, switches, segmented controls, sliders,
-//! selects, text-field frames, tiles, rows, scroll views, badges and keycaps, plus the panel
-//! and scrim helpers palettes, sheets, popovers and toasts are drawn with.
+//! Immediate-mode controls for app windows (Studio), drawn with the kit ([`crate::kit`]): the
+//! gray tokens, the type ramp, the kit's icons, and controls built on ops and hits — buttons,
+//! switches, segmented controls, sliders, selects, text-field frames, tiles, list rows,
+//! section headers, scroll views, badges and keycaps, plus the panel and scrim helpers
+//! palettes, sheets, popovers and toasts are drawn with.
 //!
 //! A frame is built by a [`Builder`]: every control appends its ops, one hit per target and a
 //! [`Target`] saying what it does (`A` is the app's own action type). Input stays the app's:
 //! it reads the targets of the frame on screen (`hit id - 1` is the target's index), and tells
 //! the next frame what is hovered, pressed and focused through [`Input`]. Keys are stable
 //! identities ([`key`]), so focus and hover survive rebuilding the list every frame.
+//!
+//! The look is the kit's: surfaces and controls are fills, never outlines (the only strokes
+//! are the keyboard focus ring and a selected tile's ring). The switch, slider, segmented
+//! control, list row and section header are the kit's own components ([`Frame`]), drawn with
+//! [`Palette::theme`], a monochrome [`Theme`] over these grays.
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -15,8 +21,12 @@ use std::sync::Arc;
 use accesskit::Role;
 
 use crate::geom::{Point, Rect, Rgba};
-use crate::scene::{DisplayList, Hit, Op};
-use crate::text::{Text, TextStyle};
+use crate::icons::Icon;
+use crate::interact::Interaction;
+use crate::kit::{Accessory, Frame, Lead, Row};
+use crate::scene::{DisplayList, Hit, HitId, Op};
+use crate::text::{Text, TextStyle, VARIABLE};
+use crate::theme::{Scheme, Style, Theme};
 
 /// A control's stable identity across frames.
 pub type Key = u64;
@@ -28,25 +38,33 @@ pub fn key(parts: impl Hash) -> Key {
     h.finish()
 }
 
-/// The gray tokens of the monochrome design (plans/native/studio-redesign.md, 8.3).
+/// The gray tokens of the monochrome design (plans/native/studio-redesign.md, 8.3), retuned
+/// for fills instead of outlines: each surface step is a clear fill step, hover and selection
+/// are washes that read on any of them, and every text step meets the kit's floors (ink-1 7:1,
+/// ink-2 and ink-3 4.5:1, ink-4 3:1 on its surfaces).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Palette {
     pub dark: bool,
     /// The main panel (content area).
     pub bg: Rgba,
-    /// Sidebar, title area.
+    /// Sidebar, title area, inspector.
     pub chrome: Rgba,
-    /// Inspector, cards, inputs, popovers.
+    /// Cards, popovers, sheets.
     pub panel: Rgba,
+    /// The hover wash (over any surface).
     pub hover: Rgba,
-    /// Current nav item, selected segment, selected row.
+    /// Current nav item, selected segment, selected row; the pressed wash.
     pub selected: Rgba,
-    /// Dividers.
+    /// Separators inside a card.
     pub line: Rgba,
-    /// Card and panel edges (decorative).
+    /// A faint edge, for the rare place a fill can't separate (pictures on the same gray).
     pub edge: Rgba,
-    /// Boundaries that identify a control.
+    /// A boundary that identifies a control (a hovered tile, a slider's rest track).
     pub control: Rgba,
+    /// A control's resting fill: secondary buttons, selects, a switch's off track.
+    pub fill: Rgba,
+    /// A quieter well: text fields, a segmented control's track, keycaps.
+    pub well: Rgba,
     pub ink1: Rgba,
     pub ink2: Rgba,
     pub ink3: Rgba,
@@ -65,50 +83,62 @@ fn hex(v: u32) -> Rgba {
     Rgba::rgb8([(v >> 16) as u8, (v >> 8) as u8, v as u8], 1.0)
 }
 
+const fn white(a: f32) -> Rgba {
+    Rgba::new(1.0, 1.0, 1.0, a)
+}
+
+const fn black(a: f32) -> Rgba {
+    Rgba::new(0.0, 0.0, 0.0, a)
+}
+
 impl Palette {
     pub fn dark() -> Self {
         Self {
             dark: true,
-            bg: hex(0x0a0a0a),
-            chrome: hex(0x141414),
-            panel: hex(0x1c1c1c),
-            hover: hex(0x282828),
-            selected: hex(0x363636),
-            line: hex(0x2b2b2b),
-            edge: hex(0x404040),
-            control: hex(0x787878),
+            bg: hex(0x0e0e0e),
+            chrome: hex(0x171717),
+            panel: hex(0x1f1f1f),
+            hover: white(0.07),
+            selected: white(0.12),
+            line: white(0.08),
+            edge: white(0.10),
+            control: hex(0x8c8c8c),
+            fill: white(0.10),
+            well: white(0.06),
             ink1: hex(0xf5f5f5),
-            ink2: hex(0xc8c8c8),
-            ink3: hex(0xa0a0a0),
-            ink4: hex(0x666666),
+            ink2: hex(0xd9d9d9),
+            ink3: hex(0xb3b3b3),
+            ink4: hex(0x7a7a7a),
             solid: hex(0xf2f2f2),
             on_solid: hex(0x0a0a0a),
-            solid_hover: hex(0xd6d6d6),
-            scrim: Rgba::new(0.0, 0.0, 0.0, 0.6),
-            shadow: Rgba::new(0.0, 0.0, 0.0, 0.45),
+            solid_hover: hex(0xd9d9d9),
+            scrim: black(0.6),
+            shadow: black(0.5),
         }
     }
 
     pub fn light() -> Self {
         Self {
             dark: false,
-            bg: hex(0xf5f5f5),
-            chrome: hex(0xe9e9e9),
+            bg: hex(0xf0f0f0),
+            chrome: hex(0xe6e6e6),
             panel: hex(0xffffff),
-            hover: hex(0xececec),
-            selected: hex(0xdcdcdc),
-            line: hex(0xe2e2e2),
-            edge: hex(0xcccccc),
-            control: hex(0x7f7f7f),
+            hover: black(0.05),
+            selected: black(0.09),
+            line: black(0.08),
+            edge: black(0.10),
+            control: hex(0x7a7a7a),
+            fill: black(0.06),
+            well: black(0.06),
             ink1: hex(0x0a0a0a),
-            ink2: hex(0x333333),
-            ink3: hex(0x5c5c5c),
-            ink4: hex(0xa3a3a3),
-            solid: hex(0x111111),
+            ink2: hex(0x2b2b2b),
+            ink3: hex(0x525252),
+            ink4: hex(0x8a8a8a),
+            solid: hex(0x141414),
             on_solid: hex(0xfafafa),
-            solid_hover: hex(0x333333),
-            scrim: Rgba::new(0.0, 0.0, 0.0, 0.28),
-            shadow: Rgba::new(0.0, 0.0, 0.0, 0.12),
+            solid_hover: hex(0x383838),
+            scrim: black(0.3),
+            shadow: black(0.16),
         }
     }
 
@@ -125,6 +155,8 @@ impl Palette {
             line: text,
             edge: text,
             control: text,
+            fill: button,
+            well: window,
             ink1: text,
             ink2: text,
             ink3: text,
@@ -136,26 +168,63 @@ impl Palette {
             shadow: Rgba::TRANSPARENT,
         }
     }
+
+    /// Hints and placeholders: between ink-3 and ink-4.
+    pub fn hint(&self) -> Rgba {
+        let (a, b) = (self.ink3, self.ink4);
+        Rgba::new((a.r + b.r) / 2.0, (a.g + b.g) / 2.0, (a.b + b.b) / 2.0, 1.0)
+    }
+
+    /// The kit theme over these grays: Mono (no accent hue), its colour roles mapped onto the
+    /// tokens, so the kit's components draw Studio's look.
+    pub fn theme(&self) -> Theme {
+        let scheme = if self.dark { Scheme::Dark } else { Scheme::Light };
+        let mut t = Theme::new(Style::Mono, scheme, self.solid);
+        let c = &mut t.color;
+        c.label = self.ink1;
+        c.secondary = self.ink3;
+        c.tertiary = self.hint();
+        c.quaternary = self.ink4;
+        c.fill = self.fill;
+        c.card = self.panel;
+        c.well = self.well;
+        c.separator = self.line;
+        c.accent = self.solid;
+        c.on_accent = self.on_solid;
+        c.accent_wash = self.selected;
+        c.surface = self.chrome;
+        c.elevated = self.panel;
+        c.hover = self.hover;
+        c.pressed = self.selected;
+        c.knob = if self.shadow.a > 0.0 { white(1.0) } else { self.ink1 };
+        c.scrollbar = self.ink1.with_alpha(0.32);
+        c.shadow = self.shadow;
+        t.radius.card = 12.0;
+        t.radius.control = Some(8.0);
+        t.elevation.color = self.shadow;
+        t
+    }
 }
 
-/// The type ramp (8.1), in design pixels.
+/// The type ramp, in design pixels: the kit's ([`crate::theme::TextRole`]) through Segoe UI
+/// Variable's axes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Font {
-    /// 28/36 semibold display: first run, the off state.
+    /// 28/700: first run, the off state.
     Display,
-    /// 20/28 semibold: sheet titles.
+    /// 22/700: sheet titles.
     Title1,
-    /// 15/20 semibold: page bar and inspector titles.
+    /// 17/600: page bar and inspector titles.
     Title2,
-    /// 13/18 semibold: section titles.
+    /// 14/600: section titles, emphasized labels.
     Heading,
-    /// 13/20 regular: labels, descriptions.
+    /// 14/400: labels, descriptions.
     Body,
-    /// 13/20 medium: buttons, sidebar items.
+    /// 14/500: buttons, sidebar items.
     Strong,
-    /// 12/16 regular: hints, details, values.
+    /// 12/400: hints, details, values.
     Caption,
-    /// 11/14 medium: badges, keycaps, name tags, counts.
+    /// 11/500: badges, keycaps, name tags, counts.
     Micro,
     /// 12/16 monospace: paths, commands, hex.
     Mono,
@@ -193,29 +262,58 @@ impl Type {
 
     /// `font` at `scale` device pixels per design pixel.
     pub fn style(&self, font: Font, scale: f32) -> TextStyle {
-        let (family, size, weight) = match font {
-            Font::Display => (&self.display, 28.0, 600),
-            Font::Title1 => (&self.display, 20.0, 600),
-            Font::Title2 => (&self.display, 15.0, 600),
-            Font::Heading => (&self.text, 13.0, 600),
-            Font::Body => (&self.text, 13.0, 400),
-            Font::Strong => (&self.text, 13.0, 500),
-            Font::Caption => (&self.text, 12.0, 400),
-            Font::Micro => (&self.text, 11.0, 500),
-            Font::Mono => (&self.mono, 12.0, 400),
+        let (size, weight, tracking) = match font {
+            Font::Display => (28.0, 700, -0.6),
+            Font::Title1 => (22.0, 700, -0.4),
+            Font::Title2 => (17.0, 600, -0.2),
+            Font::Heading => (14.0, 600, 0.0),
+            Font::Body => (14.0, 400, 0.0),
+            Font::Strong => (14.0, 500, 0.0),
+            Font::Caption => (12.0, 400, 0.0),
+            Font::Micro => (11.0, 500, 0.1),
+            Font::Mono => (12.0, 400, 0.0),
+        };
+        let size = size * self.text_scale;
+        // Segoe UI Variable through its axes (a real 500, optical size from the size); the
+        // named faces where it's missing.
+        let family = match font {
+            Font::Mono => self.mono.clone(),
+            _ if self.text.starts_with(VARIABLE) => VARIABLE.into(),
+            Font::Display | Font::Title1 | Font::Title2 => self.display.clone(),
+            _ => self.text.clone(),
         };
         TextStyle {
-            family: family.clone(),
-            size: size * scale * self.text_scale,
+            family,
+            size: size * scale,
             weight,
-            tracking: 0.0,
-            optical: 0.0,
+            tracking: tracking * scale,
+            optical: size * 0.75,
         }
     }
 
     /// The icon font at `size` design pixels.
     pub fn icon(&self, size: f32, scale: f32) -> TextStyle {
         TextStyle::new(&self.icons, size * scale)
+    }
+}
+
+/// What a control shows: one of the kit's vector icons, or an icon-font glyph (Segoe Fluent
+/// Icons) where the kit has none (the caption buttons).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Glyph {
+    Icon(Icon),
+    Font(char),
+}
+
+impl From<Icon> for Glyph {
+    fn from(icon: Icon) -> Self {
+        Self::Icon(icon)
+    }
+}
+
+impl From<char> for Glyph {
+    fn from(c: char) -> Self {
+        Self::Font(c)
     }
 }
 
@@ -285,7 +383,7 @@ pub struct ScrollArea {
 pub enum ButtonKind {
     /// `solid` fill: the page's main action.
     Primary,
-    /// `panel` fill with an edge.
+    /// The gray control fill.
     Secondary,
     /// No fill until hovered.
     Ghost,
@@ -304,6 +402,8 @@ pub struct Builder<'a, A> {
     pub text: &'a mut Text,
     pub p: &'a Palette,
     pub t: &'a Type,
+    /// The kit theme over `p` ([`Palette::theme`]).
+    pub kit: Theme,
     /// Device pixels per design pixel.
     pub s: f32,
     pub input: &'a Input,
@@ -320,6 +420,7 @@ impl<'a, A: Clone> Builder<'a, A> {
             text,
             p,
             t,
+            kit: p.theme(),
             s,
             input,
             targets: Vec::new(),
@@ -415,6 +516,36 @@ impl<'a, A: Clone> Builder<'a, A> {
             self.list.focus = Some(id);
         }
         visible.is_some() && self.hovered(key)
+    }
+
+    /// Draws kit components for the controls `keys`, which must be the next targets
+    /// registered, in order: the kit sees their hover, press and keyboard focus as the hit ids
+    /// they will get (`base`, `base + 1`…). Only the kit's ops are kept; the caller registers
+    /// the targets. `tweak` adjusts the theme for this control.
+    fn kit<R>(
+        &mut self,
+        keys: &[Key],
+        tweak: impl FnOnce(&mut Theme),
+        draw: impl FnOnce(&mut Frame, HitId) -> R,
+    ) -> R {
+        let base = self.targets.len() as HitId + 1;
+        let id = |k: Option<Key>| {
+            k.and_then(|k| keys.iter().position(|x| *x == k))
+                .map(|i| base + i as HitId)
+        };
+        let input = Interaction {
+            hover: id(self.input.hover),
+            pressed: id(self.input.pressed),
+            focus: id(self.input.focus),
+            focus_visible: self.input.focus_visible,
+        };
+        let mut theme = self.kit.clone();
+        tweak(&mut theme);
+        let mut f = Frame::new(&mut *self.text, &theme, self.s, &input);
+        let r = draw(&mut f, base);
+        let ops = std::mem::take(&mut f.list.ops);
+        self.list.ops.extend(ops);
+        r
     }
 
     // --- Primitives ---------------------------------------------------------------------------
@@ -537,23 +668,44 @@ impl<'a, A: Clone> Builder<'a, A> {
         lines.len() as f32 * line
     }
 
-    /// An icon glyph centered in `rect`, `size` design pixels.
-    pub fn icon(&mut self, rect: Rect, glyph: char, size: f32, color: Rgba) {
-        let style = self.t.icon(size, self.s);
-        let mut buf = [0u8; 4];
-        let glyph = glyph.encode_utf8(&mut buf);
-        let (w, h) = self.text.measure(glyph, &style);
-        self.list.ops.push(Op::Text {
-            rect: Rect::new(
-                (rect.left + (rect.width() - w) / 2.0).round(),
-                (rect.top + (rect.height() - h) / 2.0).round(),
-                w,
-                h,
-            ),
-            text: (&*glyph).into(),
-            style,
-            color,
-        });
+    /// An icon centered in `rect`, about `size` design pixels: the kit's vector (a touch
+    /// larger, as Lucide's outlines sit inside their box) or a font glyph.
+    pub fn icon(&mut self, rect: Rect, glyph: impl Into<Glyph>, size: f32, color: Rgba) {
+        match glyph.into() {
+            Glyph::Icon(icon) => {
+                let px = ((size + 1.0).max(13.0) * self.s).round();
+                let at = Rect::new(
+                    (rect.left + (rect.width() - px) / 2.0).round(),
+                    (rect.top + (rect.height() - px) / 2.0).round(),
+                    px,
+                    px,
+                );
+                let weight = (self.kit.icon_weight * px / 24.0).max(1.35 * self.s.min(1.5));
+                self.list.ops.push(Op::Icon {
+                    rect: at,
+                    icon,
+                    weight,
+                    color,
+                });
+            }
+            Glyph::Font(c) => {
+                let style = self.t.icon(size, self.s);
+                let mut buf = [0u8; 4];
+                let glyph = c.encode_utf8(&mut buf);
+                let (w, h) = self.text.measure(glyph, &style);
+                self.list.ops.push(Op::Text {
+                    rect: Rect::new(
+                        (rect.left + (rect.width() - w) / 2.0).round(),
+                        (rect.top + (rect.height() - h) / 2.0).round(),
+                        w,
+                        h,
+                    ),
+                    text: (&*glyph).into(),
+                    style,
+                    color,
+                });
+            }
+        }
     }
 
     /// The 2 px focus ring with a 2 px gap around `rect`, when `key` has keyboard focus.
@@ -569,7 +721,17 @@ impl<'a, A: Clone> Builder<'a, A> {
         }
     }
 
-    /// A popover, palette, sheet or toast body: the stepped shadow, the panel and its edge.
+    /// The hover (or pressed) wash of `key` over `rect`.
+    pub fn wash(&mut self, key: Key, rect: Rect, radius: f32) {
+        if self.pressed(key) && self.hovered(key) {
+            self.fill(rect, radius, self.p.selected);
+        } else if self.hovered(key) {
+            self.fill(rect, radius, self.p.hover);
+        }
+    }
+
+    /// A popover, palette, sheet or toast body: the stepped shadow and the panel. No edge:
+    /// the shadow (and the scrim behind modals) sets it apart.
     pub fn elevated(&mut self, rect: Rect, radius: f32) {
         let s = self.s;
         self.list.ops.push(Op::Shadow {
@@ -580,7 +742,6 @@ impl<'a, A: Clone> Builder<'a, A> {
             color: self.p.shadow.with_alpha(self.p.shadow.a / 6.0),
         });
         self.fill(rect, radius, self.p.panel);
-        self.stroke(rect, radius, 1.0, self.p.edge);
     }
 
     /// The scrim behind a modal, over `rect`. It swallows the pointer (`dismiss` on click).
@@ -591,55 +752,52 @@ impl<'a, A: Clone> Builder<'a, A> {
 
     // --- Controls -----------------------------------------------------------------------------
 
-    /// A button: an optional icon glyph before its label. Returns its width.
+    /// A button: an optional icon before its label.
     #[allow(clippy::too_many_arguments)]
     pub fn button(
         &mut self,
         key: Key,
         rect: Rect,
         label: &str,
-        icon: Option<char>,
+        icon: Option<Glyph>,
         kind: ButtonKind,
         enabled: bool,
         action: A,
     ) {
-        let r = self.px(6.0);
-        let hot = enabled && self.hovered(key);
+        let r = self.px(8.0).min(rect.height() / 2.0);
         let p = *self.p;
-        let (fill, ink, edge) = match kind {
-            ButtonKind::Primary => (if hot { p.solid_hover } else { p.solid }, p.on_solid, None),
-            ButtonKind::Secondary => (
-                if hot { p.hover } else { p.panel },
-                p.ink1,
-                Some(if hot { p.control } else { p.edge }),
+        let (fill, ink) = match kind {
+            ButtonKind::Primary => (
+                if enabled && self.hovered(key) { p.solid_hover } else { p.solid },
+                p.on_solid,
             ),
+            ButtonKind::Secondary => (p.fill, p.ink1),
             ButtonKind::Ghost => (
-                if hot { p.hover } else { Rgba::TRANSPARENT },
-                if hot { p.ink1 } else { p.ink2 },
-                None,
+                Rgba::TRANSPARENT,
+                if self.hovered(key) { p.ink1 } else { p.ink2 },
             ),
         };
-        let ink = if enabled { ink } else { p.ink4 };
+        let (fill, ink) = if enabled { (fill, ink) } else { (p.well, p.ink4) };
         self.fill(rect, r, fill);
-        if let Some(edge) = edge {
-            self.stroke(rect, r, 1.0, edge);
+        if enabled && kind != ButtonKind::Primary {
+            self.wash(key, rect, r);
         }
         let style = self.font(Font::Strong);
         let (tw, _) = self.text.measure(label, &style);
         let gap = if icon.is_some() && !label.is_empty() {
-            self.px(7.0)
+            self.px(6.0)
         } else {
             0.0
         };
-        let iw = if icon.is_some() { self.px(15.0) } else { 0.0 };
+        let iw = if icon.is_some() { self.px(16.0) } else { 0.0 };
         let total = tw + gap + iw;
-        let mut x = rect.left + (rect.width() - total) / 2.0;
+        let mut x = rect.left + ((rect.width() - total) / 2.0).max(self.px(8.0));
         if let Some(glyph) = icon {
-            self.icon(Rect::new(x, rect.top, iw, rect.height()), glyph, 14.0, ink);
+            self.icon(Rect::new(x, rect.top, iw, rect.height()), glyph, 15.0, ink);
             x += iw + gap;
         }
         self.text_in(
-            Rect::new(x, rect.top, rect.right - x, rect.height()),
+            Rect::new(x, rect.top, rect.right - x - self.px(6.0), rect.height()),
             label,
             &style,
             ink,
@@ -655,31 +813,33 @@ impl<'a, A: Clone> Builder<'a, A> {
     pub fn button_width(&mut self, label: &str, icon: bool, small: bool) -> f32 {
         let style = self.font(Font::Strong);
         let (tw, _) = self.text.measure(label, &style);
-        let pad = if small { 10.0 } else { 12.0 };
+        let pad = if small { 10.0 } else { 14.0 };
         let icon = if icon {
-            15.0 + if label.is_empty() { 0.0 } else { 7.0 }
+            16.0 + if label.is_empty() { 0.0 } else { 6.0 }
         } else {
             0.0
         };
-        tw + self.px(pad * 2.0 + icon)
+        (tw + self.px(pad * 2.0 + icon)).ceil()
     }
 
-    /// A square ghost button with a glyph; `on` keeps it lit (a toggled tool).
+    /// A square ghost button with an icon; `on` keeps it lit (a toggled tool).
     #[allow(clippy::too_many_arguments)]
     pub fn icon_button(
         &mut self,
         key: Key,
         rect: Rect,
-        glyph: char,
+        glyph: impl Into<Glyph>,
         label: &str,
         on: bool,
         enabled: bool,
         action: A,
     ) {
-        let r = self.px(6.0);
+        let r = self.px(8.0).min(rect.height() / 2.0);
         let hot = enabled && self.hovered(key);
-        if hot || on {
-            self.fill(rect, r, self.p.hover);
+        if on {
+            self.fill(rect, r, self.p.selected);
+        } else if enabled {
+            self.wash(key, rect, r);
         }
         let ink = if !enabled {
             self.p.ink4
@@ -688,47 +848,29 @@ impl<'a, A: Clone> Builder<'a, A> {
         } else {
             self.p.ink2
         };
-        self.icon(rect, glyph, 16.0, ink);
+        self.icon(rect, glyph, 15.0, ink);
         if enabled {
             self.hit(key, rect, Role::Button, label, action, Behavior::Click);
         }
         self.focus_ring(key, rect, r);
     }
 
-    /// A 36×20 switch, right-aligned in `rect`'s height. `label` names it for assistive tech.
+    /// The kit's switch with its top-left near `at` (the 36×20 box it replaces: the kit's
+    /// 40×24 shares its right edge and centre). `label` names it for assistive tech.
     pub fn switch(&mut self, key: Key, at: Point, on: bool, label: &str, action: A) -> Rect {
-        let rect = Rect::new(at.x, at.y, self.px(36.0), self.px(20.0));
-        let r = rect.height() / 2.0;
-        let p = *self.p;
-        let thumb = self.px(14.0);
-        if on {
-            self.fill(rect, r, p.solid);
-            let c = Rect::new(
-                rect.right - self.px(3.0) - thumb,
-                rect.top + self.px(3.0),
-                thumb,
-                thumb,
-            );
-            self.fill(c, thumb / 2.0, p.bg);
-        } else {
-            self.stroke(
-                rect,
-                r,
-                self.px(1.5),
-                if self.hovered(key) { p.ink2 } else { p.control },
-            );
-            let c = Rect::new(
-                rect.left + self.px(3.0),
-                rect.top + self.px(3.0),
-                thumb,
-                thumb,
-            );
-            self.fill(
-                c,
-                thumb / 2.0,
-                if self.hovered(key) { p.ink2 } else { p.control },
-            );
-        }
+        let right = at.x + self.px(36.0);
+        let mid = at.y + self.px(10.0);
+        // On a dark scheme the on track is near white, so its knob is dark.
+        let knob = (on && self.p.dark && self.p.shadow.a > 0.0).then_some(self.p.on_solid);
+        let rect = self.kit(
+            &[key],
+            |t| {
+                if let Some(k) = knob {
+                    t.color.knob = k;
+                }
+            },
+            |f, id| f.switch(id, right, mid, on, label, true),
+        );
         self.hit_checked(
             key,
             rect.inflate(self.px(4.0)),
@@ -738,12 +880,11 @@ impl<'a, A: Clone> Builder<'a, A> {
             action,
             Behavior::Toggle,
         );
-        self.focus_ring(key, rect, r);
         rect
     }
 
-    /// A segmented control: equal segments across `rect` when `fill`, else each as wide as its
-    /// label. `action(i)` picks segment `i`.
+    /// The kit's segmented control: equal segments across `rect` when `fill`, else as wide as
+    /// the widest label needs, at `rect`'s right. `action(i)` picks segment `i`.
     #[allow(clippy::too_many_arguments)]
     pub fn segmented(
         &mut self,
@@ -755,62 +896,111 @@ impl<'a, A: Clone> Builder<'a, A> {
         fill: bool,
         action: impl Fn(usize) -> A,
     ) -> Rect {
-        let p = *self.p;
-        let pad = self.px(2.0);
-        let style = self.font(Font::Strong).scaled(12.5 / 13.0);
-        let widths: Vec<f32> = if fill {
-            let inner = rect.width() - pad * 2.0 - pad * (items.len() as f32 - 1.0);
-            vec![inner / items.len().max(1) as f32; items.len()]
-        } else {
-            items
-                .iter()
-                .map(|s| self.text.measure(s, &style).0 + self.px(20.0))
-                .collect()
-        };
-        let total = widths.iter().sum::<f32>() + pad * (items.len() as f32 + 1.0);
+        let n = items.len().max(1) as f32;
         let outer = if fill {
             rect
         } else {
-            Rect::new(rect.right - total, rect.top, total, rect.height())
+            let w = self.segmented_width(items);
+            Rect::new(rect.right - w, rect.top, w, rect.height())
         };
-        self.fill(outer, self.px(7.0), p.panel);
-        self.stroke(outer, self.px(7.0), 1.0, p.edge);
-        let mut x = outer.left + pad;
+        let keys: Vec<Key> = (0..items.len()).map(|i| crate::controls::key((key, i))).collect();
+        let inset = (2.0 * self.s).round();
+        let inner = outer.inflate(-inset);
+        // The kit's equal segments, unless a label wouldn't fit one: then each segment is as
+        // wide as its label needs, drawn the kit's way.
+        let style = self.kit.font.style(crate::theme::TextRole::Callout, self.s);
+        let widths: Vec<f32> = items
+            .iter()
+            .map(|s| self.text.measure(s, &style).0 + self.px(14.0))
+            .collect();
+        let equal = inner.width() / n;
+        let segs: Vec<Rect> = if widths.iter().all(|w| *w <= equal) {
+            (0..items.len())
+                .map(|i| {
+                    Rect::new(
+                        (inner.left + equal * i as f32).round(),
+                        inner.top,
+                        equal.round(),
+                        inner.height(),
+                    )
+                })
+                .collect()
+        } else {
+            let extra = (inner.width() - widths.iter().sum::<f32>()) / n;
+            let mut x = inner.left;
+            widths
+                .iter()
+                .map(|w| {
+                    let r = Rect::new(x.round(), inner.top, (w + extra).round(), inner.height());
+                    x += w + extra;
+                    r
+                })
+                .collect()
+        };
+        let proportional = segs.first().is_some_and(|r| (r.width() - equal.round()).abs() > 0.5);
+        if proportional {
+            self.segments_drawn(&keys, outer, &segs, items, selected);
+        } else {
+            self.kit(&keys, |_| {}, |f, base| {
+                f.segmented(base, outer, items, selected.unwrap_or(usize::MAX));
+            });
+        }
         self.group(key, |b| {
             for (i, item) in items.iter().enumerate() {
-                let seg = Rect::new(x, outer.top + pad, widths[i], outer.height() - pad * 2.0);
-                let k = crate::controls::key((key, i));
-                let on = selected == Some(i);
-                let hot = b.hovered(k);
-                if on {
-                    b.fill(seg, b.px(5.0), p.selected);
-                } else if hot {
-                    b.fill(seg, b.px(5.0), p.hover);
-                }
-                b.text_in(
-                    seg.inflate(-b.px(4.0)),
-                    item,
-                    &style,
-                    if on || hot { p.ink1 } else { p.ink3 },
-                    Align::Center,
-                );
+                let seg = segs[i];
                 b.hit_checked(
-                    k,
+                    keys[i],
                     seg,
                     Role::RadioButton,
                     &format!("{label}: {item}"),
-                    Some(on),
+                    Some(selected == Some(i)),
                     action(i),
                     Behavior::Click,
                 );
-                b.focus_ring(k, seg, b.px(5.0));
-                x += widths[i] + pad;
             }
         });
         outer
     }
 
-    /// A slider over `rect` (track plus the value text at the right, `value_width` wide).
+    /// Segments of unequal widths in the kit's look (its segmented control has equal ones):
+    /// the well, the selected segment raised, washes, labels and focus rings.
+    fn segments_drawn(
+        &mut self,
+        keys: &[Key],
+        outer: Rect,
+        segs: &[Rect],
+        items: &[&str],
+        selected: Option<usize>,
+    ) {
+        let c = self.kit.color;
+        let radius = self.px(8.0).min(outer.height() / 2.0);
+        let inner_radius = (radius - (2.0 * self.s).round()).max(0.0);
+        self.fill(outer, radius, c.well);
+        let style = self.kit.font.style(crate::theme::TextRole::Callout, self.s);
+        for (i, (seg, item)) in segs.iter().zip(items).enumerate() {
+            let on = selected == Some(i);
+            if on {
+                self.fill(*seg, inner_radius, if self.p.dark { c.fill } else { c.knob });
+            }
+            self.wash(keys[i], *seg, inner_radius);
+            let ink = if on { c.label } else { c.secondary };
+            self.text_in(seg.inflate(-self.px(4.0)), item, &style, ink, Align::Center);
+            self.focus_ring(keys[i], *seg, inner_radius);
+        }
+    }
+
+    /// The width a segmented control needs for `items` (equal segments, the widest label).
+    pub fn segmented_width(&mut self, items: &[&str]) -> f32 {
+        let style = self.kit.font.style(crate::theme::TextRole::Callout, self.s);
+        let widest = items
+            .iter()
+            .map(|s| self.text.measure(s, &style).0)
+            .fold(0.0, f32::max);
+        ((widest + self.px(24.0)) * items.len() as f32 + self.px(4.0)).ceil()
+    }
+
+    /// The kit's slider over `rect`: the track, then the value text at the right
+    /// (`value_width` wide).
     #[allow(clippy::too_many_arguments)]
     pub fn slider(
         &mut self,
@@ -824,31 +1014,20 @@ impl<'a, A: Clone> Builder<'a, A> {
         action: A,
     ) {
         let p = *self.p;
-        let track = Rect::new(
-            rect.left + self.px(8.0),
-            rect.top + rect.height() / 2.0 - self.px(2.0),
-            rect.width() - value_width - self.px(16.0 + 12.0),
-            self.px(4.0),
+        let area = Rect::new(
+            rect.left,
+            rect.top,
+            rect.width() - value_width - self.px(12.0),
+            rect.height(),
         );
         let t = ((value - min) / (max - min)).clamp(0.0, 1.0) as f32;
-        self.fill(track, self.px(2.0), p.control);
-        let filled = Rect::new(track.left, track.top, track.width() * t, track.height());
-        self.fill(filled, self.px(2.0), p.ink1);
-        let cx = track.left + track.width() * t;
-        let cy = track.top + track.height() / 2.0;
-        let thumb = self.px(16.0);
-        let ring = Rect::new(
-            cx - thumb / 2.0 - self.px(2.0),
-            cy - thumb / 2.0 - self.px(2.0),
-            thumb + self.px(4.0),
-            thumb + self.px(4.0),
-        );
-        self.fill(ring, ring.width() / 2.0, p.chrome);
-        let knob = Rect::new(cx - thumb / 2.0, cy - thumb / 2.0, thumb, thumb);
-        self.fill(
-            knob,
-            thumb / 2.0,
-            if self.pressed(key) { p.ink2 } else { p.ink1 },
+        self.kit(&[key], |_| {}, |f, id| f.slider(id, area, t, label, None));
+        let knob = (18.0 * self.s).round();
+        let track = Rect::new(
+            area.left + knob / 2.0,
+            rect.top + rect.height() / 2.0 - self.px(2.0),
+            area.width() - knob,
+            self.px(4.0),
         );
         let style = self.font(Font::Caption);
         self.text_in(
@@ -862,12 +1041,6 @@ impl<'a, A: Clone> Builder<'a, A> {
             &style,
             p.ink2,
             Align::End,
-        );
-        let area = Rect::new(
-            rect.left,
-            rect.top,
-            track.right + self.px(8.0) - rect.left,
-            rect.height(),
         );
         self.hit(
             key,
@@ -883,23 +1056,21 @@ impl<'a, A: Clone> Builder<'a, A> {
                 value,
             },
         );
-        self.focus_ring(key, knob, thumb / 2.0);
     }
 
-    /// A select: a secondary-button look with the value and a chevron. The app opens its menu.
+    /// A select: the gray control fill with the value and a chevron. The app opens its menu.
     pub fn select(&mut self, key: Key, rect: Rect, value: &str, label: &str, action: A) {
         let p = *self.p;
-        let r = self.px(6.0);
-        let hot = self.hovered(key);
-        self.fill(rect, r, if hot { p.hover } else { p.panel });
-        self.stroke(rect, r, 1.0, if hot { p.control } else { p.edge });
-        let style = self.font(Font::Body).scaled(12.5 / 13.0);
-        let chevron = self.px(24.0);
+        let r = self.px(8.0).min(rect.height() / 2.0);
+        self.fill(rect, r, p.fill);
+        self.wash(key, rect, r);
+        let style = self.font(Font::Body);
+        let chevron = self.px(26.0);
         self.text_in(
             Rect::new(
-                rect.left + self.px(10.0),
+                rect.left + self.px(12.0),
                 rect.top,
-                rect.width() - self.px(10.0) - chevron,
+                rect.width() - self.px(12.0) - chevron,
                 rect.height(),
             ),
             value,
@@ -911,11 +1082,11 @@ impl<'a, A: Clone> Builder<'a, A> {
             Rect::new(
                 rect.right - chevron,
                 rect.top,
-                chevron - self.px(4.0),
+                chevron - self.px(6.0),
                 rect.height(),
             ),
-            '\u{E70D}',
-            10.0,
+            Icon::ChevronDown,
+            12.0,
             p.ink3,
         );
         self.hit(
@@ -931,19 +1102,19 @@ impl<'a, A: Clone> Builder<'a, A> {
 
     /// The width a select needs to show `value`.
     pub fn select_width(&mut self, value: &str) -> f32 {
-        let style = self.font(Font::Body).scaled(12.5 / 13.0);
-        self.text.measure(value, &style).0 + self.px(10.0 + 28.0)
+        let style = self.font(Font::Body);
+        (self.text.measure(value, &style).0 + self.px(12.0 + 30.0)).ceil()
     }
 
-    /// A text field's frame (32 high, `control` edge, a 2 px ring when focused) with an
-    /// optional leading glyph. The field itself is an `Op::TextField` the app appends inside
-    /// [`field_inner`]; while it's empty and unfocused, `placeholder` shows.
+    /// A text field's frame: the well, a 2 px ring while focused, an optional leading icon.
+    /// The field itself is an `Op::TextField` the app appends inside [`field_inner`]; while
+    /// it's empty and unfocused, `placeholder` shows.
     #[allow(clippy::too_many_arguments)]
     pub fn field(
         &mut self,
         key: Key,
         rect: Rect,
-        glyph: Option<char>,
+        glyph: Option<Glyph>,
         placeholder: &str,
         empty: bool,
         focused: bool,
@@ -951,8 +1122,11 @@ impl<'a, A: Clone> Builder<'a, A> {
         action: A,
     ) {
         let p = *self.p;
-        let r = self.px(6.0);
-        self.fill(rect, r, p.panel);
+        let r = self.px(8.0).min(rect.height() / 2.0);
+        self.fill(rect, r, p.well);
+        if !focused {
+            self.wash(key, rect, r);
+        }
         if focused {
             self.stroke(
                 rect.inflate(self.px(2.0)),
@@ -960,18 +1134,11 @@ impl<'a, A: Clone> Builder<'a, A> {
                 self.px(2.0),
                 p.ink1,
             );
-        } else {
-            self.stroke(
-                rect,
-                r,
-                1.0,
-                if self.hovered(key) { p.ink3 } else { p.control },
-            );
         }
         if let Some(glyph) = glyph {
             self.icon(
                 Rect::new(
-                    rect.left + self.px(8.0),
+                    rect.left + self.px(9.0),
                     rect.top,
                     self.px(16.0),
                     rect.height(),
@@ -984,14 +1151,14 @@ impl<'a, A: Clone> Builder<'a, A> {
         if empty && !focused {
             let inner = self.field_inner(rect, glyph.is_some());
             let style = self.font(Font::Body);
-            self.text_in(inner, placeholder, &style, p.ink4, Align::Start);
+            self.text_in(inner, placeholder, &style, p.hint(), Align::Start);
         }
         self.hit(key, rect, Role::TextInput, label, action, Behavior::Field);
     }
 
     /// Where a field's text goes inside its frame.
     pub fn field_inner(&self, rect: Rect, glyph: bool) -> Rect {
-        let left = if glyph { 32.0 } else { 10.0 };
+        let left = if glyph { 32.0 } else { 12.0 };
         Rect::new(
             rect.left + self.px(left),
             rect.top + (rect.height() - self.px(20.0)) / 2.0,
@@ -1000,20 +1167,15 @@ impl<'a, A: Clone> Builder<'a, A> {
         )
     }
 
-    /// A small badge (20 high); `solid` for "On desktop". Returns its width.
-    pub fn badge(&mut self, x: f32, y: f32, label: &str, glyph: Option<char>, solid: bool) -> f32 {
+    /// A small badge (20 high) on the gray fill; `solid` for "On desktop". Returns its width.
+    pub fn badge(&mut self, x: f32, y: f32, label: &str, glyph: Option<Glyph>, solid: bool) -> f32 {
         let p = *self.p;
         let style = self.font(Font::Micro);
         let (tw, _) = self.text.measure(label, &style);
         let icon = if glyph.is_some() { self.px(16.0) } else { 0.0 };
         let rect = Rect::new(x, y, tw + icon + self.px(14.0), self.px(20.0));
-        let r = self.px(4.0);
-        if solid {
-            self.fill(rect, r, p.solid);
-        } else {
-            self.fill(rect, r, p.panel);
-            self.stroke(rect, r, 1.0, p.edge);
-        }
+        let r = self.px(5.0);
+        self.fill(rect, r, if solid { p.solid } else { p.fill });
         let ink = if solid { p.on_solid } else { p.ink2 };
         if let Some(g) = glyph {
             self.icon(
@@ -1044,15 +1206,14 @@ impl<'a, A: Clone> Builder<'a, A> {
     }
 
     /// A badge drawn over a picture: dark translucent, white text. Returns its width.
-    pub fn overlay_badge(&mut self, x: f32, y: f32, label: &str, glyph: Option<char>) -> f32 {
+    pub fn overlay_badge(&mut self, x: f32, y: f32, label: &str, glyph: Option<Glyph>) -> f32 {
         let style = self.font(Font::Micro);
         let (tw, _) = self.text.measure(label, &style);
         let icon = if glyph.is_some() { self.px(16.0) } else { 0.0 };
         let rect = Rect::new(x, y, tw + icon + self.px(14.0), self.px(20.0));
-        let r = self.px(4.0);
-        self.fill(rect, r, Rgba::new(0.0, 0.0, 0.0, 0.55));
-        self.stroke(rect, r, 1.0, Rgba::new(1.0, 1.0, 1.0, 0.18));
-        let white = Rgba::new(1.0, 1.0, 1.0, 1.0);
+        let r = self.px(5.0);
+        self.fill(rect, r, black(0.62));
+        let white = white(1.0);
         if let Some(g) = glyph {
             self.icon(
                 Rect::new(
@@ -1081,35 +1242,13 @@ impl<'a, A: Clone> Builder<'a, A> {
         rect.width()
     }
 
-    /// A keycap (20 high, an edge with a heavier bottom). Returns its width.
+    /// A keycap (20 high, the well fill). Returns its width.
     pub fn keycap(&mut self, x: f32, y: f32, label: &str) -> f32 {
         let p = *self.p;
         let style = self.font(Font::Micro);
         let (tw, _) = self.text.measure(label, &style);
         let rect = Rect::new(x, y, (tw + self.px(10.0)).max(self.px(20.0)), self.px(20.0));
-        let r = self.px(4.0);
-        self.fill(rect, r, p.edge);
-        self.fill(
-            Rect::new(
-                rect.left,
-                rect.top,
-                rect.width(),
-                rect.height() - self.px(1.0),
-            ),
-            r,
-            p.panel,
-        );
-        self.stroke(
-            Rect::new(
-                rect.left,
-                rect.top,
-                rect.width(),
-                rect.height() - self.px(1.0),
-            ),
-            r,
-            1.0,
-            p.edge,
-        );
+        self.fill(rect, self.px(5.0), p.fill);
         self.text_in(rect, label, &style, p.ink2, Align::Center);
         rect.width()
     }
@@ -1123,19 +1262,16 @@ impl<'a, A: Clone> Builder<'a, A> {
         at - x - self.px(4.0)
     }
 
-    /// An 8 px status dot: filled (running) or a ring (stopped).
+    /// An 8 px status dot: ink-1 (running) or ink-4 (stopped).
     pub fn dot(&mut self, center: Point, on: bool) {
         let d = self.px(8.0);
         let rect = Rect::new(center.x - d / 2.0, center.y - d / 2.0, d, d);
-        if on {
-            self.fill(rect, d / 2.0, self.p.ink1);
-        } else {
-            self.stroke(rect, d / 2.0, self.px(1.5), self.p.control);
-        }
+        self.fill(rect, d / 2.0, if on { self.p.ink1 } else { self.p.ink4 });
     }
 
-    /// A tile's frame around `rect` (its picture drawn by the caller): selected is a 2 px ink-1
-    /// outline with a gap, hover a 1 px control outline.
+    /// A tile's frame around `rect` (its picture drawn by the caller): selected is a 2 px
+    /// ink-1 ring outside a `gap`-coloured one; hover a 2 px ring of the hover wash. At rest,
+    /// nothing: the picture is its own edge.
     pub fn tile_frame(&mut self, key: Key, rect: Rect, radius: f32, selected: bool, gap: Rgba) {
         let p = *self.p;
         if selected {
@@ -1152,10 +1288,74 @@ impl<'a, A: Clone> Builder<'a, A> {
                 gap,
             );
         } else if self.hovered(key) {
-            self.stroke(rect.inflate(1.0), radius + 1.0, 1.0, p.control);
-        } else {
-            self.stroke(rect.inflate(1.0), radius + 1.0, 1.0, p.edge);
+            self.stroke(
+                rect.inflate(self.px(4.0)),
+                radius + self.px(4.0),
+                self.px(2.0),
+                p.selected,
+            );
         }
+    }
+
+    /// The kit's list row in `rect`: lead, title and subtitle, accessory; the row is one
+    /// target. `Accessory::Button` is not supported here (its own hit would be lost).
+    #[allow(clippy::too_many_arguments)]
+    pub fn row(
+        &mut self,
+        key: Key,
+        rect: Rect,
+        lead: Lead,
+        title: &str,
+        subtitle: Option<&str>,
+        accessory: Accessory,
+        selected: bool,
+        action: A,
+    ) {
+        debug_assert!(!matches!(accessory, Accessory::Button(..)));
+        let switch = match accessory {
+            Accessory::Switch(on) => Some(on),
+            _ => None,
+        };
+        self.kit(&[key], |_| {}, |f, id| {
+            f.row(
+                &Row {
+                    id,
+                    lead,
+                    title,
+                    subtitle,
+                    accessory,
+                    selected,
+                    enabled: true,
+                },
+                rect,
+            );
+        });
+        let label = match subtitle {
+            Some(s) => format!("{title}: {s}"),
+            None => title.to_owned(),
+        };
+        let (role, checked, behavior) = match switch {
+            Some(on) => (Role::Switch, Some(on), Behavior::Toggle),
+            None if selected => (Role::RadioButton, Some(true), Behavior::Click),
+            None => (Role::Button, None, Behavior::Click),
+        };
+        self.hit_checked(key, rect, role, &label, checked, action, behavior);
+    }
+
+    /// The height of a kit row with or without a subtitle.
+    pub fn row_height(&self, subtitle: bool) -> f32 {
+        let m = self.kit.metrics;
+        (if subtitle { m.row } else { m.row_single } * self.s).round()
+    }
+
+    /// The kit's section header: a small semibold title in the secondary ink.
+    pub fn section_header(&mut self, rect: Rect, title: &str) {
+        self.kit(&[], |_| {}, |f, _| f.section_header(rect, title, None));
+    }
+
+    /// A card: the panel fill at `radius`, no edge.
+    pub fn card(&mut self, rect: Rect, radius: f32) {
+        self.fill(rect, radius, self.p.panel);
     }
 
     // --- Scroll views -------------------------------------------------------------------------
@@ -1191,20 +1391,21 @@ impl<'a, A: Clone> Builder<'a, A> {
         });
         if height > viewport.height() + 0.5 {
             let p = *self.p;
+            let w = self.px(5.0);
             let track = Rect::new(
-                viewport.right - self.px(7.0),
+                viewport.right - self.px(3.0) - w,
                 viewport.top + self.px(4.0),
-                self.px(4.0),
+                w,
                 viewport.height() - self.px(8.0),
             );
             let ratio = viewport.height() / height;
-            let len = (track.height() * ratio).max(self.px(24.0));
+            let len = (track.height() * ratio).max(self.px(28.0));
             let max = (height - viewport.height()).max(1.0);
             let y = track.top + (track.height() - len) * (offset / max).clamp(0.0, 1.0);
             let bar = Rect::new(track.left, y, track.width(), len);
             let k = crate::controls::key((key, "thumb"));
             let hot = self.hovered(k) || self.pressed(k);
-            self.fill(bar, self.px(2.0), if hot { p.control } else { p.edge });
+            self.fill(bar, w / 2.0, p.ink1.with_alpha(if hot { 0.5 } else { 0.26 }));
             self.hit(
                 k,
                 bar.inflate(self.px(3.0)),
@@ -1323,5 +1524,61 @@ mod tests {
         assert!(b.targets.iter().all(|t| t.group == Some(key("edge"))));
         assert_eq!(b.list.hits[1].checked, Some(true));
         assert_eq!(b.targets[0].action, Act::Go(0));
+    }
+
+    /// The kit draws Studio's controls: a hovered or keyboard-focused control shows it, and
+    /// nothing at rest is outlined.
+    #[test]
+    fn kit_controls_follow_the_builders_input_and_draw_no_outlines_at_rest() {
+        let mut text = Text::new().unwrap();
+        let (p, t) = (Palette::dark(), Type::new(&text));
+        let draw = |text: &mut Text, input: &Input| {
+            let mut b: Builder<'_, Act> = Builder::new(text, &p, &t, 1.0, input);
+            b.button(key("b"), Rect::new(0.0, 0.0, 90.0, 32.0), "Go", None, ButtonKind::Secondary, true, Act::Flip);
+            b.switch(key("s"), Point::new(0.0, 40.0), false, "S", Act::Flip);
+            b.segmented(key("g"), Rect::new(0.0, 70.0, 200.0, 30.0), &["A", "B"], Some(0), "G", true, Act::Go);
+            b.select(key("c"), Rect::new(0.0, 110.0, 120.0, 30.0), "Value", "C", Act::Flip);
+            b.field(key("f"), Rect::new(0.0, 150.0, 120.0, 32.0), None, "Type", true, false, "F", Act::Flip);
+            b.list
+        };
+        let rest = draw(&mut text, &Input::default());
+        assert!(
+            !rest.ops.iter().any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
+            "no outlines at rest"
+        );
+        let focused = draw(
+            &mut text,
+            &Input {
+                focus: Some(key((key("g"), 1usize))),
+                focus_visible: true,
+                ..Default::default()
+            },
+        );
+        assert!(
+            focused.ops.iter().any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
+            "the kit draws the focused segment's ring"
+        );
+        let hovered = draw(
+            &mut text,
+            &Input {
+                hover: Some(key("s")),
+                ..Default::default()
+            },
+        );
+        assert_ne!(rest.ops, hovered.ops, "the kit's switch shows its hover");
+    }
+
+    #[test]
+    fn text_steps_meet_the_kit_floors_on_every_surface() {
+        use crate::theme::{contrast, over};
+        for p in [Palette::dark(), Palette::light()] {
+            for surface in [p.bg, p.chrome, p.panel, over(p.selected, p.chrome)] {
+                let ratio = |c| contrast(c, surface);
+                assert!(ratio(p.ink1) >= 7.0, "ink-1 {:.2}", ratio(p.ink1));
+                assert!(ratio(p.ink2) >= 4.5, "ink-2 {:.2}", ratio(p.ink2));
+                assert!(ratio(p.ink3) >= 4.5, "ink-3 {:.2}", ratio(p.ink3));
+                assert!(ratio(p.hint()) >= 3.0, "hint {:.2}", ratio(p.hint()));
+            }
+        }
     }
 }

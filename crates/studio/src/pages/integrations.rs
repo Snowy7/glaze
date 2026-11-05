@@ -7,6 +7,7 @@
 //! where it shows (a bar module), its options, and one privacy line. Connect turns it on and
 //! adds its module; Disconnect takes both back in one undo step.
 
+use mypaper_ui::controls::Glyph;
 use mypaper_ui::controls::{Align, ButtonKind, Font, key};
 use mypaper_ui::{Point, Rect, Role};
 use serde_json::{Value, json};
@@ -26,7 +27,7 @@ pub enum Field {
 pub struct Integration {
     pub name: &'static str,
     pub adds: &'static str,
-    pub glyph: char,
+    pub glyph: Glyph,
     /// Its section in `integrations.json` (`None`: a plugin with no settings).
     pub section: Option<&'static str>,
     /// Shipped and on unless turned off.
@@ -208,13 +209,11 @@ pub fn bar(app: &App, b: &mut B, bar: Rect, right: f32) -> f32 {
 }
 
 pub fn view(app: &App, b: &mut B, body: Rect) {
-    let p = *b.p;
     if app.docs.error(DocId::Integrations).is_some() {
         let r = Rect::new(body.left + b.px(24.0), body.top + b.px(12.0), body.width() - b.px(48.0), 0.0);
         crate::ui::file_banner(app, b, r, DocId::Integrations);
     }
     let list = Rect::new(body.left, body.top, b.px(440.0), body.height());
-    b.vline(list.right, body.top, body.bottom, p.line);
     let needle = app.text(&FieldId::IntegrationSearch).trim().to_lowercase();
     let x = list.left + b.px(24.0);
     let w = list.width() - b.px(40.0);
@@ -236,9 +235,7 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
                 if items.is_empty() {
                     continue;
                 }
-                let mut heading = b.font(Font::Caption);
-                heading.weight = 600;
-                b.text_at(x + b.px(2.0), y + b.px(4.0), group, &heading, p.ink3);
+                b.section_header(Rect::new(x + b.px(4.0), y + b.px(2.0), w, b.px(18.0)), group);
                 y += b.px(28.0);
                 for (i, item) in items {
                     row(app, b, Rect::new(x - b.px(4.0), y, w + b.px(8.0), b.px(52.0)), i, item);
@@ -257,13 +254,13 @@ fn row(app: &App, b: &mut B, r: Rect, i: usize, item: &Integration) {
     let k = key(("integration", i));
     let on = app.nav.integration == i;
     if on {
-        b.fill(r, b.px(8.0), p.selected);
-    } else if b.hovered(k) {
-        b.fill(r, b.px(8.0), p.hover);
+        b.fill(r, b.px(10.0), p.selected);
+    } else {
+        b.wash(k, r, b.px(10.0));
     }
     let tile = Rect::new(r.left + b.px(10.0), r.top + b.px(10.0), b.px(32.0), b.px(32.0));
-    b.fill(tile, b.px(8.0), if on { p.hover } else { p.panel });
-    b.icon(tile, item.glyph, 15.0, p.ink2);
+    b.fill(tile, b.px(8.0), p.fill);
+    b.icon(tile, item.glyph, 15.0, p.ink1);
     let strong = b.font(Font::Strong);
     let small = b.font(Font::Caption);
     b.text_at(tile.right + b.px(12.0), r.top + b.px(8.0), item.name, &strong, p.ink1);
@@ -294,13 +291,12 @@ fn details(app: &App, b: &mut B, area: Rect) {
     let secret = has_secret(app, item);
     let r = area;
     let view = key(("integration-details", i));
-    b.fill(r, b.px(12.0), p.chrome);
-    b.stroke(r, b.px(12.0), 1.0, p.edge);
+    b.fill(r, b.px(12.0), p.panel);
     let x = r.left + b.px(16.0);
     let w = r.width() - b.px(32.0);
     b.scroll(view, r.inflate(-1.0), app.nav.scroll(view), Action::None, |b, top| {
         let tile = Rect::new(x, top + b.px(16.0), b.px(44.0), b.px(44.0));
-        b.fill(tile, b.px(11.0), p.hover);
+        b.fill(tile, b.px(11.0), p.fill);
         b.icon(tile, item.glyph, 20.0, p.ink1);
         let t2 = b.font(Font::Title2);
         let small = b.font(Font::Caption);
@@ -323,7 +319,7 @@ fn details(app: &App, b: &mut B, area: Rect) {
             b.button(key(("connect", section)), Rect::new(r.right - b.px(16.0) - bw, tile.top + b.px(6.0), bw, b.px(32.0)), label, None, kind, true, action);
         }
         let mut y = top + b.px(76.0);
-        b.hline(r.left, r.right, y, p.line);
+        b.hline(x, x + w, y, p.line);
         y += b.px(14.0);
         let heading = b.font(Font::Heading);
         // Shows in: its top-bar module.
@@ -335,7 +331,7 @@ fn details(app: &App, b: &mut B, area: Rect) {
             label(b, row, "Top bar", "Its module, at the end", None);
             b.switch(key(("shows-in", module)), Point::new(x + w - b.px(36.0), y + b.px(10.0)), shown, "Top bar", Action::Set(Edit::new(DocId::Studio, format!("/integration_module/{i}"), "Shows in"), Value::Null));
             y += b.px(46.0);
-            b.hline(r.left, r.right, y, p.line);
+            b.hline(x, x + w, y, p.line);
             y += b.px(14.0);
         }
         // Setup and options.
@@ -388,7 +384,7 @@ fn details(app: &App, b: &mut B, area: Rect) {
             b.button(key("int-widgets"), Rect::new(x, y, lw, b.px(28.0)), "Their widgets", Some(glyph::CHEVRON_RIGHT), ButtonKind::Secondary, true, Action::Nav(Page::Widgets));
             y += b.px(36.0);
         }
-        b.hline(r.left, r.right, y, p.line);
+        b.hline(x, x + w, y, p.line);
         y += b.px(12.0);
         b.icon(Rect::new(x, y, b.px(16.0), b.px(20.0)), glyph::INFO, 13.0, p.ink3);
         y += b.paragraph(x + b.px(26.0), y + b.px(2.0), w - b.px(26.0), item.privacy, &small, b.px(16.0), p.ink3);

@@ -18,7 +18,6 @@ use crate::ui::{B, Col, label, setting};
 pub fn view(app: &App, b: &mut B, body: Rect) {
     let p = *b.p;
     let nav = Rect::new(body.left, body.top, b.px(232.0), body.height());
-    b.vline(nav.right, body.top, body.bottom, p.line);
     let mut y = nav.top + b.px(16.0);
     b.group(key("settings-nav"), |b| {
         for section in Section::ALL {
@@ -27,10 +26,10 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
             let on = app.nav.section() == section;
             if on {
                 b.fill(r, b.px(8.0), p.selected);
-            } else if b.hovered(k) {
-                b.fill(r, b.px(8.0), p.hover);
+            } else {
+                b.wash(k, r, b.px(8.0));
             }
-            let ink = if on || b.hovered(k) { p.ink1 } else { p.ink3 };
+            let ink = if on || b.hovered(k) { p.ink1 } else { p.ink2 };
             b.icon(Rect::new(r.left + b.px(10.0), r.top, b.px(16.0), r.height()), section.glyph(), 14.0, ink);
             let style = b.font(Font::Strong);
             b.text_in(Rect::new(r.left + b.px(38.0), r.top, r.width() - b.px(40.0), r.height()), section.title(), &style, ink, Align::Start);
@@ -39,7 +38,7 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
             y += b.px(38.0);
         }
     });
-    let content = Rect::new(nav.right + 1.0, body.top, body.right - nav.right - 1.0, body.height());
+    let content = Rect::new(nav.right, body.top, body.right - nav.right, body.height());
     let view = key(("settings", app.nav.section().title()));
     b.scroll(view, content, app.nav.scroll(view), Action::None, |b, top| {
         let w = (content.width() - b.px(64.0)).min(b.px(720.0));
@@ -60,8 +59,7 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
 fn group(b: &mut B, col: &mut Col, title: &str, rows: impl FnOnce(&mut B, &mut Col)) {
     let p = *b.p;
     if !title.is_empty() {
-        let heading = b.font(Font::Heading);
-        b.text_at(col.x, col.y, title, &heading, p.ink1);
+        b.section_header(Rect::new(col.x + b.px(4.0), col.y, col.w, b.px(18.0)), title);
         col.y += b.px(26.0);
     }
     // The card is drawn under its rows: its ops go first, sized after.
@@ -69,17 +67,14 @@ fn group(b: &mut B, col: &mut Col, title: &str, rows: impl FnOnce(&mut B, &mut C
     let mut inner = Col { x: col.x + b.px(16.0), y: col.y + b.px(8.0), w: col.w - b.px(32.0), view: col.view };
     rows(b, &mut inner);
     let rect = Rect::new(col.x, col.y, col.w, inner.y - col.y + b.px(4.0));
-    let card = vec![
-        mypaper_ui::Op::Fill { rect, radius: b.px(12.0), color: p.panel },
-        mypaper_ui::Op::Stroke { rect: rect.inflate(-0.5), radius: b.px(12.0), width: 1.0, color: p.edge },
-    ];
+    let card = vec![mypaper_ui::Op::Fill { rect, radius: b.px(12.0), color: p.panel }];
     b.list.ops.splice(at..at, card);
     col.y = rect.bottom + b.px(28.0);
 }
 
-/// A thin line between rows of a card.
+/// A hairline between rows of a card, inset from its left like the rows.
 fn divider(b: &mut B, c: &mut Col) {
-    b.hline(c.x - b.px(16.0), c.x + c.w + b.px(16.0), c.y - b.px(2.0), b.p.line);
+    b.hline(c.x, c.x + c.w + b.px(16.0), c.y - b.px(2.0), b.p.line);
     c.y += b.px(4.0);
 }
 
@@ -114,8 +109,7 @@ fn general(app: &App, b: &mut B, col: &mut Col) {
 
 fn performance(app: &App, b: &mut B, col: &mut Col) {
     let p = *b.p;
-    let heading = b.font(Font::Heading);
-    b.text_at(col.x, col.y, "Graphics card", &heading, p.ink1);
+    b.section_header(Rect::new(col.x + b.px(4.0), col.y, col.w, b.px(18.0)), "Graphics card");
     col.y += b.px(26.0);
     crate::ui::anchor(app, "gpu", col.view, col.y);
     let gpus = app.system.gpus.clone().unwrap_or_default();
@@ -138,9 +132,12 @@ fn performance(app: &App, b: &mut B, col: &mut Col) {
             let r = Rect::new(col.x + i as f32 * (tw + gap), col.y, tw, th);
             let k = key(("gpu", id));
             let on = current == id;
-            b.fill(r, b.px(10.0), p.panel);
-            b.stroke(r, b.px(10.0), if on { b.px(2.0) } else { 1.0 }, if on { p.ink1 } else if b.hovered(k) { p.control } else { p.edge });
-            b.icon(Rect::new(r.left + b.px(14.0), r.top + b.px(14.0), b.px(20.0), b.px(20.0)), g, 16.0, p.ink2);
+            b.fill(r, b.px(12.0), p.panel);
+            b.wash(k, r, b.px(12.0));
+            if on {
+                b.stroke(r, b.px(12.0), b.px(2.0), p.ink1);
+            }
+            b.icon(Rect::new(r.left + b.px(14.0), r.top + b.px(14.0), b.px(20.0), b.px(20.0)), g, 17.0, if on { p.ink1 } else { p.ink2 });
             if on {
                 let check = Rect::new(r.right - b.px(32.0), r.top + b.px(12.0), b.px(20.0), b.px(20.0));
                 b.fill(check, b.px(10.0), p.solid);
@@ -210,7 +207,7 @@ fn menu_items(app: &App, b: &mut B, c: &mut Col) {
     let list_w = c.w * 0.55;
     let top = c.y + b.px(4.0);
     let rect = Rect::new(c.x, top, list_w, items.len().max(1) as f32 * b.px(34.0));
-    b.fill(rect, b.px(8.0), p.chrome);
+    b.fill(rect, b.px(10.0), p.well);
     b.group(key("menu-items"), |b| {
         for (i, e) in items.iter().enumerate() {
             let label = match e {
@@ -222,7 +219,6 @@ fn menu_items(app: &App, b: &mut B, c: &mut Col) {
             crate::ui::list_row(b, r, key(("menu-item", i)), None, &label, Action::MenuRemove(i), Some(Action::MenuRemove(i)), i + 1 == items.len());
         }
     });
-    b.stroke(rect, b.px(8.0), 1.0, p.line);
     // The live preview: the shell's own menu view with these items.
     let config = mypaper_config::DesktopMenu { enabled: true, items: items.clone() };
     let tokens = mypaper_shell::preview::menu::tokens(&crate::app::theme_name(&app.docs).unwrap_or_default(), b.text);

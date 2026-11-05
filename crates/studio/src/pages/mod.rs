@@ -292,10 +292,10 @@ pub fn display_chips(app: &App, b: &mut B, x: f32, y: f32) -> f32 {
             let (tw, _) = b.measure(&label, &caption);
             let r = Rect::new(x, y, tw + b.px(40.0), b.px(28.0));
             let k = key(("display", i));
-            b.fill(r, r.height() / 2.0, b.p.panel);
-            b.stroke(r, r.height() / 2.0, 1.0, if on || b.hovered(k) { p.control } else { p.edge });
-            b.icon(Rect::new(r.left + b.px(10.0), r.top, b.px(14.0), r.height()), crate::theme::glyph::MONITOR, 12.0, if on { p.ink1 } else { p.ink3 });
-            b.text_in(Rect::new(r.left + b.px(31.0), r.top, tw + b.px(2.0), r.height()), &label, &caption, if on { p.ink1 } else { p.ink3 }, Align::Start);
+            b.fill(r, r.height() / 2.0, if on { p.selected } else { p.fill });
+            b.wash(k, r, r.height() / 2.0);
+            b.icon(Rect::new(r.left + b.px(10.0), r.top, b.px(14.0), r.height()), crate::theme::glyph::MONITOR, 12.0, if on { p.ink1 } else { p.ink2 });
+            b.text_in(Rect::new(r.left + b.px(31.0), r.top, tw + b.px(2.0), r.height()), &label, &caption, if on { p.ink1 } else { p.ink2 }, Align::Start);
             b.hit_checked(k, r, mypaper_ui::Role::RadioButton, &label, Some(on), Action::Display(i), mypaper_ui::controls::Behavior::Click);
             b.focus_ring(k, r, r.height() / 2.0);
             x = r.right + b.px(10.0);

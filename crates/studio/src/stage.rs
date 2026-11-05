@@ -774,7 +774,6 @@ pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<
     let r = b.px(12.0);
     let t = b.px(6.0);
     b.stroke(frame.inflate(t), r + t, t * 2.0, p.bg);
-    b.stroke(frame, r, 1.0, p.edge);
     // Items: the bare wallpaper first (so items win), then each.
     let items: Vec<Item> = c
         .items

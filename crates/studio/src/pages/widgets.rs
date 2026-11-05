@@ -1,9 +1,10 @@
-//! Widgets: the display's widgets on their real grid, drawn by their native views. Drag to
+//! Widget                let w = b.segmented_width(&labels);: the display's widgets on their real grid, drawn by their native views. Drag to
 //! move, drag the corner to resize (drops onto another widget are refused), arrows move a cell
 //! and Shift+arrows resize. The inspector lists what's on the display, or shows a widget's own
 //! options from its manifest (variant selects as tiles drawn by the widget's real view), its size
 //! and its own look. Add widget is a sheet with the catalogue.
 
+use mypaper_ui::controls::Glyph;
 use mypaper_ui::controls::{Align, ButtonKind, Font, key};
 use mypaper_ui::{Point, Rect, Role};
 use mypaper_widgets::layout::{Instance, Layout};
@@ -45,7 +46,7 @@ pub fn count_here(app: &App) -> usize {
     here(app, &layout(app)).len()
 }
 
-pub fn glyph_of(id: &str) -> char {
+pub fn glyph_of(id: &str) -> Glyph {
     match id {
         "clock" => glyph::CLOCK,
         "calendar" => glyph::CALENDAR,
@@ -310,8 +311,7 @@ fn widget_setting(app: &App, b: &mut B, c: &mut Col, base: &str, resolved: &Map<
                 let labels: Vec<&str> = opts.iter().map(|o| o.1.as_str()).collect();
                 let row = Rect::new(c.x, c.y, c.w, b.px(36.0));
                 label(b, row, l, "", None);
-                let style = b.font(Font::Strong).scaled(12.5 / 13.0);
-                let w: f32 = labels.iter().map(|s| b.measure(s, &style).0 + b.px(20.0)).sum::<f32>() + b.px(8.0);
+                let w = b.segmented_width(&labels);
                 let at = opts.iter().position(|o| o.0 == current);
                 b.segmented(key(("ws", k.as_str())), Rect::new(c.x + c.w - w, c.y + b.px(3.0), w, b.px(30.0)), &labels, at, l, false, |i| Action::Set(edit.clone(), json!(opts[i].0)));
                 c.y += b.px(40.0);
@@ -358,13 +358,12 @@ fn widget_setting(app: &App, b: &mut B, c: &mut Col, base: &str, resolved: &Map<
             let items = resolved.get(k).and_then(Value::as_array).cloned().unwrap_or_default();
             let first = fields.first().map(list_key).unwrap_or_default();
             let list = Rect::new(c.x, c.y, c.w, items.len() as f32 * b.px(36.0));
-            b.fill(list, b.px(8.0), b.p.chrome);
+            b.fill(list, b.px(10.0), b.p.well);
             for (n, item) in items.iter().enumerate() {
                 let text = item.get(&first).map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_owned)).unwrap_or_default();
                 let r = Rect::new(c.x, c.y + n as f32 * b.px(36.0), c.w, b.px(36.0));
                 crate::ui::list_row(b, r, key(("list", k.as_str(), n)), None, &text, Action::None, Some(Action::ListRemove(key_of(k), n)), n + 1 == items.len());
             }
-            b.stroke(list, b.px(8.0), 1.0, b.p.line);
             c.y = list.bottom + b.px(8.0);
             let full = max_items.is_some_and(|m| items.len() >= m);
             let field_w = c.w - b.px(80.0);
@@ -393,8 +392,7 @@ fn trim(v: f64) -> String {
 /// A − value + stepper.
 fn stepper(b: &mut B, rect: Rect, name: &str, value: u32, minus: Action, plus: Action) {
     let p = *b.p;
-    b.fill(rect, b.px(6.0), p.panel);
-    b.stroke(rect, b.px(6.0), 1.0, p.control);
+    b.fill(rect, b.px(8.0), p.well);
     let caption = b.font(Font::Caption);
     let strong = b.font(Font::Strong);
     let mut x = rect.left + b.px(10.0);
@@ -417,8 +415,7 @@ fn place(app: &App, b: &mut B, c: &mut Col, value: Option<&Value>, path: &str) {
     c.y += b.px(40.0);
     if let Some(name) = town {
         let card = Rect::new(c.x, c.y, c.w, b.px(50.0));
-        b.fill(card, b.px(8.0), p.panel);
-        b.stroke(card, b.px(8.0), 1.0, p.edge);
+        b.fill(card, b.px(10.0), p.well);
         b.icon(Rect::new(card.left + b.px(10.0), card.top, b.px(18.0), card.height()), glyph::PLACE, 14.0, p.ink2);
         let strong = b.font(Font::Strong);
         let caption = b.font(Font::Caption);
@@ -848,10 +845,10 @@ pub fn add_sheet(app: &App, b: &mut B) {
                     }
                     let r = Rect::new(area.left + (n % 3) as f32 * (w + gap), y, w, h);
                     let k = key(("catalog-card", m.id.as_str()));
-                    b.fill(r, b.px(10.0), if b.hovered(k) { p.hover } else { p.bg });
-                    b.stroke(r, b.px(10.0), 1.0, if b.hovered(k) { p.control } else { p.edge });
+                    b.fill(r, b.px(12.0), p.well);
+                    b.wash(k, r, b.px(12.0));
                     let tile = Rect::new(r.left + b.px(14.0), r.top + b.px(14.0), b.px(32.0), b.px(32.0));
-                    b.fill(tile, b.px(8.0), p.hover);
+                    b.fill(tile, b.px(8.0), p.fill);
                     b.icon(tile, glyph_of(&m.id), 15.0, p.ink1);
                     let strong = b.font(Font::Strong);
                     let caption = b.font(Font::Caption);

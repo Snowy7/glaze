@@ -75,11 +75,10 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         return finish(b, chrome, vec![], overlay_from);
     }
     sidebar(app, &mut b, r);
-    // The main panel: rounded top-left, an edge on the left and top.
+    // The main panel: rounded top-left, set apart from the sidebar by its fill.
     let m = r.main;
     let wide = Rect::new(m.left, m.top, m.width() + b.px(24.0), m.height() + b.px(24.0));
     b.fill(wide, b.px(12.0), p.bg);
-    b.stroke(wide, b.px(12.0), 1.0, p.edge);
     page_bar(app, &mut b, r.bar, &mut chrome);
     chrome.push((Rect::new(r.sidebar.left, 0.0, r.sidebar.width(), b.px(52.0)), Chrome::Caption));
     chrome.push((Rect::new(m.left, 0.0, m.width(), m.top), Chrome::Caption));
@@ -123,7 +122,7 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
     b.fill(mark, b.px(7.0), p.ink1);
     b.icon(mark, glyph::WALLPAPERS, 15.0, p.chrome);
     if !r.rail {
-        let title = b.t.style(Font::Title2, b.s).scaled(14.0 / 15.0);
+        let title = b.font(Font::Heading);
         b.text_at(mark.right + b.px(10.0), mark.top - b.px(1.0), "mypaper", &title, p.ink1);
         let micro = b.font(Font::Micro);
         b.text_at(mark.right + b.px(10.0), mark.top + b.px(15.0), "Studio", &micro, p.ink3);
@@ -131,14 +130,14 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
     // Search: opens the palette.
     let search = Rect::new(x, b.px(64.0), w, b.px(34.0));
     let k = key("sidebar-search");
-    b.fill(search, b.px(8.0), if b.hovered(k) { p.hover } else { p.bg });
-    b.stroke(search, b.px(8.0), 1.0, p.edge);
+    b.fill(search, b.px(8.0), p.well);
+    b.wash(k, search, b.px(8.0));
     if r.rail {
         b.icon(search, glyph::SEARCH, 15.0, p.ink3);
     } else {
         b.icon(Rect::new(search.left + b.px(10.0), search.top, b.px(16.0), search.height()), glyph::SEARCH, 14.0, p.ink3);
         let body = b.font(Font::Body);
-        b.text_at(search.left + b.px(36.0), search.top + b.px(7.0), "Search", &body, p.ink3);
+        b.text_in(Rect::new(search.left + b.px(34.0), search.top, b.px(80.0), search.height()), "Search", &body, p.ink3, Align::Start);
         let kw = b.px(30.0 + 4.0 + 20.0);
         b.keys(search.right - kw - b.px(6.0), search.top + b.px(7.0), &["Ctrl", "K"]);
     }
@@ -167,10 +166,10 @@ fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
     let hot = b.hovered(k);
     if current {
         b.fill(rect, b.px(8.0), p.selected);
-    } else if hot {
-        b.fill(rect, b.px(8.0), p.hover);
+    } else {
+        b.wash(k, rect, b.px(8.0));
     }
-    let ink = if current || hot { p.ink1 } else { p.ink3 };
+    let ink = if current || hot { p.ink1 } else { p.ink2 };
     if rail {
         b.icon(rect, page.glyph(), 16.0, ink);
     } else {
@@ -203,8 +202,7 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
     } else {
         ("Playing", wallpaper, Action::Pause, glyph::PAUSE)
     };
-    b.fill(rect, b.px(8.0), p.panel);
-    b.stroke(rect, b.px(8.0), 1.0, if stopped_part.is_some() { p.control } else { p.edge });
+    b.fill(rect, b.px(10.0), if stopped_part.is_some() { p.selected } else { p.fill });
     let button_rect = Rect::new(rect.right - b.px(34.0), rect.top + (rect.height() - b.px(28.0)) / 2.0, b.px(28.0), b.px(28.0));
     if !rail {
         let mark = Rect::new(rect.left + b.px(12.0), rect.top, b.px(10.0), rect.height());
@@ -217,7 +215,7 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
         } else {
             b.dot(Point::new(mark.left + b.px(4.0), mark.top + mark.height() / 2.0), true);
         }
-        let strong = b.t.style(Font::Heading, b.s).scaled(12.0 / 13.0);
+        let strong = b.font(Font::Heading);
         let caption = b.font(Font::Caption);
         let tw = button_rect.left - rect.left - b.px(34.0);
         b.text_in(Rect::new(rect.left + b.px(30.0), rect.top + b.px(6.0), tw, b.px(16.0)), title, &strong, p.ink1, Align::Start);
@@ -235,11 +233,9 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
 
 fn page_bar(app: &App, b: &mut B, bar: Rect, chrome: &mut Vec<(Rect, Chrome)>) {
     let p = *b.p;
-    b.hline(bar.left, bar.right, bar.bottom - 1.0, p.line);
     chrome.push((bar, Chrome::Caption));
     // Caption buttons, right.
     let caps = caption_buttons(app, b, bar, chrome);
-    b.vline(caps - b.px(10.0), bar.top + b.px(14.0), bar.bottom - b.px(14.0), p.line);
     // The page's own cluster, then undo/redo/peek/saved, right to left.
     let mut right = caps - b.px(20.0);
     right = crate::pages::bar_actions(app, b, bar, right);
@@ -295,14 +291,12 @@ fn caption_buttons(app: &App, b: &mut B, bar: Rect, chrome: &mut Vec<(Rect, Chro
     for (g, label, action, part) in [
         (glyph::MINIMIZE, "Minimize", Action::Minimize, Chrome::Minimize),
         (if maximized { glyph::RESTORE } else { glyph::MAXIMIZE }, if maximized { "Restore" } else { "Maximize" }, Action::Maximize, Chrome::Maximize),
-        (glyph::CLOSE, "Close", Action::Close, Chrome::Close),
+        (glyph::CAPTION_CLOSE, "Close", Action::Close, Chrome::Close),
     ] {
         let r = Rect::new(x, y, w, h);
         let k = key(("caption", label));
-        if b.hovered(k) {
-            b.fill(r, b.px(6.0), p.hover);
-        }
-        b.icon(r, g, 10.0, if b.hovered(k) { p.ink1 } else { p.ink3 });
+        b.wash(k, r, b.px(6.0));
+        b.icon(r, g, 10.0, if b.hovered(k) { p.ink1 } else { p.ink2 });
         b.hit(k, r, Role::Button, label, action, mypaper_ui::controls::Behavior::Click);
         b.focus_ring(k, r, b.px(6.0));
         chrome.push((r, part));

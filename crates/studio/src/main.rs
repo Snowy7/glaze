@@ -179,7 +179,9 @@ fn run() -> Result<()> {
     surface.set_icon_png(include_bytes!("../assets/icon-32.png"));
     let (bounds, maximized) = placement(&app, scale);
     surface.place(bounds);
-    surface.set_frame(app.theme.palette.dark, app.theme.palette.edge);
+    let p = app.theme.palette;
+    // DWM wants an opaque border: the edge wash over the window's chrome.
+    surface.set_frame(p.dark, mypaper_ui::theme::over(p.edge, p.chrome));
     let studio = Rc::new(RefCell::new(Studio { app, ui, surface }));
     {
         let mut s = studio.borrow_mut();

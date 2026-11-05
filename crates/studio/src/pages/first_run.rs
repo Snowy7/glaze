@@ -92,7 +92,10 @@ pub fn view(app: &App, b: &mut B) {
                     let k = key(("taskbar-choice", i));
                     let on = taskbar == i;
                     b.fill(r, b.px(12.0), p.panel);
-                    b.stroke(r, b.px(12.0), if on { b.px(2.0) } else { 1.0 }, if on { p.ink1 } else { p.edge });
+                    b.wash(k, r, b.px(12.0));
+                    if on {
+                        b.stroke(r, b.px(12.0), b.px(2.0), p.ink1);
+                    }
                     let strong = b.font(Font::Strong);
                     b.text_at(r.left + b.px(18.0), r.top + b.px(13.0), title, &strong, p.ink1);
                     b.text_at(r.left + b.px(18.0), r.top + b.px(34.0), line, &caption, p.ink3);
@@ -108,7 +111,6 @@ pub fn view(app: &App, b: &mut B) {
             let ox = (w - ow) / 2.0;
             let r = Rect::new(ox, y, ow, b.px(64.0));
             b.fill(r, b.px(12.0), p.panel);
-            b.stroke(r, b.px(12.0), 1.0, p.edge);
             let strong = b.font(Font::Strong);
             b.text_at(r.left + b.px(18.0), r.top + b.px(13.0), "Start with Windows", &strong, p.ink1);
             b.text_at(r.left + b.px(18.0), r.top + b.px(34.0), "mypaper starts when you sign in", &caption, p.ink3);
@@ -119,7 +121,6 @@ pub fn view(app: &App, b: &mut B) {
     }
     // The footer: Skip, the safety line, Continue.
     let fy = y + b.px(12.0);
-    b.hline(x, x + content_w, fy - b.px(20.0), p.line);
     let skip = b.button_width("Skip", false, false);
     b.button(key("first-skip"), Rect::new(x, fy, skip, b.px(32.0)), "Skip", None, ButtonKind::Ghost, true, Action::FirstRunSkip);
     let label = if step == 2 { "Open Studio" } else { "Continue" };
@@ -170,7 +171,7 @@ fn starter_tile(app: &App, b: &mut B, s: &Starter, pic: Rect) {
     }
     let card = Rect::new(pic.left + w * 0.06, pic.top + h * 0.2, w * 0.28, h * 0.24);
     glass(card, 6.0);
-    let mut font = b.font(Font::Body).scaled(15.0 / 13.0);
+    let mut font = b.font(Font::Body).scaled(15.0 / 14.0);
     font.weight = weight;
     b.text_in(Rect::new(card.left + b.px(8.0), card.top, card.width(), card.height() * 0.75), "10:42", &font, Rgba::new(1.0, 1.0, 1.0, 1.0), Align::Start);
 }

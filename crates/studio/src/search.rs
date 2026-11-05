@@ -3,6 +3,7 @@
 //! flashes it); Space flips a switch in place. Results are grouped Settings, Actions,
 //! Wallpapers, Widgets, Integrations, Go to; with nothing typed, recent ones come first.
 
+use mypaper_ui::controls::Glyph;
 use mypaper_ui::controls::{Align, Font, key};
 use mypaper_ui::{Rect, Role};
 use serde_json::{Value, json};
@@ -19,7 +20,7 @@ use crate::ui::{B, text_field};
 pub struct Entry {
     pub title: String,
     pub section: String,
-    pub glyph: char,
+    pub glyph: Glyph,
     pub group: &'static str,
     pub action: Action,
     /// A switch setting: Space flips it, and the row shows its state.
@@ -127,7 +128,7 @@ fn all(app: &App) -> Vec<Entry> {
     out
 }
 
-fn setting_glyph(s: &Setting) -> char {
+fn setting_glyph(s: &Setting) -> Glyph {
     match s.place {
         crate::settings::Place::Look { windows: true } => glyph::APP,
         crate::settings::Place::Look { .. } => glyph::LOOK,
@@ -302,18 +303,17 @@ pub fn view(app: &App, b: &mut B, selected: usize) {
         for (i, e) in list.iter().enumerate() {
             if e.group != last_group {
                 last_group = e.group;
-                let micro = b.font(Font::Micro);
-                b.text_at(rect.left + b.px(16.0), y + b.px(10.0), e.group, &micro, p.ink3);
+                b.section_header(Rect::new(rect.left + b.px(16.0), y + b.px(8.0), rect.width() - b.px(32.0), b.px(18.0)), e.group);
                 y += b.px(26.0);
             }
             let r = Rect::new(rect.left + b.px(6.0), y, rect.width() - b.px(12.0), row);
             let k = key(("palette", i));
             if i == selected {
-                b.fill(r, b.px(7.0), p.selected);
-            } else if b.hovered(k) {
-                b.fill(r, b.px(7.0), p.hover);
+                b.fill(r, b.px(8.0), p.selected);
+            } else {
+                b.wash(k, r, b.px(8.0));
             }
-            b.icon(Rect::new(r.left + b.px(10.0), r.top, b.px(16.0), row), e.glyph, 14.0, p.ink3);
+            b.icon(Rect::new(r.left + b.px(10.0), r.top, b.px(16.0), row), e.glyph, 14.0, p.ink2);
             let body = b.font(Font::Body);
             let caption = b.font(Font::Caption);
             let section_w = b.measure(&e.section, &caption).0.min(r.width() * 0.45);
@@ -333,7 +333,6 @@ pub fn view(app: &App, b: &mut B, selected: usize) {
     });
     // Footer keycaps.
     let foot = Rect::new(rect.left, rect.bottom - b.px(36.0), rect.width(), b.px(36.0));
-    b.hline(foot.left, foot.right, foot.top, p.line);
     let caption = b.font(Font::Caption);
     let mut x = foot.left + b.px(16.0);
     for (keys, label) in [(&["↑", "↓"][..], "Move"), (&["Enter"][..], "Open"), (&["Space"][..], "Toggle"), (&["Esc"][..], "Close")] {
