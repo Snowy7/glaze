@@ -175,10 +175,36 @@ record token { name: string, value: token-value }   // e.g. "background", "tint"
 variant token-value { color(string), number(f32), tone(tone), flag(bool) }
 ```
 
-Token names are the theme's (`docs/ui.md` › "Tokens"). The shell applies a patch to its surface
-through the same path as the user's bar and theme settings, so it themes, animates and follows
-DPI like a user change. The user's own setting for the same token wins, and a plugin can't
-override an explicit choice.
+The shell applies a patch through the same path as the user's bar and theme settings
+(`crates/shell/src/bars/plugin_style.rs`): the bar re-resolves its kit tokens and **restyles in
+place** (same window, same appbar band, no flicker), so a patch themes, animates and follows DPI
+like a user change. Only geometry tokens (`height`) rebuild the bar, because its band changes.
+
+**Precedence.** The user's explicit fields in `bars.json` (what Studio writes, shared `look` or
+the bar's own `top.look`/`dock.look`, and the shared `appearance`) win over a plugin. A plugin
+wins over the bar's design, the preset and the theme's defaults. Patches stack in plugin load
+order, a later plugin's token over an earlier one's, and `style.reset` or disabling the plugin
+removes its patch live.
+
+Token names, per surface (`color` is `#rrggbb` or `#rrggbbaa`; a `tone` names a theme role):
+
+| token | value | `top-bar` | `dock` | `menu` | `glass` | user field that wins |
+|---|---|---|---|---|---|---|
+| `tint` | color | glass tint colour (a transparent design gets its glass back) | same | via `top-bar` | both bars | `appearance.tint` (`look.transparent` keeps it bare) |
+| `tint.opacity`, `glass.tint` | number 0..1 | tint strength | same | via `top-bar` | both bars | `look.glass.tint`, `look.tint` |
+| `glass.clarity` | number 0..1 | material clarity | same | via `top-bar` | both bars | `look.glass.clarity` |
+| `glass.blur` | number ≥ 0 (DIPs) | blur | same | via `top-bar` | both bars | `look.glass.blur` |
+| `glass.refraction`, `glass.highlight` | number | Liquid Glass lens | same | via `top-bar` | both bars | `look.glass.*` |
+| `radius` | number 0..64 | bar, island and plate corners | same | via `top-bar` | — | `look.radius`, `appearance.radius` |
+| `transparent` | flag | no plate, items on the wallpaper | same | — | — | `look.transparent` |
+| `background` | color | solid body (styles without glass) | same | via `top-bar` | — | `look.background` |
+| `font.size`, `font.weight` | number | the bar's text | same | via `top-bar` | — | `look.font.*` |
+| `height` | number 16..96 | bar height (rebuilds the bar) | — | — | — | `top.height` |
+| `label`, `secondary`, `tertiary`, `separator`, `surface`, `elevated`, `hover`, `pressed`, `warning`, `destructive`, `positive` | color or tone | the theme colour role | same | the menu's own | — | — |
+| `accent` | color or tone | accent | same | same | — | `appearance.accent` |
+
+The desktop and tray menus take the top bar's tokens, then the `menu` surface's colours. Unknown
+names are ignored. `panel` and `widget` surfaces are accepted but not applied yet (see Status).
 
 ## Permissions
 
@@ -331,12 +357,37 @@ WIT world; the guest SDK; faces through the shell bridge and picker; HTTP; timer
 storage; launch; system monitors, theme and power; native modules through
 `mypaper-native-host`; the `hello` and `weather` components.
 
-Specified in WIT but stubbed in the host (`error::unsupported`, or the event never fires):
-websockets, pipes, notifications, `ui.put-image` and the `canvas` renderer, `animated` (drawn
-as its child), window, monitor, media and notification topics, and `system.foreground`. Style
-patches reach the shell (`Plugins::style_patches`) but aren't applied to the bar yet. Bar
-modules and panels are declared in manifests but aren't hosted by the bars yet, and only
-`faces` reach the picker.
+Shell side (2026-11-05, late): style patches restyle the top bar, dock and menus in place
+(tokens above); top-bar modules from plugins (`custom:<plugin>--<bar>`, below); the `canvas`
+renderer and `animated` springs.
+
+Not yet: plugin panels and flyouts opened from a module; dock modules; the `panel` and `widget`
+style surfaces; plugin `menu` items in the desktop menu and `commands` as global shortcuts;
+plugin modules in Studio's Bars module list (type `custom:<plugin>--<bar>` in `bars.json` for
+now); the shell opening `ui.put-image` mappings for canvases (the renderer side,
+`views::plugin::canvas::put_image`, is in place; the bridge has to pass the helper's pid).
+
+### Bar modules
+
+A component plugin's `bars` contribution is placed in the top bar's `left`, `center` or `right`
+list as `custom:<plugin>--<bar>` (`custom:hello--clock`), the same placement model as every
+module. The shell opens it as the instance `bar:<plugin>--<bar>` (`event::open` with size
+`small`) while it's placed, and closes it when it's removed. The bar draws the view's text as
+the module's one line (text nodes joined, a `metric`'s or `stat`'s value) in the bar's own
+font and colours, so a plugin module looks like a built-in one under any style. A click sends
+the view's first action (a `button`'s, `icon-button`'s or `list-row`'s), or `click` when it has
+none. A `custom:<id>` with a `command` in `modules` stays a script module.
+
+### Canvas and animated
+
+`canvas { height, commands }` draws in kit points from the canvas's top left, as wide as its
+slot and `height` tall, clipped to it: `rect` (fill or stroke, corner radius), `circle`, `line`,
+`path` (SVG `M L H V C Q Z`, absolute and relative; fills are even-odd scanlines with a hairline
+edge), `text` (a kit text role) and `image` (by `ui.put-image` id; an id not yet available
+draws the theme's well). Damage is the kit's display-list diff, so a moved shape repaints only
+around itself. `animated(spring)` springs its child's values to their new ones when they change
+(a ring's fraction, a limit bar's level, segmented-bar segments, sparkline points) with the
+kit's `Tween`; while a spring moves the widget asks for frames, and at rest nothing ticks.
 
 ## Native modules
 
