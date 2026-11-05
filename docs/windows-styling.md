@@ -22,6 +22,12 @@ panic hotkey fires, or core restarts after a crash.
 
 [`themes/midnight`](../themes/midnight) is a working example.
 
+**Your look wins.** A theme's `windows` section is a suggestion: `config.json` › `look.windows`
+(edited in Studio › Look › Windows) is your layer over it, field by field. A field absent there
+follows the theme; `null` keeps Windows' own setting ("As is"); a value sets it. The fields and
+values are the ones below. So styling Windows needs no copy of a built-in theme, and it survives a
+wallpaper change. See [studio-ux.md](studio-ux.md#6-look-and-windows-styling-as-part-of-it-d2).
+
 ## The `windows` section
 
 Every field is optional; an unset field leaves Windows' own setting alone. Unknown fields are
