@@ -20,17 +20,13 @@ use windows::Win32::NetworkManagement::WiFi::{
 use windows::Win32::Storage::FileSystem::{
     GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDriveStringsW,
 };
-use windows::Win32::System::Performance::{
-    PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE, PDH_HCOUNTER, PDH_HQUERY, PDH_MORE_DATA,
-    PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterArrayW,
-    PdhOpenQueryW,
-};
+
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::System::SystemInformation::{
     GetTickCount64, GlobalMemoryStatusEx, MEMORYSTATUSEX,
 };
 use windows::Win32::System::Threading::GetSystemTimes;
-use windows::core::{PCWSTR, w};
+use windows::core::PCWSTR;
 
 use crate::bridge::Target;
 
@@ -490,115 +486,9 @@ fn fixed_disks() -> Vec<Disk> {
         .collect()
 }
 
-/// The "GPU Engine" utilization counters, read through PDH.
-struct GpuCounters {
-    query: PDH_HQUERY,
-    counter: PDH_HCOUNTER,
-    buffer: Vec<PDH_FMT_COUNTERVALUE_ITEM_W>,
-    engines: std::collections::HashMap<Vec<u16>, f64>,
-}
-
-impl GpuCounters {
-    fn open() -> Option<Self> {
-        let mut query = PDH_HQUERY::default();
-        let mut counter = PDH_HCOUNTER::default();
-        // SAFETY: out-pointers are valid; the query is closed on drop (or below on failure).
-        unsafe {
-            if PdhOpenQueryW(PCWSTR::null(), 0, &mut query) != 0 {
-                return None;
-            }
-            let path = w!(r"\GPU Engine(*)\Utilization Percentage");
-            if PdhAddEnglishCounterW(query, path, 0, &mut counter) != 0
-                || PdhCollectQueryData(query) != 0
-            {
-                PdhCloseQuery(query);
-                return None;
-            }
-        }
-        Some(Self {
-            query,
-            counter,
-            buffer: Vec::new(),
-            engines: std::collections::HashMap::new(),
-        })
-    }
-
-    fn read(&mut self) -> Option<f64> {
-        // SAFETY: two-call pattern: ask for the size, then fill a buffer of
-        // that many bytes (aligned for the items); names point into it.
-        unsafe {
-            if PdhCollectQueryData(self.query) != 0 {
-                return None;
-            }
-            let item_size = size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>();
-            let mut bytes = (self.buffer.len() * item_size) as u32;
-            let mut count = 0;
-            let mut status = PdhGetFormattedCounterArrayW(
-                self.counter,
-                PDH_FMT_DOUBLE,
-                &mut bytes,
-                &mut count,
-                (!self.buffer.is_empty()).then_some(self.buffer.as_mut_ptr()),
-            );
-            if status == PDH_MORE_DATA {
-                self.buffer.resize(
-                    (bytes as usize).div_ceil(item_size),
-                    PDH_FMT_COUNTERVALUE_ITEM_W::default(),
-                );
-                status = PdhGetFormattedCounterArrayW(
-                    self.counter,
-                    PDH_FMT_DOUBLE,
-                    &mut bytes,
-                    &mut count,
-                    Some(self.buffer.as_mut_ptr()),
-                );
-            }
-            if status != 0 || count as usize > self.buffer.len() {
-                return None;
-            }
-            self.engines.values_mut().for_each(|n| *n = 0.0);
-            const LUID: [u16; 5] = [108, 117, 105, 100, 95];
-            let mut valid = false;
-            for item in &self.buffer[..count as usize] {
-                if item.FmtValue.CStatus > 1 || item.szName.is_null() {
-                    continue;
-                }
-                let value = item.FmtValue.Anonymous.doubleValue;
-                if !value.is_finite() {
-                    continue;
-                }
-                valid = true;
-                if value == 0.0 {
-                    continue;
-                }
-                let name = item.szName.as_wide();
-                let Some(at) = name.windows(5).position(|s| s == LUID) else {
-                    continue;
-                };
-                let key = &name[at..];
-                if let Some(total) = self.engines.get_mut(key) {
-                    *total += value;
-                } else {
-                    self.engines.insert(key.to_vec(), value);
-                }
-            }
-            self.engines
-                .values()
-                .copied()
-                .reduce(f64::max)
-                .map(|n| n.clamp(0.0, 100.0))
-                .filter(|_| valid)
-                .or_else(|| valid.then_some(0.0))
-        }
-    }
-}
-
-impl Drop for GpuCounters {
-    fn drop(&mut self) {
-        // SAFETY: we opened this query.
-        unsafe { PdhCloseQuery(self.query) };
-    }
-}
+#[path = "stats_gpu.rs"]
+mod gpu;
+use gpu::GpuCounters;
 
 /// Expensive fields requested by visible consumers. CPU and memory are always cheap snapshots.
 #[derive(Debug, Clone, Copy)]
