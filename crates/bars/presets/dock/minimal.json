@@ -1,0 +1,15 @@
+{
+  "style": "floating",
+  "size": 40,
+  "padding": 4,
+  "margin": 8,
+  "spacing": 10,
+  "indicator": "dot",
+  "counter": false,
+  "look": {
+    "family": "mono",
+    "background": { "type": "none" },
+    "indicator": { "running": "#ffffff8c", "active": "#ffffff", "attention": "#ffcc4d" }
+  },
+  "animation": { "duration": 200, "curve": "smooth", "bar": { "style": "fade" }, "open": { "style": "pop", "duration": 150 } }
+}

@@ -25,10 +25,14 @@ pub enum Preset {
     NeonGlass,
     /// A detached, rounded top bar and dock.
     Floating,
+    /// A floating capsule hugging its modules up top, a floating pill of a dock.
+    Pill,
+    /// Full-width bars flush with both edges: a strip up top, a taskbar below.
+    Edge,
 }
 
 impl Preset {
-    pub const ALL: [Preset; 8] = [
+    pub const ALL: [Preset; 10] = [
         Preset::Monochrome,
         Preset::Macos,
         Preset::Windows11,
@@ -37,6 +41,8 @@ impl Preset {
         Preset::Islands,
         Preset::NeonGlass,
         Preset::Floating,
+        Preset::Pill,
+        Preset::Edge,
     ];
 
     fn source(self) -> &'static str {
@@ -49,6 +55,8 @@ impl Preset {
             Preset::Islands => include_str!("../presets/islands.json"),
             Preset::NeonGlass => include_str!("../presets/neon-glass.json"),
             Preset::Floating => include_str!("../presets/floating.json"),
+            Preset::Pill => include_str!("../presets/pill.json"),
+            Preset::Edge => include_str!("../presets/edge.json"),
         }
     }
 
@@ -130,16 +138,20 @@ pub enum DockDesign {
     Chromeos,
     /// A floating Windows 11 dock: rounded acrylic, pill indicators.
     Fluent,
-    /// A solid pill with bar indicators.
+    /// One plate per group (pinned, running, extras), bar indicators.
     Islands,
     /// Dark glass, glow indicators.
     Neon,
     /// A detached, rounded pill.
     Floating,
+    /// No plate: the icons on the wallpaper, dots under the running ones.
+    Minimal,
+    /// A full-width bar flush with the edge: Start, tasks, status and the clock.
+    Edge,
 }
 
 impl DockDesign {
-    pub const ALL: [DockDesign; 9] = [
+    pub const ALL: [DockDesign; 11] = [
         DockDesign::Monochrome,
         DockDesign::Macos,
         DockDesign::Windows11,
@@ -149,6 +161,8 @@ impl DockDesign {
         DockDesign::Islands,
         DockDesign::Neon,
         DockDesign::Floating,
+        DockDesign::Minimal,
+        DockDesign::Edge,
     ];
 
     fn source(self) -> &'static str {
@@ -162,6 +176,8 @@ impl DockDesign {
             DockDesign::Islands => include_str!("../presets/dock/islands.json"),
             DockDesign::Neon => include_str!("../presets/dock/neon.json"),
             DockDesign::Floating => include_str!("../presets/dock/floating.json"),
+            DockDesign::Minimal => include_str!("../presets/dock/minimal.json"),
+            DockDesign::Edge => include_str!("../presets/dock/edge.json"),
         }
     }
 

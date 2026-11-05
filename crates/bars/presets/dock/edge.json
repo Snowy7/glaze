@@ -1,0 +1,22 @@
+{
+  "style": "taskbar",
+  "size": 22,
+  "padding": 6,
+  "margin": 0,
+  "spacing": 2,
+  "button": 40,
+  "indicator": "bar",
+  "counter": false,
+  "align": "start",
+  "left": ["start", "search"],
+  "right": ["tray", "network", "volume", "battery", "clock"],
+  "extras": [],
+  "clock": { "format": "HH:mm" },
+  "look": {
+    "family": "mono",
+    "radius": 0,
+    "items": { "radius": 6 },
+    "indicator": { "running": "#ffffff66", "active": "accent", "attention": "#ffcc4d" }
+  },
+  "animation": { "duration": 160, "curve": "snappy", "bar": { "style": "slide" }, "open": { "style": "pop", "duration": 140 } }
+}

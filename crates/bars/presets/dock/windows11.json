@@ -3,38 +3,83 @@
   "size": 24,
   "padding": 12,
   "margin": 0,
-  "spacing": 4,
-  "button": 40,
+  "spacing": 0,
+  "button": 44,
   "magnify": false,
   "indicator": "pill",
   "counter": false,
   "align": "center",
-  "left": ["start", "search"],
-  "right": ["tray", "network", "volume", "battery", "clock", "notifications"],
-  "extras": ["desktop"],
-  "preview": { "delay": 400 },
+  "left": [
+    "start",
+    "search"
+  ],
+  "right": [
+    "tray",
+    "network",
+    "volume",
+    "battery",
+    "clock",
+    "notifications"
+  ],
+  "extras": [
+    "desktop"
+  ],
+  "preview": {
+    "delay": 400
+  },
   "look": {
     "scheme": "auto",
     "family": "fluent",
     "glyphs": "fluent",
-    "font": { "family": "\"Segoe UI Variable Text\", \"Segoe UI\", sans-serif", "size": 12, "weight": 400 },
-    "background": { "type": "wallpaper" },
+    "font": {
+      "family": "\"Segoe UI Variable Text\", \"Segoe UI\", sans-serif",
+      "size": 12,
+      "weight": 400
+    },
+    "background": {
+      "type": "wallpaper"
+    },
     "tint": 0.82,
     "saturation": 1.25,
     "noise": 0.02,
-    "border": { "rest": { "width": 1, "color": "var(--edge)" } },
+    "border": {
+      "rest": {
+        "width": 1,
+        "color": "var(--edge)"
+      }
+    },
     "items": {
       "radius": 4,
-      "rest": { "color": "text" },
-      "hover": { "background": "var(--fill-1)" },
-      "active": { "background": "var(--fill-1)" }
+      "rest": {
+        "color": "text"
+      },
+      "hover": {
+        "background": "var(--fill-1)"
+      },
+      "active": {
+        "background": "var(--fill-1)"
+      }
     },
-    "indicator": { "running": "var(--t2)", "active": "system-accent-light-2", "attention": "#ffb900" }
+    "indicator": {
+      "running": "var(--t2)",
+      "active": "system-accent-light-2",
+      "attention": "#ffb900"
+    }
   },
   "animation": {
     "duration": 167,
-    "curve": [0.1, 0.9, 0.2, 1],
-    "bar": { "style": "slide" },
-    "open": { "style": "slide", "duration": 250 }
+    "curve": [
+      0.1,
+      0.9,
+      0.2,
+      1
+    ],
+    "bar": {
+      "style": "slide"
+    },
+    "open": {
+      "style": "slide",
+      "duration": 250
+    }
   }
 }

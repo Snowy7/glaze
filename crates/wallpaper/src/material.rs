@@ -24,12 +24,22 @@ const MAX_SPECULAR: f32 = 0.4;
 pub fn liquid(m: &Material, scale: f32) -> (lr::Material, lr::Appearance) {
     let unit = |v: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 };
     let [r, g, b, a] = m.tint.map(unit);
+    let regular = lr::Material::regular();
+    // The lens's dispersion follows refraction, and the inner rims and the edge hairline follow
+    // the highlight, so both at 0 is flat frosted glass (One UI, Fluent's acrylic). Liquid's
+    // values (refraction from 0.5, highlight from 0.75) keep the kit's exactly.
+    let lens = (unit(m.refraction) / 0.5).min(1.0);
+    let light = (unit(m.highlight) / 0.75).min(1.0);
     let material = lr::Material {
         frost: (m.blur.max(0.0) / scale.max(0.5)).min(64.0),
         refraction: unit(m.refraction),
+        dispersion: regular.dispersion * lens,
         specular: unit(m.highlight) * MAX_SPECULAR,
+        rim: regular.rim * light,
+        rim_shade: regular.rim_shade * light,
+        edge: regular.edge * light,
         tint: (a > 0.0).then_some(lr::Color { r, g, b, a }),
-        ..lr::Material::regular()
+        ..regular
     };
     let appearance = lr::Appearance {
         dark: 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5,
@@ -65,5 +75,21 @@ mod tests {
         let (m, a) = liquid(&tinted, 1.5);
         assert_eq!((a.transparency, a.dark), (1.0, false));
         assert_eq!(m.tint.map(|t| t.a), Some(0.4));
+    }
+
+    #[test]
+    fn no_refraction_and_no_highlight_is_flat_frosted_glass() {
+        let acrylic = Material {
+            clarity: 0.12,
+            blur: 45.0,
+            refraction: 0.0,
+            highlight: 0.0,
+            tint: [0.12, 0.12, 0.12, 0.6],
+        };
+        let (m, _) = liquid(&acrylic, 1.5);
+        assert_eq!((m.dispersion, m.specular, m.rim, m.rim_shade, m.edge), (0.0, 0.0, 0.0, 0.0, 0.0));
+        let (kit, _) = liquid(&Material::default(), 1.5);
+        let regular = lr::Material::regular();
+        assert_eq!((kit.dispersion, kit.rim, kit.edge), (regular.dispersion, regular.rim, regular.edge));
     }
 }

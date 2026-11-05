@@ -2,10 +2,6 @@
   "style": "floating",
   "margin": 10,
   "indicator": "dot",
-  "magnify": {
-    "scale": 1.45,
-    "range": 3
-  },
   "look": {
     "family": "mono",
     "background": {

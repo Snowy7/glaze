@@ -143,6 +143,8 @@ struct Content {
     target: Target,
     /// Device px, whole.
     width: f32,
+    /// The glyph's size, device px, whole.
+    icon: f32,
     tooltip: Option<String>,
     color: Rgba,
     /// Device px.
@@ -255,12 +257,38 @@ fn module_font(module: &ModuleRef, config: &BarsConfig, kind: BarKind, tokens: &
         _ => tokens.font.weight,
     };
     let style = config.modules.get(module).map(|o| &o.style);
-    let size = style.and_then(|s| s.size).unwrap_or(tokens.font.size);
+    // A short top bar takes smaller type, so text keeps clear of the bar's rim (macOS's 24 px
+    // menu bar sets 13 px).
+    let room = if kind == BarKind::Top {
+        (config.top.height as f32 * 0.56).round()
+    } else {
+        f32::MAX
+    };
+    let size = style
+        .and_then(|s| s.size)
+        .unwrap_or(tokens.font.size.min(room));
     TextStyle {
         size,
         weight: style.and_then(|s| s.weight).unwrap_or(weight),
         optical: size * 0.75,
         ..tokens.font.clone()
+    }
+}
+
+/// A module glyph's size in design px: the bar's `icon`, else for a top bar a little over half
+/// its height up to 16 (14 in macOS's 24 px menu bar), and in a taskbar 16 with Start at the
+/// app icons' size (Windows' 24 px logo).
+fn icon_size(module: &ModuleRef, config: &BarsConfig, kind: BarKind, theme: &mypaper_ui::Theme) -> f32 {
+    if kind == BarKind::Top {
+        return config.top.icon.map_or_else(
+            || (config.top.height as f32 * 0.58).round().clamp(12.0, theme.metrics.icon),
+            |v| v as f32,
+        );
+    }
+    match (module, config.dock.icon) {
+        (_, Some(icon)) => icon as f32,
+        (ModuleRef::Builtin(Module::Start), None) => (config.dock.size() as f32).min(24.0),
+        _ => theme.metrics.icon,
     }
 }
 
@@ -284,7 +312,7 @@ fn contents(
         .map_or(theme.color.label, |c| {
             look::resolve_color(c, theme.color.label, theme.color.accent)
         });
-    let icon_px = px(theme.metrics.icon) as u32;
+    let icon_px = px(icon_size(module, config, kind, theme)) as u32;
     let pad = px(options.and_then(|o| o.style.padding).unwrap_or(7.0));
     let target = Target::Module(module.clone());
     let fluent_search = matches!(module, ModuleRef::Builtin(Module::Search))
@@ -318,6 +346,7 @@ fn contents(
             glyph,
             target,
             width,
+            icon: icon_px as f32,
             tooltip: None,
             color,
             font: font.clone(),
@@ -555,7 +584,10 @@ fn item(
         Target::Module(m) => config.modules.get(m),
         _ => None,
     };
-    let wash = rect.inset(Insets::xy(f.px(1.0), f.px(2.0)));
+    // The highlight keeps clear of the bar's rim: 2 px in a 24 px menu bar, up to 5 px in a
+    // taller bar (iOS's glass buttons sit well inside their plate).
+    let inset = ((rect.height() / f.s - 22.0) / 2.0).clamp(2.0, 5.0);
+    let wash = rect.inset(Insets::xy(f.px(1.0), f.px(inset)));
     let radius = options
         .and_then(|o| o.style.radius)
         .map_or_else(|| f.control_radius(wash.height()), |r| f.px(r));
@@ -621,7 +653,7 @@ fn item(
         return;
     }
     // Glyph and text as one centred line.
-    let icon_px = f.px(theme.metrics.icon);
+    let icon_px = content.icon;
     let (text_w, text_h) = if content.text.is_empty() {
         (0.0, 0.0)
     } else {
@@ -646,11 +678,12 @@ fn item(
         Glyph::None => {}
         Glyph::Icon(icon) => {
             // Media's play/pause is small and solid, as macOS draws it beside its title.
-            let size = if matches!(icon, Icon::Play | Icon::Pause) {
-                theme.metrics.icon_small
-            } else {
-                theme.metrics.icon
-            };
+            let size = icon_px / f.s
+                * if matches!(icon, Icon::Play | Icon::Pause) {
+                    theme.metrics.icon_small / theme.metrics.icon
+                } else {
+                    1.0
+                };
             if shadow {
                 f.icon(glyph_rect.offset(0.0, drop), *icon, size, shadow_ink);
             }
@@ -746,11 +779,17 @@ pub fn top(
     hot: Option<&Interaction>,
 ) -> Frame {
     let t = &config.top;
-    let minimal = t.design == TopDesign::Minimal;
+    let minimal = t.design == TopDesign::Minimal || tokens.bare;
     let px = |v: f32| (v * scale).round();
     let m = px(t.margin() as f32);
     let h = px(t.height as f32);
-    let pad = px(t.padding.unwrap_or(5.0) as f32);
+    // A rounded bar or island keeps its first and last item off the curve of its corners.
+    let corner = if t.layout == TopLayout::Strip {
+        0.0
+    } else {
+        (px(tokens.radius) * 0.4).round()
+    };
+    let pad = px(t.padding.unwrap_or(5.0) as f32).max(corner);
     let gap = px(t.spacing.unwrap_or(1.0) as f32);
     let groups = zones(
         &[&t.left, &t.center, &t.right],
@@ -770,9 +809,16 @@ pub fn top(
         .map(|z| z.iter().map(group_width).sum::<f32>() + m * z.len().saturating_sub(1) as f32)
         .collect();
     let available = (width as f32 - 2.0 * m).max(1.0);
+    // Room between the zones, so a hugging bar never packs them into one clump.
+    let zone_gap = px(24.0);
     let w = match t.width.unwrap_or(Dimension::Full) {
         Dimension::Full => available,
-        Dimension::Auto => widths.iter().sum::<f32>() + px(32.0),
+        // Hugging its content with the centre zone still centred: as wide as the wider side
+        // twice, plus the centre.
+        Dimension::Auto if widths[1] > 0.0 => {
+            widths[1] + 2.0 * (widths[0].max(widths[2]) + zone_gap)
+        }
+        Dimension::Auto => widths[0] + widths[2] + zone_gap,
         Dimension::Dips(d) => px(d as f32),
         Dimension::Percent(p) => (available * p as f32 / 100.0).round(),
     }
@@ -786,9 +832,13 @@ pub fn top(
         let r = if t.layout == TopLayout::Strip { 0.0 } else { radius };
         panel(&mut f, &mut out, Rect::new(left, m, w, h), r, tokens);
     }
+    // The centre zone is centred, but never over the sides: a narrow bar slides it over.
+    let centred = (left + (w - widths[1]) / 2.0).round();
     let starts = [
         left,
-        (left + (w - widths[1]) / 2.0).round(),
+        centred
+            .max(left + widths[0] + m)
+            .min((left + w - widths[2] - widths[1] - m).max(left + widths[0])),
         left + w - widths[2],
     ];
     for (z, groups) in groups.iter().enumerate() {
@@ -852,9 +902,15 @@ pub fn dock(
     } else {
         size
     };
+    // Islands: one plate per group (pinned, running, extras), apart by a gap of wallpaper.
+    let islands = d.islands && !taskbar && !tokens.bare;
     // macOS's dividers: between the kept apps and the others, and before the trash. A divider
-    // takes one more gap and its hairline.
-    let divider = gap + px(1.0).max(1.0);
+    // takes one more gap and its hairline; between islands, both plates' padding and a gap.
+    let divider = if islands {
+        2.0 * pad + px(8.0)
+    } else {
+        gap + px(1.0).max(1.0)
+    };
     let split = (!taskbar)
         .then(|| apps.iter().position(|a| !a.pinned))
         .flatten()
@@ -887,7 +943,12 @@ pub fn dock(
         - gap
         + dividers;
     let along = if horizontal { extent.0 } else { extent.1 } as f32;
-    let magnified = d.magnify.scale as f32;
+    // Off unless asked for: no zoom, no room kept for one.
+    let magnified = if d.magnify.enabled {
+        d.magnify.scale as f32
+    } else {
+        1.0
+    };
     let extra = if taskbar {
         0.0
     } else {
@@ -922,7 +983,8 @@ pub fn dock(
         if d.align == ItemsAlign::Start {
             pad + sides[0]
         } else {
-            ((envelope - base) / 2.0).max(sides[0] + pad)
+            // Windows 11: Start leads the centred apps, the group centred as one.
+            ((envelope - base + sides[0]) / 2.0).max(sides[0] + pad)
         }
     } else {
         (envelope - base) / 2.0
@@ -980,17 +1042,43 @@ pub fn dock(
     } else {
         base + maximum - minimum
     };
-    panel(
-        &mut f,
-        &mut out,
-        convert(panel_start, edge - pad, panel_length, size + pad * 2.0),
-        px(tokens.radius),
-        tokens,
-    );
+    let plate = |a: f32, length: f32| convert(a, edge - pad, length, size + pad * 2.0);
+    if islands {
+        // Pinned apps, the other running apps, the extras: each its own plate.
+        let count = apps.len();
+        let s = split.unwrap_or(count);
+        let first = |i: usize| along_at(i, zoom.get(i).map_or(0.0, |z| z.1));
+        let last = |i: usize| first(i) + length;
+        let mut runs = Vec::new();
+        if s > 0 {
+            runs.push((first(0), last(s - 1)));
+        }
+        if s < count {
+            runs.push((first(s), last(count - 1)));
+        }
+        if !d.extras.is_empty() {
+            let after = along_at(count, maximum) - gap
+                + if extras_divider { divider } else { 0.0 }
+                + gap;
+            let n = d.extras.len() as f32;
+            runs.push((after, after + n * size + (n - 1.0) * gap));
+        }
+        for (from, to) in runs {
+            panel(&mut f, &mut out, plate(from - pad, to - from + 2.0 * pad), px(tokens.radius), tokens);
+        }
+    } else if !tokens.bare {
+        panel(&mut f, &mut out, plate(panel_start, panel_length), px(tokens.radius), tokens);
+    } else {
+        f.fill(plate(panel_start, panel_length), px(tokens.radius), Rgba::HIT);
+    }
     if taskbar {
         for (i, zone) in groups.iter().enumerate().take(2) {
             let mut a = if i == 0 {
-                pad
+                if d.align == ItemsAlign::Start {
+                    pad
+                } else {
+                    start + pad - sides[0]
+                }
             } else {
                 envelope - sides[1] - pad
             };
@@ -1092,6 +1180,8 @@ pub fn dock(
             let (w, thickness) = match d.indicator {
                 IndicatorStyle::Dot => (px(4.0), px(4.0)),
                 IndicatorStyle::Bar => ((length * 0.65).round(), px(2.0)),
+                // Windows 11's pill: 6 px running, 16 px for the app in front, 3 px thick.
+                IndicatorStyle::Pill => (px(if active { 16.0 } else { 6.0 }), px(3.0)),
                 _ => (px(if active { 16.0 } else { 8.0 }), px(4.0)),
             };
             let attention = app.windows.iter().any(|w| w.attention);
@@ -1137,7 +1227,7 @@ pub fn dock(
         let inset = f.px(theme.metrics.item);
         (edge + inset, edge + size - inset)
     };
-    if let Some(s) = split {
+    if let Some(s) = split.filter(|_| !islands) {
         let at = along_at(s, zoom.get(s).map_or(0.0, |z| z.1)) - divider / 2.0 - gap / 2.0;
         let (from, to) = across_line(&f);
         divide(&mut f, horizontal, from, to, at);
@@ -1164,7 +1254,7 @@ pub fn dock(
         }
         let first = after_apps + if extras_divider { divider } else { 0.0 } + gap;
         let a = (first + i as f32 * (size + gap)).round();
-        if i == 0 && extras_divider {
+        if i == 0 && extras_divider && !islands {
             let (from, to) = across_line(&f);
             divide(&mut f, horizontal, from, to, first - gap - divider / 2.0);
         }

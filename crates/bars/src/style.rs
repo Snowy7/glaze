@@ -669,20 +669,43 @@ impl FontStyle {
     }
 }
 
+/// The five styles (the kit's `Style`): what the bars, their flyouts and menus are made of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NativeStyle {
+    /// Liquid Glass.
     #[default]
     Liquid,
-    Mono,
+    /// One UI: frosted, slightly translucent, round.
+    #[serde(rename = "oneui")]
+    OneUi,
+    /// Windows 11: acrylic, small radii, Segoe Fluent Icons.
+    Fluent,
+    /// Opaque.
     Solid,
+    /// Flat monochrome, near-opaque, no glass.
+    Mono,
+}
+
+impl NativeStyle {
+    pub const ALL: [Self; 5] = [Self::Liquid, Self::OneUi, Self::Fluent, Self::Solid, Self::Mono];
+
+    /// The style a look without one takes from its family: Windows 11's designs are Fluent,
+    /// ChromeOS's One UI, the rest Liquid.
+    pub fn of_family(family: Family) -> Self {
+        match family {
+            Family::Fluent => Self::Fluent,
+            Family::Material => Self::OneUi,
+            Family::Macos | Family::Mono => Self::Liquid,
+        }
+    }
 }
 
 /// The bar surfaces' look beyond `appearance` (docs/bars.md, "Look").
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Look {
-    /// Native style; absent selects liquid. N6 adds the other styles.
+    /// The style; missing: from `family` ([`NativeStyle::of_family`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style: Option<NativeStyle>,
     /// Light or dark; missing: from `appearance.text`.
@@ -766,6 +789,12 @@ impl Look {
             }
         }
         Ok(())
+    }
+
+    /// The style this look draws in: its own, else its family's.
+    pub fn native_style(&self) -> NativeStyle {
+        self.style
+            .unwrap_or_else(|| NativeStyle::of_family(self.family.unwrap_or_default()))
     }
 
     /// The wallpaper-glass background, if this look uses it.

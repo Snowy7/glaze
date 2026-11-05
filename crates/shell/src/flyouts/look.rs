@@ -22,6 +22,8 @@ pub struct Look {
     pub fill: Rgba,
     /// The glass under the body, for the blurred styles.
     pub glass: Option<GlassMaterial>,
+    /// The kit style: the bar's `look.style`, else its family's.
+    pub style: Style,
     /// Corner radius in design pixels.
     pub radius: f32,
     pub font: Arc<str>,
@@ -66,7 +68,7 @@ impl Look {
 
     /// The look of `bar` over `appearance`, as the bars resolve theirs (bars/look.rs).
     pub fn resolve(bar: &BarLook, appearance: &Appearance, system: &System) -> Self {
-        let style = bar.style.unwrap_or_default();
+        let style = bar.native_style();
         let dark = match bar.scheme {
             Some(Scheme::Dark) => true,
             Some(Scheme::Light) => false,
@@ -89,26 +91,39 @@ impl Look {
             Rgba::rgb8([255, 255, 255], 1.0)
         };
         let flyout_tint = bar.flyouts.tint.unwrap_or(0.62).clamp(0.0, 1.0);
+        let kit = crate::bars::look::style(style);
         let fill = match style {
             NativeStyle::Solid => tint,
-            NativeStyle::Mono | NativeStyle::Liquid => {
-                tint.with_alpha(bar.tint.or(appearance.opacity).unwrap_or(0.92).max(0.85))
-            }
+            _ => tint.with_alpha(bar.tint.or(appearance.opacity).unwrap_or(0.92).max(0.85)),
         };
-        // Flyouts sit over app windows, so their glass is more tinted than the bars' clear
-        // glass: text stays readable over anything.
-        let glass = (style == NativeStyle::Liquid).then(|| GlassMaterial {
-            clarity: 1.0 - flyout_tint,
-            // Heavier than the bars' blur: whatever is behind a flyout (an app, a widget)
-            // must not read through its text.
-            blur: if bar.flyouts.blur == Some(false) {
-                0.0
-            } else {
-                bar.glass.blur.unwrap_or(12.0).max(28.0)
-            },
-            refraction: bar.glass.refraction.unwrap_or(0.6),
-            highlight: bar.glass.highlight.unwrap_or(0.75),
-            tint,
+        // The style's material (`theme::material`), as the bars'. Flyouts sit over app windows,
+        // so their glass is more tinted and more frosted than the bars': whatever is behind a
+        // flyout (an app, a widget) must not read through its text.
+        let glass = mypaper_ui::theme::material(kit, tint).map(|base| {
+            let lensed = mypaper_ui::theme::lensed(kit);
+            GlassMaterial {
+                clarity: if lensed {
+                    1.0 - flyout_tint
+                } else {
+                    (1.0 - flyout_tint).min(base.clarity)
+                },
+                blur: if bar.flyouts.blur == Some(false) {
+                    0.0
+                } else {
+                    bar.glass.blur.unwrap_or(base.blur).max(28.0)
+                },
+                refraction: if lensed {
+                    bar.glass.refraction.unwrap_or(base.refraction)
+                } else {
+                    0.0
+                },
+                highlight: if lensed {
+                    bar.glass.highlight.unwrap_or(base.highlight)
+                } else {
+                    0.0
+                },
+                tint,
+            }
         });
         Self {
             ink,
@@ -116,16 +131,16 @@ impl Look {
             on_accent,
             fill,
             glass,
+            style: kit,
             radius: bar
                 .radius
                 .or(appearance.radius)
                 // The kit's surface radii (`Theme::new`).
-                .unwrap_or(match bar.family.unwrap_or_default() {
-                    Family::Fluent => 8.0,
-                    Family::Macos => 24.0,
-                    Family::Material => 28.0,
-                    Family::Mono => 16.0,
+                .map(|r| match kit {
+                    Style::Fluent => r.min(8.0),
+                    _ => r,
                 })
+                .unwrap_or_else(|| Theme::new(kit, UiScheme::Dark, accent).radius.surface)
                 .max(4.0),
             font: font_family(
                 bar.font
@@ -143,21 +158,15 @@ impl Look {
         }
     }
 
-    /// The kit's theme for the flyouts (docs/ui.md "The kit"): the bar's family picks the style
-    /// (Fluent → Fluent, Material → OneUi, Mono → Mono, macOS → Liquid, or Solid with no glass
-    /// and an opaque fill), the ink the scheme, and the accent carries over. The body's radius
-    /// is the look's (the user's `radius`, else the kit's), cards concentric inside it.
+    /// The kit's theme for the flyouts (docs/ui.md "The kit"): the bar's style (the same as the
+    /// bar's own, see bars/look.rs), the ink the scheme, and the accent carries over. The body's
+    /// radius is the look's (the user's `radius`, else the kit's), cards concentric inside it.
     pub fn theme(&self) -> Theme {
         let dark = mypaper_ui::theme::luminance(self.ink) > 0.5;
-        let style = match self.family {
-            Family::Fluent => Style::Fluent,
-            Family::Material => Style::OneUi,
-            Family::Mono => Style::Mono,
-            Family::Macos if self.glass.is_none() && self.fill.a >= 1.0 => Style::Solid,
-            Family::Macos => Style::Liquid,
-        };
         let scheme = if dark { UiScheme::Dark } else { UiScheme::Light };
-        let mut theme = Theme::new(style, scheme, self.accent);
+        let mut theme = Theme::new(self.style, scheme, self.accent);
+        // The style's own glass, as resolved here (more tinted than the bars').
+        theme.glass = self.glass;
         if theme.radius.surface != self.radius {
             theme.radius.card = Radii::concentric(self.radius, theme.metrics.pad, 6.0);
             theme.radius.surface = self.radius;
@@ -269,6 +278,17 @@ mod tests {
             let look = Look::resolve(&bar, &Appearance::default(), &system);
             assert_eq!(look.glass, None, "{style:?} draws its own fill");
             assert!(look.fill.a >= 0.85, "{style:?}: a readable fill");
+        }
+        // One UI and Fluent: flat frosted glass, and the flyout's theme is the bar's style.
+        for (style, kit) in [(NativeStyle::OneUi, Style::OneUi), (NativeStyle::Fluent, Style::Fluent)] {
+            let bar = BarLook {
+                style: Some(style),
+                ..Default::default()
+            };
+            let look = Look::resolve(&bar, &Appearance::default(), &system);
+            let glass = look.glass.expect("frosted glass");
+            assert_eq!((glass.refraction, glass.highlight), (0.0, 0.0), "{style:?}");
+            assert_eq!(look.theme().style, kit);
         }
         let solid = BarLook {
             style: Some(NativeStyle::Solid),

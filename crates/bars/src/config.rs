@@ -232,6 +232,10 @@ pub struct TopConfig {
     pub spacing: Option<f64>,
     /// Missing: `full`.
     pub width: Option<Dimension>,
+    /// The module glyphs' size, DIPs (10..32). Missing: from the height (16 from 28 up, a
+    /// little over half the bar below), so content never crowds the bar's rim.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<f64>,
     pub left: Vec<ModuleRef>,
     pub center: Vec<ModuleRef>,
     pub right: Vec<ModuleRef>,
@@ -257,6 +261,7 @@ impl Default for TopConfig {
             padding: None,
             spacing: None,
             width: None,
+            icon: None,
             left: modules(&[Start, Workspaces, App]),
             center: modules(&[Clock]),
             right: modules(&[Media, Tray, Network, Volume, Battery, Quick, Power]),
@@ -376,7 +381,8 @@ impl<'de> Deserialize<'de> for Running {
     }
 }
 
-/// macOS-like hover zoom: `true`/`false`, or `{ "scale", "range" }`.
+/// macOS-like hover zoom, off unless asked for: `true`/`false`, or `{ "enabled", "scale",
+/// "range" }` (a design's scale and range alone don't turn it on).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Magnify {
     pub enabled: bool,
@@ -389,7 +395,7 @@ pub struct Magnify {
 impl Default for Magnify {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             scale: 1.5,
             range: 3.0,
         }
@@ -557,8 +563,15 @@ pub struct DockConfig {
     /// How an app asking for attention (a flashing window) shows.
     pub attention: AttentionStyle,
     pub extras: Vec<Extra>,
-    /// Where the task buttons sit in a `taskbar` (centered like Windows 11, or after `left`).
+    /// Where the task buttons sit in a `taskbar`: centered like Windows 11 (with `left`, the
+    /// Start button, just before them), or after `left` at the start like Windows 10.
     pub align: ItemsAlign,
+    /// A `floating` dock as separate plates: the pinned apps, the other running apps, the extras.
+    pub islands: bool,
+    /// The `taskbar` modules' glyph size, DIPs (10..32). Missing: 16, with Start and Search at
+    /// the app icons' size, as Windows draws them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<f64>,
     /// The `taskbar` style's modules before and after the task buttons.
     pub left: Vec<ModuleRef>,
     pub right: Vec<ModuleRef>,
@@ -602,6 +615,8 @@ impl Default for DockConfig {
             attention: AttentionStyle::Pulse,
             extras: Vec::new(),
             align: ItemsAlign::Center,
+            islands: false,
+            icon: None,
             left: modules(&[Start, Search]),
             right: modules(&[Tray, Network, Volume, Battery, Clock]),
             button: None,
@@ -1105,6 +1120,9 @@ impl BarsConfig {
         range("top.padding", top.padding, 48.0)?;
         range("top.spacing", top.spacing, 32.0)?;
         let dock = &self.dock;
+        for (name, icon) in [("top.icon", top.icon), ("dock.icon", dock.icon)] {
+            check(name, icon.map(|v| v as f32), 10.0..=32.0)?;
+        }
         if dock.size.is_some_and(|s| !(16.0..=128.0).contains(&s)) {
             bail!("dock.size must be between 16 and 128, got {}", dock.size());
         }
@@ -1321,8 +1339,8 @@ mod tests {
         assert_eq!(config.dock.position, DockPosition::Left);
         assert_eq!(config.dock.pinned.as_ref().map(Vec::len), Some(1));
         assert!(
-            config.dock.magnify.enabled,
-            "unset fields keep their defaults"
+            !config.dock.magnify.enabled,
+            "unset fields keep their defaults (magnification is off unless asked for)"
         );
         assert_eq!(config.appearance.opacity, Some(0.9));
     }

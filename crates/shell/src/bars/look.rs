@@ -3,16 +3,10 @@
 //! colour, the engine glass under it, and its font overrides. CSS-era decoration is accepted on
 //! load and ignored with one warning.
 //!
-//! **Styles.** `look.style` picks the kit style; liquid follows the family the bar's menus and
-//! flyouts are drawn after:
-//!
-//! | `look.style` | family | kit style |
-//! |---|---|---|
-//! | `liquid` | `macos`, `mono` | Liquid |
-//! | `liquid` | `fluent` | Fluent |
-//! | `liquid` | `material` | One UI |
-//! | `solid` | any | Solid |
-//! | `mono` | any | Mono |
+//! **Styles.** `look.style` is the kit style one to one (`liquid`, `oneui`, `fluent`, `solid`,
+//! `mono`); a look without one takes its family's (Fluent → Fluent, Material → One UI, else
+//! Liquid). The style alone picks the material (`mypaper_ui::theme::material`): Liquid Glass,
+//! frosted One UI, Fluent acrylic, or no glass for Solid and Mono. `look.glass` tunes it.
 //!
 //! `look.glyphs: fluent` draws the module icons from Segoe Fluent Icons in any style.
 use crate::glass::Material;
@@ -37,24 +31,60 @@ pub struct Tokens {
     pub radius: f32,
     /// Engine glass under the body (liquid); `None` draws the theme's surface.
     pub material: Option<Material>,
+    /// `look.background: none`: no body at all, the items straight on the wallpaper.
+    pub bare: bool,
 }
 
-/// The kit style of a bar's look (see the module docs).
-pub fn style(native: NativeStyle, family: Family) -> Style {
+/// The kit style of a bar's style (see the module docs).
+pub fn style(native: NativeStyle) -> Style {
     match native {
+        NativeStyle::Liquid => Style::Liquid,
+        NativeStyle::OneUi => Style::OneUi,
+        NativeStyle::Fluent => Style::Fluent,
         NativeStyle::Solid => Style::Solid,
         NativeStyle::Mono => Style::Mono,
-        NativeStyle::Liquid => match family {
-            Family::Fluent => Style::Fluent,
-            Family::Material => Style::OneUi,
-            Family::Macos | Family::Mono => Style::Liquid,
-        },
     }
+}
+
+/// The engine material of `look` in `style`, tinted `tint`: the style's base
+/// (`theme::material`) with the look's knobs over it. Only Liquid takes refraction and a
+/// highlight; One UI and Fluent stay flat and frosted however the knobs are set (a clear
+/// acrylic is just glass), so their clarity is capped.
+pub fn material(look: &Look, style: Style, tint: Rgba, opacity: Option<f32>) -> Option<Material> {
+    let tinted = look.glass.tint.or(look.tint);
+    let base = mypaper_ui::theme::material(
+        style,
+        tint.with_alpha(tinted.or(opacity).unwrap_or(0.12)),
+    )?;
+    let lensed = mypaper_ui::theme::lensed(style);
+    // The bar is small glass: as clear as macOS's menu bar unless the look tints it.
+    let clarity = look.glass.clarity.unwrap_or(match tinted {
+        Some(t) => 1.0 - t,
+        None if lensed => 0.88,
+        None => base.clarity,
+    });
+    Some(if lensed {
+        Material {
+            clarity,
+            blur: look.glass.blur.unwrap_or(base.blur),
+            refraction: look.glass.refraction.unwrap_or(base.refraction),
+            highlight: look.glass.highlight.unwrap_or(base.highlight),
+            tint: base.tint,
+        }
+    } else {
+        Material {
+            clarity: clarity.min(0.6),
+            blur: look.glass.blur.unwrap_or(base.blur).max(base.blur * 0.66),
+            refraction: 0.0,
+            highlight: 0.0,
+            tint: base.tint,
+        }
+    })
 }
 
 impl Tokens {
     pub fn resolve(look: &Look, appearance: &Appearance, system: &accent::System) -> Self {
-        let native = look.style.unwrap_or_default();
+        let native = look.native_style();
         let family = look.family.unwrap_or_default();
         let dark = match look.scheme {
             Some(Scheme::Dark) => true,
@@ -71,39 +101,25 @@ impl Tokens {
         } else {
             mypaper_ui::Scheme::Light
         };
-        let mut theme = Theme::new(style(native, family), scheme, accent);
+        let kit = style(native);
+        let mut theme = Theme::new(kit, scheme, accent);
         if look.glyphs == Some(Glyphs::Fluent) {
             theme.icons = IconSet::Font(mypaper_ui::icons::SYSTEM_FAMILY.into());
         }
+        // A solid background colour only where the style draws its own body: a glass style
+        // keeps its glass (a design's tint colour is no reason to drop it).
         let fill = match &look.background {
-            Some(Fill::Solid { color }) => {
+            Some(Fill::Solid { color }) if theme.glass.is_none() => {
                 Some(resolve_color(color, theme.color.label, theme.color.accent))
             }
             _ => None,
         };
-        // The glass's tint is the theme's (appearance) tint, light: the bar is small glass, as
-        // clear as macOS's menu bar.
+        // The glass's tint is the theme's (appearance) tint.
         let tint = appearance.tint.map_or(
             Rgba::rgb8(if dark { [23, 24, 28] } else { [243, 243, 247] }, 1.0),
             |c| Rgba::rgb8(c.0, 1.0),
         );
-        let material = (native == NativeStyle::Liquid && fill.is_none_or(|f| f.a < 0.999))
-            .then_some(Material {
-                clarity: look
-                    .glass
-                    .clarity
-                    .unwrap_or_else(|| 1.0 - look.glass.tint.or(look.tint).unwrap_or(0.12)),
-                blur: look.glass.blur.unwrap_or(12.0),
-                refraction: look.glass.refraction.unwrap_or(0.6),
-                highlight: look.glass.highlight.unwrap_or(0.75),
-                tint: tint.with_alpha(
-                    look.glass
-                        .tint
-                        .or(look.tint)
-                        .or(appearance.opacity)
-                        .unwrap_or(0.12),
-                ),
-            });
+        let material = material(look, kit, tint, appearance.opacity);
         let body = theme.font.style(TextRole::Body, 1.0);
         let size = look.font.size.unwrap_or(body.size);
         // A family other than the system face replaces the variable font; Segoe UI in any
@@ -116,12 +132,21 @@ impl Tokens {
             tracking: body.tracking,
             optical: size * 0.75,
         };
+        // The style shapes the corners too: Fluent's are small (4-8 px), One UI's rounder.
+        let radius = look.radius.or(appearance.radius).unwrap_or(12.0);
+        let radius = match kit {
+            Style::Fluent => radius.min(8.0),
+            Style::OneUi => radius * 1.25,
+            _ => radius,
+        };
+        let bare = matches!(look.background, Some(Fill::None));
         Self {
             family,
             font,
             fill,
-            radius: look.radius.or(appearance.radius).unwrap_or(12.0),
-            material,
+            radius,
+            material: material.filter(|_| !bare),
+            bare,
             theme,
         }
     }
@@ -255,13 +280,54 @@ mod tests {
 
     #[test]
     fn every_bar_style_maps_to_a_kit_style() {
-        let mut seen = std::collections::BTreeSet::new();
-        for native in [NativeStyle::Liquid, NativeStyle::Solid, NativeStyle::Mono] {
-            for family in [Family::Mono, Family::Fluent, Family::Macos, Family::Material] {
-                seen.insert(style(native, family).name());
-            }
-        }
+        let seen: std::collections::BTreeSet<_> =
+            NativeStyle::ALL.into_iter().map(|s| style(s).name()).collect();
         assert_eq!(seen.len(), Style::ALL.len(), "{seen:?}");
+    }
+
+    /// The style alone decides the material: only Liquid bends and lights its rim; One UI and
+    /// Fluent are flat frosted glass even when a design asks for refraction; Solid and Mono have
+    /// none, and Mono stays near-opaque.
+    #[test]
+    fn styles_pick_distinct_materials() {
+        let system = crate::flyouts::look::fixed_system();
+        let design = Look {
+            glass: mypaper_bars::style::GlassStyle {
+                refraction: Some(0.6),
+                highlight: Some(0.5),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let tokens = |native| {
+            Tokens::resolve(
+                &Look {
+                    style: Some(native),
+                    ..design.clone()
+                },
+                &Appearance::default(),
+                &system,
+            )
+        };
+        let liquid = tokens(NativeStyle::Liquid).material.expect("liquid glass");
+        assert!(liquid.refraction > 0.0 && liquid.highlight > 0.0);
+        for frosted in [NativeStyle::OneUi, NativeStyle::Fluent] {
+            let m = tokens(frosted).material.expect("frosted glass");
+            assert_eq!((m.refraction, m.highlight), (0.0, 0.0), "{frosted:?}");
+            assert!(m.clarity <= 0.6 && m.blur > liquid.blur, "{frosted:?}: {m:?}");
+        }
+        for flat in [NativeStyle::Solid, NativeStyle::Mono] {
+            let t = tokens(flat);
+            assert!(t.material.is_none(), "{flat:?}");
+            assert!(t.theme.color.surface.a >= 0.9, "{flat:?}: near-opaque");
+        }
+        assert!(tokens(NativeStyle::Fluent).radius <= 8.0);
+        // A look without a style takes its family's.
+        let fluent = Look {
+            family: Some(Family::Fluent),
+            ..Default::default()
+        };
+        assert_eq!(fluent.native_style(), NativeStyle::Fluent);
     }
 
     #[test]

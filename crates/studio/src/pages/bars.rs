@@ -20,7 +20,7 @@ use crate::ui::{B, Col, inspector, label, section, setting};
 use crate::view::split;
 
 /// Presets shown as tiles (Neon glass loads as Floating: its decoration is gone).
-const PRESETS: [(&str, &str); 7] = [
+const PRESETS: [(&str, &str); 9] = [
     ("monochrome", "Monochrome"),
     ("macos", "macOS"),
     ("windows11", "Windows 11"),
@@ -28,6 +28,8 @@ const PRESETS: [(&str, &str); 7] = [
     ("chromeos", "ChromeOS"),
     ("islands", "Islands"),
     ("floating", "Floating"),
+    ("pill", "Floating pill"),
+    ("edge", "Full-width edge"),
 ];
 
 pub const TOP_DESIGNS: [(&str, &str); 8] = [
@@ -41,7 +43,7 @@ pub const TOP_DESIGNS: [(&str, &str); 8] = [
     ("neon", "Neon"),
 ];
 
-pub const DOCK_DESIGNS: [(&str, &str); 9] = [
+pub const DOCK_DESIGNS: [(&str, &str); 11] = [
     ("monochrome", "Monochrome"),
     ("macos", "macOS"),
     ("windows11", "Windows 11"),
@@ -51,6 +53,8 @@ pub const DOCK_DESIGNS: [(&str, &str); 9] = [
     ("islands", "Islands"),
     ("floating", "Floating"),
     ("neon", "Neon"),
+    ("minimal", "Minimal"),
+    ("edge", "Full-width edge"),
 ];
 
 /// Modules, as Studio names them.

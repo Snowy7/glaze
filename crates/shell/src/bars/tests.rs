@@ -303,8 +303,8 @@ fn bars_match_goldens_in_each_style_and_keep_glass_bodies_hit_testable() {
     for (name, style, family, scheme) in [
         ("liquid", NativeStyle::Liquid, Family::Macos, Scheme::Dark),
         ("liquid-light", NativeStyle::Liquid, Family::Macos, Scheme::Light),
-        ("oneui", NativeStyle::Liquid, Family::Material, Scheme::Dark),
-        ("fluent", NativeStyle::Liquid, Family::Fluent, Scheme::Dark),
+        ("oneui", NativeStyle::OneUi, Family::Material, Scheme::Dark),
+        ("fluent", NativeStyle::Fluent, Family::Fluent, Scheme::Dark),
         ("mono", NativeStyle::Mono, Family::Mono, Scheme::Dark),
         ("solid", NativeStyle::Solid, Family::Macos, Scheme::Dark),
     ] {

@@ -252,10 +252,13 @@ const PERF: Place = Place::Settings(Section::Performance);
 const DESKTOP: Place = Place::Settings(Section::Desktop);
 
 const EDGES: &[(&str, &str)] = &[(r#""top""#, "Top"), (r#""bottom""#, "Bottom")];
+/// A bar's own style over Look's: the same five the shell draws.
 const ON_OFF_STYLE: &[(&str, &str)] = &[
     (r#""liquid""#, "Liquid"),
-    (r#""mono""#, "Mono"),
+    (r#""oneui""#, "One UI"),
+    (r#""fluent""#, "Fluent"),
     (r#""solid""#, "Solid"),
+    (r#""mono""#, "Mono"),
 ];
 const DISPLAYS: &[(&str, &str)] = &[(r#""all""#, "All"), (r#""primary""#, "Main display")];
 const SCHEME: &[(&str, &str)] = &[

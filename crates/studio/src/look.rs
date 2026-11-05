@@ -146,9 +146,10 @@ fn keys(look: &Look) -> Vec<Key> {
             path: "/appearance/surface",
             from: "/look/style",
             value: widgets.0.map(|s| {
+                // The style draws the body (Mono and Solid without glass); "tint" is not a
+                // widgets.json surface and made the whole file fail to load.
                 json!(match s {
                     Style::Solid => "solid",
-                    Style::Mono => "tint",
                     _ => "glass",
                 })
             }),
@@ -247,12 +248,14 @@ fn family(look: &Look, own: Option<&FamilyLook>) -> (Option<Style>, Material) {
     }
 }
 
-/// The bars' native style for a look style (the shell draws three today).
+/// The bars' style for a look style: the same five.
 fn bar_style(s: Style) -> &'static str {
     match s {
         Style::Liquid => "liquid",
+        Style::Oneui => "oneui",
+        Style::Fluent => "fluent",
         Style::Solid => "solid",
-        Style::Oneui | Style::Fluent | Style::Mono => "mono",
+        Style::Mono => "mono",
     }
 }
 
@@ -305,7 +308,7 @@ mod tests {
             ],
         );
         let get = |doc, path: &str| ops.iter().find(|o| o.doc == doc && o.path == path).and_then(|o| o.value.clone());
-        assert_eq!(get(DocId::Bars, "/look/style"), Some(json!("mono")));
+        assert_eq!(get(DocId::Bars, "/look/style"), Some(json!("fluent")));
         assert_eq!(get(DocId::Bars, "/look/family"), Some(json!("fluent")));
         assert_eq!(get(DocId::Widgets, "/appearance/surface"), Some(json!("solid")));
         // Back to the wallpaper's: the keys are removed.
