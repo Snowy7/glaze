@@ -135,21 +135,6 @@ pub static LIST: &[Integration] = &[
         privacy: "Reads Docker's local engine. Nothing leaves this PC.",
     },
     Integration {
-        name: "Tailscale",
-        adds: "Connection and exit node",
-        glyph: glyph::GLOBE,
-        section: Some("tailscale"),
-        builtin: false,
-        module: Some("tailscale"),
-        secret: None,
-        fields: &[
-            Field::Text { path: "/tailscale/pipe", label: "Service pipe", placeholder: "\\\\.\\pipe\\ProtectedPrefix\\Administrators\\Tailscale\\tailscaled" },
-            Field::Switch { path: "/tailscale/liveVerified", label: "Live updates", hint: "Off: one status when you open it" },
-        ],
-        setup: "Uses the Tailscale service already on this PC.",
-        privacy: "Reads the local Tailscale service's status, with its own access checks.",
-    },
-    Integration {
         name: "Grok Bot",
         adds: "Quick prompts, routines and recent requests",
         glyph: glyph::STAR,
