@@ -239,5 +239,34 @@
       "footer": "2.4% CPU · 6000 kbps · 0 dropped",
       "refresh": true
     }
+  },
+  "offline": {
+    "large": {
+      "body": {
+        "detail": "Open OBS and enable its WebSocket server.",
+        "icon": "video",
+        "kind": "empty",
+        "title": "OBS isn't running"
+      },
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "detail": "Open OBS and enable its WebSocket server.",
+        "icon": "video",
+        "kind": "empty",
+        "title": "OBS isn't running"
+      },
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "detail": "Open OBS and enable its WebSocket server.",
+        "icon": "video",
+        "kind": "empty",
+        "title": "OBS isn't running"
+      },
+      "refresh": true
+    }
   }
 }
