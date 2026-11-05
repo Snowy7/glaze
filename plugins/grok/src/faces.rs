@@ -29,7 +29,7 @@ pub fn face(id: &str, size: SizeClass, discovery: &Discovery, routines: &[Routin
         let mut children = vec![View::text(if discovery.signed_in { "Grok Bot found" } else { "Open Grok Bot" }, Role::Headline)];
         if !small { children.extend([View::tinted("Add a routine webhook under Advanced", Role::Callout, Tone::Secondary), View::tinted("to run it here.", Role::Callout, Tone::Secondary)]); }
         children.push(View::Spacer);
-        children.push(button("Open Grok Bot", "open", "external"));
+        children.push(if discovery.signed_in { button("Connect", "connect", "sparkles") } else { button("Open Grok Bot", "open", "external") });
         View::stack(children)
     } else if small {
         let r = &routines[0];
