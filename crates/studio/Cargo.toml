@@ -17,6 +17,7 @@ mypaper-theme.workspace = true
 mypaper-ui.workspace = true
 mypaper-shell = { path = "../shell" }
 mypaper-widgets = { path = "../widgets" }
+mypaper-integrations = { path = "../integrations" }
 mypaper-plugin-weather = { path = "../../plugins/weather" }
 
 anyhow.workspace = true

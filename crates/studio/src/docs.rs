@@ -22,10 +22,12 @@ pub enum DocId {
     Widgets,
     /// Studio's own state: its appearance, where it was, recent wallpapers. Not undoable.
     Studio,
+    /// `integrations.json` (docs/integrations.md): which integrations are on, their endpoints.
+    Integrations,
 }
 
 impl DocId {
-    pub const ALL: [DocId; 4] = [DocId::Config, DocId::Bars, DocId::Widgets, DocId::Studio];
+    pub const ALL: [DocId; 5] = [DocId::Config, DocId::Bars, DocId::Widgets, DocId::Studio, DocId::Integrations];
 
     /// How a banner names the file's settings.
     pub fn label(self) -> &'static str {
@@ -34,6 +36,7 @@ impl DocId {
             DocId::Bars => "Your bar settings",
             DocId::Widgets => "Your widget settings",
             DocId::Studio => "Studio's settings",
+            DocId::Integrations => "Your integration settings",
         }
     }
 
@@ -64,6 +67,7 @@ impl DocId {
                 raw.clone()
             }
             DocId::Studio => raw.clone(),
+            DocId::Integrations => serde_json::to_value(mypaper_integrations::config::Config::parse(text)?)?,
         };
         Ok((raw, effective))
     }
@@ -163,7 +167,8 @@ pub fn paths() -> Vec<Option<PathBuf>> {
         mypaper_config::path().ok(),
         mypaper_bars::config::path().ok(),
         mypaper_widgets::files::layout().ok(),
-        dir.map(|d| d.join("studio.json")),
+        dir.as_ref().map(|d| d.join("studio.json")),
+        dir.map(|d| d.join("integrations.json")),
     ]
 }
 
@@ -181,7 +186,7 @@ impl Docs {
     pub fn fixture(texts: [&str; 4]) -> Self {
         let docs = DocId::ALL
             .iter()
-            .zip(texts)
+            .zip(texts.into_iter().chain(["{}"]))
             .map(|(id, text)| Doc::from_text(*id, None, Some(text.to_owned())))
             .collect();
         Self::with(docs)

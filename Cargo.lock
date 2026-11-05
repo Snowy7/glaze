@@ -1414,6 +1414,7 @@ dependencies = [
  "mypaper-bars",
  "mypaper-config",
  "mypaper-desktop",
+ "mypaper-integrations",
  "mypaper-plugin-weather",
  "mypaper-shell",
  "mypaper-theme",
