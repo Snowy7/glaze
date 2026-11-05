@@ -6,7 +6,7 @@ Repository/branch: `D:\Coding\projects\desktop\wallpaper`, `native`, shared chec
 | Check | Result |
 |---|---|
 | `cargo check -p mypaper-shell -p mypaper-studio` | Passed after the concurrent owners finished their shared API edits. |
-| `cargo test -p mypaper-integrations` | 19 passed (9 library, 10 integration); includes Credential Manager, provider lifecycle and cancellation-safe Discord IPC frames. |
+| `cargo test -p mypaper-integrations` | 18 passed (9 library, 9 integration); includes Credential Manager, provider lifecycle and cancellation-safe Discord IPC frames. |
 | `cargo test -p mypaper-widgets --lib` | 131 passed, 3 ignored. |
 | Shell `custom_tests` | 2 passed: imported data stays separate from local events; dense native frames, account scrolling and custom templates at 150% scaling stay within their frames. |
 | Studio `goldens::widgets` | Passed for dark and light; both images were generated, dark was inspected. |
