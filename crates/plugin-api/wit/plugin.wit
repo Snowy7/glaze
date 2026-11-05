@@ -189,6 +189,10 @@ interface launch {
     use types.{error};
     /// A URL, file or app (`launch`).
     open: func(target: string) -> result<_, error>;
+    /// Read an app's public desktop-status.json, verifying its pid belongs to that app.
+    /// App is one folder name under AppData; no private databases or account tokens are read.
+    record desktop-status { installed: bool, running: bool, marker: option<string> }
+    inspect: func(app: string) -> result<desktop-status, error>;
 }
 
 interface notify {

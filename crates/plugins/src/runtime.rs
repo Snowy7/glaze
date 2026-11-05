@@ -397,6 +397,10 @@ impl mypaper::plugin::pipes::Host for State {
 }
 
 impl mypaper::plugin::launch::Host for State {
+    fn inspect(&mut self, app: String) -> Result<mypaper::plugin::launch::DesktopStatus, WitError> {
+        self.allowed("launch")?;
+        caps::desktop_status(&app).map_err(failed)
+    }
     fn open(&mut self, target: String) -> Result<(), WitError> {
         self.allowed("launch")?;
         caps::launch(&target).map_err(failed)

@@ -110,10 +110,16 @@ pub fn fetch(method: &str, url: &str, headers: &[(String, String)], body: Option
 /// `mypaper/integrations/plugin/<id>/<key>`, the same target the native plugin host uses.
 fn credential(plugin: &str, key: &str) -> Result<Vec<u16>, String> {
     let ok = |s: &str| !s.is_empty() && s.len() <= 96 && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_".contains(c));
-    if !ok(plugin) || !ok(key) {
-        return Err("keys are 1-96 of [A-Za-z0-9_-]".into());
+    if !ok(plugin) || key.len() > 128 || !key.split('/').all(ok) {
+        return Err("keys contain 1-96 character [A-Za-z0-9_-] segments".into());
     }
-    Ok(format!("mypaper/integrations/plugin/{plugin}/{key}\0").encode_utf16().collect())
+    // Scoped first-party keys preserve credentials entered in Studio before plugin migration.
+    let target = if key.starts_with(&format!("{plugin}/")) {
+        format!("mypaper/integrations/{key}\0")
+    } else {
+        format!("mypaper/integrations/plugin/{plugin}/{key}\0")
+    };
+    Ok(target.encode_utf16().collect())
 }
 
 pub fn secret_get(plugin: &str, key: &str) -> Result<Option<String>, String> {
@@ -197,6 +203,41 @@ pub fn launch(target: &str) -> Result<(), String> {
     // SAFETY: the strings outlive the call; ShellExecuteW returns > 32 on success.
     let code = unsafe { ShellExecuteW(None, w!("open"), &HSTRING::from(target), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
     if code.0 as usize > 32 { Ok(()) } else { Err(format!("ShellExecute failed ({})", code.0 as usize)) }
+}
+
+/// Public app status only. A stale marker cannot make a stopped app appear signed in.
+pub fn desktop_status(app: &str) -> Result<crate::runtime::mypaper::plugin::launch::DesktopStatus, String> {
+    use std::io::Read;
+    use std::path::PathBuf;
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
+    if app.is_empty() || app.len() > 96 || !app.bytes().all(|b| b.is_ascii_alphanumeric() || b" -_".contains(&b)) {
+        return Err("app must be one application folder name".into());
+    }
+    let root = |name| std::env::var_os(name).map(PathBuf::from).unwrap_or_default();
+    let mut installed = root("LOCALAPPDATA").join("Programs").join(app).join(format!("{app}.exe")).is_file();
+    let marker = std::fs::File::open(root("APPDATA").join(app).join("desktop-status.json")).ok().and_then(|file| {
+        let mut bytes = Vec::new();
+        file.take(4097).read_to_end(&mut bytes).ok()?;
+        (bytes.len() <= 4096).then(|| String::from_utf8(bytes).ok()).flatten()
+    });
+    let pid = marker.as_deref().and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok()).and_then(|v| v["pid"].as_u64()).and_then(|v| u32::try_from(v).ok());
+    let mut running = false;
+    if let Some(pid) = pid {
+        // SAFETY: read-only process query; the handle and output buffer are owned here.
+        unsafe {
+            if let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+                let mut name = [0u16; 32768];
+                let mut size = name.len() as u32;
+                if QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, windows::core::PWSTR(name.as_mut_ptr()), &mut size).is_ok() {
+                    let image = String::from_utf16_lossy(&name[..size as usize]);
+                    running = image.rsplit('\\').next().is_some_and(|name| name.eq_ignore_ascii_case(&format!("{app}.exe")));
+                }
+                let _ = windows::Win32::Foundation::CloseHandle(process);
+            }
+        }
+    }
+    installed |= running;
+    Ok(crate::runtime::mypaper::plugin::launch::DesktopStatus { installed, running, marker })
 }
 
 pub struct Monitor {
