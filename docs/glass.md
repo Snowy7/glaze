@@ -43,6 +43,14 @@ keep its shaders, pipeline and parameter values as they are.
 | highlight | `specular` = 0.4 × highlight | 0.75 = the kit's 30 % *Light* |
 | tint | `tint` (stained glass, alpha = strength); its colour picks the scheme | dark tint: dark face |
 
+Every surface reaches these through one rule, `GlassMaterial::tuned` (`crates/ui/src/theme.rs`):
+the style's material at the surface's own default (bars clearer, flyouts more tinted), with each
+control the user set (`config.json` › `look.material`, or the family's `look.bars` / `widgets` /
+`menus`) replacing it unclamped. Blur 0 is no frost; a set clarity also sets the tint's strength to
+`1 - clarity`, so clarity 1 is clear, untinted glass. Blur is in DIPs until a surface hands it to the
+engine (times its scale). A bar's `look.transparent` drops its plate altogether (the macOS top bar's
+default); a material or style change restyles bars in place, never new windows or appbars.
+
 Glass follows the scheme, never the content (`adapt_to_content` off): our labels follow the
 surface's colours. Plates move exactly as published (`Scene::place`, since the shell owns motion);
 liquid-rust's springs materialize glass in and out and fade material changes.
