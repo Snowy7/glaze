@@ -26,6 +26,7 @@ pub enum Status<'a> {
 pub enum Hit {
     Action(String),
     Field(String),
+    Select { action: String, options: Vec<mypaper_plugin_sdk::view::SelectOption>, selected: Option<String> },
 }
 
 /// The plugin action behind hit `hit` in `face`, if any.
@@ -47,6 +48,7 @@ fn collect(view: &View, out: &mut Vec<Hit>) {
         View::Card { child, .. } => collect(child, out),
         View::Button { action, .. } | View::IconButton { action, .. } => out.push(Hit::Action(action.clone())),
         View::Field { action, .. } => out.push(Hit::Field(action.clone())),
+        View::Select { action, options, selected, .. } => out.push(Hit::Select { action: action.clone(), options: options.clone(), selected: selected.clone() }),
         View::ListRow { action: Some(action), .. } => out.push(Hit::Action(action.clone())),
         _ => {}
     }
@@ -196,7 +198,7 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
         }
         View::Text { role: r, .. } => f.line(role(*r)),
         View::Icon { size, .. } => f.px(size.unwrap_or(16.0)),
-        View::Button { .. } | View::Field { .. } => f.px(f.theme.metrics.control),
+        View::Button { .. } | View::Field { .. } | View::Select { .. } => f.px(f.theme.metrics.control),
         View::ListRow { detail, .. } => {
             let row = Row {
                 id: 0,
@@ -319,6 +321,11 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             let kind = if *primary { ButtonKind::Filled } else { ButtonKind::Gray };
             let id = take_hit();
             f.button(id, rect, label, i.as_deref().map(icon), kind, true);
+        }
+        View::Select { label, options, selected, .. } => {
+            let id = take_hit();
+            let caption = options.iter().find(|option| Some(&option.value) == selected.as_ref()).map_or(label.as_str(), |option| option.label.as_str());
+            f.button(id, rect, caption, Some(Icon::ChevronDown), ButtonKind::Gray, !options.is_empty());
         }
         View::Field { placeholder, .. } => {
             // Text entry goes through the host's RichEdit field (docs/plugins.md); drawn as its well.

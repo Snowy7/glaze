@@ -186,6 +186,7 @@ pub struct Widgets {
     stats: Stats,
     icons: Icons,
     plugins: Plugins,
+    plugin_menu: Option<mypaper_ui::menu::Menu<(String, String, String)>>,
     worker: data::Worker,
     holds: Holds,
     held: bool,
@@ -308,6 +309,7 @@ impl Widgets {
             stats: Stats::default(),
             icons: Icons::new(wake.clone()),
             plugins: Plugins::new(wake),
+            plugin_menu: None,
             worker: data::Worker::new(window),
             holds,
             held: false,
@@ -1463,6 +1465,14 @@ impl Widgets {
     }
 
     pub fn on_event(&mut self, ui: &mut Ui, surface: SurfaceId, event: &Event) {
+        if let Some(menu) = &mut self.plugin_menu {
+            if menu.owns(surface) {
+                if let Some(mypaper_ui::menu::Outcome::Chosen((instance, action, value))) = menu.handle(ui, surface, event) {
+                    self.plugins.face_action(&instance, &action, Some(value));
+                }
+                return;
+            }
+        }
         if matches!(event, Event::DpiChanged(_)) {
             self.monitors = monitor_infos();
             self.edit_geometry_dirty = true;
@@ -1816,7 +1826,7 @@ impl Widgets {
         let m = &mut entry.model;
         m.dirty = true;
         if m.kind == Widget::Plugin {
-            self.plugin_action(id, hit);
+            self.plugin_action(ui, id, hit);
             return;
         }
         if matches!(m.kind, Widget::T3 | Widget::Grok | Widget::Discord) && hit == view::FIELD {

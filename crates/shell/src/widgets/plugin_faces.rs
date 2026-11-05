@@ -61,7 +61,7 @@ impl Widgets {
         }
     }
 
-    pub(super) fn plugin_action(&mut self, id: &str, hit: mypaper_ui::HitId) {
+    pub(super) fn plugin_action(&mut self, ui: &mut mypaper_ui::Ui, id: &str, hit: mypaper_ui::HitId) {
         match self.plugins.face_view(id).and_then(|face| action_at(face, hit)) {
             Some(Hit::Action(action)) => self.plugins.face_action(id, &action, None),
             // Text goes through the shell's RichEdit field; `submit_plugin_field` sends it.
@@ -70,6 +70,20 @@ impl Widgets {
                     entry.model.data["field_action"] = action.into();
                 }
                 self.open_field(id, None);
+            }
+            Some(Hit::Select { action, options, selected }) => {
+                use mypaper_ui::menu::{Entry, Menu, screen_at};
+                let Some(entry) = self.entries.get(id) else { return };
+                let at = (entry.rect.left as i32, entry.rect.bottom as i32);
+                let items = options.into_iter().map(|option| Entry::radio(&option.label, (id.to_owned(), action.clone(), option.value.clone()), selected.as_ref() == Some(&option.value))).collect();
+                if self.plugin_menu.is_none() {
+                    self.plugin_menu = Menu::new("Plugin selection").ok();
+                }
+                if let Some(menu) = &mut self.plugin_menu {
+                    if let Err(error) = menu.open(ui, items, at, screen_at(at.0, at.1), &entry.tokens) {
+                        log::warn!("Plugin selection: {error:#}");
+                    }
+                }
             }
             None => {}
         }

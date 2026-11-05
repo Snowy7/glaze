@@ -68,6 +68,13 @@ pub struct Series {
     pub color: Option<Tone>,
 }
 
+/// An option's stable value is returned by the host when selected.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SelectOption {
+    pub label: String,
+    pub value: String,
+}
+
 /// One node. Unknown kinds (from a newer SDK minor) deserialize as [`View::Unknown`] and draw as
 /// nothing, so hosts stay compatible with newer plugins.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -112,6 +119,14 @@ pub enum View {
         icon: Option<String>,
         #[serde(default)]
         primary: bool,
+    },
+    /// A native kit menu. Choosing an option sends its value with `action`.
+    Select {
+        label: String,
+        action: String,
+        options: Vec<SelectOption>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<String>,
     },
     Field {
         placeholder: String,
