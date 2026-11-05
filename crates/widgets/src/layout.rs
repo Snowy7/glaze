@@ -166,6 +166,13 @@ impl Layout {
     /// Writes atomically, so watchers never see a half-written file.
     pub fn save(&self, path: &Path) -> Result<()> {
         self.validate()?;
+        Self::save_value(&serde_json::to_value(self)?, path)
+    }
+
+    /// Studio keeps omitted defaults and raw settings while sharing the desktop's write guard.
+    pub fn save_value(value: &Value, path: &Path) -> Result<()> {
+        let text = serde_json::to_string_pretty(value)? + "\n";
+        Self::parse(&text)?;
         // An external editor may have changed the file since the host loaded it. Check at the
         // write boundary too, so even an edit arriving before the watcher cannot destroy it.
         match std::fs::read(path) {
@@ -175,17 +182,18 @@ impl Layout {
                     .and_then(Self::parse)
                 {
                     let backup = crate::files::backup(path, &bytes)?;
-                    bail!("refusing to overwrite invalid {}: {error:#}; backup: {}", path.display(), backup.display());
+                    bail!(
+                        "refusing to overwrite invalid {}: {error:#}; backup: {}",
+                        path.display(),
+                        backup.display()
+                    );
                 }
                 crate::files::write_atomic(&path.with_extension("json.previous"), &bytes)?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(error).context("checking existing layout before saving"),
         }
-        crate::files::write_atomic(
-            path,
-            (serde_json::to_string_pretty(self)? + "\n").as_bytes(),
-        )
+        crate::files::write_atomic(path, text.as_bytes())
     }
 
     pub fn get(&self, instance: &str) -> Option<&Instance> {
@@ -516,8 +524,13 @@ mod tests {
             layout.overlay = !layout.overlay;
             assert!(layout.save(&path).is_err());
             assert_eq!(std::fs::read(&path).unwrap(), bytes);
-            assert!(std::fs::read_dir(&dir).unwrap().flatten().any(|entry|
-                entry.path() != path && std::fs::read(entry.path()).is_ok_and(|saved| saved == bytes)));
+            assert!(
+                std::fs::read_dir(&dir)
+                    .unwrap()
+                    .flatten()
+                    .any(|entry| entry.path() != path
+                        && std::fs::read(entry.path()).is_ok_and(|saved| saved == bytes))
+            );
         }
         // Correcting the file releases the write gate, without losing recovery copies.
         std::fs::write(&path, b"{\"instances\":[]}").unwrap();
@@ -534,9 +547,16 @@ mod tests {
         let mut layout = Layout::default();
         let id = layout.add("photo", "m", [0, 0], [2, 2]);
         let picked = pick::import(&dir, "photo", &id, &source).unwrap();
-        layout.set_settings(&id, serde_json::json!({"image1": picked.url,
+        layout
+            .set_settings(
+                &id,
+                serde_json::json!({"image1": picked.url,
             "nested": [{"url": picked.url}], "external": "https://example.com/photo.jpg"})
-            .as_object().unwrap().clone()).unwrap();
+                .as_object()
+                .unwrap()
+                .clone(),
+            )
+            .unwrap();
         let copy = layout.duplicate(&id, [2, 0]).unwrap();
         pick::copy_instance(&dir, &id, &copy);
         layout.remove(&id).unwrap();
@@ -545,7 +565,10 @@ mod tests {
         for value in [&settings["image1"], &settings["nested"][0]["url"]] {
             let url = pick::parse_data_url(value.as_str().unwrap()).unwrap();
             assert_eq!(url.instance, copy);
-            assert_eq!(std::fs::read(dir.join(&url.instance).join("files").join(&url.name)).unwrap(), b"picture bytes");
+            assert_eq!(
+                std::fs::read(dir.join(&url.instance).join("files").join(&url.name)).unwrap(),
+                b"picture bytes"
+            );
         }
         assert_eq!(settings["external"], "https://example.com/photo.jpg");
         std::fs::remove_dir_all(dir).unwrap();
