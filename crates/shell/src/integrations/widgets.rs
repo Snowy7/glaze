@@ -1,7 +1,7 @@
 //! Visible built-in widgets lease the same providers as bars and panels.
 use crate::widgets::model::{Model as WidgetModel, Widget};
 use mypaper_integrations::{
-    Action, Availability, Data, Lease, Provider, Snapshot, launcher,
+    Availability, Data, Lease, Provider, Snapshot, launcher,
 };
 use mypaper_ui::HitId;
 
@@ -144,7 +144,6 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
         super::calendar::sync(widget);
 
     }
-    let state = &mut widget.integration;
 }
 
 pub(super) fn open(target: &str) -> anyhow::Result<()> {
@@ -178,9 +177,5 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
         }
         return true;
     }
-    let result = match (&state.snapshot.data, widget.kind) {
-        _ => Ok(()),
-    };
-    state.notice = result.err().map(|error| error.to_string());
-    true
+    false
 }
