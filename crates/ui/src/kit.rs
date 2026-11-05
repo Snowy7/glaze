@@ -315,6 +315,7 @@ impl<'a> Frame<'a> {
 
     /// Wrapped text from `(x, y)`, `width` wide, at most `lines` lines on the role's line
     /// height. The height used.
+    #[allow(clippy::too_many_arguments)]
     pub fn paragraph(
         &mut self,
         x: f32,

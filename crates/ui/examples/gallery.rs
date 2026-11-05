@@ -531,7 +531,7 @@ fn rounded_distance(r: Rect, radius: f32, x: f32, y: f32) -> f32 {
 /// Premultiplied `top` over opaque `bg`.
 fn over(top: &Image, bg: &Image) -> Image {
     let mut out = bg.clone();
-    for (o, t) in out.pixels.chunks_exact_mut(4).zip(top.pixels.chunks_exact(4)) {
+    for (o, t) in out.pixels.as_chunks_mut::<4>().0.iter_mut().zip(top.pixels.as_chunks::<4>().0) {
         let a = f32::from(t[3]) / 255.0;
         for k in 0..3 {
             o[k] = (f32::from(t[k]) + f32::from(o[k]) * (1.0 - a)).round().min(255.0) as u8;

@@ -224,7 +224,7 @@ mod tests {
         assert_eq!(next, Some(now + scroll.idle), "sleeps until the fade");
         let fading = now + scroll.idle + scroll.fade / 2;
         assert!(scroll.bar(fading) > 0.0 && scroll.bar(fading) < 1.0);
-        assert_eq!(scroll.tick(fading).0, true);
+        assert!(scroll.tick(fading).0);
         let done = now + scroll.idle + scroll.fade + Duration::from_millis(1);
         assert_eq!(scroll.tick(done), (true, None), "draws the faded frame, then rests");
         assert_eq!(scroll.tick(done), (false, None));

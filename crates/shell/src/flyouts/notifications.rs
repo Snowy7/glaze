@@ -392,6 +392,8 @@ impl Panel for Center {
                 let width = column.rect.width();
                 let cards = self.cards();
                 let mut content = 0.0;
+                // Measured once: each wrap is a fresh DirectWrite layout.
+                let mut heights = Vec::with_capacity(cards.len());
                 let mut shown_group = None;
                 for &(g, i) in &cards {
                     if shown_group != Some(g) {
@@ -400,13 +402,15 @@ impl Panel for Center {
                             content += f.px(28.0) + f.px(4.0);
                         }
                     }
-                    content += self.card_height(&mut f, g, i, width) + f.px(8.0);
+                    let h = self.card_height(&mut f, g, i, width);
+                    heights.push(h);
+                    content += h + f.px(8.0);
                 }
                 content = (content - f.px(8.0)).max(0.0);
                 let room = column.rest().height();
                 let viewport = column.next(content.min(room));
                 f.scroll(viewport, &self.scroll, Instant::now(), |f, at| {
-                    self.list(f, &cards, Rect::new(at.x, at.y, width, content))
+                    self.list(f, &cards, &heights, Rect::new(at.x, at.y, width, content))
                 });
             }
         }
@@ -667,7 +671,7 @@ impl Panel for Center {
 impl Center {
     /// The list's content from `rect`'s top: group headers of opened stacks, and cards.
     /// Returns its height.
-    fn list(&self, f: &mut Frame, cards: &[(usize, usize)], rect: Rect) -> f32 {
+    fn list(&self, f: &mut Frame, cards: &[(usize, usize)], heights: &[f32], rect: Rect) -> f32 {
         let gap = f.px(8.0);
         let mut column = Stack::column(rect, gap);
         let mut shown_group = None;
@@ -683,7 +687,7 @@ impl Center {
                 }
             }
             let stacked = (!open && group.items.len() > 1).then_some(group.items.len() - 1);
-            let h = self.card_height(f, g, i, rect.width());
+            let h = heights[n];
             self.card(f, n, g, &group.items[i], stacked, column.next(h));
         }
         column.used()
