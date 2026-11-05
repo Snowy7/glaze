@@ -1,35 +1,22 @@
 {
   "id": "t3",
   "name": "T3 Code",
-  "version": "1.0.0",
+  "category": "Integrations",
+  "version": "2.0.0",
   "author": "mypaper",
-  "description": "Active threads, agents, requests for input and recent completions.",
+  "description": "Live running threads and agents, approvals, usage and a new thread prompt.",
   "size": {
     "default": [
-      4,
-      2
+      8,
+      5
     ],
     "min": [
-      2,
-      2
+      4,
+      3
     ],
     "max": [
-      4,
-      4
-    ],
-    "allowed": [
-      [
-        2,
-        2
-      ],
-      [
-        4,
-        2
-      ],
-      [
-        4,
-        4
-      ]
+      12,
+      10
     ]
   },
   "resizable": true,
@@ -37,5 +24,31 @@
     "launch"
   ],
   "plugins": [],
-  "settings": []
+  "settings": [
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Face",
+      "options": [
+        {
+          "value": "running",
+          "label": "Running now"
+        },
+        {
+          "value": "usage",
+          "label": "Usage"
+        },
+        {
+          "value": "new",
+          "label": "New thread"
+        },
+        {
+          "value": "attention",
+          "label": "Needs you"
+        }
+      ],
+      "default": "running"
+    }
+  ],
+  "instances": "multiple"
 }

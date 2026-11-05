@@ -56,7 +56,7 @@ impl Drop for Secret {
 pub fn prompt_t3_pairing() -> Result<Option<Secret>> {
     use windows::Win32::Foundation::ERROR_CANCELLED;
     let title: Vec<u16> = "Connect T3 Code\0".encode_utf16().collect();
-    let message: Vec<u16> = "Create a pairing code in T3 Code > Settings > Connections, then paste it in Password. mypaper requests read-only thread status.\0".encode_utf16().collect();
+    let message: Vec<u16> = "Create a pairing code in T3 Code > Settings > Connections, then paste it below. Allow thread status, usage (diagnostics), and thread controls. Work starts only on your click in mypaper.\0".encode_utf16().collect();
     let target = target("t3-pairing")?;
     let info = CREDUI_INFOW {
         cbSize: std::mem::size_of::<CREDUI_INFOW>() as u32,

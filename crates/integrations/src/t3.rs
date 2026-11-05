@@ -74,6 +74,91 @@ pub struct Snapshot {
     pub threads: Vec<Thread>,
     pub projects: BTreeMap<String, String>,
     pub transitions: Vec<Transition>,
+    pub details: BTreeMap<String, ThreadDetail>,
+    pub models: Vec<ModelChoice>,
+    pub environment_id: Option<String>,
+    pub permissions: Vec<String>,
+    /// The last completed usage read. T3 exposes reads, rather than usage change events.
+    pub usage: Option<Vec<Usage>>,
+    pub usage_notice: Option<String>,
+    pub usage_day: Option<String>,
+    pub omit_older_settled: bool,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ThreadDetail {
+    pub model: String,
+    pub parent_id: Option<String>,
+    pub agent: bool,
+    pub background_tasks: usize,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelChoice {
+    pub provider: String,
+    pub provider_name: String,
+    pub model: String,
+    pub name: String,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Usage {
+    pub provider: String,
+    pub model: String,
+    pub tokens: u64,
+    pub cost_microusd: u64,
+    pub unpriced: bool,
+}
+impl Snapshot {
+    pub fn can_operate(&self) -> bool {
+        self.permissions.iter().any(|p| p == "orchestration:operate")
+    }
+    /// Installed T3 registers t3code:// and accepts environment/thread prompt links.
+    pub fn thread_link(&self, thread_id: &str) -> Option<String> {
+        self.environment_id.as_ref().map(|environment| format!("t3code://threads/{}/{}", crate::launcher::encode(environment), crate::launcher::encode(thread_id)))
+    }
+    fn detail(&mut self, thread: &Value) {
+        if let Some(id) = thread["id"].as_str() {
+            self.details.insert(id.into(), ThreadDetail {
+                model: thread["modelSelection"]["model"].as_str().unwrap_or_default().chars().take(128).collect(),
+                parent_id: thread["lineage"]["parentThreadId"].as_str().map(str::to_owned),
+                agent: thread["lineage"]["relationshipToParent"] == "subagent",
+                background_tasks: thread["pendingBackgroundTasks"].as_array().map_or(0, Vec::len),
+            });
+        }
+    }
+    fn configure(&mut self, value: &Value) {
+        self.omit_older_settled = value["shellOlderSettled"] == true;
+        self.environment_id = value["environment"]["environmentId"].as_str().map(str::to_owned);
+        self.models.clear();
+        for provider in value["providers"].as_array().into_iter().flatten().filter(|p| p["enabled"] == true && p["installed"] == true) {
+            let Some(id) = provider["instanceId"].as_str() else { continue };
+            for model in provider["models"].as_array().into_iter().flatten().take(256) {
+                if let Some(slug) = model["slug"].as_str() {
+                    self.models.push(ModelChoice {
+                        provider: id.into(),
+                        provider_name: provider["displayName"].as_str().unwrap_or(id).into(),
+                        model: slug.into(),
+                        name: model["name"].as_str().unwrap_or(slug).into(),
+                    });
+                }
+            }
+        }
+    }
+    fn usage(&mut self, value: &Value) {
+        let mut groups: BTreeMap<(String, String), Usage> = BTreeMap::new();
+        for bucket in value["buckets"].as_array().into_iter().flatten() {
+            let (Some(provider), Some(model)) = (bucket["provider"].as_str(), bucket["model"].as_str()) else {continue};
+            let usage = groups.entry((provider.into(), model.into())).or_insert_with(|| Usage {provider: provider.into(), model: model.into(), ..Default::default()});
+            // Reasoning is already included in output, so never add it twice.
+            for key in ["uncachedInputTokens", "cachedInputTokens", "cacheCreationTokens", "outputTokens"] {
+                usage.tokens = usage.tokens.saturating_add(bucket["totals"][key].as_u64().unwrap_or(0));
+            }
+            if let Some(cost) = bucket["costUsd"].as_f64().filter(|n| n.is_finite() && *n >= 0.0) {
+                usage.cost_microusd = usage.cost_microusd.saturating_add((cost * 1_000_000.0).round() as u64);
+            }
+            usage.unpriced |= bucket["unpricedRecords"].as_u64().unwrap_or(0) > 0;
+        }
+        self.usage = Some(groups.into_values().collect());
+        self.usage_notice = None;
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Transition {
@@ -109,6 +194,8 @@ impl Snapshot {
                     "T3 has too many threads to load. Archive old threads, then retry."
                 );
                 self.threads = threads;
+                self.details.clear();
+                for thread in snapshot["threads"].as_array().into_iter().flatten() { self.detail(thread); }
                 self.sequence = snapshot["snapshotSequence"]
                     .as_u64()
                     .ok_or_else(|| anyhow::anyhow!("missing T3 sequence"))?;
@@ -141,9 +228,11 @@ impl Snapshot {
                 match kind {
                     "thread.updated" => {
                         let thread: Thread = serde_json::from_value(item["thread"].clone())?;
+                        self.detail(&item["thread"]);
                         let previous = self.threads.iter().position(|t| t.id == thread.id);
                         if item["location"] == "archive" {
                             self.threads.retain(|t| t.id != thread.id);
+                            self.details.remove(&thread.id);
                             return Ok(());
                         }
                         if let Some(index) = previous {
@@ -181,9 +270,10 @@ impl Snapshot {
                             self.threads.push(thread);
                         }
                     }
-                    "thread.removed" => self
-                        .threads
-                        .retain(|t| Some(t.id.as_str()) != item["threadId"].as_str()),
+                    "thread.removed" => {
+                        self.threads.retain(|t| Some(t.id.as_str()) != item["threadId"].as_str());
+                        if let Some(id) = item["threadId"].as_str() { self.details.remove(id); }
+                    },
                     "project.updated" => {
                         if let (Some(id), Some(title)) = (
                             item["project"]["id"].as_str(),
@@ -212,8 +302,8 @@ pub(crate) async fn run(config: &crate::config::T3, publish: &Publish) -> Result
         "supported T3 orchestration protocol is 2"
     );
     ensure!(
-        !config.endpoint.is_empty(),
-        "configure the T3 /ws loopback endpoint and pair a read-only mypaper client"
+        config.endpoint.is_empty() || crate::transport::loopback_url(&config.endpoint).is_ok(),
+        "Use a local T3 Code address in Advanced settings."
     );
     let token = credentials::read("t3").map_err(|_| anyhow::anyhow!("pair mypaper with T3 using orchestration:read and store the token in Credential Manager"))?;
     subscribe(config, publish, token.text()?).await.map_err(|error| {
@@ -223,15 +313,25 @@ pub(crate) async fn run(config: &crate::config::T3, publish: &Publish) -> Result
 }
 async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -> Result<()> {
     let mut socket = transport::socket_with_limit(
-        &config.endpoint,
+        crate::t3_client::endpoint(&config.endpoint),
         Some(token),
         Some("orchestrationProtocol=2"),
         MESSAGE_LIMIT,
     )
     .await?;
-    transport::send(&mut socket,json!({"_tag":"Request","id":"1","tag":"orchestration.subscribeShell","payload":{"requestCompletionMarker":true},"headers":[]})).await?;
     let mut state = Snapshot::default();
+    if config.live_verified {
+        state.permissions = crate::t3_client::permissions(&config.endpoint).await.unwrap_or_default();
+        if let Ok(value) = crate::t3_client::request(&config.endpoint, "server.getConfig", json!({})).await {
+            state.configure(&value);
+        }
+        refresh_usage(config, &mut state).await;
+    }
+    let mut payload=json!({"requestCompletionMarker":true});
+    if state.omit_older_settled {payload["omitOlderSettled"]=json!(true);}
+    transport::send(&mut socket,json!({"_tag":"Request","id":"1","tag":"orchestration.subscribeShell","payload":payload,"headers":[]})).await?;
     let mut baseline = false;
+    let mut last_usage_transition = None;
     loop {
         let frames = transport::receive(&mut socket).await?;
         publish.delivered();
@@ -253,6 +353,11 @@ async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -
                         );
                         state.apply(item)?;
                         baseline = true;
+                    }
+                    let transition=state.transitions.last().filter(|t|!t.attention).map(|t|(t.run_id.clone(),t.status));
+                    if transition.is_some() && transition != last_usage_transition {
+                        last_usage_transition=transition;
+                        refresh_usage(config,&mut state).await;
                     }
                     publish.set(
                         if config.live_verified {
@@ -276,6 +381,18 @@ async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -
                 _ => bail!("unsupported Effect RPC envelope"),
             }
         }
+    }
+}
+
+async fn refresh_usage(config: &crate::config::T3, state: &mut Snapshot) {
+    if !state.permissions.iter().any(|p| p == "diagnostics:read") {
+        state.usage_notice = Some("Usage needs diagnostics access. Reconnect with a T3 pairing code that includes diagnostics:read.".into());
+        return;
+    }
+    let day = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    match crate::t3_client::request(&config.endpoint, "server.getUsageSummary", json!({"sinceDay":day,"untilDay":day,"timeZone":"UTC","resolution":"day"})).await {
+        Ok(value) => {state.usage(&value);state.usage_day=Some(day);},
+        Err(_) => state.usage_notice = Some("Usage is unavailable. Refresh to try again.".into()),
     }
 }
 

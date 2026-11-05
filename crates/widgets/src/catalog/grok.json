@@ -1,35 +1,22 @@
 {
   "id": "grok",
   "name": "Grok Bot",
-  "version": "1.0.0",
+  "category": "Integrations",
+  "version": "2.0.0",
   "author": "mypaper",
-  "description": "Start saved routines and see their request receipts.",
+  "description": "Discover Grok Bot, run saved routines, open prompts and view recent requests.",
   "size": {
     "default": [
-      4,
-      2
+      8,
+      5
     ],
     "min": [
-      2,
-      2
+      4,
+      3
     ],
     "max": [
-      4,
-      4
-    ],
-    "allowed": [
-      [
-        2,
-        2
-      ],
-      [
-        4,
-        2
-      ],
-      [
-        4,
-        4
-      ]
+      12,
+      10
     ]
   },
   "resizable": true,
@@ -37,5 +24,27 @@
     "launch"
   ],
   "plugins": [],
-  "settings": []
+  "settings": [
+    {
+      "key": "variant",
+      "type": "select",
+      "label": "Face",
+      "options": [
+        {
+          "value": "routines",
+          "label": "Routines"
+        },
+        {
+          "value": "recent",
+          "label": "Recent requests and notifications"
+        },
+        {
+          "value": "prompt",
+          "label": "Quick prompt"
+        }
+      ],
+      "default": "routines"
+    }
+  ],
+  "instances": "multiple"
 }
