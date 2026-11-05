@@ -9,6 +9,7 @@ use mypaper_ui::{HitId, Point, Rect, Rgba, icons::Icon, theme::TextRole};
 
 pub mod animated;
 pub mod canvas;
+pub mod scroll;
 
 /// Hit ids of a face's actions: `ACTION + n` for the nth action in tree order.
 pub const ACTION: HitId = 800_000;
@@ -49,6 +50,7 @@ fn collect(view: &View, out: &mut Vec<Hit>) {
             children.iter().for_each(|c| collect(c, out))
         }
         View::Card { child, .. } | View::Animated { child, .. } => collect(child, out),
+        View::Scroll { child, .. } => collect(child, out),
         View::Button { action, .. } | View::IconButton { action, .. } => out.push(Hit::Action(action.clone())),
         View::Field { action, .. } => out.push(Hit::Field(action.clone())),
         View::Select { action, options, selected, .. } => out.push(Hit::Select { action: action.clone(), options: options.clone(), selected: selected.clone() }),
@@ -229,7 +231,7 @@ fn empty(f: &mut Frame<'_>, rect: Rect, icon: Option<Icon>, title: &str, detail:
 fn flexible(view: &View) -> bool {
     match view {
         View::Animated { child, .. } => flexible(child),
-        _ => matches!(view, View::Spacer | View::AreaChart { .. } | View::Empty { .. } | View::List { .. }),
+        _ => matches!(view, View::Spacer | View::AreaChart { .. } | View::Empty { .. } | View::List { .. } | View::Scroll { .. }),
     }
 }
 
@@ -291,6 +293,8 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
             (None, false) => f.line(TextRole::Headline) + f.px(12.0),
         },
         View::Animated { child, .. } => self::height(f, child, width),
+        // Takes the free height, like a list; its content scrolls inside.
+        View::Scroll { .. } => f.px(80.0),
         View::Spacer | View::Unknown => 0.0,
     }
 }
@@ -609,6 +613,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             };
             f.hit(id, rect, mypaper_ui::Role::Button, &name, true, None);
         }
+        View::Scroll { id, child, on_reach_end } => scroll::draw(f, rect, id, child, on_reach_end.as_ref(), next),
         View::Spacer | View::Unknown => {}
     }
 }

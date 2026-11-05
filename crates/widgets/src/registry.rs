@@ -158,6 +158,9 @@ fn component_faces() -> Vec<(String, WidgetManifest)> {
                 "description": format!("From the {} plugin", plugin.name),
                 "category": "Plugins",
                 "size": { "default": size.default, "min": size.min.unwrap_or(size.default), "max": size.max },
+                // The face's options are the widget's settings: Studio's form and the widget's
+                // Options… menu edit them per instance (docs/plugins.md, "Face options").
+                "settings": face.options,
             });
             match serde_json::from_value::<WidgetManifest>(manifest) {
                 Ok(manifest) => out.push((id, manifest)),

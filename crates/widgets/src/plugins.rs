@@ -699,7 +699,12 @@ impl Plugins {
             && slot.face == face
             && slot.component.is_some()
         {
-            if slot.size != size || slot.settings != settings {
+            if slot.size == size && slot.settings != settings {
+                // Only the options changed: `event::options`, the face stays open.
+                slot.settings = settings;
+                let message = wire::HostMsg::Options { instance: instance.into(), settings: slot.settings.to_string() };
+                self.to_helper(message, now)?;
+            } else if slot.size != size || slot.settings != settings {
                 slot.size = size;
                 slot.settings = settings;
                 let message = component_open(instance, slot);

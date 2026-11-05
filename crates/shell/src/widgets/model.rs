@@ -497,9 +497,13 @@ impl Model {
                         Some(instant + time::boundary(now.ms - published * 1000, quantum))
                     })
                     .min(),
-                // A plugin face's `animated` spring is still moving: one more frame.
-                Widget::Plugin if super::views::plugin::animated::moving() => {
-                    Some(instant + mypaper_ui::display_frame())
+                // A plugin face's `animated` spring is still moving: one more frame. Its `scroll`
+                // panes ask for frames only while gliding or fading.
+                Widget::Plugin => {
+                    let spring = super::views::plugin::animated::moving()
+                        .then(|| instant + mypaper_ui::display_frame());
+                    let scroll = super::views::plugin::scroll::next(&self.placed.instance, instant);
+                    spring.into_iter().chain(scroll).min()
                 }
                 _ => None,
             }

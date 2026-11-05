@@ -8,6 +8,7 @@ mod markdown;
 mod metrics;
 pub(crate) mod model;
 mod plugin_faces;
+mod plugin_options;
 pub(crate) mod plugin_events;
 mod plugin_notifications;
 mod discord_migration;
@@ -192,6 +193,8 @@ pub struct Widgets {
     plugin_notifications: plugin_notifications::Notifications,
     plugin_events: plugin_events::Events,
     plugin_menu: Option<mypaper_ui::menu::Menu<(String, String, String)>>,
+    /// A plugin widget's right-click "Options…" (`plugin_options`).
+    options_menu: Option<mypaper_ui::menu::Menu<plugin_options::Choice>>,
     worker: data::Worker,
     holds: Holds,
     held: bool,
@@ -317,6 +320,7 @@ impl Widgets {
             plugin_notifications: Default::default(),
             plugin_events: Default::default(),
             plugin_menu: None,
+            options_menu: None,
             worker: data::Worker::new(window),
             holds,
             held: false,
@@ -1505,6 +1509,14 @@ impl Widgets {
     }
 
     pub fn on_event(&mut self, ui: &mut Ui, surface: SurfaceId, event: &Event) {
+        if let Some(menu) = &mut self.options_menu
+            && menu.owns(surface)
+        {
+            if let Some(mypaper_ui::menu::Outcome::Chosen(choice)) = menu.handle(ui, surface, event) {
+                self.set_plugin_option(choice);
+            }
+            return;
+        }
         if let Some(menu) = &mut self.plugin_menu {
             if menu.owns(surface) {
                 if let Some(mypaper_ui::menu::Outcome::Chosen((instance, action, value))) = menu.handle(ui, surface, event) {
@@ -1674,7 +1686,14 @@ impl Widgets {
                 m.focus = Some(*hit);
                 m.dirty = true;
             }
+            // A plugin face's `scroll` panes move locally; the plugin never sees the wheel.
+            Event::Wheel(p, delta) if self.entries[&id].model.kind == Widget::Plugin => {
+                self.plugin_wheel(&id, p.at, *delta)
+            }
             Event::Wheel(_, delta) => self.scroll(&id, -f32::from(*delta) / 120.0 * 48.0),
+            Event::Release(p, Button::Right) if self.entries[&id].model.kind == Widget::Plugin => {
+                self.open_plugin_options(ui, &id, p.screen)
+            }
             Event::Press(p, Button::Left) => {
                 let entry = self.entries.get_mut(&id).unwrap();
                 entry.surface.take_focus();
