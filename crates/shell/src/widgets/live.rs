@@ -1,19 +1,7 @@
 //! Live N4 harness. Run under the desktop lock with isolated APPDATA/LOCALAPPDATA. It uses the
 //! production widget host and services, six instances across the real monitors, plus a warmed
 //! native menu. It never stops the user's mypaper or changes taskbar state.
-#[path = "../glass.rs"]
-mod glass;
-#[allow(
-    dead_code,
-    reason = "the harness reuses the production inbox, whose wparam is used by menus and bars"
-)]
-#[path = "../inbox.rs"]
-mod inbox;
-#[allow(dead_code)]
-#[path = "../integrations/fixture.rs"]
-mod integrations;
-#[path = "mod.rs"]
-mod widgets;
+use mypaper_shell::{bars, inbox, integrations, widgets};
 // Use the product's performance harness math, including wall time normalization.
 #[allow(dead_code)]
 #[path = "../../../../tools/perf/src/cpu.rs"]
@@ -34,6 +22,7 @@ fn main() -> Result<()> {
     mypaper_desktop::init_logging();
     mypaper_desktop::enable_dpi_awareness();
     let _restore = RestoreInput::new();
+    let _awake = Awake::new()?;
     let seconds = std::env::args()
         .nth(1)
         .and_then(|v| v.parse::<u64>().ok())
@@ -42,6 +31,7 @@ fn main() -> Result<()> {
     anyhow::ensure!(!monitors.is_empty(), "no monitors");
     let registry = registry::builtins();
     let mut layout = Layout::default();
+    layout.appearance.style = Some(mypaper_theme::WidgetStyle::Liquid);
     for (i, id) in [
         "clock",
         "calendar",
@@ -80,8 +70,11 @@ fn main() -> Result<()> {
     )?;
     let mut ui = Ui::new()?;
     let _media_pause = PausedMedia::new();
+    if std::env::var_os("MYPAPER_N4_SEED_ONLY").is_some() {
+        return seed_only(seconds, monitors.len());
+    }
     let inbox = inbox::Inbox::new()?;
-    let mut host = widgets::Widgets::new(&mut ui, inbox.hwnd())?;
+    let mut host = widgets::Widgets::new(&mut ui, inbox.hwnd(), &[])?;
     let mut menu = Menu::<u8>::new("N4 fixture menu")?;
     let screen = mypaper_ui::screen_at(monitors[0].work.x + 40, monitors[0].work.y + 40);
     menu.open(
@@ -99,6 +92,11 @@ fn main() -> Result<()> {
     if std::env::var_os("MYPAPER_N4_INTERACTIONS").is_some() {
         exercise(&mut ui, &mut host)?;
     }
+    let mut bars = if std::env::var_os("MYPAPER_N4_BARS").is_some() {
+        Some(bars::Bars::new(&mut ui, bars::prepare()?)?)
+    } else {
+        None
+    };
     let _visible_desktop = if std::env::var_os("MYPAPER_N4_DESKTOP_VISIBLE").is_some() {
         Some(VisibleDesktop::new()?)
     } else {
@@ -127,14 +125,34 @@ fn main() -> Result<()> {
             &windows::core::HSTRING::from(stop_name),
         )
     }?;
+    // SAFETY: this named auto-reset event requests diagnostics only outside CPU windows.
+    let snapshot = unsafe {
+        windows::Win32::System::Threading::CreateEventW(
+            None,
+            false,
+            false,
+            &windows::core::HSTRING::from(format!(
+                "Local\\mypaper-n4-fixture-snapshot-{}",
+                std::process::id()
+            )),
+        )
+    }?;
+    let started = Instant::now();
     let deadline = Instant::now() + Duration::from_secs(seconds);
-    let mut sample_at = Instant::now() + Duration::from_secs(5);
-    let mut sample: Option<(Instant, u64)> = None;
+    let profiling = std::env::var_os("MYPAPER_N4_PROFILE").is_some();
+    let mut profile_phase = 0;
+    let mut sample_at = if profiling {
+        Instant::now() + Duration::from_secs(20)
+    } else {
+        deadline
+    };
+    let mut sample: Option<(Instant, u64, u64)> = None;
     let mut samples = Vec::new();
     let mut message = MSG::default();
     loop {
         let timeout = host
             .timeout_ms()
+            .min(bars.as_ref().map_or(u32::MAX, bars::Bars::timeout))
             .min(
                 sample_at
                     .saturating_duration_since(Instant::now())
@@ -150,16 +168,20 @@ fn main() -> Result<()> {
                     .min(u128::from(u32::MAX - 1)) as u32,
             );
         // SAFETY: the ticker handle and all windows live through this standard UI pump.
+        let handles: Vec<_> = [host.timer_handle(), stop, snapshot]
+            .into_iter()
+            .chain(bars.as_ref().into_iter().flat_map(bars::Bars::handles))
+            .collect();
+        // SAFETY: every handle and the message queue belong to this live fixture.
         let woke = unsafe {
-            MsgWaitForMultipleObjectsEx(
-                Some(&[host.timer_handle(), stop]),
-                timeout,
-                QS_ALLINPUT,
-                MWMO_INPUTAVAILABLE,
-            )
+            MsgWaitForMultipleObjectsEx(Some(&handles), timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE)
         };
         if woke.0 == WAIT_OBJECT_0.0 + 1 {
             break;
+        }
+        if woke.0 == WAIT_OBJECT_0.0 + 2 {
+            checkpoint(&host, started);
+            continue;
         }
         if woke == WAIT_OBJECT_0 {
             host.frame_ready();
@@ -171,8 +193,14 @@ fn main() -> Result<()> {
                     return Ok(());
                 }
                 host.raw_message(&message);
+                if let Some(bars) = &mut bars {
+                    bars.message(&message);
+                }
                 if message.hwnd.is_invalid() && message.message == mypaper_desktop::WM_FACT {
                     host.fact(message.wParam.0, message.lParam.0);
+                    if let Some(bars) = &mut bars {
+                        bars.fact(message.wParam.0, message.lParam.0);
+                    }
                 }
                 let _ = TranslateMessage(&message);
                 DispatchMessageW(&message);
@@ -183,13 +211,24 @@ fn main() -> Result<()> {
         }
         while let Some((surface, event)) = next_event() {
             host.on_event(&mut ui, surface, &event);
+            if let Some(bars) = &mut bars {
+                bars.event(&mut ui, surface, &event);
+            }
         }
-        integrations::process();
+        if integrations::process()
+            && let Some(bars) = &mut bars
+        {
+            bars.integration_changed();
+        }
         host.poll(&mut ui);
-        if Instant::now() >= sample_at {
+        if let Some(bars) = &mut bars {
+            bars.tick(&mut ui);
+        }
+        if profiling && Instant::now() >= sample_at {
             let at = Instant::now();
-            let busy = busy_ticks();
-            if let Some((start, before)) = sample {
+            let busy = busy_ticks(false);
+            let ui_busy = busy_ticks(true);
+            if let Some((start, before, ui_before)) = sample {
                 let cpu =
                     perf_cpu::cpu_use(Duration::from_nanos((busy - before) * 100), at - start, 16);
                 println!(
@@ -198,7 +237,24 @@ fn main() -> Result<()> {
                     cpu.one_core,
                     host.counters()
                 );
-                println!("N4_COST stats_us,paint_us,polls={:?}", host.costs());
+                println!("N4_COST {:?}", host.costs());
+                let ui_cpu = perf_cpu::cpu_use(
+                    Duration::from_nanos((ui_busy - ui_before) * 100),
+                    at - start,
+                    16,
+                );
+                println!(
+                    "N4_THREADS ui_core_pct={:.5} worker_core_pct={:.5}",
+                    ui_cpu.one_core,
+                    (cpu.one_core - ui_cpu.one_core).max(0.0)
+                );
+                if profiling {
+                    println!(
+                        "N4_PROFILE phase={} cpu_core_pct={:.5}",
+                        ["six", "without-system", "bars-only"][profile_phase],
+                        cpu.one_core
+                    );
+                }
                 let probes = host.live_windows();
                 // SAFETY: read-only hit queries at coordinates of the fixture's own windows.
                 let hits=probes.iter().filter(|p|unsafe {WindowFromPoint(windows::Win32::Foundation::POINT {x:((p.rect.left+p.rect.right)/2.0) as i32,y:((p.rect.top+p.rect.bottom)/2.0) as i32})}==p.hwnd).count();
@@ -226,40 +282,148 @@ fn main() -> Result<()> {
                 }
                 samples.push(cpu.one_core);
             }
-            sample = Some((at, busy));
+            if profiling && sample.is_some() {
+                profile_phase += 1;
+                if profile_phase == 3 {
+                    println!("N4_PROFILE_DONE");
+                    break;
+                }
+                if profile_phase == 1 {
+                    layout.instances.retain(|i| i.widget != "system-monitor");
+                } else {
+                    layout.instances.clear();
+                }
+                layout.save(&files::layout()?)?;
+                host.handle(
+                    &mut ui,
+                    inbox::Msg {
+                        message: widgets::WM_LAYOUT,
+                        wparam: 0,
+                        lparam: 0,
+                    },
+                );
+                sample = None;
+                sample_at = Instant::now() + Duration::from_secs(10);
+                continue;
+            }
+            if sample.is_none() {
+                println!("N4_BASELINE counters={:?}", host.counters());
+                println!("N4_COST_BASELINE {:?}", host.costs());
+            }
+            sample = Some((at, busy, ui_busy));
             sample_at = at + Duration::from_secs(60);
         }
         if Instant::now() >= deadline {
             break;
         }
     }
+    checkpoint(&host, started);
     println!("N4_DONE drivers={:?}", mypaper_ui::modules::gpu_drivers());
-    println!("N4_MEDIAN {:?}", perf_cpu::median(&samples));
     // SAFETY: the harness owns this event and its wait loop has ended.
     unsafe {
         let _ = windows::Win32::Foundation::CloseHandle(stop);
+        let _ = windows::Win32::Foundation::CloseHandle(snapshot);
     }
     Ok(())
 }
 
-fn busy_ticks() -> u64 {
+/// Seed the same six-instance fixture and hold its paused-media/visible-desktop guards while
+/// the actual shell is measured. This helper creates no widget, bar or menu windows.
+fn seed_only(seconds: u64, monitors: usize) -> Result<()> {
+    let _visible = VisibleDesktop::new()?;
+    // SAFETY: this helper owns its named stop event until the bounded wait ends.
+    let stop = unsafe {
+        windows::Win32::System::Threading::CreateEventW(
+            None,
+            true,
+            false,
+            &windows::core::HSTRING::from(format!(
+                "Local\\mypaper-n4-fixture-stop-{}",
+                std::process::id()
+            )),
+        )
+    }?;
+    println!(
+        "N4_READY pid={} monitors={monitors} seconds={seconds} seed_only=true",
+        std::process::id()
+    );
+    let deadline = Instant::now() + Duration::from_secs(seconds);
+    let mut message = MSG::default();
+    // SAFETY: this thread owns its queue and event. Pump COM's hidden STA windows as well as
+    // waiting for stop, so the media guard cannot obstruct another process's SMTC calls.
+    unsafe {
+        while Instant::now() < deadline {
+            if MsgWaitForMultipleObjectsEx(
+                Some(&[stop]),
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .as_millis()
+                    .max(1)
+                    .min(u128::from(u32::MAX - 1)) as u32,
+                QS_ALLINPUT,
+                MWMO_INPUTAVAILABLE,
+            ) == WAIT_OBJECT_0
+            {
+                break;
+            }
+            while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+        let _ = windows::Win32::Foundation::CloseHandle(stop);
+    }
+    println!("N4_DONE drivers={:?}", mypaper_ui::modules::gpu_drivers());
+    Ok(())
+}
+
+/// Window probes and logging are explicit checkpoints, never part of an external CPU sample.
+fn checkpoint(host: &widgets::Widgets, started: Instant) {
+    let probes = host.live_windows();
+    // SAFETY: read-only hit queries at the centers of this fixture's own windows.
+    let visible = probes.iter().filter(|p| unsafe { WindowFromPoint(windows::Win32::Foundation::POINT {
+        x: ((p.rect.left + p.rect.right) / 2.0) as i32,
+        y: ((p.rect.top + p.rect.bottom) / 2.0) as i32,
+    }) } == p.hwnd).count();
+    println!(
+        "N4_CHECKPOINT elapsed_s={:.3} counters={:?} visible={visible}/{} costs={:?}",
+        started.elapsed().as_secs_f64(),
+        host.counters(),
+        probes.len(),
+        host.costs()
+    );
+}
+
+fn busy_ticks(thread: bool) -> u64 {
     use windows::Win32::Foundation::FILETIME;
-    use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
+    use windows::Win32::System::Threading::{
+        GetCurrentProcess, GetCurrentThread, GetProcessTimes, GetThreadTimes,
+    };
     let (mut created, mut exited, mut kernel, mut user) = (
         FILETIME::default(),
         FILETIME::default(),
         FILETIME::default(),
         FILETIME::default(),
     );
-    // SAFETY: own process, valid FILETIME outputs.
+    // SAFETY: own process/thread, valid FILETIME outputs.
     unsafe {
-        let _ = GetProcessTimes(
-            GetCurrentProcess(),
-            &mut created,
-            &mut exited,
-            &mut kernel,
-            &mut user,
-        );
+        let _ = if thread {
+            GetThreadTimes(
+                GetCurrentThread(),
+                &mut created,
+                &mut exited,
+                &mut kernel,
+                &mut user,
+            )
+        } else {
+            GetProcessTimes(
+                GetCurrentProcess(),
+                &mut created,
+                &mut exited,
+                &mut kernel,
+                &mut user,
+            )
+        };
     }
     let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
     ticks(kernel) + ticks(user)
@@ -268,6 +432,50 @@ fn busy_ticks() -> u64 {
 struct RestoreInput {
     foreground: windows::Win32::Foundation::HWND,
     cursor: windows::Win32::Foundation::POINT,
+}
+
+/// Both displays must remain on throughout the live fixture. Restore this thread's previous
+/// execution-state requirements on every exit; no power-plan setting is changed.
+struct Awake(windows::Win32::System::Power::EXECUTION_STATE);
+impl Awake {
+    fn new() -> Result<Self> {
+        use windows::Win32::System::Power::{
+            ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, SetThreadExecutionState,
+        };
+        // SAFETY: this is a temporary requirement owned by the fixture's main thread.
+        let previous = unsafe {
+            SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)
+        };
+        anyhow::ensure!(previous.0 != 0, "could not keep the fixture displays awake");
+        let guard = Self(previous);
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_MOVE, MOUSEINPUT, SendInput,
+        };
+        // A display requirement prevents timeout but doesn't wake a display already off.
+        // SAFETY: a zero-distance mouse move wakes it without clicking or moving the cursor.
+        let sent = unsafe {
+            SendInput(
+                &[INPUT {
+                    r#type: INPUT_MOUSE,
+                    Anonymous: INPUT_0 {
+                        mi: MOUSEINPUT {
+                            dwFlags: MOUSEEVENTF_MOVE,
+                            ..Default::default()
+                        },
+                    },
+                }],
+                size_of::<INPUT>() as i32,
+            )
+        };
+        anyhow::ensure!(sent == 1, "could not wake the fixture displays");
+        Ok(guard)
+    }
+}
+impl Drop for Awake {
+    fn drop(&mut self) {
+        // SAFETY: restore exactly the flags returned on this same thread at fixture startup.
+        let _ = unsafe { windows::Win32::System::Power::SetThreadExecutionState(self.0) };
+    }
 }
 impl RestoreInput {
     fn new() -> Self {
@@ -453,9 +661,21 @@ fn exercise(ui: &mut Ui, host: &mut widgets::Widgets) -> Result<()> {
         host.live_windows()
             .iter()
             .any(|w| w.instance == "notes-1" && w.editing_text && w.ordered),
-        "note click did not focus a bottom-band RichEdit field"
+        "note click did not focus a bottom-band RichEdit field: {:?}",
+        host.live_windows()
     );
     let typed = "فحص 東京測試 한글입력";
+    // SAFETY: read-only focus/style probes of this test's own surface before keyboard input.
+    unsafe {
+        anyhow::ensure!(
+            GetForegroundWindow() == note.hwnd && GetFocus() == note.hwnd,
+            "note field lacks real focus: foreground={:?} focus={:?} expected={:?} ex={:x}",
+            GetForegroundWindow(),
+            GetFocus(),
+            note.hwnd,
+            GetWindowLongPtrW(note.hwnd, GWL_EXSTYLE)
+        );
+    }
     let keys: Vec<_> = typed
         .encode_utf16()
         .flat_map(|ch| {
@@ -491,7 +711,7 @@ fn exercise(ui: &mut Ui, host: &mut widgets::Widgets) -> Result<()> {
     let saved = Storage::new(files::user("widget-data")?).get("notes-1", "text")?;
     anyhow::ensure!(
         saved.as_str().is_some_and(|s| s.contains(typed)),
-        "the native field did not persist keyboard-entered Arabic/CJK text"
+        "the native field did not persist keyboard-entered Arabic/CJK text: {saved}"
     );
     println!("N4_CHECK alpha_hit=1 widget_click=1 unicode_keyboard=1 z_order_after_click=1");
     // SAFETY: inverse of the Show Desktop operation above.
@@ -655,6 +875,66 @@ fn exercise(ui: &mut Ui, host: &mut widgets::Widgets) -> Result<()> {
     );
     pump_for(ui, host, Duration::from_millis(100));
     println!("N4_CHECK edit_drag=1 edit_resize=1 persisted_grid=1");
+    let mut overlay_layout = before_layout.clone();
+    let overlay_id = overlay_layout.add("media-pill", &monitor.device, [1, 1], [4, 1]);
+    overlay_layout.overlay = true;
+    overlay_layout.save(&files::layout()?)?;
+    host.handle(
+        ui,
+        inbox::Msg {
+            message: widgets::WM_LAYOUT,
+            wparam: 0,
+            lparam: 0,
+        },
+    );
+    for (editing, topmost) in [(false, true), (true, false), (false, true)] {
+        host.handle(
+            ui,
+            inbox::Msg {
+                message: widgets::WM_EDIT,
+                wparam: 0,
+                lparam: isize::from(editing),
+            },
+        );
+        pump_for(ui, host, Duration::from_millis(100));
+        let pill = host
+            .live_windows()
+            .into_iter()
+            .find(|p| p.instance == overlay_id)
+            .unwrap();
+        // SAFETY: style query of this fixture's verified overlay/desktop surface.
+        let ex = unsafe { GetWindowLongPtrW(pill.hwnd, GWL_EXSTYLE) } as u32;
+        anyhow::ensure!(
+            pill.visible && (ex & WS_EX_TOPMOST.0 != 0) == topmost && ex & WS_EX_NOACTIVATE.0 == 0,
+            "overlay/edit layer or keyboard activation is incorrect"
+        );
+    }
+    host.handle(
+        ui,
+        inbox::Msg {
+            message: widgets::WM_OVERLAY,
+            wparam: 0,
+            lparam: 0,
+        },
+    );
+    pump_for(ui, host, Duration::from_millis(100));
+    anyhow::ensure!(
+        host.live_windows()
+            .iter()
+            .any(|p| p.instance == overlay_id && !p.visible),
+        "overlay toggle did not hide the pill"
+    );
+    before_layout.save(&files::layout()?)?;
+    host.handle(
+        ui,
+        inbox::Msg {
+            message: widgets::WM_LAYOUT,
+            wparam: 0,
+            lparam: 0,
+        },
+    );
+    pump_for(ui, host, Duration::from_millis(100));
+    println!("N4_CHECK overlay_topmost=1 overlay_desktop_while_editing=1 overlay_toggle=1");
     Ok(())
 }
 

@@ -9,6 +9,31 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+/// Preserve exact bytes beside a configuration. Never replace a previous recovery copy.
+/// Identical content reuses its backup, keeping repeated refused writes cheap.
+pub fn backup(path: &Path, bytes: &[u8]) -> Result<PathBuf> {
+    use std::io::Write;
+    for index in 0.. {
+        let mut name = path.as_os_str().to_owned();
+        name.push(if index == 0 { ".bak".to_owned() } else { format!(".bak.{index}") });
+        let target = PathBuf::from(name);
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&target) {
+            Ok(mut file) => {
+                file.write_all(bytes)?;
+                file.sync_all()?;
+                return Ok(target);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                if std::fs::read(&target).is_ok_and(|saved| saved == bytes) {
+                    return Ok(target);
+                }
+            }
+            Err(e) => return Err(e).context("preserving configuration backup"),
+        }
+    }
+    unreachable!()
+}
+
 /// The first `<ancestor>/<relative>` folder above `exe` for which `ok` holds.
 fn find_up(exe: &Path, relative: &str, ok: impl Fn(&Path) -> bool) -> Option<PathBuf> {
     exe.ancestors()

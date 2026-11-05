@@ -14,6 +14,32 @@ pub struct Stamp {
     pub ms: i64,
 }
 impl Stamp {
+    pub fn at(ms: i64) -> Self {
+        let ticks = ((ms + 11_644_473_600_000) * 10_000) as u64;
+        let file = FILETIME {
+            dwLowDateTime: ticks as u32,
+            dwHighDateTime: (ticks >> 32) as u32,
+        };
+        let (mut utc, mut local) = (SYSTEMTIME::default(), SYSTEMTIME::default());
+        // SAFETY: time conversion only, with valid output structures.
+        unsafe {
+            let _ = windows::Win32::System::Time::FileTimeToSystemTime(&file, &mut utc);
+            let _ = windows::Win32::System::Time::SystemTimeToTzSpecificLocalTime(
+                None, &utc, &mut local,
+            );
+        }
+        Self {
+            date: Date {
+                year: local.wYear.into(),
+                month: local.wMonth.into(),
+                day: local.wDay.into(),
+            },
+            hour: local.wHour.into(),
+            minute: local.wMinute.into(),
+            second: local.wSecond.into(),
+            ms,
+        }
+    }
     pub fn now() -> Self {
         // SAFETY: read-only OS clock query.
         let t = unsafe { GetLocalTime() };
@@ -62,12 +88,132 @@ impl Stamp {
             text.push_str(&format!(":{:02}", self.second));
         }
         if !format24 {
-            text.push_str(if self.hour < 12 { " AM" } else { " PM" });
+            let period = locale_time(self, "tt");
+            text.push(' ');
+            text.push_str(&period);
         }
         text
     }
     pub fn midnight_after(self) -> i64 {
         local_epoch(self.date.add_days(1), 0, 0).unwrap_or(self.ms + 86_400_000)
+    }
+}
+
+/// Windows' user locale, including localized weekday/month names and day-period words.
+pub fn date_label(date: Date, long: bool) -> String {
+    let mut buffer = [0u16; 256];
+    let stamp = SYSTEMTIME {
+        wYear: date.year as u16,
+        wMonth: date.month as u16,
+        wDay: date.day as u16,
+        ..Default::default()
+    };
+    // SAFETY: NLS copies into the bounded buffer; null locale means user default.
+    let count = unsafe {
+        windows::Win32::Globalization::GetDateFormatEx(
+            windows::core::PCWSTR::null(),
+            if long {
+                windows::Win32::Globalization::DATE_LONGDATE
+            } else {
+                windows::Win32::Globalization::DATE_SHORTDATE
+            },
+            Some(&stamp),
+            windows::core::PCWSTR::null(),
+            Some(&mut buffer),
+            windows::core::PCWSTR::null(),
+        )
+    };
+    if count > 1 {
+        let label = String::from_utf16_lossy(&buffer[..count as usize - 1]);
+        if long {
+            // Some user long-date patterns omit the weekday; the clock still promises it.
+            let mut weekday = [0u16; 80];
+            // SAFETY: same date, user locale and bounded output as above.
+            let n = unsafe {
+                windows::Win32::Globalization::GetDateFormatEx(
+                    windows::core::PCWSTR::null(),
+                    windows::Win32::Globalization::ENUM_DATE_FORMATS_FLAGS(0),
+                    Some(&stamp),
+                    &windows::core::HSTRING::from("dddd"),
+                    Some(&mut weekday),
+                    windows::core::PCWSTR::null(),
+                )
+            };
+            if n > 1 {
+                let weekday = String::from_utf16_lossy(&weekday[..n as usize - 1]);
+                if !label.contains(&weekday) {
+                    return format!("{weekday}, {label}");
+                }
+            }
+        }
+        label
+    } else {
+        date.key()
+    }
+}
+
+pub fn greeting(hour: u32) -> &'static str {
+    use windows::Win32::Globalization::{GetLocaleInfoEx, LOCALE_SISO639LANGNAME};
+    let mut language = [0u16; 16];
+    // SAFETY: the user's language code only; no global locale is changed.
+    let n = unsafe {
+        GetLocaleInfoEx(
+            windows::core::PCWSTR::null(),
+            LOCALE_SISO639LANGNAME,
+            Some(&mut language),
+        )
+    };
+    let language = String::from_utf16_lossy(&language[..n.saturating_sub(1) as usize]);
+    let period = match hour {
+        5..=11 => 0,
+        12..=16 => 1,
+        17..=20 => 2,
+        _ => 3,
+    };
+    match language.as_str() {
+        "ar" => ["صباح الخير", "مساء الخير", "مساء الخير", "ما زلت مستيقظًا"][period],
+        "ja" => [
+            "おはようございます",
+            "こんにちは",
+            "こんばんは",
+            "まだ起きていますか",
+        ][period],
+        "zh" => ["早上好", "下午好", "晚上好", "夜深了"][period],
+        "fr" => ["Bonjour", "Bon après-midi", "Bonsoir", "Encore debout"][period],
+        "de" => ["Guten Morgen", "Guten Tag", "Guten Abend", "Noch wach"][period],
+        "es" => [
+            "Buenos días",
+            "Buenas tardes",
+            "Buenas noches",
+            "Aún despierto",
+        ][period],
+        _ => ["Good morning", "Good afternoon", "Good evening", "Still up"][period],
+    }
+}
+fn locale_time(stamp: Stamp, format: &str) -> String {
+    let mut buffer = [0u16; 64];
+    let time = SYSTEMTIME {
+        wHour: stamp.hour as u16,
+        wMinute: stamp.minute as u16,
+        wSecond: stamp.second as u16,
+        ..Default::default()
+    };
+    // SAFETY: NLS formatting into our local buffer.
+    let count = unsafe {
+        windows::Win32::Globalization::GetTimeFormatEx(
+            windows::core::PCWSTR::null(),
+            windows::Win32::Globalization::TIME_FORMAT_FLAGS(0),
+            Some(&time),
+            &windows::core::HSTRING::from(format),
+            Some(&mut buffer),
+        )
+    };
+    if count > 1 {
+        String::from_utf16_lossy(&buffer[..count as usize - 1])
+    } else if stamp.hour < 12 {
+        "AM".into()
+    } else {
+        "PM".into()
     }
 }
 pub fn epoch_ms() -> i64 {

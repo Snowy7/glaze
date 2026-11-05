@@ -1,0 +1,124 @@
+{
+  "date": "2026-11-05",
+  "branch": "t3/widget-parity-gaps",
+  "source_revision": "bf82081bf7adb044923a59f14ac88329fa5fd74e",
+  "native_merged_revision": "9cc02b11f89bce51dd6a598ba58a24880757001e",
+  "final_live_qualification": "deferred_by_user",
+  "final_source_cpu_ram_qualified": false,
+  "last_attempt": {
+    "accepted": false,
+    "reason": "T3 covered one monitor; 3/6 widgets visible before measurement"
+  },
+  "readme_glass_capture": "pending; rejected capture discarded",
+  "historical_valid_production": {
+    "directory": "production-before-current-geometry",
+    "source_note": "Batched WIC sparse reads and unchanged ULW geometry; before discarded single-value arc cache and final 64-entry bound / startup heap optimization.",
+    "current_source_qualification": false,
+    "visible_before": 6,
+    "visible_after": 6,
+    "production_exit_code": 0,
+    "seed_exit_code": 0,
+    "cpu_core_pct_samples": [
+      0.05,
+      0.16,
+      0.08
+    ],
+    "cpu_core_pct_median": 0.08,
+    "cpu_core_pct_budget": 0.1,
+    "private_mb_samples": [
+      42,
+      41,
+      41
+    ],
+    "private_mb_median": 41,
+    "private_mb_budget": 40,
+    "spawn_to_first_bar_ms_samples": [
+      263.251,
+      255.44,
+      221.09
+    ],
+    "spawn_to_first_bar_ms_median": 255.44,
+    "spawn_to_first_bar_target_ms": 73,
+    "widget_initialization_after_first_bar": true,
+    "pdh_loaded_at_first_bar": [
+      false,
+      false,
+      false
+    ]
+  },
+  "tests": {
+    "widgets": {
+      "passed": 124,
+      "failed": 0,
+      "ignored": 3,
+      "log": "widgets-tests.log"
+    },
+    "integrations": {
+      "passed": 10,
+      "failed": 0,
+      "log": "integrations-tests.log"
+    },
+    "shell_widget_filter": {
+      "passed": 18,
+      "failed": 0,
+      "ignored": 2,
+      "log": "ui-and-studio-tests.log"
+    },
+    "ui_unit": {
+      "passed": 33,
+      "failed": 0,
+      "log": "ui-and-studio-tests.log"
+    },
+    "ui_no_gpu_surface": {
+      "passed": 1,
+      "failed": 0,
+      "log": "ui-and-studio-tests.log"
+    },
+    "studio": {
+      "passed": 27,
+      "failed": 0,
+      "log": "ui-and-studio-tests.log"
+    },
+    "strict_clippy": {
+      "passed": true,
+      "log": "final-static-checks.log"
+    },
+    "widget_goldens_and_hit_targets": 17
+  },
+  "historical_component_trace": {
+    "gate_for_full_shell": false,
+    "log": "fixture.log",
+    "elapsed_seconds": 202.942,
+    "presents_delta": 105,
+    "minute_clock_presents_delta": 4,
+    "nonclock_presents_delta": 101,
+    "unscheduled_presents_observed": 0,
+    "final_production_schedule_qualified": false
+  },
+  "historical_interactions": {
+    "directory": "interactions",
+    "app_activations": 12,
+    "alpha_hit_and_actual_keyboard": true,
+    "arabic_keyboard": true,
+    "cjk_committed_text": true,
+    "cjk_ime_composition": "not available",
+    "show_desktop": true,
+    "explorer_restart": true,
+    "edit_drag_resize_persistence": true,
+    "overlay_transitions": true,
+    "fixture_exit_code": 0
+  },
+  "excluded_from_gates": [
+    "root component fixture CPU/RAM: incomplete production process",
+    "all profile folders: deliberately reduced instances or fields",
+    "production-current-geometry-experiment: discarded code",
+    "production-single and display-off folders: partial/rejected attempts; may retain earlier files",
+    "with-concurrent-builds and with-periodic-diagnostics: contaminated diagnostics"
+  ],
+  "pending": [
+    "Final six-widget production shell CPU and memory with both displays on the desktop",
+    "Final production present-scheduling qualification",
+    "Final README glass screenshot under docs/media",
+    "Spawn-to-first-bar remains above target; crash recovery not remeasured"
+  ]
+}

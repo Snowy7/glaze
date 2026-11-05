@@ -1,0 +1,10 @@
+
+running 1 test
+test stats::gpu::tests::raw_gpu_rates_match_the_windows_formatter ... raw=20.645531 formatted=20.645531
+raw=17.965260 formatted=17.965260
+raw=20.538554 formatted=20.538554
+raw=18.058431 formatted=18.058431
+raw=20.589943 formatted=20.589943
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 126 filtered out; finished in 1.50s

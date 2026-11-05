@@ -1,0 +1,359 @@
+param([switch]$Interactions,[ValidateRange(0,3)][int]$Samples=3,[switch]$Debug,[switch]$Profile,[switch]$Production,[switch]$ProductionProfile,[switch]$WithoutDesktopMenu,[switch]$StatsProfile,[switch]$HostFixture)
+$ErrorActionPreference='Stop'
+if (-not $Interactions -and -not $Profile -and -not $Debug -and -not $HostFixture) {$Production=$true}
+if ($StatsProfile) {$ProductionProfile=$true}
+if ($WithoutDesktopMenu) {$Production=$true;if ($Samples -ne 1 -or $ProductionProfile) {throw 'Use -WithoutDesktopMenu -Samples 1 only for diagnosis'}}
+if ($ProductionProfile) {$Production=$true;if ($Samples -ne 3) {throw 'Production profiling uses three separate one-minute phases'}}
+if ($HostFixture -and $Production) {throw 'Choose the production shell or the component host fixture'}
+if ($Debug -and $Samples -ne 0) {throw 'Performance samples require the release build'}
+if ($Profile -and ($Samples -ne 0 -or $Interactions)) {throw 'Use -Profile -Samples 0 separately from gates/interactions'}
+if ($Production -and ($Interactions -or $Profile -or $Debug)) {throw 'Production gates use the release shell separately from interactions/profiling'}
+$widgetLiveRoot=(Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
+$widgetLiveLock='C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$widgetLiveEvidence=Join-Path $PSScriptRoot 'evidence'
+if ($Interactions) {$widgetLiveEvidence=Join-Path $widgetLiveEvidence 'interactions'}
+if ($Profile) {$widgetLiveEvidence=Join-Path $widgetLiveEvidence 'profile'}
+if ($Production) {$widgetLiveEvidence=Join-Path $widgetLiveEvidence $(if ($StatsProfile) {'production-stats-profile'} elseif ($WithoutDesktopMenu) {'production-without-menu'} elseif ($ProductionProfile) {'production-profile'} elseif ($Samples -ne 3) {'production-single'} else {'production'})}
+$widgetLiveData=Join-Path $env:TEMP ('mypaper-widget-parity-'+[Guid]::NewGuid().ToString('N'))
+$widgetLiveOldApp=$env:APPDATA
+$widgetLiveOldLocal=$env:LOCALAPPDATA
+$widgetLiveFixture=$null
+$widgetLiveEngine=$null
+$widgetLiveShell=$null
+$widgetLiveMinimized=$false
+$widgetLiveCore=$null
+$widgetLiveLockOwned=$false
+function Enter-WidgetLiveLock {
+    while (-not (New-Item -ItemType Directory -Path $widgetLiveLock -ErrorAction SilentlyContinue)) {
+        $existing=Get-Item -LiteralPath $widgetLiveLock -ErrorAction SilentlyContinue
+        if ($existing -and ((Get-Date)-$existing.CreationTime).TotalMinutes -gt 5) {
+            Remove-Item -LiteralPath $widgetLiveLock -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Seconds 2
+    }
+}
+Add-Type -TypeDefinition @'
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+public static class WidgetStartup {
+ [DllImport("kernel32.dll")] static extern void GetSystemTimePreciseAsFileTime(out long time);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent,IntPtr after,string name,string title);
+ [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window,out uint pid);
+ [DllImport("user32.dll")] static extern bool PostMessage(IntPtr window,uint message,IntPtr w,IntPtr l);
+ public static Process Spawn(string exe,out long at) {
+  var info=new ProcessStartInfo(exe);info.UseShellExecute=false;info.CreateNoWindow=true;
+  long ticks;GetSystemTimePreciseAsFileTime(out ticks);at=(ticks-116444736000000000L)/10;
+  return Process.Start(info);
+ }
+ [StructLayout(LayoutKind.Sequential)] struct Point { public int x,y; }
+ [StructLayout(LayoutKind.Sequential)] struct Rect { public int left,top,right,bottom; }
+ delegate bool WindowProc(IntPtr window,IntPtr arg);
+ [DllImport("user32.dll")] static extern bool EnumWindows(WindowProc proc,IntPtr arg);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr window,System.Text.StringBuilder text,int size);
+ [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window,out Rect rect);
+ [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
+ [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Point point);
+ public static int VisibleWidgets(int pid) {
+  int count=0;
+  EnumWindows((window,arg)=>{
+   uint owner;GetWindowThreadProcessId(window,out owner);
+   if(owner!=pid)return true;
+   var name=new System.Text.StringBuilder(256);GetWindowText(window,name,256);
+   if(!name.ToString().StartsWith("mypaper widget "))return true;
+   Rect rect;
+   if(IsWindowVisible(window)&&GetWindowRect(window,out rect)&&WindowFromPoint(new Point{x=(rect.left+rect.right)/2,y=(rect.top+rect.bottom)/2})==window)count++;
+   return true;
+  },IntPtr.Zero);
+  return count;
+ }
+ [DllImport("kernel32.dll")] static extern IntPtr OpenThread(uint access,bool inherit,uint tid);
+ [DllImport("kernel32.dll")] static extern int GetThreadDescription(IntPtr thread,out IntPtr text);
+ [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr text);
+ [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+ public class ThreadUse { public int id; public string name; public double cpu_ms; }
+ public static ThreadUse[] Threads(int pid) {
+  var rows=new System.Collections.Generic.List<ThreadUse>();
+  foreach(ProcessThread thread in Process.GetProcessById(pid).Threads)try {
+   string name="";IntPtr handle=OpenThread(0x800,false,(uint)thread.Id);
+   if(handle!=IntPtr.Zero)try {IntPtr text;if(GetThreadDescription(handle,out text)==0){name=Marshal.PtrToStringUni(text);LocalFree(text);}}finally{CloseHandle(handle);}
+   rows.Add(new ThreadUse{id=thread.Id,name=name,cpu_ms=thread.TotalProcessorTime.TotalMilliseconds});
+  }catch(InvalidOperationException){}catch(System.ComponentModel.Win32Exception){}
+  return rows.ToArray();
+ }
+ public static void Snapshot(int pid) {
+  IntPtr window=IntPtr.Zero;
+  while((window=FindWindowEx(new IntPtr(-3),window,"mypaper.shell.inbox",null))!=IntPtr.Zero) {
+   uint owner;GetWindowThreadProcessId(window,out owner);
+   if(owner==pid){PostMessage(window,0x8068,IntPtr.Zero,IntPtr.Zero);return;}
+  }
+ }
+ public static void Close(int pid) {
+  IntPtr window=IntPtr.Zero;
+  while((window=FindWindowEx(new IntPtr(-3),window,"mypaper.shell.inbox",null))!=IntPtr.Zero) {
+   uint owner;GetWindowThreadProcessId(window,out owner);
+   if(owner==pid){PostMessage(window,0x10,IntPtr.Zero,IntPtr.Zero);return;}
+  }
+ }
+}
+'@
+try {
+    Write-Output 'Waiting for desktop lock for worktree engine + bar/dock + six-widget fixture.'
+    Enter-WidgetLiveLock
+    $widgetLiveLockOwned=$true
+    New-Item -ItemType Directory -Path $widgetLiveEvidence,(Join-Path $widgetLiveData 'appdata\mypaper'),(Join-Path $widgetLiveData 'local'),(Join-Path $widgetLiveRoot 'docs\media') -Force | Out-Null
+    Remove-Item -LiteralPath (Join-Path $widgetLiveEvidence 'budgets.json') -ErrorAction SilentlyContinue
+    Get-FileHash (Join-Path $widgetLiveRoot 'target\release\mypaper-shell.exe'),(Join-Path $widgetLiveRoot 'target\release\mypaper-wallpaper.exe'),(Join-Path $widgetLiveRoot 'target\release\examples\mypaper-widget-fixture.exe') | Select-Object Path,Hash | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'binaries.json')
+    $processes=Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'mypaper-core.exe','mypaper-shell.exe','mypaper-wallpaper.exe' }
+    $widgetLiveCore=$processes | Where-Object Name -eq 'mypaper-core.exe' | Select-Object -First 1
+    $processes | Select-Object Name,ProcessId,ExecutablePath,CommandLine | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'original-processes.json')
+    # Stop only the processes observed under this lock. The original core is restored in finally.
+    foreach ($process in ($processes | Sort-Object { if ($_.Name -eq 'mypaper-core.exe') {0} else {1} })) {
+        Stop-Process -Id $process.ProcessId -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Seconds 2
+    $env:APPDATA=Join-Path $widgetLiveData 'appdata'
+    $env:LOCALAPPDATA=Join-Path $widgetLiveData 'local'
+    $config=@{theme=(Join-Path $widgetLiveRoot 'themes\rain-city');paused=$false;pause_on_battery=$false;pause_on_fullscreen=$false;static_snapshot=$false}
+    if ($WithoutDesktopMenu) {$config.desktop_menu=@{enabled=$false}}
+    [IO.File]::WriteAllText((Join-Path $env:APPDATA 'mypaper\config.json'),($config | ConvertTo-Json))
+    # Floating Liquid bars, both displays; a paused media service and minute clocks.
+    [IO.File]::WriteAllText((Join-Path $env:APPDATA 'mypaper\bars.json'),'{"preset":"macos","taskbar":{"mode":"hide"},"look":{"style":"liquid"},"top":{"monitors":"all","clock":{"seconds":false}},"dock":{"enabled":true,"monitors":"all","autohide":false,"pinned":[]},"performance":"off"}')
+    $engineExe=Join-Path $widgetLiveRoot 'target\release\mypaper-wallpaper.exe'
+    $widgetLiveEngine=Start-Process -FilePath $engineExe -WorkingDirectory $widgetLiveRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $widgetLiveEvidence 'engine-stdout.log') -RedirectStandardError (Join-Path $widgetLiveEvidence 'engine-stderr.log')
+    $env:MYPAPER_N4_FIXTURE='1'
+    $env:MYPAPER_N4_DESKTOP_VISIBLE='1'
+    $env:MYPAPER_N4_BARS='1'
+    $env:MYPAPER_WIDGETS_IGNORE_COVERED='1'
+    if ($Interactions) {$env:MYPAPER_N4_INTERACTIONS='1'}
+    if ($Profile) {$env:MYPAPER_N4_PROFILE='1'}
+    if ($Production) {$env:MYPAPER_N4_SEED_ONLY='1'}
+    $fixtureProfile=if ($Debug) {'debug'} else {'release'}
+    $widgetLiveFixture=Start-Process -FilePath (Join-Path $widgetLiveRoot "target\$fixtureProfile\examples\mypaper-widget-fixture.exe") -ArgumentList '300' -WorkingDirectory $widgetLiveRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $widgetLiveEvidence 'fixture.log') -RedirectStandardError (Join-Path $widgetLiveEvidence 'fixture-stderr.log')
+    # Windows PowerShell can lose ExitCode when a PassThru process exits before its handle
+    # is retained; open it while alive so the final success check reads the native exit code.
+    $null=$widgetLiveFixture.Handle
+    Remove-Item Env:MYPAPER_N4_FIXTURE,Env:MYPAPER_N4_DESKTOP_VISIBLE,Env:MYPAPER_N4_BARS,Env:MYPAPER_WIDGETS_IGNORE_COVERED,Env:MYPAPER_N4_INTERACTIONS,Env:MYPAPER_N4_PROFILE,Env:MYPAPER_N4_SEED_ONLY -ErrorAction SilentlyContinue
+    $readyDeadline=(Get-Date).AddSeconds(65)
+    $engineRestarts=0
+    do {
+        if ($Interactions -and $widgetLiveEngine.HasExited -and $engineRestarts -eq 0) {
+            # The engine requests a supervised restart when the interaction fixture restarts Explorer.
+            $widgetLiveEngine=Start-Process -FilePath $engineExe -WorkingDirectory $widgetLiveRoot -WindowStyle Hidden -PassThru
+            $engineRestarts++
+        }
+        if ($widgetLiveFixture.HasExited -or $widgetLiveEngine.HasExited) { throw 'Worktree fixture or engine exited. See evidence logs.' }
+        Start-Sleep -Milliseconds 500
+        $ready=(Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log') -ErrorAction SilentlyContinue) -match 'N4_READY'
+    } until ($ready -or (Get-Date) -gt $readyDeadline)
+    if (-not $ready) {throw 'Fixture did not become ready'}
+    if ($Production) {
+        $productionLog=Join-Path $env:LOCALAPPDATA 'mypaper\mypaper.log'
+        $productionOffset=@(Get-Content -LiteralPath $productionLog -ErrorAction SilentlyContinue).Count
+        $productionStartedAt=[long]0
+        $widgetLiveShell=[WidgetStartup]::Spawn((Join-Path $widgetLiveRoot 'target\release\mypaper-shell.exe'),[ref]$productionStartedAt)
+        $null=$widgetLiveShell.Handle
+        $productionReadyDeadline=(Get-Date).AddSeconds(25)
+        do {
+            Start-Sleep -Milliseconds 20
+            if ($widgetLiveShell.HasExited) {throw 'Production shell exited during initialization'}
+            $productionLines=@(Get-Content -LiteralPath $productionLog -ErrorAction SilentlyContinue | Select-Object -Skip $productionOffset)
+            $productionReady=$productionLines -match 'component=shell widgets_ready_ms='
+        } until ($productionReady -or (Get-Date) -gt $productionReadyDeadline)
+        if (-not $productionReady) {throw 'Production widgets did not become ready'}
+        $productionLines | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'production-startup.log')
+    }
+    # Idle measurements follow a full minute of service/font/cache warm-up. Cold spawn-to-bar
+    # remains measured separately below; every configured widget stays visible throughout.
+    if (-not $Interactions -and -not $Profile) {Start-Sleep -Seconds $(if ($ProductionProfile) {20} else {60})}
+    Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in $widgetLiveFixture.Id,$widgetLiveEngine.Id,$widgetLiveShell.Id } | Select-Object Name,ProcessId,ExecutablePath,CommandLine | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'worktree-processes.json')
+    if ($Profile) {
+        $profileDeadline=(Get-Date).AddSeconds(240)
+        do {
+            Start-Sleep -Milliseconds 500
+            $profileDone=(Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log')) -match 'N4_PROFILE_DONE'
+            if ($widgetLiveFixture.HasExited -and -not $profileDone) {throw 'Profile fixture failed'}
+        } until ($profileDone -or (Get-Date) -gt $profileDeadline)
+        if (-not $profileDone) {throw 'Profile exceeded its desktop window'}
+    }
+    if (-not $Interactions -and -not $Profile) {
+        if ($Production) {
+            [WidgetStartup]::Snapshot($widgetLiveShell.Id)
+            $productionVisibleBefore=[WidgetStartup]::VisibleWidgets($widgetLiveShell.Id)
+            if ($productionVisibleBefore -ne 6) {throw "Production fixture has $productionVisibleBefore/6 visible widgets"}
+        }
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        $bounds=[System.Windows.Forms.SystemInformation]::VirtualScreen
+        $bitmap=New-Object System.Drawing.Bitmap($bounds.Width,$bounds.Height)
+        $graphics=[System.Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.CopyFromScreen($bounds.X,$bounds.Y,0,0,$bounds.Size)
+            $bitmap.Save((Join-Path $widgetLiveRoot 'docs\media\widgets-native-glass.png'),[System.Drawing.Imaging.ImageFormat]::Png)
+        } finally {$graphics.Dispose();$bitmap.Dispose()}
+        Write-Output 'Screenshot saved; starting official 60-second measurements.'
+        if (-not $Production) {
+            $snapshot=[System.Threading.EventWaitHandle]::OpenExisting("Local\mypaper-n4-fixture-snapshot-$($widgetLiveFixture.Id)")
+            try {$snapshot.Set() | Out-Null} finally {$snapshot.Dispose()}
+            $snapshotDeadline=(Get-Date).AddSeconds(5)
+            do {
+                Start-Sleep -Milliseconds 25
+                $checkpoint=(Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log')) -match 'N4_CHECKPOINT'
+            } until ($checkpoint -or (Get-Date) -gt $snapshotDeadline)
+            if (-not $checkpoint) {throw 'Fixture did not acknowledge the measurement checkpoint'}
+            if (@($checkpoint -notmatch 'visible=6/6(?: |$)').Count -ne 0) {throw 'The idle fixture must show all six widgets'}
+        }
+    }
+    Remove-Item -LiteralPath $widgetLiveLock
+    $widgetLiveLockOwned=$false
+    foreach ($sample in $(if ($Samples -gt 0) {1..$Samples})) {
+        $measureLabel=if ($Production) {"widget-production-$sample"} else {"widget-parity-$sample"}
+        if ($ProductionProfile) {
+            $phase=if ($StatsProfile) {@('six','without-gpu','without-gpu-net')[$sample-1]} else {@('six','without-widgets','without-menu')[$sample-1]}
+            $measureLabel="widget-production-profile-$phase"
+            $phaseVisible=[WidgetStartup]::VisibleWidgets($widgetLiveShell.Id)
+            $phaseExpected=if ($StatsProfile -or $sample -eq 1) {6} else {0}
+            if ($phaseVisible -ne $phaseExpected) {throw "Diagnostic $phase visibility mismatch: $phaseVisible/$phaseExpected"}
+            [WidgetStartup]::Threads($widgetLiveShell.Id) | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence "$phase-threads-before.json")
+        }
+        & 'C:\Users\you\AppData\Local\Temp\mypaper-tools\measure.ps1' -Label $measureLabel -Seconds 60
+        if ($widgetLiveFixture.HasExited) {throw 'Fixture exited during a performance sample'}
+        if ($Production -and $widgetLiveShell.HasExited) {throw 'Production shell exited during a performance sample'}
+        if ($Production) {[WidgetStartup]::Snapshot($widgetLiveShell.Id)}
+        Copy-Item -LiteralPath "C:\Users\you\AppData\Local\Temp\mypaper-tools\measure-$measureLabel.json" -Destination $widgetLiveEvidence
+        if ($ProductionProfile) {
+            Enter-WidgetLiveLock
+            try {
+                [WidgetStartup]::Threads($widgetLiveShell.Id) | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence "$phase-threads-after.json")
+                if ($StatsProfile -and $sample -lt 3) {
+                    $diagnosticLayout=Join-Path $env:APPDATA 'mypaper\widgets.json'
+                    $diagnosticDoc=Get-Content -Raw -LiteralPath $diagnosticLayout | ConvertFrom-Json
+                    $diagnosticSystem=$diagnosticDoc.instances | Where-Object widget -eq 'system-monitor'
+                    if (-not $diagnosticSystem.settings) {$diagnosticSystem | Add-Member -NotePropertyName settings -NotePropertyValue ([pscustomobject]@{}) -Force}
+                    $diagnosticSystem.settings | Add-Member -NotePropertyName $(if ($sample -eq 1) {'gpu'} else {'net'}) -NotePropertyValue $false -Force
+                    [IO.File]::WriteAllText($diagnosticLayout,($diagnosticDoc | ConvertTo-Json -Depth 30))
+                } elseif ($sample -eq 1) {
+                    $diagnosticLayout=Join-Path $env:APPDATA 'mypaper\widgets.json'
+                    $diagnosticDoc=Get-Content -Raw -LiteralPath $diagnosticLayout | ConvertFrom-Json
+                    $diagnosticDoc.instances=@()
+                    [IO.File]::WriteAllText($diagnosticLayout,($diagnosticDoc | ConvertTo-Json -Depth 30))
+                } elseif ($sample -eq 2) {
+                    $diagnosticConfig=Join-Path $env:APPDATA 'mypaper\config.json'
+                    $diagnosticDoc=Get-Content -Raw -LiteralPath $diagnosticConfig | ConvertFrom-Json
+                    $diagnosticDoc | Add-Member -NotePropertyName desktop_menu -NotePropertyValue @{enabled=$false} -Force
+                    [IO.File]::WriteAllText($diagnosticConfig,($diagnosticDoc | ConvertTo-Json -Depth 30))
+                }
+                if ($sample -lt 3) {Start-Sleep -Seconds 10}
+            } finally {Remove-Item -LiteralPath $widgetLiveLock}
+        }
+    }
+    Enter-WidgetLiveLock
+    $widgetLiveLockOwned=$true
+    if ($Production) {
+        $productionVisibleAfter=[WidgetStartup]::VisibleWidgets($widgetLiveShell.Id)
+        @{before=$productionVisibleBefore;after=$productionVisibleAfter;expected=6;pid=$widgetLiveShell.Id} | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'production-visibility.json')
+        $productionExpectedAfter=if ($ProductionProfile -and -not $StatsProfile) {0} else {6}
+        if ($productionVisibleAfter -ne $productionExpectedAfter) {throw "Production fixture has $productionVisibleAfter/$productionExpectedAfter visible widgets"}
+        [WidgetStartup]::Close($widgetLiveShell.Id)
+        $widgetLiveShell.WaitForExit(10000) | Out-Null
+        if (-not $widgetLiveShell.HasExited -or $widgetLiveShell.ExitCode -ne 0) {throw 'Measured production shell failed to stop cleanly'}
+        [IO.File]::WriteAllText((Join-Path $widgetLiveEvidence 'production-exit-code.txt'),[string]$widgetLiveShell.ExitCode)
+    }
+    if (-not $Profile -and -not $widgetLiveFixture.HasExited) {
+        $stop=[System.Threading.EventWaitHandle]::OpenExisting("Local\mypaper-n4-fixture-stop-$($widgetLiveFixture.Id)")
+        try {$stop.Set() | Out-Null} finally {$stop.Dispose()}
+    }
+    $widgetLiveFixture.WaitForExit(20000) | Out-Null
+    Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log')
+    if (-not $widgetLiveFixture.HasExited) {throw 'Fixture did not stop before startup measurements'}
+    [IO.File]::WriteAllText((Join-Path $widgetLiveEvidence 'fixture-exit-code.txt'),[string]$widgetLiveFixture.ExitCode)
+    if ($widgetLiveFixture.ExitCode -ne 0) {throw "Fixture failed (exit $($widgetLiveFixture.ExitCode)); these measurements are not a passing gate"}
+    if ($Production -and $Samples -eq 3 -and -not $ProductionProfile) {
+        $budgetRows=@(1..3 | ForEach-Object {
+            $sampleDoc=Get-Content -Raw -LiteralPath (Join-Path $widgetLiveEvidence "measure-widget-production-$_.json") | ConvertFrom-Json
+            $sampleDoc.rows | Where-Object part -eq 'mypaper-shell'
+        })
+        if ($budgetRows.Count -ne 3) {throw 'Each sample must contain exactly one production shell'}
+        $cpuMedian=@($budgetRows.cpu_core_pct | Sort-Object)[1]
+        $memoryMedian=@($budgetRows.private_mb | Sort-Object)[1]
+        @{cpu_samples=$budgetRows.cpu_core_pct;private_mb_samples=$budgetRows.private_mb;cpu_median=$cpuMedian;private_mb_median=$memoryMedian;cpu_gate=0.1;private_mb_gate=40;cpu_pass=($cpuMedian -le 0.1);memory_pass=($memoryMedian -le 40)} | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'budgets.json')
+    }
+    if (-not $Profile -and -not $Interactions -and -not $Production) {
+        $checkpoints=@(Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log') | Where-Object {$_ -match 'N4_CHECKPOINT'})
+        if ($checkpoints.Count -ne 2 -or @($checkpoints -notmatch 'visible=6/6(?: |$)').Count -ne 0) {throw 'Missing visible-widget checkpoints around the measurement windows'}
+    }
+    # Actual production shell, with the same six configured instances. Timestamp the spawn
+    # call itself and compare the native first-present and widget-initialization markers.
+    $desktop=New-Object -ComObject Shell.Application
+    try {$desktop.MinimizeAll();$widgetLiveMinimized=$true} finally {[void][Runtime.InteropServices.Marshal]::ReleaseComObject($desktop)}
+    $startupRows=@()
+    $log=Join-Path $env:LOCALAPPDATA 'mypaper\mypaper.log'
+    foreach ($run in $(if (-not $Interactions -and -not $Profile -and -not $ProductionProfile) {1..3})) {
+        $lineOffset=@(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue).Count
+        $startedAt=[long]0
+        $widgetLiveShell=[WidgetStartup]::Spawn((Join-Path $widgetLiveRoot 'target\release\mypaper-shell.exe'),[ref]$startedAt)
+        $firstPdh=$null
+        $firstModuleObservation=$false
+        $until=(Get-Date).AddSeconds(20)
+        do {
+            Start-Sleep -Milliseconds 20
+            $lines=@(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue | Select-Object -Skip $lineOffset)
+            if (-not $firstModuleObservation -and ($lines -match 'component=shell first_paint_ms=')) {
+                $firstPdh=@($widgetLiveShell.Modules | Where-Object ModuleName -eq 'pdh.dll').Count -gt 0
+                $firstModuleObservation=$true
+            }
+            $widgetMarker=$lines | Where-Object {$_ -match 'component=shell widgets_ready_ms='} | Select-Object -First 1
+        } until ($widgetMarker -or $widgetLiveShell.HasExited -or (Get-Date)-gt $until)
+        $first=$lines | Where-Object {$_ -match 'component=shell first_paint_ms='} | Select-Object -First 1
+        $init=$lines | Where-Object {$_ -match 'component=shell widgets_init_ms='} | Select-Object -First 1
+        if (-not $first -or -not $init -or -not $widgetMarker) {throw 'Missing production shell startup markers'}
+        $first -match 'first_paint_ms=([0-9.]+) epoch_us=(\d+)' | Out-Null
+        $age=[double]$Matches[1];$paintEpoch=[long]$Matches[2]
+        $init -match 'widgets_init_ms=([0-9.]+) epoch_us=(\d+)' | Out-Null
+        if ([long]$Matches[2] -le $paintEpoch) {throw 'Widgets started before the first bar present'}
+        $widgetLiveShell.Refresh()
+        $row=[pscustomobject]@{run=$run;configured_widgets=6;spawn_to_first_bar_ms=($paintEpoch-$startedAt)/1000.0;process_age_first_bar_ms=$age;widgets_init_ms=[double]$Matches[1];pdh_loaded_at_first_bar=$firstPdh;private_mb_after_widgets=[Math]::Round($widgetLiveShell.PrivateMemorySize64/1MB,2)}
+        $startupRows+=$row
+        $row | Format-List | Out-String | Write-Output
+        $lines | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence "startup-$run.log")
+        [WidgetStartup]::Close($widgetLiveShell.Id)
+        $widgetLiveShell.WaitForExit(10000) | Out-Null
+        if (-not $widgetLiveShell.HasExited) {throw 'Production shell failed to stop'}
+    }
+    if (-not $Interactions -and -not $Profile -and -not $ProductionProfile) {$startupRows | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'startup.json')}
+} finally {
+    try {
+    if (-not $widgetLiveLockOwned) {Enter-WidgetLiveLock;$widgetLiveLockOwned=$true}
+    if ($widgetLiveFixture -and -not $widgetLiveFixture.HasExited) {
+        Stop-Process -Id $widgetLiveFixture.Id -ErrorAction SilentlyContinue
+        $restoreShell=New-Object -ComObject Shell.Application
+        try {$restoreShell.UndoMinimizeALL()} finally {[void][Runtime.InteropServices.Marshal]::ReleaseComObject($restoreShell)}
+    }
+    if ($widgetLiveEngine -and -not $widgetLiveEngine.HasExited) {Stop-Process -Id $widgetLiveEngine.Id -ErrorAction SilentlyContinue}
+    if ($widgetLiveShell -and -not $widgetLiveShell.HasExited) {Stop-Process -Id $widgetLiveShell.Id -ErrorAction SilentlyContinue}
+    if ($widgetLiveMinimized) {
+        $restoreShell=New-Object -ComObject Shell.Application
+        try {$restoreShell.UndoMinimizeALL()} finally {[void][Runtime.InteropServices.Marshal]::ReleaseComObject($restoreShell)}
+    }
+    if (Test-Path -LiteralPath (Join-Path $widgetLiveData 'local\mypaper')) {
+        Get-ChildItem -LiteralPath (Join-Path $widgetLiveData 'local\mypaper') -Filter '*.log' -Recurse | Copy-Item -Destination $widgetLiveEvidence
+    }
+    $env:APPDATA=$widgetLiveOldApp
+    $env:LOCALAPPDATA=$widgetLiveOldLocal
+    Remove-Item Env:MYPAPER_N4_FIXTURE,Env:MYPAPER_N4_DESKTOP_VISIBLE,Env:MYPAPER_N4_BARS,Env:MYPAPER_WIDGETS_IGNORE_COVERED,Env:MYPAPER_N4_INTERACTIONS,Env:MYPAPER_N4_PROFILE,Env:MYPAPER_N4_SEED_ONLY -ErrorAction SilentlyContinue
+    if ($widgetLiveCore) {
+        $restoreArgs=$widgetLiveCore.CommandLine -replace '^(?:"[^"]+"|\S+)\s*',''
+        if ($restoreArgs) {Start-Process -FilePath $widgetLiveCore.ExecutablePath -ArgumentList $restoreArgs -WorkingDirectory (Split-Path -Parent $widgetLiveCore.ExecutablePath) -WindowStyle Hidden | Out-Null}
+        else {Start-Process -FilePath $widgetLiveCore.ExecutablePath -WorkingDirectory (Split-Path -Parent $widgetLiveCore.ExecutablePath) -WindowStyle Hidden | Out-Null}
+    }
+    # Only this run's exact, resolved temporary directory may be removed recursively.
+    $resolvedLiveData=[System.IO.Path]::GetFullPath($widgetLiveData)
+    $resolvedLiveTemp=[System.IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')+'\'
+    if ($resolvedLiveData.StartsWith($resolvedLiveTemp,[StringComparison]::OrdinalIgnoreCase) -and (Split-Path -Leaf $resolvedLiveData) -like 'mypaper-widget-parity-*') {
+        Remove-Item -LiteralPath $resolvedLiveData -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    } finally {
+        if ($widgetLiveLockOwned) {Remove-Item -LiteralPath $widgetLiveLock -ErrorAction SilentlyContinue}
+    }
+}
+

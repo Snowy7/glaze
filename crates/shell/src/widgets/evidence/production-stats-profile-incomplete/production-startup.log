@@ -1,0 +1,30 @@
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell main_ms=37.8 epoch_us=1793858677447997
+[2026-11-05T06:04:37Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell config_ms=50.2 epoch_us=1793858677460307
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=50.2 epoch_us=1793858677460313
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=53.8 epoch_us=1793858677463977
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell services_ms=53.9 epoch_us=1793858677464020
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=55.2 epoch_us=1793858677465311
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=55.2 epoch_us=1793858677465354
+[2026-11-05T06:04:37Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) ready in 160.3ms
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=wallpaper source_ms=787.0 epoch_us=1793858677509128
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=wallpaper loop_ms=829.1 epoch_us=1793858677551253
+[2026-11-05T06:04:37Z INFO  mypaper_wallpaper::overlay::capture] glass overlays: borderless capture allowed
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=164.3 epoch_us=1793858677574469
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=295.9 epoch_us=1793858677706061
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=296.0 epoch_us=1793858677706179
+[2026-11-05T06:04:37Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=510.2 epoch_us=1793858677920309
+[2026-11-05T06:04:38Z INFO  mypaper_desktop::startup] READY component=wallpaper first_frame_ms=1352.5 epoch_us=1793858678074588
+[2026-11-05T06:04:38Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-05T06:04:38Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180 (2 screens): ready after 142.1 ms (not waited on), copy 0.05 ms on the frame, write 2.06 ms off it
+[2026-11-05T06:04:38Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T06:04:38Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-05T06:04:38Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T06:04:39Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T06:04:39Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 149.9587ms
+[2026-11-05T06:04:39Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-05T06:04:39Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=2031.4 epoch_us=1793858679441499
+[2026-11-05T06:04:39Z INFO  mypaper_shell] running
+[2026-11-05T06:04:39Z INFO  mypaper_wallpaper::trim] trimmed the working set
+[2026-11-05T06:04:39Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=2164.8 epoch_us=1793858679574948
+[2026-11-05T06:04:40Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2844.2 epoch_us=1793858680254311

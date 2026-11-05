@@ -1,0 +1,21 @@
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell main_ms=47.3 epoch_us=1793862202084298
+[2026-11-05T07:03:22Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell config_ms=57.4 epoch_us=1793862202094484
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=57.4 epoch_us=1793862202094492
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=61.1 epoch_us=1793862202098105
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell services_ms=61.1 epoch_us=1793862202098154
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=62.6 epoch_us=1793862202099594
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=62.6 epoch_us=1793862202099641
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=184.9 epoch_us=1793862202221916
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=382.4 epoch_us=1793862202419457
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=382.5 epoch_us=1793862202419561
+[2026-11-05T07:03:22Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=646.4 epoch_us=1793862202683407
+[2026-11-05T07:03:22Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T07:03:22Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-05T07:03:23Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T07:03:23Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T07:03:23Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-05T07:03:23Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=1769.6 epoch_us=1793862203806683
+[2026-11-05T07:03:23Z INFO  mypaper_shell] running
+[2026-11-05T07:03:23Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=1852.1 epoch_us=1793862203889106
+[2026-11-05T07:03:24Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2455.8 epoch_us=1793862204492851

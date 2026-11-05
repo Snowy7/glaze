@@ -50,6 +50,67 @@ pub fn snapped(grid: &Grid, rect: Rect, scale: f64) -> ([u32; 2], [u32; 2]) {
     ];
     grid.clamp(cell, size)
 }
+
+/// Old arranging policy: one neighbor swaps into the original cell on a move; otherwise
+/// overlapped neighbors shift down, then right. Failure leaves the entire layout unchanged.
+pub fn resolve(
+    grid: &Grid,
+    instances: &[Instance],
+    id: &str,
+    monitor: &str,
+    cell: [u32; 2],
+    size: [u32; 2],
+    resize: bool,
+) -> Option<Vec<Instance>> {
+    if grid.clamp(cell, size) != (cell, size) {
+        return None;
+    }
+    let original = instances.iter().find(|i| i.instance == id)?;
+    let mut next = instances.to_vec();
+    let moved = next.iter_mut().find(|i| i.instance == id)?;
+    moved.cell = cell;
+    moved.size = size;
+    moved.monitor = monitor.into();
+    let mut displaced: Vec<_> = next
+        .iter()
+        .filter(|i| {
+            i.instance != id && i.monitor == monitor && overlaps(cell, size, i.cell, i.size)
+        })
+        .cloned()
+        .collect();
+    if displaced.is_empty() {
+        return Some(next);
+    }
+    next.retain(|i| !displaced.iter().any(|d| d.instance == i.instance));
+    if !resize && original.monitor == monitor && displaced.len() == 1 {
+        let neighbor = &displaced[0];
+        if free(grid, original.cell, neighbor.size, &next, monitor, None) {
+            let mut swapped = neighbor.clone();
+            swapped.cell = original.cell;
+            next.push(swapped);
+            return Some(next);
+        }
+    }
+    displaced.sort_by_key(|i| (i.cell[1], i.cell[0]));
+    for mut neighbor in displaced {
+        let from = neighbor.cell;
+        let spot = (from[0]..grid.cols)
+            .flat_map(|col| {
+                let first = from[1] + u32::from(col == from[0]);
+                (first..grid.rows).map(move |row| [col, row])
+            })
+            .find(|&at| free(grid, at, neighbor.size, &next, monitor, None))?;
+        neighbor.cell = spot;
+        next.push(neighbor);
+    }
+    // Preserve instance order for predictable focus and future serialization.
+    Some(
+        instances
+            .iter()
+            .filter_map(|i| next.iter().find(|n| n.instance == i.instance).cloned())
+            .collect(),
+    )
+}
 pub fn grid_view(grid: &Grid, size: (u32, u32), scale: f32) -> DisplayList {
     let mut list = DisplayList::default();
     list.ops.push(Op::Fill {
@@ -75,14 +136,19 @@ pub fn grid_view(grid: &Grid, size: (u32, u32), scale: f32) -> DisplayList {
     }
     list
 }
-pub fn palette(names: &[(String, String)], scale: f32) -> (DisplayList, (u32, u32)) {
+pub fn palette(
+    names: &[(String, String)],
+    scale: f32,
+    error: Option<&str>,
+) -> (DisplayList, (u32, u32)) {
     let mut list = DisplayList::default();
     let cols = 6;
     let w = 120.0 * scale;
     let h = 38.0 * scale;
     let size = (
         (cols as f32 * w + 16.0 * scale) as u32,
-        ((names.len() + 1).div_ceil(cols) as f32 * h + 16.0 * scale) as u32,
+        ((names.len() + 1).div_ceil(cols) as f32 * h
+            + if error.is_some() { 62.0 } else { 16.0 } * scale) as u32,
     );
     list.ops.push(Op::Fill {
         rect: Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32),
@@ -125,6 +191,19 @@ pub fn palette(names: &[(String, String)], scale: f32) -> (DisplayList, (u32, u3
             checked: None,
         });
     }
+    if let Some(error) = error {
+        list.ops.push(Op::Text {
+            rect: Rect::new(
+                12.0 * scale,
+                size.1 as f32 - 42.0 * scale,
+                size.0 as f32 - 24.0 * scale,
+                40.0 * scale,
+            ),
+            text: error.into(),
+            style: TextStyle::new("Segoe UI", 10.0 * scale),
+            color: Rgba::rgb8([255, 170, 150], 1.0),
+        });
+    }
     (list, size)
 }
 
@@ -132,6 +211,40 @@ pub fn palette(names: &[(String, String)], scale: f32) -> (DisplayList, (u32, u3
 mod tests {
     use super::*;
     use mypaper_widgets::layout::{GridSpec, Layout, RectF};
+    #[test]
+    fn arranging_swaps_shifts_and_refuses_atomically() {
+        let grid = Grid {
+            origin: [0.0; 2],
+            cell: [96.0; 2],
+            gap: 8.0,
+            cols: 6,
+            rows: 4,
+        };
+        let mut layout = Layout::default();
+        let a = layout.add("notes", "m", [0, 0], [2, 2]);
+        let b = layout.add("notes", "m", [2, 0], [2, 2]);
+        let swapped = resolve(&grid, &layout.instances, &a, "m", [2, 0], [2, 2], false).unwrap();
+        assert_eq!(
+            swapped.iter().find(|i| i.instance == b).unwrap().cell,
+            [0, 0]
+        );
+        let shifted = resolve(&grid, &layout.instances, &a, "m", [1, 0], [3, 2], true).unwrap();
+        assert_eq!(
+            shifted.iter().find(|i| i.instance == b).unwrap().cell,
+            [2, 2]
+        );
+        let full = Grid {
+            rows: 2,
+            cols: 4,
+            ..grid
+        };
+        assert!(resolve(&full, &layout.instances, &a, "m", [1, 0], [3, 2], true).is_none());
+        assert_eq!(
+            layout.get(&b).unwrap().cell,
+            [2, 0],
+            "refusal never mutates input"
+        );
+    }
     #[test]
     fn drag_resize_and_add_stay_on_grid_without_overlaps() {
         let grid = Grid::new(

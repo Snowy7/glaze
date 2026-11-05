@@ -1,0 +1,62 @@
+Microsoft (R) COFF/PE Dumper Version 14.50.35729.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file target\release\mypaper-shell.exe
+
+File Type: EXECUTABLE IMAGE
+
+  Image has the following dependencies:
+
+    bcryptprimitives.dll
+    powrprof.dll
+    advapi32.dll
+    user32.dll
+    kernel32.dll
+    version.dll
+    ntdll.dll
+    oleaut32.dll
+    ws2_32.dll
+    api-ms-win-core-synch-l1-2-0.dll
+    iphlpapi.dll
+    combase.dll
+    ole32.dll
+    gdi32.dll
+    d2d1.dll
+    dwrite.dll
+    dxva2.dll
+    dwmapi.dll
+    psapi.dll
+    api-ms-win-shcore-scaling-l1-1-1.dll
+    secur32.dll
+    shell32.dll
+    imm32.dll
+    propsys.dll
+    api-ms-win-core-winrt-l1-1-0.dll
+    api-ms-win-core-winrt-error-l1-1-0.dll
+    shlwapi.dll
+    uiautomationcore.dll
+    wtsapi32.dll
+    wlanapi.dll
+    VCRUNTIME140.dll
+    api-ms-win-crt-runtime-l1-1-0.dll
+    api-ms-win-crt-stdio-l1-1-0.dll
+    api-ms-win-crt-math-l1-1-0.dll
+    api-ms-win-crt-locale-l1-1-0.dll
+    api-ms-win-crt-heap-l1-1-0.dll
+    api-ms-win-crt-string-l1-1-0.dll
+
+  Image has the following delay load dependencies:
+
+    pdh.dll
+    winhttp.dll
+
+  Summary
+
+        1000 .data
+       19000 .pdata
+       A2000 .rdata
+        5000 .reloc
+        1000 .rsrc
+      60C000 .text
+        1000 .tls

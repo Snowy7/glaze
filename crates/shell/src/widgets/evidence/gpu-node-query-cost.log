@@ -1,0 +1,8 @@
+enum status=0 adapters=5 query_size=808
+adapter=0 status=0 nodes=14
+adapter=1 status=0 nodes=14
+adapter=2 status=0 nodes=11
+adapter=3 status=0 nodes=14
+adapter=4 status=0 nodes=17
+kind=NODE ok=5300/7000 sample_wall_us=23145.6 sample_cpu_us=22187.5
+kind=NODE2 ok=5300/7000 sample_wall_us=22394.7 sample_cpu_us=22187.5

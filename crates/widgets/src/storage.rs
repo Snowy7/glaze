@@ -23,6 +23,34 @@ pub struct Storage {
 }
 
 impl Storage {
+    /// A duplicate owns a complete snapshot, including any picked-file URLs in stored data.
+    pub fn duplicate(&mut self, from: &str, to: &str) -> Result<()> {
+        ensure!(
+            crate::manifest::valid_id(from) && crate::manifest::valid_id(to),
+            "invalid storage id"
+        );
+        let mut value = Value::Object(self.data(from)?.clone());
+        crate::pick::rebase_value(&mut value, from, to);
+        let bytes = serde_json::to_vec(&value)?;
+        ensure!(bytes.len() <= MAX_BYTES, "storage is limited to 1 MB");
+        let path = self.path(to);
+        ensure!(!path.exists(), "duplicate storage already exists");
+        crate::files::write_atomic(&path, &bytes)?;
+        self.cache.remove(to);
+        Ok(())
+    }
+
+    /// Removal follows a successful layout save; a failed save keeps all instance data.
+    pub fn remove(&mut self, instance: &str) -> Result<()> {
+        ensure!(crate::manifest::valid_id(instance), "invalid storage id");
+        match std::fs::remove_file(self.path(instance)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+        self.cache.remove(instance);
+        Ok(())
+    }
     pub fn new(dir: PathBuf) -> Self {
         Self {
             dir,
@@ -63,6 +91,19 @@ impl Storage {
     /// Stores `value` under `key`, or deletes the key when `value` is `None`.
     pub fn set(&mut self, instance: &str, key: &str, value: Option<Value>) -> Result<()> {
         let path = self.path(instance);
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                if let Err(error) = serde_json::from_slice::<Map<String, Value>>(&bytes) {
+                    let backup = crate::files::backup(&path, &bytes)?;
+                    anyhow::bail!(
+                        "refusing to overwrite invalid storage: {error}; backup: {}",
+                        backup.display()
+                    );
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).with_context(|| format!("reading {}", path.display())),
+        }
         let data = self.data(instance)?;
         let mut next = data.clone();
         match value {
@@ -144,6 +185,26 @@ mod tests {
         assert!(storage.set("a-1", "big", Some(big)).is_err());
         assert_eq!(storage.get("a-1", "big").unwrap(), Value::Null);
         assert_eq!(Storage::new(dir.clone()).get("a-1", "k").unwrap(), json!(1));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn corrupt_storage_is_preserved_even_with_a_warm_cache() {
+        let dir = crate::files::temp_dir("storage-corrupt");
+        let mut storage = Storage::new(dir.clone());
+        storage
+            .set("notes-1", "text", Some(json!("saved")))
+            .unwrap();
+        let path = dir.join("notes-1.json");
+        let malformed = b"{\"text\": damaged";
+        std::fs::write(&path, malformed).unwrap();
+        assert!(storage.set("notes-1", "text", Some(json!("edit"))).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), malformed);
+        assert_eq!(
+            std::fs::read(dir.join("notes-1.json.bak")).unwrap(),
+            malformed
+        );
+        assert_eq!(storage.get("notes-1", "text").unwrap(), json!("saved"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

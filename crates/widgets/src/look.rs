@@ -30,7 +30,7 @@ pub fn defaults() -> Appearance {
         surface: Some(Surface::Glass),
         tint: Some(DEFAULT_TINT),
         opacity: Some(0.46),
-        blur: Some(24.0),
+        blur: Some(12.0),
         radius: Some(22.0),
         border: Some(true),
         text: Some(TextTone::Light),
@@ -43,14 +43,14 @@ pub fn defaults() -> Appearance {
 }
 
 /// The built-in liquid glass knobs, under the theme's `widgets.glass`: a clear lens bent at its
-/// rim, one thin specular edge, a whisper of tint and no blur.
+/// rim, one thin specular edge, a whisper of tint and 12 px of frost.
 pub fn liquid_defaults() -> Liquid {
     Liquid {
         intensity: Some(1.0),
         refraction: Some(0.6),
         highlight: Some(0.55),
         tint: Some(0.06),
-        blur: Some(0.0),
+        blur: Some(12.0),
     }
 }
 
@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(got.opacity, Some(0.9), "user beats theme");
         assert_eq!(got.surface, Some(Surface::Glass), "theme beats defaults");
         assert_eq!(got.text, Some(TextTone::Dark));
-        assert_eq!(got.blur, Some(24.0), "untouched fields keep the default");
+        assert_eq!(got.blur, Some(12.0), "untouched fields keep the default");
     }
 
     #[test]

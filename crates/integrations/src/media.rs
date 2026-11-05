@@ -44,6 +44,11 @@ pub struct Snapshot {
     pub previous: bool,
     pub next: bool,
     pub artwork: Option<String>,
+    /// Session-relative timeline in milliseconds; absent for a live/unsupported timeline.
+    pub position_ms: Option<i64>,
+    pub duration_ms: Option<i64>,
+    /// Unix milliseconds at which `position_ms` was reported by SMTC.
+    pub position_at_ms: Option<i64>,
 }
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
@@ -68,11 +73,16 @@ fn notify<S: windows::core::RuntimeType + 'static, A: windows::core::RuntimeType
 struct Subscription {
     manager: Manager,
     manager_tokens: [i64; 2],
-    session: Option<(Session, [i64; 2])>,
+    session: Option<(Session, [i64; 3])>,
     artwork: Option<(String, Option<String>)>,
 }
 impl Subscription {
-    fn follow(&mut self, changed: &Arc<Notify>, publish: &Publish) -> Result<()> {
+    fn follow(
+        &mut self,
+        changed: &Arc<Notify>,
+        timeline: &Arc<Notify>,
+        publish: &Publish,
+    ) -> Result<()> {
         let next = self.manager.GetCurrentSession().ok();
         if next.as_ref() == self.session.as_ref().map(|(s, _)| s) {
             return Ok(());
@@ -87,14 +97,23 @@ impl Subscription {
                     return Err(e.into());
                 }
             };
-            self.session = Some((session, [a, b]));
+            let c = match session.TimelinePropertiesChanged(&notify(timeline, publish)) {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = session.RemoveMediaPropertiesChanged(a);
+                    let _ = session.RemovePlaybackInfoChanged(b);
+                    return Err(e.into());
+                }
+            };
+            self.session = Some((session, [a, b, c]));
         }
         Ok(())
     }
     fn unfollow(&mut self) {
-        if let Some((session, [a, b])) = self.session.take() {
+        if let Some((session, [a, b, c])) = self.session.take() {
             let _ = session.RemoveMediaPropertiesChanged(a);
             let _ = session.RemovePlaybackInfoChanged(b);
+            let _ = session.RemoveTimelinePropertiesChanged(c);
         }
     }
     fn read(&mut self) -> Result<Snapshot> {
@@ -105,10 +124,11 @@ impl Subscription {
         let playback = session.GetPlaybackInfo()?;
         let controls = playback.Controls()?;
         let key = format!(
-            "{}\n{}\n{}",
+            "{}\n{}\n{}\n{}",
             session.SourceAppUserModelId()?,
             props.Title()?,
-            props.Artist()?
+            props.Artist()?,
+            props.AlbumTitle()?
         );
         if self.artwork.as_ref().is_none_or(|(old, _)| old != &key) {
             let image = (|| -> Option<String> {
@@ -130,7 +150,7 @@ impl Subscription {
             })();
             self.artwork = Some((key, image));
         }
-        Ok(Snapshot {
+        let mut snapshot = Snapshot {
             title: props.Title()?.to_string(),
             artist: props.Artist()?.to_string(),
             album: props.AlbumTitle()?.to_string(),
@@ -140,7 +160,35 @@ impl Subscription {
             previous: controls.IsPreviousEnabled()?,
             next: controls.IsNextEnabled()?,
             artwork: self.artwork.as_ref().and_then(|(_, image)| image.clone()),
-        })
+            ..Snapshot::default()
+        };
+        self.read_timeline(&mut snapshot);
+        Ok(snapshot)
+    }
+    /// Seek/timeline notifications do not reread metadata or reopen the thumbnail stream.
+    fn read_timeline(&self, snapshot: &mut Snapshot) {
+        let timeline = self
+            .session
+            .as_ref()
+            .and_then(|(session, _)| session.GetTimelineProperties().ok())
+            .and_then(|timeline| {
+                let start = timeline.StartTime().ok()?.Duration;
+                let duration = timeline.EndTime().ok()?.Duration - start;
+                if duration <= 0 {
+                    return None;
+                }
+                Some((
+                    (timeline.Position().ok()?.Duration - start).clamp(0, duration) / 10_000,
+                    duration / 10_000,
+                    timeline
+                        .LastUpdatedTime()
+                        .ok()
+                        .map(|at| at.UniversalTime / 10_000 - 11_644_473_600_000),
+                ))
+            });
+        snapshot.position_ms = timeline.as_ref().map(|(position, _, _)| *position);
+        snapshot.duration_ms = timeline.as_ref().map(|(_, duration, _)| *duration);
+        snapshot.position_at_ms = timeline.and_then(|(_, _, at)| at);
     }
     fn control(&self, action: Action) -> Result<()> {
         let Some((session, _)) = &self.session else {
@@ -190,6 +238,7 @@ pub(crate) async fn run(
     let _com = Com::new()?;
     let manager = Manager::RequestAsync()?.join()?;
     let changed = Arc::new(Notify::new());
+    let timeline = Arc::new(Notify::new());
     let a = manager.CurrentSessionChanged(&notify(&changed, publish))?;
     let b = match manager.SessionsChanged(&notify(&changed, publish)) {
         Ok(b) => b,
@@ -204,11 +253,20 @@ pub(crate) async fn run(
         session: None,
         artwork: None,
     };
-    subscription.follow(&changed, publish)?;
-    publish.set(Availability::Live, Some(Data::Media(subscription.read()?)));
+    subscription.follow(&changed, &timeline, publish)?;
+    let mut snapshot = subscription.read()?;
+    publish.set(Availability::Live, Some(Data::Media(snapshot.clone())));
     loop {
         tokio::select! {
-            _ = changed.notified() => { subscription.follow(&changed,publish)?; publish.set(Availability::Live, Some(Data::Media(subscription.read()?))); }
+            _ = changed.notified() => {
+                subscription.follow(&changed, &timeline, publish)?;
+                snapshot = subscription.read()?;
+                publish.set(Availability::Live, Some(Data::Media(snapshot.clone())));
+            }
+            _ = timeline.notified() => {
+                subscription.read_timeline(&mut snapshot);
+                publish.set(Availability::Live, Some(Data::Media(snapshot.clone())));
+            }
             Some(action) = commands.recv() => if let crate::Action::Media(action) = action { publish.action_result(subscription.control(action)); }
         }
     }

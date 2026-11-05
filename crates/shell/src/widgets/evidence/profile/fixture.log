@@ -1,0 +1,27 @@
+N4_MEDIA paused_existing=false
+N4_READY pid=67824 monitors=2 seconds=300
+N4_MONITORS [("\\\\.\\DISPLAY1", 96), ("\\\\.\\DISPLAY2", 96)]
+N4_BASELINE counters=(25, 2)
+N4_COST_BASELINE WorkCosts { clock_us: 62, coverage_us: 56267, stats_us: 8792, paint_us: 67002, polls: 128, orders: 1, order_us: 53, plate_us: 109, poll_us: 616478 }
+N4_SAMPLE wall_s=60.015 cpu_core_pct=0.13018 counters=(56, 3)
+N4_COST WorkCosts { clock_us: 169, coverage_us: 56297, stats_us: 36026, paint_us: 90820, polls: 212, orders: 1, order_us: 53, plate_us: 109, poll_us: 669270 }
+N4_THREADS ui_core_pct=0.10414 worker_core_pct=0.02604
+N4_PROFILE phase=six cpu_core_pct=0.13018
+N4_VISIBLE_HITS 6/6
+N4_BASELINE counters=(56, 3)
+N4_COST_BASELINE WorkCosts { clock_us: 178, coverage_us: 56299, stats_us: 36026, paint_us: 90887, polls: 222, orders: 1, order_us: 53, plate_us: 120, poll_us: 672167 }
+N4_SAMPLE wall_s=60.014 cpu_core_pct=0.07811 counters=(57, 4)
+N4_COST WorkCosts { clock_us: 211, coverage_us: 56304, stats_us: 36026, paint_us: 92011, polls: 264, orders: 1, order_us: 53, plate_us: 120, poll_us: 674131 }
+N4_THREADS ui_core_pct=0.00000 worker_core_pct=0.07811
+N4_PROFILE phase=without-system cpu_core_pct=0.07811
+N4_VISIBLE_HITS 5/5
+N4_BASELINE counters=(57, 4)
+N4_COST_BASELINE WorkCosts { clock_us: 215, coverage_us: 56305, stats_us: 36026, paint_us: 92011, polls: 271, orders: 1, order_us: 53, plate_us: 129, poll_us: 692008 }
+N4_SAMPLE wall_s=60.005 cpu_core_pct=0.07812 counters=(57, 4)
+N4_COST WorkCosts { clock_us: 248, coverage_us: 56308, stats_us: 36026, paint_us: 92011, polls: 315, orders: 1, order_us: 53, plate_us: 129, poll_us: 692188 }
+N4_THREADS ui_core_pct=0.02604 worker_core_pct=0.05208
+N4_PROFILE phase=bars-only cpu_core_pct=0.07812
+N4_VISIBLE_HITS 0/0
+N4_PROFILE_DONE
+N4_CHECKPOINT elapsed_s=220.121 counters=(57, 4) visible=0/0 costs=WorkCosts { clock_us: 248, coverage_us: 56308, stats_us: 36026, paint_us: 92011, polls: 315, orders: 1, order_us: 53, plate_us: 129, poll_us: 692188 }
+N4_DONE drivers=[]

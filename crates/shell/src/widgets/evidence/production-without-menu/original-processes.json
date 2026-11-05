@@ -1,0 +1,20 @@
+[
+    {
+        "Name":  "mypaper-core.exe",
+        "ProcessId":  67628,
+        "ExecutablePath":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-core.exe",
+        "CommandLine":  "\"C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-core.exe\" "
+    },
+    {
+        "Name":  "mypaper-shell.exe",
+        "ProcessId":  84772,
+        "ExecutablePath":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-shell.exe",
+        "CommandLine":  "\"C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-shell.exe\""
+    },
+    {
+        "Name":  "mypaper-wallpaper.exe",
+        "ProcessId":  93128,
+        "ExecutablePath":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-wallpaper.exe",
+        "CommandLine":  "\"C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-wallpaper.exe\""
+    }
+]

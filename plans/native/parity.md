@@ -2,11 +2,11 @@
 
 Audit date: 5 November 2026. Old baseline: `main` at `f378a4c`. Native baseline: checked-out `native`, HEAD `61a3da44ae41d107f35a633aa9a1f6f734e23810`, plus the files present while this audit was read. Other agents are changing N3, bars and the engine concurrently; this is a source snapshot, not a release verdict.
 
-The original audit was read-only. Bars/flyouts follow-up on 5 November updates the owned source rows and records production measurements in docs/bars.md. **Done means an implemented, reachable source path was found; it does not mean live-tested.** Partial means the old user outcome or one of its controls is incomplete. N3 takes precedence for its assigned flyouts, launcher, notification center and menu presentation, even where a provider or tint-only menu already exists. Bar and engine work is mentioned in notes rather than relabeled N3.
+The original audit was read-only. Widget follow-up incorporates native through `9cc02b1`; source parity and live evidence are recorded in [docs/widgets.md](../../docs/widgets.md#widget-parity-follow-up-validation). Performance gates remain separate from behavior status. Bars/flyouts follow-up on 5 November updates the owned source rows and records production measurements in docs/bars.md. **Done means an implemented, reachable source path was found; it does not mean live-tested.** Partial means the old user outcome or one of its controls is incomplete. N3 takes precedence for its assigned flyouts, launcher, notification center and menu presentation, even where a provider or tint-only menu already exists. Bar and engine work is mentioned in notes rather than relabeled N3.
 
 Each row is one checklist item; related settings with the same status are enumerated together. Counts apply to rows, not individual JSON properties. Studio rows measure both the editor and whether its controls still affect the desktop. The final backlog references row IDs and excludes N3 and deliberate cuts.
 
-**Status counts:** **211 done**; **18 dropped on purpose**; **12 missing**; **58 partial**. **299 rows total.**
+**Status counts:** **269 done**; **18 dropped on purpose**; **12 partial**. **299 rows total.**
 
 Old locations below are paths at `f378a4c`, read with `git show f378a4c:<path>` and inventoried with `git ls-tree -r f378a4c`. Abbreviations in that column: `B/` = `bars/shell/src/`; `RB/` = `crates/bars/src/`; `RW/` = `crates/widgets/src/`; `W/` = `widgets/`; `S/` = `apps/studio/src/`; `ST/` = `apps/studio/src-tauri/src/`. Native evidence links point to current files, whose contents may change after this audit.
 
@@ -138,32 +138,34 @@ This is separate from the desktop Launcher widget below. The plan drops exactly 
 
 All 17 old manifests are represented by compiled [native catalog schemas][widget-catalog]; IDs, settings defaults and replacement aliases remain. Each widget subsection below covers **all** of its manifest settings. The old `size.default/min/max`, `resizable`, `preset`, `instances`, permissions, storage and replacement rules are covered here rather than repeated 17 times.
 
+Widget “done” rows describe implemented behavior. Final production CPU/RAM qualification and the README glass capture are pending the user's deferred desktop window; [widget handoff](../../docs/widgets.md#implementation-handoff-2026-11-05) records measured failures and historical results.
+
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
 | H01 All 17 widget IDs, defaults, settings validation and old replacement aliases | **done** | `W/*/widget.json`, `RW/manifest.rs`, `RW/registry.rs` | [Registry][widget-registry], [layout][widget-layout], [catalog][widget-catalog]: compiled manifests preserve legacy identifiers. |
 | H02 Existing instance IDs/settings, per-instance text/tasks/events/timer/cache and shared activity storage | **done** | `RW/layout.rs`, `RW/storage.rs`, `W/*/main.js` | [Widget model][widget-model], [storage][widget-storage]: reads old keys/JSON shapes without reseeding existing layouts. |
 | H03 Monitor/cell/size, icon-grid default, fixed cell/gap/margin, work area, missing-monitor fallback | **done** | `RW/layout.rs`, `RW/display.rs` | [Layout][widget-layout], [widget host][widget-host]: grid, size clamping and display reconciliation remain. |
 | H04 Edit toggle from tray/Studio/message and Ctrl+Alt+Shift+W; Done/Escape | **done** | `RW/main.rs`, `W/shell/src/edit.ts` | [Widget control][widget-control], [host][widget-host], [edit chrome][widget-edit]: legacy messages/hotkey and native Done are wired. |
-| H05 Add palette, duplicate with storage/picked files, remove and instance limits | **partial** | `W/shell/src/edit.ts`, `RW/app.rs` | [Widget host][widget-host]: add/limits and data copy work, but duplicate does not rebase picked-file URLs; removal omits the old picked-file cleanup. |
-| H06 Pointer drag, snapping, min/max resize and save-on-drop | **partial** | `W/shell/src/grid.ts`, `W/shell/src/edit.ts` | [Edit model][widget-edit], [host][widget-host]: drag and one bottom-right resize handle work; old edge/corner handles are absent. |
-| H07 Overlap resolution by swapping/shifting neighbors; reject impossible layout with feedback | **partial** | `W/shell/src/grid.ts` | [Edit model][widget-edit]: rejects every overlapping drop; no shift/swap placement or old refusal feedback. |
-| H08 Arrows move; Shift+arrows resize selected widget | **missing** | `W/shell/src/edit.ts` | [Widget host][widget-host]: edit-mode keyboard handling only checks Escape. |
+| H05 Add palette, duplicate with storage/picked files, remove and instance limits | **done** | `W/shell/src/edit.ts`, `RW/app.rs` | [Widget host][widget-host]: duplicate rebases settings and storage URLs after checked private-file copy; successful removal cleans storage and picked files. Failed saves retain live state and files. |
+| H06 Pointer drag, snapping, min/max resize and save-on-drop | **done** | `W/shell/src/grid.ts`, `W/shell/src/edit.ts` | [Edit model][widget-edit], [host][widget-host]: eight edge/corner handles, opposite-edge anchoring, snapping, manifest min/max and transactional save-on-drop. |
+| H07 Overlap resolution by swapping/shifting neighbors; reject impossible layout with feedback | **done** | `W/shell/src/grid.ts` | [Edit model][widget-edit]: swaps equal neighbors, shifts a collision chain into free cells, and refuses impossible layouts atomically with a visible notice. |
+| H08 Arrows move; Shift+arrows resize selected widget | **done** | `W/shell/src/edit.ts` | [Widget host][widget-host]: arrows move the selected widget and Shift+arrows resize, through the same checked placement/save path as pointer arranging. |
 | H09 Settings and Appearance edited directly on a widget / edit toolbar | **dropped on purpose** | `W/shell/src/settings-form.ts`, `W/shell/src/appearance-form.ts` | [Plan line 352][losses]: edit settings in Studio instead. |
-| H10 Topmost overlay preset and `overlay` toggle, including media-pill; below-app desktop preset | **partial** | `RW/overlay.rs`, `W/media-pill/widget.json` | [Widget host][widget-host] creates every instance as `DesktopChild`; toggle hides media-pill but does not create its always-on-top surface. |
+| H10 Topmost overlay preset and `overlay` toggle, including media-pill; below-app desktop preset | **done** | `RW/overlay.rs`, `W/media-pill/widget.json` | [Widget host][widget-host]: overlay presets (including media-pill) use activating topmost surfaces and the retained toggle; arranging moves them into the desktop band and desktop presets remain below applications. |
 | H11 Visible-only subscriptions/timers, covered-monitor hiding, pause/battery/lock/display-off | **done** | `RW/app.rs`, `RW/media.rs`, `RW/audio.rs`, `RW/stats.rs` | [Widget host][widget-host]: releases hidden buffers and gates data services and worker fetches. |
-| H12 Ignore edit-mode requests while held; leave edit mode on entering hold | **missing** | `RW/app.rs`, `docs/widgets.md:457` | [Widget host][widget-host] toggles editing without a hold guard and does not end editing when holds change. |
-| H13 Built-in/theme/global/instance appearance layers; explicit resets and palette accent | **partial** | `RW/look.rs`, `W/shell/src/appearance.ts` | [Widget look][widget-look] preserves merging, but [host][widget-host] passes `look::accent(None)`, resolving `auto` to white rather than the active wallpaper palette. |
-| H14 Surface none/glass/solid, tint and opacity | **partial** | `W/*/base.css`, `RW/look.rs` | [Widget view][widget-view]: surfaces exist, but solid uses `tokens.material.tint` at configured opacity rather than forcing alpha 1. |
+| H12 Ignore edit-mode requests while held; leave edit mode on entering hold | **done** | `RW/app.rs`, `docs/widgets.md:457` | [Widget host][widget-host]: held hosts ignore edit requests and cancel arranging when a hold starts. |
+| H13 Built-in/theme/global/instance appearance layers; explicit resets and palette accent | **done** | `RW/look.rs`, `W/shell/src/appearance.ts` | [Widget look][widget-look], [host][widget-host]: retained layer/reset merging now resolves auto accent from the active wallpaper palette. |
+| H14 Surface none/glass/solid, tint and opacity | **done** | `W/*/base.css`, `RW/look.rs` | [Widget view][widget-view]: none/glass/tint are retained and solid forces opaque fill. |
 | H15 Radius, border toggle, text light/dark, accent, font and content scale | **done** | `RW/look.rs`, `W/*/base.css` | [Widget view][widget-view], [host][widget-host]: these non-CSS appearance controls have native consumers. |
-| H16 Text shadow setting | **missing** | `W/*/base.css`, `RW/look.rs` | [Widget tokens][widget-host] do not consume `Appearance.shadow` for text; especially noticeable on `surface:none`. |
-| H17 Non-neon minimal/depth/paper/aero/liquid design styles | **partial** | `W/*/base.css`, `RW/look.rs` | [Widget view][widget-view]: style values survive validation but do not select distinct native widget designs. |
+| H16 Text shadow setting | **done** | `W/*/base.css`, `RW/look.rs` | [Widget view][widget-view]: optional text shadows cover plain and emphasized text, including clipped content. |
+| H17 Non-neon minimal/depth/paper/aero/liquid design styles | **done** | `W/*/base.css`, `RW/look.rs` | [Widget view][widget-view]: minimal/depth/paper/aero/liquid select distinct native treatments; approved CSS/noise/glow losses remain removed. N6 global style synchronization remains C25. |
 | H18 Gradient/noise/glow/neon and ambient motion; theme CSS / HTML SDK / custom HTML widget loading | **dropped on purpose** | `W/*/base.css`, `W/shell/`, `packages/widget-sdk/`, `RW/net.rs` | [Plan lines 350–352][losses], [lines 66–67][html-plan]: compiled native built-ins replace HTML/CSS. |
-| H19 Live wallpaper glass; appearance blur/opacity plus theme glass intensity/refraction/highlight/tint/blur | **partial** | `W/shell/src/plates.ts`, `RW/look.rs`, `crates/theme/src/lib.rs` | [Widget host][widget-host] publishes plates, but omits `intensity`, base appearance blur/opacity in the material calculation; only some knobs affect glass. |
-| H20 Live edits of active theme appearance/materials | **partial** | `RW/theme.rs`, `RW/app.rs` | [Widget host][widget-host], [bar host][bar-host]: watch config/palette/layout, but no active-theme file watcher; direct theme-file edits need another watched event/restart. |
-| H21 Invalid layout: retain last good display, refuse writes and show edit-mode error | **partial** | `RW/app.rs`, `W/shell/src/edit.ts` | [Widget host][widget-host] retains good state but merely logs failure; later arranging/overlay saves can overwrite the invalid file. |
-| H22 Scroll and keyboard access to long content in notes/todo/RSS/calendar/launcher | **missing** | `W/*/style.css`, `W/*/main.js` | [Widget view][widget-view], [host][widget-host]: truncate/break at bounds with no scroll offset or wheel handler. |
-| H23 JSON-RPC plugin manifests, request/subscription protocol and Studio setting-search calls | **partial** | `RW/plugins.rs`, `RW/rpc.rs`, `docs/writing-plugins.md` | [Plugin library][widget-plugins] remains (Studio's town search now calls the weather plugin's library directly, `crates/studio/src/app.rs`; the Tauri `plugins.rs` went with N7); shell owns a plugin manager but built-ins bypass it and no general native provider UI is wired. |
-| H24 File/image pickers: private copied files, 64 MB cap, filters, duplicate URL rebasing | **partial** | `RW/pick.rs`, `W/shell/src/settings-form.ts` | [Picker][widget-picker] and Studio imports retain limits/filters; [host][widget-host] copies files on duplicate without rewriting source-instance URLs. |
+| H19 Live wallpaper glass; appearance blur/opacity plus theme glass intensity/refraction/highlight/tint/blur | **done** | `W/shell/src/plates.ts`, `RW/look.rs`, `crates/theme/src/lib.rs` | [Widget host][widget-host]: publishes Source::Widgets plates with 12 px default blur, appearance opacity/blur and theme tint/intensity/refraction/highlight. Worktree rain-city frost was inspected live; the final README capture is pending. |
+| H20 Live edits of active theme appearance/materials | **done** | `RW/theme.rs`, `RW/app.rs` | [Widget host][widget-host]: watches active-theme theme.json and rebinds its watcher when the configured theme changes; bar watcher status remains owned by the bar slice. |
+| H21 Invalid layout: retain last good display, refuse writes and show edit-mode error | **done** | `RW/app.rs`, `W/shell/src/edit.ts` | [Layout][widget-layout], [host][widget-host]: parse failures retain the last good display (empty on invalid startup), preserve immutable recovery backups, refuse every write at the file boundary and surface the edit error. |
+| H22 Scroll and keyboard access to long content in notes/todo/RSS/calendar/launcher | **done** | `W/*/style.css`, `W/*/main.js` | [Widget view][widget-view], [host][widget-host]: clipped scrolling and hits, wheel/arrows/Page/Home/End, Tab traversal and Enter/Space invoke reach long lists and Markdown previews. |
+| H23 JSON-RPC plugin manifests, request/subscription protocol and Studio setting-search calls | **done** | `RW/plugins.rs`, `RW/rpc.rs`, `docs/writing-plugins.md` | [Plugin library][widget-plugins], [widget documentation](../../docs/widgets.md): JSON-RPC request/subscription and Studio setting-search remain supported; native widget provider integrations are explicit Rust consumers, with no arbitrary plugin-generated UI. The supported boundary is documented. |
+| H24 File/image pickers: private copied files, 64 MB cap, filters, duplicate URL rebasing | **done** | `RW/pick.rs`, `W/shell/src/settings-form.ts` | [Picker][widget-picker], [host][widget-host]: filters and 64 MB cap remain; duplicates recursively rebase only source-owned URLs and use checked private-file copies. |
 | H25 Old `mypaper-widgets --edit/--overlay` executable invocation | **dropped on purpose** | `RW/main.rs` | [Plan line 63][html-plan] deletes the executable; [widget control][widget-control] preserves the edit/overlay outcomes through the old hotkeys and registered messages. |
 | H26 Per-widget web permissions/CSP/SDK mock harness | **dropped on purpose** | `RW/net.rs`, `packages/widget-sdk/`, `docs/writing-widgets.md` | [Plan lines 66–67][html-plan], [line 352][losses]: HTML execution and authoring contract is intentionally retired. |
 
@@ -171,33 +173,33 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
-| WC01 `variant`: desk digital, flip, analog, words greeting, world | **partial** | `W/clock/widget.json`, `W/clock/main.js` | [Widget view][widget-view]: five branches exist, but flip has static tiles, analog lacks numerals/date window, and greeting/world lose supporting information. |
-| WC02 `format24`, `showSeconds`, `showDate` | **partial** | `W/clock/main.js`, `W/clock/clock-format.js` | [Clock view][widget-view], [widget time][widget-time]: digital/flip honor all; analog/greeting do not honor the old date/time information settings fully. |
+| WC01 `variant`: desk digital, flip, analog, words greeting, world | **done** | `W/clock/widget.json`, `W/clock/main.js` | [Widget view][widget-view]: desk, finite value-change flip, analog with numerals/date, greeting with time/date, and world dials are implemented. |
+| WC02 `format24`, `showSeconds`, `showDate` | **done** | `W/clock/main.js`, `W/clock/clock-format.js` | [Clock view][widget-view], [widget time][widget-time]: clock formats/date controls retain each face's information; greeting/world tick at minute precision and analog/digital/flip support seconds. |
 | WC03 `zones` list (label/tz, up to eight), real time-zone conversion | **done** | `W/clock/widget.json`, `W/clock/zones.js` | [Widget time][widget-time], [view][widget-view]: stored IANA zones are passed to Windows Globalization. |
-| WC04 World-city dial, day/night, relative day/UTC offset, invalid-zone explanation and adaptive layout | **partial** | `W/clock/zones.js`, `W/clock/main.js` | [Widget view][widget-view]: only label and clock remain; invalid zones display an em dash. |
+| WC04 World-city dial, day/night, relative day/UTC offset, invalid-zone explanation and adaptive layout | **done** | `W/clock/zones.js`, `W/clock/main.js` | [Widget view][widget-view]: adaptive world rows include dials, day/night, relative date and UTC offset; invalid zones explain the failure and long city lists scroll. |
 | WC05 `name` override / Windows display-name greeting; `font` override | **done** | `W/clock/main.js`, `RW/userinfo.rs` | [Widget view][widget-view], `crates/widgets/src/userinfo.rs`: explicit/default name and custom font are consumed. |
-| WC06 Locale-sensitive date/weekday/time-period words | **partial** | `W/clock/clock-format.js`, `W/clock/greeting.js` | [Shared calendar][calendar-ui], [widget time][widget-time]: dates/weekdays and AM/PM/greetings are hard-coded English. |
-| WC07 Second/minute-aligned ticking, no updates hidden; bounded flip transition | **partial** | `W/clock/main.js` | [Widget model][widget-model] preserves scheduling; the value-change flip transition has not been ported (not an ambient-motion cut). |
+| WC06 Locale-sensitive date/weekday/time-period words | **done** | `W/clock/clock-format.js`, `W/clock/greeting.js` | [Widget time][widget-time]: Windows locale formats weekday/date/day-period text; greetings follow the user language with an English fallback. |
+| WC07 Second/minute-aligned ticking, no updates hidden; bounded flip transition | **done** | `W/clock/main.js` | [Widget model][widget-model], [host][widget-host]: second/minute aligned, hidden clocks sleep, flip transitions finish after 280 ms and start only on displayed-value changes. |
 
 ### Calendar
 
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
 | WCA01 `variant` month/agenda/strip and compact responsive layout | **done** | `W/calendar/widget.json`, `W/calendar/main.js` | [Widget view][widget-view]: all three native layouts are present, with compact strip fallback. |
-| WCA02 `weekStart` auto/monday/sunday/saturday and `weekNumbers` | **partial** | `W/calendar/calendar-logic.js`, `W/calendar/main.js` | [Widget view][widget-view]: month honors both; week strip always starts Sunday, ignoring `weekStart`. |
-| WCA03 Previous/next month or week, select day, title-click return to today | **partial** | `W/calendar/main.js` | [Widget host][widget-host]: arrows/selection work; title is plain text with no Today reset action. |
+| WCA02 `weekStart` auto/monday/sunday/saturday and `weekNumbers` | **done** | `W/calendar/calendar-logic.js`, `W/calendar/main.js` | [Widget view][widget-view]: month and week strip honor auto/monday/sunday/saturday; month retains week numbers. |
+| WCA03 Previous/next month or week, select day, title-click return to today | **done** | `W/calendar/main.js` | [Widget host][widget-host]: previous/next and day selection remain; title invokes Today and resets month/week offset. |
 | WCA04 Local events persistence, month event dots, upcoming agenda and delete | **done** | `W/calendar/main.js`, `W/calendar/calendar-logic.js` | [Widget model][widget-model], [view][widget-view], [host][widget-host]: reads old `events`, shows markers/agenda and saves deletions. |
-| WCA05 Add event title, chosen date, optional time, color swatch, validation and cancel | **partial** | `W/calendar/main.js:276`, `W/calendar/calendar-logic.js` | [Widget host][widget-host]: adds selected-day events from one text field with optional HH:MM prefix; no date picker, color picker or equivalent validation feedback. |
-| WCA06 Selected day's complete event list and color indicators; agenda scrolling | **partial** | `W/calendar/main.js` | [Widget view][widget-view]: selected-day footer shows only the first title, ignores stored event colors and clips the agenda. |
+| WCA05 Add event title, chosen date, optional time, color swatch, validation and cancel | **done** | `W/calendar/main.js:276`, `W/calendar/calendar-logic.js` | [Widget host][widget-host], [view][widget-view]: content editor supplies title/date/optional time, six color swatches, validation feedback and Save/Enter/Cancel/Escape; stored wire shape is unchanged. |
+| WCA06 Selected day's complete event list and color indicators; agenda scrolling | **done** | `W/calendar/main.js` | [Widget view][widget-view]: selected-day events and agenda display all entries through clipped scrolling, with stored color indicators. |
 
 ### Now playing
 
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
 | WM01 Shared SMTC title/artist/artwork, play/pause/previous/next and live progress | **done** | `W/now-playing/main.js`, `RW/media.rs` | [Widget view][widget-view], [host][widget-host]: current media, artwork and transport use native services. |
-| WM02 `variant` card/blur/strip/viz | **partial** | `W/now-playing/widget.json`, `W/now-playing/main.js` | [Widget view][widget-view]: strip/card and spectrum exist, but blur is the same card rather than the artwork-backdrop layout. |
-| WM03 `tint` colors from artwork; album/source-app/elapsed/duration labels | **missing** | `W/now-playing/main.js`, `W/now-playing/media.js` | [Widget view][widget-view]: no artwork color analysis, `tint` consumer or old metadata/time labels. |
-| WM04 `viz` bars/mirror/wave and `sensitivity` | **partial** | `W/now-playing/spectrum.js`, `W/now-playing/viz.js` | [Widget view][widget-view], [host][widget-host]: opt-in WASAPI bars honor sensitivity; `viz` mode choice is ignored. |
+| WM02 `variant` card/blur/strip/viz | **done** | `W/now-playing/widget.json`, `W/now-playing/main.js` | [Widget view][widget-view]: card/strip/viz remain and blur uses a bounded downsampled artwork backdrop. |
+| WM03 `tint` colors from artwork; album/source-app/elapsed/duration labels | **done** | `W/now-playing/main.js`, `W/now-playing/media.js` | [Widget view][widget-view]: opt-in artwork-derived tint, album/source app and elapsed/duration metadata are rendered. |
+| WM04 `viz` bars/mirror/wave and `sensitivity` | **done** | `W/now-playing/spectrum.js`, `W/now-playing/viz.js` | [Widget view][widget-view], [host][widget-host]: opt-in WASAPI renders bars/mirror/wave with sensitivity; no ambient audio polling when unused. |
 | WM05 `glow` artwork halo | **dropped on purpose** | `W/now-playing/main.js`, `W/now-playing/style.css` | [Plan line 350][losses]: glow is explicitly cut. |
 | WM06 Empty/no-art/live states and only-visible spectrum capture | **done** | `W/now-playing/main.js`, `RW/audio.rs` | [Widget view][widget-view], [host][widget-host]: empty/artwork fallback and visibility gating remain. |
 
@@ -205,11 +207,11 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
-| WMP01 `variant` pill/notch/mini | **partial** | `W/media-pill/widget.json`, `W/media-pill/style.css` | [Widget view][widget-view]: every media-pill uses one compact media layout; shape choices have no effect. |
+| WMP01 `variant` pill/notch/mini | **done** | `W/media-pill/widget.json`, `W/media-pill/style.css` | [Widget view][widget-view]: pill/notch/mini select actual compact layouts and plate shapes. |
 | WMP02 `progress`, artwork/title/artist and previous/play/next | **done** | `W/media-pill/main.js`, `W/media-pill/pill.js` | [Widget view][widget-view], [host][widget-host]: shares the real native media controls and progress line. |
-| WMP03 Single-instance overlay preset, always on top and overlay toggle | **partial** | `W/media-pill/widget.json`, `RW/overlay.rs` | [Registry][widget-registry] retains the limit; [host][widget-host] places it with desktop widgets (see H10). |
+| WMP03 Single-instance overlay preset, always on top and overlay toggle | **done** | `W/media-pill/widget.json`, `RW/overlay.rs` | [Registry][widget-registry], [host][widget-host]: single-instance rule retained; topmost overlay surface and toggle are implemented (H10). |
 | WMP04 Overflow title marquee | **dropped on purpose** | `W/media-pill/main.js`, `W/media-pill/style.css` | [Plan line 350][losses]: continuously scrolling widget motion is removed. |
-| WMP05 Track/artist/elapsed/duration hover description | **missing** | `W/media-pill/main.js` | [Widget view][widget-view]: no native equivalent of the former full-title tooltip. |
+| WMP05 Track/artist/elapsed/duration hover description | **done** | `W/media-pill/main.js` | [Widget view][widget-view], [host][widget-host]: hover describes full track/artist and elapsed/duration. |
 
 ### Launcher (desktop widget)
 
@@ -218,8 +220,8 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 | WL01 `variant` dock/grid/list; `shortcuts` label+target (up to 24) | **done** | `W/launcher/widget.json`, `W/launcher/apps.js` | [Widget view][widget-view], [host][widget-host]: all three layouts launch exe/AUMID/folder/link targets. |
 | WL02 `labels`, `iconSize`, real Windows app icons | **done** | `W/launcher/main.js`, `RW/appicon.rs` | [Widget view][widget-view], [host][widget-host]: icon retrieval, size and name controls remain. |
 | WL03 `search`, `engine` DuckDuckGo/Google/Bing/Brave/Ecosia/Startpage/custom and `customUrl` | **done** | `W/launcher/main.js`, `W/launcher/url.js` | [Widget host][widget-host]: native search entry builds encoded engine URLs and recognizes direct web addresses. |
-| WL04 Dock magnification and launch bounce/error feedback | **missing** | `W/launcher/main.js`, `W/launcher/style.css` | [Widget view][widget-view], [host][widget-host]: no hover zoom or success/failure animation; these interaction-triggered effects were not ambient motion. |
-| WL05 Invalid-custom-URL feedback, Escape clear then blur, long app-grid/list scrolling | **partial** | `W/launcher/url.js`, `W/launcher/main.js` | [Widget host][widget-host]: validates the template but silently declines it, discards Escape text and has no scrollable overflow. |
+| WL04 Dock magnification and launch bounce/error feedback | **done** | `W/launcher/main.js`, `W/launcher/style.css` | [Widget view][widget-view], [host][widget-host]: hover magnification, finite launch bounce and visible launch-failure feedback. |
+| WL05 Invalid-custom-URL feedback, Escape clear then blur, long app-grid/list scrolling | **done** | `W/launcher/url.js`, `W/launcher/main.js` | [Widget host][widget-host]: invalid custom URL reports an error; Escape clears then blurs; grids/lists scroll with keyboard access. |
 
 ### Quick toggles
 
@@ -228,17 +230,17 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 | WQT01 `variant` grid/row/list, adaptive tile placement | **done** | `W/quick-toggles/widget.json`, `W/quick-toggles/main.js` | [Widget view][widget-view]: all three native tile arrangements exist. |
 | WQT02 Tile visibility: `wifi`, `bluetooth`, `focus`, `airplane`, `nightlight`, `sound`, `display`, `battery` | **done** | `W/quick-toggles/widget.json` | [Widget view][widget-view]: every old tile-enable setting is read. |
 | WQT03 Click each tile to open its matching Windows Settings page | **done** | `W/quick-toggles/toggles.js`, `W/quick-toggles/main.js` | [Widget host][widget-host]: retains the old link behavior; the separate quick-settings flyout supplies real toggles in N3. |
-| WQT04 Live Wi-Fi on/signal/SSID and battery percent/charging labels and glyphs | **missing** | `W/quick-toggles/toggles.js`, `W/quick-toggles/main.js:98` | [Widget host][widget-host] subscribes to stats, but [view][widget-view] never reads them when drawing quick toggles. |
-| WQT05 Launch failure/pressed feedback | **missing** | `W/quick-toggles/main.js:48`, `:76` | [Widget fetcher][widget-data] logs launch failure only; no per-tile failure/press state reaches the view. |
+| WQT04 Live Wi-Fi on/signal/SSID and battery percent/charging labels and glyphs | **done** | `W/quick-toggles/toggles.js`, `W/quick-toggles/main.js:98` | [Widget view][widget-view]: live Wi-Fi connection/SSID/signal and battery percent/charging drive labels and glyphs. |
+| WQT05 Launch failure/pressed feedback | **done** | `W/quick-toggles/main.js:48`, `:76` | [Widget fetcher][widget-data], [host][widget-host]: activation results return to the view; finite pressed state and visible failure notice. |
 
 ### Weather
 
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
-| WW01 `city` auto location / place object, Studio town search; `units` metric/imperial | **done** | `W/weather/widget.json`, `W/weather/main.js` | [Widget fetcher][widget-data], [widget inspector][n7-widgets]: linked weather service and the native place inspector (Automatic or a town, with search) support both. |
-| WW02 `variant` card/compact/forecast, current temperature/place/condition | **partial** | `W/weather/main.js`, `W/weather/weather-logic.js` | [Widget view][widget-view]: current data and variants work, but the old roomy layouts and day/night-specific illustration are reduced. |
-| WW03 Hourly forecast temperatures/chance/conditions; daily icons/chance/range bars and responsive seven-day view | **missing** | `W/weather/main.js:109`, `W/weather/weather-logic.js` | [Widget view][widget-view]: fetches hourly data but never draws it; daily view is only three/six date+high/low entries. |
-| WW04 Location unavailable/denied guidance, privacy Settings action, retry/stale states and ten-minute cache | **partial** | `W/weather/main.js`, `plugins/weather/src/service.rs` | [Widget fetcher][widget-data] keeps the service/cache; [view][widget-view] reduces actionable permission/error states to plain text. |
+| WW01 `city` auto location / place object, Studio town search; `units` metric/imperial | **done** | `W/weather/widget.json`, `W/weather/main.js` | [Widget fetcher][widget-data], `apps/studio/src/components/inspectors/WidgetSettingControl.tsx`: linked weather service and retained place inspector support both. |
+| WW02 `variant` card/compact/forecast, current temperature/place/condition | **done** | `W/weather/main.js`, `W/weather/weather-logic.js` | [Widget view][widget-view]: current/card/compact/forecast include day/night condition illustrations and responsive content. |
+| WW03 Hourly forecast temperatures/chance/conditions; daily icons/chance/range bars and responsive seven-day view | **done** | `W/weather/main.js:109`, `W/weather/weather-logic.js` | [Widget view][widget-view]: hourly temperature/chance/condition rows and seven daily icons/chance/range bars scroll instead of truncating. |
+| WW04 Location unavailable/denied guidance, privacy Settings action, retry/stale states and ten-minute cache | **done** | `W/weather/main.js`, `plugins/weather/src/service.rs` | [Widget fetcher][widget-data], [view][widget-view]: retained ten-minute service cache, location guidance, privacy Settings action, retry and cached/offline feedback. |
 | WW05 `animate` and animated rain/cloud/snow illustration | **dropped on purpose** | `W/weather/main.js`, `W/weather/style.css` | [Plan line 350][losses]: ambient weather motion is intentionally removed. |
 | WW06 Click-place inline town picker / automatic-location switch | **dropped on purpose** | `W/weather/main.js:283` | [Plan line 352][losses]: on-widget settings move to Studio; `city` itself remains required. |
 
@@ -247,10 +249,10 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
 | WS01 `cpu`, `ram`, `gpu`, `net`, `disk`, `battery`; `drives` filter | **done** | `W/system-monitor/widget.json`, `W/system-monitor/meters.js` | [Widget view][widget-view], [stats service][widget-stats]: per-metric selection and drive filtering remain. |
-| WS02 `variant` rings/bars/spark | **partial** | `W/system-monitor/gauge.js`, `W/system-monitor/main.js` | [Widget view][widget-view]: graphs use only CPU/RAM/GPU history indexed by displayed row; hiding earlier metrics misassigns traces, and network/disk graphs become bars. |
-| WS03 `interval` 1000/2000/5000 ms | **partial** | `W/system-monitor/main.js`, `W/system-monitor/widget.json` | [Widget host][widget-host] always subscribes at two seconds; plan line 229 specifies two-second native ticks, but does not explicitly classify this old setting as a deliberate loss. |
+| WS02 `variant` rings/bars/spark | **done** | `W/system-monitor/gauge.js`, `W/system-monitor/main.js` | [Widget view][widget-view], [metric model](../../crates/shell/src/widgets/metrics.rs): all displayed metrics have stable trace IDs, including network/disk/battery; hiding earlier rows cannot misassign history. |
+| WS03 `interval` 1000/2000/5000 ms | **done** | `W/system-monitor/main.js`, `W/system-monitor/widget.json` | [Widget host][widget-host]: interval 1000/2000/5000 ms selects the shared sampler deadline; default remains the plan's two seconds. Hidden/held consumers stop sampling. |
 | WS04 `vary` per-metric color, charging and metric-specific values | **done** | `W/system-monitor/main.js`, `W/system-monitor/meters.js` | [Widget view][widget-view]: color choice, units and battery presence are consumed. |
-| WS05 Responsive readable layout, no-data/unsupported metric states | **partial** | `W/system-monitor/main.js`, `W/system-monitor/meters.js` | [Widget view][widget-view]: basic layouts exist; dense rows shrink into the box and lose old detailed labels/graph coverage. |
+| WS05 Responsive readable layout, no-data/unsupported metric states | **done** | `W/system-monitor/main.js`, `W/system-monitor/meters.js` | [Widget view][widget-view]: readable row minimums with overflow scrolling, complete labels, no-selection/first-sample/unsupported states. |
 
 ### Timer
 
@@ -259,7 +261,7 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 | WT01 `focusMinutes`, `shortMinutes`, `longMinutes`, `customMinutes`, `sessionsBeforeLong`, `autoAdvance` | **done** | `W/timer/widget.json`, `W/timer/main.js` | [Widget model][widget-model], [host][widget-host]: durations, break selection and near-live automatic advance are implemented. |
 | WT02 Focus/short/long/custom selection, start/pause/reset/skip, ring and remaining time | **done** | `W/timer/main.js` | [Widget view][widget-view], [host][widget-host]: all mode and transport hit actions exist. |
 | WT03 Wall-clock persistence while closed/hidden; discovered completion waits rather than auto-running | **done** | `W/timer/main.js` | [Widget model][widget-model], [host][widget-host]: uses old `endsAt`/`finishedAt` and the 2.5-second auto-advance guard. |
-| WT04 Session-cycle reset after long break, activity credited to actual finish day | **partial** | `W/timer/main.js:116`, `W/timer/activity.js` | [Widget host][widget-host]: retains session count after long break and records the current day instead of the stored finish day after a delayed wake. |
+| WT04 Session-cycle reset after long break, activity credited to actual finish day | **done** | `W/timer/main.js:116`, `W/timer/activity.js` | [Widget host][widget-host], [model][widget-model]: leaving a long break resets the session cycle; delayed focus completion credits the stored finish instant's local date. |
 | WT05 Bounded completion glow and its click-to-acknowledge state | **dropped on purpose** | `W/timer/main.js`, `W/timer/style.css` | [Plan line 350][losses]: glow decoration is explicitly cut; native completion text remains in [widget view][widget-view]. |
 
 ### Countdown
@@ -268,17 +270,17 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 |---|---|---|---|
 | WCD01 `title`, `date` (empty = next New Year), `time`, `afterwards` countUp/stop | **done** | `W/countdown/widget.json`, `W/countdown/count.js` | [Widget model][widget-model], [view][widget-view]: local target, elapsed days and done/today states are implemented. |
 | WCD02 `style` digits/ring, `startDate` ring origin and `showSeconds` | **done** | `W/countdown/main.js`, `W/countdown/count.js` | [Widget model][widget-model], [view][widget-view]: configurable progress denominator and minute/second boundary updates remain. |
-| WCD03 Largest nonzero unit, secondary units/date/progress, narrow/tiny responsive layouts | **partial** | `W/countdown/main.js` | [Widget view][widget-view]: native output uses a simpler days/time arrangement and omits some old adaptive/footer detail. |
+| WCD03 Largest nonzero unit, secondary units/date/progress, narrow/tiny responsive layouts | **done** | `W/countdown/main.js` | [Widget view][widget-view]: adaptive leading unit, secondary units, date and progress fit narrow/tiny layouts. |
 
 ### Photo
 
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
 | WP01 `variant` bleed/matte/polaroid, `fit` cover/contain, `caption` | **done** | `W/photo/widget.json`, `W/photo/main.js` | [Widget view][widget-view]: frame, fit and polaroid caption all have native consumers. |
-| WP02 `image1`–`image6`, private picked-file URLs and duplicate-file ownership | **partial** | `W/photo/widget.json`, `RW/pick.rs` | [Widget host][widget-host] resolves original URLs and copies files, but duplicates retain the source ID and fail its “Photo belongs to another instance” check. |
+| WP02 `image1`–`image6`, private picked-file URLs and duplicate-file ownership | **done** | `W/photo/widget.json`, `RW/pick.rs` | [Layout][widget-layout], [picker][widget-picker], [host][widget-host]: duplicated image1–image6 URLs own the copied instance folder and survive source removal; regression-tested. |
 | WP03 `interval`, `shuffle` and soft crossfade slideshow | **done** | `W/photo/frame.js`, `W/photo/main.js` | [Widget host][widget-host], [view][widget-view]: deadlines, nonrepeat next-image choice and bounded fades are implemented. |
 | WP04 `motion` Ken Burns pan/zoom | **dropped on purpose** | `W/photo/main.js`, `W/photo/frame.js` | [Plan line 350][losses]: ambient photo motion is explicitly out. |
-| WP05 Skip broken pictures and continue/recover slideshow | **partial** | `W/photo/main.js` | [Widget host][widget-host]: a failed current-image decode leaves no next deadline; skipping bad user pictures still needs restoring. |
+| WP05 Skip broken pictures and continue/recover slideshow | **done** | `W/photo/main.js` | [Widget host][widget-host]: bad decode/ownership failures retain a good current image and schedule bounded advance/retry, including a single broken source. |
 | WP06 Built-in demo landscapes/captions when no user image is chosen | **dropped on purpose** | `W/photo/scenes.js` (three generated placeholder landscapes) | [Plan line 352][losses]: classified as the explicitly removed stand-ins; user-photo playback/recovery remains required at WP01–WP05. |
 
 ### Notes
@@ -287,8 +289,8 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 |---|---|---|---|
 | WN01 Click/keyboard edit, multiline text, clipboard/undo/IME, Escape/blur finish | **done** | `W/notes/main.js` | [Widget host][widget-host], [RichEdit field][text-field]: native editor and persistence are wired. |
 | WN02 `fontScale`, autosave after 400 ms and flush when hidden/arranging/exiting | **done** | `W/notes/widget.json`, `W/notes/main.js` | [Widget host][widget-host], [view][widget-view]: reads old text and flushes the same storage key. |
-| WN03 Markdown headings/bullets/tasks/quotes/rules and inline bold/italic/code/strike | **partial** | `W/notes/md.js`, `W/notes/main.js` | [Widget view][widget-view]: approximates block text and strips some markers; no real inline styles, rule/quote presentation or complete task syntax. |
-| WN04 Click task checkboxes, including `* [ ]` and indented forms; scroll long notes | **partial** | `W/notes/md.js`, `W/notes/main.js` | [Widget host][widget-host], [view][widget-view]: only exact `- [ ]`/`- [x]` at column zero toggle, and preview text clips. |
+| WN03 Markdown headings/bullets/tasks/quotes/rules and inline bold/italic/code/strike | **done** | `W/notes/md.js`, `W/notes/main.js` | [Widget view][widget-view], [Markdown parser](../../crates/shell/src/widgets/markdown.rs): headings/bullets/tasks/quotes/rules and bold/italic/code/strike render as native text operations. |
+| WN04 Click task checkboxes, including `* [ ]` and indented forms; scroll long notes | **done** | `W/notes/md.js`, `W/notes/main.js` | [Widget host][widget-host], [view][widget-view]: task offsets handle both bullet kinds and indentation; long previews scroll with clipped checkbox hits. |
 
 ### To do
 
@@ -296,9 +298,9 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 |---|---|---|---|
 | WTD01 `title` (empty hides), `addPosition` top/bottom, `hideDone` | **done** | `W/todo/widget.json`, `W/todo/main.js` | [Widget view][widget-view], [host][widget-host]: all settings are consumed. |
 | WTD02 Add/edit/check/delete, count remaining, persistent text/done and 300-task limit | **done** | `W/todo/main.js` | [Widget model][widget-model], [host][widget-host]: controls and old storage shape are retained. |
-| WTD03 Enter/F2 edit, Enter commit, Escape cancel, Delete task, focusout commit | **partial** | `W/todo/main.js:278` | [Widget host][widget-host]: Enter and blur save, but Escape also commits an edit; F2/Delete and ordinary keyboard focus traversal are missing. |
-| WTD04 Completion progress bar, compact auto-hide-done, scrolling and reveal just-added task | **missing** | `W/todo/main.js`, `W/todo/style.css` | [Widget view][widget-view]: only remaining count and clipped rows are drawn, with no scroll/progress/compact policy. |
-| WTD05 Shared heatmap activity and reversing a session's completion | **partial** | `W/todo/activity.js`, `W/todo/main.js:236` | [Widget host][widget-host]: counts/unchecks work until inserting-at-top or deleting any item clears the index-based counted map. |
+| WTD03 Enter/F2 edit, Enter commit, Escape cancel, Delete task, focusout commit | **done** | `W/todo/main.js:278` | [Widget host][widget-host]: Tab/Enter/Space traversal/invoke, Enter/F2 edit, Enter or focusout commit, Escape cancel and Delete removal. |
+| WTD04 Completion progress bar, compact auto-hide-done, scrolling and reveal just-added task | **done** | `W/todo/main.js`, `W/todo/style.css` | [Widget view][widget-view], [host][widget-host]: progress, compact hide-done policy, scrolling and reveal of newly added tasks. |
+| WTD05 Shared heatmap activity and reversing a session's completion | **done** | `W/todo/activity.js`, `W/todo/main.js:236` | [Widget host][widget-host], [model][widget-model]: insertion/deletion shifts completion-credit indices; undo reverses the correct session/day count. |
 
 ### RSS
 
@@ -306,8 +308,8 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 |---|---|---|---|
 | WR01 `feeds` (up to eight URLs), `maxItems` 3–30, `refreshMinutes` 15–120 | **done** | `W/rss/widget.json`, `W/rss/main.js`, `plugins/rss/` | [Widget fetcher][widget-data], [host][widget-host]: fetches/parses feeds on a sleeping worker and applies limits. |
 | WR02 `variant` list/cards, `showSource`, `showTime`, click safe HTTP(S) article | **done** | `W/rss/main.js` | [Widget view][widget-view], [host][widget-host]: both layouts and link validation are wired. |
-| WR03 Merge newest first, global duplicate removal, cached/offline content, per-feed failure information | **partial** | `W/rss/main.js`, `plugins/rss/src/` | [Widget fetcher][widget-data]: caches/sorts, but adjacent-only dedup can retain duplicate stories and returned per-feed errors/staleness are not shown. |
-| WR04 Relative age now/minutes/hours/days/date and scroll all selected headlines | **partial** | `W/rss/time.js`, `W/rss/main.js` | [Widget view][widget-view]: age only renders minutes/hours and rows past the box are unreachable. |
+| WR03 Merge newest first, global duplicate removal, cached/offline content, per-feed failure information | **done** | `W/rss/main.js`, `plugins/rss/src/` | [Widget fetcher][widget-data], [view][widget-view]: newest-first global dedup, cached offline content and per-feed failure feedback. |
+| WR04 Relative age now/minutes/hours/days/date and scroll all selected headlines | **done** | `W/rss/time.js`, `W/rss/main.js` | [Widget view][widget-view], [model][widget-model]: now/minute/hour/day/date ages update at their displayed boundary; every selected headline is scrollable. |
 
 ### Crypto
 
@@ -315,7 +317,7 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 |---|---|---|---|
 | WCR01 `coins` CoinGecko IDs (up to six), `currency` usd/eur/gbp/jpy, `refreshMinutes` 2–30 | **done** | `W/crypto/widget.json`, `W/crypto/main.js` | [Widget fetcher][widget-data], [host][widget-host]: CoinGecko requests and refresh settings are wired. |
 | WCR02 `showChange`, signed 24h percent and positive/negative color | **done** | `W/crypto/main.js`, `W/crypto/logic.js` | [Widget view][widget-view]: visibility and signed change colors remain. |
-| WCR03 Currency-aware price precision, narrow layouts, updated timestamp, offline/cached indicators | **partial** | `W/crypto/main.js`, `W/crypto/logic.js` | [Widget view][widget-view], [model][widget-model]: cache loads, but fixed two decimals can show tiny coins as zero; no timestamp/stale footer. |
+| WCR03 Currency-aware price precision, narrow layouts, updated timestamp, offline/cached indicators | **done** | `W/crypto/main.js`, `W/crypto/logic.js` | [Widget view][widget-view], [model][widget-model]: currency/value precision (including tiny values), narrow scrollable rows, updated timestamp and cached/offline footer. |
 
 ### Activity heatmap
 
@@ -323,7 +325,7 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 |---|---|---|---|
 | WH01 `variant` weeks/month/streak; `source` all/todo/timer; shared historical counts | **done** | `W/heatmap/widget.json`, `W/heatmap/heat.js` | [Widget view][widget-view], [host][widget-host]: source aggregation and all three layouts exist. |
 | WH02 `weekStart` monday/sunday and `legend` | **done** | `W/heatmap/main.js` | [Widget view][widget-view]: weekday placement and legend toggle are consumed. |
-| WH03 `labels` month/weekday labels; per-day hover count/date tooltip | **missing** | `W/heatmap/main.js`, `W/heatmap/widget.json` | [Widget view][widget-view]: no `labels` consumer or visible tooltip; accessibility hit labels alone do not preserve hover information. |
+| WH03 `labels` month/weekday labels; per-day hover count/date tooltip | **done** | `W/heatmap/main.js`, `W/heatmap/widget.json` | [Widget view][widget-view], [host][widget-host]: optional month/weekday labels and hover date/count description. |
 | WH04 Streak/total summaries, percentile intensity and live updates from task/focus completion | **done** | `W/heatmap/heat.js`, `W/heatmap/main.js` | [Widget view][widget-view], [host][widget-host]: intensity buckets, streak and completion refresh are implemented. |
 
 ### Quote
@@ -332,7 +334,7 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 |---|---|---|---|
 | WQ01 `mode` daily/hourly/click, `source` builtin/custom/both, `custom` text+author (up to 50) | **done** | `W/quote/widget.json`, `W/quote/pick.js` | [Widget view][widget-view], [model][widget-model]: built-in/custom selection and boundary scheduling remain. |
 | WQ02 Click/assistive invoke for another quote, text+author and empty-custom state | **done** | `W/quote/main.js`, `W/quote/quotes.js` | [Widget host][widget-host], [view][widget-view]: click advances the offset; empty custom sources show an explicit empty state. |
-| WQ03 Fit complete quote/author at small sizes and normal Enter/Space activation | **partial** | `W/quote/main.js` | [Widget view][widget-view]: wraps at a fixed size and has no ordinary keyboard activation path (general H22). |
+| WQ03 Fit complete quote/author at small sizes and normal Enter/Space activation | **done** | `W/quote/main.js` | [Widget view][widget-view], [host][widget-host]: measured word-wrap fit includes quote/author; Tab and Enter/Space reach the next-quote action. |
 
 ## Wallpaper
 
@@ -417,7 +419,7 @@ N7 (2026-11-05) replaced the Tauri Studio with the native one (`crates/studio`, 
 |---|---|---|---|
 | R01 Tray icon, theme-name tooltip, re-add after Explorer restart | **done** | `crates/core/src/tray.rs` | [Core tray][core-tray]: icon/tooltip and TaskbarCreated handling are retained. |
 | R02 Pause/Resume, theme picker/current mark, Open Studio, Restart wallpaper, Quit | **done** | `crates/core/src/tray.rs` | [Core tray][core-tray]: same config writes and supervisor actions remain. |
-| R03 Edit widgets / show overlay widgets, top-bar/dock toggles, taskbar keep/autohide/hide | **partial** | `crates/core/src/tray.rs` | [Core tray][core-tray]: edit/overlay messages and bar/dock/taskbar edits remain; shell tray presentation is complete. The overlay outcome still depends on the widget owner closing H10. |
+| R03 Edit widgets / show overlay widgets, top-bar/dock toggles, taskbar keep/autohide/hide | **done** | `crates/core/src/tray.rs` | [Core tray][core-tray], [widget host][widget-host]: retained messages/config edits now reach the implemented overlay surfaces and edit controls. |
 | R04 Desktop icons visibility/large/medium/small, mypaper menu and classic-menu toggles/checks | **done** | `crates/core/src/tray.rs`, `crates/core/src/desktop_extras.rs` | [Core tray][core-tray], [desktop extras][desktop-extras]: all desktop submenu actions remain. |
 | R05 Ctrl+Alt+Shift+Backspace panic: stop children, stock taskbar/wallpaper/style/cursors restore | **done** | `crates/core/src/main.rs`, `crates/core/src/bars.rs`, `crates/core/src/styling.rs` | [Core main][core-main], [core bars][core-bars], [styling][styling]: hotkey stays independent of shell responsiveness. |
 | R06 Ctrl+Alt+Shift+W and Ctrl+Alt+Shift+O, registered edit/overlay messages | **done** | `RW/main.rs`, `RW/app.rs` | [Widget control][widget-control]: legacy message window and both global hotkeys are registered by the native shell. |
@@ -449,9 +451,9 @@ The authoritative schemas at the old commit are Rust types/validators, not four 
 | C15 Hover/press/open/magnify/bounce/attention animation leaves | **partial** | `B/style/motion.ts`, `RB/style.rs` | [Bar motion][bar-motion], [window][bar-window]: dock magnify timing is consumed; Studio hover/press timings and launch-bounce/attention durations are not. Menus-opening timing currently affects bar slide, while popup/menu opening keeps its fixed spring. |
 | C16 `icons` pack selection; AUMID/path/exe/extension/key matching, mono/missing fallback and bundled pack | **done** | `RB/icon_pack.rs`, `B/style/icon-pack.ts`, `bars/shell/public/icons/mono/` | [Bar icons][bar-icons]: user-pack ranking/masks plus embedded mono assets and dynamic network/volume/media/battery/trash keys. |
 | C17 Launcher/calendar/audio/tray configs accepted with validation and inherited pins | **done** | `RB/flyouts/config.rs` | [Flyout config][flyout-config], [flyouts][flyouts]: native consumers honor validated settings, omitted-pin inheritance, calendar zones, output switching and explicit two-layout migration. |
-| C18 `widgets.json` version/grid/instances/overlay and per-instance monitor/cell/size/settings/appearance | **partial** | `RW/layout.rs`, `W/shell/src/host.ts` | [Layout][widget-layout], [host][widget-host]: parses original shape; overlay behavior and invalid-file edit protection are H10/H21. |
+| C18 `widgets.json` version/grid/instances/overlay and per-instance monitor/cell/size/settings/appearance | **done** | `RW/layout.rs`, `W/shell/src/host.ts` | [Layout][widget-layout], [host][widget-host]: original layout shape retained; overlay surfaces and invalid-file recovery/write refusal are implemented (H10/H21). |
 | C19 `widget.json` settings types/defaults/ranges/groups/replaces/size/resizable/instances/preset | **done** | `RW/manifest.rs`, `W/*/widget.json` | [Manifest parser][widget-manifest], [catalog][widget-catalog]: native catalog retains all built-in setting declarations and migration aliases. |
-| C20 Instance/shared storage, private picked files and compatible duplicates | **partial** | `RW/storage.rs`, `RW/pick.rs`, `RW/app.rs` | [Storage][widget-storage], [host][widget-host]: storage/loading/copy work, but remove does not clean associated files (H05). |
+| C20 Instance/shared storage, private picked files and compatible duplicates | **done** | `RW/storage.rs`, `RW/pick.rs`, `RW/app.rs` | [Storage][widget-storage], [picker][widget-picker], [host][widget-host]: compatible instance/shared storage, owned duplicate URLs and post-save removal cleanup; malformed storage is backed up and write-protected even with a warm cache. |
 | C21 `theme.json` name/hidden, seven wallpaper kinds and all source settings | **done** | `crates/theme/src/lib.rs` | [Theme schema][theme-schema]: existing source fields survive; exact keys are enumerated in Wallpaper. |
 | C22 `theme.json` windows, bars/widgets appearance/glass and partial-layer resets | **partial** | `crates/theme/src/lib.rs`, `RW/look.rs`, `RB/look.rs` | [Theme schema][theme-schema], [widget look][widget-look], [bar tokens][bar-look]: data remains valid but some native visual consumers are incomplete. |
 | C23 Theme folder asset confinement, hot reload, failed reload keeps previous theme | **done** | `crates/theme/src/lib.rs`, `crates/wallpaper/src/main.rs` | [Theme schema][theme-schema], [engine main][engine-main]: wallpaper asset validation/reload remains; shell appearance watcher gap is H20. |
@@ -474,26 +476,13 @@ The T19 action inventory is: `default`, `none`, `start`, `search`, `notification
 
 ## Prioritized missing and partial work (excluding N3 and intentional losses)
 
-This is the complete unresolved-row backlog grouped by user outcome. References to Studio/config rows avoid repeating the same implementation job. Bar/engine agents may already be fixing some of these; re-read their files before assigning work. Deferred N6/N7 requirements remain visible rather than being misclassified as dropped.
+The remaining rows belong to retained appearance, motion and engine/Studio controls; widget behavior rows are implemented. Performance gates are tracked separately in docs/widgets.md.
 
-1. **P0 — Protect user files and make photo duplication work.** Refuse all native layout writes after a parse failure; surface the error; rebase duplicate picked-file URLs and restore removal cleanup. Covers H05, H21, H24, WP02, C18, C20. These affect data integrity or break a user's copied photo widget immediately.
-2. **P1 — Restore access to content.** Add real scrolling and focus traversal/invoke to widget lists and previews, widget arrow/Shift-arrow arranging with full resize handles and neighbor swap/shift, and correct todo Escape/F2/Delete behavior. Covers H06, H07, H08, H22, WTD03, WN04, WR04, WL05, WQ03.
-3. **P1 — Restore shell-surface and tray availability.** Create the media-pill overlay surface with the existing toggle/instance rules, and prevent/exit arranging while held. Covers H10, H12, WMP03 and the remaining widget outcome in R03. Configured tray hosting now survives hidden bars/fullscreen (T18 closed).
-4. **P1 — Make appearance controls truthful.** Fix widget auto accent, truly opaque solid fill, text shadow and glass opacity/blur/intensity; consume retained bar surface/font/scale/border/none/material/scheme controls and state styling. Covers H13, H14, H16, H17, H19, C06, C07, C09, C10, C12, C22; do not restore deliberately removed gradients/noise/glow/CSS.
-5. **P1 — Follow live theme edits.** Bars and flyouts now watch the active theme file. Add the equivalent widget watch. Covers H20 and the live-update part of S17; saving a setting must update the actual desktop without a second unrelated config write.
-6. **P1 — Finish glass over web/app wallpapers.** Connect top-level widget/bar surfaces to the existing overlay engine when the wallpaper owns native windows. Covers P14; coordinate with the active engine agent (N5), separate from N3's app-overlap/flyout work.
-7. **P1 — Correct displayed data.** Fix system graph trace-to-metric mapping, the ignored interval control/explicit two-second policy, readable dense metric states, quick-toggle live Wi-Fi/battery state, timer long-break reset/finish-day attribution, todo activity bookkeeping, RSS dedup/stale-feed feedback and crypto price precision/stale timestamp. Covers WS02, WS03, WS05, WQT04, WT04, WTD05, WR03, WCR03.
-8. **P2 — Complete weather and calendar content.** Restore hourly/day forecast detail and actionable weather failures, calendar strip week-start, Today reset, event date/time/color input and complete day/agenda lists. Covers WW02, WW03, WW04, WCA02, WCA03, WCA05, WCA06.
-9. **P2 — Finish clock faces and localization.** Restore analog date/numerals, greeting's time/date, world offset/day/night/dials, locale-sensitive text, and finite flip-on-value-change behavior. Covers WC01, WC02, WC04, WC06, WC07.
-10. **P2 — Finish media variants and information.** Restore artwork-derived tint/metadata/time labels, blur-card layout, spectrum mirror/wave, media-pill shape selection and full-track tooltip. Covers WM02, WM03, WM04, WMP01, WMP05; ambient marquee and glow stay removed.
-11. **P2 — Complete the remaining widget interactions.** Launcher zoom/launch/failure and quick-toggle press/failure feedback; countdown adaptive unit/detail layout; photo skip/retry after bad images; real notes Markdown; todo progress/compact behavior; heatmap labels/hover information and quote fit. Covers WL04, WQT05, WCD03, WP05, WN03, WTD04, WH03 and remaining WL05/WQ03 content details.
-12. **Closed — Dock behavior and status affordances.** D02, D07, D12, D14, D17, D18, T12, T13, T22, T24 and T27 now have native implementations and focused coverage; see the bars/flyouts follow-up in docs/bars.md.
-13. **P2 — Finish motion customization.** Bundled glyph/assets and dynamic pack keys are restored (C11/C16 closed). Retained motion style/hover/press/bounce/attention overrides still need the broader style pass. Covers C13, C14 and C15; finite default dock feedback is already implemented.
-14. **Done by N7.** ~~**P2 — Make retained Studio status/previews accurate now.**~~ Replace deleted bar/widget process checks with shell status, restore real widget previews and stop presenting CSS design thumbnails as native output. Covers S04, S16, S19, S28, S31 and the truthfulness portions of S14, S15, S17, S20, S21, S24, S25, S26. Old CSS/theme/decoration controls should be removed as intentional cuts, not reimplemented.
-15. **P2 — Expose the new GPU/FPS settings.** Add global/per-wallpaper GPU and frame-rate controls to Studio while preserving explicit choices. Covers C26; coordinate with active engine optimization, and distinguish web/app self-paced rendering in the UI.
-16. **P3 — Finish N6's style system.** Add oneui/fluent, map retained style intent to the five approved native styles and wire the one-switch Windows accent/frame/light-dark synchronization. Covers C25 plus style/preview aspects of T05, H17, S19 and S25; old CSS designs need not be reconstructed byte-for-byte.
-17. **P3 — Clarify the remaining extension contract.** Wire the promised native JSON-RPC provider path or document its supported consumer boundary. Covers H23; HTML widgets/SDK and the old widget executable remain cut.
-18. **Done by N7.** ~~**P3 — Native Studio (explicitly deferrable N7).**~~ Replace Tauri with the native renderer and share real shell previews. Covers S33, with S16's preview regression already prioritized separately; preserve the retained page/settings inventory above.
+1. **P1 — Make retained bar appearance controls truthful.** Consume retained bar surface/font/scale/border/none/material/scheme controls and state styling. Covers C06, C07, C09, C10, C12, C22; widget appearance controls are implemented. Do not restore deliberately removed gradients/noise/glow/CSS.
+2. **P1 — Finish glass over web/app wallpapers.** Connect top-level widget/bar surfaces to the existing overlay engine when the wallpaper owns native windows. Covers P14; coordinate with the active engine agent (N5), separate from N3's app-overlap/flyout work.
+3. **P2 — Finish motion customization.** Retained motion style/hover/press/bounce/attention overrides still need the broader style pass. Covers C13, C14 and C15; finite default dock feedback is already implemented.
+4. **P2 — Expose the new GPU/FPS settings.** Add global/per-wallpaper GPU and frame-rate controls to Studio while preserving explicit choices. Covers C26; coordinate with active engine optimization, and distinguish web/app self-paced rendering in the UI.
+5. **P3 — Finish N6's style system.** Add oneui/fluent, map retained style intent to the five approved native styles and wire the one-switch Windows accent/frame/light-dark synchronization. Covers C25; old CSS designs need not be reconstructed byte-for-byte.
 
 ## + more: ten valuable improvements after parity
 
