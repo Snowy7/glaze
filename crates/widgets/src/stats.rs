@@ -550,9 +550,6 @@ impl Sampler {
         if fields.gpu && self.gpu.is_none() {
             self.gpu = GpuCounters::open();
         }
-        if !fields.gpu {
-            self.gpu = None;
-        }
         let stats = SystemStats {
             cpu: cpu_percent(&self.last, &now),
             memory: memory(),
@@ -657,6 +654,11 @@ impl Stats {
         if self.held || (self.subs.is_empty() && self.once.is_empty()) {
             self.sampler = None;
             self.ready_at = None;
+        } else if self.once.is_empty() && !self.subs.iter().any(|sub| sub.fields.gpu) {
+            // Keep the PDH query warm across non-GPU deliveries to slower/faster subscribers.
+            if let Some(sampler) = &mut self.sampler {
+                sampler.gpu = None;
+            }
         }
     }
 

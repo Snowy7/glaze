@@ -50,6 +50,11 @@ impl WindowEvents {
     pub fn take_changed(&self) -> bool {
         CHANGED.swap(false, Ordering::Relaxed)
     }
+
+    /// Coverage of individual desktop surfaces, without the monitor-only maximized shortcut.
+    pub fn covered_regions(regions: &[Rect]) -> Vec<bool> {
+        covered(regions, false)
+    }
 }
 
 impl Drop for WindowEvents {
@@ -92,10 +97,15 @@ unsafe extern "system" fn on_event(
 /// For each monitor: is it fully hidden by a maximized or fullscreen window?
 /// One cheap pass over top-level windows; call it after [`WindowEvents`] fires.
 pub fn covered_monitors(monitors: &[Rect]) -> Vec<bool> {
+    covered(monitors, true)
+}
+
+fn covered(monitors: &[Rect], maximized: bool) -> Vec<bool> {
     let mut scan = Scan {
         monitors,
         covered: vec![false; monitors.len()],
         pid: std::process::id(),
+        maximized,
     };
     // SAFETY: the callback only runs during this call, while `scan` is alive.
     unsafe {
@@ -108,6 +118,7 @@ struct Scan<'a> {
     monitors: &'a [Rect],
     covered: Vec<bool>,
     pid: u32,
+    maximized: bool,
 }
 
 const SHELL_CLASSES: &[&str] = &[
@@ -129,7 +140,7 @@ unsafe extern "system" fn scan_window(hwnd: HWND, data: LPARAM) -> BOOL {
     let (cx, cy) = frame.center();
     for (monitor, covered) in scan.monitors.iter().zip(scan.covered.iter_mut()) {
         // Maximized windows stop at the taskbar, so match them by center.
-        if (zoomed && monitor.contains_point(cx, cy)) || frame.contains(monitor) {
+        if (scan.maximized && zoomed && monitor.contains_point(cx, cy)) || frame.contains(monitor) {
             *covered = true;
         }
     }

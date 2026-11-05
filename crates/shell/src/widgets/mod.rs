@@ -67,6 +67,7 @@ pub const WM_DIAGNOSTICS: u32 = WM_APP + 104;
 const WM_BOUNDS: u32 = WM_APP + 105;
 
 struct Entry {
+    stats_listening: bool,
     surface: Surface,
     topmost: bool,
     model: Model,
@@ -511,6 +512,61 @@ impl Widgets {
                 time::wait_ms(d.saturating_duration_since(Instant::now()))
             })
     }
+    /// Keep stats subscriptions only for visible, uncovered consumers and their displayed fields.
+    fn subscribe_stats(&mut self, now: Instant) {
+        let regions: Vec<_> = self.entries.values()
+            .filter(|e| matches!(e.model.kind, Widget::System | Widget::QuickToggles))
+            .map(|e| mypaper_desktop::Rect {
+                x: e.rect.left.floor() as i32,
+                y: e.rect.top.floor() as i32,
+                width: e.rect.width().ceil() as i32,
+                height: e.rect.height().ceil() as i32,
+            })
+            .collect();
+        if regions.is_empty() {
+            return;
+        }
+        let covered = if self.editing
+            || std::env::var_os("MYPAPER_WIDGETS_IGNORE_COVERED").is_some_and(|v| v == "1")
+        {
+            vec![false; regions.len()]
+        } else {
+            mypaper_desktop::WindowEvents::covered_regions(&regions)
+        };
+        for (entry, covered) in self.entries.values_mut()
+            .filter(|e| matches!(e.model.kind, Widget::System | Widget::QuickToggles))
+            .zip(covered)
+        {
+            let m = &entry.model;
+            let quick = m.kind == Widget::QuickToggles;
+            let needed = if quick {
+                m.flag("wifi", true) || m.flag("battery", true)
+            } else {
+                ["cpu", "ram", "gpu", "net", "battery"].iter().any(|key| m.flag(key, true))
+                    || m.flag("disk", false)
+            };
+            let active = needed && m.visible && !self.held && (entry.topmost || !covered);
+            if !active {
+                self.stats.forget(&m.placed.instance);
+            } else if !entry.stats_listening {
+                self.stats.subscribe_fields(
+                    &m.placed.instance,
+                    "system",
+                    if quick { Duration::from_secs(5) } else { m.stats_interval() },
+                    now,
+                    mypaper_widgets::stats::SampleFields {
+                        gpu: !quick && m.flag("gpu", true),
+                        disks: !quick && m.flag("disk", false),
+                        net: !quick && m.flag("net", true),
+                        battery: m.flag("battery", true),
+                        network: m.flag(if quick { "wifi" } else { "net" }, true),
+                    },
+                );
+            }
+            entry.stats_listening = active;
+        }
+    }
+
     pub fn poll(&mut self, ui: &mut Ui) {
         self.costs.polls += 1;
         let instant = Instant::now();
@@ -550,7 +606,8 @@ impl Widgets {
                 Err(e) => log::warn!("widget desktop: {e:#}"),
             }
         }
-        if self.windows.take_changed() {
+        let windows_changed = self.windows.take_changed();
+        if windows_changed {
             // Explorer can move its anchor without sending our windows a position message.
             // One band probe catches that; ordinary app/child churn needs no group repair.
             if self
@@ -614,12 +671,16 @@ impl Widgets {
                 entry.model.photo.previous = None;
             }
         }
+        let stats_visibility_changed = windows_changed || self.reconcile_needed;
         if self.reconcile_needed {
             plates_changed = true;
             if let Err(e) = self.reconcile(ui, now, instant) {
                 log::error!("native widgets: {e:#}");
             }
             self.reconcile_needed = false;
+        }
+        if stats_visibility_changed {
+            self.subscribe_stats(instant);
         }
         if self.order_due.is_some_and(|at| at <= instant) {
             let measured = Instant::now();
@@ -656,16 +717,28 @@ impl Widgets {
             } = delivery
                 && let Some(entry) = self.entries.get_mut(&instance)
             {
-                let before = metrics::visible(&entry.model);
-                let quick_changed =
-                    entry.model.stats.as_ref().is_none_or(|old| {
-                        old.battery != stats.battery || old.network != stats.network
+                let quick = entry.model.kind == Widget::QuickToggles;
+                let before = (!quick).then(|| metrics::visible(&entry.model));
+                let uptime_changed = entry.model.str("variant", "rings") == "bars"
+                    && entry.model.stats.as_ref().is_none_or(|old| {
+                        (old.uptime / 60.0) as u64 != (stats.uptime / 60.0) as u64
                     });
+                let shown_network = |network: &Option<mypaper_widgets::stats::Network>| {
+                    network.as_ref().map(|n| {
+                        (n.kind, n.name.clone(), (n.signal.unwrap_or(0) / 26).min(3))
+                    })
+                };
+                let quick_changed = quick && entry.model.stats.as_ref().is_none_or(|old| {
+                    (entry.model.flag("battery", true) && old.battery != stats.battery)
+                        || (entry.model.flag("wifi", true)
+                            && shown_network(&old.network) != shown_network(&stats.network))
+                });
                 entry.model.stats = Some(stats);
-                let after = metrics::visible(&entry.model);
+                let after = (!quick).then(|| metrics::visible(&entry.model));
                 let spark = entry.model.str("variant", "rings") == "spark";
+                let mut history_changed = false;
                 if spark {
-                    for metric in &after {
+                    for metric in after.iter().flatten() {
                         let history = entry.model.history.entry(metric.id.clone()).or_default();
                         let sample = if metric.id == "net" {
                             entry
@@ -677,16 +750,18 @@ impl Widgets {
                         } else {
                             metric.percent
                         };
+                        history_changed |= history.len() < 60
+                            || history.iter().any(|old| *old != sample);
                         history.push_back(sample);
                         if history.len() > 60 {
                             history.pop_front();
                         }
                     }
                 }
-                entry.model.dirty |= if entry.model.kind == Widget::QuickToggles {
+                entry.model.dirty |= if quick {
                     quick_changed
                 } else {
-                    spark || before != after
+                    history_changed || before != after || uptime_changed
                 };
             }
         }
@@ -896,6 +971,7 @@ impl Widgets {
                         self.entries.insert(
                             instance.instance.clone(),
                             Entry {
+                                stats_listening: false,
                                 surface,
                                 topmost,
                                 model,
@@ -934,6 +1010,7 @@ impl Widgets {
             entry.model.dirty |= restyled;
             entry.painted &= !restyled;
             if changed {
+                entry.stats_listening = false;
                 entry.model.generation += 1;
                 entry.model.fetching = false;
                 entry.model.scroll = 0.0;
@@ -978,6 +1055,7 @@ impl Widgets {
                 entry.model.next = None;
                 entry.model.fetch_at = None;
                 self.stats.forget(&instance.instance);
+                entry.stats_listening = false;
                 self.media.forget(&instance.instance);
                 self.audio.forget(&instance.instance);
             } else if !self.held && (!was_visible || changed) {
@@ -988,26 +1066,6 @@ impl Widgets {
                     Widget::Weather | Widget::Crypto | Widget::Rss
                 ) {
                     entry.model.fetch_at = Some(instant);
-                }
-                if matches!(entry.model.kind, Widget::System | Widget::QuickToggles) {
-                    let quick = entry.model.kind == Widget::QuickToggles;
-                    self.stats.subscribe_fields(
-                        &instance.instance,
-                        "system",
-                        if quick {
-                            Duration::from_secs(2)
-                        } else {
-                            entry.model.stats_interval()
-                        },
-                        instant,
-                        mypaper_widgets::stats::SampleFields {
-                            gpu: !quick && entry.model.flag("gpu", true),
-                            disks: !quick && entry.model.flag("disk", false),
-                            net: !quick && entry.model.flag("net", true),
-                            battery: quick || entry.model.flag("battery", true),
-                            network: quick || entry.model.flag("net", true),
-                        },
-                    );
                 }
                 if entry.model.kind == Widget::Media {
                     self.media.subscribe(&instance.instance, "media");
