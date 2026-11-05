@@ -207,7 +207,7 @@ impl Drop for Ticker {
 }
 
 /// One refresh of the display, from DWM (60 Hz when it can't say).
-fn display_frame() -> Duration {
+pub fn display_frame() -> Duration {
     let mut timing = DWM_TIMING_INFO {
         cbSize: size_of::<DWM_TIMING_INFO>() as u32,
         ..Default::default()
