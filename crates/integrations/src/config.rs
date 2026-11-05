@@ -127,6 +127,7 @@ pub struct Docker {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+/// Read compatibility for integrations.json predating the component migration. No native provider uses it.
 pub struct Tailscale {
     pub enabled: bool,
     pub pipe: String,
