@@ -549,11 +549,11 @@ impl Bars {
             self.maximized_due.get_or_insert(now + Duration::from_millis(150));
         }
         if maximized_event || maximized_settled {
+            // Focus and monitor changes invalidate every monitor's independent z-order decision.
+            // Fullscreen visibility is handled separately below.
             let windows = maximized::ZOrder::read();
             for b in &mut self.bars {
-                let hide = b.hide_when_maximized()
-                    && self.fullscreen.as_deref() != Some(&b.monitor.device)
-                    && windows.hides(b.monitor.rect);
+                let hide = b.hide_when_maximized() && windows.hides(b.monitor.rect);
                 b.maximized.observe(hide, now);
             }
         }
