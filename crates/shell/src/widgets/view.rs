@@ -152,7 +152,9 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
         .get("border")
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    if surface != "none" && border {
+    // No outlines on glass: the engine draws its one edge, matching the plate's shape.
+    let outlined = !matches!(surface, "none" | "glass") && border;
+    if outlined {
         match design {
             "depth" => c.stroke(
                 rect.inflate(-2.0 * scale),
@@ -202,7 +204,7 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
         Widget::Heatmap => heatmap(&mut c, model, now),
         Widget::Quote => quote(&mut c, model, now),
     }
-    if (surface != "none" && border) || editing {
+    if outlined || editing {
         c.stroke(
             rect.inflate(-0.5),
             radius,

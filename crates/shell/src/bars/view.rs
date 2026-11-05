@@ -65,12 +65,15 @@ impl Frame {
             radius,
             color: tokens.fill.with_alpha(tokens.fill.a.max(1.0 / 255.0)),
         });
-        self.list.ops.push(Op::Stroke {
-            rect: rect.inflate(-0.5),
-            radius,
-            width: 1.0,
-            color: tokens.rim,
-        });
+        // No outlines on glass: the engine draws its one edge, matching the plate's shape.
+        if tokens.material.is_none() {
+            self.list.ops.push(Op::Stroke {
+                rect: rect.inflate(-0.5),
+                radius,
+                width: 1.0,
+                color: tokens.rim,
+            });
+        }
     }
     fn hit(&mut self, rect: Rect, label: &str, target: Target) -> u32 {
         self.targets.push(target);

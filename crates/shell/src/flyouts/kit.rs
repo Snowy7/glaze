@@ -656,27 +656,25 @@ impl<'a> Kit<'a> {
         self.y += self.px(10.0);
     }
 
-    /// The panel's body, filling the whole window: glass under it with a light tint of the
-    /// style's fill over it, or the style's own fill. The tint matters over our own widgets:
-    /// the engine's capture leaves the shell's windows out, so its glass cannot blur them and
-    /// they would read through the panel's text. Goes first, under everything else.
+    /// The panel's body, filling the whole window: glass under it, or the style's own fill
+    /// with a hairline. The engine's glass is opaque and tinted for legibility (the flyout's
+    /// clarity), and covers our own widgets behind it, so on glass the body only takes clicks:
+    /// no fill and no outline over it. Goes first, under everything else.
     pub fn body(list: &mut DisplayList, size: (f32, f32), radius: f32, look: &Look, glass: bool) {
         let rect = Rect::new(0.0, 0.0, size.0, size.1);
         let mut ops = vec![Op::Fill {
             rect,
             radius,
-            color: if glass {
-                look.fill.with_alpha(0.68)
-            } else {
-                look.fill
-            },
+            color: if glass { Rgba::HIT } else { look.fill },
         }];
-        ops.push(Op::Stroke {
-            rect: rect.inflate(-0.5),
-            radius,
-            width: 1.0,
-            color: look.ink.with_alpha(if glass { 0.16 } else { 0.12 }),
-        });
+        if !glass {
+            ops.push(Op::Stroke {
+                rect: rect.inflate(-0.5),
+                radius,
+                width: 1.0,
+                color: look.ink.with_alpha(0.12),
+            });
+        }
         ops.append(&mut list.ops);
         list.ops = ops;
     }

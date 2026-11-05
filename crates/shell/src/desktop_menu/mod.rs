@@ -278,7 +278,14 @@ impl DesktopMenu {
         }
         MENU_OPEN.store(true, Ordering::Relaxed);
         let screen = screen_at(at.0, at.1);
-        if let Err(e) = self.menu.open(ui, items, at, screen, &self.settings.tokens) {
+        // No outlines on glass: the engine draws its one edge and its shadow.
+        let glass = self.settings.tokens.glass.is_some() || mypaper_ui::glass::style().is_some();
+        let tokens = Tokens {
+            border: self.settings.tokens.border && !glass,
+            shadow: self.settings.tokens.shadow && !glass,
+            ..self.settings.tokens.clone()
+        };
+        if let Err(e) = self.menu.open(ui, items, at, screen, &tokens) {
             log::warn!("desktop menu: {e:#}");
             MENU_OPEN.store(false, Ordering::Relaxed);
         }
