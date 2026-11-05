@@ -213,7 +213,10 @@ fn overview(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig) {
         crate::ui::nav_row(b, c, glyph::START, "Start menu", &format!("{} layout{}", if start == "grid" { "Grid" } else { "Windows 11" }, if config.launcher.win_key { " · Windows key opens it" } else { "" }), Action::SelectPanel(Some(Panel::Start)));
         crate::ui::nav_row(b, c, glyph::CALENDAR, "Calendar", &format!("{zones} other clock{}", if zones == 1 { "" } else { "s" }), Action::SelectPanel(Some(Panel::Calendar)));
         crate::ui::nav_row(b, c, glyph::SOUND, "Sound", if config.audio.switch_output { "Can switch the output device" } else { "Volume only" }, Action::SelectPanel(Some(Panel::Sound)));
-        crate::ui::nav_row(b, c, glyph::CHEVRON_DOWN, "Tray", if config.tray.host { "Collects the tray icons" } else { "Windows keeps them" }, Action::SelectPanel(Some(Panel::Tray)));
+        // With the Windows taskbar hidden the bars always collect the tray: nothing to choose.
+        if config.taskbar.mode != mypaper_bars::config::TaskbarMode::Hide {
+            crate::ui::nav_row(b, c, glyph::CHEVRON_DOWN, "Tray", if config.tray.host { "Collects the tray icons" } else { "Windows keeps them" }, Action::SelectPanel(Some(Panel::Tray)));
+        }
         crate::ui::nav_row(b, c, glyph::BELL, "Notifications", "Win+N and Win+A open mypaper's", Action::SelectPanel(Some(Panel::Notifications)));
     });
     let overrides: Vec<String> = app.get(DocId::Bars, "/overrides").and_then(Value::as_object).map(|m| m.keys().cloned().collect()).unwrap_or_default();
