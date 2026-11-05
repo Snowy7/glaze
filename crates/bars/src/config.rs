@@ -750,6 +750,7 @@ impl<'de> Deserialize<'de> for ModuleRef {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use serde::de::{Error, IntoDeserializer};
         let text = String::deserialize(deserializer)?;
+        if text == "obs" { return Ok(Self::Custom("obs--status".into())); }
         if text == "tailscale" { return Ok(Self::Custom("tailscale--status".into())); }
         if text == "|" {
             return Ok(Self::Break);
