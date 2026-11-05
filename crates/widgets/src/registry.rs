@@ -129,9 +129,6 @@ pub fn builtins() -> Registry {
     let manifest =
         WidgetManifest::parse(include_str!("catalog/t3.json"), "t3").expect("built-in schema");
     widgets.insert("t3".into(), Installed { manifest });
-    let manifest =
-        WidgetManifest::parse(include_str!("catalog/obs.json"), "obs").expect("built-in schema");
-    widgets.insert("obs".into(), Installed { manifest });
     for (id, definition) in crate::custom::catalog() {
         match definition.manifest(&id) {
             Ok(manifest) => { widgets.insert(id, Installed { manifest }); }
