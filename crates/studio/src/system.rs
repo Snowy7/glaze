@@ -265,6 +265,31 @@ pub fn start() -> Result<()> {
     Ok(())
 }
 
+/// Starts Studio again once this one has quit: a hidden PowerShell waits for this process, then
+/// starts `mypaper-studio.exe` beside it (which a deploy may have replaced meanwhile). The
+/// caller quits right after.
+pub fn restart_studio() -> Result<()> {
+    let exe = std::env::current_exe()?.with_file_name("mypaper-studio.exe");
+    let path = exe.display().to_string().replace('\'', "''");
+    let pid = std::process::id();
+    Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            &format!("Wait-Process -Id {pid} -Timeout 30 -ErrorAction SilentlyContinue; Start-Process -FilePath '{path}'"),
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .context("restarting Studio")?;
+    Ok(())
+}
+
 /// Stops core (which restores the desktop and stops its children), then what's left.
 pub fn stop() -> Result<()> {
     let ours = || {

@@ -326,6 +326,8 @@ pub enum Action {
     MenuMove(usize, i32),
     StartOver(DocId),
     ShowFile(DocId),
+    /// Quit and start Studio again (a file was saved by a newer mypaper).
+    RestartStudio,
     // Integrations
     SelectIntegration(usize),
     // Overlays

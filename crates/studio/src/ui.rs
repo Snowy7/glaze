@@ -494,15 +494,27 @@ pub fn banner(b: &mut B, rect: Rect, text: &str, buttons: &[(&str, Action)]) -> 
     h
 }
 
-/// A file's can't-be-read banner (Start over keeps a backup), when it has one. Returns the
-/// height used.
+/// A file's banner, when it has one. Returns the height used.
 pub fn file_banner(app: &App, b: &mut B, rect: Rect, doc: crate::docs::DocId) -> f32 {
-    let Some(error) = app.docs.error(doc) else {
+    let Some((text, buttons)) = banner_for(&app.docs, doc) else {
         return 0.0;
     };
+    banner(b, rect, &text, &buttons) + b.px(12.0)
+}
+
+/// What a file's banner says and offers. A layout saved by a newer mypaper offers only Restart:
+/// nothing destructive. A file that can't be read offers Show file and Start over (which asks
+/// first and keeps a timestamped backup).
+pub fn banner_for(docs: &crate::docs::Docs, doc: crate::docs::DocId) -> Option<(String, Vec<(&'static str, Action)>)> {
+    let error = docs.error(doc)?;
+    if docs.newer(doc) {
+        return Some((crate::docs::NEWER.to_owned(), vec![("Restart", Action::RestartStudio)]));
+    }
     let first = error.lines().next().unwrap_or(error);
-    let text = format!("{} can't be read: {first}", doc.label());
-    banner(b, rect, &text, &[("Show file", Action::ShowFile(doc)), ("Start over", Action::StartOver(doc))]) + b.px(12.0)
+    Some((
+        format!("{} can't be read: {first}", doc.label()),
+        vec![("Show file", Action::ShowFile(doc)), ("Start over", Action::StartOver(doc))],
+    ))
 }
 
 /// A navigation row: the kit's list row (icon badge, title, detail, chevron); the whole row is

@@ -12,10 +12,16 @@ use anyhow::{Context, Result};
 /// Preserve exact bytes beside a configuration. Never replace a previous recovery copy.
 /// Identical content reuses its backup, keeping repeated refused writes cheap.
 pub fn backup(path: &Path, bytes: &[u8]) -> Result<PathBuf> {
+    backup_tagged(path, "bak", bytes)
+}
+
+/// [`backup`] as `<file>.<tag>` (then `.<tag>.1`, ...): e.g. `widgets.json.v1`, the layout
+/// as it was before its upgrade.
+pub fn backup_tagged(path: &Path, tag: &str, bytes: &[u8]) -> Result<PathBuf> {
     use std::io::Write;
     for index in 0.. {
         let mut name = path.as_os_str().to_owned();
-        name.push(if index == 0 { ".bak".to_owned() } else { format!(".bak.{index}") });
+        name.push(if index == 0 { format!(".{tag}") } else { format!(".{tag}.{index}") });
         let target = PathBuf::from(name);
         match std::fs::OpenOptions::new().write(true).create_new(true).open(&target) {
             Ok(mut file) => {

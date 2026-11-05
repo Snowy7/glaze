@@ -120,9 +120,36 @@ impl Layout {
     }
 
     pub fn parse(json: &str) -> Result<Self> {
+        // Said first, and plainly: a newer file is not a broken one (it must never be "started
+        // over"). Readers tell the two apart with [`newer_version`].
+        if let Some(version) = newer_version(json) {
+            bail!("{NEWER} (layout version {version}; this mypaper reads up to {VERSION})");
+        }
         let layout: Self = serde_json::from_str(json)?;
         layout.validate()?;
         Ok(layout)
+    }
+
+    /// Loads `path` and moves a version-1 file onto the fine grid ([`Layout::upgrade`]). Before
+    /// an upgraded layout can ever be written, the old file is kept byte for byte as
+    /// `widgets.json.v1` (never overwritten; a different one goes to `.v1.1`, ...). Returns the
+    /// layout and whether it was upgraded (and so should be saved).
+    pub fn load_upgrading(path: &Path) -> Result<(Self, bool)> {
+        let bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok((Self::default(), false));
+            }
+            Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
+        };
+        let text = std::str::from_utf8(&bytes).with_context(|| format!("in {}", path.display()))?;
+        let mut layout = Self::parse(text).with_context(|| format!("in {}", path.display()))?;
+        if layout.version < VERSION {
+            crate::files::backup_tagged(path, &format!("v{}", layout.version), &bytes)
+                .context("keeping the layout before its upgrade")?;
+        }
+        let upgraded = layout.upgrade();
+        Ok((layout, upgraded))
     }
 
     /// Moves a version-1 layout onto the fine grid: every cell and size doubles, which keeps
@@ -194,11 +221,23 @@ impl Layout {
     /// Studio keeps omitted defaults and raw settings while sharing the desktop's write guard.
     pub fn save_value(value: &Value, path: &Path) -> Result<()> {
         let text = serde_json::to_string_pretty(value)? + "\n";
-        Self::parse(&text)?;
+        let next = Self::parse(&text)?;
         // An external editor may have changed the file since the host loaded it. Check at the
         // write boundary too, so even an edit arriving before the watcher cannot destroy it.
         match std::fs::read(path) {
             Ok(bytes) => {
+                // A newer mypaper's file, or an older layout version over a newer one: refused
+                // as is (no backup: nothing is wrong with the file).
+                let current = std::str::from_utf8(&bytes).ok();
+                if let Some(version) = current.and_then(newer_version) {
+                    bail!("{NEWER} (layout version {version}); restart to update before editing");
+                }
+                let on_disk = current.and_then(file_version).unwrap_or(0);
+                ensure!(
+                    on_disk <= u64::from(next.version),
+                    "refusing to write layout version {} over version {on_disk}",
+                    next.version
+                );
                 if let Err(error) = std::str::from_utf8(&bytes)
                     .map_err(anyhow::Error::from)
                     .and_then(Self::parse)
@@ -380,6 +419,20 @@ impl Layout {
     }
 }
 
+/// What a reader says of a layout from a newer mypaper.
+pub const NEWER: &str = "This layout was saved by a newer mypaper";
+
+/// The `version` a layout file declares, if it declares one.
+fn file_version(json: &str) -> Option<u64> {
+    serde_json::from_str::<Value>(json).ok()?.get("version")?.as_u64()
+}
+
+/// The version of a layout saved by a newer mypaper than this one (above [`VERSION`]). Such a
+/// file is fine: a reader shows "restart to update" and never offers to start over.
+pub fn newer_version(json: &str) -> Option<u64> {
+    file_version(json).filter(|&v| v > u64::from(VERSION))
+}
+
 /// A rectangle in DIPs.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct RectF {
@@ -547,7 +600,7 @@ mod tests {
         let path = dir.join("widgets.json");
         let mut layout = Layout::default();
         layout.save(&path).unwrap();
-        for bytes in [b"{ broken".as_slice(), b"{\"version\":99}", b"\xff\xfe"] {
+        for bytes in [b"{ broken".as_slice(), b"{\"version\":0}", b"\xff\xfe"] {
             std::fs::write(&path, bytes).unwrap();
             layout.overlay = !layout.overlay;
             assert!(layout.save(&path).is_err());
@@ -851,6 +904,44 @@ mod tests {
         assert!(!layout.upgrade(), "upgrades once");
         let saved = serde_json::to_string(&layout).unwrap();
         assert_eq!(Layout::parse(&saved).unwrap(), layout);
+    }
+
+    #[test]
+    fn the_upgrade_keeps_the_version_one_file_and_older_writers_cannot_undo_it() {
+        let dir = crate::files::temp_dir("upgrade-backup");
+        let path = dir.join("widgets.json");
+        std::fs::write(&path, LAYOUT).unwrap();
+        let (layout, upgraded) = Layout::load_upgrading(&path).unwrap();
+        assert!(upgraded && layout.version == VERSION);
+        let kept = dir.join("widgets.json.v1");
+        assert_eq!(std::fs::read_to_string(&kept).unwrap(), LAYOUT, "kept byte for byte");
+        layout.save(&path).unwrap();
+        // Loading again: nothing to upgrade, the backup is never replaced.
+        assert!(!Layout::load_upgrading(&path).unwrap().1);
+        assert_eq!(std::fs::read_to_string(&kept).unwrap(), LAYOUT);
+        // A version-1 write over the version-2 file (an older Studio) is refused.
+        let old = serde_json::from_str::<Value>(r#"{ "version": 1, "instances": [] }"#).unwrap();
+        assert!(Layout::save_value(&old, &path).is_err());
+        assert_eq!(Layout::load(&path).unwrap(), layout, "the upgraded file stands");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_newer_layout_is_reported_as_newer_and_never_overwritten() {
+        let newer = r#"{ "version": 3, "instances": [], "somethingNew": true }"#;
+        assert_eq!(newer_version(newer), Some(3));
+        assert_eq!(newer_version(LAYOUT), None);
+        assert_eq!(newer_version("{ broken"), None);
+        let error = format!("{:#}", Layout::parse(newer).unwrap_err());
+        assert!(error.starts_with(NEWER), "{error}");
+        let dir = crate::files::temp_dir("newer-layout");
+        let path = dir.join("widgets.json");
+        std::fs::write(&path, newer).unwrap();
+        let error = format!("{:#}", Layout::default().save(&path).unwrap_err());
+        assert!(error.starts_with(NEWER), "{error}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), newer, "left exactly as it was");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1, "nothing to back up: it isn't broken");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

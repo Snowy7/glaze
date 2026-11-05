@@ -124,7 +124,8 @@ pub fn run(app: &mut App, action: Action) {
         | Action::MenuRemove(_)
         | Action::MenuMove(..)
         | Action::StartOver(_)
-        | Action::ShowFile(_) => settings::run(app, action),
+        | Action::ShowFile(_)
+        | Action::RestartStudio => settings::run(app, action),
         Action::SelectIntegration(i) => {
             app.go(Page::Integrations);
             app.nav.integration = *i;

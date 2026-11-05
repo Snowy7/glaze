@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 use crate::actions::{Action, Edit, FieldId, Section};
 use crate::app::App;
-use crate::docs::{DocId, Op};
+use crate::docs::{DocId, Op, StartedOver};
 use crate::theme::glyph;
 use crate::ui::{B, Col, label, setting};
 
@@ -385,7 +385,8 @@ fn troubleshoot(app: &App, b: &mut B, col: &mut Col) {
             let row = Rect::new(c.x, c.y, c.w, b.px(40.0));
             label(b, row, name, &format!("{detail}; a backup is kept"), None);
             let w = b.button_width("Start over", false, true);
-            b.button(key(("start-over", *name)), Rect::new(row.right - w, row.top + b.px(6.0), w, b.px(28.0)), "Start over", None, ButtonKind::Secondary, true, Action::StartOver(*doc));
+            // A file from a newer mypaper is never started over (restart Studio instead).
+            b.button(key(("start-over", *name)), Rect::new(row.right - w, row.top + b.px(6.0), w, b.px(28.0)), "Start over", None, ButtonKind::Secondary, !app.docs.newer(*doc), Action::StartOver(*doc));
             c.y += b.px(44.0);
         }
     });
@@ -483,8 +484,12 @@ pub fn run(app: &mut App, action: Action) {
                 app.input.focus = Some(key(("menu-item", to as usize)));
             }
         }
+        Action::RestartStudio => match crate::system::restart_studio() {
+            Ok(()) => app.quit = true,
+            Err(e) => app.alert(format!("{e:#}")),
+        },
         Action::StartOver(doc) => {
-            if doc == DocId::Config {
+            if doc == DocId::Config && app.docs.error(DocId::Config).is_none() {
                 // Look's start over: only the look goes (a backup of the file is kept).
                 if let Some(path) = app.docs.doc(DocId::Config).path.clone() {
                     let _ = std::fs::copy(&path, path.with_extension("json.bak"));
@@ -493,9 +498,15 @@ pub fn run(app: &mut App, action: Action) {
                 app.toast("Your look is back to the wallpaper's (config.json.bak keeps the old one)", None);
                 return;
             }
-            let defaults = if doc == DocId::Bars { "{ \"version\": 1 }\n" } else { "{ \"version\": 1, \"instances\": [] }\n" };
-            match app.docs.start_over(doc, defaults) {
-                Ok(backup) => app.toast(format!("Started over{}", backup.map_or(String::new(), |b| format!("; the old file is {}", b.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()))), None),
+            let defaults = match doc {
+                DocId::Bars => "{ \"version\": 1 }\n".to_owned(),
+                // The current layout version: an older one would be upgraded (and refused) again.
+                DocId::Widgets => format!("{{ \"version\": {}, \"instances\": [] }}\n", mypaper_widgets::layout::VERSION),
+                _ => "{}\n".to_owned(),
+            };
+            match app.docs.start_over(doc, &defaults, |backup| confirm_start_over(doc, backup)) {
+                Ok(StartedOver::Declined) => {}
+                Ok(StartedOver::Done(backup)) => app.toast(format!("Started over{}", backup.map_or(String::new(), |b| format!("; the old file is {}", b.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()))), None),
                 Err(e) => app.alert(format!("{e:#}")),
             }
         }
@@ -511,4 +522,31 @@ pub fn run(app: &mut App, action: Action) {
 fn set_items(app: &mut App, items: Vec<Entry>, label: &str) {
     let value = serde_json::to_value(items).unwrap_or(Value::Null);
     app.apply(label, vec![Op { doc: DocId::Config, path: "/desktop_menu/items".into(), value: Some(value) }]);
+}
+
+/// Asks before Start over, in a modal dialog (Cancel is the default): what goes, and where the
+/// current file is kept first.
+fn confirm_start_over(doc: DocId, backup: Option<&std::path::Path>) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        IDOK, MB_DEFBUTTON2, MB_ICONWARNING, MB_OKCANCEL, MB_TASKMODAL, MessageBoxW,
+    };
+    let what = match doc {
+        DocId::Widgets => "All your widgets and where they sit are removed.",
+        DocId::Bars => "Your bars go back to the defaults.",
+        _ => "These settings go back to the defaults.",
+    };
+    let kept = backup
+        .and_then(|b| b.file_name())
+        .map(|n| format!("\n\nThe current file is kept first as {}.", n.to_string_lossy()))
+        .unwrap_or_default();
+    let text = windows::core::HSTRING::from(format!("Start over?\n\n{what}{kept}"));
+    // SAFETY: a modal dialog on this (the UI) thread with owned strings.
+    unsafe {
+        MessageBoxW(
+            None,
+            &text,
+            windows::core::w!("Start over"),
+            MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2 | MB_TASKMODAL,
+        ) == IDOK
+    }
 }

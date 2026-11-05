@@ -33,7 +33,7 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
   # An open Studio window belongs to the user: leave it running and skip its exe (locked) this time.
   $copy = $names
   if (Get-Process mypaper-studio -ErrorAction SilentlyContinue) {
-    Write-Warning "Studio is open; leaving it running and not updating mypaper-studio.exe"
+    Write-Warning "Studio is open; leaving it running (its exe is swapped below)"
     $copy = $names | Where-Object { $_ -ne "mypaper-studio" }
   }
   $deadline = (Get-Date).AddSeconds(20)
@@ -41,6 +41,25 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
   if (Get-Process $copy -ErrorAction SilentlyContinue) { throw "mypaper did not stop" }
 
   New-Item -ItemType Directory -Force $destination | Out-Null
+  # An open Studio keeps running, but its exe is still replaced: a running exe can be renamed,
+  # so the old one moves aside and its "Restart Studio" (or the next launch) gets this build.
+  # Without this an old Studio lingered and misread newer files (2026-11-05: version 2 layouts).
+  if ($copy -notcontains "mypaper-studio" -and (Test-Path -LiteralPath "$From\mypaper-studio.exe") -and
+      [IO.Path]::GetFullPath("$From\mypaper-studio.exe") -ne [IO.Path]::GetFullPath("$destination\mypaper-studio.exe")) {
+    Get-ChildItem -LiteralPath $destination -Filter "mypaper-studio.exe.old-*" -ErrorAction SilentlyContinue |
+      ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
+    $aside = "$destination\mypaper-studio.exe.old-$(Get-Date -Format yyyyMMddHHmmss)"
+    try {
+      Move-Item -LiteralPath "$destination\mypaper-studio.exe" -Destination $aside -Force
+      Copy-Item -LiteralPath "$From\mypaper-studio.exe" -Destination "$destination\mypaper-studio.exe" -Force
+      Write-Warning "Studio is open on the old build; restart it to update (the new exe is in place)"
+    } catch {
+      if (-not (Test-Path -LiteralPath "$destination\mypaper-studio.exe") -and (Test-Path -LiteralPath $aside)) {
+        Move-Item -LiteralPath $aside -Destination "$destination\mypaper-studio.exe" -Force
+      }
+      Write-Warning "Could not swap the open Studio's exe ($_); it stays on the old build"
+    }
+  }
   foreach ($exe in $copy) {
     if ([IO.Path]::GetFullPath("$From\$exe.exe") -ne [IO.Path]::GetFullPath("$destination\$exe.exe")) {
       Copy-Item -LiteralPath "$From\$exe.exe" -Destination "$destination\$exe.exe" -Force

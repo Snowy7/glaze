@@ -206,23 +206,24 @@ impl Widgets {
         let path = files::layout()?;
         let missing = !path.exists();
         // A broken file never gets a starter layout or migration written over it.
-        let (mut layout, layout_error) = match Layout::load(&path) {
-            Ok(layout) => (layout, None),
+        // Version-1 layouts move onto the fine grid once (same rectangles, finer cells); the
+        // version-1 file is kept as widgets.json.v1 before the first version-2 write.
+        let (mut layout, upgraded, layout_error) = match Layout::load_upgrading(&path) {
+            Ok((layout, upgraded)) => (layout, upgraded, None),
             Err(error) => {
                 if let Ok(bytes) = std::fs::read(&path) {
                     let _ = files::backup(&path, &bytes);
                 }
                 (
                     Layout::default(),
+                    false,
                     Some(format!(
                         "Invalid widgets.json: {error:#}. Correct the file before editing."
                     )),
                 )
             }
         };
-        // Version-1 layouts move onto the fine grid once (same rectangles, finer cells).
-        if layout_error.is_none() && (layout.migrate(|id| registry.replacement(id)) | layout.upgrade())
-        {
+        if layout_error.is_none() && (layout.migrate(|id| registry.replacement(id)) | upgraded) {
             layout.save(&path)?;
         }
         let monitors = monitor_infos();
@@ -366,10 +367,22 @@ impl Widgets {
                 self.commit_layout(next);
                 self.reconcile_needed = true;
             }
-            WM_LAYOUT => match Layout::load(&self.path) {
-                Ok(mut layout) => {
+            WM_LAYOUT => match Layout::load_upgrading(&self.path) {
+                // An older mypaper (an old Studio's Start over) wrote an older layout version
+                // over the one this shell already upgraded. That file is kept beside it
+                // (widgets.json.v1...) and the shell's layout goes back: never adopt a downgrade.
+                Ok((_, true)) if self.layout_error.is_none() => {
+                    log::warn!(
+                        "widgets.json: an older mypaper wrote an older layout version over version {}; kept it beside and restored the current layout",
+                        layout::VERSION
+                    );
+                    if let Err(e) = self.layout.save(&self.path) {
+                        log::error!("widget layout restore: {e:#}");
+                    }
+                }
+                Ok((mut layout, upgraded)) => {
                     self.layout_error = None;
-                    if (layout.migrate(|id| self.registry.replacement(id)) | layout.upgrade())
+                    if (layout.migrate(|id| self.registry.replacement(id)) | upgraded)
                         && let Err(e) = layout.save(&self.path)
                     {
                         log::warn!("widget migration: {e:#}");

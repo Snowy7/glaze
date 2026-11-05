@@ -5,7 +5,9 @@
 //!
 //! Rules (plans/native/studio-redesign.md, 5.8 and 6):
 //! - a file that doesn't parse is never written; its pages show a banner and edit nothing until
-//!   the user chooses Start over, which keeps a `.bak`;
+//!   the user chooses Start over, which asks first and keeps a timestamped `.bak`;
+//! - a layout saved by a newer mypaper isn't broken: it says "restart Studio to update" and
+//!   offers nothing destructive (no Start over);
 //! - a file changed on disk since Studio read it is read again first, and the edit is applied to
 //!   the newer text, so an editor never overwrites a newer file.
 
@@ -13,7 +15,20 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
+use mypaper_widgets::layout;
 use serde_json::{Map, Value};
+
+/// What a file saved by a newer mypaper shows instead of an error.
+pub const NEWER: &str = "This layout was saved by a newer mypaper. Restart Studio to update.";
+
+/// What [`Docs::start_over`] did.
+#[derive(Debug, PartialEq)]
+pub enum StartedOver {
+    /// The user said no: nothing was touched.
+    Declined,
+    /// The defaults replaced the file, which was kept here first (none when there was no file).
+    Done(Option<PathBuf>),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DocId {
@@ -90,6 +105,9 @@ pub struct Doc {
     pub effective: Value,
     /// Why the file on disk can't be read (it's left alone until Start over).
     pub error: Option<String>,
+    /// The file was saved by a newer mypaper (a later layout version): only a restart helps,
+    /// and Start over is refused.
+    pub newer: bool,
     /// The text last read or written, to notice other writers.
     seen: Option<String>,
 }
@@ -110,10 +128,14 @@ impl Doc {
                 raw,
                 effective,
                 error: None,
+                newer: false,
                 seen: text,
             },
             Err(e) => {
+                let newer = id == DocId::Widgets && layout::newer_version(source).is_some();
+                // A newer file isn't broken: no recovery copy, and its own message.
                 if id == DocId::Widgets
+                    && !newer
                     && let Some(path) = &path
                     && let Ok(bytes) = std::fs::read(path)
                 {
@@ -124,7 +146,8 @@ impl Doc {
                     path,
                     raw,
                     effective,
-                    error: Some(format!("{e:#}")),
+                    error: Some(if newer { NEWER.to_owned() } else { format!("{e:#}") }),
+                    newer,
                     seen: text,
                 }
             }
@@ -216,6 +239,11 @@ impl Docs {
 
     pub fn error(&self, id: DocId) -> Option<&str> {
         self.doc(id).error.as_deref()
+    }
+
+    /// Whether `id` was saved by a newer mypaper (restart to update; never start over).
+    pub fn newer(&self, id: DocId) -> bool {
+        self.doc(id).newer
     }
 
     /// The value at `path`: the file's own, else its owner's default.
@@ -372,6 +400,7 @@ impl Docs {
         let doc = &mut self.docs[id.index()];
         if fresh.error.is_some() {
             doc.error = fresh.error;
+            doc.newer = fresh.newer;
             doc.seen = fresh.seen;
         } else {
             *doc = fresh;
@@ -380,25 +409,39 @@ impl Docs {
         true
     }
 
-    /// Start over: the file is kept as `<name>.bak` and replaced by `defaults`.
-    pub fn start_over(&mut self, id: DocId, defaults: &str) -> Result<Option<PathBuf>> {
+    /// Start over: `confirm` is asked first (Settings shows a dialog; it gets the backup's
+    /// path), then the file is copied to `<name>.<YYYYMMDD-HHMMSS>.bak` (never replacing
+    /// another), and only then replaced by `defaults`. A layout saved by a newer mypaper is
+    /// refused outright: it isn't broken, this Studio is just old.
+    pub fn start_over(
+        &mut self,
+        id: DocId,
+        defaults: &str,
+        confirm: impl FnOnce(Option<&Path>) -> bool,
+    ) -> Result<StartedOver> {
         let path = self.doc(id).path.clone();
-        let backup = match &path {
-            Some(path) if path.exists() => {
-                let backup = if id == DocId::Widgets {
-                    mypaper_widgets::files::backup(path, &std::fs::read(path)?)?
-                } else {
-                    let mut name = path.as_os_str().to_owned();
-                    name.push(".bak");
-                    let backup = PathBuf::from(name);
-                    std::fs::copy(path, &backup).context("keeping a backup")?;
-                    backup
-                };
-                Some(backup)
-            }
-            _ => None,
-        };
+        let on_disk = path.as_deref().and_then(|p| std::fs::read_to_string(p).ok());
+        if self.doc(id).newer
+            || (id == DocId::Widgets && on_disk.as_deref().and_then(layout::newer_version).is_some())
+        {
+            bail!("{NEWER}");
+        }
+        let backup = path.as_deref().filter(|p| p.exists()).map(timestamped);
+        if !confirm(backup.as_deref()) {
+            return Ok(StartedOver::Declined);
+        }
         let (raw, effective) = id.parse(defaults)?;
+        if let (Some(path), Some(backup)) = (&path, &backup) {
+            use std::io::Write;
+            let bytes = std::fs::read(path).context("reading the file to keep")?;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(backup)
+                .with_context(|| format!("keeping a backup at {}", backup.display()))?;
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+        }
         if let Some(path) = &path {
             write_atomic(path, defaults.as_bytes())?;
         }
@@ -410,7 +453,7 @@ impl Docs {
         self.undo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
         self.redo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
         self.version += 1;
-        Ok(backup)
+        Ok(StartedOver::Done(backup))
     }
 
     /// Applies, checks and writes `ops`; returns each changed document's before and after.
@@ -489,6 +532,24 @@ impl Docs {
         self.docs[id.index()].seen = Some(text);
         Ok(())
     }
+}
+
+/// `<path>.<YYYYMMDD-HHMMSS>.bak` in local time, or `-1`, `-2`, ... after it when taken.
+fn timestamped(path: &Path) -> PathBuf {
+    // SAFETY: fills and returns a plain struct.
+    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    let stamp = format!(
+        "{:04}{:02}{:02}-{:02}{:02}{:02}",
+        t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond
+    );
+    (0..)
+        .map(|n| {
+            let mut name = path.as_os_str().to_owned();
+            name.push(if n == 0 { format!(".{stamp}.bak") } else { format!(".{stamp}-{n}.bak") });
+            PathBuf::from(name)
+        })
+        .find(|p| !p.exists())
+        .expect("a free name")
 }
 
 fn render(raw: &Value) -> Result<String> {
@@ -592,6 +653,7 @@ fn remove(node: &mut Value, tokens: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::actions::Action;
     use serde_json::json;
 
     fn op(doc: DocId, path: &str, value: Option<Value>) -> Op {
@@ -659,7 +721,7 @@ mod tests {
             docs.edit("Pause", &[op(DocId::Config, "/paused", Some(json!(true)))])
                 .is_err()
         );
-        docs.start_over(DocId::Config, "{}").unwrap();
+        docs.start_over(DocId::Config, "{}", |_| true).unwrap();
         assert!(docs.error(DocId::Config).is_none());
     }
 
@@ -680,6 +742,85 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    /// A fresh temp folder for one test.
+    fn folder(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("mypaper-studio-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn files_in(root: &Path) -> usize {
+        std::fs::read_dir(root).unwrap().count()
+    }
+
+    #[test]
+    fn a_layout_from_a_newer_mypaper_offers_restart_and_nothing_destructive() {
+        let root = folder("newer-layout");
+        let path = root.join("widgets.json");
+        let current = r#"{ "version": 2, "instances": [] }"#;
+        std::fs::write(&path, current).unwrap();
+        let mut docs = Docs::fixture(["{}", "{\"version\":1}", current, "{}"]);
+        docs.docs[DocId::Widgets.index()].path = Some(path.clone());
+        docs.docs[DocId::Widgets.index()].seen = Some(current.into());
+        // A newer mypaper saves its layout while this Studio is open.
+        let newer = r#"{ "version": 3, "instances": [{ "instance": "clock-1" }], "future": true }"#;
+        std::fs::write(&path, newer).unwrap();
+        assert!(docs.reload(DocId::Widgets));
+        assert!(docs.newer(DocId::Widgets));
+        let (text, buttons) = crate::ui::banner_for(&docs, DocId::Widgets).unwrap();
+        assert_eq!(text, "This layout was saved by a newer mypaper. Restart Studio to update.");
+        assert_eq!(buttons, vec![("Restart", Action::RestartStudio)], "Restart only: no Start over");
+        // Nothing can destroy it: Start over is refused without even asking, edits too.
+        assert!(
+            docs.start_over(DocId::Widgets, "{}", |_| panic!("never offered")).is_err()
+        );
+        assert!(docs.edit("Overlay", &[op(DocId::Widgets, "/overlay", Some(json!(false)))]).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), newer, "left exactly as it was");
+        assert_eq!(files_in(&root), 1, "no recovery copy: it isn't broken");
+        // Loaded fresh (Studio started while the file was newer): the same.
+        let docs = Docs::fixture(["{}", "{\"version\":1}", newer, "{}"]);
+        assert!(docs.newer(DocId::Widgets));
+        let (_, buttons) = crate::ui::banner_for(&docs, DocId::Widgets).unwrap();
+        assert!(buttons.iter().all(|(_, a)| !matches!(a, Action::StartOver(_))));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn starting_over_asks_first_and_keeps_a_timestamped_backup_before_writing() {
+        let root = folder("start-over");
+        let path = root.join("widgets.json");
+        let corrupt = "{ \"instances\": [ broken";
+        std::fs::write(&path, corrupt).unwrap();
+        let mut docs = Docs::fixture(["{}", "{\"version\":1}", corrupt, "{}"]);
+        docs.docs[DocId::Widgets.index()].path = Some(path.clone());
+        assert!(!docs.newer(DocId::Widgets) && docs.error(DocId::Widgets).is_some());
+        let (_, buttons) = crate::ui::banner_for(&docs, DocId::Widgets).unwrap();
+        assert!(buttons.contains(&("Start over", Action::StartOver(DocId::Widgets))));
+        let defaults = r#"{ "version": 2, "instances": [] }"#;
+        // Declined: nothing is touched.
+        let mut asked = None;
+        let declined = docs.start_over(DocId::Widgets, defaults, |backup| {
+            asked = backup.map(Path::to_path_buf);
+            false
+        });
+        assert_eq!(declined.unwrap(), StartedOver::Declined);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), corrupt);
+        assert_eq!(files_in(&root), 1);
+        // The question names the backup: widgets.json.<YYYYMMDD-HHMMSS>.bak, not written yet.
+        let name = asked.unwrap().file_name().unwrap().to_string_lossy().into_owned();
+        let stamp = name.strip_prefix("widgets.json.").and_then(|s| s.strip_suffix(".bak")).unwrap();
+        assert!(stamp.len() == 15 && stamp.as_bytes()[8] == b'-', "{name}");
+        assert!(stamp.chars().filter(|c| *c != '-').all(|c| c.is_ascii_digit()), "{name}");
+        // Confirmed: the old bytes are kept first, then the defaults are written.
+        let done = docs.start_over(DocId::Widgets, defaults, |_| true).unwrap();
+        let StartedOver::Done(Some(backup)) = done else { panic!("{done:?}") };
+        assert_eq!(std::fs::read_to_string(&backup).unwrap(), corrupt);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), defaults);
+        assert!(docs.error(DocId::Widgets).is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn starting_widgets_over_never_replaces_an_earlier_recovery_copy() {
         let root =
@@ -689,9 +830,13 @@ mod tests {
         let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);
         docs.docs[DocId::Widgets.index()].path = Some(path.clone());
         std::fs::write(&path, "first malformed layout").unwrap();
-        let first = docs.start_over(DocId::Widgets, "{}").unwrap().unwrap();
+        let done = |s| match s {
+            StartedOver::Done(Some(backup)) => backup,
+            other => panic!("{other:?}"),
+        };
+        let first = done(docs.start_over(DocId::Widgets, "{}", |_| true).unwrap());
         std::fs::write(&path, "second malformed layout").unwrap();
-        let second = docs.start_over(DocId::Widgets, "{}").unwrap().unwrap();
+        let second = done(docs.start_over(DocId::Widgets, "{}", |_| true).unwrap());
         assert_ne!(first, second);
         assert_eq!(
             std::fs::read_to_string(first).unwrap(),
