@@ -13,6 +13,7 @@ use windows::{
 };
 
 thread_local! { static REQUESTS: RefCell<Vec<(isize, Request)>> = const { RefCell::new(Vec::new()) }; }
+thread_local! { static STAGED: RefCell<Option<(isize, Request)>> = const { RefCell::new(None) }; }
 
 pub struct Host {
     hwnd: HWND,
@@ -141,12 +142,54 @@ unsafe extern "system" fn receive(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
                 std::slice::from_raw_parts(packet.lpData as *const u8, packet.cbData as usize)
             };
             if let Ok(request) = serde_json::from_slice::<Request>(bytes) {
-                REQUESTS.with_borrow_mut(|q| q.push((wp.0 as isize, request)));
+                // A timed-out WM_COPYDATA may arrive late. Open only after core confirms its ack.
+                STAGED.with_borrow_mut(|s| *s = Some((wp.0 as isize, request)));
                 return LRESULT(1);
             }
         }
         return LRESULT(0);
     }
+    if msg == wire::SHOW {
+        if let Some(request) = confirm(wp.0 as isize, lp.0 as usize) {
+            REQUESTS.with_borrow_mut(|q| q.push(request));
+        }
+        return LRESULT(0);
+    }
     // SAFETY: messages the inbox doesn't handle retain their original parameters.
     unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
+}
+
+fn confirm(caller: isize, nonce: usize) -> Option<(isize, Request)> {
+    STAGED.with_borrow_mut(|s| {
+        s.take_if(|(owner, request)| *owner == caller && request.nonce == nonce)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_late_or_unacknowledged_request_cannot_open_a_second_tray_menu() {
+        STAGED.with_borrow_mut(|s| {
+            *s = Some((
+                42,
+                Request {
+                    nonce: 2,
+                    point: (10, 20),
+                    items: vec![],
+                },
+            ))
+        });
+        assert!(
+            confirm(42, 1).is_none(),
+            "old confirmation must preserve the newer request"
+        );
+        assert!(confirm(43, 2).is_none(), "another caller cannot confirm it");
+        assert_eq!(confirm(42, 2).unwrap().1.nonce, 2);
+        assert!(
+            confirm(42, 2).is_none(),
+            "a confirmation is consumed exactly once"
+        );
+    }
 }

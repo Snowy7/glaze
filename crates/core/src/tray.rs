@@ -704,6 +704,17 @@ fn show_shell_menu(caller: HWND, menu: HMENU, point: (i32, i32), themes: &[Strin
             return false;
         }
         PENDING_MENU.with_borrow_mut(|p| *p = Some((nonce, themes.to_vec())));
+        if PostMessageW(
+            Some(host),
+            wire::SHOW,
+            WPARAM(caller.0 as usize),
+            LPARAM(nonce as isize),
+        )
+        .is_err()
+        {
+            PENDING_MENU.with_borrow_mut(|p| *p = None);
+            return false;
+        }
         true
     }
 }
