@@ -22,6 +22,7 @@ fn main() -> Result<()> {
     mypaper_desktop::init_logging();
     mypaper_desktop::enable_dpi_awareness();
     let _restore = RestoreInput::new();
+    let _awake = Awake::new()?;
     let seconds = std::env::args()
         .nth(1)
         .and_then(|v| v.parse::<u64>().ok())
@@ -346,12 +347,30 @@ fn seed_only(seconds: u64, monitors: usize) -> Result<()> {
         "N4_READY pid={} monitors={monitors} seconds={seconds} seed_only=true",
         std::process::id()
     );
-    // SAFETY: the event remains open during this bounded wait; no UI windows need pumping.
+    let deadline = Instant::now() + Duration::from_secs(seconds);
+    let mut message = MSG::default();
+    // SAFETY: this thread owns its queue and event. Pump COM's hidden STA windows as well as
+    // waiting for stop, so the media guard cannot obstruct another process's SMTC calls.
     unsafe {
-        windows::Win32::System::Threading::WaitForSingleObject(
-            stop,
-            seconds.saturating_mul(1000).min(u64::from(u32::MAX - 1)) as u32,
-        );
+        while Instant::now() < deadline {
+            if MsgWaitForMultipleObjectsEx(
+                Some(&[stop]),
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .as_millis()
+                    .max(1)
+                    .min(u128::from(u32::MAX - 1)) as u32,
+                QS_ALLINPUT,
+                MWMO_INPUTAVAILABLE,
+            ) == WAIT_OBJECT_0
+            {
+                break;
+            }
+            while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
         let _ = windows::Win32::Foundation::CloseHandle(stop);
     }
     println!("N4_DONE drivers={:?}", mypaper_ui::modules::gpu_drivers());
@@ -413,6 +432,50 @@ fn busy_ticks(thread: bool) -> u64 {
 struct RestoreInput {
     foreground: windows::Win32::Foundation::HWND,
     cursor: windows::Win32::Foundation::POINT,
+}
+
+/// Both displays must remain on throughout the live fixture. Restore this thread's previous
+/// execution-state requirements on every exit; no power-plan setting is changed.
+struct Awake(windows::Win32::System::Power::EXECUTION_STATE);
+impl Awake {
+    fn new() -> Result<Self> {
+        use windows::Win32::System::Power::{
+            ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, SetThreadExecutionState,
+        };
+        // SAFETY: this is a temporary requirement owned by the fixture's main thread.
+        let previous = unsafe {
+            SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)
+        };
+        anyhow::ensure!(previous.0 != 0, "could not keep the fixture displays awake");
+        let guard = Self(previous);
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_MOVE, MOUSEINPUT, SendInput,
+        };
+        // A display requirement prevents timeout but doesn't wake a display already off.
+        // SAFETY: a zero-distance mouse move wakes it without clicking or moving the cursor.
+        let sent = unsafe {
+            SendInput(
+                &[INPUT {
+                    r#type: INPUT_MOUSE,
+                    Anonymous: INPUT_0 {
+                        mi: MOUSEINPUT {
+                            dwFlags: MOUSEEVENTF_MOVE,
+                            ..Default::default()
+                        },
+                    },
+                }],
+                size_of::<INPUT>() as i32,
+            )
+        };
+        anyhow::ensure!(sent == 1, "could not wake the fixture displays");
+        Ok(guard)
+    }
+}
+impl Drop for Awake {
+    fn drop(&mut self) {
+        // SAFETY: restore exactly the flags returned on this same thread at fixture startup.
+        let _ = unsafe { windows::Win32::System::Power::SetThreadExecutionState(self.0) };
+    }
 }
 impl RestoreInput {
     fn new() -> Self {
