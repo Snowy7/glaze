@@ -6,6 +6,7 @@ pub(crate) mod docker;
 pub(crate) mod grok;
 pub(crate) mod obs;
 pub(crate) mod t3;
+mod t3_limits;
 pub(crate) mod tailscale;
 #[cfg(test)]
 mod tests;

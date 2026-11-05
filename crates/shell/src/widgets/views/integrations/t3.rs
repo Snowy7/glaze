@@ -135,6 +135,7 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
     let face = m.str("variant", "running");
     let title = match face.as_str() {
         "usage" => "T3 · Usage",
+        "limits" => "T3 · Limits",
         "new" => "T3 · New thread",
         "attention" => "T3 · Needs you",
         _ => "T3 · Running now",
@@ -156,6 +157,7 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
     };
     match face.as_str() {
         "usage" => usage(f, m, state, &l),
+        "limits" => super::t3_limits::view(f, state, &l, _now_ms),
         "new" => composer(f, m, state, &l),
         "attention" => threads(f, m, state, &l, true),
         _ => threads(f, m, state, &l, false),

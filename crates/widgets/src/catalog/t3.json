@@ -39,6 +39,10 @@
           "label": "Usage"
         },
         {
+          "value": "limits",
+          "label": "Limits"
+        },
+        {
           "value": "new",
           "label": "New thread"
         },
