@@ -118,7 +118,6 @@ impl Integration {
             Provider::Notifications => "Notifications",
             Provider::Media => "Now playing",
             Provider::T3 => "T3 Code",
-            Provider::Obs => "OBS Studio",
             Provider::Calendar => "Calendar",
             Provider::Discord => "Discord",
         }
@@ -261,39 +260,6 @@ impl Panel for Integration {
                     }
                     list(f, &mut column, &self.scroll, &rows);
                 }
-                Some(Data::Obs(state)) => {
-                    section(f, &mut column, &state.scene);
-                    line(
-                        f,
-                        &mut column,
-                        &format!(
-                            "Recording: {} · Streaming: {}",
-                            if state.recording {
-                                if state.paused { "Paused" } else { "Active" }
-                            } else {
-                                "Stopped"
-                            },
-                            if state.streaming { "Live" } else { "Stopped" }
-                        ),
-                    );
-                    if connected {
-                        let record = if state.recording {
-                            ("Stop recording", ButtonKind::Destructive)
-                        } else {
-                            ("Start recording", ButtonKind::Gray)
-                        };
-                        let stream = if state.streaming {
-                            ("Stop streaming", ButtonKind::Destructive)
-                        } else {
-                            ("Start streaming", ButtonKind::Gray)
-                        };
-                        buttons(
-                            f,
-                            &mut column,
-                            &[(PRIMARY, record.0, record.1), (SECONDARY, stream.0, stream.1)],
-                        );
-                    }
-                }
                 Some(Data::Media(state)) => {
                     let c = f.theme.color;
                     let mut rest =
@@ -352,26 +318,6 @@ impl Panel for Integration {
                     return Effect::Close;
                 }
                 Effect::None
-            }
-            Data::Obs(s) => {
-                let action = match id {
-                    PRIMARY => {
-                        if s.recording {
-                            mypaper_integrations::obs::Action::StopRecording
-                        } else {
-                            mypaper_integrations::obs::Action::StartRecording
-                        }
-                    }
-                    SECONDARY => {
-                        if s.streaming {
-                            mypaper_integrations::obs::Action::StopStreaming
-                        } else {
-                            mypaper_integrations::obs::Action::StartStreaming
-                        }
-                    }
-                    _ => return Effect::None,
-                };
-                self.action(Action::Obs(action))
             }
             Data::Media(_) if id == PRIMARY => {
                 self.action(Action::Media(mypaper_integrations::media::Action::Toggle))
@@ -553,78 +499,3 @@ impl Panel for AppActions {
     }
 }
 
-thread_local! { static ROUTINE: RefCell<Option<RoutineResult>> = const { RefCell::new(None) }; }
-pub fn run_routine(routine: mypaper_integrations::config::Routine) {
-    let title = routine.title.clone();
-    ROUTINE.with_borrow_mut(|s| {
-        *s = Some(RoutineResult {
-            title,
-            task: Some(super::Task::spawn(move || {
-                mypaper_integrations::launcher::start_routine(&routine)
-            })),
-            result: None,
-        })
-    });
-}
-pub fn routine_panel() -> Box<dyn Panel> {
-    Box::new(
-        ROUTINE
-            .with_borrow_mut(Option::take)
-            .unwrap_or(RoutineResult {
-                title: "Routine".into(),
-                task: None,
-                result: Some(Err("No routine selected".into())),
-            }),
-    )
-}
-#[cfg(test)]
-pub fn routine_fixture() -> Box<dyn Panel> {
-    Box::new(RoutineResult {
-        title: "Daily brief".into(),
-        task: None,
-        result: Some(Ok(())),
-    })
-}
-struct RoutineResult {
-    title: String,
-    task: Option<super::Task<()>>,
-    result: Option<Result<(), String>>,
-}
-impl Panel for RoutineResult {
-    fn width(&self) -> f32 {
-        380.0
-    }
-    fn view(&self, kit: &mut Kit) {
-        kit.frame(|f, area| {
-            let mut column = Stack::column(area, f.px(8.0));
-            header(f, &mut column, "Grok Bot", &[]);
-            f.section_header(column.next(f.px(24.0)), &self.title, None);
-            let icon = match &self.result {
-                None => Icon::Clock,
-                Some(Ok(())) => Icon::Check,
-                Some(Err(_)) => Icon::Warning,
-            };
-            let text = match &self.result {
-            None => "Starting routine…",
-            Some(Ok(())) => {
-                "Accepted by Grok Bot. Completion will arrive through Windows notifications."
-            }
-            Some(Err(error)) => error,
-            };
-            notice(f, &mut column, icon, text, None);
-            area.top + column.used()
-        });
-    }
-    fn activate(&mut self, _: HitId, _: &mut Cx) -> Effect {
-        Effect::None
-    }
-    fn refresh(&mut self, _: &mut Cx) -> bool {
-        if let Some(result) = self.task.as_ref().and_then(super::Task::take) {
-            self.task = None;
-            self.result = Some(result);
-            true
-        } else {
-            false
-        }
-    }
-}
