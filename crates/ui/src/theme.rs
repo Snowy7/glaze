@@ -306,23 +306,7 @@ impl Theme {
             scrollbar: 5.0,
             scrollbar_inset: 3.0,
         };
-        let glass = match style {
-            Style::Liquid => Some(GlassMaterial {
-                clarity: 0.55,
-                blur: 12.0,
-                refraction: 0.6,
-                highlight: 0.75,
-                tint: color.surface,
-            }),
-            Style::OneUi | Style::Fluent => Some(GlassMaterial {
-                clarity: 0.2,
-                blur: 12.0,
-                refraction: 0.0,
-                highlight: 0.0,
-                tint: color.surface,
-            }),
-            Style::Solid | Style::Mono => None,
-        };
+        let glass = material(style, color.surface);
         Self {
             style,
             scheme,
@@ -425,6 +409,51 @@ impl Theme {
             disabled: self.color.quaternary,
         }
     }
+}
+
+/// The engine material of `style` under a surface tinted `tint` (its alpha is the tint's
+/// strength), or `None` for the styles that draw their own fill. The one place a style becomes
+/// glass; bars, widgets, flyouts and menus all start here and only layer the user's knobs over
+/// it.
+///
+/// - **Liquid**: Liquid Glass, a lens at the rim and a specular light (liquid-rust's regular).
+/// - **One UI**: a frosted card, slightly translucent: heavy blur, no lens, no rim light.
+/// - **Fluent**: Windows 11 acrylic: the heaviest blur under a strong tint, no lens or rim
+///   (the engine drops dispersion and the inner rims with refraction and highlight at 0).
+/// - **Solid**, **Mono**: no glass (opaque, and flat near-opaque monochrome).
+pub fn material(style: Style, tint: Rgba) -> Option<GlassMaterial> {
+    let (clarity, blur, refraction, highlight, strength) = match style {
+        Style::Liquid => (0.55, 12.0, 0.6, 0.75, tint.a),
+        Style::OneUi => (0.35, 24.0, 0.0, 0.0, tint.a.max(0.35)),
+        Style::Fluent => (0.12, 30.0, 0.0, 0.0, tint.a.max(0.6)),
+        Style::Solid | Style::Mono => return None,
+    };
+    Some(GlassMaterial {
+        clarity,
+        blur,
+        refraction,
+        highlight,
+        tint: tint.with_alpha(strength),
+    })
+}
+
+/// Whether `style` puts a lens under its surfaces (only Liquid; the others are flat).
+pub const fn lensed(style: Style) -> bool {
+    matches!(style, Style::Liquid)
+}
+
+/// The user's style for surfaces that carry no look of their own (widgets), process-wide.
+static ACTIVE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Sets the user's active style (the shell sets it from `config.json` › `look`).
+pub fn set_active(style: Style) {
+    let index = Style::ALL.iter().position(|s| *s == style).unwrap_or(0);
+    ACTIVE.store(index as u8, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The user's active style; Liquid until [`set_active`] says otherwise.
+pub fn active() -> Style {
+    Style::ALL[ACTIVE.load(std::sync::atomic::Ordering::Relaxed) as usize % Style::ALL.len()]
 }
 
 fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
