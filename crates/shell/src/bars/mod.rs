@@ -6,6 +6,7 @@ mod maximized;
 mod motion;
 mod preview;
 pub(crate) mod services;
+mod sprites;
 #[cfg(test)]
 mod tests;
 mod tray_menu;

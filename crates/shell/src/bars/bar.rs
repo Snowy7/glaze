@@ -94,6 +94,11 @@ pub struct Bar {
     magnify_animate: bool,
     magnify_settings: motion::Settings,
     animations: HashMap<String, (Instant, bool)>,
+    /// The floating dock's sprites (DWM places and scales its icons); none for other bars and
+    /// styles, or when DirectComposition is unavailable.
+    sprites: Option<super::sprites::Sprites>,
+    /// DirectComposition failed once: draw everything in the window from then on.
+    sprites_failed: bool,
 }
 
 pub fn edge(kind: BarKind, config: &BarsConfig) -> Edge {
@@ -194,6 +199,8 @@ impl Bar {
             magnify_animate: magnify_settings.enabled,
             magnify_settings,
             animations: HashMap::new(),
+            sprites: None,
+            sprites_failed: false,
         };
         let thickness = ((if kind == BarKind::Top {
             bar.config.top.band()
@@ -635,7 +642,7 @@ impl Bar {
             let (list, offset, size) = if self.kind == BarKind::Top {
                 self.frame.crop(crop)
             } else {
-                (self.frame.list.clone(), Point::default(), self.frame.size)
+                (self.dock_list(ui), Point::default(), self.frame.size)
             };
             self.offsets.push(offset);
             let glass = self
@@ -693,6 +700,39 @@ impl Bar {
             }
         }
         Ok(())
+    }
+
+    /// What the dock's window draws: only its hit mask when its plate is glass (or bare) and
+    /// the rest goes to sprites, else the whole frame.
+    fn dock_list(&mut self, ui: &mut Ui) -> mypaper_ui::DisplayList {
+        let t = &self.tokens;
+        let glass_plate = t.bare
+            || (t.fill.is_none() && t.material.is_some() && t.theme.glass.is_some());
+        if self.sprites_failed || self.config.dock.style != DockStyle::Floating || !glass_plate {
+            self.sprites = None;
+            return self.frame.list.clone();
+        }
+        if self.sprites.is_none() {
+            match super::sprites::Sprites::new(self.surface.hwnd()) {
+                Ok(s) => self.sprites = Some(s),
+                Err(e) => {
+                    log::warn!("dock sprites: {e:#}");
+                    self.sprites_failed = true;
+                    return self.frame.list.clone();
+                }
+            }
+        }
+        let sprites = self.sprites.as_mut().expect("made above");
+        match sprites.update(ui, &self.frame.list) {
+            Ok(Some(mask)) => mask,
+            Ok(None) => self.frame.list.clone(),
+            Err(e) => {
+                log::warn!("dock sprites: {e:#}");
+                self.sprites = None;
+                self.sprites_failed = true;
+                self.frame.list.clone()
+            }
+        }
     }
 
     pub fn origin(&self) -> (i32, i32) {
