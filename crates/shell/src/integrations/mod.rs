@@ -383,12 +383,18 @@ pub fn dock_badge(
     let Some(Data::Notifications(state)) = state.data else {
         return;
     };
-    let id = app_id(app);
-    let count = id
-        .as_ref()
-        .and_then(|id| state.counts.get(id))
-        .copied()
-        .unwrap_or(0);
+    // The item's AUMID (grouping's identity), else Squirrel's from its exe (Discord, Slack and
+    // Teams classic in the tray), matched as Windows does: case-insensitively.
+    let ids: Vec<String> = app_id(app)
+        .into_iter()
+        .chain(app.exe.as_deref().and_then(mypaper_bars::apps::squirrel_aumid))
+        .collect();
+    let count: usize = state
+        .counts
+        .iter()
+        .filter(|(key, _)| ids.iter().any(|id| id.eq_ignore_ascii_case(key)))
+        .map(|(_, n)| *n)
+        .sum();
     if count == 0 {
         return;
     }

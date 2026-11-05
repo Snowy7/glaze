@@ -120,6 +120,20 @@ pub fn squirrel_target(target: &str, args: &str) -> Option<String> {
     (!name.is_empty()).then(|| format!("{dir}\\{name}").to_lowercase())
 }
 
+/// The AUMID Squirrel registers for an app installed in `…\<Name>\` (Discord, Slack, Teams
+/// classic): `com.squirrel.<name>.<name>`, lowercase. Its toasts carry it even while the app
+/// runs only in the tray, with no window to read an AUMID from.
+pub fn squirrel_aumid(exe: &str) -> Option<String> {
+    let identity = exe_identity(exe);
+    let mut dirs = identity.rsplit('\\').skip(1);
+    let name = match dirs.next()? {
+        // Teams classic runs from `…\Microsoft\Teams\current\Teams.exe`.
+        "current" => dirs.next()?,
+        name => name,
+    };
+    (!name.is_empty() && !name.contains(':')).then(|| format!("com.squirrel.{name}.{name}"))
+}
+
 /// Groups windows given in z-order (top first); groups come in the order of their top window.
 pub fn group(windows: Vec<AppWindow>) -> Vec<Group> {
     let mut groups: Vec<Group> = Vec::new();
@@ -263,8 +277,16 @@ pub fn dock_items(pins: &[Pin], running: &[Running], order: &[String], view: Vie
                 icon: pin.icon.clone(),
                 pinned: true,
                 windows: windows_of(&groups),
-                aumid: pin.aumid.clone(),
-                exe: pin.exe.clone(),
+                // A Squirrel pin (`Update.exe --processStart Discord.exe`) has no AUMID of its
+                // own; its windows' is what notifications and badges key by.
+                aumid: pin
+                    .aumid
+                    .clone()
+                    .or_else(|| groups.iter().find_map(|g| g.aumid.clone())),
+                exe: pin
+                    .exe
+                    .clone()
+                    .or_else(|| groups.iter().find_map(|g| g.exe.clone())),
             }
         })
         .collect();
@@ -707,6 +729,34 @@ mod tests {
         let summary: Vec<(&str, bool, usize)> =
             items.iter().map(|i| (i.name.as_str(), i.pinned, i.windows.len())).collect();
         assert_eq!(summary, [("Discord", true, 2), ("x", false, 1)]);
+    }
+
+    /// Notification badges key by AUMID: a grouped Squirrel pin carries its windows' one, and
+    /// with no window (tray only) the one Squirrel registers from its install folder.
+    #[test]
+    fn grouped_squirrel_pins_keep_the_identity_their_notifications_use() {
+        let exe = r"c:\users\me\appdata\local\discord\app-1.0.9188\Discord.exe";
+        let groups = group(vec![window(20, Some("com.squirrel.Discord.Discord"), Some(exe))]);
+        let apps: Vec<Running> = groups.into_iter().map(|g| running(g, "Discord")).collect();
+        let pins = [Pin {
+            path: r"C:\Discord.lnk".into(),
+            exe: squirrel_target(r"c:\users\me\appdata\local\discord\Update.exe", "--processStart Discord.exe"),
+            ..Pin::default()
+        }];
+        let items = dock_items(&pins, &apps, &[], View::default());
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].aumid.as_deref(), Some("com.squirrel.Discord.Discord"));
+        let tray_only = dock_items(&pins, &[], &[], View::default());
+        let id = tray_only[0].exe.as_deref().and_then(squirrel_aumid);
+        assert_eq!(id.as_deref(), Some("com.squirrel.discord.discord"));
+        assert_eq!(
+            squirrel_aumid(r"c:\users\me\appdata\local\slack\app-4.41.0\slack.exe").as_deref(),
+            Some("com.squirrel.slack.slack")
+        );
+        assert_eq!(
+            squirrel_aumid(r"c:\users\me\appdata\local\microsoft\teams\current\Teams.exe").as_deref(),
+            Some("com.squirrel.teams.teams")
+        );
     }
 
     #[test]
