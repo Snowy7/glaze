@@ -302,15 +302,6 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
             if s.streaming { "LIVE " } else { "" },
             s.scene
         ),
-        Some(Data::Docker(s)) => format!(
-            "{} containers{}",
-            s.containers.iter().filter(|c| c.state == "running").count(),
-            if s.containers.iter().any(|c| c.failed) {
-                " · !"
-            } else {
-                ""
-            }
-        ),
         _ => match provider {
             Provider::Notifications => "Notifications",
             Provider::T3 => "T3",
