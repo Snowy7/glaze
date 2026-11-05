@@ -35,3 +35,8 @@ handoff into one action, and routines keep their Advanced key controls in the fa
 Verification includes guest validation tests, host hit routing and size bounds at 1×/1.5× DPI,
 and execution of the compiled WASM against the real capability brokers. The runtime test
 inspects request effects without dispatching them or launching an application.
+
+Release measurement (2026-11-06, `golden/runtime-memory.txt`): the routines face used 1.06 MiB
+of guest linear memory and added 1.20 MiB of process private memory. Cached load took 1.27 ms;
+install-time AOT compilation plus first load took 448.5 ms. The benchmark process finished at
+8.0 MiB private memory including its shared engine. The component is 284 KiB.
