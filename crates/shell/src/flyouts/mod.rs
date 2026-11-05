@@ -1412,6 +1412,11 @@ fn on_screen(window: isize) -> bool {
 }
 
 fn position(open: &Open, now: Instant) -> (i32, i32) {
+    // On glass it opens in place: every move makes the engine re-render its glass at the new
+    // spot, and a frame of that showed as the glass blinking out while the flyout slid in.
+    if mypaper_ui::glass::style().is_some() {
+        return open.origin;
+    }
     let p = open.motion.map_or(1.0, |m| m.value(now));
     let offset = ((1.0 - p) * 10.0 * open.scale).round() as i32;
     let dy = if open.below { -offset } else { offset };
