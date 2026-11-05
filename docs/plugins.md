@@ -424,9 +424,8 @@ component bytes and experimental status. The example declares a **2 MiB** memory
 The sidecar is build metadata; Studio does not consume it yet. WASM and intermediate build
 outputs are ignored, as for the Rust guests. `scripts/build-plugins.ps1` still builds only
 the Rust guests; build TypeScript explicitly before packaging/deploying.
-Integration must also add `plugins/hello-ts` to the root Cargo workspace's `exclude` list:
-its `plugins/*` glob otherwise treats this non-Cargo folder as a Rust crate. That shared-file
-edit is outside this SDK slice's ownership.
+The root Cargo workspace excludes `plugins/hello-ts`: its `plugins/*` glob would otherwise
+treat this non-Cargo folder as a Rust crate. Keep TypeScript guest folders excluded.
 
 ```ts
 import { definePlugin, Role, ui, View } from '@mypaper/plugin-sdk';
