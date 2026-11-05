@@ -125,10 +125,15 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
                     state.lease = Some(lease);
                     Snapshot::default()
                 }
+                // T3 switches itself on: its CLI can grant access without a prompt.
+                Err(_) if widget.kind == Widget::T3 && mypaper_integrations::t3_auth::available() => {
+                    super::t3_widgets::connect(state, None);
+                    Snapshot::default()
+                }
                 Err(_) => Snapshot {
                     availability: Availability::Unavailable(
                         if widget.kind == Widget::T3 {
-                            "Read-only pairing required"
+                            "T3 Code is not running"
                         } else {
                             "Connect this integration in Settings"
                         }
@@ -149,6 +154,14 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
         }
     }
     if let Some(result) = state.task.as_ref().and_then(super::Task::take) {
+        if widget.kind == Widget::T3
+            && result.is_ok()
+            && let Some(lease) = &state.lease
+            && !matches!(state.snapshot.data, Some(Data::T3(_)))
+        {
+            // Access was just granted; reconnect now rather than on the next refresh.
+            lease.retry();
+        }
         if widget.kind == Widget::T3 && state.t3.submitted {
             if result.is_ok() {
                 state.t3.draft.clear();

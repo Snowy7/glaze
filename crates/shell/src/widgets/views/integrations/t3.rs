@@ -2,7 +2,7 @@
 use super::*;
 use crate::integrations::{
     t3_widgets::{
-        APPROVE, DENY, MODEL, MODEL_CHOICE, PROJECT, PROJECT_CHOICE, Picker, REAUTHORIZE, SEND,
+        APPROVE, DENY, MODEL, MODEL_CHOICE, PROJECT, PROJECT_CHOICE, Picker, SEND,
         THREAD,
     },
     widgets::{CONNECT, REFRESH},
@@ -142,21 +142,14 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
     };
     let l = chrome(f, rect, title, Icon::Terminal, true);
     let Some(Data::T3(state)) = &m.integration.snapshot.data else {
-        connect_face(
-            f,
-            m,
-            &l,
-            "Connect T3",
-            "Finds T3 Code on this PC. Existing pairing is reused; otherwise paste one T3 pairing code.",
-            Icon::Terminal,
-        );
+        pairing(f, m, &l);
         if let Some(footer) = l.footer {
             connection(f, m, footer, "Local T3 Code");
         }
         return;
     };
     match face.as_str() {
-        "usage" => usage(f, m, state, &l),
+        "usage" => super::t3_usage::view(f, state, &l),
         "limits" => super::t3_limits::view(f, state, &l, _now_ms),
         "new" => composer(f, m, state, &l),
         "attention" => threads(f, m, state, &l, true),
@@ -166,8 +159,8 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
         let usage_label = state
             .usage_day
             .as_ref()
-            .map_or("Usage access needed".into(), |day| {
-                format!("{day} · UTC · refresh to update")
+            .map_or("Last 30 days".into(), |day| {
+                format!("30 days to {day} · UTC")
             });
         connection(
             f,
@@ -180,6 +173,53 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
             },
         );
     }
+}
+
+/// No data yet. mypaper connects in the background through T3's CLI; only when that cannot
+/// work (T3 closed, CLI missing) does the tile offer one field for a pasted pairing code.
+fn pairing(f: &mut Frame<'_>, m: &Model, l: &Areas) {
+    let failed = match &m.integration.snapshot.availability {
+        Availability::Unavailable(reason) | Availability::Stale(reason) => Some(reason.as_str()),
+        _ => None,
+    };
+    let Some(reason) = failed.filter(|_| !m.integration.busy()) else {
+        f.empty(
+            l.body,
+            Some(Icon::Terminal),
+            "Connecting to T3 Code…",
+            (!l.compact).then_some("mypaper signs in through T3 Code on this PC."),
+        );
+        return;
+    };
+    let (button, rest) = l.body.take_bottom(f.px(30.0), f.px(7.0));
+    let (field, description) = rest.take_bottom(f.px(30.0), f.px(7.0));
+    if description.height() >= f.line(TextRole::Callout) {
+        let detail = if reason.contains("not running") {
+            "Open T3 Code and refresh, or paste a pairing code from T3 Code › Settings › Connections."
+        } else {
+            "Paste a pairing code from T3 Code › Settings › Connections."
+        };
+        f.paragraph(
+            description.left,
+            description.top,
+            description.width(),
+            detail,
+            TextRole::Callout,
+            f.theme.color.secondary,
+            (description.height() / f.line(TextRole::Callout))
+                .floor()
+                .max(1.0) as usize,
+        );
+    }
+    prompt_field(f, m, field, "Paste pairing code");
+    f.button(
+        CONNECT,
+        button,
+        "Connect",
+        Some(Icon::Terminal),
+        ButtonKind::Tinted,
+        !m.integration.busy(),
+    );
 }
 
 fn status(thread: &Thread) -> &'static str {
@@ -394,107 +434,6 @@ fn threads(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas, attention:
     }
 }
 
-fn access(f: &mut Frame<'_>, m: &Model, l: &Areas, label: &str, detail: &str) {
-    let (button, body) = l.body.take_bottom(f.px(29.0), f.px(7.0));
-    if body.height() >= f.line(TextRole::Callout) {
-        f.paragraph(
-            body.left,
-            body.top,
-            body.width(),
-            detail,
-            TextRole::Callout,
-            f.theme.color.secondary,
-            (body.height() / f.line(TextRole::Callout)).floor().max(1.0) as usize,
-        );
-    }
-    f.button(
-        REAUTHORIZE,
-        button,
-        label,
-        Some(Icon::Lock),
-        ButtonKind::Tinted,
-        !m.integration.busy(),
-    );
-}
-
-fn usage(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas) {
-    let Some(usage) = &state.usage else {
-        access(
-            f,
-            m,
-            l,
-            "Allow usage",
-            if l.compact {
-                "Needs T3 usage access"
-            } else {
-                "Pair again with diagnostics access to read tokens and cost from T3 Code."
-            },
-        );
-        return;
-    };
-    let tokens: u64 = usage.iter().map(|u| u.tokens).sum();
-    if l.compact {
-        metric(
-            f,
-            l.body,
-            &number(tokens),
-            "tokens · UTC day",
-            f.theme.color.label,
-        );
-        return;
-    }
-    let (summary, body) = l.body.take_top(f.px(55.0), f.px(7.0));
-    let (left, right) = summary.take_left(summary.width() * 0.5, f.px(7.0));
-    metric(
-        f,
-        left,
-        &number(tokens),
-        "tokens · UTC day",
-        f.theme.color.label,
-    );
-    let cost: u64 = usage.iter().map(|u| u.cost_microusd).sum();
-    metric(
-        f,
-        right,
-        &format!("${:.2}", cost as f64 / 1_000_000.0),
-        if usage.iter().any(|u| u.unpriced) {
-            "known cost · partial"
-        } else {
-            "estimated cost"
-        },
-        f.theme.color.label,
-    );
-    let row_h = f.px(43.0);
-    let visible = (body.height() / row_h).floor().max(0.0) as usize;
-    m.scroll_max
-        .set(usage.len().saturating_sub(visible) as f32 * row_h);
-    m.scroll_page.set(body.height());
-    let first = (m.scroll.max(0.0) / row_h).floor() as usize;
-    for (i, usage) in usage.iter().skip(first).take(visible).enumerate() {
-        f.row(
-            &Row {
-                id: 0,
-                lead: Lead::None,
-                title: &usage.model,
-                subtitle: Some(&usage.provider),
-                accessory: Accessory::Text(&format!(
-                    "{} · ${:.2}",
-                    number(usage.tokens),
-                    usage.cost_microusd as f64 / 1_000_000.0
-                )),
-                selected: false,
-                enabled: true,
-            },
-            Rect::new(
-                body.left,
-                body.top + i as f32 * f.px(43.0),
-                body.width(),
-                f.px(42.0),
-            ),
-        );
-    }
-}
-
 pub(super) fn prompt_field(f: &mut Frame<'_>, m: &Model, rect: Rect, hint: &str) {
     let field = m.field.as_ref();
     let draft = if m.kind == crate::widgets::model::Widget::T3 {
@@ -537,16 +476,12 @@ pub(super) fn prompt_field(f: &mut Frame<'_>, m: &Model, rect: Rect, hint: &str)
 
 fn composer(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas) {
     if !state.can_operate() {
-        access(
-            f,
-            m,
-            l,
-            "Allow controls",
-            if l.compact {
-                "Thread access needed"
-            } else {
-                "Pair again with thread controls. New threads start only when you send a prompt here."
-            },
+        // mypaper's own grant includes thread controls; this only shows mid-reconnect.
+        f.empty(
+            l.body,
+            Some(Icon::Terminal),
+            "Thread controls unavailable",
+            Some("Refresh to reconnect to T3 Code."),
         );
         return;
     }
@@ -709,7 +644,9 @@ fn composer(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas) {
 }
 
 pub(super) fn number(value: u64) -> String {
-    if value >= 1_000_000 {
+    if value >= 1_000_000_000 {
+        format!("{:.1}B", value as f64 / 1_000_000_000.0)
+    } else if value >= 1_000_000 {
         format!("{:.1}M", value as f64 / 1_000_000.0)
     } else if value >= 1000 {
         format!("{:.1}K", value as f64 / 1000.0)

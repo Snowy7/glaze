@@ -1,13 +1,12 @@
 //! T3 widget state/actions. Input is captured only by a mypaper RichEdit field.
 use super::widgets::{CONNECT, Model};
 use crate::widgets::model::{Model as WidgetModel, Widget};
-use mypaper_integrations::{Data, pairing, t3_client};
+use mypaper_integrations::{Data, pairing, t3_auth, t3_client};
 use mypaper_ui::HitId;
 
 pub const PROJECT: HitId = 7000;
 pub const MODEL: HitId = 7001;
 pub const SEND: HitId = 7002;
-pub const REAUTHORIZE: HitId = 7003;
 pub const APPROVE: HitId = 100_000;
 pub const DENY: HitId = 120_000;
 pub const THREAD: HitId = 200_000;
@@ -52,19 +51,19 @@ pub(crate) fn resolve_approval(
         .then(|| (thread.id.clone(), request.id.clone()))
 }
 
-pub fn connect(state: &mut Model, reauthorize: bool) {
+/// Connects in the background: T3's CLI issues mypaper's token, or, when a pairing code was
+/// pasted into the tile, that code is exchanged once. Then T3 is switched on and live.
+pub fn connect(state: &mut Model, code: Option<String>) {
     if state.busy() {
         return;
     }
     state.task = Some(super::Task::spawn(move || {
         let config = super::load()?;
-        let connected = if reauthorize {
-            pairing::reauthorize_t3_blocking(&config.t3.endpoint)
-        } else {
-            pairing::connect_t3_blocking(&config.t3.endpoint)
-        }?;
-        if !connected {
-            return Ok(());
+        match code {
+            Some(code) => pairing::t3_blocking(&config.t3.endpoint, &code)?,
+            None => {
+                t3_auth::ensure(false)?;
+            }
         }
         let mut config = super::load()?;
         config.t3.enabled = true;
@@ -88,10 +87,16 @@ pub fn submit(widget: &mut WidgetModel, prompt: &str) -> bool {
         return true;
     }
     let Some(Data::T3(snapshot)) = &state.snapshot.data else {
+        // Before any data the tile's field holds a pasted pairing code, never a prompt.
+        let code = prompt.trim();
+        if !code.is_empty() {
+            state.t3.submitted = true;
+            connect(state, Some(code.to_owned()));
+        }
         return true;
     };
     if !state.actionable() || !snapshot.can_operate() {
-        state.notice = Some("Allow thread controls in T3 Code, then reconnect.".into());
+        state.notice = Some("Thread controls are unavailable. Refresh to reconnect.".into());
         return true;
     }
     let Some(project) = snapshot.projects.keys().nth(state.t3.project).cloned() else {
@@ -115,19 +120,23 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
     if widget.kind != Widget::T3 {
         return false;
     }
-    if hit == SEND {
+    if hit == SEND || hit == CONNECT {
         let text = widget
             .field
             .as_ref()
             .and_then(|f| f.text().ok())
             .unwrap_or_else(|| widget.integration.t3.draft.clone());
+        if hit == CONNECT
+            && (text.trim().is_empty()
+                || matches!(widget.integration.snapshot.data, Some(Data::T3(_))))
+        {
+            // Connect with an empty field retries the background path.
+            connect(&mut widget.integration, None);
+            return true;
+        }
         return submit(widget, &text);
     }
     let state = &mut widget.integration;
-    if hit == CONNECT || hit == REAUTHORIZE {
-        connect(state, hit == REAUTHORIZE);
-        return true;
-    }
     let Some(Data::T3(snapshot)) = &state.snapshot.data else {
         return true;
     };

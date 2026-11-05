@@ -7,6 +7,7 @@ pub(crate) mod grok;
 pub(crate) mod obs;
 pub(crate) mod t3;
 mod t3_limits;
+mod t3_usage;
 pub(crate) mod tailscale;
 #[cfg(test)]
 mod tests;

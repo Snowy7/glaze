@@ -14,6 +14,7 @@ pub mod notifications;
 pub mod obs;
 pub mod pairing;
 pub mod t3;
+pub mod t3_auth;
 pub mod t3_client;
 pub mod grok;
 pub mod tailscale;

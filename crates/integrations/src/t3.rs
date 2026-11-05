@@ -203,6 +203,8 @@ pub struct ProviderHistory {
     pub provider: String,
     pub cost: Vec<u64>,
     pub tokens: Vec<u64>,
+    /// Sessions over the whole window, when T3 reports them.
+    pub sessions: u64,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ThreadDetail {
@@ -317,6 +319,10 @@ impl Snapshot {
             ..Default::default()
         };
         let mut today_buckets = Vec::new();
+        // Field names only (no values), once per read, to confirm the wire shape.
+        if let Some(first) = value["buckets"].as_array().and_then(|b| b.first()).and_then(Value::as_object) {
+            log::info!("T3 usage bucket keys: {:?}", first.keys().collect::<Vec<_>>());
+        }
         for bucket in value["buckets"].as_array().into_iter().flatten() {
             let day = ["day", "date", "bucketDay", "startDay"]
                 .iter()
@@ -354,12 +360,17 @@ impl Snapshot {
                             provider: provider.into(),
                             cost: vec![0; len],
                             tokens: vec![0; len],
+                            sessions: 0,
                         });
                         history.providers.last_mut().unwrap()
                     }
                 };
                 row.cost[index] += cost;
                 row.tokens[index] += tokens;
+                row.sessions += ["sessionCount", "sessions", "threadCount"]
+                    .iter()
+                    .find_map(|k| bucket[*k].as_u64())
+                    .unwrap_or(0);
             }
             if day == today {
                 today_buckets.push(bucket.clone());
@@ -558,15 +569,48 @@ pub(crate) async fn run(config: &crate::config::T3, publish: &Publish) -> Result
         config.endpoint.is_empty() || crate::transport::loopback_url(&config.endpoint).is_ok(),
         "Use a local T3 Code address in Advanced settings."
     );
-    let token = credentials::read("t3").map_err(|_| anyhow::anyhow!("pair mypaper with T3 using orchestration:read and store the token in Credential Manager"))?;
-    subscribe(config, publish, token.text()?)
-        .await
-        .map_err(|error| {
-            log::warn!("T3 subscription: {error:#}");
+    // Background access first: T3's CLI issues (or renews) mypaper's token with no prompt.
+    let issue = |force| tokio::task::spawn_blocking(move || crate::t3_auth::ensure(force));
+    let auto = issue(false).await?;
+    if let Err(error) = &auto {
+        log::info!("T3 auto-connect: {error:#}");
+    }
+    let live = config.live_verified || auto.is_ok();
+    let token = credentials::read("t3").map_err(|_| match &auto {
+        Err(error) => anyhow::anyhow!("{error}"),
+        Ok(_) => anyhow::anyhow!("T3 Code access is missing"),
+    })?;
+    let mut result = subscribe(config, live, publish, token.text()?).await;
+    if result.as_ref().is_err_and(unauthorized) && crate::t3_auth::available() {
+        // The server dropped our grant (revoked or expired early): re-issue once.
+        issue(true).await??;
+        let token = credentials::read("t3")?;
+        result = subscribe(config, true, publish, token.text()?).await;
+    }
+    result.map_err(|error| {
+        log::warn!("T3 subscription: {error:#}");
+        if unauthorized(&error) {
+            anyhow::anyhow!("T3 Code no longer accepts mypaper's access")
+        } else {
             anyhow::anyhow!("T3 disconnected. Retry to reconnect to your local T3 Code.")
-        })
+        }
+    })
 }
-async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -> Result<()> {
+
+/// A 401/403 on the socket upgrade: the bearer itself was refused.
+fn unauthorized(error: &anyhow::Error) -> bool {
+    use tokio_tungstenite::tungstenite::Error;
+    error.chain().any(|cause| {
+        matches!(cause.downcast_ref::<Error>(), Some(Error::Http(response)) if matches!(response.status().as_u16(), 401 | 403))
+    })
+}
+
+async fn subscribe(
+    config: &crate::config::T3,
+    live: bool,
+    publish: &Publish,
+    token: &str,
+) -> Result<()> {
     let mut socket = transport::socket_with_limit(
         crate::t3_client::endpoint(&config.endpoint),
         Some(token),
@@ -575,7 +619,7 @@ async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -
     )
     .await?;
     let mut state = Snapshot::default();
-    if config.live_verified {
+    if live {
         state.permissions = crate::t3_client::permissions(&config.endpoint)
             .await
             .unwrap_or_default();
@@ -631,7 +675,7 @@ async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -
                         refresh_usage(config, &mut state).await;
                     }
                     publish.set(
-                        if config.live_verified {
+                        if live {
                             Availability::Live
                         } else {
                             Availability::Cached
@@ -639,7 +683,7 @@ async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -
                         Some(Data::T3(state.clone())),
                     );
                     transport::send(&mut socket, json!({"_tag":"Ack","requestId":"1"})).await?;
-                    if !config.live_verified {
+                    if !live {
                         return Ok(());
                     }
                 }
@@ -657,7 +701,7 @@ async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -
 
 async fn refresh_usage(config: &crate::config::T3, state: &mut Snapshot) {
     if !state.permissions.iter().any(|p| p == "diagnostics:read") {
-        state.usage_notice = Some("Usage needs diagnostics access. Reconnect with a T3 pairing code that includes diagnostics:read.".into());
+        state.usage_notice = Some("Usage is unavailable. Refresh to reconnect.".into());
         return;
     }
     let now = chrono::Utc::now().date_naive();
@@ -742,7 +786,7 @@ mod tests {
             });
             let publish=Publish { provider:crate::Provider::T3,snapshot:Arc::new(Mutex::new(crate::Snapshot::default())),wake:Arc::new(|_|{}),counters:Arc::new(crate::Counters::default()) };
             for _ in 0..2 {
-                subscribe(&config,&publish,"fixture-only").await.unwrap();
+                subscribe(&config,false,&publish,"fixture-only").await.unwrap();
                 let snapshot=publish.snapshot.lock().unwrap();
                 assert_eq!(snapshot.availability,Availability::Cached);
                 assert!(matches!(&snapshot.data,Some(Data::T3(state)) if state.threads.len()==996));

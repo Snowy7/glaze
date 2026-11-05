@@ -1,5 +1,6 @@
-//! T3's one-time bootstrap exchange, pinned to the same protocol source as the summary client.
-//! Only the resulting scoped bearer is persisted, in Windows Credential Manager.
+//! T3 access. The normal path is background issue through T3's CLI (`t3_auth`); this file holds
+//! the fallback: a pasted one-time pairing code exchanged once on loopback. Only the resulting
+//! scoped bearer is persisted, in Windows Credential Manager.
 use anyhow::{Result, ensure};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
@@ -7,63 +8,27 @@ use hyper::Request;
 use hyper_util::rt::TokioIo;
 use serde_json::Value;
 
-/// Runs on the Connect worker; no async runtime or listener remains after pairing.
+/// Exchanges a code pasted into the T3 widget for the widgets' full scope set. Runs on a
+/// widget worker; no runtime or listener remains afterwards.
 pub fn t3_blocking(endpoint: &str, code: &str) -> Result<()> {
-    save_exchange(endpoint, code, "orchestration:read")
-}
-
-fn save_exchange(endpoint: &str, code: &str, scope: &str) -> Result<()> {
+    let endpoint = crate::t3_client::endpoint(endpoint);
     let mut token = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
-        .block_on(exchange_scoped(endpoint, code, scope))?;
+        .block_on(exchange_scoped(endpoint, code, &crate::t3_auth::SCOPES.join(" ")))?;
     let saved = std::str::from_utf8(&token)
         .map_err(anyhow::Error::from)
         .and_then(|token| crate::credentials::write("t3", token));
     token.fill(0);
-    saved
+    saved?;
+    // A pasted grant has no CLI session record, so auto-issue may replace it later.
+    let _ = crate::credentials::remove("t3-session");
+    Ok(())
 }
 
-/// Existing pairing is reused. New pairing uses T3's supported native one-time code;
-/// its browser OAuth tokens are MCP-only and cannot authorize the live /ws stream.
-pub fn connect_t3_blocking(endpoint: &str) -> Result<bool> {
-    connect_t3(endpoint, true)
-}
-
-pub fn reauthorize_t3_blocking(endpoint: &str) -> Result<bool> {
-    connect_t3(endpoint, false)
-}
-
-fn connect_t3(endpoint: &str, reuse: bool) -> Result<bool> {
-    let endpoint = crate::t3_client::endpoint(endpoint);
-    if reuse
-        && crate::credentials::read("t3").is_ok()
-        && crate::t3_client::check_blocking(endpoint).is_ok()
-    {
-        return Ok(true);
-    }
-    let uri = crate::transport::loopback_url(endpoint)?;
-    let host = uri.host().unwrap_or("127.0.0.1").trim_matches(['[', ']']);
-    let addresses: Vec<_> =
-        std::net::ToSocketAddrs::to_socket_addrs(&(host, uri.port_u16().unwrap_or(80)))?.collect();
-    ensure!(
-        addresses
-            .iter()
-            .any(|address| std::net::TcpStream::connect_timeout(
-                address,
-                std::time::Duration::from_secs(2)
-            )
-            .is_ok()),
-        "T3 Code is not running. Open it, then Connect again."
-    );
-    let Some(code) = crate::credentials::prompt_t3_pairing()? else {
-        return Ok(false);
-    };
-    save_exchange(
-        endpoint,
-        code.text()?,
-        "orchestration:read orchestration:operate diagnostics:read",
-    )?;
+/// Studio's Connect: issue access in the background through T3's CLI. No prompt.
+pub fn connect_t3_blocking(_endpoint: &str) -> Result<bool> {
+    crate::t3_auth::ensure(false)?;
     Ok(true)
 }
 
