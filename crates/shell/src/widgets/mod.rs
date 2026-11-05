@@ -94,6 +94,8 @@ struct Drag {
 struct EditSurface {
     surface: Surface,
     monitor: usize,
+    /// Hover and press over the palette's tiles (unused on grids).
+    hot: mypaper_ui::Interaction,
 }
 
 /// Read-only diagnostics used by the locked live harness.
@@ -1270,14 +1272,12 @@ impl Widgets {
                 self.set_editing(ui, false);
                 return;
             }
-            let hit = match event {
-                Event::Release(p, Button::Left) => {
-                    palette.surface.shown().hit_at(p.at).map(|h| h.id)
-                }
-                Event::Invoke(hit) => Some(*hit),
-                _ => None,
-            };
-            if let Some(hit) = hit {
+            let palette = self.palette.as_mut().unwrap();
+            let response = palette.hot.handle(palette.surface.shown(), event);
+            if response != mypaper_ui::interact::Response::Unchanged {
+                self.repaint_palette(ui);
+            }
+            if let mypaper_ui::interact::Response::Activate(hit) = response {
                 let ids: Vec<_> = self.registry.widgets.keys().cloned().collect();
                 if let Some(id) = ids.get(hit as usize) {
                     self.add(ui, id.clone());
@@ -1409,20 +1409,12 @@ impl Widgets {
                 let hover = hit.map(|h| h.id);
                 if hover != entry.model.hover {
                     entry.model.hover = hover;
-                    entry.model.tooltip = hit
-                        .filter(|h| h.id != view::BODY)
-                        .map(|h| h.label.to_string());
-                    if entry.model.kind == Widget::Media {
-                        entry.model.tooltip = Some(media_description(&entry.model, Stamp::now()));
-                    }
                     entry.model.dirty = true;
                 }
             }
             Event::Leave => {
                 let m = &mut self.entries.get_mut(&id).unwrap().model;
-                m.dirty |= m.hover.take().is_some();
-                m.tooltip = None;
-                m.pressed = None;
+                m.dirty |= m.hover.take().is_some() | m.pressed.take().is_some();
             }
             Event::TextChanged => {
                 let m = &mut self.entries.get_mut(&id).unwrap().model;
@@ -1468,7 +1460,6 @@ impl Widgets {
         if m.scroll != next {
             m.scroll = next;
             m.dirty = true;
-            m.tooltip = None;
             m.hover = None;
         }
     }
@@ -2063,6 +2054,7 @@ impl Widgets {
             self.grids.push(EditSurface {
                 surface,
                 monitor: index,
+                hot: Default::default(),
             });
         }
         for entry in self.entries.values() {
@@ -2081,6 +2073,8 @@ impl Widgets {
                 &names,
                 monitor.dpi as f32 / 96.0,
                 self.layout_error.as_deref(),
+                &Default::default(),
+                &mut ui.text,
             );
             let origin = (
                 monitor.work.x + (monitor.work.width - size.0 as i32) / 2,
@@ -2096,12 +2090,42 @@ impl Widgets {
             surface.present(ui, origin, size, list)?;
             surface.show();
             surface.raise_in_desktop_band()?;
+            // The keyboard comes here, so Escape leaves edit mode at once.
+            surface.take_focus();
             self.palette = Some(EditSurface {
                 surface,
                 monitor: index,
+                hot: Default::default(),
             });
         }
         Ok(())
+    }
+    /// Draws the palette again with its hover and press state (only what changed reaches the
+    /// screen).
+    fn repaint_palette(&mut self, ui: &mut Ui) {
+        let Some(palette) = &mut self.palette else {
+            return;
+        };
+        let Some(monitor) = self.monitors.get(palette.monitor) else {
+            return;
+        };
+        let names: Vec<_> = self
+            .registry
+            .widgets
+            .iter()
+            .map(|(id, i)| (id.clone(), i.manifest.name.clone()))
+            .collect();
+        let (list, size) = edit::palette(
+            &names,
+            monitor.dpi as f32 / 96.0,
+            self.layout_error.as_deref(),
+            &palette.hot,
+            &mut ui.text,
+        );
+        let origin = palette.surface.origin();
+        if let Err(e) = palette.surface.present(ui, origin, size, list) {
+            log::warn!("widget palette: drawing: {e:#}");
+        }
     }
     fn edit_action(&mut self, ui: &mut Ui, id: &str, hit: HitId) {
         if self.layout_error.is_some() {
@@ -2490,13 +2514,49 @@ fn update_artwork(model: &mut Model, ui: &Ui, data: &Value) {
     if model.data.get("artwork") == data.get("artwork") {
         return;
     }
-    model.artwork = data
+    let decoded = data
         .get("artwork")
         .and_then(|value| decode_url(ui, value, (256, 256)));
-    (model.artwork_backdrop, model.artwork_tint) = model
-        .artwork
+    (model.artwork_backdrop, model.artwork_tint) = decoded
         .as_ref()
         .map_or((None, None), |art| artwork_material(art));
+    model.artwork = decoded.map(|art| Arc::new(rounded_square(&art, 0.12)));
+}
+
+/// A centred square crop of `image` with its corners cut round (radius = `radius` × side) to
+/// transparent, antialiased over one pixel. Covers are drawn rounded this way: a layered
+/// window's bitmap op has no clip shape, and this runs once per track, not per frame.
+fn rounded_square(image: &mypaper_ui::Image, radius: f32) -> mypaper_ui::Image {
+    let side = image.width.min(image.height);
+    let (x0, y0) = ((image.width - side) / 2, (image.height - side) / 2);
+    let r = side as f32 * radius;
+    let mut pixels = Vec::with_capacity((side * side * 4) as usize);
+    for y in 0..side {
+        let start = (((y0 + y) * image.width + x0) * 4) as usize;
+        pixels.extend_from_slice(&image.pixels[start..start + side as usize * 4]);
+    }
+    let edge = side as f32;
+    for y in 0..side {
+        for x in 0..side {
+            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+            let dx = (r - px).max(px - (edge - r)).max(0.0);
+            let dy = (r - py).max(py - (edge - r)).max(0.0);
+            if dx == 0.0 || dy == 0.0 {
+                continue;
+            }
+            // Coverage of the pixel by the corner's circle; premultiplied, so scale all four.
+            let coverage = (r - (dx * dx + dy * dy).sqrt() + 0.5).clamp(0.0, 1.0);
+            let at = ((y * side + x) * 4) as usize;
+            for channel in &mut pixels[at..at + 4] {
+                *channel = (*channel as f32 * coverage).round() as u8;
+            }
+        }
+    }
+    mypaper_ui::Image {
+        width: side,
+        height: side,
+        pixels,
+    }
 }
 
 fn paint(
@@ -2606,7 +2666,7 @@ pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
         _ => [220; 3],
     };
     Tokens {
-        font: TextStyle::new(layer.font.as_deref().unwrap_or("Segoe UI Variable"), 14.0),
+        font: TextStyle::new(layer.font.as_deref().unwrap_or(view::DEFAULT_FAMILY), 14.0),
         colors: Colors::new(dark, accent),
         material: mypaper_ui::Material {
             tint: Rgba::rgb8(
@@ -2724,20 +2784,7 @@ fn calendar_start(m: &Model) -> u32 {
         _ => time::week_start(),
     }
 }
-fn media_description(m: &Model, now: Stamp) -> String {
-    let advance = if m.data["playing"].as_bool() == Some(true) {
-        (now.ms - m.data["_at"].as_i64().unwrap_or(now.ms)).max(0) as f64 / 1000.0
-    } else {
-        0.0
-    };
-    format!(
-        "{} ? {}\n{} / {}",
-        m.data["title"].as_str().unwrap_or("Nothing playing"),
-        m.data["artist"].as_str().unwrap_or(""),
-        media_time(m.data["position"].as_f64().unwrap_or(0.0) + advance),
-        media_time(m.data["duration"].as_f64().unwrap_or(0.0))
-    )
-}
+/// `m:ss`, for media positions.
 fn media_time(seconds: f64) -> String {
     let seconds = seconds.max(0.0) as u64;
     format!("{}:{:02}", seconds / 60, seconds % 60)

@@ -1,6 +1,11 @@
 //! Grid placement and edit chrome. Layout is committed only at the end of a gesture; a rejected
 //! drop leaves the saved layout intact. Motion itself stays in physical pixels, at display rate.
-use mypaper_ui::{DisplayList, Hit, Op, Rect, Rgba, Role, TextStyle};
+use mypaper_ui::icons::{self, Icon};
+use mypaper_ui::interact::State;
+use mypaper_ui::{
+    DisplayList, Hit, HitId, Ink, Interaction, Op, Rect, Rgba, Role, Step, Text, TextStyle,
+    Typeface,
+};
 use mypaper_widgets::layout::{Grid, Instance};
 
 pub fn overlaps(a: [u32; 2], size: [u32; 2], b: [u32; 2], other: [u32; 2]) -> bool {
@@ -136,75 +141,184 @@ pub fn grid_view(grid: &Grid, size: (u32, u32), scale: f32) -> DisplayList {
     }
     list
 }
+/// The "Add widgets" palette: a header with Done, then a grid of tiles (icon and name) with
+/// the shared hover and press washes from `hot`. Hit ids are the tiles' indices into `names`;
+/// Done is `names.len()`.
 pub fn palette(
     names: &[(String, String)],
     scale: f32,
     error: Option<&str>,
+    hot: &Interaction,
+    text: &mut Text,
 ) -> (DisplayList, (u32, u32)) {
+    let s = scale;
+    let face = Typeface::system(text);
+    let family = icons::system_family(text);
+    let ink = Ink::of(Rgba::rgb8([245, 245, 247], 1.0));
     let mut list = DisplayList::default();
     let cols = 6;
-    let w = 120.0 * scale;
-    let h = 38.0 * scale;
+    let (tile_w, tile_h, gap, pad, header) = (136.0 * s, 44.0 * s, 6.0 * s, 12.0 * s, 44.0 * s);
+    let rows = names.len().div_ceil(cols);
+    let error_h = if error.is_some() { 40.0 * s } else { 0.0 };
     let size = (
-        (cols as f32 * w + 16.0 * scale) as u32,
-        ((names.len() + 1).div_ceil(cols) as f32 * h
-            + if error.is_some() { 62.0 } else { 16.0 } * scale) as u32,
+        (pad * 2.0 + cols as f32 * tile_w + (cols - 1) as f32 * gap).ceil() as u32,
+        (header + rows as f32 * (tile_h + gap) - gap + pad + error_h).ceil() as u32,
     );
+    let panel = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
     list.ops.push(Op::Fill {
-        rect: Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32),
-        radius: 16.0 * scale,
-        color: Rgba::new(0.09, 0.11, 0.14, 0.98),
+        rect: panel,
+        radius: 18.0 * s,
+        color: Rgba::rgb8([22, 24, 29], 0.96),
     });
-    for (i, (_, name)) in names
-        .iter()
-        .chain(std::iter::once(&(String::new(), "Done · Esc".into())))
-        .enumerate()
-    {
-        let r = Rect::new(
-            8.0 * scale + (i % cols) as f32 * w,
-            8.0 * scale + (i / cols) as f32 * h,
-            w - 4.0 * scale,
-            h - 4.0 * scale,
-        );
-        list.ops.push(Op::Fill {
-            rect: r,
-            radius: 6.0 * scale,
-            color: Rgba::new(1.0, 1.0, 1.0, 0.06),
-        });
+    list.ops.push(Op::Stroke {
+        rect: panel.inflate(-0.5),
+        radius: 18.0 * s,
+        width: 1.0,
+        color: Rgba::new(1.0, 1.0, 1.0, 0.12),
+    });
+    let label = |list: &mut DisplayList,
+                 text: &mut Text,
+                 rect: Rect,
+                 value: &str,
+                 style: TextStyle,
+                 color: Rgba| {
+        let value = text.fit(value, &style, rect.width().max(1.0));
+        let (w, h) = text.measure(&value, &style);
         list.ops.push(Op::Text {
             rect: Rect::new(
-                r.left + 8.0 * scale,
-                r.top + 8.0 * scale,
-                r.width() - 16.0 * scale,
-                22.0 * scale,
+                rect.left.round(),
+                (rect.top + (rect.height() - h) / 2.0).round(),
+                w,
+                h,
             ),
-            text: name.as_str().into(),
-            style: TextStyle::new("Segoe UI", 11.0 * scale),
-            color: Rgba::new(1.0, 1.0, 1.0, 1.0),
+            text: value,
+            style,
+            color,
         });
+    };
+    label(
+        &mut list,
+        text,
+        Rect::new(pad + 4.0 * s, 0.0, 300.0 * s, header),
+        "Add widgets",
+        face.style(Step::Headline, s),
+        ink.primary,
+    );
+    // Done: a light chip with dark text, the one filled control.
+    let done_id = names.len() as HitId;
+    let done = Rect::new(panel.right - pad - 76.0 * s, 9.0 * s, 76.0 * s, 26.0 * s);
+    let done_fill = match hot.state(done_id, true) {
+        State::Hover => Rgba::rgb8([255; 3], 1.0),
+        State::Pressed => Rgba::rgb8([200, 202, 208], 1.0),
+        _ => Rgba::rgb8([236, 237, 240], 1.0),
+    };
+    list.ops.push(Op::Fill {
+        rect: done,
+        radius: 13.0 * s,
+        color: done_fill,
+    });
+    let style = face.style(Step::Label, s);
+    let (w, _) = text.measure("Done", &style);
+    label(
+        &mut list,
+        text,
+        Rect::new(
+            done.left + (done.width() - w) / 2.0,
+            done.top,
+            w + 1.0,
+            done.height(),
+        ),
+        "Done",
+        style,
+        Rgba::rgb8([16, 16, 20], 1.0),
+    );
+    list.hits.push(Hit {
+        id: done_id,
+        rect: done,
+        role: Role::Button,
+        label: "Done (Esc)".into(),
+        enabled: true,
+        checked: None,
+    });
+    for (i, (id, name)) in names.iter().enumerate() {
+        let r = Rect::new(
+            pad + (i % cols) as f32 * (tile_w + gap),
+            header + (i / cols) as f32 * (tile_h + gap),
+            tile_w,
+            tile_h,
+        );
+        let state = hot.state(i as HitId, true);
+        list.ops.push(Op::Fill {
+            rect: r,
+            radius: 10.0 * s,
+            color: match state {
+                State::Hover => Rgba::new(1.0, 1.0, 1.0, 0.14),
+                State::Pressed => Rgba::new(1.0, 1.0, 1.0, 0.22),
+                _ => Rgba::new(1.0, 1.0, 1.0, 0.06),
+            },
+        });
+        let icon = Rect::new(r.left + 8.0 * s, r.top, 26.0 * s, r.height());
+        list.ops.push(icons::centered(
+            text,
+            &family,
+            widget_icon(id),
+            (16.0 * s).round(),
+            icon,
+            ink.secondary,
+        ));
+        label(
+            &mut list,
+            text,
+            Rect::new(r.left + 38.0 * s, r.top, r.width() - 44.0 * s, r.height()),
+            name,
+            face.style(Step::Body, s),
+            ink.primary,
+        );
         list.hits.push(Hit {
-            id: i as u32,
+            id: i as HitId,
             rect: r,
             role: Role::Button,
-            label: name.as_str().into(),
+            label: format!("Add {name}").into(),
             enabled: true,
             checked: None,
         });
     }
     if let Some(error) = error {
-        list.ops.push(Op::Text {
-            rect: Rect::new(
-                12.0 * scale,
-                size.1 as f32 - 42.0 * scale,
-                size.0 as f32 - 24.0 * scale,
-                40.0 * scale,
+        label(
+            &mut list,
+            text,
+            Rect::new(
+                pad + 4.0 * s,
+                size.1 as f32 - error_h,
+                panel.width() - 2.0 * pad,
+                error_h - 8.0 * s,
             ),
-            text: error.into(),
-            style: TextStyle::new("Segoe UI", 10.0 * scale),
-            color: Rgba::rgb8([255, 170, 150], 1.0),
-        });
+            error,
+            face.style(Step::Caption, s),
+            Rgba::rgb8([255, 170, 150], 1.0),
+        );
     }
     (list, size)
+}
+
+/// The palette's icon for a built-in widget id.
+fn widget_icon(id: &str) -> Icon {
+    match id {
+        "calendar" => Icon::Calendar,
+        "clock" => Icon::Clock,
+        "countdown" | "timer" => Icon::Timer,
+        "crypto" => Icon::Gauge,
+        "heatmap" | "todo" => Icon::Tasks,
+        "launcher" => Icon::Apps,
+        "media-pill" | "now-playing" => Icon::Music,
+        "notes" | "quote" => Icon::Notes,
+        "photo" => Icon::Photo,
+        "quick-toggles" => Icon::Settings,
+        "rss" => Icon::Feed,
+        "system-monitor" => Icon::Cpu,
+        "weather" => Icon::Brightness,
+        _ => Icon::Apps,
+    }
 }
 
 #[cfg(test)]
