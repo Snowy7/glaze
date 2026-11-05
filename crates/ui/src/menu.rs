@@ -824,7 +824,11 @@ impl<C: Clone> Menu<C> {
             .set_glass(self.tokens.glass.map(|material| crate::glass::Glass {
                 body: Rect::new(edge as f32, edge as f32, w as f32, h as f32),
                 radius: (self.tokens.radius * p.layout.scale).max(0.0),
-                material,
+                // The look's blur is in DIPs; the engine takes physical px, as for flyouts.
+                material: crate::GlassMaterial {
+                    blur: material.blur * p.layout.scale,
+                    ..material
+                },
             }));
         p.surface.present(ui, at, size, list)?;
         Ok(())
