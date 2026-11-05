@@ -22,6 +22,8 @@ pub use desktop_menu::DesktopMenu;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    /// Optional native services. Every experiment is off until explicitly enabled.
+    pub experimental: Experimental,
     /// Wallpaper GPU preference and frame cap, with optional overrides keyed by theme folder ID.
     pub engine: EngineConfig,
     /// Theme name (looked up like `mypaper_theme::locate`) or folder path.
@@ -53,6 +55,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            experimental: Experimental::default(),
             engine: EngineConfig::default(),
             theme: "aurora".into(),
             paused: false,
@@ -64,6 +67,13 @@ impl Default for Config {
             look: Look::default(),
         }
     }
+}
+
+/// Unproven features stay opt-in and incur no runtime cost while disabled.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Experimental {
+    pub file_index: bool,
 }
 
 /// `%APPDATA%\mypaper`: config plus the user's own `themes\`.
@@ -116,6 +126,14 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_index_is_explicitly_opt_in() {
+        assert!(!Config::parse("{}").unwrap().experimental.file_index);
+        let config = Config::parse(r#"{"experimental":{"file_index":true}}"#).unwrap();
+        assert!(Config::parse(&serde_json::to_string(&config).unwrap()).unwrap().experimental.file_index);
+        assert!(Config::parse(r#"{"experimental":{"file_indx":true}}"#).is_err());
+    }
 
     #[test]
     fn missing_fields_default_and_typos_fail() {
