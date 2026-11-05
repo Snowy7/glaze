@@ -830,7 +830,10 @@ impl Surface {
             } else {
                 std::ptr::null()
             },
-            psize: if source.is_some_and(|(_, _, resized)| resized) {
+            // Always with new pixels, resized or not: without a size, Windows accepts the call
+            // and keeps showing the old pixels (measured live: every hover and press on the
+            // bars and widgets stayed invisible).
+            psize: if source.is_some() {
                 &size
             } else {
                 std::ptr::null()
