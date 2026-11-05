@@ -51,7 +51,38 @@ pub enum Entry<C> {
         label: String,
         items: Vec<Entry<C>>,
     },
+    /// An action or a submenu with an icon in the leading column (where a check mark goes). On a
+    /// check item the icon stands in for the check mark and shows only while it is on (a radio
+    /// dot, say).
+    Iconic {
+        icon: MenuIcon,
+        item: Box<Entry<C>>,
+    },
 }
+
+/// An icon in a menu row's leading column, drawn in a square of [`ICON_SIZE`] design px.
+#[derive(Debug, Clone)]
+pub enum MenuIcon {
+    /// A glyph of the menu's icon font (Segoe Fluent Icons), in the label's ink.
+    Glyph(char),
+    /// A premultiplied bitmap (a shell extension's or an app's own icon), scaled into the square.
+    Image(Arc<crate::Image>),
+}
+
+impl PartialEq for MenuIcon {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Glyph(a), Self::Glyph(b)) => a == b,
+            (Self::Image(a), Self::Image(b)) => Arc::ptr_eq(a, b) || a == b,
+            _ => false,
+        }
+    }
+}
+
+/// The leading icon's side in design px: Windows 11's menu icons are 16 px.
+pub const ICON_SIZE: f32 = 16.0;
+/// Segoe Fluent Icons' radio bullet: the mark of the chosen item of a group.
+pub const RADIO: char = '\u{E915}';
 
 impl<C> Entry<C> {
     /// A plain, enabled item.
@@ -74,19 +105,52 @@ impl<C> Entry<C> {
         }
     }
 
+    /// An enabled radio item: a dot while it is the group's choice.
+    pub fn radio(label: &str, command: C, on: bool) -> Self {
+        Self::check(label, command, on).with_icon(MenuIcon::Glyph(RADIO))
+    }
+
+    /// This item with `icon` in its leading column.
+    pub fn with_icon(self, icon: MenuIcon) -> Self {
+        match self {
+            Self::Separator => Self::Separator,
+            Self::Iconic { item, .. } => Self::Iconic { icon, item },
+            item => Self::Iconic {
+                icon,
+                item: Box::new(item),
+            },
+        }
+    }
+
+    /// The item without its icon.
+    pub fn plain(&self) -> &Self {
+        match self {
+            Self::Iconic { item, .. } => item.plain(),
+            item => item,
+        }
+    }
+
+    /// Its leading icon, if it has one.
+    pub fn icon(&self) -> Option<&MenuIcon> {
+        match self {
+            Self::Iconic { icon, .. } => Some(icon),
+            _ => None,
+        }
+    }
+
     /// Can the pointer or the keyboard land on it?
     pub fn selectable(&self) -> bool {
-        match self {
-            Self::Separator => false,
+        match self.plain() {
             Self::Action { enabled, .. } => *enabled,
             Self::Submenu { .. } => true,
+            _ => false,
         }
     }
 
     pub fn label(&self) -> &str {
-        match self {
-            Self::Separator => "",
+        match self.plain() {
             Self::Action { label, .. } | Self::Submenu { label, .. } => label,
+            _ => "",
         }
     }
 }
@@ -328,16 +392,37 @@ pub fn view<C>(
             style: glyph_style.clone(),
             color: ink,
         };
-        if let Entry::Action {
-            checked: Some(true),
-            ..
-        } = item
-        {
-            ops.push(glyph(
-                body.left + m.pad + m.gutter / 2.0,
-                icons::CHECK,
-                layout.check,
-            ));
+        let checked = match item.plain() {
+            Entry::Action { checked, .. } => *checked,
+            _ => None,
+        };
+        let lead_x = body.left + m.pad + m.gutter / 2.0;
+        let square = {
+            let size = (ICON_SIZE * s).round();
+            Rect::new(
+                (lead_x - size / 2.0).round(),
+                (center_y - size / 2.0).round(),
+                size,
+                size,
+            )
+        };
+        match item.icon() {
+            // A check item's icon is its mark: shown only while on.
+            Some(_) if checked == Some(false) => {}
+            Some(MenuIcon::Glyph(g)) => ops.push(Op::Text {
+                rect: square,
+                text: g.to_string().into(),
+                style: TextStyle::new(&tokens.icons, square.width()),
+                color: ink,
+            }),
+            Some(MenuIcon::Image(image)) => ops.push(Op::Image {
+                rect: square,
+                image: image.clone(),
+                opacity: if selectable { 1.0 } else { 0.4 },
+                source: None,
+            }),
+            None if checked == Some(true) => ops.push(glyph(lead_x, icons::CHECK, layout.check)),
+            None => {}
         }
         ops.push(Op::Text {
             rect: Rect::new(
@@ -350,17 +435,13 @@ pub fn view<C>(
             style: label_style.clone(),
             color: ink,
         });
-        if let Entry::Submenu { .. } = item {
+        if let Entry::Submenu { .. } = item.plain() {
             ops.push(glyph(
                 body.right - m.pad - m.arrow / 2.0,
                 icons::CHEVRON_RIGHT,
                 layout.chevron,
             ));
         }
-        let checked = match item {
-            Entry::Action { checked, .. } => *checked,
-            _ => None,
-        };
         hits.push(Hit {
             id: index as HitId,
             rect: Rect::new(body.left, top, body.width(), row.height),
@@ -615,7 +696,7 @@ impl<C: Clone> Menu<C> {
     /// The command of `panel`'s selected row, if it is an action; choosing it closes the menu.
     fn choose(&mut self, panel: usize) -> Option<Outcome<C>> {
         let p = &self.panels[panel];
-        let command = match p.items.get(p.hover?)? {
+        let command = match p.items.get(p.hover?)?.plain() {
             Entry::Action {
                 command,
                 enabled: true,
@@ -632,7 +713,9 @@ impl<C: Clone> Menu<C> {
         let current = self.panels.len().checked_sub(1)?;
         let hover = self.panels[current].hover;
         let on_submenu = hover
-            .is_some_and(|row| matches!(self.panels[current].items[row], Entry::Submenu { .. }));
+            .is_some_and(|row| {
+                matches!(self.panels[current].items[row].plain(), Entry::Submenu { .. })
+            });
         match key {
             k if k == VK_DOWN.0 || k == VK_UP.0 => {
                 let delta = if k == VK_DOWN.0 { 1 } else { -1 };
@@ -702,7 +785,7 @@ impl<C: Clone> Menu<C> {
             self.redraw(ui, panel);
         }
         let Some(row) = target else { return };
-        if !matches!(self.panels[panel].items[row], Entry::Submenu { .. }) {
+        if !matches!(self.panels[panel].items[row].plain(), Entry::Submenu { .. }) {
             return;
         }
         if self.panels.len() == panel + 1 {
@@ -716,7 +799,7 @@ impl<C: Clone> Menu<C> {
     }
 
     fn open_submenu(&mut self, ui: &mut Ui, parent: usize, row: usize) {
-        let Entry::Submenu { items, .. } = self.panels[parent].items[row].clone() else {
+        let Entry::Submenu { items, .. } = self.panels[parent].items[row].plain().clone() else {
             return;
         };
         let p = &self.panels[parent];

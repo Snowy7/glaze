@@ -41,7 +41,7 @@ pub use interact::Interaction;
 pub use kit::{Accessory, ButtonKind, Frame, Lead, Row as ListRow, Tile};
 pub use layout::{Align, Insets, SizeClass, Stack};
 pub use scroll::Scroll;
-pub use menu::{Entry, Menu, Outcome, Screen, screen_at};
+pub use menu::{Entry, Menu, MenuIcon, Outcome, Screen, screen_at};
 pub use motion::{Spring, Ticker, Tween, display_frame};
 pub use render::{Image, TextMode, TextQuality, Ui, render};
 pub use scene::{DisplayList, Hit, HitId, Op};
