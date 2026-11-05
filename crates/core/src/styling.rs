@@ -26,8 +26,11 @@ pub const WM_STYLE_PALETTE: u32 = WM_APP + 5;
 
 pub struct Styling {
     tweaks: Tweaks,
-    /// The folder of the theme being styled, and its `windows` section.
+    /// The folder of the theme being styled, and the styling in effect: the user's look
+    /// (`look.windows`, D2) over the theme's `windows` section.
     theme: Option<(PathBuf, Option<WindowsStyle>)>,
+    /// The user's look, as last read from `config.json`.
+    look: mypaper_config::Look,
     /// The config's theme the last time we looked. Like the wallpaper, we
     /// only switch when this changes, so a `THEME` override on the command
     /// line stays in effect through unrelated config edits.
@@ -55,6 +58,7 @@ impl Styling {
         Ok(Self {
             tweaks,
             theme: None,
+            look: Config::load().map(|c| c.look).unwrap_or_default(),
             config_theme: config_theme.to_owned(),
             _config: watch_config(post(WM_STYLE_CONFIG))
                 .inspect_err(|e| log::warn!("styling will not follow config changes: {e:#}"))
@@ -79,8 +83,14 @@ impl Styling {
     pub fn follow_config(&mut self) {
         match Config::load() {
             Ok(config) if config.theme != self.config_theme => {
+                self.look = config.look;
                 self.set_theme(&config.theme);
                 self.config_theme = config.theme;
+            }
+            Ok(config) if config.look != self.look => {
+                // The user's own Windows styling changed (D2): re-layer it over the theme's.
+                self.look = config.look;
+                self.palette_changed();
             }
             Ok(_) => {}
             Err(e) => log::warn!("styling unchanged: {e:#}"),
@@ -106,7 +116,8 @@ impl Styling {
     }
 
     fn use_theme(&mut self, loaded: LoadedTheme) {
-        self.theme = Some((loaded.dir, loaded.theme.windows));
+        let style = self.look.windows_style(loaded.theme.windows.as_ref());
+        self.theme = Some((loaded.dir, style));
         self.apply();
     }
 

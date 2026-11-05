@@ -172,15 +172,20 @@ Every change is journaled and restored. See [docs/desktop-extras.md](docs/deskto
 ### Studio
 
 <p align="center">
-  <img src="docs/media/studio-gallery.png" alt="mypaper Studio: the theme gallery" width="85%">
+  <img src="docs/media/studio/home-dark.png" alt="mypaper Studio: Home" width="85%">
 </p>
 
-Studio has:
-- a gallery;
-- new themes from any image, video, folder, shader, 3D model, page or app;
-- a styling editor with a live preview;
-- bar and dock settings;
-- the widget list.
+Studio is a native app on the same software Direct2D layer as the shell: about 25 MB while open,
+nothing at all once closed. It edits the same settings files, so every change shows on the desktop
+at once, and it follows edits made anywhere else.
+- **Home:** your desktop as it is, and quick switches.
+- **Wallpapers:** your library, and new wallpapers from any image, video, folder, shader, 3D model,
+  page or app.
+- **Look:** one look for everything, from the bars and widgets to Windows' own windows.
+- **Widgets** and **Bars:** arranged on a live preview drawn by the shell's own code.
+- **Integrations** and **Settings.**
+
+**Ctrl+K** finds any setting, wallpaper, widget or action. See [docs/studio-ux.md](docs/studio-ux.md).
 
 ## Performance
 
@@ -218,16 +223,13 @@ Measured on a Ryzen laptop (AMD iGPU and NVIDIA dGPU, two 1440p monitors), relea
 
 ## Quick start
 
-You need Windows 10/11, [rustup](https://rustup.rs) and [pnpm](https://pnpm.io). The pinned
-nightly toolchain installs itself.
+You need Windows 10/11 and [rustup](https://rustup.rs). The pinned nightly toolchain installs
+itself.
 
 ```sh
-cargo build --release --workspace          # core, wallpaper, widgets, bars, plugins
-pnpm -C widgets/shell install && pnpm -C widgets/shell build
-pnpm -C bars/shell install && pnpm -C bars/shell build
-target/release/mypaper-core                # wallpaper + widgets + bars + tray icon
-
-cd apps/studio && pnpm install && pnpm release   # mypaper Studio
+cargo build --release --workspace          # every program, Studio and the plugins included
+target/release/mypaper-core                # wallpaper + shell + tray icon
+target/release/mypaper-studio              # mypaper Studio (also: tray > Open Studio)
 ```
 
 | Shortcut | Does |
@@ -276,7 +278,7 @@ version keeps running.
 ## Architecture
 
 ```text
-mypaper-studio        Tauri app: gallery, themes, styling, widgets and bars settings
+mypaper-studio        the settings app (software Direct2D), started from the tray, closed = gone
 mypaper-core          supervisor · tray · panic hotkey · Windows styling + undo journal
   ├─ mypaper-wallpaper   wgpu: one GPU device, one surface per monitor, behind the icons
   ├─ mypaper-widgets     a transparent WebView2 layer per monitor, above the icons
@@ -295,7 +297,7 @@ mypaper-core          supervisor · tray · panic hotkey · Windows styling + un
 | `crates/tweaks`, `crates/inject` | Windows styling with an undo journal; which windows may be styled |
 | `crates/desktop`, `crates/config`, `crates/theme` | Win32 plumbing, settings, theme format |
 | `packages/widget-sdk`, `widgets/`, `plugins/` | Widget SDK, the bundled widgets and plugins |
-| `apps/studio` | mypaper Studio (Tauri v2 + React + Tailwind) |
+| `crates/studio` | mypaper Studio, on `crates/ui` ([docs/studio-ux.md](docs/studio-ux.md)) |
 
 Builds are fast: incremental Rust rebuilds take 1–3 s, thanks to nightly Cranelift, the parallel
 frontend, rust-lld and a DX12-only wgpu ([engine notes](docs/engine-notes.md)).
@@ -308,6 +310,7 @@ frontend, rust-lld and a DX12-only wgpu ([engine notes](docs/engine-notes.md)).
 | [writing-widgets.md](docs/writing-widgets.md) · [writing-plugins.md](docs/writing-plugins.md) | Tutorials |
 | [bars.md](docs/bars.md) | Top bar, dock, menus, presets and taskbar |
 | [ui.md](docs/ui.md) | The native UI layer (`crates/ui`) and `mypaper-shell` |
+| [studio-ux.md](docs/studio-ux.md) | Studio: pages, previews, search, keyboard, how it edits your files |
 | [performance.md](docs/performance.md) | The harness, the budgets, and before/after startup numbers |
 | [windows-styling.md](docs/windows-styling.md) | Accent, borders, Mica, dark mode, and what is restored |
 | [web-and-app-wallpapers.md](docs/web-and-app-wallpapers.md) | Web and external-renderer wallpapers |

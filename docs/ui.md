@@ -207,6 +207,40 @@ nothing. Click and focus requests come back as `Event::Invoke` and `Event::Focus
   layered window costs about 20 ms, more than the rest of opening a menu. A closed menu's windows
   keep no bitmaps.
 
+## App windows and controls (N7)
+
+Studio ([studio-ux.md](studio-ux.md)) is the one ordinary app window. What it added, all additive:
+
+- **`Kind::App { min }`** (`app_window.rs`): a resizable, activated, opaque window with a taskbar
+  button. It is not layered: `present` draws the damaged rectangle in the WIC bitmap and copies it
+  straight to the window with `SetDIBitsToDevice` (no DIB section, no third copy). The app draws
+  its own title area and says where the caption and caption buttons are with
+  `Surface::set_chrome(&[(Rect, Chrome)])`; `WM_NCHITTEST` answers from them (plus the top resize
+  band), so drag, double-click, Aero Snap and the snap-layouts flyout over Maximize all work.
+  Window helpers: `place`, `show_active`, `client_size`, `scale`, `is_maximized`, `minimize`,
+  `toggle_maximize`, `set_background` (the colour behind a resize), `set_cursor(Cursor)`,
+  `set_frame(dark, border)` (DWM dark mode and border colour), `set_icon_png`. Events:
+  `Event::Resized(w, h)`, `Event::Close` (the app decides), `Event::SettingChanged` (light/dark,
+  accent or contrast changed). Windows' size/move loop stops the app's own; `set_modal_hook`
+  lets the app render from inside it.
+- **Clips:** `Op::Clip { rect }` and `Op::Unclip` bracket ops drawn inside a scroll view
+  (`PushAxisAlignedClip`); damage treats the clip's rectangle as the bounds.
+- **`Text::set_capacity(layouts)`:** a window with a few hundred labels on screen keeps them all
+  laid out instead of reshaping them every frame.
+- **Controls** (`controls.rs`): immediate-mode controls for app windows. `Palette` is the gray
+  token set (dark, light, contrast), `Type` the type ramp (it follows Windows' text size). A frame
+  is built by `Builder<A>`, where `A` is the app's action type: each control appends its ops, one
+  hit (role, label, state) and a `Target { key, action, behavior, group, rect, visible, scroll }`.
+  Hit id − 1 is the target's index. `Behavior` says how input treats it (`Click`, `Toggle`,
+  `Slider`, `Field`, `Drag`, `Thumb`); `group` ties segments, tiles and rows together for arrow
+  keys; `scroll` lets keyboard focus reach a target scrolled out of view. The app keeps the input
+  state and hands it back as `Input { hover, pressed, focus, focus_visible, pointer }`; `key(..)`
+  makes stable identities, so focus survives rebuilding the list every frame. The controls:
+  `button`, `icon_button`, `switch`, `segmented`, `slider`, `select`, `field`, `badge`, `keycap`,
+  `tile_frame`, `scroll`, and the panel helpers (`elevated`, `scrim`) that palettes, sheets,
+  popovers and toasts are drawn with. Lists, tabs, colour swatches and dialogs are Studio's
+  compositions of these (`crates/studio/src/ui.rs`).
+
 ## `mypaper-shell`
 
 One UI thread, plus the desktop menu's mouse-hook thread (a low-level hook must answer in

@@ -27,19 +27,9 @@ pub fn open_studio() {
     }
 }
 
-/// Studio beside this exe, or a dev build of `apps/studio` under this exe's folder or a parent.
+/// Studio (`crates/studio`), built beside this exe like the other components.
 fn find_studio(exe: &Path) -> Option<PathBuf> {
-    let beside = exe.with_file_name(STUDIO_EXE);
-    let dev = exe.ancestors().skip(1).flat_map(|dir| {
-        ["release", "debug"].map(|profile| {
-            dir.join("apps/studio/src-tauri/target")
-                .join(profile)
-                .join(STUDIO_EXE)
-        })
-    });
-    std::iter::once(beside)
-        .chain(dev)
-        .find(|path| path.is_file())
+    Some(exe.with_file_name(STUDIO_EXE)).filter(|path| path.is_file())
 }
 
 /// Toggles the widget host's edit mode: its registered `mypaper.widgets.edit` message

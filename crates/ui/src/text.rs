@@ -75,6 +75,8 @@ pub struct Text {
     layouts: HashMap<(FormatKey, Arc<str>), Laid>,
     /// Counts lookups, to find the least recently used layouts.
     clock: u64,
+    /// How many layouts to keep ([`MAX_LAYOUTS`] unless the app says otherwise).
+    capacity: usize,
 }
 
 /// A layout costs about 19 KB private (measured, docs/ui.md), so the cache keeps this many and
@@ -91,11 +93,18 @@ impl Text {
             formats: HashMap::new(),
             layouts: HashMap::new(),
             clock: 0,
+            capacity: MAX_LAYOUTS,
         })
     }
 
     pub(crate) fn factory(&self) -> &IDWriteFactory {
         &self.factory
+    }
+
+    /// Keeps up to `layouts` laid-out strings (about 19 KB each). A window that shows a few
+    /// hundred labels at once (Studio) raises it so a frame never re-shapes its own text.
+    pub fn set_capacity(&mut self, layouts: usize) {
+        self.capacity = layouts.max(8);
     }
 
     /// The width and height of `text` in `style`, in device pixels.
@@ -216,7 +225,7 @@ impl Text {
         match self.layouts.get_mut(&key) {
             Some(laid) => laid.used = self.clock,
             None => {
-                if self.layouts.len() >= MAX_LAYOUTS {
+                if self.layouts.len() >= self.capacity {
                     self.evict();
                 }
                 let laid = self.make(text, style)?;

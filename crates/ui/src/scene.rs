@@ -16,7 +16,7 @@ pub type HitId = u32;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     /// A clipped group, used by windowless scroll views. Bounds never escape the viewport.
-    Clip { rect: Rect, ops: Arc<[Op]> },
+    Clipped { rect: Rect, ops: Arc<[Op]> },
     /// Markdown emphasis without changing the shared text style contract.
     Emphasis {
         rect: Rect,
@@ -82,13 +82,18 @@ pub enum Op {
         drop: f32,
         color: Rgba,
     },
+    /// Clips what follows to `rect` (intersected with any clip already pushed) until the
+    /// matching [`Op::Unclip`]. Scroll views wrap their content in a pair.
+    Clip { rect: Rect },
+    /// Ends the innermost [`Op::Clip`].
+    Unclip,
 }
 
 impl Op {
     /// Every pixel this operation may touch, antialiasing included.
     pub fn bounds(&self) -> Rect {
         match self {
-            Self::Clip { rect, .. } => *rect,
+            Self::Clipped { rect, .. } => *rect,
             Self::Emphasis { rect, style, .. } => rect.inflate(2.0 + style.size * 0.1),
             Self::Arc {
                 center,
@@ -119,6 +124,9 @@ impl Op {
             Self::Shadow {
                 rect, spread, drop, ..
             } => rect.inflate(spread + 1.0).offset(0.0, *drop),
+            // A changed clip changes what everything inside it may show.
+            Self::Clip { rect } => *rect,
+            Self::Unclip => Rect::default(),
         }
     }
 }
@@ -185,11 +193,11 @@ fn collect_damage(old: &[Op], new: &[Op], clip: Option<Rect>, out: &mut Vec<Rect
         let changed = match (old.get(i), new.get(i)) {
             (Some(a), Some(b)) if a == b => continue,
             (
-                Some(Op::Clip {
+                Some(Op::Clipped {
                     rect: a,
                     ops: before,
                 }),
-                Some(Op::Clip {
+                Some(Op::Clipped {
                     rect: b,
                     ops: after,
                 }),
@@ -279,11 +287,11 @@ fn damage_ops(old: &[Op], new: &[Op]) -> Option<Rect> {
         .filter_map(|i| match (old.get(i), new.get(i)) {
             (Some(a), Some(b)) if a == b => None,
             (
-                Some(Op::Clip {
+                Some(Op::Clipped {
                     rect: a,
                     ops: before,
                 }),
-                Some(Op::Clip {
+                Some(Op::Clipped {
                     rect: b,
                     ops: after,
                 }),
@@ -298,7 +306,7 @@ fn damage_ops(old: &[Op], new: &[Op]) -> Option<Rect> {
                 (!clipped.is_empty()).then_some(clipped)
             }
             (a, b) => {
-                let bounds = |op: Option<&Op>| op.map(Op::bounds);
+                let bounds = |op: Option<&Op>| op.map(Op::bounds).filter(|r| !r.is_empty());
                 match (bounds(a), bounds(b)) {
                     (Some(a), Some(b)) => Some(a.union(b)),
                     (one, other) => one.or(other),
@@ -338,11 +346,11 @@ mod tests {
     #[test]
     fn a_changed_scrolled_meter_damages_its_own_bounds_and_not_the_whole_viewport() {
         let viewport = Rect::new(0.0, 0.0, 400.0, 300.0);
-        let before = list(vec![Op::Clip {
+        let before = list(vec![Op::Clipped {
             rect: viewport,
             ops: vec![fill(0.0), fill(100.0), fill(300.0)].into(),
         }]);
-        let after = list(vec![Op::Clip {
+        let after = list(vec![Op::Clipped {
             rect: viewport,
             ops: vec![fill(0.0), fill(105.0), fill(300.0)].into(),
         }]);
@@ -350,11 +358,11 @@ mod tests {
             after.damage(&before),
             Some(Rect::new(99.0, 0.0, 17.0, 11.0))
         );
-        let outside = list(vec![Op::Clip {
+        let outside = list(vec![Op::Clipped {
             rect: viewport,
             ops: vec![fill(0.0), fill(100.0), fill(500.0)].into(),
         }]);
-        let changed_outside = list(vec![Op::Clip {
+        let changed_outside = list(vec![Op::Clipped {
             rect: viewport,
             ops: vec![fill(0.0), fill(100.0), fill(510.0)].into(),
         }]);

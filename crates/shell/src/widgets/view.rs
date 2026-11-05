@@ -341,8 +341,8 @@ fn text_shadows(ops: Vec<Op>, scale: f32) -> Vec<Op> {
                 italic: *italic,
                 strike: *strike,
             }),
-            Op::Clip { rect, ops } => {
-                out.push(Op::Clip {
+            Op::Clipped { rect, ops } => {
+                out.push(Op::Clipped {
                     rect: *rect,
                     ops: text_shadows(ops.to_vec(), scale).into(),
                 });
@@ -377,7 +377,7 @@ impl Draw<'_> {
     }
     fn scroll_end(&mut self, mark: (usize, usize), clip: Rect) {
         let ops = self.list.ops.split_off(mark.0);
-        self.list.ops.push(Op::Clip {
+        self.list.ops.push(Op::Clipped {
             rect: clip,
             ops: ops.into(),
         });

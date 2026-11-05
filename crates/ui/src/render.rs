@@ -351,9 +351,7 @@ impl Canvas {
                 let clip = area.to_rect();
                 t.PushAxisAlignedClip(&d2d(clip), D2D1_ANTIALIAS_MODE_ALIASED);
                 t.Clear(Some(&color(Rgba::TRANSPARENT)));
-                for op in list.ops.iter().filter(|op| touches(op, clip)) {
-                    self.op(text, op, clip);
-                }
+                self.ops(text, &list.ops, clip);
                 t.PopAxisAlignedClip();
             }
             t.EndDraw(None, None).context("drawing")?;
@@ -390,20 +388,50 @@ impl Canvas {
     }
 
     /// # Safety
+    /// Runs between BeginDraw/EndDraw. Marker clips are scoped to this slice, including
+    /// inside a retained clipped group, so an unmatched Unclip cannot pop a caller's clip.
+    unsafe fn ops(&self, text: &mut Text, ops: &[Op], damage: Rect) {
+        let mut pushed = 0;
+        // SAFETY: the caller owns this draw scope; each pushed clip is balanced below.
+        unsafe {
+            for op in ops {
+                match op {
+                    Op::Clip { rect } => {
+                        self.target
+                            .PushAxisAlignedClip(&d2d(*rect), D2D1_ANTIALIAS_MODE_ALIASED);
+                        pushed += 1;
+                    }
+                    Op::Unclip if pushed > 0 => {
+                        self.target.PopAxisAlignedClip();
+                        pushed -= 1;
+                    }
+                    Op::Unclip => {}
+                    op if touches(op, damage) => self.op(text, op, damage),
+                    _ => {}
+                }
+            }
+            for _ in 0..pushed {
+                self.target.PopAxisAlignedClip();
+            }
+        }
+    }
+
+    /// # Safety
     /// Must run between `BeginDraw` and `EndDraw`.
     unsafe fn op(&self, text: &mut Text, op: &Op, damage: Rect) {
         let (t, brush) = (&self.target, &self.brush);
         // SAFETY: per this function's contract.
         unsafe {
             match op {
-                Op::Clip { rect, ops } => {
+                Op::Clipped { rect, ops } => {
                     t.PushAxisAlignedClip(&d2d(*rect), D2D1_ANTIALIAS_MODE_ALIASED);
-                    for child in ops
-                        .iter()
-                        .filter(|op| touches(op, *rect) && touches(op, damage))
-                    {
-                        self.op(text, child, damage);
-                    }
+                    let damage = Rect {
+                        left: rect.left.max(damage.left),
+                        top: rect.top.max(damage.top),
+                        right: rect.right.min(damage.right),
+                        bottom: rect.bottom.min(damage.bottom),
+                    };
+                    self.ops(text, ops, damage);
                     t.PopAxisAlignedClip();
                 }
                 Op::Emphasis {
@@ -631,6 +659,8 @@ impl Canvas {
                         );
                     }
                 }
+                // Applied by `draw`, around the ops they enclose.
+                Op::Clip { .. } | Op::Unclip => {}
                 Op::Shadow {
                     rect,
                     radius,
