@@ -253,6 +253,26 @@ impl Bars {
             services::wait_ms(at.saturating_duration_since(Instant::now()))
         })
     }
+    /// Which deadline [`timeout`](Self::timeout) waits for, for the shell loop's wake counts.
+    pub fn timeout_source(&self) -> &'static str {
+        [
+            (self.config_due, "bars.config"),
+            (self.display_due, "bars.display"),
+            (self.reservation_due, "bars.reservation"),
+            (self.explorer_due, "bars.explorer"),
+            (self.rehide_due, "bars.rehide"),
+            (self.services.deadline(), "bars.services"),
+            (self.preview_due.as_ref().map(|p| p.0), "bars.preview"),
+            (self.preview_close, "bars.preview_close"),
+            (self.tooltip_due.map(|t| t.0), "bars.tooltip"),
+            (self.warm_due.map(|t| t.0), "bars.warm"),
+            (self.bars.iter().filter_map(|b| b.hide_at).min(), "bars.hide"),
+        ]
+        .into_iter()
+        .filter_map(|(at, name)| Some((at?, name)))
+        .min_by_key(|d| d.0)
+        .map_or("bars", |d| d.1)
+    }
     pub fn config_changed(&mut self) {
         self.config_due = Some(Instant::now() + Duration::from_millis(100));
     }

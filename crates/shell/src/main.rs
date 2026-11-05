@@ -12,7 +12,10 @@
 // The shell's modules are a library (`lib.rs`) so Studio can draw previews with them.
 use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, widgets};
 
+mod wakes;
+
 use std::process::ExitCode;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use mypaper_config::Config;
@@ -20,12 +23,13 @@ use mypaper_desktop::desktop_view::Com;
 use mypaper_desktop::{ConfigWatcher, WM_FACT, startup, watch_config};
 use mypaper_tweaks::palette::{self, PaletteWatcher};
 use mypaper_ui::{Ui, modules, next_event};
-use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_ABANDONED, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Threading::{
-    CreateMutexW, GetCurrentProcessId, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    CreateMutexW, GetCurrentProcessId, INFINITE, OpenProcess, PROCESS_SYNCHRONIZE,
+    WaitForSingleObject,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
@@ -35,6 +39,7 @@ use windows::core::w;
 
 use crate::desktop_menu::{DesktopMenu, Settings};
 use crate::inbox::{Inbox, Msg, WM_CONFIG, WM_PALETTE};
+use crate::wakes::{Cause, Wakes};
 
 fn main() -> ExitCode {
     mypaper_desktop::init_logging();
@@ -80,39 +85,50 @@ fn run() -> Result<()> {
     log::info!("running");
 
     let mut msg = MSG::default();
+    let mut wakes = Wakes::new();
     // Bars::new has already presented its first frame. Yield through the message loop before
     // any widget windows, fonts, providers or fetchers are initialized.
     let mut widgets_pending = true;
     'run: loop {
+        let start = Instant::now();
         // Order matters: the parent, then the widgets' frame timer, then the bars' handles.
-        let handles: Vec<HANDLE> = parent
-            .iter()
-            .copied()
-            .chain(shell.widgets.as_ref().map(widgets::Widgets::timer_handle))
-            .chain(shell.bars.handles())
-            .chain([shell.flyouts.handle()])
-            .collect();
+        let mut handles: Vec<(HANDLE, &'static str)> = parent.iter().map(|&h| (h, "parent")).collect();
+        handles.extend(shell.widgets.as_ref().map(|w| (w.timer_handle(), "widgets.frame")));
+        handles.extend(
+            shell
+                .bars
+                .handles()
+                .into_iter()
+                .enumerate()
+                .map(|(i, h)| (h, if i == 0 { "bars.ticker" } else { "bars.desktops" })),
+        );
+        handles.push((shell.flyouts.handle(), "flyouts.ticker"));
+        let raw: Vec<HANDLE> = handles.iter().map(|h| h.0).collect();
+        // The nearest deadline, and whose it is (0 widgets, 1 bars, 2 flyouts).
+        let (timeout, due) = if widgets_pending {
+            (0, 3)
+        } else {
+            [
+                shell.widgets.as_ref().map_or(INFINITE, widgets::Widgets::timeout_ms),
+                shell.bars.timeout(),
+                shell.flyouts.timeout_ms(),
+            ]
+            .into_iter()
+            .zip(0..)
+            .min()
+            .unwrap_or((INFINITE, 3))
+        };
+        wakes.spent("wait setup", start);
         // SAFETY: the parent's handle stays open for the whole loop.
         let woke = unsafe {
             MsgWaitForMultipleObjectsEx(
-                (!handles.is_empty()).then_some(handles.as_slice()),
-                if widgets_pending {
-                    0
-                } else {
-                    shell
-                        .widgets
-                        .as_ref()
-                        .map_or(
-                            windows::Win32::System::Threading::INFINITE,
-                            widgets::Widgets::timeout_ms,
-                        )
-                        .min(shell.bars.timeout())
-                        .min(shell.flyouts.timeout_ms())
-                },
+                (!raw.is_empty()).then_some(raw.as_slice()),
+                timeout,
                 QS_ALLINPUT,
                 MWMO_INPUTAVAILABLE,
             )
         };
+        let mut at = Instant::now();
         if parent.is_some() && woke == WAIT_OBJECT_0 {
             log::info!("the process that started the shell exited; stopping");
             break;
@@ -122,9 +138,25 @@ fn run() -> Result<()> {
         {
             widgets.frame_ready();
         }
+        let signalled = woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
+        let mut cause = if woke == WAIT_TIMEOUT {
+            Some(Cause::Timeout(match due {
+                0 => "widgets",
+                1 => shell.bars.timeout_source(),
+                2 => "flyouts",
+                _ => "startup",
+            }))
+        } else {
+            handles.get(signalled).map(|h| Cause::Handle(h.1))
+        };
         // SAFETY: standard message pump on the thread that owns every window of the shell.
         unsafe {
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                wakes.message(&msg);
+                if cause.is_none() && signalled == handles.len() {
+                    // Woken by this posted message, not by a sent one.
+                    cause = Some(Cause::Message);
+                }
                 if msg.message == WM_QUIT {
                     break 'run;
                 }
@@ -143,8 +175,12 @@ fn run() -> Result<()> {
                 DispatchMessageW(&msg);
             }
         }
-        shell.drain(&mut ui);
+        at = wakes.spent("pump", at);
+        wakes.wake(cause.unwrap_or(Cause::Sent));
+        wakes.report(|| format!("widgets since start: {:?}", shell.widgets.as_ref().map(widgets::Widgets::costs)));
+        at = shell.drain(&mut ui, &mut wakes, at);
         shell.bars.tick(&mut ui);
+        wakes.spent("bars.tick", at);
         if widgets_pending {
             widgets_pending = false;
             startup::ready("shell", "widgets_init_ms");
@@ -180,10 +216,12 @@ struct Shell {
 impl Shell {
     /// Handles everything queued: inbox messages and input, in order, until both are empty.
     /// Handling one may call into Explorer and so let more arrive; they are handled here too.
-    fn drain(&mut self, ui: &mut Ui) {
+    /// Adds the time each part took to `wakes`, from `at`; returns when it finished.
+    fn drain(&mut self, ui: &mut Ui, wakes: &mut Wakes, mut at: Instant) -> Instant {
         if integrations::process() {
             self.bars.integration_changed();
         }
+        at = wakes.spent("integrations", at);
         let mut config_changed = false;
         loop {
             if let Some(msg) = inbox::next() {
@@ -217,16 +255,20 @@ impl Shell {
                 break;
             }
         }
+        at = wakes.spent("events", at);
         if let Some(widgets) = &mut self.widgets {
             widgets.poll(ui);
         }
+        at = wakes.spent("widgets.poll", at);
         // What the bars asked to open, provider answers, and the open flyout's motion.
         self.flyouts.process(ui, &mut self.bars);
+        at = wakes.spent("flyouts.process", at);
         // The menu's look follows the theme and its palette, so both count.
         if config_changed {
             self.follow_config(ui);
             self.flyouts.config_changed(ui, self.inbox);
         }
+        at
     }
 
     fn fact(&mut self, ui: &mut Ui, wparam: usize, lparam: isize) {
