@@ -6,6 +6,9 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 pub const PROTOCOL_VERSION: u32 = 2;
+// The installed server's shell baseline is ~2.4 MiB. This is a wire bound; only
+// typed metadata is retained, never the shell's message previews or transcripts.
+pub const MESSAGE_LIMIT: usize = 32 * 1024 * 1024;
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Thread {
@@ -102,8 +105,8 @@ impl Snapshot {
                 }
                 let threads: Vec<Thread> = serde_json::from_value(snapshot["threads"].clone())?;
                 ensure!(
-                    threads.len() <= 256,
-                    "T3 snapshot exceeds 256 threads; narrow the server projection"
+                    threads.len() <= 16_384,
+                    "T3 has too many threads to load. Archive old threads, then retry."
                 );
                 self.threads = threads;
                 self.sequence = snapshot["snapshotSequence"]
@@ -172,8 +175,8 @@ impl Snapshot {
                             self.threads[index] = thread;
                         } else {
                             ensure!(
-                                self.threads.len() < 256,
-                                "T3 thread bound exceeded; refresh the projection"
+                                self.threads.len() < 16_384,
+                                "T3 has too many threads to load. Archive old threads, then retry."
                             );
                             self.threads.push(thread);
                         }
@@ -213,13 +216,17 @@ pub(crate) async fn run(config: &crate::config::T3, publish: &Publish) -> Result
         "configure the T3 /ws loopback endpoint and pair a read-only mypaper client"
     );
     let token = credentials::read("t3").map_err(|_| anyhow::anyhow!("pair mypaper with T3 using orchestration:read and store the token in Credential Manager"))?;
-    subscribe(config, publish, token.text()?).await
+    subscribe(config, publish, token.text()?).await.map_err(|error| {
+        log::warn!("T3 subscription: {error:#}");
+        anyhow::anyhow!("T3 disconnected. Retry to reconnect to your local T3 Code.")
+    })
 }
 async fn subscribe(config: &crate::config::T3, publish: &Publish, token: &str) -> Result<()> {
-    let mut socket = transport::socket(
+    let mut socket = transport::socket_with_limit(
         &config.endpoint,
         Some(token),
         Some("orchestrationProtocol=2"),
+        MESSAGE_LIMIT,
     )
     .await?;
     transport::send(&mut socket,json!({"_tag":"Request","id":"1","tag":"orchestration.subscribeShell","payload":{"requestCompletionMarker":true},"headers":[]})).await?;
@@ -301,14 +308,28 @@ mod tests {
                     }).await.unwrap();
                     let request:Value=serde_json::from_str(socket.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
                     assert_eq!(request["tag"],"orchestration.subscribeShell");
-                    socket.send(Message::Text(json!({"_tag":"Chunk","requestId":"1","values":[{"kind":"snapshot","snapshot":{"schemaVersion":1,"snapshotSequence":4,"projects":[],"threads":[]}}]}).to_string().into())).await.unwrap();
+                    // Match the real failure: 996 threads and a >2 MiB single frame.
+                    let threads: Vec<_> = (0..996).map(|i| json!({
+                        "id":format!("thread-{i}"),"projectId":"p","title":"Fixture thread",
+                        "providerInstanceId":"codex","status":"running","latestRunId":null,
+                        "activeRunId":null,"pendingRuntimeRequest":null,"updatedAt":"2026-11-05",
+                        "latestVisibleMessage":{"text":"x".repeat(2400)}
+                    })).collect();
+                    let baseline=json!({"_tag":"Chunk","requestId":"1","values":[{"kind":"snapshot","snapshot":{"schemaVersion":2,"snapshotSequence":4,"projects":[],"threads":threads}}]}).to_string();
+                    assert!(baseline.len()>2*1024*1024);
+                    socket.send(Message::Text(baseline.into())).await.unwrap();
                     let ack:Value=serde_json::from_str(socket.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
                     assert_eq!(ack,json!({"_tag":"Ack","requestId":"1"}));
                     assert!(socket.next().await.is_none_or(|r|r.is_err() || matches!(r,Ok(Message::Close(_)))));
                 }
             });
             let publish=Publish { provider:crate::Provider::T3,snapshot:Arc::new(Mutex::new(crate::Snapshot::default())),wake:Arc::new(|_|{}),counters:Arc::new(crate::Counters::default()) };
-            for _ in 0..2 { subscribe(&config,&publish,"fixture-only").await.unwrap();assert_eq!(publish.snapshot.lock().unwrap().availability,Availability::Cached); }
+            for _ in 0..2 {
+                subscribe(&config,&publish,"fixture-only").await.unwrap();
+                let snapshot=publish.snapshot.lock().unwrap();
+                assert_eq!(snapshot.availability,Availability::Cached);
+                assert!(matches!(&snapshot.data,Some(Data::T3(state)) if state.threads.len()==996));
+            }
             server.await.unwrap();
         });
     }

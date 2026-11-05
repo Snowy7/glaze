@@ -41,6 +41,16 @@ pub async fn socket(
     authorization: Option<&str>,
     query: Option<&str>,
 ) -> Result<Socket> {
+    socket_with_limit(endpoint, authorization, query, LIMIT).await
+}
+
+/// Protocol-specific bounds keep large T3 shell summaries separate from small control APIs.
+pub async fn socket_with_limit(
+    endpoint: &str,
+    authorization: Option<&str>,
+    query: Option<&str>,
+    limit: usize,
+) -> Result<Socket> {
     loopback_url(endpoint)?;
     let url = match query {
         Some(query) => format!("{endpoint}?{query}"),
@@ -53,8 +63,8 @@ pub async fn socket(
             .insert("authorization", format!("Bearer {token}").parse()?);
     }
     let config = WebSocketConfig::default()
-        .max_message_size(Some(LIMIT))
-        .max_frame_size(Some(LIMIT));
+        .max_message_size(Some(limit))
+        .max_frame_size(Some(limit));
     let (socket, _) = tokio::time::timeout(
         std::time::Duration::from_secs(5),
         tokio_tungstenite::connect_async_with_config(request, Some(config), true),
