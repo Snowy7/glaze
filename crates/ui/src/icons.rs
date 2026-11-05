@@ -155,6 +155,24 @@ pub enum Icon {
     Umbrella,
     Sunrise,
     Sunset,
+    // Apps (Studio).
+    Palette,
+    Undo,
+    Redo,
+    Pointer,
+    Move,
+    Wrench,
+    Video,
+    Sparkles,
+    Package,
+    Images,
+    Activity,
+    Rocket,
+    Quote,
+    Coins,
+    Grid,
+    Toggle,
+    PanelTop,
 }
 
 impl Icon {
@@ -386,6 +404,23 @@ impl Icon {
             Self::Umbrella => "umbrella",
             Self::Sunrise => "sunrise",
             Self::Sunset => "sunset",
+            Self::Palette => "palette",
+            Self::Undo => "undo-2",
+            Self::Redo => "redo-2",
+            Self::Pointer => "mouse-pointer-2",
+            Self::Move => "move",
+            Self::Wrench => "wrench",
+            Self::Video => "video",
+            Self::Sparkles => "sparkles",
+            Self::Package => "box",
+            Self::Images => "images",
+            Self::Activity => "activity",
+            Self::Rocket => "rocket",
+            Self::Quote => "quote",
+            Self::Coins => "coins",
+            Self::Grid => "grid-3x3",
+            Self::Toggle => "toggle-right",
+            Self::PanelTop => "panel-top",
         }
     }
 
@@ -665,6 +700,8 @@ mod tests {
             Icon::Thunder,
             Icon::Controls,
             Icon::Sunset,
+            Icon::Palette,
+            Icon::PanelTop,
         ];
         for icon in all {
             let segs = icon.segments();
