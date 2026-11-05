@@ -11,8 +11,13 @@ const MODES: [(&str, &str); 4] = [("focus", "Focus"), ("short", "Short"), ("long
 pub fn draw(c: &mut Ctx, r: Rect) {
     let s = c.s();
     let (w, h) = (c.rect.width() / s, c.rect.height() / s);
-    let tile = w < 130.0 || (h < 130.0 && w < 150.0);
-    let row = !tile && (h < 130.0 || w / h > 1.4);
+    let button = (w.min(h) * 0.15).clamp(26.0, 40.0).round();
+    let play = (button * 1.3).round();
+    let wide = h < 130.0 || w / h > 1.4;
+    // A row needs its ring, a gap and the three controls side by side; else the tile.
+    let row_fits = w - h.min(w * 0.5) - 14.0 >= button * 2.0 + play + 16.0;
+    let tile = w < 130.0 || (h < 130.0 && w < 150.0) || (wide && !row_fits);
+    let row = !tile && wide;
     let switch = !tile && h >= 130.0 && w >= 290.0;
     let r = if switch {
         let (bar, rest) = r.take_top(c.px(c.f.theme.metrics.control_small), c.px(10.0));
@@ -23,8 +28,6 @@ pub fn draw(c: &mut Ctx, r: Rect) {
     } else {
         r
     };
-    let button = (c.rect.width().min(c.rect.height()) / s * 0.15).clamp(26.0, 40.0).round();
-    let play = (button * 1.3).round();
     if tile {
         let d = r.width().min(r.height()).floor();
         let center = r.center();

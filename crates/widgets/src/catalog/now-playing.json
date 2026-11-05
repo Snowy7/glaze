@@ -1,23 +1,14 @@
 {
   "id": "now-playing",
   "name": "Now playing",
+  "category": "Media",
   "version": "3.0.0",
   "author": "mypaper",
   "description": "What's playing in any app: artwork, progress and controls, or the sound's spectrum.",
   "size": {
-    "default": [
-      4,
-      2
-    ],
-    "min": [
-      2,
-      1
-    ],
-    "max": [
-      4,
-      4
-    ],
-    "allowed": [[2, 1], [3, 1], [4, 1], [2, 2], [3, 2], [4, 2], [2, 3], [3, 3], [4, 3], [2, 4], [3, 4], [4, 4]]
+    "default": [8, 4],
+    "min": [4, 2],
+    "max": [8, 8]
   },
   "resizable": true,
   "permissions": [

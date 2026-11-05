@@ -1,6 +1,6 @@
 //! Now playing and the media pill. The box picks the layout, as the web widget's container
 //! queries did:
-//! - **compact** (under 130 px tall, the strip): the cover the full height, title and artist,
+//! - **compact** (under 165 px tall, the strip): the cover the full height, title and artist,
 //!   a hairline of progress, the transport at the right;
 //! - **row** (3:2 and wider): the cover on the left; the app, title, artist, scrubber with
 //!   times and the transport in a column beside it (the macOS Now Playing widget);
@@ -87,7 +87,8 @@ pub fn draw(c: &mut Ctx, r: Rect) {
         return idle(c, r);
     }
     let (w, h) = (c.rect.width() / s, c.rect.height() / s);
-    if c.m.str("variant", "card") == "strip" || h < 130.0 {
+    // The row and column layouts need about 165 px for cover, text and transport.
+    if c.m.str("variant", "card") == "strip" || h < 165.0 {
         compact(c, r, &t);
     } else if w >= h * 1.5 {
         row(c, r, &t);

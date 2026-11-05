@@ -1,36 +1,14 @@
 {
   "id": "discord",
   "name": "Discord",
+  "category": "Integrations",
   "version": "1.0.0",
   "author": "mypaper",
-  "description": "Retained Discord notifications and a direct link to conversations.",
+  "description": "Recent Windows notifications, optional bot history and sending, and current call status with authorized Discord RPC.",
   "size": {
-    "default": [
-      4,
-      2
-    ],
-    "min": [
-      2,
-      2
-    ],
-    "max": [
-      4,
-      4
-    ],
-    "allowed": [
-      [
-        2,
-        2
-      ],
-      [
-        4,
-        2
-      ],
-      [
-        4,
-        4
-      ]
-    ]
+    "default": [8, 4],
+    "min": [4, 4],
+    "max": [8, 8]
   },
   "resizable": true,
   "permissions": [

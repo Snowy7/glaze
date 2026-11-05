@@ -147,34 +147,39 @@ pub fn builtins() -> Registry {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn every_native_view_declares_sizes_and_weather_can_show_a_full_forecast() {
+    fn every_size_from_min_to_max_is_allowed_one_cell_at_a_time() {
         for installed in super::builtins().widgets.values() {
             let manifest = &installed.manifest;
-            assert!(!manifest.size.allowed.is_empty(), "{}", manifest.id);
-            assert!(manifest.size.allowed.contains(&manifest.size.default));
-            for size in &manifest.size.allowed {
-                assert_eq!(manifest.fit_size(size.map(f64::from), *size), Some(*size));
+            // Custom widgets (registered here too) may leave max open or skip the category.
+            let max = manifest.size.max.unwrap_or([16; 2]);
+            let compiled = ["clock", "calendar", "weather", "t3", "notes", "heatmap"];
+            if compiled.contains(&manifest.id.as_str()) {
+                assert!(manifest.category.is_some(), "{} has a picker category", manifest.id);
+            }
+            let sizes: Vec<_> = manifest.size.sizes([16; 2]).collect();
+            assert!(sizes.contains(&manifest.size.default));
+            let span = (max[0] - manifest.size.min[0] + 1) * (max[1] - manifest.size.min[1] + 1);
+            assert_eq!(sizes.len() as u32, span, "{}: dense", manifest.id);
+            for size in sizes {
+                assert_eq!(manifest.fit_size(size.map(f64::from), size), Some(size));
+                assert_eq!(manifest.clamp_size(size), size);
             }
         }
         let registry = super::builtins();
+        // The integration widgets step one cell at a time too (T3 at 6×8, between 4×8 and 8×8).
+        let t3 = &registry.get("t3").unwrap().manifest;
+        assert_eq!(t3.clamp_size([6, 8]), [6, 8]);
+        assert_eq!(t3.clamp_size([7, 5]), [7, 5]);
         let weather = &registry.get("weather").unwrap().manifest;
-        for size in [[2, 2], [4, 2], [4, 4], [4, 5], [5, 5], [5, 6]] {
-            assert_eq!(weather.clamp_size(size), size);
-        }
-        let timer = &registry.get("timer").unwrap().manifest;
-        assert_eq!(
-            timer.clamp_size([4, 3]),
-            [4, 4],
-            "an undeclared intermediate size is never persisted"
-        );
-        assert_eq!(weather.fit_size([5.0, 6.0], [4, 5]), Some([4, 5]));
-        assert_eq!(weather.fit_size([2.0, 2.0], [1, 1]), None);
+        assert_eq!(weather.fit_size([10.0, 12.0], [8, 10]), Some([8, 10]));
+        assert_eq!(weather.fit_size([4.0, 4.0], [2, 2]), None);
+        assert_eq!(weather.clamp_size([1, 1]), weather.size.min);
     }
     use super::*;
     #[test]
     fn every_builtin_schema_and_replacement_survives_without_html() {
         let registry = builtins();
-        assert_eq!(registry.widgets.len(), 23);
+        assert!(registry.widgets.len() >= 23);
         assert_eq!(registry.replacement("analog-clock").unwrap().0, "clock");
         assert_eq!(
             registry

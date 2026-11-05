@@ -1,36 +1,14 @@
 {
   "id": "tailscale",
   "name": "Tailscale",
+  "category": "Integrations",
   "version": "1.0.0",
   "author": "mypaper",
   "description": "Your private network, exit node and a bounded peer snapshot.",
   "size": {
-    "default": [
-      4,
-      2
-    ],
-    "min": [
-      2,
-      2
-    ],
-    "max": [
-      4,
-      4
-    ],
-    "allowed": [
-      [
-        2,
-        2
-      ],
-      [
-        4,
-        2
-      ],
-      [
-        4,
-        4
-      ]
-    ]
+    "default": [8, 4],
+    "min": [4, 4],
+    "max": [8, 8]
   },
   "resizable": true,
   "permissions": [

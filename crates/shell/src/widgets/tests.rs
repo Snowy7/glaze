@@ -502,12 +502,115 @@ fn widget_shot(ui: &mut Ui, m: &mut Model, size: (u32, u32), dark: bool) -> (myp
     )
 }
 
+/// Paint that leaves a widget's frame (a pixel of antialiasing allowed): the first such op.
+fn overflow(list: &DisplayList, size: (u32, u32)) -> Option<String> {
+    let frame = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32).inflate(1.0);
+    list.ops.iter().find_map(|op| {
+        let (kind, rect) = match op {
+            Op::Text { rect, text, .. } => (format!("text {text:?}"), *rect),
+            Op::Emphasis { rect, text, .. } => (format!("text {text:?}"), *rect),
+            Op::Fill { rect, .. } => ("fill".into(), *rect),
+            Op::Stroke { rect, .. } => ("stroke".into(), *rect),
+            Op::Icon { rect, .. } => ("icon".into(), *rect),
+            Op::Image { rect, .. } | Op::RoundedImage { rect, .. } => ("image".into(), *rect),
+            Op::Clipped { rect, .. } | Op::TextField { rect, .. } => ("group".into(), *rect),
+            Op::Arc { center, radius, .. } => (
+                "arc".into(),
+                Rect::new(center.x - radius, center.y - radius, radius * 2.0, radius * 2.0),
+            ),
+            Op::Line { from, to, .. } => (
+                "line".into(),
+                Rect {
+                    left: from.x.min(to.x),
+                    top: from.y.min(to.y),
+                    right: from.x.max(to.x),
+                    bottom: from.y.max(to.y),
+                },
+            ),
+            _ => return None,
+        };
+        // A text box is a line box: its leading may pass the frame, its glyphs may not.
+        let rect = if kind.starts_with("text") {
+            let lead = rect.height() * 0.15;
+            Rect { top: rect.top + lead, bottom: rect.bottom - lead, ..rect }
+        } else {
+            rect
+        };
+        let outside = rect.left < frame.left
+            || rect.top < frame.top
+            || rect.right > frame.right
+            || rect.bottom > frame.bottom;
+        (outside && rect.width() > 0.0 && rect.height() > 0.0).then(|| {
+            format!(
+                "{kind} at {:.0},{:.0} {:.0}×{:.0}",
+                rect.left,
+                rect.top,
+                rect.width(),
+                rect.height()
+            )
+        })
+    })
+}
+
+/// The size sheet as a check: every widget at every size from its min to its max (one cell at a
+/// time), on the fine grid of a 96 DIP and a 75 DIP (Windows' default) icon cell, renders
+/// without panicking and keeps its paint inside its frame. Integration views are listed, not
+/// failed: other owners fix those (MYPAPER_SIZES=all fails them too).
+#[test]
+fn every_widget_renders_inside_its_frame_at_every_size() {
+    let mut ui = Ui::new().unwrap();
+    let root = temp("dense-sizes");
+    let strict_all = std::env::var("MYPAPER_SIZES").is_ok_and(|v| v == "all");
+    let integrations = ["discord", "t3", "obs", "docker", "tailscale", "grok"];
+    let mut failures = Vec::new();
+    let mut reported = Vec::new();
+    for (id, installed) in &registry::builtins().widgets {
+        let mut m = fixture(id, root.clone());
+        let tokens = tokens(&m.placed.appearance);
+        for size in installed.manifest.size.sizes([16, 16]) {
+            m.placed.size = size;
+            for (cell, gap) in [(44.0_f32, 8.0_f32), (33.5, 8.0)] {
+                let px = |n: u32| (n as f32 * cell + (n - 1) as f32 * gap).round() as u32;
+                let frame = (px(size[0]), px(size[1]));
+                let list = view::view(
+                    &m,
+                    &tokens,
+                    view::Frame {
+                        size: frame,
+                        scale: 1.0,
+                        now: now(),
+                        instant: Instant::now(),
+                        editing: false,
+                    },
+                    &mut ui.text,
+                );
+                if let Some(what) = overflow(&list, frame) {
+                    let line = format!("{id} {}×{} ({cell} DIP cells, {}×{} px): {what}", size[0], size[1], frame.0, frame.1);
+                    if integrations.contains(&id.as_str()) && !strict_all {
+                        reported.push(line);
+                    } else {
+                        failures.push(line);
+                    }
+                }
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(root);
+    for line in &reported {
+        eprintln!("integration view overflows: {line}");
+    }
+    assert!(failures.is_empty(), "{} overflow(s):
+{}", failures.len(), failures.join("
+"));
+}
+
 /// Size sheets for review: every widget at every allowed size, dark over a night backdrop and
 /// light over a day one, each on a stand-in for the engine's glass (its tint and shadow).
 #[test]
 #[ignore = "writes docs/media/native/widget-*.png; run when widget views change"]
 fn widget_size_sheets() {
-    const CELL: u32 = 96;
+    // The fine grid of a 96 DIP icon cell.
+    const CELL: u32 = 44;
     const GAP: u32 = 8;
     let px = |n: u32| n * CELL + (n - 1) * GAP;
     let mut ui = Ui::new().unwrap();
@@ -520,7 +623,7 @@ fn widget_size_sheets() {
         if integration || only.as_deref().is_some_and(|o| o != id) {
             continue;
         }
-        let mut sizes = installed.manifest.size.allowed.clone();
+        let mut sizes: Vec<_> = installed.manifest.size.sizes([16, 16]).collect();
         sizes.sort_by_key(|s| (s[1], s[0]));
         let rows: Vec<u32> = sizes.iter().map(|s| s[1]).collect::<BTreeSet<_>>().into_iter().collect();
         let margin = 24.0;

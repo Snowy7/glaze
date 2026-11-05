@@ -111,8 +111,23 @@ struct Settle {
 struct EditSurface {
     surface: Surface,
     monitor: usize,
-    /// Hover and press over the palette's tiles (unused on grids).
+    /// Hover and press over the pill's buttons (unused on grids).
     hot: mypaper_ui::Interaction,
+}
+/// The widget picker popover: where it adds (a monitor, and the cell that was right-clicked),
+/// its search field and its list.
+struct Picker {
+    surface: Surface,
+    monitor: usize,
+    at: Option<[u32; 2]>,
+    hot: mypaper_ui::Interaction,
+    scroll: mypaper_ui::Scroll,
+    field: Option<TextField>,
+    query: String,
+    /// Index into the filtered choices: the previewed widget.
+    selected: usize,
+    notice: Option<String>,
+    choices: Vec<edit::Choice>,
 }
 
 /// Read-only diagnostics used by the locked live harness.
@@ -156,7 +171,9 @@ pub struct Widgets {
     ghost: Option<EditSurface>,
     edit_geometry_dirty: bool,
     grids: Vec<EditSurface>,
+    /// The edit pill (+ and Done).
     palette: Option<EditSurface>,
+    picker: Option<Picker>,
     rx: mpsc::Receiver<Msg>,
     media: Media,
     audio: Audio<Wasapi>,
@@ -203,7 +220,9 @@ impl Widgets {
                 )
             }
         };
-        if layout.migrate(|id| registry.replacement(id)) {
+        // Version-1 layouts move onto the fine grid once (same rectangles, finer cells).
+        if layout_error.is_none() && (layout.migrate(|id| registry.replacement(id)) | layout.upgrade())
+        {
             layout.save(&path)?;
         }
         let monitors = monitor_infos();
@@ -273,6 +292,7 @@ impl Widgets {
             edit_geometry_dirty: true,
             grids: Vec::new(),
             palette: None,
+            picker: None,
             rx,
             media: Media::new(wake.clone()),
             audio: Audio::new(Wasapi::new(wake.clone())),
@@ -349,7 +369,7 @@ impl Widgets {
             WM_LAYOUT => match Layout::load(&self.path) {
                 Ok(mut layout) => {
                     self.layout_error = None;
-                    if layout.migrate(|id| self.registry.replacement(id))
+                    if (layout.migrate(|id| self.registry.replacement(id)) | layout.upgrade())
                         && let Err(e) = layout.save(&self.path)
                     {
                         log::warn!("widget migration: {e:#}");
@@ -1004,6 +1024,8 @@ impl Widgets {
         self.refresh_activity();
         if self.editing {
             self.make_edit_surfaces(ui)?;
+        } else {
+            self.picker = None;
         }
         Ok(())
     }
@@ -1376,6 +1398,10 @@ impl Widgets {
             }
             return;
         }
+        if self.picker.as_ref().is_some_and(|p| p.surface.id() == surface) {
+            self.picker_event(ui, event);
+            return;
+        }
         if let Some(palette) = &self.palette
             && palette.surface.id() == surface
         {
@@ -1388,19 +1414,37 @@ impl Widgets {
             if response != mypaper_ui::interact::Response::Unchanged {
                 self.repaint_palette(ui);
             }
-            if let mypaper_ui::interact::Response::Activate(hit) = response {
-                let ids: Vec<_> = self.registry.widgets.keys().cloned().collect();
-                if let Some(id) = ids.get(hit as usize) {
-                    self.add(ui, id.clone());
-                } else {
-                    self.set_editing(ui, false);
+            match response {
+                mypaper_ui::interact::Response::Activate(edit::PILL_ADD) => {
+                    if self.picker.take().is_none() {
+                        let monitor = self.palette.as_ref().map_or(0, |p| p.monitor);
+                        let anchor = self.palette.as_ref().map(|p| {
+                            let (x, y) = p.surface.origin();
+                            let shown = p.surface.shown();
+                            let h = shown.hits.iter().map(|h| h.rect.bottom).fold(0.0, f32::max);
+                            (x, y + h.round() as i32)
+                        });
+                        self.open_picker(ui, monitor, None, anchor);
+                    }
                 }
+                mypaper_ui::interact::Response::Activate(edit::PILL_DONE) => {
+                    self.set_editing(ui, false)
+                }
+                _ => {}
             }
             return;
         }
-        if self.grids.iter().any(|s| s.surface.id() == surface) {
-            if matches!(event, Event::Key(27)) {
-                self.set_editing(ui, false);
+        if let Some(grid) = self.grids.iter().find(|s| s.surface.id() == surface) {
+            match event {
+                Event::Key(27) => self.set_editing(ui, false),
+                // Right-click on empty desktop: add a widget at that cell.
+                Event::Release(p, Button::Right) => {
+                    let monitor = grid.monitor;
+                    let at = self.cell_at(monitor, p.screen);
+                    self.open_picker(ui, monitor, at, Some(p.screen));
+                }
+                Event::Press(_, Button::Left) => self.picker = None,
+                _ => {}
             }
             return;
         }
@@ -2115,12 +2159,15 @@ impl Widgets {
         self.editing = on;
         self.grids.clear();
         self.palette = None;
+        self.picker = None;
         for entry in self.entries.values_mut() {
             entry.model.dirty = true;
         }
         self.reconcile_needed = true;
         self.poll(ui);
     }
+    /// Edit mode's surfaces: a grid on each monitor (it takes right-clicks on empty desktop,
+    /// widgets stay above it) and the pill on the primary one.
     fn make_edit_surfaces(&mut self, ui: &mut Ui) -> Result<()> {
         if !self.edit_geometry_dirty
             && self.palette.is_some()
@@ -2132,6 +2179,7 @@ impl Widgets {
         self.grids.clear();
         self.costs.edit_rebuilds += 1;
         self.palette = None;
+        self.picker = None;
         self.ghost = None;
         let Some(host) = self.host else {
             return Ok(());
@@ -2145,21 +2193,18 @@ impl Widgets {
                 Role::Pane,
             )?;
             let bounds = usable_screen(monitor, &self.bars);
+            let origin = (bounds.left.round() as i32, bounds.top.round() as i32);
+            // Whole device pixels from the rounded origin to the area's far edge: the grid
+            // reaches the bottom and right edges exactly.
             let size = (
-                bounds.width().floor().max(1.0) as u32,
-                bounds.height().floor().max(1.0) as u32,
+                (bounds.right.round() as i32 - origin.0).max(1) as u32,
+                (bounds.bottom.round() as i32 - origin.1).max(1) as u32,
             );
             let scale = monitor.dpi as f32 / 96.0;
             let mut grid = grid_for_bars(&self.layout, monitor, &self.bars);
-            grid.origin[0] -= f64::from(bounds.left - monitor.rect.x as f32) / f64::from(scale);
-            grid.origin[1] -= f64::from(bounds.top - monitor.rect.y as f32) / f64::from(scale);
-            click_through(&surface);
-            surface.present(
-                ui,
-                (bounds.left.ceil() as i32, bounds.top.ceil() as i32),
-                size,
-                edit::grid_view(&grid, size, scale),
-            )?;
+            grid.origin[0] -= f64::from(origin.0 - monitor.rect.x) / f64::from(scale);
+            grid.origin[1] -= f64::from(origin.1 - monitor.rect.y) / f64::from(scale);
+            surface.present(ui, origin, size, edit::grid_view(&grid, size, scale))?;
             surface.show();
             surface.keep_above_desktop()?;
             self.grids.push(EditSurface {
@@ -2174,33 +2219,22 @@ impl Widgets {
             }
         }
         if let Some((index, monitor)) = self.monitors.iter().enumerate().find(|(_, m)| m.primary) {
-            let names = self
-                .registry
-                .widgets
-                .iter()
-                .map(|(id, i)| (id.clone(), i.manifest.name.clone()))
-                .collect::<Vec<_>>();
-            let bounds = usable_screen(monitor, &self.bars);
-            let scale = palette_scale(monitor, bounds);
-            let (list, size) = edit::palette(
-                &names,
-                scale,
-                self.layout_error.as_deref(),
-                &Default::default(),
-                &mut ui.text,
-            );
+            let scale = monitor.dpi as f32 / 96.0;
+            let (list, size) =
+                edit::pill(&edit::chrome_theme(), scale, &Default::default(), &mut ui.text);
             let widgets: Vec<_> = self
                 .entries
                 .values()
                 .filter(|e| e.monitor == index && e.model.visible)
                 .map(|e| e.rect)
                 .collect();
-            let origin = edit::palette_origin(bounds, size, scale, &widgets);
+            let bounds = usable_screen(monitor, &self.bars);
+            let origin = edit::pill_origin(bounds, size, scale, &widgets);
             let mut surface = Surface::new(
                 Kind::DesktopChild {
                     parent: host.icons_parent(),
                 },
-                "Add widgets",
+                "Edit widgets",
                 Role::Toolbar,
             )?;
             surface.present(ui, origin, size, list)?;
@@ -2217,7 +2251,7 @@ impl Widgets {
         self.edit_geometry_dirty = false;
         Ok(())
     }
-    /// Draws the palette again with its hover and press state (only what changed reaches the
+    /// Draws the pill again with its hover and press state (only what changed reaches the
     /// screen).
     fn repaint_palette(&mut self, ui: &mut Ui) {
         let Some(palette) = &mut self.palette else {
@@ -2226,22 +2260,325 @@ impl Widgets {
         let Some(monitor) = self.monitors.get(palette.monitor) else {
             return;
         };
-        let names: Vec<_> = self
-            .registry
-            .widgets
-            .iter()
-            .map(|(id, i)| (id.clone(), i.manifest.name.clone()))
-            .collect();
-        let (list, size) = edit::palette(
-            &names,
-            palette_scale(monitor, usable_screen(monitor, &self.bars)),
-            self.layout_error.as_deref(),
+        let (list, size) = edit::pill(
+            &edit::chrome_theme(),
+            monitor.dpi as f32 / 96.0,
             &palette.hot,
             &mut ui.text,
         );
         let origin = palette.surface.origin();
         if let Err(e) = palette.surface.present(ui, origin, size, list) {
-            log::warn!("widget palette: drawing: {e:#}");
+            log::warn!("widget pill: drawing: {e:#}");
+        }
+    }
+    /// The grid cell under a screen point on `monitor`, if any.
+    fn cell_at(&self, monitor: usize, point: (i32, i32)) -> Option<[u32; 2]> {
+        let screen = self.monitors.get(monitor)?;
+        let grid = grid_for_bars(&self.layout, screen, &self.bars);
+        let scale = f64::from(screen.dpi) / 96.0;
+        let at = [
+            f64::from(point.0 - screen.rect.x) / scale,
+            f64::from(point.1 - screen.rect.y) / scale,
+        ];
+        let cell = [0, 1].map(|i| ((at[i] - grid.origin[i]) / (grid.cell[i] + grid.gap)).floor());
+        (cell[0] >= 0.0
+            && cell[1] >= 0.0
+            && (cell[0] as u32) < grid.cols
+            && (cell[1] as u32) < grid.rows)
+            .then(|| [cell[0] as u32, cell[1] as u32])
+    }
+    /// Opens the picker on `monitor` near `anchor` (a screen point); a pick lands at `at` when
+    /// that is free, else in the first free spot.
+    fn open_picker(
+        &mut self,
+        ui: &mut Ui,
+        monitor: usize,
+        at: Option<[u32; 2]>,
+        anchor: Option<(i32, i32)>,
+    ) {
+        self.registry = registry::builtins();
+        if self.layout_error.is_some() {
+            return;
+        }
+        let (Some(host), Some(screen)) = (self.host, self.monitors.get(monitor)) else {
+            return;
+        };
+        let theme = edit::chrome_theme();
+        let s = screen.dpi as f32 / 96.0;
+        let size = edit::picker_size(s);
+        let bounds = usable_screen(screen, &self.bars).inflate(-8.0 * s);
+        let (x, y) = anchor.unwrap_or((
+            (bounds.left + bounds.width() / 2.0) as i32,
+            bounds.top as i32,
+        ));
+        // From the pill: centred under it. From a right-click: its corner at the pointer.
+        let rect = edit::clamp_rect(
+            Rect::new(
+                x as f32 - if at.is_some() { 0.0 } else { size.0 as f32 / 2.0 },
+                y as f32 + if at.is_some() { 0.0 } else { 8.0 * s },
+                size.0 as f32,
+                size.1 as f32,
+            ),
+            bounds,
+        );
+        let mut choices: Vec<_> = self
+            .registry
+            .widgets
+            .iter()
+            .map(|(id, installed)| {
+                let m = &installed.manifest;
+                edit::Choice {
+                    id: id.clone(),
+                    name: m.name.clone(),
+                    category: m.category.clone().unwrap_or_else(|| "Other".into()),
+                    description: m.description.clone().unwrap_or_default(),
+                    size: m.size.default,
+                }
+            })
+            .collect();
+        edit::sort_choices(&mut choices);
+        let surface = match Surface::new(
+            Kind::DesktopChild {
+                parent: host.icons_parent(),
+            },
+            "Add widget",
+            Role::Dialog,
+        ) {
+            Ok(surface) => surface,
+            Err(e) => return log::warn!("widget picker: {e:#}"),
+        };
+        let field = TextField::new(
+            surface.hwnd(),
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            false,
+            theme.font.style(mypaper_ui::TextRole::Body, s).size,
+            theme.color.label,
+        )
+        .inspect_err(|e| log::warn!("widget picker search: {e:#}"))
+        .ok();
+        surface.set_text_field(field.clone());
+        self.picker = Some(Picker {
+            surface,
+            monitor,
+            at,
+            hot: Default::default(),
+            scroll: mypaper_ui::Scroll::new(&theme.motion),
+            field,
+            query: String::new(),
+            selected: 0,
+            notice: None,
+            choices,
+        });
+        self.repaint_picker(ui, Some((rect.left.round() as i32, rect.top.round() as i32)));
+        if let Some(picker) = &self.picker {
+            picker.surface.show();
+            let _ = picker.surface.raise_in_desktop_band();
+            picker.surface.take_focus();
+            if let Some(field) = &picker.field {
+                field.focus();
+            }
+        }
+    }
+    /// The selected choice drawn at its default size, small enough for the preview pane.
+    fn picker_preview(
+        &mut self,
+        ui: &mut Ui,
+        widget: &str,
+        s: f32,
+    ) -> Option<(mypaper_ui::DisplayList, f32, f32)> {
+        let manifest = &self.registry.get(widget)?.manifest;
+        // Nominal fine cells: 44 DIPs and an 8 DIP gap (half a 96 DIP icon cell).
+        let grid = Grid {
+            origin: [0.0; 2],
+            cell: [44.0; 2],
+            gap: 8.0,
+            cols: 64,
+            rows: 64,
+        };
+        let instance = layout::Instance {
+            instance: "picker-preview".into(),
+            widget: widget.into(),
+            monitor: String::new(),
+            cell: [0, 0],
+            size: manifest.size.default,
+            settings: Default::default(),
+            appearance: Default::default(),
+        };
+        let appearance = look::resolve(
+            &instance.appearance,
+            &self.layout.appearance,
+            &look::base(&self.skin),
+            self.accent,
+        );
+        let placed = layout::place(&instance, manifest, &grid, &appearance);
+        let span = grid.rect(placed.cell, placed.size);
+        let mut model = Model::new(placed, &mut self.storage, Stamp::now()).ok()?;
+        model.visible = true;
+        let tokens = tokens(&model.placed.appearance);
+        // Fit the pane (310 × 220 design px), never above life size.
+        let k = (310.0 / span.width as f32)
+            .min(220.0 / span.height as f32)
+            .min(1.0)
+            * s;
+        let (w, h) = (
+            (span.width as f32 * k).round(),
+            (span.height as f32 * k).round(),
+        );
+        let content = view::view(
+            &model,
+            &tokens,
+            view::Frame {
+                size: (w as u32, h as u32),
+                scale: k,
+                now: Stamp::now(),
+                instant: Instant::now(),
+                editing: false,
+            },
+            &mut ui.text,
+        );
+        // The widget's plate stands in for its glass.
+        let radius = view::plate_radius(&model, Rect::new(0.0, 0.0, w, h), k);
+        let mut list = mypaper_ui::DisplayList::default();
+        list.ops.push(mypaper_ui::Op::Fill {
+            rect: Rect::new(0.0, 0.0, w, h),
+            radius,
+            color: Rgba::rgb8([44, 44, 48], 0.92),
+        });
+        list.ops.extend(content.ops);
+        Some((list, w, h))
+    }
+    fn repaint_picker(&mut self, ui: &mut Ui, origin: Option<(i32, i32)>) {
+        let Some(picker) = &self.picker else { return };
+        let Some(screen) = self.monitors.get(picker.monitor) else {
+            return;
+        };
+        let s = screen.dpi as f32 / 96.0;
+        let selected = edit::filter(&picker.choices, &picker.query)
+            .get(picker.selected)
+            .map(|c| c.id.clone());
+        let preview = selected.and_then(|id| self.picker_preview(ui, &id, s));
+        let Some(picker) = &mut self.picker else { return };
+        let theme = edit::chrome_theme();
+        let shown = edit::filter(&picker.choices, &picker.query);
+        let list = edit::picker(
+            &theme,
+            s,
+            &picker.hot,
+            &mut ui.text,
+            &shown,
+            edit::PickerState {
+                query: &picker.query,
+                field: picker.field.as_ref(),
+                selected: picker.selected,
+                scroll: &picker.scroll,
+                now: Instant::now(),
+                notice: picker.notice.as_deref(),
+                preview,
+            },
+        );
+        let origin = origin.unwrap_or_else(|| picker.surface.origin());
+        if let Err(e) = picker
+            .surface
+            .present(ui, origin, edit::picker_size(s), list)
+        {
+            log::warn!("widget picker: drawing: {e:#}");
+        }
+    }
+    fn picker_event(&mut self, ui: &mut Ui, event: &Event) {
+        let Some(picker) = &mut self.picker else { return };
+        let count = edit::filter(&picker.choices, &picker.query).len();
+        let mut redraw = false;
+        match event {
+            Event::Key(27) => {
+                self.picker = None;
+                return;
+            }
+            // Up and Down move the selection; Enter adds it.
+            Event::Key(key @ (38 | 40)) if count > 0 => {
+                picker.selected = if *key == 38 {
+                    picker.selected.saturating_sub(1)
+                } else {
+                    (picker.selected + 1).min(count - 1)
+                };
+                picker.notice = None;
+                redraw = true;
+            }
+            Event::Key(13) | Event::TextSubmit => return self.pick(ui, None),
+            Event::TextChanged => {
+                if let Some(query) = picker.field.as_ref().and_then(|f| f.text().ok())
+                    && query != picker.query
+                {
+                    picker.query = query;
+                    picker.selected = 0;
+                    picker.notice = None;
+                    picker.scroll.reset();
+                }
+                redraw = true;
+            }
+            Event::Wheel(_, delta) => {
+                let s = self
+                    .monitors
+                    .get(picker.monitor)
+                    .map_or(1.0, |m| m.dpi as f32 / 96.0);
+                redraw = picker.scroll.scroll_by(
+                    -f32::from(*delta) / 120.0 * 48.0 * s,
+                    false,
+                    Instant::now(),
+                );
+            }
+            Event::Deactivated => {
+                // The search field lives in this window, so typing never deactivates it.
+                // SAFETY: a read-only foreground query.
+                let foreground =
+                    unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() };
+                if foreground != picker.surface.hwnd() {
+                    self.picker = None;
+                }
+                return;
+            }
+            _ => {}
+        }
+        let response = picker.hot.handle(picker.surface.shown(), event);
+        if let Some(row) = picker.hot.hover.and_then(|h| h.checked_sub(edit::PICK_ROW))
+            && (row as usize) < count
+            && row as usize != picker.selected
+        {
+            picker.selected = row as usize;
+            picker.notice = None;
+            redraw = true;
+        }
+        match response {
+            mypaper_ui::interact::Response::Activate(edit::PICK_ADD) => {
+                return self.pick(ui, None);
+            }
+            mypaper_ui::interact::Response::Activate(hit) if hit >= edit::PICK_ROW => {
+                return self.pick(ui, Some((hit - edit::PICK_ROW) as usize));
+            }
+            mypaper_ui::interact::Response::Unchanged => {}
+            _ => redraw = true,
+        }
+        if redraw {
+            self.repaint_picker(ui, None);
+        }
+    }
+    /// Adds the picker's selection (or row `index`) and closes it; a refusal stays open with
+    /// its reason.
+    fn pick(&mut self, ui: &mut Ui, index: Option<usize>) {
+        let Some(picker) = &self.picker else { return };
+        let shown = edit::filter(&picker.choices, &picker.query);
+        let Some(choice) = shown.get(index.unwrap_or(picker.selected)) else {
+            return;
+        };
+        let (id, monitor, at) = (choice.id.clone(), picker.monitor, picker.at);
+        match self.add(ui, &id, monitor, at) {
+            Ok(()) => self.picker = None,
+            Err(reason) => {
+                if let Some(picker) = &mut self.picker {
+                    picker.notice = Some(reason.into());
+                    picker.selected = index.unwrap_or(picker.selected);
+                }
+                self.repaint_picker(ui, None);
+            }
         }
     }
     fn edit_action(&mut self, ui: &mut Ui, id: &str, hit: HitId) {
@@ -2320,29 +2657,43 @@ impl Widgets {
             entry.model.dirty = true;
         }
     }
-    fn add(&mut self, ui: &mut Ui, id: String) {
+    /// Adds an instance of `id` on `monitor` at its default size: at `at` when that spot
+    /// is free, else the first free spot. Any number of instances, unless the widget limits it.
+    fn add(
+        &mut self,
+        ui: &mut Ui,
+        id: &str,
+        monitor: usize,
+        at: Option<[u32; 2]>,
+    ) -> Result<(), &'static str> {
         if self.layout_error.is_some() {
-            return;
+            return Err("The layout file is invalid; fix it to add widgets");
         }
-        let Some(index) = self.palette.as_ref().map(|p| p.monitor) else {
-            return;
-        };
-        let monitor = &self.monitors[index];
-        let grid = grid_for_bars(&self.layout, monitor, &self.bars);
-        let manifest = &self.registry.get(&id).unwrap().manifest;
-        let (total, here) = self.layout.count_of(&id, |i| i.monitor == monitor.device);
+        let screen = self.monitors.get(monitor).ok_or("That display is gone")?;
+        let grid = grid_for_bars(&self.layout, screen, &self.bars);
+        let manifest = &self.registry.get(id).ok_or("Unknown widget")?.manifest;
+        let (total, here) = self.layout.count_of(id, |i| i.monitor == screen.device);
         if !manifest.instances.allows(total, here) {
-            return;
+            return Err("This widget can only be added once");
         }
-        let size = manifest.clamp_size(manifest.size.default);
-        if let Some(cell) = edit::vacancy(&grid, size, &self.layout.instances, &monitor.device) {
-            let mut next = self.layout.clone();
-            next.add(&id, &monitor.device, cell, size);
-            if self.commit_layout(next) {
-                self.reconcile_needed = true;
-                self.poll(ui);
-            }
+        let size = manifest
+            .fit_size(manifest.size.default.map(f64::from), [grid.cols, grid.rows])
+            .ok_or("This display is too small for it")?;
+        let instances = &self.layout.instances;
+        let device = &screen.device;
+        let cell = at
+            .map(|at| grid.clamp(at, size).0)
+            .filter(|&cell| edit::free(&grid, cell, size, instances, device, None))
+            .or_else(|| edit::vacancy(&grid, size, instances, device))
+            .ok_or("No free space on this display. Move or remove a widget first.")?;
+        let mut next = self.layout.clone();
+        next.add(id, device, cell, size);
+        if !self.commit_layout(next) {
+            return Err("Could not save the layout");
         }
+        self.reconcile_needed = true;
+        self.poll(ui);
+        Ok(())
     }
     fn place_edit(
         &mut self,
@@ -2854,12 +3205,6 @@ fn click_through(surface: &Surface) {
             style | WS_EX_TRANSPARENT.0 as isize,
         );
     }
-}
-fn palette_scale(monitor: &Monitor, bounds: Rect) -> f32 {
-    (monitor.dpi as f32 / 96.0)
-        .min(bounds.width() / 978.0)
-        .min(bounds.height() / 280.0)
-        .max(0.01)
 }
 
 /// Timeline and transport changes reuse decoded art and its blurred/tinted material. `rect`

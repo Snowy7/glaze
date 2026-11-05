@@ -405,7 +405,10 @@ fn tile(c: &mut Ctx, r: Rect) {
         (h * 0.7).min(w * 0.24).clamp(40.0, 80.0)
     } else {
         (h * 0.46).min(w * 0.4).clamp(34.0, 72.0)
-    };
+    }
+    // The numeral's line always fits the body (short wide tiles on a fine grid).
+    .min(r.height() / s * 0.78)
+    .max(20.0);
     let number = c.display(size, 500);
     let number = mypaper_ui::TextStyle {
         tracking: -0.04 * number.size,

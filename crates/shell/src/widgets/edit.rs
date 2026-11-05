@@ -1,17 +1,17 @@
 //! Grid placement and edit chrome. Layout is committed only at the end of a gesture; a rejected
 //! drop leaves the saved layout intact. Motion itself stays in physical pixels, at display rate.
 use mypaper_bars::config::{BarsConfig, DockPosition, TopPosition};
-use mypaper_ui::icons::{self, Icon};
-use mypaper_ui::interact::State;
+use mypaper_ui::icons::Icon;
 use mypaper_ui::{
-    DisplayList, Hit, HitId, Ink, Interaction, Op, Rect, Rgba, Role, Step, Text, TextStyle,
-    Typeface,
+    Accessory, Align, ButtonKind, DisplayList, Frame, HitId, Interaction, Lead, ListRow, Op, Rect,
+    Rgba, Scheme, Scroll, Text, TextField, TextRole, Theme,
 };
 use mypaper_widgets::layout::{Grid, Instance};
 use mypaper_widgets::{layout::RectF, manifest::WidgetManifest};
 
 /// Intersect the OS work area with bands derived from config, even if appbar registration
-/// failed or an autohiding dock has released its reservation. All coordinates are DIPs.
+/// failed. An autohiding dock reserves nothing: widgets reach the bottom edge and the dock
+/// slides over them when it shows (as on macOS). All coordinates are DIPs.
 pub fn usable_area(
     area: RectF,
     work: RectF,
@@ -27,7 +27,7 @@ pub fn usable_area(
             3
         }] += bars.top.band();
     }
-    if bars.dock.enabled && bars.dock.monitors.includes(device, primary) {
+    if bars.dock.enabled && !bars.dock.autohide && bars.dock.monitors.includes(device, primary) {
         inset[match bars.dock.position {
             DockPosition::Left => 0,
             DockPosition::Right => 2,
@@ -73,29 +73,13 @@ pub fn resize_target(
             [grid.cols, grid.rows][i].saturating_sub(cell[i])
         }
     });
-    let fits = |s: &[u32; 2]| (0..2).all(|i| s[i] <= limits[i] && (moving[i] || s[i] == size[i]));
-    let next = if !manifest.resizable {
-        Some(size)
-    } else if manifest.size.allowed.is_empty() {
-        manifest.fit_size(desired, limits)
+    // A side handle keeps the other dimension; every size from min to max is allowed.
+    let desired = [0, 1].map(|i| if moving[i] { desired[i] } else { f64::from(size[i]) });
+    let next = if manifest.resizable {
+        manifest.fit_size(desired, limits)?
     } else {
-        manifest
-            .size
-            .allowed
-            .iter()
-            .filter(|s| fits(s))
-            .copied()
-            .min_by(|a, b| {
-                let distance = |s: [u32; 2]| {
-                    (0..2)
-                        .map(|i| (f64::from(s[i]) - desired[i]).powi(2))
-                        .sum::<f64>()
-                };
-                distance(*a)
-                    .total_cmp(&distance(*b))
-                    .then_with(|| (b[0] + b[1]).cmp(&(a[0] + a[1])))
-            })
-    }?;
+        size
+    };
     let at = [0, 1].map(|i| {
         if edges[i] {
             cell[i] + size[i] - next[i]
@@ -106,7 +90,7 @@ pub fn resize_target(
     Some((at, next))
 }
 
-/// Shift-arrow moves to the next supported extent, including gaps between declared sizes.
+/// Shift-arrow grows or shrinks one cell along `axis`; None at the widget's min or max.
 pub fn nudge_size(
     manifest: &WidgetManifest,
     size: [u32; 2],
@@ -117,26 +101,11 @@ pub fn nudge_size(
     if !manifest.resizable {
         return None;
     }
-    if manifest.size.allowed.is_empty() {
-        let mut requested = size;
-        requested[axis] = size[axis].saturating_add_signed(delta);
-        return manifest.fit_size(requested.map(f64::from), limits);
-    }
+    let mut requested = size;
+    requested[axis] = size[axis].saturating_add_signed(delta);
     manifest
-        .size
-        .allowed
-        .iter()
-        .copied()
-        .filter(|s| {
-            s[1 - axis] == size[1 - axis]
-                && (0..2).all(|i| s[i] <= limits[i])
-                && if delta > 0 {
-                    s[axis] > size[axis]
-                } else {
-                    s[axis] < size[axis]
-                }
-        })
-        .min_by_key(|s| s[axis].abs_diff(size[axis]))
+        .fit_size(requested.map(f64::from), limits)
+        .filter(|&next| next != size)
 }
 
 /// Clamps a physical pointer-following rectangle without changing its dimensions.
@@ -182,8 +151,9 @@ pub fn ghost_view(size: (u32, u32), scale: f32, valid: bool) -> DisplayList {
     }
 }
 
-/// The old toolbar policy: use the bottom when widgets block the top and the bottom is clear.
-pub fn palette_origin(bounds: Rect, size: (u32, u32), scale: f32, widgets: &[Rect]) -> (i32, i32) {
+/// Where the edit pill sits: top centre, or bottom centre when widgets block the top and the
+/// bottom is clear.
+pub fn pill_origin(bounds: Rect, size: (u32, u32), scale: f32, widgets: &[Rect]) -> (i32, i32) {
     let x = bounds.left + (bounds.width() - size.0 as f32) / 2.0;
     let top = bounds.top + 10.0 * scale;
     let bottom = (bounds.bottom - size.1 as f32 - 10.0 * scale).max(bounds.top);
@@ -386,182 +356,248 @@ pub fn grid_view(grid: &Grid, size: (u32, u32), scale: f32) -> DisplayList {
     }
     list
 }
-/// The "Add widgets" palette: a header with Done, then a grid of tiles (icon and name) with
-/// the shared hover and press washes from `hot`. Hit ids are the tiles' indices into `names`;
-/// Done is `names.len()`.
-pub fn palette(
-    names: &[(String, String)],
-    scale: f32,
-    error: Option<&str>,
-    hot: &Interaction,
-    text: &mut Text,
-) -> (DisplayList, (u32, u32)) {
-    let s = scale;
-    let face = Typeface::system(text);
-    let family = icons::system_family(text);
-    let ink = Ink::of(Rgba::rgb8([245, 245, 247], 1.0));
-    let mut list = DisplayList::default();
-    let cols = 6;
-    let (tile_w, tile_h, gap, pad, header) = (150.0 * s, 44.0 * s, 6.0 * s, 12.0 * s, 44.0 * s);
-    let rows = names.len().div_ceil(cols);
-    let error_h = if error.is_some() { 40.0 * s } else { 0.0 };
-    let size = (
-        (pad * 2.0 + cols as f32 * tile_w + (cols - 1) as f32 * gap).ceil() as u32,
-        (header + rows as f32 * (tile_h + gap) - gap + pad + error_h).ceil() as u32,
+/// Hit ids of the edit pill.
+pub const PILL_ADD: HitId = 1;
+pub const PILL_DONE: HitId = 2;
+/// Hit ids of the picker: its Add button, and row `i` of the filtered list at `PICK_ROW + i`.
+pub const PICK_ADD: HitId = 3;
+pub const PICK_ROW: HitId = 100;
+
+/// The edit chrome's kit theme: the user's style, dark, and monochrome like the widgets (the
+/// primary action takes the label's ink).
+pub fn chrome_theme() -> Theme {
+    let mut theme = Theme::new(
+        mypaper_ui::theme::active(),
+        Scheme::Dark,
+        mypaper_ui::theme::SYSTEM_BLUE,
     );
-    let panel = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
-    list.ops.push(Op::Fill {
-        rect: panel,
-        radius: 18.0 * s,
-        color: Rgba::rgb8([22, 24, 29], 0.96),
-    });
-    list.ops.push(Op::Stroke {
-        rect: panel.inflate(-0.5),
-        radius: 18.0 * s,
-        width: 1.0,
-        color: Rgba::new(1.0, 1.0, 1.0, 0.12),
-    });
-    let label = |list: &mut DisplayList,
-                 text: &mut Text,
-                 rect: Rect,
-                 value: &str,
-                 style: TextStyle,
-                 color: Rgba| {
-        let value = text.fit(value, &style, rect.width().max(1.0));
-        let (w, h) = text.measure(&value, &style);
-        list.ops.push(Op::Text {
-            rect: Rect::new(
-                rect.left.round(),
-                (rect.top + (rect.height() - h) / 2.0).round(),
-                w,
-                h,
-            ),
-            text: value,
-            style,
-            color,
-        });
-    };
-    label(
-        &mut list,
-        text,
-        Rect::new(pad + 4.0 * s, 0.0, 300.0 * s, header),
-        "Add widgets",
-        face.style(Step::Headline, s),
-        ink.primary,
-    );
-    // Done: a light chip with dark text, the one filled control.
-    let done_id = names.len() as HitId;
-    let done = Rect::new(panel.right - pad - 76.0 * s, 9.0 * s, 76.0 * s, 26.0 * s);
-    let done_fill = match hot.state(done_id, true) {
-        State::Hover => Rgba::rgb8([255; 3], 1.0),
-        State::Pressed => Rgba::rgb8([200, 202, 208], 1.0),
-        _ => Rgba::rgb8([236, 237, 240], 1.0),
-    };
-    list.ops.push(Op::Fill {
-        rect: done,
-        radius: 13.0 * s,
-        color: done_fill,
-    });
-    let style = face.style(Step::Label, s);
-    let (w, _) = text.measure("Done", &style);
-    label(
-        &mut list,
-        text,
-        Rect::new(
-            done.left + (done.width() - w) / 2.0,
-            done.top,
-            w + 1.0,
-            done.height(),
-        ),
-        "Done",
-        style,
-        Rgba::rgb8([16, 16, 20], 1.0),
-    );
-    list.hits.push(Hit {
-        id: done_id,
-        rect: done,
-        role: Role::Button,
-        label: "Done (Esc)".into(),
-        enabled: true,
-        checked: None,
-    });
-    for (i, (id, name)) in names.iter().enumerate() {
-        let r = Rect::new(
-            pad + (i % cols) as f32 * (tile_w + gap),
-            header + (i / cols) as f32 * (tile_h + gap),
-            tile_w,
-            tile_h,
-        );
-        let state = hot.state(i as HitId, true);
-        list.ops.push(Op::Fill {
-            rect: r,
-            radius: 10.0 * s,
-            color: match state {
-                State::Hover => Rgba::new(1.0, 1.0, 1.0, 0.14),
-                State::Pressed => Rgba::new(1.0, 1.0, 1.0, 0.22),
-                _ => Rgba::new(1.0, 1.0, 1.0, 0.06),
-            },
-        });
-        let icon = Rect::new(r.left + 8.0 * s, r.top, 26.0 * s, r.height());
-        list.ops.push(icons::centered(
-            text,
-            &family,
-            widget_icon(id),
-            (16.0 * s).round(),
-            icon,
-            ink.secondary,
-        ));
-        label(
-            &mut list,
-            text,
-            Rect::new(r.left + 38.0 * s, r.top, r.width() - 44.0 * s, r.height()),
-            name,
-            face.style(Step::Body, s),
-            ink.primary,
-        );
-        list.hits.push(Hit {
-            id: i as HitId,
-            rect: r,
-            role: Role::Button,
-            label: format!("Add {name}").into(),
-            enabled: true,
-            checked: None,
-        });
-    }
-    if let Some(error) = error {
-        label(
-            &mut list,
-            text,
-            Rect::new(
-                pad + 4.0 * s,
-                size.1 as f32 - error_h,
-                panel.width() - 2.0 * pad,
-                error_h - 8.0 * s,
-            ),
-            error,
-            face.style(Step::Caption, s),
-            Rgba::rgb8([255, 170, 150], 1.0),
-        );
-    }
-    (list, size)
+    let p = &mut theme.color;
+    (p.accent, p.on_accent) = (Rgba::rgb8([242; 3], 1.0), Rgba::rgb8([17, 17, 19], 1.0));
+    p.accent_wash = p.accent.with_alpha(0.16);
+    theme
 }
 
-/// The palette's icon for a built-in widget id.
-fn widget_icon(id: &str) -> Icon {
+/// The edit pill: "+" (add a widget) and Done, a small capsule that floats over the desktop.
+pub fn pill(theme: &Theme, s: f32, hot: &Interaction, text: &mut Text) -> (DisplayList, (u32, u32)) {
+    let mut f = Frame::new(text, theme, s, hot);
+    let (pad, gap, add) = (f.px(6.0), f.px(4.0), f.px(36.0));
+    let (done_w, _) = f.button_size("Done", false);
+    let size = (
+        (pad * 2.0 + add + gap + done_w).ceil(),
+        (pad * 2.0 + add).ceil(),
+    );
+    let body = Rect::new(0.0, 0.0, size.0, size.1);
+    f.surface_shaped(body, size.1 / 2.0, false);
+    f.icon_button(
+        PILL_ADD,
+        Rect::new(pad, pad, add, add),
+        Icon::Add,
+        36.0,
+        "Add widget",
+        true,
+    );
+    f.button(
+        PILL_DONE,
+        Rect::new(pad + add + gap, pad, done_w, add),
+        "Done",
+        None,
+        ButtonKind::Filled,
+        true,
+    );
+    (f.list, (size.0 as u32, size.1 as u32))
+}
+
+/// A widget the picker offers.
+pub struct Choice {
+    pub id: String,
+    pub name: String,
+    pub category: String,
+    pub description: String,
+    /// Its default size in cells.
+    pub size: [u32; 2],
+}
+
+/// The picker's groups, in order; anything else lands after them, then "Other".
+const CATEGORIES: [&str; 6] = ["Time", "Info", "Media", "Productivity", "System", "Integrations"];
+
+/// Orders choices by category, then name.
+pub fn sort_choices(choices: &mut [Choice]) {
+    let rank = |c: &Choice| match CATEGORIES.iter().position(|&k| k == c.category) {
+        Some(i) => (i, String::new()),
+        None if c.category == "Other" => (CATEGORIES.len() + 1, String::new()),
+        None => (CATEGORIES.len(), c.category.clone()),
+    };
+    choices.sort_by(|a, b| rank(a).cmp(&rank(b)).then_with(|| a.name.cmp(&b.name)));
+}
+
+/// The choices a search shows: a case-insensitive match on name, category or id.
+pub fn filter<'a>(choices: &'a [Choice], query: &str) -> Vec<&'a Choice> {
+    let query = query.trim().to_lowercase();
+    choices
+        .iter()
+        .filter(|c| {
+            query.is_empty()
+                || [&c.name, &c.category, &c.id]
+                    .iter()
+                    .any(|s| s.to_lowercase().contains(&query))
+        })
+        .collect()
+}
+
+/// The picker popover's size in device px at `s`.
+pub fn picker_size(s: f32) -> (u32, u32) {
+    ((600.0 * s).round() as u32, (420.0 * s).round() as u32)
+}
+
+/// What the picker draws besides its choices.
+pub struct PickerState<'a> {
+    pub query: &'a str,
+    pub field: Option<&'a TextField>,
+    /// Index into the filtered choices (the preview's widget).
+    pub selected: usize,
+    pub scroll: &'a Scroll,
+    pub now: std::time::Instant,
+    /// A refusal to show under the preview ("No room on this display").
+    pub notice: Option<&'a str>,
+    /// The selected widget drawn at its default size, `(list, width, height)` in device px.
+    pub preview: Option<(DisplayList, f32, f32)>,
+}
+
+/// The widget picker: a search field over a scrolling list grouped by category on the left,
+/// and the selected widget's preview, name, size and Add on the right.
+pub fn picker(
+    theme: &Theme,
+    s: f32,
+    hot: &Interaction,
+    text: &mut Text,
+    shown: &[&Choice],
+    state: PickerState,
+) -> DisplayList {
+    let mut f = Frame::new(text, theme, s, hot);
+    let (w, h) = picker_size(s);
+    let body = Rect::new(0.0, 0.0, w as f32, h as f32);
+    f.surface(body, false);
+    let inner = body.inset(mypaper_ui::Insets::all(f.px(theme.metrics.pad)));
+    let (list, pane) = inner.take_left(f.px(250.0), f.px(theme.metrics.gap));
+    let (search, rows) = list.take_top(f.px(theme.metrics.control), f.px(8.0));
+    let field_rect = f.field_frame(
+        search,
+        "Search widgets",
+        state.query.is_empty(),
+        state.field.is_some(),
+        Some(Icon::Search),
+    );
+    if let Some(field) = state.field {
+        field.set_rect(field_rect);
+        f.push(Op::TextField {
+            rect: field_rect,
+            field: field.clone(),
+            revision: field.revision(),
+        });
+    }
+    let row_h = f.px(theme.metrics.row_single);
+    let header_h = (f.px(theme.metrics.row_single) * 2.0 / 3.0).round();
+    if shown.is_empty() {
+        f.empty(rows, Some(Icon::Search), "No widgets match", None);
+    } else {
+        f.scroll(rows, state.scroll, state.now, |f, origin| {
+            let mut y = origin.y;
+            let mut category: Option<&str> = None;
+            for (i, choice) in shown.iter().enumerate() {
+                if category != Some(choice.category.as_str()) {
+                    category = Some(&choice.category);
+                    f.section_header(
+                        Rect::new(origin.x, y, rows.width(), header_h),
+                        &choice.category,
+                        None,
+                    );
+                    y += header_h;
+                }
+                f.row(
+                    &ListRow {
+                        id: PICK_ROW + i as HitId,
+                        lead: Lead::Icon(widget_icon(&choice.id)),
+                        title: &choice.name,
+                        subtitle: None,
+                        accessory: Accessory::None,
+                        selected: i == state.selected,
+                        enabled: true,
+                    },
+                    Rect::new(origin.x, y, rows.width(), row_h),
+                );
+                y += row_h;
+            }
+            y - origin.y
+        });
+    }
+    // The preview pane.
+    let card = f.card(pane);
+    if let Some(choice) = shown.get(state.selected) {
+        let c = theme.color;
+        let (title, rest) = card.take_bottom(f.px(theme.metrics.control), f.px(10.0));
+        let (info, stage) = rest.take_bottom(f.px(64.0), f.px(10.0));
+        if let Some((preview, pw, ph)) = state.preview {
+            let at = stage.place(pw, ph, Align::Center, Align::Center);
+            f.push(Op::Clipped {
+                rect: stage,
+                ops: preview.translated(at.left, at.top).ops.into(),
+            });
+        }
+        f.label(
+            info.left,
+            info.top,
+            &choice.name,
+            TextRole::Title3,
+            c.label,
+            info.width() - f.px(56.0),
+        );
+        let size = format!("{} × {}", choice.size[0], choice.size[1]);
+        f.text_in(
+            Rect::new(info.left, info.top, info.width(), f.line(TextRole::Title3)),
+            &size,
+            TextRole::Footnote,
+            c.tertiary,
+            Align::End,
+        );
+        let detail = state.notice.unwrap_or(&choice.description);
+        f.paragraph(
+            info.left,
+            info.top + f.line(TextRole::Title3) + f.px(2.0),
+            info.width(),
+            detail,
+            TextRole::Callout,
+            if state.notice.is_some() { c.warning } else { c.secondary },
+            2,
+        );
+        f.button(PICK_ADD, title, "Add widget", Some(Icon::Add), ButtonKind::Filled, true);
+    }
+    f.list
+}
+
+/// The picker's icon for a widget id (custom widgets get the generic one).
+pub fn widget_icon(id: &str) -> Icon {
     match id {
         "calendar" => Icon::Calendar,
         "clock" => Icon::Clock,
         "countdown" | "timer" => Icon::Timer,
         "crypto" => Icon::Gauge,
-        "heatmap" | "todo" => Icon::Tasks,
+        "heatmap" => Icon::Layers,
+        "todo" => Icon::Tasks,
         "launcher" => Icon::Apps,
         "media-pill" | "now-playing" => Icon::Music,
-        "notes" | "quote" => Icon::Notes,
+        "notes" => Icon::Notes,
+        "quote" => Icon::Message,
         "photo" => Icon::Photo,
-        "quick-toggles" => Icon::Settings,
+        "quick-toggles" => Icon::Controls,
         "rss" => Icon::Feed,
         "system-monitor" => Icon::Cpu,
-        "weather" => Icon::Brightness,
+        "weather" => Icon::CloudSun,
+        "t3" => Icon::Terminal,
+        "discord" => Icon::Message,
+        "obs" => Icon::Video,
+        "docker" => Icon::Layers,
+        "tailscale" => Icon::Globe,
+        "grok" => Icon::Sparkles,
         _ => Icon::Apps,
     }
 }
@@ -579,6 +615,7 @@ mod tests {
             height: 1440.0,
         };
         let config=BarsConfig::parse(r#"{"top":{"height":32,"layout":"floating","margin":8},"dock":{"enabled":true,"autohide":true,"monitors":"all","position":"bottom","size":48,"padding":5,"margin":6}}"#).unwrap();
+        // An autohiding dock reserves nothing: widgets reach the bottom edge.
         let usable = usable_area(area, area, &config, "DISPLAY1", true);
         assert_eq!(
             usable,
@@ -586,10 +623,14 @@ mod tests {
                 x: 0.0,
                 y: 48.0,
                 width: 2560.0,
-                height: 1322.0
+                height: 1392.0
             }
         );
         assert_eq!(usable_area(area, usable, &config, "DISPLAY1", true), usable);
+        let fixed = BarsConfig::parse(r#"{"top":{"height":32,"layout":"floating","margin":8},"dock":{"enabled":true,"autohide":false,"monitors":"all","position":"bottom","size":48,"padding":5,"margin":6}}"#).unwrap();
+        let usable = usable_area(area, area, &fixed, "DISPLAY1", true);
+        assert_eq!((usable.y, usable.height), (48.0, 1322.0), "a fixed dock keeps its band");
+        assert_eq!(usable_area(area, usable, &fixed, "DISPLAY1", true), usable);
         let overridden=BarsConfig::parse(r#"{"top":{"enabled":false},"dock":{"enabled":false},"overrides":{"secondary":{"top":{"enabled":true,"height":40,"position":"bottom","margin":0},"dock":{"enabled":true,"position":"left","monitors":"all","size":40,"padding":4,"margin":6}}}}"#).unwrap().for_monitor("DISPLAY2",false).unwrap();
         assert_eq!(
             usable_area(area, area, &overridden, "DISPLAY2", false),
@@ -602,7 +643,7 @@ mod tests {
         );
     }
     #[test]
-    fn weather_resizes_live_to_supported_tall_sizes_and_keeps_opposite_edges() {
+    fn weather_resizes_one_cell_at_a_time_and_keeps_opposite_edges() {
         let registry = mypaper_widgets::registry::builtins();
         let manifest = &registry.get("weather").unwrap().manifest;
         let grid = Grid {
@@ -612,7 +653,8 @@ mod tests {
             cols: 12,
             rows: 10,
         };
-        for size in [[4, 4], [4, 5], [5, 5], [5, 6]] {
+        // Every size between min and max, odd ones included (T3-style 3×4 on the old grid).
+        for size in [[4, 4], [4, 5], [5, 5], [5, 6], [7, 3], [9, 9]] {
             let requested = grid.rect([2, 1], size);
             assert_eq!(
                 resize_target(
@@ -647,12 +689,19 @@ mod tests {
             resize_target(
                 &grid,
                 manifest,
-                [9, 8],
-                [3, 2],
+                [6, 8],
+                [4, 2],
                 huge,
                 [false, false, true, true]
             ),
-            Some(([9, 8], [3, 2]))
+            Some(([6, 8], [6, 2])),
+            "bounded by the grid"
+        );
+        // A side handle changes one dimension by one cell.
+        let wider = grid.rect([2, 1], [5, 3]);
+        assert_eq!(
+            resize_target(&grid, manifest, [2, 1], [4, 3], wider, [false, false, true, false]),
+            Some(([2, 1], [5, 3]))
         );
         // Every corner/side preserves the edge it did not grab.
         for edges in [
@@ -673,11 +722,13 @@ mod tests {
         }
     }
     #[test]
-    fn sparse_sizes_keyboard_steps_and_clamped_layout_keep_valid_neighbors() {
+    fn keyboard_steps_one_cell_and_clamped_layout_keeps_valid_neighbors() {
         let registry = mypaper_widgets::registry::builtins();
         let timer = &registry.get("timer").unwrap().manifest;
-        assert_eq!(nudge_size(timer, [4, 4], 1, -1, [6, 6]), Some([4, 2]));
-        assert_eq!(nudge_size(timer, [4, 2], 1, 1, [6, 6]), Some([4, 4]));
+        assert_eq!(nudge_size(timer, [4, 4], 1, -1, [6, 6]), Some([4, 3]));
+        assert_eq!(nudge_size(timer, [4, 3], 1, 1, [6, 6]), Some([4, 4]));
+        assert_eq!(nudge_size(timer, [2, 2], 0, -1, [6, 6]), None, "at its min");
+        assert_eq!(nudge_size(timer, [6, 6], 0, 1, [6, 6]), None, "at the grid edge");
         let grid = Grid {
             origin: [0.0; 2],
             cell: [96.0; 2],
@@ -722,12 +773,12 @@ mod tests {
         );
     }
     #[test]
-    fn palette_uses_a_clear_edge_inside_the_usable_area() {
+    fn the_pill_uses_a_clear_edge_inside_the_usable_area() {
         let area = Rect::new(0.0, 48.0, 2560.0, 1322.0);
         let size = (954, 200);
-        assert_eq!(palette_origin(area, size, 1.0, &[]), (803, 58));
+        assert_eq!(pill_origin(area, size, 1.0, &[]), (803, 58));
         let widgets = [Rect::new(1072.0, 64.0, 415.0, 210.0)];
-        assert_eq!(palette_origin(area, size, 1.0, &widgets), (803, 1160));
+        assert_eq!(pill_origin(area, size, 1.0, &widgets), (803, 1160));
     }
     #[test]
     fn tiny_usable_areas_never_expand_back_to_the_nominal_icon_cell() {
@@ -745,6 +796,33 @@ mod tests {
         let bounds = Rect::new(-2560.0, 50.0, 2560.0, 1310.0);
         let live = clamp_rect(Rect::new(-2700.0, -100.0, 400.0, 500.0), bounds);
         assert_eq!(live, Rect::new(-2560.0, 50.0, 400.0, 500.0));
+    }
+    #[test]
+    fn the_picker_groups_by_category_and_searches_names_categories_and_ids() {
+        let choice = |id: &str, name: &str, category: &str| Choice {
+            id: id.into(),
+            name: name.into(),
+            category: category.into(),
+            description: String::new(),
+            size: [4, 4],
+        };
+        let mut choices = vec![
+            choice("my-gauge", "Gauge", "Other"),
+            choice("t3", "T3 Code", "Integrations"),
+            choice("weather", "Weather", "Info"),
+            choice("clock", "Clock", "Time"),
+            choice("calendar", "Calendar", "Time"),
+            choice("stocks", "Stocks", "Finance"),
+        ];
+        sort_choices(&mut choices);
+        let order: Vec<_> = choices.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(order, ["calendar", "clock", "weather", "t3", "stocks", "my-gauge"]);
+        let ids = |q: &str| filter(&choices, q).iter().map(|c| c.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids("  CLO "), ["clock"]);
+        assert_eq!(ids("time"), ["calendar", "clock"]);
+        assert_eq!(ids("my-"), ["my-gauge"]);
+        assert_eq!(ids("").len(), 6);
+        assert!(ids("zzz").is_empty());
     }
     #[test]
     fn arranging_swaps_shifts_and_refuses_atomically() {

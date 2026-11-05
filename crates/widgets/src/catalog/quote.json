@@ -1,23 +1,14 @@
 {
   "id": "quote",
   "name": "Quote",
+  "category": "Info",
   "version": "1.1.0",
   "author": "mypaper",
   "description": "A short quote, new every day. Click for another.",
   "size": {
-    "default": [
-      3,
-      1
-    ],
-    "min": [
-      2,
-      1
-    ],
-    "max": [
-      4,
-      2
-    ],
-    "allowed": [[2, 1], [3, 1], [4, 1], [2, 2], [3, 2], [4, 2]]
+    "default": [6, 2],
+    "min": [4, 2],
+    "max": [8, 4]
   },
   "resizable": true,
   "permissions": [],

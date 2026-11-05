@@ -783,6 +783,8 @@ impl Setting {
     }
 }
 
+/// Sizes in grid cells (the fine grid of layout version 2: half a desktop-icon cell). Every
+/// size from `min` to `max` is allowed, one cell at a time; views adapt to any of them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SizeSpec {
@@ -791,9 +793,15 @@ pub struct SizeSpec {
     pub min: [u32; 2],
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<[u32; 2]>,
-    /// Native view sizes in cells. Older external schemas may still use min/max alone.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub allowed: Vec<[u32; 2]>,
+}
+
+impl SizeSpec {
+    /// Every allowed size, row by row (for size sheets and pickers); `max` defaults to
+    /// `limit` when the manifest leaves it open.
+    pub fn sizes(&self, limit: [u32; 2]) -> impl Iterator<Item = [u32; 2]> + use<> {
+        let (min, max) = (self.min, self.max.unwrap_or(limit));
+        (min[1]..=max[1]).flat_map(move |h| (min[0]..=max[0]).map(move |w| [w, h]))
+    }
 }
 
 fn one_by_one() -> [u32; 2] {
@@ -823,6 +831,9 @@ pub struct WidgetManifest {
     pub author: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// The widget picker's group ("Time", "Media", ...); none lands in "Other".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
     #[serde(default = "default_entry")]
     pub entry: String,
     pub size: SizeSpec,
@@ -877,12 +888,7 @@ impl WidgetManifest {
             "entry {:?} must be a path inside the widget folder",
             self.entry
         );
-        let SizeSpec {
-            default,
-            min,
-            max,
-            allowed,
-        } = &self.size;
+        let SizeSpec { default, min, max } = &self.size;
         let fits = |low: &[u32; 2], high: &[u32; 2]| low[0] <= high[0] && low[1] <= high[1];
         ensure!(
             min[0] >= 1 && min[1] >= 1,
@@ -893,16 +899,6 @@ impl WidgetManifest {
             max.is_none_or(|max| fits(default, &max)),
             "size: default must be <= max"
         );
-        ensure!(
-            allowed.is_empty() || allowed.contains(default),
-            "size.allowed must contain default"
-        );
-        for size in allowed {
-            ensure!(
-                fits(min, size) && max.is_none_or(|max| fits(size, &max)),
-                "size.allowed must fit min/max"
-            );
-        }
         for plugin in &self.plugins {
             ensure!(
                 valid_id(plugin),
@@ -962,36 +958,19 @@ impl WidgetManifest {
             .expect("validated manifest has a default size")
     }
 
-    /// Closest supported size that fits the available cells. Ties grow, like cell snapping.
+    /// The closest allowed size (every size from min to max, rounded per axis) that fits in
+    /// `limits` cells; None when even `min` doesn't fit.
     pub fn fit_size(&self, requested: [f64; 2], limits: [u32; 2]) -> Option<[u32; 2]> {
         if !self.resizable {
             return (0..2)
                 .all(|i| self.size.default[i] <= limits[i])
                 .then_some(self.size.default);
         }
-        if self.size.allowed.is_empty() {
-            let max = self.size.max.unwrap_or([u32::MAX; 2]);
-            let hi = [0, 1].map(|i| max[i].min(limits[i]));
-            return (0..2).all(|i| self.size.min[i] <= hi[i]).then(|| {
-                [0, 1]
-                    .map(|i| (requested[i].round().max(0.0) as u32).clamp(self.size.min[i], hi[i]))
-            });
-        }
-        self.size
-            .allowed
-            .iter()
-            .copied()
-            .filter(|s| (0..2).all(|i| s[i] <= limits[i]))
-            .min_by(|a, b| {
-                let distance = |s: [u32; 2]| {
-                    (0..2)
-                        .map(|i| (f64::from(s[i]) - requested[i]).powi(2))
-                        .sum::<f64>()
-                };
-                distance(*a)
-                    .total_cmp(&distance(*b))
-                    .then_with(|| (b[0] + b[1]).cmp(&(a[0] + a[1])))
-            })
+        let max = self.size.max.unwrap_or([u32::MAX; 2]);
+        let hi = [0, 1].map(|i| max[i].min(limits[i]));
+        (0..2).all(|i| self.size.min[i] <= hi[i]).then(|| {
+            [0, 1].map(|i| (requested[i].round().max(0.0) as u32).clamp(self.size.min[i], hi[i]))
+        })
     }
 
     pub fn setting(&self, key: &str) -> Option<&Setting> {

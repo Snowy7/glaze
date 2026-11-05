@@ -37,9 +37,8 @@ widget still needs the engine's overlay consumer; the wallpaper plate seam does 
 
 Ctrl+Alt+Shift+W toggles edit mode. The existing registered `mypaper.widgets.edit` message to the
 message-only `mypaper.widgets.host` window still works for Studio/core callers (wParam: 0 off,
-1 on, 2 toggle). The native palette
-adds any built-in, selects instances, removes them, and exits. Drag and all eight resize edges/corners snap to
-the per-monitor grid. Moves first try to swap a single neighbor into the original cell; otherwise
+1 on, 2 toggle). Drag and all eight resize edges/corners snap to the per-monitor grid, one cell at
+a time, with a ghost showing the target and a spring on drop. Moves first try to swap a single neighbor into the original cell; otherwise
 overlapping neighbors shift down, then right in reading order. If they cannot fit, the entire edit
 is refused with feedback. Arrows move the focused widget; Shift+arrows resize it. The opposite edge
 stays fixed when resizing from the top/left. Instance limits also apply to duplication. The display-frame ticker
@@ -48,9 +47,24 @@ remain accepted by the native host. Per-widget settings forms live in Studio's e
 validated date/time, six color swatches, Save/Enter and Cancel/Escape. Edit mode is refused during
 a hold and exits when a hold begins.
 
-The palette is a header (Add widgets, Done) over icon tiles with hover and press washes; it takes
-the keyboard when it opens, so Escape leaves edit mode
-([screenshot](media/native/polish-edit-palette.png)).
+Edit mode shows a small floating pill (+ and Done) on the primary monitor, top centre (bottom when
+widgets block the top); it takes the keyboard, so Escape leaves edit mode. + opens the widget
+picker under it; right-clicking empty desktop opens it at the pointer, and a pick lands in that
+cell when it is free. The picker (kit popover) has a search field (name, category or id), a list
+grouped by the manifest's `category` (Time, Info, Media, Productivity, System, Integrations, then
+others, then Other), and a preview of the selected widget at its default size with Add. Up/Down
+move the selection, Enter adds, Escape or a click outside closes it. Any number of instances can
+be added unless the manifest's `instances` rule says otherwise; a refusal shows in the picker.
+
+**Grid.** The grid fills each monitor's usable area (the monitor less the top bar's band and a
+fixed dock's band; an autohiding dock reserves nothing, so widgets reach the bottom edge) inside
+`grid.margin`: as many whole icon cells as fit, stretched edge to edge, each split in two
+(`layout::SUBDIVISION`). So whole cells always fill the area exactly, at about half the icon cell.
+
+**Sizes.** A manifest's `size` (`default`, `min`, `max`, in fine cells) allows every size from
+`min` to `max`; there is no `allowed` list. Views pick their layout from their box
+(`SizeClass` and their own breakpoints); `every_widget_renders_inside_its_frame_at_every_size`
+renders every widget at every size on 96 and 75 DIP icon grids and fails on paint outside the frame.
 
 ## Look and layouts by size
 
@@ -140,16 +154,19 @@ and Explorer; a cached top-level set distinguishes destroyed apps from child-win
 
 ## Layout and existing data
 
-`%APPDATA%\mypaper\widgets.json` is unchanged: `grid`, `appearance`, and `instances`, with each
+`%APPDATA%\mypaper\widgets.json` (version 2): `grid`, `appearance`, and `instances`, with each
 instance's `instance`, `widget`, `monitor`, `cell`, `size`, `appearance`, and `settings`. Instance ids
 are stable. `now-playing` and `media-pill` are not renamed. The library's `layout.rs` owns grid
 conversion, placement, migration and atomic saves. Missing files get six widgets: clock, calendar,
 media, weather, monitor and notes. An intentionally empty or invalid existing file is never reseeded.
+Version 1 files (cells of the icon grid) are upgraded once by the shell (`Layout::upgrade`: cells
+and sizes double, which keeps every rectangle exactly, since the fine grid subdivides the icon
+grid) and saved; parsing alone never upgrades, so Studio's raw edits stay in the file's own units.
 Invalid live reloads retain the last valid layout. Every layout save also parses the current file
 at the write boundary, including edits arriving before a watcher notification. Unreadable or invalid
 files refuse the write; invalid bytes are preserved in a non-overwritten `widgets.json.bak` (then
 `.bak.1`, etc. for different contents). `widgets.json.previous` holds the prior valid version.
-The edit palette displays the error; writes resume only after a valid reload. Layout changes are
+The picker displays the error; writes resume only after a valid reload. Layout changes are
 committed in memory only after their save succeeds. Removal cleans data/picked files only after that
 commit. Duplication rebases owned URLs recursively in settings and stored data, copies private files,
 and refuses conflicting destination data instead of replacing it. A failed copy/save rolls back only

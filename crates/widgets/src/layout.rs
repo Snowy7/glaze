@@ -15,7 +15,13 @@ use serde_json::{Map, Value};
 use crate::manifest::{WidgetManifest, valid_id};
 use crate::{look, pick};
 
-pub const VERSION: u32 = 1;
+/// Version 2 halved the grid cell: version-1 files are upgraded by [`Layout::upgrade`].
+pub const VERSION: u32 = 2;
+
+/// Grid cells per desktop-icon cell (layout version 2; version 1 used the icon cell itself).
+/// The fine grid subdivides the icon grid exactly, so `cell × 2, size × 2` lands a version-1
+/// widget on the very same rectangle.
+pub const SUBDIVISION: u32 = 2;
 
 /// The cell size when the icon spacing is unknown.
 const FALLBACK_CELL: f64 = 96.0;
@@ -119,10 +125,26 @@ impl Layout {
         Ok(layout)
     }
 
+    /// Moves a version-1 layout onto the fine grid: every cell and size doubles, which keeps
+    /// each widget exactly where and as big as it was (see [`SUBDIVISION`]). The shell calls
+    /// this after every load and saves when it returns true; Studio edits the raw file in
+    /// whatever version it finds, so parsing never upgrades on its own.
+    pub fn upgrade(&mut self) -> bool {
+        if self.version >= VERSION {
+            return false;
+        }
+        for instance in &mut self.instances {
+            instance.cell = instance.cell.map(|c| c.saturating_mul(SUBDIVISION));
+            instance.size = instance.size.map(|s| s.saturating_mul(SUBDIVISION));
+        }
+        self.version = VERSION;
+        true
+    }
+
     fn validate(&self) -> Result<()> {
         ensure!(
-            self.version == VERSION,
-            "version {} isn't supported (expected {VERSION})",
+            (1..=VERSION).contains(&self.version),
+            "version {} isn't supported (expected 1 to {VERSION})",
             self.version
         );
         let GridSpec { cell, gap, margin } = self.grid;
@@ -411,22 +433,24 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// The grid for a work area: `spec.cell` (or `icon_cell` when it's 0),
-    /// starting at the work area plus the margin, with as many whole cells
-    /// as fit (at least one).
+    /// The grid for a work area: as many whole icon cells (`spec.cell`, or `icon_cell` when
+    /// it's 0) as fit inside the margin, stretched so they span the area edge to edge, then
+    /// each split into [`SUBDIVISION`] cells per side. Whole cells always fill the area exactly:
+    /// no leftover strip on the right or bottom.
     pub fn new(spec: &GridSpec, icon_cell: [f64; 2], work: RectF) -> Self {
         let cell = if spec.cell > 0.0 {
             [spec.cell; 2]
         } else {
             icon_cell
         };
-        // As many whole cells of the nominal size as fit, then every cell
-        // stretched so the grid spans the full area, edge to edge (no
-        // leftover strip on the right or bottom).
         let span = |length: f64, nominal: f64| {
             let margin = spec.margin.min((length - 1.0).max(0.0) / 2.0);
             let usable = (length - 2.0 * margin).max(1.0);
-            let count = (((usable + spec.gap) / (nominal + spec.gap)).floor() as u32).max(1);
+            let coarse = (((usable + spec.gap) / (nominal + spec.gap)).floor() as u32).max(1);
+            let size = (usable - f64::from(coarse - 1) * spec.gap) / f64::from(coarse);
+            // A cell too small to split (a tiny area) stays whole.
+            let split = if size - spec.gap >= 2.0 { SUBDIVISION } else { 1 };
+            let count = coarse * split;
             let size = (usable - f64::from(count - 1) * spec.gap) / f64::from(count);
             (count, size, margin)
         };
@@ -700,7 +724,7 @@ mod tests {
     fn rejects_bad_files() {
         for (bad, why) in [
             (
-                LAYOUT.replace("\"version\": 1", "\"version\": 2"),
+                LAYOUT.replace("\"version\": 1", "\"version\": 3"),
                 "version",
             ),
             (LAYOUT.replace("\"cell\": 0", "\"cell\": 4"), "tiny cell"),
@@ -738,10 +762,11 @@ mod tests {
     fn grid_fits_whole_cells_in_the_work_area() {
         let grid = Grid::new(&GridSpec::default(), [96.0, 96.0], WORK);
         assert_eq!(grid.origin, [16.0, 16.0]);
-        // (1920 - 32 + 8) / 104 = 18.2 → 18; (1040 - 32 + 8) / 104 = 9.7 → 9
-        assert_eq!((grid.cols, grid.rows), (18, 9));
+        // (1920 - 32 + 8) / 104 = 18.2 → 18 icon cells; (1040 - 32 + 8) / 104 = 9.7 → 9; each
+        // split in two.
+        assert_eq!((grid.cols, grid.rows), (36, 18));
         // Stretched to span the full area: the last cell ends at the right/bottom margin.
-        let last = grid.rect([17, 8], [1, 1]);
+        let last = grid.rect([35, 17], [1, 1]);
         assert!((last.x + last.width - (1920.0 - 16.0)).abs() < 1e-9);
         assert!((last.y + last.height - (1040.0 - 16.0)).abs() < 1e-9);
         let fixed = Grid::new(
@@ -753,9 +778,9 @@ mod tests {
             WORK,
         );
         // A fixed nominal cell decides the count ((1888 + 8) / 128 = 14.8 → 14,
-        // (1008 + 8) / 128 = 7.9 → 7); cells then stretch to fill.
-        assert_eq!((fixed.cols, fixed.rows), (14, 7));
-        assert!(fixed.cell[0] >= 120.0 && fixed.cell[1] >= 120.0);
+        // (1008 + 8) / 128 = 7.9 → 7); cells then stretch to fill, and split.
+        assert_eq!((fixed.cols, fixed.rows), (28, 14));
+        assert!(fixed.rect([0, 0], [2, 2]).width >= 120.0);
     }
 
     #[test]
@@ -767,13 +792,65 @@ mod tests {
         }; // taskbar on top
         let grid = Grid::new(&GridSpec::default(), [75.0, 90.0], work);
         assert_eq!(grid.origin, [16.0, 64.0]);
-        // (1888 + 8) / 83 = 22.8 → 22 columns; (1008 + 8) / 98 = 10.4 → 10 rows.
-        assert_eq!((grid.cols, grid.rows), (22, 10));
+        // (1888 + 8) / 83 = 22.8 → 22 icon columns; (1008 + 8) / 98 = 10.4 → 10 rows; split.
+        assert_eq!((grid.cols, grid.rows), (44, 20));
         let rect = grid.rect([1, 2], [2, 1]);
         assert!((rect.x - (16.0 + grid.cell[0] + 8.0)).abs() < 1e-9);
         assert!((rect.y - (64.0 + 2.0 * (grid.cell[1] + 8.0))).abs() < 1e-9);
         assert!((rect.width - (2.0 * grid.cell[0] + 8.0)).abs() < 1e-9);
-        assert!(grid.cell[0] >= 75.0 && grid.cell[1] >= 90.0);
+        let icon = grid.rect([0, 0], [2, 2]);
+        assert!(icon.width >= 75.0 && icon.height >= 90.0);
+    }
+
+    #[test]
+    fn whole_fine_cells_fill_every_area_edge_to_edge() {
+        for (width, height) in [(2560.0, 1352.0), (1920.0, 1040.0), (1366.0, 705.0), (3440.0, 1377.5)]
+        {
+            for icon in [[75.0, 75.0], [96.0, 96.0], [75.0, 90.0], [137.0, 101.0]] {
+                let work = RectF { x: 0.0, y: 36.0, width, height };
+                let grid = Grid::new(&GridSpec::default(), icon, work);
+                let all = grid.rect([0, 0], [grid.cols, grid.rows]);
+                let margin = GridSpec::default().margin;
+                assert!((all.x - margin).abs() < 1e-9 && (all.y - (36.0 + margin)).abs() < 1e-9);
+                assert!((all.x + all.width - (width - margin)).abs() < 1e-9, "{width} {icon:?}");
+                assert!((all.y + all.height - (36.0 + height - margin)).abs() < 1e-9);
+                // About half an icon cell: never coarser, never below a third.
+                for i in 0..2 {
+                    assert!(grid.cell[i] <= icon[i] / 2.0 + 8.0 && grid.cell[i] >= icon[i] / 3.0);
+                }
+                assert_eq!((grid.cols % 2, grid.rows % 2), (0, 0), "icon cells split in two");
+            }
+        }
+    }
+
+    #[test]
+    fn version_one_layouts_upgrade_onto_the_same_rectangles() {
+        let mut layout = Layout::parse(LAYOUT).unwrap();
+        assert_eq!(layout.version, 1, "parsing alone never upgrades (Studio edits raw files)");
+        let grid = Grid::new(&GridSpec::default(), [96.0, 96.0], WORK);
+        // A version-1 cell was one icon cell: two fine cells and the gap between them.
+        let icon = grid.cell[0] * 2.0 + grid.gap;
+        let old = |cell: [u32; 2], size: [u32; 2]| RectF {
+            x: grid.origin[0] + f64::from(cell[0]) * (icon + grid.gap),
+            y: grid.origin[1] + f64::from(cell[1]) * (grid.cell[1] * 2.0 + 2.0 * grid.gap),
+            width: f64::from(size[0]) * icon + f64::from(size[0] - 1) * grid.gap,
+            height: f64::from(size[1]) * (grid.cell[1] * 2.0 + grid.gap)
+                + f64::from(size[1] - 1) * grid.gap,
+        };
+        layout.instances[0].cell = [3, 2];
+        layout.instances[0].size = [3, 1];
+        let before = old([3, 2], [3, 1]);
+        assert!(layout.upgrade());
+        let after = &layout.instances[0];
+        assert_eq!((after.cell, after.size), ([6, 4], [6, 2]));
+        let now = grid.rect(after.cell, after.size);
+        for (a, b) in [(before.x, now.x), (before.y, now.y), (before.width, now.width), (before.height, now.height)] {
+            assert!((a - b).abs() < 1e-9, "{before:?} vs {now:?}");
+        }
+        assert_eq!(layout.version, VERSION);
+        assert!(!layout.upgrade(), "upgrades once");
+        let saved = serde_json::to_string(&layout).unwrap();
+        assert_eq!(Layout::parse(&saved).unwrap(), layout);
     }
 
     #[test]
@@ -790,9 +867,9 @@ mod tests {
 
     #[test]
     fn clamping_keeps_widgets_on_the_grid() {
-        let grid = Grid::new(&GridSpec::default(), [96.0, 96.0], WORK); // 18 x 9
-        assert_eq!(grid.clamp([17, 8], [2, 1]), ([16, 8], [2, 1]));
-        assert_eq!(grid.clamp([3, 3], [40, 40]), ([0, 0], [18, 9]));
+        let grid = Grid::new(&GridSpec::default(), [96.0, 96.0], WORK); // 36 x 18
+        assert_eq!(grid.clamp([35, 17], [2, 1]), ([34, 17], [2, 1]));
+        assert_eq!(grid.clamp([3, 3], [80, 80]), ([0, 0], [36, 18]));
         assert_eq!(grid.clamp([3, 3], [2, 2]), ([3, 3], [2, 2]));
     }
 
@@ -803,7 +880,7 @@ mod tests {
         instance.cell = [50, 50];
         instance.size = [9, 9];
         let placed = place(&instance, &manifest(), &grid, &look::defaults());
-        assert_eq!((placed.cell, placed.size), ([14, 7], [4, 2]));
+        assert_eq!((placed.cell, placed.size), ([32, 16], [4, 2]));
         assert_eq!(placed.appearance["surface"], "glass");
         assert!(placed.own.is_empty());
         assert_eq!(placed.settings["format24"], Value::Bool(true));

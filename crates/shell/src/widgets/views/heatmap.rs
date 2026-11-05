@@ -119,8 +119,11 @@ fn weeks(c: &mut Ctx, r: Rect) {
             let x = left + col as f32 * (cell + gap);
             if month_row > 0.0 && row == 0 && date.day <= 7 && x >= label_end {
                 let name = &MONTHS[date.month as usize - 1][..3];
-                let at = Rect::new(x, plot.top, c.px(40.0), month_row);
-                label_end = x + c.text(at, name, TextRole::Caption, color.secondary, Align::Start) + c.px(6.0);
+                // Only where the whole name fits before the plot's right edge.
+                if x + c.measure(name, TextRole::Caption).0 <= plot.right {
+                    let at = Rect::new(x, plot.top, plot.right - x, month_row);
+                    label_end = x + c.text(at, name, TextRole::Caption, color.secondary, Align::Start) + c.px(6.0);
+                }
             }
             if date > today {
                 continue;
