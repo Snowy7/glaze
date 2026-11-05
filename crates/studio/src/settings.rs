@@ -1139,6 +1139,8 @@ pub static SETTINGS: &[Setting] = &[
     custom("dock_pinned", "Pinned apps", "Windows' pins or your own", DOCK)
         .words("pins favourites apps"),
     custom("dock_modules", "Modules", "Beside the apps (taskbar style)", DOCK),
+    custom("start_pinned", "Pinned apps", "Start's own, or the dock's", Place::BarsPanel(Panel::Start))
+        .words("start pins favourites apps"),
     // --- Bars › Panels --------------------------------------------------------------------------
     sel(
         "start_layout",
@@ -1167,7 +1169,7 @@ pub static SETTINGS: &[Setting] = &[
         "",
         B,
         "/launcher/winKey",
-        false,
+        true,
         Place::BarsPanel(Panel::Start),
     )
     .words("windows key start"),

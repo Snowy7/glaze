@@ -106,10 +106,10 @@ pub fn run(app: &mut App, action: Action) {
         | Action::DeleteCustom(_)
         | Action::ResetBar(_)
         | Action::StartBars
-        | Action::PinAdd
-        | Action::PinRemove(_)
+        | Action::PinAdd(_)
+        | Action::PinRemove(..)
         | Action::PinMove(..)
-        | Action::PinsFromWindows => bars::run(app, action),
+        | Action::PinsOwn(_) => bars::run(app, action),
         Action::ToggleAutostart(_)
         | Action::MenuReset
         | Action::MenuAdd(_)

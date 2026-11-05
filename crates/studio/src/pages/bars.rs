@@ -9,7 +9,7 @@ use mypaper_ui::controls::{Align, ButtonKind, Font, key};
 use mypaper_ui::{Point, Rect, Role};
 use serde_json::{Value, json};
 
-use crate::actions::{Action, Bar, Choices, Edit, FieldId, Page, Panel, Slot};
+use crate::actions::{Action, Bar, Choices, Edit, FieldId, Page, Panel, Pins, Slot};
 use crate::app::{App, Drag, Overlay};
 use crate::docs::{DocId, Op, token};
 use crate::settings::Place;
@@ -168,6 +168,9 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
             module(app, b, col, &config, &slot);
         } else if let Some(panel) = app.nav.panel {
             panel_inspector(app, b, col, panel);
+            if panel == Panel::Start {
+                pins(app, b, col, &config, Pins::Start);
+            }
         } else if let Some(bar) = app.nav.bar {
             bar_inspector(app, b, col, &config, bar);
         } else {
@@ -294,7 +297,7 @@ fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: 
         }
     });
     if bar == Bar::Dock {
-        pins(app, b, col, config);
+        pins(app, b, col, config, Pins::Dock);
     }
     if bar == Bar::Top || config.dock.style == mypaper_bars::config::DockStyle::Taskbar {
         modules(app, b, col, config, bar);
@@ -416,24 +419,33 @@ fn modules(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: Bar) {
     });
 }
 
-/// The dock's pinned apps: your own list, or Windows' pins.
-fn pins(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig) {
+/// A pinned-apps list: its own, or what it follows (the dock: Windows' pins; Start: the dock's).
+fn pins(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, which: Pins) {
+    let (anchor, follows) = match which {
+        Pins::Dock => ("dock_pinned", "Windows' pins"),
+        Pins::Start => ("start_pinned", "The dock's"),
+    };
     section(b, col, "Pinned apps", |b, c| {
-        crate::ui::heading_action(b, c, c.y - b.px(28.0), "Add", Some(glyph::ADD), Action::PinAdd);
-        crate::ui::anchor(app, "dock_pinned", c.view, c.y);
-        let own = app.docs.is_set(DocId::Bars, "/dock/pinned");
-        let pins = config.dock.pinned.clone().unwrap_or_default();
-        b.segmented(key("pin-source"), Rect::new(c.x, c.y, c.w, b.px(32.0)), &["Windows' pins", "Your own"], Some(usize::from(own)), "Pinned apps", true, |i| {
-            if i == 0 { Action::Set(Edit::new(DocId::Bars, "/dock/pinned", "Pinned apps"), Value::Null) } else { Action::PinsFromWindows }
+        let own = app.docs.is_set(DocId::Bars, which.path());
+        if own {
+            crate::ui::heading_action(b, c, c.y - b.px(28.0), "Add", Some(glyph::ADD), Action::PinAdd(which));
+        }
+        crate::ui::anchor(app, anchor, c.view, c.y);
+        b.segmented(key(("pin-source", which)), Rect::new(c.x, c.y, c.w, b.px(32.0)), &[follows, "Your own"], Some(usize::from(own)), "Pinned apps", true, |i| {
+            if i == 0 { Action::Set(Edit::new(DocId::Bars, which.path(), "Pinned apps"), Value::Null) } else { Action::PinsOwn(which) }
         });
         c.y += b.px(40.0);
+        if !own {
+            return;
+        }
+        let pins = own_pins(config, which);
         let rect = Rect::new(c.x, c.y, c.w, pins.len().max(1) as f32 * b.px(36.0));
         b.fill(rect, b.px(8.0), b.p.chrome);
-        b.group(key("pins"), |b| {
+        b.group(key(("pins", which)), |b| {
             for (i, pin) in pins.iter().enumerate() {
                 let name = pin.name.clone().unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path));
                 let r = Rect::new(c.x, c.y + i as f32 * b.px(36.0), c.w, b.px(36.0));
-                crate::ui::list_row(b, r, key(("pin", i)), Some(glyph::APP), &name, Action::PinRemove(i), own.then_some(Action::PinRemove(i)), i + 1 == pins.len());
+                crate::ui::list_row(b, r, key(("pin", which, i)), Some(glyph::APP), &name, Action::PinRemove(which, i), Some(Action::PinRemove(which, i)), i + 1 == pins.len());
             }
         });
         b.stroke(rect, b.px(8.0), 1.0, b.p.line);
@@ -660,37 +672,58 @@ pub fn run(app: &mut App, action: Action) {
             app.toast_undo("Back to its design");
         }
         Action::StartBars => app.run(Action::StartMypaper),
-        Action::PinsFromWindows => {
-            let pins: Vec<Value> = mypaper_shell::preview::bars::default_pins().into_iter().filter_map(|p| serde_json::to_value(p).ok()).collect();
-            app.apply("Your own pins", vec![Op { doc: DocId::Bars, path: "/dock/pinned".into(), value: Some(Value::Array(pins)) }]);
+        Action::PinsOwn(which) => {
+            let Some(config) = config(app) else { return };
+            let start = match which {
+                Pins::Dock => mypaper_shell::preview::bars::default_pins(),
+                Pins::Start => config.dock.pinned.unwrap_or_else(mypaper_shell::preview::bars::default_pins),
+            };
+            set_pins(app, which, "Your own pins", start.into_iter().filter_map(|p| serde_json::to_value(p).ok()).collect());
         }
-        Action::PinAdd => {
+        Action::PinAdd(which) => {
             if let Some(path) = crate::dialogs::pick(app.window, "Choose an app to pin", false, crate::dialogs::PROGRAMS) {
                 let Some(config) = config(app) else { return };
-                let mut pins: Vec<Value> = config.dock.pinned.unwrap_or_default().into_iter().filter_map(|p| serde_json::to_value(p).ok()).collect();
+                let mut pins = pin_values(&config, which);
                 pins.push(json!({ "path": path.display().to_string() }));
-                app.apply("Pin an app", vec![Op { doc: DocId::Bars, path: "/dock/pinned".into(), value: Some(Value::Array(pins)) }]);
+                set_pins(app, which, "Pin an app", pins);
             }
         }
-        Action::PinRemove(i) => {
+        Action::PinRemove(which, i) => {
             let Some(config) = config(app) else { return };
-            let mut pins: Vec<Value> = config.dock.pinned.unwrap_or_default().into_iter().filter_map(|p| serde_json::to_value(p).ok()).collect();
-            if i < pins.len() && app.docs.is_set(DocId::Bars, "/dock/pinned") {
+            let mut pins = pin_values(&config, which);
+            if i < pins.len() && app.docs.is_set(DocId::Bars, which.path()) {
                 pins.remove(i);
-                app.apply("Unpin", vec![Op { doc: DocId::Bars, path: "/dock/pinned".into(), value: Some(Value::Array(pins)) }]);
+                set_pins(app, which, "Unpin", pins);
             }
         }
-        Action::PinMove(i, delta) => {
+        Action::PinMove(which, i, delta) => {
             let Some(config) = config(app) else { return };
-            let mut pins: Vec<Value> = config.dock.pinned.unwrap_or_default().into_iter().filter_map(|p| serde_json::to_value(p).ok()).collect();
+            let mut pins = pin_values(&config, which);
             let to = i as i32 + delta;
             if to >= 0 && (to as usize) < pins.len() {
                 pins.swap(i, to as usize);
-                app.apply("Move pin", vec![Op { doc: DocId::Bars, path: "/dock/pinned".into(), value: Some(Value::Array(pins)) }]);
+                set_pins(app, which, "Move pin", pins);
             }
         }
         _ => {}
     }
+}
+
+/// A list's own pins (empty while it follows another list).
+fn own_pins(config: &BarsConfig, which: Pins) -> Vec<mypaper_bars::config::Pinned> {
+    match which {
+        Pins::Dock => config.dock.pinned.clone(),
+        Pins::Start => config.launcher.pinned.clone(),
+    }
+    .unwrap_or_default()
+}
+
+fn pin_values(config: &BarsConfig, which: Pins) -> Vec<Value> {
+    own_pins(config, which).into_iter().filter_map(|p| serde_json::to_value(p).ok()).collect()
+}
+
+fn set_pins(app: &mut App, which: Pins, label: &str, pins: Vec<Value>) {
+    app.apply(label, vec![Op { doc: DocId::Bars, path: which.path().into(), value: Some(Value::Array(pins)) }]);
 }
 
 fn list_of(config: &BarsConfig, bar: Bar, list: &str) -> Vec<Value> {

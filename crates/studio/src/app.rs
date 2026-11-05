@@ -869,7 +869,7 @@ impl App {
         };
         match action {
             Action::SelectModule(Some(slot)) => self.run(Action::MoveModule(slot, delta)),
-            Action::PinRemove(i) => self.run(Action::PinMove(i, delta)),
+            Action::PinRemove(which, i) => self.run(Action::PinMove(which, i, delta)),
             Action::MenuRemove(i) => self.run(Action::MenuMove(i, delta)),
             _ => {}
         }

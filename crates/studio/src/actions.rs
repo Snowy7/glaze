@@ -118,6 +118,23 @@ impl Section {
     }
 }
 
+/// A pinned-apps list: the dock's, or Start's own (which otherwise follows the dock's).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Pins {
+    Dock,
+    Start,
+}
+
+impl Pins {
+    /// Where the list is in `bars.json`.
+    pub fn path(self) -> &'static str {
+        match self {
+            Pins::Dock => "/dock/pinned",
+            Pins::Start => "/launcher/pinned",
+        }
+    }
+}
+
 /// Which bar the Bars inspector shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Bar {
@@ -290,10 +307,11 @@ pub enum Action {
     DeleteCustom(String),
     ResetBar(Bar),
     StartBars,
-    PinAdd,
-    PinRemove(usize),
-    PinMove(usize, i32),
-    PinsFromWindows,
+    PinAdd(Pins),
+    PinRemove(Pins, usize),
+    PinMove(Pins, usize, i32),
+    /// Start an own list from what the list follows now.
+    PinsOwn(Pins),
     // Settings
     ToggleAutostart(bool),
     MenuReset,
