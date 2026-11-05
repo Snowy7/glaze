@@ -4,6 +4,8 @@
 The medium and large faces can select any scene; record, stream, pause/resume, and microphone
 buttons send obs-websocket 5 requests only when activated. CPU, bitrate and dropped frames appear
 when OBS supplies them. Bitrate needs two stream-byte samples, five seconds apart.
+The `status` bar module preserves older OBS bar entries and uses server events between updates;
+when only the bar is visible it installs no stats or clock timer.
 
 Enable **Tools → WebSocket Server Settings** in OBS. The plugin connects to
 `ws://127.0.0.1:4455` with the `obswebsocket.json` subprotocol. Set `port` in the plugin's settings
