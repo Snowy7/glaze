@@ -30,7 +30,6 @@ pub enum Widget {
     Quote,
     Discord,
     T3,
-    Obs,
     Custom,
     /// A face drawn by an SDK plugin of the same id (docs/plugins.md); `data` holds its view.
     Plugin,
@@ -56,7 +55,6 @@ impl Widget {
             "quote" => Self::Quote,
             "discord" => Self::Discord,
             "t3" => Self::T3,
-            "obs" => Self::Obs,
             custom if custom.starts_with("custom-") => Self::Custom,
             _ => return None,
         })
@@ -425,9 +423,6 @@ impl Model {
         } else {
             match self.kind {
                 Widget::Custom => self.integration.custom.next,
-                Widget::Obs if self.integration.clock_running() => {
-                    Some(instant + time::boundary(now.ms, 1000))
-                }
                 Widget::Clock => Some(
                     instant
                         + time::boundary(
