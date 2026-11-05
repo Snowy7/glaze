@@ -399,7 +399,7 @@ fn contents(
         })
     };
     match builtin {
-        Module::T3 | Module::Obs => {}
+        Module::T3 => {}
         Module::Start | Module::Quick | Module::Power => {
             let glyph = icon(ui, images);
             add(String::new(), glyph, target, ui, images)
