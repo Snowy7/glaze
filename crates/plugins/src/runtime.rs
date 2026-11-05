@@ -206,7 +206,9 @@ impl State {
     }
     /// The topics this plugin subscribed to (the host routes system events by them).
     pub fn subscribed(&self, topic: Topic) -> bool {
-        self.topics.contains(&topic) && (topic != Topic::Windows || self.permissions.iter().any(|p| p == "windows"))
+        self.topics.contains(&topic)
+            && (topic != Topic::Windows || self.permissions.iter().any(|p| p == "windows"))
+            && (topic != Topic::Notifications || self.permissions.iter().any(|p| p == "notifications"))
     }
     /// The open websocket or pipe `id`, to start its thread or return delivery credit.
     pub fn conn(&self, id: u64) -> Option<&io::Conn> {
@@ -306,6 +308,9 @@ impl mypaper::plugin::events::Host for State {
     fn subscribe(&mut self, topics: Vec<mypaper::plugin::events::Topic>) -> Result<(), WitError> {
         if topics.contains(&Topic::Windows) {
             self.allowed("windows")?;
+        }
+        if topics.contains(&Topic::Notifications) {
+            self.allowed("notifications")?;
         }
         for topic in topics {
             if !self.topics.contains(&topic) {
