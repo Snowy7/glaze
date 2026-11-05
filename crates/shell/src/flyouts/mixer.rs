@@ -28,6 +28,19 @@ const DEVICES: HitId = 100;
 /// Sessions: a slider at `LIST + 2 * index`, its mute button at `+ 1`.
 const SESSIONS: HitId = LIST;
 
+thread_local! {
+    /// The devices, apps and volume when the panel last closed (the UI thread's).
+    static LAST: std::cell::RefCell<(Option<MixerState>, Option<Volume>)> =
+        const { std::cell::RefCell::new((None, None)) };
+}
+
+impl Drop for Mixer {
+    fn drop(&mut self) {
+        let last = (self.state.take(), self.volume);
+        LAST.with_borrow_mut(|l| *l = last);
+    }
+}
+
 pub struct Mixer {
     state: Option<MixerState>,
     volume: Option<Volume>,
@@ -47,9 +60,10 @@ impl Mixer {
         cx.lanes
             .mixer(move |lane| Reply::Mixer(lane.read(switchable)));
         Self {
-            state: None,
-            // The endpoint (COM activation, tens of ms cold) is opened once on screen.
-            volume: None,
+            // What was last shown, so a reopen keeps its layout (see `quick`); the endpoint
+            // (COM activation, tens of ms cold) is opened once on screen.
+            state: LAST.with_borrow(|l| l.0.clone()),
+            volume: LAST.with_borrow(|l| l.1),
             switchable,
             icons: Vec::new(),
             error: None,
@@ -305,12 +319,15 @@ impl Panel for Mixer {
                     self.pending = Some(state.clone());
                     return false;
                 }
-                self.icons = state
+                let icons: Vec<_> = state
                     .sessions
                     .iter()
                     .map(|s| cx.image(s.icon.as_deref()))
                     .collect();
-                let changed = self.state.as_ref() != Some(state);
+                // A remembered list redraws when only its icons came.
+                let changed = self.state.as_ref() != Some(state)
+                    || icons.iter().map(Option::is_some).ne(self.icons.iter().map(Option::is_some));
+                self.icons = icons;
                 self.state = Some(state.clone());
                 changed
             }

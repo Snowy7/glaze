@@ -1008,8 +1008,15 @@ impl Flyouts {
             return;
         };
         let p = motion.value(now);
-        // Visible from the first frame (content is on screen at once), opaque by two thirds.
-        let alpha = (0.45 + p * 0.8).clamp(0.0, 1.0);
+        // On glass, the content fades in with its glass: the engine's glass shows some 25-60 ms
+        // after the window and fades in over 300 ms, so content shown at once would sit over the
+        // bare app behind it first (a flash). A drawn fill is visible from the first frame.
+        let alpha = if mypaper_ui::glass::style().is_some() {
+            (p - 0.12) * 1.3
+        } else {
+            0.45 + p * 0.8
+        }
+        .clamp(0.0, 1.0);
         if motion.done(now) {
             open.motion = None;
         }

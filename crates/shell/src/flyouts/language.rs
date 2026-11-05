@@ -12,6 +12,19 @@ use super::{Cx, Effect, LIST, Panel};
 
 const SETTINGS: HitId = 1;
 
+thread_local! {
+    /// The layouts when the panel last closed (the UI thread's).
+    static LAST: std::cell::RefCell<(Vec<Layout>, Option<String>)> =
+        const { std::cell::RefCell::new((Vec::new(), None)) };
+}
+
+impl Drop for Language {
+    fn drop(&mut self) {
+        let last = (std::mem::take(&mut self.layouts), self.current.take());
+        LAST.with_borrow_mut(|l| *l = last);
+    }
+}
+
 pub struct Language {
     layouts: Vec<Layout>,
     current: Option<String>,
@@ -22,8 +35,10 @@ pub struct Language {
 impl Language {
     pub fn new(cx: &mut Cx) -> Self {
         let window = cx.bars.external_foreground();
-        // The layouts come once it is on screen (a registry walk, ~15 ms).
-        Self::with(Vec::new(), None, window)
+        // The layouts come once it is on screen (a registry walk, ~15 ms); until then, the ones
+        // last shown, so a reopen keeps its layout.
+        let (layouts, current) = LAST.with_borrow(Clone::clone);
+        Self::with(layouts, current, window)
     }
 
     pub fn with(layouts: Vec<Layout>, current: Option<String>, window: isize) -> Self {

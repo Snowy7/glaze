@@ -50,6 +50,11 @@ const POLL: Duration = Duration::from_secs(4);
 /// The month's band under the list, design px.
 const MONTH: f32 = 276.0;
 
+thread_local! {
+    /// Do not disturb as last read, so a reopen's bell shows it on its first frame.
+    static LAST_DND: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
 /// Toasts of one app, newest first.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Group {
@@ -128,11 +133,11 @@ impl Center {
         cx.lanes.quick(|_| Reply::Dnd(toggles::dnd::read(), None));
         let lease = crate::integrations::acquire(Provider::Notifications);
         let error = lease.as_ref().err().map(ToString::to_string);
-        Self {
+        let mut center = Self {
             list: None,
             groups: Vec::new(),
             open: BTreeSet::new(),
-            dnd: None,
+            dnd: LAST_DND.get(),
             icons: Vec::new(),
             calendar: Calendar::new(cx),
             now: epoch_ms(),
@@ -144,7 +149,11 @@ impl Center {
             logos: HashMap::new(),
             error,
             availability: Availability::Connecting,
-        }
+        };
+        // The shared lease already holds the list (the bar's badge reads it): the first frame
+        // shows it, instead of "Loading…" and a resize a frame later.
+        center.refresh(cx);
+        center
     }
 
     #[cfg(test)]
@@ -579,6 +588,7 @@ impl Panel for Center {
             Reply::Dnd(dnd, _) => {
                 let changed = self.dnd != *dnd;
                 self.dnd = *dnd;
+                LAST_DND.set(*dnd);
                 changed
             }
             _ => false,

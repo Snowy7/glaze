@@ -66,16 +66,42 @@ pub struct Quick {
 /// follows changes made elsewhere (Windows' own quick settings, a hardware key).
 const POLL: Duration = Duration::from_secs(5);
 
+/// What the panel showed when it last closed (the UI thread's).
+#[derive(Clone, Default)]
+struct Last {
+    live: Option<controls::State>,
+    display: Option<u32>,
+    volume: Option<Volume>,
+}
+
+thread_local! {
+    static LAST: std::cell::RefCell<Last> = std::cell::RefCell::default();
+}
+
+impl Drop for Quick {
+    fn drop(&mut self) {
+        let last = Last {
+            live: self.live.take(),
+            display: self.display,
+            volume: self.volume,
+        };
+        LAST.with_borrow_mut(|l| *l = last);
+    }
+}
+
 impl Quick {
     pub fn new(cx: &mut Cx) -> Self {
         cx.lanes.quick(|lane| Reply::Quick(lane.read()));
         cx.lanes
             .quick(|_| Reply::QuickControl(controls::read(), None));
+        // A reopen starts from what was last shown, so its first frame has its final layout;
+        // the reads that follow update it in place.
+        let last = LAST.with_borrow(Clone::clone);
         Self {
-            live: None,
-            display: None,
+            live: last.live,
+            display: last.display,
             // The endpoint (COM activation, tens of ms cold) is opened once on screen.
-            volume: None,
+            volume: last.volume,
             network: network::read(None),
             battery: system::battery(),
             brightness: None,

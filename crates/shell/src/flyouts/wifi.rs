@@ -64,6 +64,19 @@ pub fn bars(signal: u32) -> usize {
     }
 }
 
+thread_local! {
+    /// The networks and the radio when the panel last closed (the UI thread's).
+    static LAST: std::cell::RefCell<(Option<WifiState>, Option<bool>)> =
+        const { std::cell::RefCell::new((None, None)) };
+}
+
+impl Drop for Wifi {
+    fn drop(&mut self) {
+        let last = (self.state.take(), self.radio);
+        LAST.with_borrow_mut(|l| *l = last);
+    }
+}
+
 pub struct Wifi {
     state: Option<WifiState>,
     radio: Option<bool>,
@@ -86,8 +99,9 @@ impl Wifi {
         cx.lanes
             .quick(|_| Reply::QuickControl(controls::read(), None));
         Self {
-            state: None,
-            radio: None,
+            // What was last shown, so a reopen keeps its layout (see `quick`).
+            state: LAST.with_borrow(|l| l.0.clone()),
+            radio: LAST.with_borrow(|l| l.1),
             expanded: None,
             status: None,
             scroll: Scroll::new(&cx.look.theme().motion),
