@@ -46,7 +46,16 @@ fn hits_map_back_to_plugin_actions() {
     assert_eq!(action_at(&attention, ACTION + 2), Some(Hit::Action("deny:thread-0:approval".into())));
     assert_eq!(action_at(&attention, ACTION + 3), None);
     assert_eq!(action_at(&attention, ACTION - 1), Some(Hit::Action("refresh".into())));
-    assert_eq!(action_at(&face("new"), ACTION), Some(Hit::Field("send".into())));
+    let new_thread = face("new");
+    for (offset, expected) in [(0, "project"), (1, "model")] {
+        assert!(matches!(
+            action_at(&new_thread, ACTION + offset),
+            Some(Hit::Select { action, options, selected })
+                if action == expected && options.iter().any(|option| Some(&option.value) == selected.as_ref())
+        ));
+    }
+    assert_eq!(action_at(&new_thread, ACTION + 2), Some(Hit::Field("send".into())));
+    assert_eq!(action_at(&new_thread, ACTION + 3), None);
 }
 
 #[test]
