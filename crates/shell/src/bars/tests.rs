@@ -631,6 +631,8 @@ fn readme_scene_bars() {
     let mut ui = Ui::new().unwrap();
     let mut model = model();
     model.notifications = None;
+    // The widgets half's clock (`widgets::tests::now`), so the bar and the clock widget agree.
+    (model.clock.wHour, model.clock.wMinute) = (14, 37);
     let mut config = BarsConfig::parse(
         r#"{"preset":"macos","look":{"style":"liquid","scheme":"dark"},
             "dock":{"enabled":true,"extras":["desktop","trash"],"magnify":false}}"#,
@@ -643,7 +645,7 @@ fn readme_scene_bars() {
     let mut images = view::Images::default();
     let top = view::top(width, &config, &model, &top_tokens, scale, &mut ui, &mut images, None);
     let dock = view::dock(
-        &config, &model, &apps(), &dock_tokens, scale, (width, 400), &[], &[], &mut ui,
+        &config, &model, &readme_apps(&dir), &dock_tokens, scale, (width, 400), &[], &[], &mut ui,
         &mut images, None,
     );
     let mut list = mypaper_ui::DisplayList::default();
@@ -682,4 +684,59 @@ fn readme_scene_bars() {
     std::fs::create_dir_all(&dir).unwrap();
     mypaper_ui::golden::write(&image, &dir.join("bars.png")).unwrap();
     std::fs::write(dir.join("bars.plates"), plates).unwrap();
+}
+
+/// The README dock's apps: stock Windows programs and Studio, with the icons the shell draws for
+/// them (written as PNGs under `dir/icons`); an icon that can't be read drops its app, so the
+/// dock never shows a letter placeholder.
+fn readme_apps(dir: &std::path::Path) -> Vec<Item> {
+    let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
+    let studio = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/logo/png/mark-256.png");
+    let apps = [
+        ("File Explorer", r"C:\Windows\explorer.exe", true, true),
+        ("Microsoft Edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", true, true),
+        ("PowerShell", r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", true, true),
+        ("Notepad", r"C:\Windows\notepad.exe", true, false),
+        ("Task Manager", r"C:\Windows\System32\Taskmgr.exe", true, false),
+    ];
+    let mut items: Vec<Item> = apps
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, (name, exe, pinned, open))| {
+            let icon = crate::desktop_menu::shell_menu::file_icon(std::path::Path::new(exe), 256)?;
+            let png = dir.join("icons").join(format!("{i}.png"));
+            mypaper_ui::golden::write(&icon, &png).ok()?;
+            Some(Item {
+                key: name.into(),
+                name: name.into(),
+                path: exe.into(),
+                icon: Some(png.display().to_string()),
+                pinned,
+                windows: if open {
+                    vec![ItemWindow {
+                        hwnd: i as isize + 1,
+                        title: name.into(),
+                        active: i == 0,
+                        minimized: false,
+                        attention: false,
+                    }]
+                } else {
+                    vec![]
+                },
+                aumid: None,
+                exe: None,
+            })
+        })
+        .collect();
+    items.push(Item {
+        key: "mypaper Studio".into(),
+        name: "mypaper Studio".into(),
+        path: "mypaper-studio.exe".into(),
+        icon: Some(studio.display().to_string()),
+        pinned: true,
+        windows: vec![],
+        aumid: None,
+        exe: None,
+    });
+    items
 }

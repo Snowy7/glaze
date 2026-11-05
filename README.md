@@ -53,12 +53,10 @@ settings, per wallpaper too; `auto` renders on the card that drives your screens
 
 ### Liquid Glass
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/media/readme/glass-before.jpg" width="420"><br>A flat tint, without the engine's glass</td>
-    <td align="center"><img src="docs/media/readme/glass-after.jpg" width="420"><br>Liquid Glass from the engine, under the same widgets</td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/media/readme/glass-before-after.jpg" alt="The same clock and weather widgets over rain-city: on the left a flat tint, on the right the engine's Liquid Glass at clear clarity, refracting the raindrops behind it" width="80%"><br>
+  <sub>Left: a flat tint. Right: the engine's Liquid Glass, clarity set to clear.</sub>
+</p>
 
 The bars, dock, widgets, flyouts and menus all sit on glass that the engine draws with
 **liquid-rust**: a squircle lens refracts the backdrop (Snell's law, η 1.5), with light frost, a
@@ -69,10 +67,6 @@ crop. See [docs/glass.md](docs/glass.md).
 
 ### Top bar and dock
 
-<p align="center">
-  <img src="docs/media/readme/dock.jpg" alt="The dock on Liquid Glass over rain-city" width="70%">
-</p>
-
 A native top bar and dock replace the taskbar (keep it, auto-hide it, or hide it; it's always
 restored). Presets include macOS, Windows 11, Windows 10, ChromeOS, islands, floating, pill, edge
 and neon glass. The dock groups windows by app, magnifies, and shows live window previews. A real
@@ -81,56 +75,46 @@ Tailscale. See [docs/bars.md](docs/bars.md).
 
 ### Five styles
 
-<p align="center">
-  <img src="docs/media/readme/styles-grid.jpg" alt="Every bar preset (rows) in every style (columns: liquid, oneui, fluent, solid, mono), dark, over rain-city" width="100%">
-</p>
+- **liquid**: Liquid Glass, the default.
+- **oneui**: frosted.
+- **fluent**: acrylic, 8 px corners.
+- **solid** and **mono**: no glass.
 
-**liquid** (Liquid Glass, the default), **oneui** (frosted), **fluent** (acrylic, 8 px corners),
-**solid** and **mono**. The style applies to the bars, dock, flyouts, menus and widgets alike, in
-light and dark. The grid above is the `preset_style_grid` golden test: every preset in every style.
+The style applies to the bars, dock, flyouts, menus and widgets alike, in light and dark. The
+`preset_style_grid` golden test renders every preset in every style.
 
 ### Panels and menus
 
-<table>
-  <tr>
-    <td align="center" valign="top"><img src="docs/media/readme/control-center.png" width="300"><br><b>Control Center</b><br>Do not disturb, night light, power mode, display and sound</td>
-    <td align="center" valign="top"><img src="docs/media/readme/notifications.png" width="300"><br><b>Notifications</b><br>Grouped per app, with the month below</td>
-    <td align="center" valign="top"><img src="docs/media/readme/desktop-menu.png" width="230"><br><b>Desktop menu</b><br>The full right-click menu, with each item's real icon</td>
-  </tr>
-</table>
+<img src="docs/media/readme/control-center.png" alt="Control Center: Wi-Fi, Bluetooth, do not disturb, night light, airplane mode, power mode, display and sound" width="300" align="right">
 
-<p align="center">
-  <img src="docs/media/readme/launcher.png" alt="The launcher: a search field and pinned apps" width="55%"><br>
-  <b>Launcher</b>: press Win, type to search apps, files and settings; pinned and recent apps, clipboard
-</p>
+- **Control Center:** Wi-Fi, Bluetooth, do not disturb, night light, power mode, display and
+  sound.
+- **Notifications:** grouped per app, with the month below.
+- **Launcher:** press Win and type to search apps, files and settings; pinned and recent apps,
+  clipboard.
+- **Desktop menu:** the full right-click menu, with each item's real icon.
 
 Flyouts also cover Wi-Fi, a per-app volume mixer, the keyboard layout, power and the tray. Our
 desktop menu replaces Windows' on the bare desktop, including Explorer's own verbs and the **New**
 submenu; Shift or right-clicking an icon still gets the native one. See
 [docs/desktop-extras.md](docs/desktop-extras.md).
 
-### Widgets
+<br clear="right">
 
-<p align="center">
-  <img src="docs/media/readme/sizes-clock.jpg" alt="The clock widget at every size" width="100%">
-  <img src="docs/media/readme/sizes-system.jpg" alt="The system widget, as rings, at every size" width="100%">
-</p>
+### Widgets
 
 17 built-in native widgets, each with a designed layout per size: clock, calendar, countdown, timer,
 now playing, media pill, weather, RSS, crypto, system monitor, quick toggles, launcher, photos,
 notes, to-do, activity heatmap and quote. They snap to a per-monitor grid on the desktop layer, or
 float above apps as overlays.
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/media/readme/edit-mode.jpg" width="560"><br><b>Edit mode</b> (Ctrl+Alt+Shift+W): drag and resize on the grid; <b>+</b> opens the widget picker</td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/media/readme/edit-mode.jpg" alt="Widgets in edit mode on the desktop: clock, weather, system, calendar and now playing, each with resize handles" width="60%"><br>
+  <sub><b>Edit mode</b> (Ctrl+Alt+Shift+W): drag and resize on the grid; <b>+</b> opens the widget picker.</sub>
+</p>
 
 **Integration widgets** talk to local apps directly, with no helper process, and run only while
 visible:
-
-<img src="docs/media/readme/t3-usage-limits.png" alt="T3 Usage and T3 Limits widgets (test fixture data)" width="300" align="right">
 
 - **T3 Code:** running threads, threads that need you (approve or deny), a new-thread prompt,
   **Usage** (30-day cost and tokens per provider) and **Limits** (each provider's windows and
@@ -142,25 +126,21 @@ visible:
 Settings for each live in Studio. See [docs/widgets.md](docs/widgets.md) and
 [docs/integrations.md](docs/integrations.md).
 
-<br clear="right">
-
 ### Studio
 
 <p align="center">
   <img src="docs/media/readme/studio-home.jpg" alt="mypaper Studio: Home" width="85%">
 </p>
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/media/readme/studio-look.jpg" width="420"><br><b>Look</b>: style, glass material, colours</td>
-    <td align="center"><img src="docs/media/readme/studio-widgets.jpg" width="420"><br><b>Widgets</b>: arrange on a live preview</td>
-  </tr>
-</table>
-
 Studio is the native settings app, on the same UI kit as the shell. It opens in about 250 ms, uses
-13–25 MB while open and nothing once closed. Home, Wallpapers, Look, Widgets, Bars and Integrations
-each edit the same settings files the shell watches, so changes show on the desktop at once, with
-undo and redo. **Ctrl+K** finds any setting, wallpaper, widget or action. See
+13–25 MB while open and nothing once closed. Every page edits the same settings files the shell
+watches, so changes show on the desktop at once, with undo and redo:
+
+- **Home** and **Wallpapers:** pick and tune the wallpaper.
+- **Look:** style, glass material, colours.
+- **Widgets:** arrange on a live preview.
+- **Bars** and **Integrations:** modules, dock, and each integration's settings.
+ **Ctrl+K** finds any setting, wallpaper, widget or action. See
 [docs/studio-ux.md](docs/studio-ux.md).
 
 ## Performance
