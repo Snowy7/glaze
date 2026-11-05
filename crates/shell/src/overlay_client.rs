@@ -1,6 +1,7 @@
 //! The shell's end of the engine's glass overlays (docs/engine-notes.md, "Glass overlays"): the
 //! thread's [`Backdrop`], which sends each popup's `Open`, `Place`, `Material` and `Close` to
-//! the engine's request window as one `WM_COPYDATA`.
+//! the engine's request window. Open/close use `WM_COPYDATA`; changing geometry and material
+//! overwrite a shared snapshot and post a coalesced wake, without waiting for the engine.
 //!
 //! The wire is the engine's own `request.rs`, compiled here as is, so both ends always agree.
 //! Every popup is `Layer::Popup`. When no engine answers, [`Backdrop::available`] is false and
@@ -13,7 +14,7 @@
 #[path = "../../wallpaper/src/overlay/request.rs"]
 mod request;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use mypaper_desktop::Rect;
@@ -23,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     IsWindow, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE,
 };
 
-use self::request::{Layer, Material, Reply, Request};
+use self::request::{Channel, Layer, Material, Reply, Request};
 
 /// Sends this thread's glass requests to the engine from now on.
 pub fn install() {
@@ -64,6 +65,27 @@ pub fn warm(client: HWND, shape: Shape) {
 struct Client {
     /// The engine's request window, while it answers.
     engine: Cell<Option<HWND>>,
+    plates: RefCell<Vec<Plate>>,
+}
+
+struct Plate {
+    client: HWND,
+    shape: Shape,
+    radius: f32,
+    material: Material,
+    channel: Channel,
+}
+
+impl Plate {
+    fn request(&self) -> Request {
+        Request::Open {
+            client: self.client,
+            layer: Layer::Popup,
+            rect: rect(self.shape),
+            radius: self.radius,
+            material: self.material,
+        }
+    }
 }
 
 impl Client {
@@ -108,32 +130,70 @@ impl Backdrop for Client {
     }
 
     fn open(&self, client: HWND, shape: Shape, radius: f32, material: &GlassMaterial) -> bool {
-        self.send(&Request::Open {
+        let Ok(channel) = Channel::open(client, true) else {
+            return false;
+        };
+        let mut plate = Plate {
             client,
-            layer: Layer::Popup,
-            rect: rect(shape),
+            shape,
             radius,
             material: wire(material),
-        })
+            channel,
+        };
+        let request = plate.request();
+        plate.channel.write(&request);
+        if !self.send(&request) {
+            return false;
+        }
+        let mut plates = self.plates.borrow_mut();
+        plates.retain(|p| p.client != client);
+        plates.push(plate);
+        true
     }
 
     fn place(&self, client: HWND, shape: Shape, radius: f32) {
-        self.send(&Request::Place {
-            client,
-            rect: rect(shape),
-            radius,
-        });
+        let mut plates = self.plates.borrow_mut();
+        let Some(plate) = plates.iter_mut().find(|p| p.client == client) else {
+            return;
+        };
+        if plate.shape == shape && plate.radius == radius {
+            return;
+        }
+        let Some(engine) = self.engine() else {
+            return;
+        };
+        let previous = (plate.shape, plate.radius);
+        plate.shape = shape;
+        plate.radius = radius;
+        let request = plate.request();
+        if !plate.channel.publish(engine, &request) {
+            (plate.shape, plate.radius) = previous;
+        }
     }
 
     fn material(&self, client: HWND, material: &GlassMaterial) {
-        self.send(&Request::Material {
-            client,
-            material: wire(material),
-        });
+        let material = wire(material);
+        let mut plates = self.plates.borrow_mut();
+        let Some(plate) = plates.iter_mut().find(|p| p.client == client) else {
+            return;
+        };
+        if plate.material == material {
+            return;
+        }
+        let Some(engine) = self.engine() else {
+            return;
+        };
+        let previous = plate.material;
+        plate.material = material;
+        let request = plate.request();
+        if !plate.channel.publish(engine, &request) {
+            plate.material = previous;
+        }
     }
 
     fn close(&self, client: HWND) {
         self.send(&Request::Close { client });
+        self.plates.borrow_mut().retain(|p| p.client != client);
     }
 }
 

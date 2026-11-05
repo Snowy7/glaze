@@ -19,9 +19,10 @@
 //! 3. A new or moved overlay takes the next frame whatever its dirty rects, and draws it
 //!    without comparing (excluded windows appearing or moving always produce one).
 //!
-//! **Moving.** A `Place` moves the overlay window inside the request's `WM_COPYDATA`, before the
-//! client moves itself, so both land in the same composition frame; the glass inside follows at
-//! the next captured frame.
+//! **Moving.** The shell publishes its latest geometry and material in a shared mailbox and
+//! posts one wake. The engine takes at most one snapshot per display frame; repeated geometry
+//! costs nothing and a busy/cold engine never blocks an animating shell. Open and close stay
+//! ordered in the request queue, including requests received while a cold open is being built.
 //!
 //! **Memory and warmth.** Nothing exists until the first overlay opens. WGC's first frame takes
 //! ~100-250 ms after a session starts, so the capture device, sessions and DirectComposition
@@ -54,24 +55,24 @@ use windows::Win32::Graphics::DirectComposition::{
     DCompositionCreateDevice3, IDCompositionDesktopDevice,
 };
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromRect,
+    DEVMODEW, ENUM_CURRENT_SETTINGS, EnumDisplaySettingsW, GetMonitorInfoW, HMONITOR,
+    MONITOR_DEFAULTTONEAREST, MONITORINFO, MONITORINFOEXW, MonitorFromRect,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, EVENT_OBJECT_DESTROY, GWLP_USERDATA,
     GetWindowLongPtrW, GetWindowThreadProcessId, HWND_MESSAGE, IsWindow, MSG, OBJID_WINDOW,
-    PM_NOREMOVE, PM_QS_SENDMESSAGE, PeekMessageW,
-    PostMessageW, RegisterClassExW, RegisterWindowMessageW, SetWindowDisplayAffinity,
-    SetWindowLongPtrW, WDA_EXCLUDEFROMCAPTURE, WINEVENT_OUTOFCONTEXT, WM_APP, WM_COPYDATA,
-    WNDCLASSEXW,
+    PM_NOREMOVE, PM_QS_SENDMESSAGE, PeekMessageW, PostMessageW, RegisterClassExW,
+    RegisterWindowMessageW, SetWindowDisplayAffinity, SetWindowLongPtrW, WDA_EXCLUDEFROMCAPTURE,
+    WINEVENT_OUTOFCONTEXT, WM_APP, WM_COPYDATA, WNDCLASSEXW,
 };
-use windows::core::w;
+use windows::core::{PCWSTR, w};
 
 pub use self::capture::Counts;
 use self::capture::{CaptureDevice, CopyTimer, Session};
 use self::glass::{Pipelines, Targets};
-use self::request::{Layer, Material, OVERLAY_CLASS, Reply, Request};
+use self::request::{Channel, Layer, Material, OVERLAY_CLASS, Reply, Request, WM_PLACEMENT};
 use self::timing::Timer;
 use self::window::OverlayWindow;
 
@@ -127,6 +128,102 @@ struct Inbox {
     /// Where each overlay is, so a `Place` can move its window at once (see the module docs).
     placements: RefCell<Vec<Placement>>,
     moved_at_once: Cell<u64>,
+    motion: RefCell<Vec<Motion>>,
+}
+
+struct Motion {
+    client: HWND,
+    channel: Channel,
+    last: Request,
+    pending: bool,
+    next: Instant,
+    interval: Duration,
+}
+
+impl Inbox {
+    fn receive(&self, request: Request) {
+        // Lifecycle messages are synchronous, so a Close received during Open still queues
+        // after it. Remove its mailbox now: an older posted wake cannot resurrect the glass.
+        match request {
+            Request::Open { client, rect, .. } => {
+                let mut motion = self.motion.borrow_mut();
+                motion.retain(|m| m.client != client);
+                if let Ok(mut channel) = Channel::open(client, false) {
+                    let _ = channel.take();
+                    motion.push(Motion {
+                        client,
+                        channel,
+                        last: request,
+                        pending: false,
+                        next: Instant::now(),
+                        interval: display_interval(rect),
+                    });
+                }
+            }
+            Request::Close { client } => self.motion.borrow_mut().retain(|m| m.client != client),
+            _ => {}
+        }
+        move_now(self, &request);
+        self.requests.borrow_mut().push_back(request);
+    }
+
+    fn take_motion(&self, now: Instant) {
+        for motion in self.motion.borrow_mut().iter_mut() {
+            if !motion.pending || now < motion.next {
+                continue;
+            }
+            motion.pending = false;
+            let Some(latest @ Request::Open { client, .. }) = motion.channel.take() else {
+                continue;
+            };
+            if client != motion.client {
+                continue;
+            }
+            if latest != motion.last {
+                // Open is also the full-state update of an existing overlay: geometry and
+                // material change together, with one placement/commit for this frame.
+                self.requests.borrow_mut().push_back(latest);
+            }
+            motion.last = latest;
+            motion.next = now + motion.interval;
+        }
+    }
+
+    fn motion_deadline(&self) -> Option<Instant> {
+        self.motion
+            .borrow()
+            .iter()
+            .filter(|m| m.pending)
+            .map(|m| m.next)
+            .min()
+    }
+}
+
+/// Read the destination display's refresh rate once at Open, outside the animation path.
+fn display_interval(rect: Rect) -> Duration {
+    let (monitor, _) = monitor_of(rect);
+    let mut info = MONITORINFOEXW::default();
+    info.monitorInfo.cbSize = size_of::<MONITORINFOEXW>() as u32;
+    let mut mode = DEVMODEW {
+        dmSize: size_of::<DEVMODEW>() as u16,
+        ..Default::default()
+    };
+    // SAFETY: correctly sized, live output structs; the device name is zero terminated.
+    let hz = unsafe {
+        if GetMonitorInfoW(monitor, (&raw mut info).cast()).as_bool()
+            && EnumDisplaySettingsW(
+                PCWSTR(info.szDevice.as_ptr()),
+                ENUM_CURRENT_SETTINGS,
+                &mut mode,
+            )
+            .as_bool()
+        {
+            mode.dmDisplayFrequency
+        } else {
+            60
+        }
+    };
+    Duration::from_secs_f64(1.0 / f64::from(if hz > 1 { hz } else { 60 }))
 }
 
 /// An open overlay's window and geometry, as the request window's procedure needs them.
@@ -226,6 +323,9 @@ impl Overlays {
     /// When the warm capture goes cold: the loop must call [`tick`](Self::tick) by then.
     pub fn deadline(&self) -> Option<Instant> {
         self.warm_until
+            .into_iter()
+            .chain(self.inbox.motion_deadline())
+            .min()
     }
 
     /// Times the GPU work of every update (measuring only: it waits for the GPU).
@@ -262,6 +362,7 @@ impl Overlays {
     /// Handles what arrived since the last call: requests, gone clients, waiting frames.
     /// Returns how many requests it handled.
     pub fn tick(&mut self) -> usize {
+        self.inbox.take_motion(Instant::now());
         // A cold open takes the shell's sent requests while it works (see 	ake_sent); those
         // run here, after it, in the order they came.
         let mut handled = 0;
@@ -287,6 +388,10 @@ impl Overlays {
                 .collect();
             for client in gone {
                 log::info!("glass overlay: client {client:?} is gone");
+                self.inbox
+                    .motion
+                    .borrow_mut()
+                    .retain(|m| m.client != client);
                 self.close(client);
             }
         }
@@ -378,7 +483,12 @@ impl Overlays {
         material: Material,
     ) -> Result<()> {
         if let Some(o) = self.find(client) {
-            return self.place(o, rect, radius, material);
+            let material_changed = self.open[o].material != material;
+            self.place(o, rect, radius, material)?;
+            if material_changed && self.open[o].shown.is_some() && !self.open[o].fresh {
+                self.draw(&[o])?;
+            }
+            return Ok(());
         }
         let opened = Instant::now();
         let (monitor, bounds) = monitor_of(rect);
@@ -671,14 +781,7 @@ impl Overlays {
                 self.open[o].targets.read_count(&mut encoder);
             }
         }
-        render(
-            &mut self.open,
-            &early,
-            true,
-            &self.gpu,
-            &mut encoder,
-            live,
-        );
+        render(&mut self.open, &early, true, &self.gpu, &mut encoder, live);
         if let Some(t) = &live.timer {
             t.resolve(&mut encoder);
         }
@@ -720,14 +823,7 @@ impl Overlays {
         }
         if !late.is_empty() {
             let mut encoder = device.create_command_encoder(&Default::default());
-            render(
-                &mut self.open,
-                &late,
-                false,
-                &self.gpu,
-                &mut encoder,
-                live,
-            );
+            render(&mut self.open, &late, false, &self.gpu, &mut encoder, live);
             if let Some(t) = &live.timer {
                 t.resolve(&mut encoder);
             }
@@ -747,14 +843,7 @@ impl Overlays {
     fn draw(&mut self, which: &[usize]) -> Result<()> {
         let live = self.live.as_mut().context("no overlays")?;
         let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
-        render(
-            &mut self.open,
-            which,
-            false,
-            &self.gpu,
-            &mut encoder,
-            live,
-        );
+        render(&mut self.open, which, false, &self.gpu, &mut encoder, live);
         self.gpu.queue.submit([encoder.finish()]);
         self.show(which)
     }
@@ -1045,8 +1134,7 @@ unsafe extern "system" fn inbox_proc(
             // SAFETY: a WM_COPYDATA's lParam.
             let reply = match unsafe { request::decode(lparam) } {
                 Some(request) => {
-                    move_now(inbox, &request);
-                    inbox.requests.borrow_mut().push_back(request);
+                    inbox.receive(request);
                     if inbox.affinity.get() {
                         Reply::TakenExcludeYourself
                     } else {
@@ -1056,6 +1144,18 @@ unsafe extern "system" fn inbox_proc(
                 None => Reply::Rejected,
             };
             LRESULT(reply.to_lresult())
+        }
+        (WM_PLACEMENT, Some(inbox)) => {
+            let client = HWND(wparam.0 as *mut _);
+            if let Some(motion) = inbox
+                .motion
+                .borrow_mut()
+                .iter_mut()
+                .find(|m| m.client == client)
+            {
+                motion.pending = true;
+            }
+            LRESULT(0)
         }
         (WM_FRAME, Some(inbox)) => {
             inbox.frames.set(true);
@@ -1067,5 +1167,86 @@ unsafe extern "system" fn inbox_proc(
         }
         // SAFETY: the system's own message, forwarded unchanged.
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+#[cfg(test)]
+mod motion_tests {
+    use super::*;
+
+    #[test]
+    fn motion_coalesces_per_frame_and_close_during_open_cannot_be_undone_by_a_wake() {
+        let client = HWND((0x7100_0000usize + std::process::id() as usize) as *mut _);
+        let initial = Request::Open {
+            client,
+            layer: Layer::Popup,
+            rect: Rect {
+                x: 10,
+                y: 10,
+                width: 300,
+                height: 100,
+            },
+            radius: 12.0,
+            material: Material::CLEAR,
+        };
+        let mut writer = Channel::open(client, true).unwrap();
+        writer.write(&initial);
+        let inbox = Inbox::default();
+        inbox.receive(initial);
+        // Open has been dequeued but its expensive capture setup has not completed yet.
+        assert_eq!(inbox.requests.borrow_mut().pop_front(), Some(initial));
+        let update = |x| Request::Open {
+            client,
+            layer: Layer::Popup,
+            rect: Rect {
+                x,
+                y: 10,
+                width: 300,
+                height: 100,
+            },
+            radius: 14.0,
+            material: Material {
+                blur: 8.0,
+                ..Material::CLEAR
+            },
+        };
+        let now = Instant::now();
+        for x in 20..30 {
+            writer.write(&update(x));
+        }
+        inbox.motion.borrow_mut()[0].pending = true;
+        inbox.take_motion(now);
+        assert_eq!(inbox.requests.borrow_mut().pop_front(), Some(update(29)));
+        writer.write(&update(40));
+        inbox.motion.borrow_mut()[0].pending = true;
+        inbox.take_motion(now);
+        assert!(inbox.requests.borrow().is_empty(), "one update per frame");
+        let next = inbox.motion_deadline().unwrap();
+        writer.write(&update(50));
+        inbox.take_motion(next);
+        assert_eq!(inbox.requests.borrow_mut().pop_front(), Some(update(50)));
+        writer.write(&update(60));
+        inbox.motion.borrow_mut()[0].pending = true;
+        inbox.receive(Request::Close { client });
+        inbox.take_motion(next + Duration::from_secs(1));
+        assert_eq!(
+            inbox.requests.borrow_mut().pop_front(),
+            Some(Request::Close { client })
+        );
+        assert!(
+            inbox.requests.borrow().is_empty(),
+            "no stale motion after close"
+        );
+        assert!(inbox.motion_deadline().is_none());
+        // Reopening the same HWND gets a new lifecycle and still accepts motion.
+        writer.write(&initial);
+        inbox.receive(initial);
+        writer.write(&update(70));
+        inbox.motion.borrow_mut()[0].pending = true;
+        inbox.take_motion(Instant::now());
+        assert_eq!(
+            inbox.requests.borrow_mut().drain(..).collect::<Vec<_>>(),
+            vec![initial, update(70)]
+        );
     }
 }

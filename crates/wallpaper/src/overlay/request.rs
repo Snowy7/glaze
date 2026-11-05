@@ -16,6 +16,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
+#[path = "channel.rs"]
+mod channel;
+pub use channel::Channel;
+pub const WM_PLACEMENT: u32 = channel::WM_PLACEMENT;
+
 /// The window class of the engine's overlay message window (message-only).
 pub const OVERLAY_CLASS: PCWSTR = w!("mypaper.wallpaper.overlay");
 /// `COPYDATASTRUCT::dwData` of an overlay request ("MPOV"), and the wire version in its high byte.
