@@ -247,6 +247,13 @@ impl GlassPass {
         }
     }
 
+    /// The renderer screen `index` last drew with (the frame lab profiles its passes).
+    #[cfg(test)]
+    pub fn renderer(&mut self, index: usize) -> Option<&mut lr::Renderer> {
+        let source = self.screens.get(index)?.source.clone()?;
+        self.shared.iter_mut().find(|s| s.texture == source).map(|s| &mut s.renderer)
+    }
+
     /// How many screens draw glass from `texture`.
     fn shared_by(&self, texture: &wgpu::Texture) -> usize {
         self.screens.iter().filter(|s| s.source.as_ref() == Some(texture)).count()

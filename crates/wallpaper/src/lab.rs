@@ -25,6 +25,8 @@ use crate::gpu::{Gpu, KeptFrame};
 use crate::sources::{self, Frame, Source};
 
 const SIZE: (u32, u32) = (2560, 1440);
+/// Timestamps the glass renderer may write per frame (its passes plus one).
+const PASS_STAMPS: u32 = 24;
 
 /// The plates fixture (examples/plates.rs) on one monitor at the origin.
 fn fixture(dock_x: f32) -> Vec<Plate> {
@@ -60,6 +62,8 @@ struct Lab {
     queries: wgpu::QuerySet,
     resolve: wgpu::Buffer,
     read: wgpu::Buffer,
+    pass_resolve: wgpu::Buffer,
+    pass_read: wgpu::Buffer,
     period: f64,
 }
 
@@ -90,16 +94,20 @@ impl Lab {
             ty: wgpu::QueryType::Timestamp,
             count: 4,
         });
-        let buffer = |usage| {
+        let buffer = |size, usage| {
             gpu.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("lab timestamps"),
-                size: 32,
+                size,
                 usage,
                 mapped_at_creation: false,
             })
         };
-        let resolve = buffer(wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC);
-        let read = buffer(wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
+        let resolving = wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC;
+        let reading = wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ;
+        let resolve = buffer(32, resolving);
+        let read = buffer(32, reading);
+        let pass_resolve = buffer(u64::from(PASS_STAMPS) * 8, resolving);
+        let pass_read = buffer(u64::from(PASS_STAMPS) * 8, reading);
         let period = f64::from(gpu.queue.get_timestamp_period());
         Self {
             gpu,
@@ -111,6 +119,8 @@ impl Lab {
             queries,
             resolve,
             read,
+            pass_resolve,
+            pass_read,
             period,
         }
     }
@@ -145,23 +155,59 @@ impl Lab {
         encoder
     }
 
-    /// Submits one timed frame, waits for it and returns [wallpaper, restore, glass] in ms.
-    fn timed(&mut self, clock: Duration, frame: u32, wallpaper: bool) -> [f64; 3] {
+    /// Submits one timed frame, waits for it and returns [wallpaper, restore, glass] in ms, and
+    /// the glass renderer's passes (label, ms) once [`Lab::profile`] is on.
+    fn timed(
+        &mut self,
+        clock: Duration,
+        frame: u32,
+        wallpaper: bool,
+    ) -> ([f64; 3], Vec<(&'static str, f64)>) {
         let mut encoder = self.encode(clock, frame, wallpaper);
         encoder.resolve_query_set(&self.queries, 0..4, &self.resolve, 0);
         encoder.copy_buffer_to_buffer(&self.resolve, 0, &self.read, 0, 32);
+        let labels = self
+            .glass
+            .renderer(0)
+            .and_then(|r| r.profiler.as_ref())
+            .map(|p| {
+                let labels = p.labels();
+                let n = labels.len() as u32 + 1;
+                encoder.resolve_query_set(p.queries(), 0..n, &self.pass_resolve, 0);
+                encoder.copy_buffer_to_buffer(&self.pass_resolve, 0, &self.pass_read, 0, u64::from(n) * 8);
+                labels
+            })
+            .unwrap_or_default();
         self.gpu.queue.submit([encoder.finish()]);
-        let stamps: Vec<u64> = self.map(&self.read, |bytes| {
+        let ticks = |bytes: &[u8]| -> Vec<u64> {
             bytes
                 .as_chunks::<8>()
                 .0
                 .iter()
                 .map(|b| u64::from_ne_bytes(*b))
                 .collect()
+        };
+        let stamps = self.map(&self.read, ticks);
+        let ms = |s: &[u64], a: usize, b: usize| s[b].saturating_sub(s[a]) as f64 * self.period / 1e6;
+        let passes = if labels.is_empty() {
+            Vec::new()
+        } else {
+            let s = self.map(&self.pass_read, ticks);
+            labels.iter().enumerate().map(|(i, l)| (*l, ms(&s, i, i + 1))).collect()
+        };
+        ([ms(&stamps, 0, 1), ms(&stamps, 1, 2), ms(&stamps, 2, 3)], passes)
+    }
+
+    /// Times the glass renderer's passes from the next frame on.
+    fn profile(&mut self) {
+        let queries = self.gpu.device.create_query_set(&wgpu::QuerySetDescriptor {
+            label: Some("lab passes"),
+            ty: wgpu::QueryType::Timestamp,
+            count: PASS_STAMPS,
         });
-        let ms =
-            |a: usize, b: usize| stamps[b].saturating_sub(stamps[a]) as f64 * self.period / 1e6;
-        [ms(0, 1), ms(1, 2), ms(2, 3)]
+        if let Some(r) = self.glass.renderer(0) {
+            r.profiler = Some(liquid_rust::Profiler::new(queries));
+        }
     }
 
     fn map<T>(&self, buffer: &wgpu::Buffer, read: impl FnOnce(&[u8]) -> T) -> T {
@@ -213,6 +259,29 @@ impl Lab {
     }
 }
 
+/// GPU ms per renderer pass across frames; a label seen again in one frame gets a number.
+#[derive(Default)]
+struct Passes(Vec<(String, Vec<f64>)>);
+
+impl Passes {
+    fn add(&mut self, frame: &[(&'static str, f64)]) {
+        let mut seen: Vec<&str> = Vec::new();
+        for (label, ms) in frame {
+            let n = seen.iter().filter(|l| *l == label).count();
+            seen.push(label);
+            let name = if n == 0 {
+                (*label).to_string()
+            } else {
+                format!("{label} #{}", n + 1)
+            };
+            match self.0.iter_mut().find(|(l, _)| *l == name) {
+                Some((_, values)) => values.push(*ms),
+                None => self.0.push((name, vec![*ms])),
+            }
+        }
+    }
+}
+
 /// Median, p95 and maximum of `values`.
 fn spread(values: &mut [f64]) -> [f64; 3] {
     values.sort_by(f64::total_cmp);
@@ -253,35 +322,46 @@ fn lab() {
     std::fs::write(out.join("frames.json"), format!("[{}]", files.join(","))).unwrap();
 
     // Wallpaper frames at 30 fps from 5 s, then glass-only frames with the dock moving.
+    lab.profile();
     let mut wallpaper = [vec![], vec![], vec![], vec![]];
+    let mut wallpaper_passes = Passes::default();
     for f in 0..frames {
         let clock = Duration::from_secs_f64(5.0 + f64::from(f) / 30.0);
-        let ms = lab.timed(clock, f, true);
+        let (ms, passes) = lab.timed(clock, f, true);
         for (k, v) in ms.iter().enumerate() {
             wallpaper[k].push(*v);
         }
         wallpaper[3].push(ms.iter().sum());
+        wallpaper_passes.add(&passes);
     }
     let mut glass = [vec![], vec![], vec![]];
+    let mut glass_passes = Passes::default();
     for f in 0..frames {
         lab.glass
             .set_plates(fixture(160.0 * (f as f32 * 0.05).sin()));
-        let ms = lab.timed(Duration::from_secs(5), f, false);
+        let (ms, passes) = lab.timed(Duration::from_secs(5), f, false);
         glass[0].push(ms[1]);
         glass[1].push(ms[2]);
         glass[2].push(ms[1] + ms[2]);
+        glass_passes.add(&passes);
     }
     let names = ["wallpaper", "restore", "glass", "frame"];
     let mut report = Vec::new();
     for (name, values) in names.iter().zip(&mut wallpaper) {
         report.push((format!("wallpaper-frame {name}"), spread(values)));
     }
+    for (name, values) in &mut wallpaper_passes.0 {
+        report.push((format!("wallpaper-frame | {name}"), spread(values)));
+    }
     for (name, values) in ["restore", "glass", "frame"].iter().zip(&mut glass) {
         report.push((format!("glass-only {name}"), spread(values)));
     }
+    for (name, values) in &mut glass_passes.0 {
+        report.push((format!("glass-only | {name}"), spread(values)));
+    }
     let mut json = Vec::new();
     for (name, [median, p95, max]) in &report {
-        eprintln!("{name:>26}: median {median:.3} / p95 {p95:.3} / max {max:.3} ms");
+        eprintln!("{name:>30}: median {median:.3} / p95 {p95:.3} / max {max:.3} ms");
         json.push(format!(
             "\"{name}\":{{\"median\":{median},\"p95\":{p95},\"max\":{max}}}"
         ));
@@ -381,10 +461,15 @@ fn memory() {
             },
         );
         kept.restore(&gpu, target, &view, &mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+    }
+    step("first frames", Some(&gpu));
+    for (i, (kept, target)) in kept.iter().zip(&targets).enumerate() {
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
         glass.encode(&gpu, i, &kept.texture, target, true, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
     }
-    step("first frames + glass", Some(&gpu));
+    step("glass on both", Some(&gpu));
     // Two backdrop pyramids (backdrop.rs DIVISORS), as two screens of different kept frames keep.
     let pyramids: Vec<_> = (0..2)
         .flat_map(|_| [2, 4, 8, 16, 32, 64])

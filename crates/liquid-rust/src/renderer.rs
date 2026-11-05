@@ -347,8 +347,12 @@ impl Pyramid {
 
     /// Downsamples the texture `first` reads (see [`down_bind_group`]) into every level, only
     /// inside `region` (px of level 0).
-    fn build(&self, pipelines: &Pipelines, encoder: &mut wgpu::CommandEncoder, first: &wgpu::BindGroup, region: Bounds) {
+    fn build(&self, pipelines: &Pipelines, encoder: &mut wgpu::CommandEncoder, first: &wgpu::BindGroup, region: Bounds, profiler: &Option<Profiler>) {
+        const LEVELS: [&str; MAX_LEVELS as usize] = ["pyramid 0", "pyramid 1", "pyramid 2", "pyramid 3", "pyramid 4", "pyramid 5", "pyramid 6"];
         for (i, mip) in self.mips.iter().enumerate() {
+            if i > 0 {
+                stamp(profiler, encoder, LEVELS[i - 1]);
+            }
             let f = (1u32 << (i + 1)) as f32;
             let mip_size = ((self.size.0.div_ceil(2) >> i).max(1), (self.size.1.div_ceil(2) >> i).max(1));
             let b = expand([region[0] / f, region[1] / f, region[2] / f, region[3] / f], 2.0);
@@ -372,6 +376,7 @@ impl Pyramid {
             }
             pass.draw(0..3, 0..1);
         }
+        stamp(profiler, encoder, LEVELS[self.mips.len() - 1]);
     }
 }
 
@@ -418,6 +423,50 @@ fn blit(pipelines: &Pipelines, encoder: &mut wgpu::CommandEncoder, group: &wgpu:
     pass.set_pipeline(&pipelines.blit);
     pass.set_bind_group(0, group, &[]);
     pass.draw(0..3, 0..1);
+}
+
+/// mypaper: GPU timestamps between the renderer's passes, for the frame lab's per-pass profile.
+/// Needs `TIMESTAMP_QUERY_INSIDE_ENCODERS`. Timestamp 0 opens a frame; timestamp `i + 1` closes
+/// the pass named `labels()[i]`.
+pub struct Profiler {
+    queries: wgpu::QuerySet,
+    labels: std::cell::RefCell<Vec<&'static str>>,
+}
+
+impl Profiler {
+    /// Profiles into `queries` (a timestamp set; passes past its count are not timed).
+    pub fn new(queries: wgpu::QuerySet) -> Self {
+        Self { queries, labels: std::cell::RefCell::new(Vec::new()) }
+    }
+
+    /// The query set, to resolve `0..=labels().len()`.
+    pub fn queries(&self) -> &wgpu::QuerySet {
+        &self.queries
+    }
+
+    /// The passes timed in the last frame, in order.
+    pub fn labels(&self) -> Vec<&'static str> {
+        self.labels.borrow().clone()
+    }
+
+    fn open(&self, encoder: &mut wgpu::CommandEncoder) {
+        self.labels.borrow_mut().clear();
+        encoder.write_timestamp(&self.queries, 0);
+    }
+
+    fn stamp(&self, encoder: &mut wgpu::CommandEncoder, label: &'static str) {
+        let mut labels = self.labels.borrow_mut();
+        if (labels.len() as u32) + 1 < self.queries.count() {
+            labels.push(label);
+            encoder.write_timestamp(&self.queries, labels.len() as u32);
+        }
+    }
+}
+
+fn stamp(profiler: &Option<Profiler>, encoder: &mut wgpu::CommandEncoder, label: &'static str) {
+    if let Some(p) = profiler {
+        p.stamp(encoder, label);
+    }
 }
 
 /// Bind groups kept across frames, keyed by what they read. Making one is a driver call (and,
@@ -488,6 +537,8 @@ pub struct Renderer {
     /// Per layer: whether it needs a backdrop that includes the glass below it. Kept to reuse
     /// its allocation.
     rebuild: Vec<bool>,
+    /// mypaper: per-pass GPU timestamps, when the frame lab asks.
+    pub profiler: Option<Profiler>,
 }
 
 /// Last contents written to the renderer's buffers.
@@ -585,6 +636,7 @@ impl Renderer {
             uploaded: Uploaded::default(),
             binds: Binds { blit: BindCache::new(), down_first: BindCache::new(), glass: BindCache::new() },
             rebuild: Vec::new(),
+            profiler: None,
         }
     }
 
@@ -632,6 +684,9 @@ impl Renderer {
             return;
         }
         let layers = (layers.start_bound().cloned(), layers.end_bound().cloned());
+        if let Some(p) = &self.profiler {
+            p.open(encoder);
+        }
         pack(scene, layers, frame.scale, Vec2::new(size.0 as f32, size.1 as f32), &mut self.packed);
         if self.pyramid.as_ref().is_none_or(|p| p.size != size) {
             self.pyramid = Some(Pyramid::new(device, &self.pipelines, size));
@@ -648,6 +703,7 @@ impl Renderer {
         if frame.copy_content {
             let copy = self.binds.blit.get(frame.content.clone(), |src| blit_bind_group(device, pipelines, src));
             blit(pipelines, encoder, &copy, frame.target, None, size);
+            stamp(&self.profiler, encoder, "copy content");
         }
         if self.packed.layers.is_empty() {
             return;
@@ -674,13 +730,14 @@ impl Renderer {
         let Some(pyramid) = &self.pyramid else { return };
         let pipelines = &self.pipelines;
         let binds = &mut self.binds;
+        let profiler = &self.profiler;
         let region = tail(0);
         if frame.content_changed || !self.cached.is_some_and(|c| contains(c, region)) {
             // Content that holds still is blurred across the whole screen, once: the glass
             // can then move anywhere over it without another build.
             let region = if frame.content_changed { region } else { screen };
             let first = binds.down_first.get(frame.content.clone(), |src| down_bind_group(device, &pipelines.down_first, &pipelines.sampler, src));
-            pyramid.build(pipelines, encoder, &first, region);
+            pyramid.build(pipelines, encoder, &first, region, profiler);
             self.cached = Some(region);
         }
 
@@ -724,11 +781,12 @@ impl Renderer {
                 }
                 // A pyramid of its own, so the blur of the content stays cached.
                 let first = binds.down_first.get(dst.clone(), |src| down_bind_group(device, &pipelines.down_first, &pipelines.sampler, src));
-                layered.build(pipelines, encoder, &first, region);
+                layered.build(pipelines, encoder, &first, region, profiler);
                 group = glass_group(dst, layered, true);
                 (src, baked) = (dst, i);
             }
             draw_layer(pipelines, encoder, &group, layer, frame.target, None, size);
+            stamp(profiler, encoder, "glass layer");
         }
     }
 

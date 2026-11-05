@@ -29,3 +29,5 @@ Each is marked `mypaper:` in the source.
   shaders.
 - `Material::outset`: how far glass draws or samples past its frame, which sizes an overlay's
   window.
+- `Profiler` / `Renderer::profiler`: optional GPU timestamps between the renderer's passes, for
+  the engine's frame lab (`crates/wallpaper/src/lab.rs`). Off (`None`) unless the lab sets it.
