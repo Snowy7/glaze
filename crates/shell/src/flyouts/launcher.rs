@@ -231,7 +231,11 @@ fn field_rects(s: f32) -> (Rect, Rect) {
         right: well.right - px(10.0),
         ..well
     };
-    (well, inner)
+    // RichEdit draws its line at the top of its rect, so the field's rect is one line (Segoe
+    // UI's is 1.33 em), centred in the well like the glyph and the placeholder.
+    let line = (FIELD_TEXT * s * 1.33).ceil().min(inner.height());
+    let top = (inner.top + (inner.height() - line) / 2.0).round();
+    (well, Rect { top, bottom: top + line, ..inner })
 }
 
 /// The search text's size, design px (Spotlight's large field).
@@ -575,11 +579,13 @@ impl Panel for Launcher {
         kit.frame(|f, area| {
             let c = f.theme.color;
             // The field: a well with the search glyph, the placeholder, and the text itself.
+            // The field is the RichEdit's one line, centred in the well (`field_rects`).
             let field = self.field_rect;
             let well = Rect {
                 left: field.left - (f.px(10.0) + f.px(18.0) + f.px(6.0)),
                 right: field.right + f.px(10.0),
-                ..field
+                top: f.px(PAD),
+                bottom: f.px(PAD) + f.px(FIELD),
             };
             let radius = f.control_radius(well.height());
             f.fill(well, radius, c.well);

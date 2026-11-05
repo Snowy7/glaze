@@ -492,6 +492,17 @@ fn flyouts_open_under_their_module_and_stay_in_the_work_area() {
         place(Kind::Launcher, (560, 400), clock, &m, 1.0, true),
         (-2560 + 1000, 48 + 278)
     );
+    // A bar down the left side: centred on the work area, not the whole screen; its top stays
+    // put whatever its height (results growing never move it).
+    let mut side = monitor();
+    side.work.x += 200;
+    side.work.width -= 200;
+    for height in [120, 400, 700] {
+        assert_eq!(
+            place(Kind::Launcher, (560, height), clock, &side, 1.0, true),
+            (-2360 + (2360 - 560) / 2, 48 + 278)
+        );
+    }
     // Above a bottom dock.
     let dock = mypaper_ui::Rect::new(-1300.0, 1380.0, 48.0, 48.0);
     let (_, y) = place(Kind::TrayOverflow, (190, 100), dock, &m, 1.0, false);

@@ -58,7 +58,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, ReleaseCapture, SetCapture, VK_DOWN, VK_ESCAPE, VK_LEFT, VK_NEXT, VK_PRIOR,
     VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
+use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetForegroundWindow, GetWindowRect};
 
 use self::kit::Kit;
 use self::look::Look;
@@ -790,21 +790,30 @@ impl Flyouts {
         self.show(ui, bars, request);
     }
 
-    /// Win, Win+N, Win+A: the launcher, notifications or quick settings, on the monitor of the
-    /// app in front, anchored where Windows puts them (the top bar's right end).
+    /// Win, Win+N, Win+A: the launcher, notifications or quick settings, anchored where Windows
+    /// puts them (the top bar's right end). The launcher opens on the monitor under the mouse;
+    /// the others on the monitor of the app in front.
     fn win_key(&mut self, ui: &mut Ui, bars: &mut Bars, target: winkey::Target) {
         let kind = match target {
             winkey::Target::Launcher => Kind::Launcher,
             winkey::Target::Notifications => Kind::Notifications,
             winkey::Target::Quick => Kind::Quick,
         };
-        let mut front = windows::Win32::Foundation::RECT::default();
-        // SAFETY: read-only queries; `front` outlives the call.
-        let found = unsafe { GetWindowRect(GetForegroundWindow(), &mut front) }.is_ok();
-        let center = (
-            (front.left + front.right) / 2,
-            (front.top + front.bottom) / 2,
-        );
+        let (found, center) = if kind == Kind::Launcher {
+            let mut cursor = windows::Win32::Foundation::POINT::default();
+            // SAFETY: a read-only query into a local.
+            let found = unsafe { GetCursorPos(&mut cursor) }.is_ok();
+            (found, (cursor.x, cursor.y))
+        } else {
+            let mut front = windows::Win32::Foundation::RECT::default();
+            // SAFETY: read-only queries; `front` outlives the call.
+            let found = unsafe { GetWindowRect(GetForegroundWindow(), &mut front) }.is_ok();
+            let center = (
+                (front.left + front.right) / 2,
+                (front.top + front.bottom) / 2,
+            );
+            (found, center)
+        };
         let monitors = mypaper_desktop::monitor_infos();
         let monitor = monitors
             .iter()
@@ -1461,7 +1470,8 @@ pub fn place(
     let bottom = (work.y + work.height - h).max(top);
     let x = match kind {
         Kind::Notifications => right,
-        Kind::Launcher => monitor.rect.x + (monitor.rect.width - w) / 2,
+        // Centred on the work area (a side bar shifts it), like Windows 11's Start.
+        Kind::Launcher => work.x + (work.width - w) / 2,
         _ => (anchor.left + anchor.width() / 2.0).round() as i32 - w / 2,
     };
     let y = match kind {
