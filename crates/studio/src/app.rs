@@ -552,7 +552,7 @@ impl App {
             } => {
                 let t = ((p.x - track.left) / track.width().max(1.0)).clamp(0.0, 1.0) as f64;
                 let value = round_step(min + (max - min) * t, step, min);
-                self.set_live(&edit, json!(value));
+                self.set_live(&edit, number(value));
             }
             Drag::Thumb {
                 view,
@@ -848,7 +848,7 @@ impl App {
         {
             let v = round_step((value + step * steps).clamp(*min, *max), *step, *min);
             let edit = edit.clone();
-            self.set(&edit, json!(v));
+            self.set(&edit, number(v));
         }
     }
 
@@ -858,7 +858,7 @@ impl App {
         {
             let v = to.clamp(*min, *max);
             let edit = edit.clone();
-            self.set(&edit, json!(v));
+            self.set(&edit, number(v));
         }
     }
 
@@ -1459,6 +1459,12 @@ pub fn field_key(id: &FieldId) -> Key {
 /// The key of a More disclosure: its place and name.
 pub fn more_key(place: Place, group: &str) -> Key {
     key(("more", format!("{place:?}"), group))
+}
+
+/// A slider's value as JSON: whole numbers as integers, since some fields only take those
+/// (a preview delay in ms); fractional fields read integers too.
+pub fn number(v: f64) -> Value {
+    if v.fract() == 0.0 && v.abs() < 1e15 { json!(v as i64) } else { json!(v) }
 }
 
 fn round_step(v: f64, step: f64, min: f64) -> f64 {

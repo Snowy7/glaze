@@ -307,8 +307,9 @@ fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: 
         &[
             ("Layout", &["top_margin", "top_padding", "top_spacing"]),
             ("Clock", &["top_clock_seconds", "top_clock_format"]),
-            ("Look", &["top_style", "top_scheme", "top_radius", "top_font_size"]),
-            ("Motion", &["top_motion", "top_motion_style", "top_motion_curve", "top_motion_duration"]),
+            ("Look", &["top_style", "top_scheme", "top_family", "top_radius", "top_font_size"]),
+            ("Edges and buttons", &["top_edge_width", "top_edge_color", "top_shadow", "top_button_radius", "top_button_rest_fill", "top_button_rest_text", "top_button_hover_fill", "top_button_hover_text", "top_button_active_fill", "top_button_active_text"]),
+            ("Motion", &["top_motion", "top_motion_style", "top_motion_curve", "top_motion_duration", "top_motion_hover", "top_motion_press", "top_motion_open"]),
             ("Displays", &["top_displays"]),
         ]
     } else {
@@ -316,8 +317,10 @@ fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: 
             ("Layout", &["dock_margin", "dock_padding", "dock_spacing", "dock_magnify_scale", "dock_magnify_range"]),
             ("Taskbar", &["dock_align", "dock_titles", "dock_button", "dock_clock_seconds"]),
             ("Apps", &["dock_running", "dock_split", "dock_counter", "dock_previews", "dock_preview_delay", "dock_bounce", "dock_attention", "dock_indicator"]),
-            ("Look", &["dock_style_own", "dock_radius"]),
-            ("Motion", &["dock_motion", "dock_motion_style"]),
+            ("Look", &["dock_style_own", "dock_family", "dock_radius"]),
+            ("Edges and buttons", &["dock_edge_width", "dock_edge_color", "dock_shadow", "dock_button_radius", "dock_button_rest_fill", "dock_button_rest_text", "dock_button_hover_fill", "dock_button_hover_text", "dock_button_active_fill", "dock_button_active_text"]),
+            ("Running indicators", &["dock_indicator_running", "dock_indicator_active", "dock_indicator_attention"]),
+            ("Motion", &["dock_motion", "dock_motion_style", "dock_motion_curve", "dock_motion_duration", "dock_motion_hover", "dock_motion_press", "dock_motion_open", "dock_motion_magnify", "dock_motion_bounce", "dock_motion_attention"]),
             ("Displays", &["dock_displays"]),
         ]
     };

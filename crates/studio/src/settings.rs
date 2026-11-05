@@ -201,6 +201,14 @@ const fn sl(
     }
 }
 
+/// A text value (a colour, a format); clearing it removes the key.
+const fn txt(id: &'static str, label: &'static str, doc: DocId, path: &'static str, placeholder: &'static str, place: Place) -> Setting {
+    Setting {
+        kind: Kind::Text { placeholder },
+        ..sw(id, label, "", doc, path, false, place)
+    }
+}
+
 const fn custom(id: &'static str, label: &'static str, hint: &'static str, place: Place) -> Setting {
     Setting {
         id,
@@ -262,6 +270,18 @@ const MOTION_STYLE: &[(&str, &str)] = &[
     (r#""scale""#, "Scale"),
     (r#""morph""#, "Morph"),
     (r#""none""#, "None"),
+];
+const FAMILY: &[(&str, &str)] = &[
+    (r#""mono""#, "mypaper"),
+    (r#""fluent""#, "Windows 11"),
+    (r#""macos""#, "macOS"),
+    (r#""material""#, "ChromeOS"),
+];
+/// A bar's shadow at rest: its design's, none, or a soft one.
+const SHADOW: &[(&str, &str)] = &[
+    ("null", "From the design"),
+    (r#"{"color":"transparent"}"#, "None"),
+    (r##"{"color":"#00000059","y":4,"blur":16}"##, "Soft"),
 ];
 const CURVES: &[(&str, &str)] = &[
     (r#""smooth""#, "Smooth"),
@@ -842,6 +862,43 @@ pub static SETTINGS: &[Setting] = &[
         TOP,
     )
     .more("Motion"),
+    // A bar's own look beyond the common few, and each movement's timing (spec 2.4, 2.7).
+    sel("top_family", "Drawn like", "", B, "/top/look/family", FAMILY, r#""mono""#, TOP).more("Look"),
+    sl("top_edge_width", "Edge line", B, "/top/look/border/rest/width", (0.0, 8.0, 0.5), "px", 1.0, 0.0, TOP).more("Edges and buttons"),
+    txt("top_edge_color", "Edge color", B, "/top/look/border/rest/color", "#rrggbb, accent or text", TOP).more("Edges and buttons"),
+    ch("top_shadow", "Shadow", "", B, "/top/look/shadow/rest", SHADOW, r#"null"#, TOP).more("Edges and buttons"),
+    sl("top_button_radius", "Button corners", B, "/top/look/items/radius", (0.0, 24.0, 1.0), "px", 1.0, 8.0, TOP).more("Edges and buttons"),
+    txt("top_button_rest_fill", "At rest: fill", B, "/top/look/items/rest/background", "#rrggbb, accent or text", TOP).more("Edges and buttons"),
+    txt("top_button_rest_text", "At rest: text", B, "/top/look/items/rest/color", "#rrggbb, accent or text", TOP).more("Edges and buttons"),
+    txt("top_button_hover_fill", "Pointed at: fill", B, "/top/look/items/hover/background", "#rrggbb, accent or text", TOP).more("Edges and buttons"),
+    txt("top_button_hover_text", "Pointed at: text", B, "/top/look/items/hover/color", "#rrggbb, accent or text", TOP).more("Edges and buttons"),
+    txt("top_button_active_fill", "Pressed: fill", B, "/top/look/items/active/background", "#rrggbb, accent or text", TOP).more("Edges and buttons"),
+    txt("top_button_active_text", "Pressed: text", B, "/top/look/items/active/color", "#rrggbb, accent or text", TOP).more("Edges and buttons"),
+    sl("top_motion_hover", "Pointing", B, "/top/animation/hover/duration", (0.0, 1000.0, 10.0), "ms", 1.0, 160.0, TOP).more("Motion"),
+    sl("top_motion_press", "Pressing", B, "/top/animation/press/duration", (0.0, 1000.0, 10.0), "ms", 1.0, 160.0, TOP).more("Motion"),
+    sl("top_motion_open", "Menus opening", B, "/top/animation/open/duration", (0.0, 1000.0, 10.0), "ms", 1.0, 160.0, TOP).more("Motion"),
+    sel("dock_family", "Drawn like", "", B, "/dock/look/family", FAMILY, r#""mono""#, DOCK).more("Look"),
+    sl("dock_edge_width", "Edge line", B, "/dock/look/border/rest/width", (0.0, 8.0, 0.5), "px", 1.0, 0.0, DOCK).more("Edges and buttons"),
+    txt("dock_edge_color", "Edge color", B, "/dock/look/border/rest/color", "#rrggbb, accent or text", DOCK).more("Edges and buttons"),
+    ch("dock_shadow", "Shadow", "", B, "/dock/look/shadow/rest", SHADOW, r#"null"#, DOCK).more("Edges and buttons"),
+    sl("dock_button_radius", "Button corners", B, "/dock/look/items/radius", (0.0, 24.0, 1.0), "px", 1.0, 8.0, DOCK).more("Edges and buttons"),
+    txt("dock_button_rest_fill", "At rest: fill", B, "/dock/look/items/rest/background", "#rrggbb, accent or text", DOCK).more("Edges and buttons"),
+    txt("dock_button_rest_text", "At rest: text", B, "/dock/look/items/rest/color", "#rrggbb, accent or text", DOCK).more("Edges and buttons"),
+    txt("dock_button_hover_fill", "Pointed at: fill", B, "/dock/look/items/hover/background", "#rrggbb, accent or text", DOCK).more("Edges and buttons"),
+    txt("dock_button_hover_text", "Pointed at: text", B, "/dock/look/items/hover/color", "#rrggbb, accent or text", DOCK).more("Edges and buttons"),
+    txt("dock_button_active_fill", "Pressed: fill", B, "/dock/look/items/active/background", "#rrggbb, accent or text", DOCK).more("Edges and buttons"),
+    txt("dock_button_active_text", "Pressed: text", B, "/dock/look/items/active/color", "#rrggbb, accent or text", DOCK).more("Edges and buttons"),
+    txt("dock_indicator_running", "Running", B, "/dock/look/indicator/running", "#rrggbb, accent or text", DOCK).more("Running indicators"),
+    txt("dock_indicator_active", "In front", B, "/dock/look/indicator/active", "#rrggbb, accent or text", DOCK).more("Running indicators"),
+    txt("dock_indicator_attention", "Wants attention", B, "/dock/look/indicator/attention", "#rrggbb, accent or text", DOCK).more("Running indicators"),
+    sel("dock_motion_curve", "Curve", "", B, "/dock/animation/curve", CURVES, r#""smooth""#, DOCK).more("Motion"),
+    sl("dock_motion_duration", "Duration", B, "/dock/animation/duration", (0.0, 1000.0, 10.0), "ms", 1.0, 240.0, DOCK).more("Motion"),
+    sl("dock_motion_hover", "Pointing", B, "/dock/animation/hover/duration", (0.0, 1000.0, 10.0), "ms", 1.0, 160.0, DOCK).more("Motion"),
+    sl("dock_motion_press", "Pressing", B, "/dock/animation/press/duration", (0.0, 1000.0, 10.0), "ms", 1.0, 160.0, DOCK).more("Motion"),
+    sl("dock_motion_open", "Menus opening", B, "/dock/animation/open/duration", (0.0, 1000.0, 10.0), "ms", 1.0, 160.0, DOCK).more("Motion"),
+    sl("dock_motion_magnify", "Magnify", B, "/dock/animation/bar/dock/magnify/duration", (0.0, 2000.0, 10.0), "ms", 1.0, 300.0, DOCK).more("Motion"),
+    sl("dock_motion_bounce", "Launch bounce", B, "/dock/animation/bar/dock/bounce/duration", (0.0, 2000.0, 10.0), "ms", 1.0, 300.0, DOCK).more("Motion"),
+    sl("dock_motion_attention", "Attention", B, "/dock/animation/bar/dock/attention/duration", (0.0, 2000.0, 10.0), "ms", 1.0, 300.0, DOCK).more("Motion"),
     custom("top_modules", "Modules", "Start, middle and end", TOP).words("modules clock tray"),
     custom("dock_design", "Design", "", DOCK),
     ch(
@@ -1263,6 +1320,32 @@ mod tests {
             }
             if s.kind != Kind::Custom {
                 assert!(s.path.starts_with('/'), "{}", s.id);
+            }
+        }
+    }
+
+    /// Each setting, written alone into an empty file with every value it offers, passes the
+    /// owning program's parser: the rows point at real fields with real values.
+    #[test]
+    fn settings_write_what_their_program_accepts() {
+        use crate::docs::{DocId, Op, apply_op};
+        use serde_json::json;
+        for s in SETTINGS.iter().filter(|s| s.doc != DocId::Studio) {
+            let values: Vec<serde_json::Value> = match s.kind {
+                Kind::Switch { default } => vec![json!(default), json!(!default)],
+                Kind::Choice { options, .. } | Kind::Select { options, .. } => {
+                    options.iter().map(|(v, _)| serde_json::from_str(v).unwrap()).collect()
+                }
+                Kind::Slider { min, max, default, .. } => [min, max, default].map(crate::app::number).to_vec(),
+                Kind::Text { placeholder } if placeholder.contains("#rrggbb") => vec![json!("#336699"), json!("accent")],
+                Kind::Text { .. } | Kind::Custom => continue,
+            };
+            for value in values {
+                let mut root = json!({});
+                apply_op(&mut root, &Op { doc: s.doc, path: s.path.into(), value: Some(value.clone()) });
+                if let Err(e) = s.doc.parse(&root.to_string()) {
+                    panic!("{} = {value}: {e:#}", s.id);
+                }
             }
         }
     }
