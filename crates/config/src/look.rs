@@ -14,6 +14,7 @@
 use anyhow::{Result, bail};
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::apps::AppsStyle;
 use crate::windows::{Backdrop, Color, Corners, Paint, WindowsStyle};
 
 /// The five native styles. Liquid is the default.
@@ -250,6 +251,9 @@ pub struct Look {
     pub menus: Option<FamilyLook>,
     #[serde(skip_serializing_if = "WindowsLayer::is_empty")]
     pub windows: WindowsLayer,
+    /// The app styler's rules over the wallpaper's `apps` (experimental; see `crate::apps`).
+    #[serde(skip_serializing_if = "AppsStyle::is_empty")]
+    pub apps: AppsStyle,
 }
 
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {

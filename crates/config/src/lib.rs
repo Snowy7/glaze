@@ -4,11 +4,13 @@
 //! changes live (theme switch, pause), so there is no IPC to keep in sync.
 //! Missing fields take their defaults, so older files keep working.
 
+pub mod apps;
 pub mod desktop_menu;
 mod engine;
 pub mod look;
 mod windows;
 pub use engine::{EngineConfig, GpuPreference, RenderOptions, RenderSettings};
+pub use apps::{AppRules, AppsStyle};
 pub use look::Look;
 pub use windows::{Backdrop, Color, Corners, Paint, WindowsStyle};
 
@@ -74,6 +76,10 @@ impl Default for Config {
 #[serde(default, deny_unknown_fields)]
 pub struct Experimental {
     pub file_index: bool,
+    /// Restyle the XAML inside File Explorer and Settings (docs/windows-styling.md, "App
+    /// styler"): core runs `mypaper-styler` only while this is on. Written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub app_styler: bool,
 }
 
 /// `%APPDATA%\mypaper`: config plus the user's own `themes\`.
@@ -133,6 +139,16 @@ mod tests {
         let config = Config::parse(r#"{"experimental":{"file_index":true}}"#).unwrap();
         assert!(Config::parse(&serde_json::to_string(&config).unwrap()).unwrap().experimental.file_index);
         assert!(Config::parse(r#"{"experimental":{"file_indx":true}}"#).is_err());
+    }
+
+    #[test]
+    fn the_app_styler_is_opt_in_and_only_written_when_on() {
+        let off = Config::parse("{}").unwrap();
+        assert!(!off.experimental.app_styler);
+        assert!(!serde_json::to_string(&off).unwrap().contains("app_styler"));
+        let on = Config::parse(r#"{"experimental":{"app_styler":true}}"#).unwrap();
+        assert!(on.experimental.app_styler);
+        assert_eq!(Config::parse(&serde_json::to_string(&on).unwrap()).unwrap(), on);
     }
 
     #[test]
