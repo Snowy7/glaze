@@ -379,6 +379,11 @@ fn contents(
                     c.color = theme.color.tertiary;
                 }
             }
+        } else if let ModuleRef::Custom(id) = module
+            && let Some(label) = super::plugin_modules::label(id)
+        {
+            // A plugin's bar module (`custom:<plugin>--<bar>`): its view's line.
+            add(label, Glyph::None, target, ui, images);
         }
         return output;
     };

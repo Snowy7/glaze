@@ -779,6 +779,19 @@ impl Widgets {
         }
         // Style patches the runtime reported reach the bars and menus (docs/plugins.md, "Styling").
         crate::bars::plugin_style::publish(self.plugins.style_patches());
+        // Plugin bar modules: open what the bars placed, hand their views over, route clicks.
+        let modules = crate::bars::plugin_modules::sync(|instance| self.plugins.face_view(instance).cloned());
+        for (instance, plugin, bar) in modules.open {
+            if let Err(e) = self.plugins.open_face(&instance, &plugin, &bar, mypaper_plugin_sdk::SizeClass::Small, json!({}), instant) {
+                log::warn!("bar module {instance}: {e:?}");
+            }
+        }
+        for instance in modules.close {
+            self.plugins.close_face(&instance);
+        }
+        for (instance, action) in modules.clicks {
+            self.plugins.face_action(&instance, &action, None);
+        }
         self.sync_plugin_faces();
         let ids: Vec<_> = self.entries.keys().cloned().collect();
         for id in ids {

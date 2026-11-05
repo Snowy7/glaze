@@ -4,6 +4,7 @@ pub(crate) mod icons;
 pub(crate) mod look;
 mod maximized;
 mod motion;
+pub mod plugin_modules;
 pub mod plugin_style;
 mod preview;
 pub(crate) mod services;
@@ -419,6 +420,10 @@ impl Bars {
         // A plugin patched or reset a bar's style: restyle in place like a settings change.
         if plugin_style::take_changed() {
             self.config_due.get_or_insert(now);
+        }
+        // A plugin module drew a new view: repaint (the damage diff keeps it to that item).
+        if plugin_modules::take_changed() {
+            self.dirty();
         }
         if services::take_due(&mut self.config_due, now) {
             match load_config() {
@@ -1215,8 +1220,13 @@ impl Bars {
                     self.action(action, anchor, &monitor);
                     return;
                 }
-                let ModuleRef::Builtin(module) = module else {
-                    return;
+                let module = match module {
+                    ModuleRef::Builtin(module) => module,
+                    ModuleRef::Custom(id) => {
+                        plugin_modules::click(&id);
+                        return;
+                    }
+                    ModuleRef::Break => return,
                 };
                 let grouped = b.tokens.family == Family::Fluent;
                 if input == Trigger::Left
@@ -1545,6 +1555,7 @@ impl Bars {
     /// flash. Only bars whose geometry changed are dropped (first, freeing their band) and built
     /// again, and only then do the bars reserve again.
     fn reconcile(&mut self, ui: &mut Ui) -> Result<()> {
+        plugin_modules::place(&self.config);
         self.press = None;
         self.preview = None;
         self.preview_due = None;
