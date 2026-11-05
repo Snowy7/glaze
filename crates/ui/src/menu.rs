@@ -712,10 +712,12 @@ impl<C: Clone> Menu<C> {
     fn key(&mut self, ui: &mut Ui, key: u16) -> Option<Outcome<C>> {
         let current = self.panels.len().checked_sub(1)?;
         let hover = self.panels[current].hover;
-        let on_submenu = hover
-            .is_some_and(|row| {
-                matches!(self.panels[current].items[row].plain(), Entry::Submenu { .. })
-            });
+        let on_submenu = hover.is_some_and(|row| {
+            matches!(
+                self.panels[current].items[row].plain(),
+                Entry::Submenu { .. }
+            )
+        });
         match key {
             k if k == VK_DOWN.0 || k == VK_UP.0 => {
                 let delta = if k == VK_DOWN.0 { 1 } else { -1 };

@@ -259,6 +259,33 @@ impl DesktopView {
         Ok(unsafe { self.folder.SetCurrentFolderFlags(mask, flags) }?)
     }
 
+    /// "Auto arrange icons" (`FWF_AUTOARRANGE`) and "Align icons to grid" (`FWF_SNAPTOGRID`).
+    pub fn arrangement(&self) -> Result<(bool, bool)> {
+        use windows::Win32::UI::Shell::{FWF_AUTOARRANGE, FWF_SNAPTOGRID};
+        // SAFETY: plain COM call.
+        let flags = unsafe { self.folder.GetCurrentFolderFlags() }?;
+        Ok((
+            flags & FWF_AUTOARRANGE.0 as u32 != 0,
+            flags & FWF_SNAPTOGRID.0 as u32 != 0,
+        ))
+    }
+
+    /// Sets "Auto arrange icons" (`grid: false`) or "Align icons to grid" (`grid: true`).
+    pub fn set_arrangement(&self, grid: bool, on: bool) -> Result<()> {
+        use windows::Win32::UI::Shell::{FWF_AUTOARRANGE, FWF_SNAPTOGRID};
+        let mask = if grid {
+            FWF_SNAPTOGRID
+        } else {
+            FWF_AUTOARRANGE
+        }
+        .0 as u32;
+        // SAFETY: plain COM call.
+        Ok(unsafe {
+            self.folder
+                .SetCurrentFolderFlags(mask, if on { mask } else { 0 })
+        }?)
+    }
+
     pub fn refresh(&self) -> Result<()> {
         // SAFETY: plain COM call.
         Ok(unsafe { self.view.Refresh() }?)

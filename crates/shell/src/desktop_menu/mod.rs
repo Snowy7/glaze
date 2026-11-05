@@ -9,16 +9,21 @@
 //!   desktop's folder view, confirms each swallowed click with UI Automation
 //!   (`ElementFromPoint`: a list *item* is an icon), opens the menu ([`mypaper_ui::Menu`]) and
 //!   runs the chosen command. If the confirmation says "icon" (the cached rectangles were
-//!   stale), the click is replayed to the native desktop. "Show more options" does the same:
-//!   the right-click is replayed, marked as ours so the hook lets it through once.
+//!   stale), the click is replayed to the native desktop. "Show more options" (only in a
+//!   configured menu) does the same: the right-click is replayed, marked as ours so the hook
+//!   lets it through once.
+//! - The **shell menu worker** ([`shell_menu`]) holds the desktop folder's own context menu
+//!   (New, the shell extensions), built ahead of time so the menu opens without waiting for it.
 //!
 //! The hook is not installed at all while a fullscreen app is in front, the session is locked or
 //! the display is off (`Shift`+right-click is always native).
 
 mod hook;
 pub mod items;
+pub mod shell_menu;
 
 use std::process::Command as Process;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result};
@@ -27,7 +32,7 @@ use mypaper_desktop::desktop_hit::IconMap;
 use mypaper_desktop::desktop_view::{self, DesktopView, SortKey};
 use mypaper_desktop::hold::Fact;
 use mypaper_desktop::{ControlWindow, WM_FACT, fullscreen_app_in_front};
-use mypaper_ui::{Event, Menu, Outcome, SurfaceId, Tokens, Ui, screen_at};
+use mypaper_ui::{Event, Image, Menu, Outcome, SurfaceId, Tokens, Ui, screen_at};
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
 use windows::Win32::UI::Accessibility::{
@@ -42,7 +47,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{HSTRING, PCWSTR, w};
 
 use self::hook::{HookThread, ICONS, ICONS_DIRTY_QUEUED, MENU_OPEN, replay_right_click, unpack};
-use self::items::{Command, ViewState};
+use self::items::{Command, Sources, ViewState};
+use self::shell_menu::ShellMenu;
 use crate::apps;
 use crate::inbox::{self, Msg};
 
@@ -86,6 +92,10 @@ pub struct DesktopMenu {
     /// the settings change, so the desktop, dock and tray menus and the bar look alike.
     themed: Option<Tokens>,
     menu: Menu<Command>,
+    /// The shell's own menu (New, extensions); `None` if its worker could not start.
+    shell: Option<ShellMenu>,
+    /// mypaper's icon for its own items.
+    icon: Option<Arc<Image>>,
     uia: Option<IUIAutomation>,
     hook: HookThread,
     pending: Option<Pending>,
@@ -112,10 +122,20 @@ impl DesktopMenu {
         let control = ControlWindow::new(w!("mypaper.desktopmenu.control"))
             .inspect_err(|e| log::warn!("desktop menu: no lock/display notifications: {e:#}"))
             .ok();
+        let icon_px = icon_pixels(&settings.tokens, screen_at(0, 0).dpi);
+        let shell = ShellMenu::start(icon_px)
+            .inspect_err(|e| log::warn!("desktop menu: no shell extensions: {e:#}"))
+            .ok();
+        let icon = std::env::current_exe().ok().and_then(|exe| {
+            let studio = exe.with_file_name("mypaper-studio.exe");
+            shell_menu::file_icon(if studio.is_file() { &studio } else { &exe }, icon_px)
+        });
         let mut menu = Self {
             settings,
             themed: None,
             menu: Menu::new("mypaper desktop menu")?,
+            shell,
+            icon,
             uia,
             hook: HookThread::spawn()?,
             pending: None,
@@ -275,14 +295,23 @@ impl DesktopMenu {
     }
 
     fn show(&mut self, ui: &mut Ui, at: (i32, i32), state: ViewState) {
+        let started = std::time::Instant::now();
         self.opened_at = at;
-        let items = items::build(&self.settings.menu, state);
+        let screen = screen_at(at.0, at.1);
+        let snapshot = self.shell.as_mut().and_then(|shell| {
+            shell.set_icon_size(icon_pixels(&self.settings.tokens, screen.dpi));
+            shell.snapshot()
+        });
+        let sources = Sources {
+            shell: snapshot.as_ref(),
+            mypaper: self.icon.as_ref(),
+        };
+        let items = items::build(&self.settings.menu, state, sources);
         if items.is_empty() {
             replay_right_click(at);
             return;
         }
         MENU_OPEN.store(true, Ordering::Relaxed);
-        let screen = screen_at(at.0, at.1);
         let scale = self.settings.tokens.scale;
         let base = self
             .themed
@@ -302,6 +331,15 @@ impl DesktopMenu {
             log::warn!("desktop menu: {e:#}");
             MENU_OPEN.store(false, Ordering::Relaxed);
         }
+        log::info!(
+            "desktop menu: open in {:.1?} ({})",
+            started.elapsed(),
+            if snapshot.is_some() {
+                "with the shell's items"
+            } else {
+                "built-ins only: the shell's items are not ready"
+            }
+        );
     }
 
     /// Runs a chosen command (the menu is already closed).
@@ -319,6 +357,15 @@ impl DesktopMenu {
                 let view = DesktopView::open()?;
                 view.set_icons_visible(!view.icons_visible()?)?;
             }
+            Command::AutoArrange(on) => DesktopView::open()?.set_arrangement(false, on)?,
+            Command::AlignToGrid(on) => DesktopView::open()?.set_arrangement(true, on)?,
+            Command::Shell { generation, id } => {
+                if let Some(shell) = &mut self.shell {
+                    shell.invoke(generation, id, self.opened_at);
+                }
+            }
+            // The widget gallery is Studio's.
+            Command::AddWidget => apps::open_studio(),
             Command::SortBy(key) => {
                 let view = DesktopView::open()?;
                 let ascending = view.sort()?.is_none_or(|(_, up)| up);
@@ -396,12 +443,17 @@ unsafe extern "system" fn on_foreground(
 fn view_state() -> ViewState {
     let clipboard = clipboard_has_files();
     match DesktopView::open() {
-        Ok(view) => ViewState {
-            icon_size: view.icon_size().ok(),
-            icons_visible: view.icons_visible().unwrap_or(true),
-            sort: view.sort().ok().flatten(),
-            can_paste: clipboard,
-        },
+        Ok(view) => {
+            let (auto_arrange, align_to_grid) = view.arrangement().unwrap_or_default();
+            ViewState {
+                icon_size: view.icon_size().ok(),
+                icons_visible: view.icons_visible().unwrap_or(true),
+                auto_arrange,
+                align_to_grid,
+                sort: view.sort().ok().flatten(),
+                can_paste: clipboard,
+            }
+        }
         Err(e) => {
             log::debug!("desktop menu: view state unavailable: {e:#}");
             ViewState {
@@ -411,6 +463,12 @@ fn view_state() -> ViewState {
             }
         }
     }
+}
+
+/// The menu's icon size in device pixels on a monitor of `dpi`: 16 px, scaled.
+fn icon_pixels(tokens: &Tokens, dpi: u32) -> i32 {
+    (mypaper_ui::menu::ICON_SIZE * dpi.max(96) as f32 / 96.0 * tokens.scale.clamp(0.5, 2.0)).round()
+        as i32
 }
 
 fn clipboard_has_files() -> bool {

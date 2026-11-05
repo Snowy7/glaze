@@ -1,16 +1,43 @@
-//! The desktop menu's items: which there are (from `desktop_menu` in the config and the
-//! desktop's current state) and what each does. Pure, so it is tested without a window; the
-//! menu itself (layout, drawing, input) is `mypaper_ui::Menu`.
+//! The desktop menu's items: which there are (from `desktop_menu` in the config, the desktop's
+//! current state and the shell's own menu, [`super::shell_menu`]) and what each does. Pure, so
+//! it is tested without a window; the menu itself (layout, drawing, input) is `mypaper_ui::Menu`.
+//!
+//! The default menu is Windows 11's full desktop menu, with nothing behind "Show more options":
+//! View, Sort by, Refresh | Paste | Open in Terminal and the shell extensions | New (every
+//! registered type) | Display settings, Personalize | mypaper's own items. Every row has an icon:
+//! the extension's own bitmap, else the Segoe Fluent glyph Windows 11 uses.
 
-use mypaper_config::desktop_menu::{Builtin, DesktopMenu, Entry as Configured};
+use std::sync::Arc;
+
+use mypaper_config::desktop_menu::{Builtin, DesktopMenu, Entry as Configured, default_items};
 use mypaper_desktop::desktop_view::{IconSize, NewItem, SortKey};
-use mypaper_ui::Entry;
+use mypaper_ui::{Entry, Image, MenuIcon};
+
+use super::shell_menu::{ShellItem, Snapshot};
+
+/// Segoe Fluent Icons glyphs of Windows 11's own desktop menu.
+pub mod glyph {
+    pub const VIEW: char = '\u{E8A9}';
+    pub const SORT: char = '\u{E8CB}';
+    pub const REFRESH: char = '\u{E72C}';
+    pub const NEW: char = '\u{ECC8}';
+    pub const PASTE: char = '\u{E77F}';
+    pub const DISPLAY: char = '\u{E7F4}';
+    pub const PERSONALIZE: char = '\u{E771}';
+    pub const TERMINAL: char = '\u{E756}';
+    pub const FOLDER: char = '\u{E8B7}';
+    pub const DOCUMENT: char = '\u{E8A5}';
+    /// An extension that brings no icon of its own.
+    pub const APP: char = '\u{ECAA}';
+}
 
 /// What choosing an item does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     IconSize(IconSize),
     ToggleIcons,
+    AutoArrange(bool),
+    AlignToGrid(bool),
     SortBy(SortKey),
     SortOrder {
         ascending: bool,
@@ -20,9 +47,15 @@ pub enum Command {
     Paste,
     OpenStudio,
     EditWidgets,
+    AddWidget,
     Display,
     Personalize,
     Terminal,
+    /// Command `id` of the shell's menu `generation` ([`super::shell_menu`]).
+    Shell {
+        generation: u64,
+        id: u32,
+    },
     /// Hand the right-click to the native Windows menu.
     MoreOptions,
     Custom {
@@ -33,14 +66,25 @@ pub enum Command {
 
 pub type Item = Entry<Command>;
 
-/// What the desktop looks like right now: drives the check marks.
+/// What the desktop looks like right now: drives the check marks and radio dots.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ViewState {
     pub icon_size: Option<IconSize>,
     pub icons_visible: bool,
+    pub auto_arrange: bool,
+    pub align_to_grid: bool,
     /// The sort column and whether it is ascending.
     pub sort: Option<(SortKey, bool)>,
     pub can_paste: bool,
+}
+
+/// What the menu is built from besides the config and the desktop's state.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Sources<'a> {
+    /// The shell's own menu, once the worker has built it.
+    pub shell: Option<&'a Snapshot>,
+    /// mypaper's icon, for mypaper's items.
+    pub mypaper: Option<&'a Arc<Image>>,
 }
 
 fn sort_label(key: SortKey) -> &'static str {
@@ -52,30 +96,180 @@ fn sort_label(key: SortKey) -> &'static str {
     }
 }
 
-/// The menu for `config` (hidden items left out, no stray separators) in `state`.
-pub fn build(config: &DesktopMenu, state: ViewState) -> Vec<Item> {
-    config
-        .tidy_items()
-        .into_iter()
-        .map(|entry| match entry {
-            Configured::Custom(c) => Entry::action(
-                &c.label,
-                Command::Custom {
-                    command: c.command.clone(),
-                    args: c.args.clone(),
-                },
-            ),
-            Configured::Builtin(builtin) => builtin_item(*builtin, state),
-        })
-        .collect()
+/// One slot of the menu: a built-in, a configured custom command, or one of mypaper's items
+/// that only the default menu has.
+enum Slot<'a> {
+    Builtin(Builtin),
+    Custom(&'a mypaper_config::desktop_menu::Custom),
+    AddWidget,
+    Studio,
 }
 
-fn builtin_item(builtin: Builtin, state: ViewState) -> Item {
+/// The default menu: Windows 11's full desktop menu, then mypaper's.
+fn default_slots() -> Vec<Slot<'static>> {
+    use Builtin::*;
+    let mut slots: Vec<Slot> = [
+        View,
+        Sort,
+        Refresh,
+        Separator,
+        Paste,
+        Separator,
+        Terminal,
+        More,
+        Separator,
+        New,
+        Separator,
+        Display,
+        Personalize,
+        Separator,
+        Wallpaper,
+        Widgets,
+    ]
+    .into_iter()
+    .map(Slot::Builtin)
+    .collect();
+    slots.extend([Slot::AddWidget, Slot::Studio]);
+    slots
+}
+
+/// The menu for `config` (hidden items left out, no stray separators) in `state`. With the
+/// default config it is Windows 11's full menu; in a configured one, `more` stands for the shell
+/// extensions and `new` lists every registered type.
+pub fn build(config: &DesktopMenu, state: ViewState, sources: Sources) -> Vec<Item> {
+    let slots = if config.items == default_items() {
+        default_slots()
+    } else {
+        config
+            .tidy_items()
+            .into_iter()
+            .map(|entry| match entry {
+                Configured::Builtin(b) => Slot::Builtin(*b),
+                Configured::Custom(c) => Slot::Custom(c),
+            })
+            .collect()
+    };
+    let mypaper = || match sources.mypaper {
+        Some(image) => MenuIcon::Image(image.clone()),
+        None => MenuIcon::Glyph(glyph::APP),
+    };
+    let mut items = Vec::new();
+    for slot in slots {
+        match slot {
+            Slot::Builtin(Builtin::More) => items.extend(extensions(sources.shell)),
+            Slot::Builtin(b @ (Builtin::Wallpaper | Builtin::Widgets)) => {
+                items.push(builtin_item(b, state, sources).with_icon(mypaper()))
+            }
+            Slot::Builtin(b) => items.push(builtin_item(b, state, sources)),
+            Slot::Custom(c) => items.push(
+                Entry::action(
+                    &c.label,
+                    Command::Custom {
+                        command: c.command.clone(),
+                        args: c.args.clone(),
+                    },
+                )
+                .with_icon(MenuIcon::Glyph(glyph::APP)),
+            ),
+            Slot::AddWidget => {
+                items.push(Entry::action("Add widget", Command::AddWidget).with_icon(mypaper()))
+            }
+            Slot::Studio => items
+                .push(Entry::action("mypaper Studio", Command::OpenStudio).with_icon(mypaper())),
+        }
+    }
+    tidy(items)
+}
+
+/// No leading, trailing or doubled separators.
+fn tidy(items: Vec<Item>) -> Vec<Item> {
+    let mut out: Vec<Item> = Vec::with_capacity(items.len());
+    for item in items {
+        if matches!(item, Entry::Separator) && matches!(out.last(), None | Some(Entry::Separator)) {
+            continue;
+        }
+        out.push(item);
+    }
+    while matches!(out.last(), Some(Entry::Separator)) {
+        out.pop();
+    }
+    out
+}
+
+/// Verbs of the shell's menu that mypaper's own items already cover.
+const COVERED: [&str; 5] = ["display", "personalize", "refresh", "paste", "properties"];
+
+/// Is this the shell's "New" submenu?
+fn is_new(item: &ShellItem) -> bool {
+    matches!(item, ShellItem::Submenu { items, .. }
+        if items.iter().any(|i| matches!(i, ShellItem::Action { verb, .. } if verb == "newfolder")))
+}
+
+/// The shell's items besides "New" and the ones mypaper covers.
+fn extensions(shell: Option<&Snapshot>) -> Vec<Item> {
+    let Some(shell) = shell else {
+        return Vec::new();
+    };
+    let covered = |item: &&ShellItem| matches!(item, ShellItem::Action { verb, .. } if COVERED.contains(&verb.as_str()));
+    let items = shell
+        .items
+        .iter()
+        .filter(|item| !is_new(item) && !covered(item))
+        .map(|item| from_shell(item, shell.generation, glyph::APP))
+        .collect();
+    // Windows sets the extensions off from what follows.
+    let mut items = tidy(items);
+    if !items.is_empty() {
+        items.insert(0, Entry::Separator);
+    }
+    items
+}
+
+fn from_shell(item: &ShellItem, generation: u64, fallback: char) -> Item {
+    let icon = |image: &Option<Arc<Image>>| match image {
+        Some(image) => MenuIcon::Image(image.clone()),
+        None => MenuIcon::Glyph(fallback),
+    };
+    match item {
+        ShellItem::Separator => Entry::Separator,
+        ShellItem::Action {
+            label,
+            id,
+            icon: image,
+            enabled,
+            ..
+        } => Entry::Action {
+            label: label.clone(),
+            command: Command::Shell {
+                generation,
+                id: *id,
+            },
+            checked: None,
+            enabled: *enabled,
+        }
+        .with_icon(icon(image)),
+        ShellItem::Submenu {
+            label,
+            icon: image,
+            items,
+        } => Entry::Submenu {
+            label: label.clone(),
+            items: items
+                .iter()
+                .map(|i| from_shell(i, generation, fallback))
+                .collect(),
+        }
+        .with_icon(icon(image)),
+    }
+}
+
+fn builtin_item(builtin: Builtin, state: ViewState, sources: Sources) -> Item {
+    let icon = MenuIcon::Glyph;
     match builtin {
         Builtin::Separator => Entry::Separator,
         Builtin::View => {
             let size = |label, size| {
-                Entry::check(
+                Entry::radio(
                     label,
                     Command::IconSize(size),
                     state.icon_size == Some(size),
@@ -89,12 +283,24 @@ fn builtin_item(builtin: Builtin, state: ViewState) -> Item {
                     size("Small icons", IconSize::Small),
                     Entry::Separator,
                     Entry::check(
+                        "Auto arrange icons",
+                        Command::AutoArrange(!state.auto_arrange),
+                        state.auto_arrange,
+                    ),
+                    Entry::check(
+                        "Align icons to grid",
+                        Command::AlignToGrid(!state.align_to_grid),
+                        state.align_to_grid,
+                    ),
+                    Entry::Separator,
+                    Entry::check(
                         "Show desktop icons",
                         Command::ToggleIcons,
                         state.icons_visible,
                     ),
                 ],
             }
+            .with_icon(icon(glyph::VIEW))
         }
         Builtin::Sort => {
             let current = state.sort;
@@ -102,17 +308,17 @@ fn builtin_item(builtin: Builtin, state: ViewState) -> Item {
                 .into_iter()
                 .map(|key| {
                     let on = current.is_some_and(|(k, _)| k == key);
-                    Entry::check(sort_label(key), Command::SortBy(key), on)
+                    Entry::radio(sort_label(key), Command::SortBy(key), on)
                 })
                 .collect();
             items.push(Entry::Separator);
             let ascending = current.is_none_or(|(_, up)| up);
-            items.push(Entry::check(
+            items.push(Entry::radio(
                 "Ascending",
                 Command::SortOrder { ascending: true },
                 ascending,
             ));
-            items.push(Entry::check(
+            items.push(Entry::radio(
                 "Descending",
                 Command::SortOrder { ascending: false },
                 !ascending,
@@ -121,26 +327,53 @@ fn builtin_item(builtin: Builtin, state: ViewState) -> Item {
                 label: "Sort by".into(),
                 items,
             }
+            .with_icon(icon(glyph::SORT))
         }
-        Builtin::Refresh => Entry::action("Refresh", Command::Refresh),
-        Builtin::New => Entry::Submenu {
-            label: "New".into(),
-            items: vec![
-                Entry::action("Folder", Command::New(NewItem::Folder)),
-                Entry::action("Text Document", Command::New(NewItem::TextDocument)),
-            ],
-        },
+        Builtin::Refresh => {
+            Entry::action("Refresh", Command::Refresh).with_icon(icon(glyph::REFRESH))
+        }
+        Builtin::New => {
+            // The shell's own "New": Folder, Shortcut and every registered type, with icons.
+            let shell_new = sources.shell.and_then(|shell| {
+                let new = shell.items.iter().find(|i| is_new(i))?;
+                Some((new, shell.generation))
+            });
+            let items = match shell_new {
+                Some((ShellItem::Submenu { items, .. }, generation)) => items
+                    .iter()
+                    .map(|i| from_shell(i, generation, glyph::DOCUMENT))
+                    .collect(),
+                _ => vec![
+                    Entry::action("Folder", Command::New(NewItem::Folder))
+                        .with_icon(icon(glyph::FOLDER)),
+                    Entry::action("Text Document", Command::New(NewItem::TextDocument))
+                        .with_icon(icon(glyph::DOCUMENT)),
+                ],
+            };
+            Entry::Submenu {
+                label: "New".into(),
+                items,
+            }
+            .with_icon(icon(glyph::NEW))
+        }
         Builtin::Paste => Entry::Action {
             label: "Paste".into(),
             command: Command::Paste,
             checked: None,
             enabled: state.can_paste,
-        },
+        }
+        .with_icon(icon(glyph::PASTE)),
         Builtin::Wallpaper => Entry::action("Change wallpaper", Command::OpenStudio),
         Builtin::Widgets => Entry::action("Edit widgets", Command::EditWidgets),
-        Builtin::Display => Entry::action("Display settings", Command::Display),
-        Builtin::Personalize => Entry::action("Personalize", Command::Personalize),
-        Builtin::Terminal => Entry::action("Open terminal here", Command::Terminal),
+        Builtin::Display => {
+            Entry::action("Display settings", Command::Display).with_icon(icon(glyph::DISPLAY))
+        }
+        Builtin::Personalize => {
+            Entry::action("Personalize", Command::Personalize).with_icon(icon(glyph::PERSONALIZE))
+        }
+        Builtin::Terminal => {
+            Entry::action("Open in Terminal", Command::Terminal).with_icon(icon(glyph::TERMINAL))
+        }
         Builtin::More => Entry::action("Show more options", Command::MoreOptions),
     }
 }
@@ -162,9 +395,48 @@ mod tests {
         items.iter().map(Item::label).collect()
     }
 
+    /// A shell menu like this machine's: two extensions, "New", and verbs mypaper covers.
+    fn shell() -> Snapshot {
+        let action = |label: &str, verb: &str, id| ShellItem::Action {
+            label: label.into(),
+            verb: verb.into(),
+            id,
+            icon: None,
+            enabled: true,
+        };
+        Snapshot {
+            generation: 7,
+            items: vec![
+                action("Open Git Bash here", "git_shell", 75),
+                ShellItem::Separator,
+                action("NVIDIA App", "", 1),
+                ShellItem::Separator,
+                ShellItem::Submenu {
+                    label: "New".into(),
+                    icon: None,
+                    items: vec![
+                        action("Folder", "newfolder", 3),
+                        action("Shortcut", "newlink", 4),
+                        ShellItem::Separator,
+                        action("Text Document", ".txt", 15),
+                    ],
+                },
+                ShellItem::Separator,
+                action("Display settings", "display", 81),
+                action("Personalize", "personalize", 83),
+            ],
+            took: Default::default(),
+        }
+    }
+
     #[test]
-    fn the_default_menu_has_the_documented_items_in_order() {
-        let items = build(&DesktopMenu::default(), ViewState::default());
+    fn the_default_menu_is_windows_full_menu_then_mypapers() {
+        let shell = shell();
+        let sources = Sources {
+            shell: Some(&shell),
+            mypaper: None,
+        };
+        let items = build(&DesktopMenu::default(), ViewState::default(), sources);
         assert_eq!(
             labels(&items),
             [
@@ -172,18 +444,63 @@ mod tests {
                 "Sort by",
                 "Refresh",
                 "",
-                "New",
                 "Paste",
                 "",
-                "Change wallpaper",
-                "Edit widgets",
+                "Open in Terminal",
+                "",
+                "Open Git Bash here",
+                "",
+                "NVIDIA App",
+                "",
+                "New",
+                "",
                 "Display settings",
                 "Personalize",
                 "",
-                "Open terminal here",
-                "Show more options",
+                "Change wallpaper",
+                "Edit widgets",
+                "Add widget",
+                "mypaper Studio",
             ]
         );
+        // Every row has an icon; extensions run through the shell's own menu.
+        assert!(
+            items
+                .iter()
+                .all(|i| matches!(i, Entry::Separator) || i.icon().is_some())
+        );
+        let git = items.iter().find(|i| i.label() == "Open Git Bash here");
+        assert!(matches!(
+            git.map(Item::plain),
+            Some(Entry::Action {
+                command: Command::Shell {
+                    generation: 7,
+                    id: 75
+                },
+                ..
+            })
+        ));
+        // "New" is the shell's, with every registered type.
+        let new = items.iter().find(|i| i.label() == "New").unwrap();
+        let Entry::Submenu { items: new, .. } = new.plain() else {
+            panic!("New is a submenu")
+        };
+        assert_eq!(labels(new), ["Folder", "Shortcut", "", "Text Document"]);
+    }
+
+    #[test]
+    fn without_the_shells_menu_the_built_ins_open_at_once() {
+        let items = build(
+            &DesktopMenu::default(),
+            ViewState::default(),
+            Sources::default(),
+        );
+        assert!(labels(&items).starts_with(&["View", "Sort by", "Refresh", "", "Paste", ""]));
+        let new = items.iter().find(|i| i.label() == "New").unwrap();
+        let Entry::Submenu { items: new, .. } = new.plain() else {
+            panic!("New is a submenu")
+        };
+        assert_eq!(labels(new), ["Folder", "Text Document"]);
     }
 
     #[test]
@@ -201,50 +518,58 @@ mod tests {
                 }),
             ]),
             ViewState::default(),
+            Sources::default(),
         );
         assert_eq!(labels(&items), ["Refresh", "", "Notes"]);
         assert!(matches!(
-            &items[2],
+            items[2].plain(),
             Entry::Action { command: Command::Custom { command, args }, .. }
                 if command == "notepad.exe" && args == &["a.txt"]
         ));
     }
 
     #[test]
-    fn check_marks_follow_the_desktops_state() {
+    fn check_marks_and_radio_dots_follow_the_desktops_state() {
         let state = ViewState {
             icon_size: Some(IconSize::Medium),
             icons_visible: true,
+            auto_arrange: false,
+            align_to_grid: true,
             sort: Some((SortKey::Modified, false)),
             can_paste: false,
         };
-        let items = build(&DesktopMenu::default(), state);
-        let marks = |item: &Item| -> Vec<(String, Option<bool>)> {
-            let Entry::Submenu { items, .. } = item else {
+        let items = build(&DesktopMenu::default(), state, Sources::default());
+        let marks = |item: &Item| -> Vec<(String, Option<bool>, bool)> {
+            let Entry::Submenu { items, .. } = item.plain() else {
                 panic!("a submenu")
             };
             items
                 .iter()
-                .filter_map(|i| match i {
-                    Entry::Action { label, checked, .. } => Some((label.clone(), *checked)),
+                .filter_map(|i| match i.plain() {
+                    Entry::Action { label, checked, .. } => {
+                        Some((label.clone(), *checked, i.icon().is_some()))
+                    }
                     _ => None,
                 })
                 .collect()
         };
+        let mark = |label: &str, on: bool, radio: bool| (label.to_owned(), Some(on), radio);
         assert_eq!(
             marks(&items[0]),
             [
-                ("Large icons".to_owned(), Some(false)),
-                ("Medium icons".to_owned(), Some(true)),
-                ("Small icons".to_owned(), Some(false)),
-                ("Show desktop icons".to_owned(), Some(true)),
+                mark("Large icons", false, true),
+                mark("Medium icons", true, true),
+                mark("Small icons", false, true),
+                mark("Auto arrange icons", false, false),
+                mark("Align icons to grid", true, false),
+                mark("Show desktop icons", true, false),
             ]
         );
         let sort = marks(&items[1]);
-        assert!(sort.contains(&("Date modified".to_owned(), Some(true))));
-        assert!(sort.contains(&("Name".to_owned(), Some(false))));
-        assert!(sort.contains(&("Descending".to_owned(), Some(true))));
-        assert!(sort.contains(&("Ascending".to_owned(), Some(false))));
+        assert!(sort.contains(&mark("Date modified", true, true)));
+        assert!(sort.contains(&mark("Name", false, true)));
+        assert!(sort.contains(&mark("Descending", true, true)));
+        assert!(sort.contains(&mark("Ascending", false, true)));
 
         // Paste is disabled with nothing to paste.
         let paste = items.iter().find(|i| i.label() == "Paste").unwrap();
@@ -270,11 +595,18 @@ mod tests {
         let state = ViewState {
             icon_size: Some(IconSize::Medium),
             icons_visible: true,
+            auto_arrange: false,
+            align_to_grid: true,
             sort: Some((SortKey::Name, true)),
             can_paste: false,
         };
-        let root = build(&DesktopMenu::default(), state);
-        let Entry::Submenu { items: view, .. } = &root[0] else {
+        let shell = shell();
+        let sources = Sources {
+            shell: Some(&shell),
+            mypaper: None,
+        };
+        let root = build(&DesktopMenu::default(), state, sources);
+        let Entry::Submenu { items: view, .. } = root[0].plain() else {
             panic!("View is a submenu")
         };
         let golden = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
