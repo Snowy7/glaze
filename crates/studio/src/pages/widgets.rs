@@ -522,6 +522,11 @@ pub fn run(app: &mut App, action: Action) {
             let Some(id) = app.nav.widget.clone() else { return };
             let l = layout(app);
             let Some(i) = l.get(&id).cloned() else { return };
+            let (total, here) = l.count_of(&i.widget, |other| other.monitor == i.monitor);
+            if app.registry.get(&i.widget).is_some_and(|widget| !widget.manifest.instances.allows(total, here)) {
+                app.alert("This widget has reached its instance limit");
+                return;
+            }
             match first_free(app, &l, i.size) {
                 Some(cell) => {
                     let duplicated = (|| -> anyhow::Result<String> {
