@@ -1,4 +1,4 @@
-//! Effect RPC JSON summary subscription pinned to T3 protocol 2 / a21d7887. No client ping task.
+//! Effect RPC v2 shell summaries, with bounded metadata and no client ping task.
 use crate::{Availability, Data, Publish, credentials, transport};
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -102,6 +102,14 @@ pub struct Thread {
 pub struct Request {
     pub id: String,
     pub kind: String,
+}
+impl Request {
+    pub fn approvable(&self) -> bool {
+        matches!(
+            self.kind.as_str(),
+            "command" | "file-read" | "file-change" | "mcp-elicitation" | "permission"
+        )
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]

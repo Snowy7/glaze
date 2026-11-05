@@ -9,6 +9,7 @@ use mypaper_integrations::launcher::RoutineState;
 use mypaper_ui::kit::{Accessory, Lead, Row};
 
 pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
+    m.integration.grok.targets.borrow_mut().clear();
     let variant = m.str("variant", "routines");
     let title = match variant.as_str() {
         "prompt" => "Grok · Prompt",
@@ -193,6 +194,11 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
             .runs
             .iter()
             .any(|r| r.id == state.routines[0].id && r.state == RoutineState::Sending);
+        state
+            .grok
+            .targets
+            .borrow_mut()
+            .insert(RUN, state.routines[0].id.clone());
         f.button(
             RUN,
             button,
@@ -220,6 +226,11 @@ pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
                 .runs
                 .iter()
                 .any(|run| run.id == routine.id && run.state == RoutineState::Sending);
+            state
+                .grok
+                .targets
+                .borrow_mut()
+                .insert(RUN + i as u32, routine.id.clone());
             f.row(
                 &Row {
                     id: RUN + i as u32,

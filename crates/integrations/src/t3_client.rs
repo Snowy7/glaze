@@ -104,7 +104,7 @@ pub fn launch_blocking(
         !prompt.trim().is_empty() && prompt.len() <= 32 * 1024,
         "Write a prompt of up to 32 KiB."
     );
-    let payload = json!({"commandId":command_id(),"projectId":project,"title":prompt.chars().take(80).collect::<String>(),
+    let payload = json!({"commandId":command_id(),"projectId":project,"title":prompt.trim().chars().take(80).collect::<String>(),
         "generateTitle":true,"modelSelection":{"instanceId":model.provider,"model":model.model},
         "runtimeMode":"approval-required","interactionMode":"default","workspaceStrategy":{"type":"root"},
         "initialMessage":{"text":prompt,"attachments":[]}});

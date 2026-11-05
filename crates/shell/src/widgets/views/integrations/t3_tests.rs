@@ -313,3 +313,30 @@ fn t3_scrolling_reaches_the_last_agent_and_stale_approvals_are_disabled() {
             .any(|op| matches!(op,Op::Text{text,..} if text.contains("socket detail")))
     );
 }
+
+#[test]
+fn rendered_approvals_never_retarget_after_a_thread_or_request_changes() {
+    use crate::integrations::t3_widgets::{APPROVE, resolve_approval};
+    let mut ui = Ui::new().unwrap();
+    let mut m = fixture("t3", "attention");
+    draw(&mut ui, &m, (360, 360), 1.0);
+    let Some(Data::T3(snapshot)) = &mut m.integration.snapshot.data else {
+        unreachable!()
+    };
+    assert_eq!(
+        resolve_approval(&m.integration.t3, snapshot, APPROVE),
+        Some(("thread-0".into(), "approval".into()))
+    );
+    snapshot.threads[0]
+        .pending_runtime_request
+        .as_mut()
+        .unwrap()
+        .id = "replacement-request".into();
+    assert!(resolve_approval(&m.integration.t3, snapshot, APPROVE).is_none());
+    snapshot.threads.remove(0);
+    snapshot.threads[0].pending_runtime_request = Some(t3::Request {
+        id: "different-thread-request".into(),
+        kind: "command".into(),
+    });
+    assert!(resolve_approval(&m.integration.t3, snapshot, APPROVE).is_none());
+}

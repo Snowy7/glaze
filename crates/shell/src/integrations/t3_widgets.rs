@@ -20,13 +20,36 @@ pub enum Picker {
     Model,
 }
 
+#[derive(Clone)]
+pub struct Target {
+    pub thread_id: String,
+    pub request_id: Option<String>,
+}
+
 #[derive(Default)]
 pub struct State {
+    /// Bind rendered controls to exact identities across provider updates before the next paint.
+    pub targets: std::cell::RefCell<std::collections::BTreeMap<HitId, Target>>,
     pub project: usize,
     pub model: usize,
     pub draft: String,
     pub submitted: bool,
     pub picker: Option<Picker>,
+}
+
+pub(crate) fn resolve_approval(
+    state: &State,
+    snapshot: &mypaper_integrations::t3::Snapshot,
+    hit: HitId,
+) -> Option<(String, String)> {
+    let target = state.targets.borrow().get(&hit)?.clone();
+    let thread = snapshot
+        .threads
+        .iter()
+        .find(|thread| thread.id == target.thread_id)?;
+    let request = thread.pending_runtime_request.as_ref()?;
+    (target.request_id.as_deref() == Some(request.id.as_str()) && request.approvable())
+        .then(|| (thread.id.clone(), request.id.clone()))
 }
 
 pub fn connect(state: &mut Model, reauthorize: bool) {
@@ -141,23 +164,17 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
             return true;
         }
         let approve = hit < DENY;
-        if let Some(thread) = snapshot
-            .threads
-            .get((hit - if approve { APPROVE } else { DENY }) as usize)
-            && let Some(request) = &thread.pending_runtime_request
-            && request.kind != "user_input"
-            && request.kind != "auth_refresh"
-            && request.kind != "dynamic_tool_call"
-        {
-            let (thread, request) = (thread.id.clone(), request.id.clone());
+        if let Some((thread, request)) = resolve_approval(&state.t3, snapshot, hit) {
             let address = super::config().t3.endpoint;
             state.task = Some(super::Task::spawn(move || {
                 t3_client::respond_blocking(&address, &thread, &request, approve)
             }));
         }
-    } else if let Some(thread) = hit
-        .checked_sub(THREAD)
-        .and_then(|i| snapshot.threads.get(i as usize))
+    } else if let Some(target) = state.t3.targets.borrow().get(&hit).cloned()
+        && let Some(thread) = snapshot
+            .threads
+            .iter()
+            .find(|thread| thread.id == target.thread_id)
     {
         let target = state
             .thread_links

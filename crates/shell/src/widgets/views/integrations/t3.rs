@@ -131,6 +131,7 @@ pub(super) fn connect_face(
 }
 
 pub(crate) fn view(f: &mut Frame<'_>, m: &Model, rect: Rect, _now_ms: i64) {
+    m.integration.t3.targets.borrow_mut().clear();
     let face = m.str("variant", "running");
     let title = match face.as_str() {
         "usage" => "T3 · Usage",
@@ -306,6 +307,13 @@ fn threads(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas, attention:
                 ""
             }
         );
+        m.integration.t3.targets.borrow_mut().insert(
+            THREAD + *index as u32,
+            crate::integrations::t3_widgets::Target {
+                thread_id: thread.id.clone(),
+                request_id: None,
+            },
+        );
         f.row(
             &Row {
                 id: THREAD + *index as u32,
@@ -326,11 +334,17 @@ fn threads(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas, attention:
         if attention
             && state.can_operate()
             && let Some(request) = &thread.pending_runtime_request
-            && !matches!(
-                request.kind.as_str(),
-                "user_input" | "user-input" | "auth_refresh" | "dynamic_tool_call"
-            )
+            && request.approvable()
         {
+            for hit in [APPROVE + *index as u32, DENY + *index as u32] {
+                m.integration.t3.targets.borrow_mut().insert(
+                    hit,
+                    crate::integrations::t3_widgets::Target {
+                        thread_id: thread.id.clone(),
+                        request_id: Some(request.id.clone()),
+                    },
+                );
+            }
             let controls = Rect::new(
                 body.left + f.px(34.0),
                 top + f.px(47.0),
@@ -430,11 +444,13 @@ fn usage(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas) {
         },
         f.theme.color.label,
     );
-    for (i, usage) in usage
-        .iter()
-        .take((body.height() / f.px(43.0)).floor().max(0.0) as usize)
-        .enumerate()
-    {
+    let row_h = f.px(43.0);
+    let visible = (body.height() / row_h).floor().max(0.0) as usize;
+    m.scroll_max
+        .set(usage.len().saturating_sub(visible) as f32 * row_h);
+    m.scroll_page.set(body.height());
+    let first = (m.scroll.max(0.0) / row_h).floor() as usize;
+    for (i, usage) in usage.iter().skip(first).take(visible).enumerate() {
         f.row(
             &Row {
                 id: 0,
@@ -461,10 +477,15 @@ fn usage(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas) {
 
 pub(super) fn prompt_field(f: &mut Frame<'_>, m: &Model, rect: Rect, hint: &str) {
     let field = m.field.as_ref();
+    let draft = if m.kind == crate::widgets::model::Widget::T3 {
+        m.integration.t3.draft.as_str()
+    } else {
+        ""
+    };
     let inner = f.field_frame(
         rect,
         hint,
-        field.is_none(),
+        field.is_none() && draft.is_empty(),
         field.is_some(),
         Some(Icon::Edit),
     );
@@ -475,6 +496,14 @@ pub(super) fn prompt_field(f: &mut Frame<'_>, m: &Model, rect: Rect, hint: &str)
             field: field.clone(),
             revision: field.revision(),
         });
+    } else if !draft.is_empty() {
+        f.text_in(
+            inner,
+            draft,
+            TextRole::Body,
+            f.theme.color.label,
+            Align::Start,
+        );
     }
     f.hit(
         crate::widgets::views::FIELD,

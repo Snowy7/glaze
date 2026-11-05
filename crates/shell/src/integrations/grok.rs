@@ -12,12 +12,14 @@ pub const PROMPT: HitId = 7301;
 
 #[derive(Default)]
 pub struct Model {
+    pub targets: std::cell::RefCell<std::collections::BTreeMap<HitId, String>>,
     pub discovery: grok::Discovery,
     pub cards: Vec<mypaper_integrations::notifications::Card>,
     notifications: Option<Lease>,
     watcher: Option<FileWatch>,
     changed: Arc<AtomicBool>,
     generation: Option<u64>,
+    watch_attempted: bool,
 }
 
 pub fn sync(widget: &mut WidgetModel, active: bool) {
@@ -25,6 +27,7 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
     if !active {
         state.notifications = None;
         state.watcher = None;
+        state.watch_attempted = false;
         return;
     }
     if state.generation != Some(super::generation()) {
@@ -32,7 +35,8 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
         state.notifications = None;
         state.cards.clear();
     }
-    if state.watcher.is_none() {
+    if !state.watch_attempted {
+        state.watch_attempted = true;
         state.discovery = grok::discover();
         let changed = state.changed.clone();
         // The marker's directory changes on sign-in/out and process lifecycle, never on a timer.
@@ -96,6 +100,16 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
     if widget.kind != Widget::Grok {
         return false;
     }
+    if hit == super::widgets::REFRESH {
+        widget.integration.grok.watcher = None;
+        widget.integration.grok.watch_attempted = false;
+        widget
+            .integration
+            .grok
+            .changed
+            .store(true, Ordering::Release);
+        return false;
+    }
     if hit == super::widgets::CONNECT {
         let discovery = grok::discover();
         if !discovery.installed {
@@ -131,6 +145,24 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
             .and_then(|field| field.text().ok())
             .unwrap_or_default();
         return submit(widget, &prompt);
+    }
+    if (super::widgets::RUN..super::widgets::RUN + 32).contains(&hit) {
+        let id = widget.integration.grok.targets.borrow().get(&hit).cloned();
+        if !widget.integration.busy()
+            && let Some(routine) = id.and_then(|id| {
+                widget
+                    .integration
+                    .routines
+                    .iter()
+                    .find(|routine| routine.id == id)
+                    .cloned()
+            })
+        {
+            widget.integration.task = Some(super::Task::spawn(move || {
+                mypaper_integrations::launcher::start_routine(&routine)
+            }));
+        }
+        return true;
     }
     false
 }

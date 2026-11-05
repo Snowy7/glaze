@@ -270,7 +270,8 @@ fn row(app: &App, b: &mut B, r: Rect, i: usize, item: &Integration) {
     let state = status(app, item);
     if state == "Connect" {
         let bw = b.button_width("Connect", false, true);
-        b.button(key(("connect-row", i)), Rect::new(r.right - bw - b.px(10.0), r.top + b.px(12.0), bw, b.px(28.0)), "Connect", None, ButtonKind::Secondary, true, Action::SelectIntegration(i));
+        let action=if matches!(item.name,"T3 Code"|"Grok Bot") {Action::Set(Edit::new(DocId::Studio,format!("/integration_on/{i}"),"Connect"),Value::Null)}else{Action::SelectIntegration(i)};
+        b.button(key(("connect-row", i)), Rect::new(r.right - bw - b.px(10.0), r.top + b.px(12.0), bw, b.px(28.0)), "Connect", None, ButtonKind::Secondary, true, action);
     } else {
         let (sw, _) = b.measure(state, &small);
         let sx = r.right - sw - b.px(10.0);
@@ -312,7 +313,7 @@ fn details(app: &App, b: &mut B, area: Rect) {
         b.dot(Point::new(tile.right + b.px(18.0), tile.top + b.px(32.0)), on);
         b.text_at(tile.right + b.px(28.0), tile.top + b.px(24.0), &line, &small, p.ink3);
         if let Some(section) = item.section {
-            let (label, kind, action) = if on {
+            let (label, kind, action) = if on && secret != Some(false) {
                 (if item.builtin { "Turn off" } else { "Disconnect" }, ButtonKind::Secondary, Action::Set(Edit::new(DocId::Studio, format!("/integration_off/{i}"), "Disconnect"), Value::Null))
             } else {
                 (if item.builtin { "Turn on" } else { "Connect" }, ButtonKind::Primary, Action::Set(Edit::new(DocId::Studio, format!("/integration_on/{i}"), "Connect"), Value::Null))
