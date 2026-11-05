@@ -13,7 +13,7 @@ lock, leave the desktop restored, kill headless browsers) still applies.
   anything else that rewrites files or history you don't own. Never revert someone else's edit.
 - Commit only your own paths, and commit often (every working step):
   `git commit -m "<type>(<area>): <what>" -- <path> <path> ...`
-  (the `--` form commits those paths whatever else is staged). No push.
+  (the `--` form commits those paths whatever else is staged; `git add` new files first). No push.
 - Keep every saved state compiling. Change shared APIs additively first, migrate callers, then
   remove the old API in the same commit series. If `cargo check` fails in files you don't own,
   wait a minute and retry; don't fix them.
