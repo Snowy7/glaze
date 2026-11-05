@@ -715,7 +715,6 @@ pub enum Module {
     Notifications,
     /// Optional native integrations configured in integrations.json.
     T3,
-    Obs,
 }
 
 /// An entry of a module list: a built-in module, `custom:<id>`, or `|` (a break between islands,
