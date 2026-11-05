@@ -12,7 +12,7 @@ use windows::Win32::Graphics::Direct2D::{
     D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_FEATURE_LEVEL_DEFAULT,
     D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_SOFTWARE, D2D1_RENDER_TARGET_USAGE_NONE,
     D2D1_ROUNDED_RECT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE, D2D1CreateFactory, ID2D1Bitmap,
-    ID2D1Factory, ID2D1RenderTarget, ID2D1SolidColorBrush,
+    ID2D1Factory, ID2D1PathGeometry, ID2D1RenderTarget, ID2D1SolidColorBrush,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_PIXEL_GEOMETRY_FLAT, DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC, IDWriteRenderingParams,
@@ -374,6 +374,7 @@ pub(crate) struct Canvas {
     target: ID2D1RenderTarget,
     brush: ID2D1SolidColorBrush,
     images: RefCell<HashMap<usize, (Arc<Image>, ID2D1Bitmap)>>,
+    arcs: RefCell<HashMap<[u32; 4], ID2D1PathGeometry>>,
 }
 
 impl Canvas {
@@ -412,6 +413,7 @@ impl Canvas {
                 target,
                 brush,
                 images: RefCell::new(HashMap::new()),
+                arcs: RefCell::new(HashMap::new()),
             })
         }
     }
@@ -588,39 +590,54 @@ impl Canvas {
                             *width,
                             None,
                         );
-                    } else if *sweep > 0.0
-                        && let Ok(path) = t.GetFactory().and_then(|f| f.CreatePathGeometry())
-                        && let Ok(sink) = path.Open()
-                    {
-                        sink.BeginFigure(
-                            Vector2 {
-                                X: center.x,
-                                Y: center.y - radius,
-                            },
-                            D2D1_FIGURE_BEGIN_HOLLOW,
-                        );
-                        // Small fixed prefixes reduce meter damage while preserving every
-                        // pixel before the changing final segment.
-                        let count = (sweep / ARC_STEP).ceil() as u32;
-                        for segment in 1..=count {
-                            let angle = (segment as f32 * ARC_STEP).min(*sweep);
-                            sink.AddArc(&D2D1_ARC_SEGMENT {
-                                point: Vector2 {
-                                    X: center.x + radius * angle.sin(),
-                                    Y: center.y - radius * angle.cos(),
+                    } else if *sweep > 0.0 {
+                        let key = [
+                            center.x.to_bits(),
+                            center.y.to_bits(),
+                            radius.to_bits(),
+                            sweep.to_bits(),
+                        ];
+                        let mut arcs = self.arcs.borrow_mut();
+                        if !arcs.contains_key(&key)
+                            && let Ok(path) = t.GetFactory().and_then(|f| f.CreatePathGeometry())
+                            && let Ok(sink) = path.Open()
+                        {
+                            sink.BeginFigure(
+                                Vector2 {
+                                    X: center.x,
+                                    Y: center.y - radius,
                                 },
-                                size: D2D_SIZE_F {
-                                    width: *radius,
-                                    height: *radius,
-                                },
-                                rotationAngle: 0.0,
-                                sweepDirection: D2D1_SWEEP_DIRECTION_CLOCKWISE,
-                                arcSize: D2D1_ARC_SIZE_SMALL,
-                            });
+                                D2D1_FIGURE_BEGIN_HOLLOW,
+                            );
+                            // Small fixed prefixes reduce meter damage while preserving every
+                            // pixel before the changing final segment.
+                            let count = (sweep / ARC_STEP).ceil() as u32;
+                            for segment in 1..=count {
+                                let angle = (segment as f32 * ARC_STEP).min(*sweep);
+                                sink.AddArc(&D2D1_ARC_SEGMENT {
+                                    point: Vector2 {
+                                        X: center.x + radius * angle.sin(),
+                                        Y: center.y - radius * angle.cos(),
+                                    },
+                                    size: D2D_SIZE_F {
+                                        width: *radius,
+                                        height: *radius,
+                                    },
+                                    rotationAngle: 0.0,
+                                    sweepDirection: D2D1_SWEEP_DIRECTION_CLOCKWISE,
+                                    arcSize: D2D1_ARC_SIZE_SMALL,
+                                });
+                            }
+                            sink.EndFigure(D2D1_FIGURE_END_OPEN);
+                            if sink.Close().is_ok() {
+                                if arcs.len() >= 256 {
+                                    arcs.clear();
+                                }
+                                arcs.insert(key, path);
+                            }
                         }
-                        sink.EndFigure(D2D1_FIGURE_END_OPEN);
-                        if sink.Close().is_ok() {
-                            t.DrawGeometry(&path, brush, *width, None);
+                        if let Some(path) = arcs.get(&key) {
+                            t.DrawGeometry(path, brush, *width, None);
                         }
                     }
                 }
