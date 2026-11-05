@@ -211,7 +211,14 @@ fn group_open(items: Vec<Item>) -> Vec<Item> {
     for item in items {
         if let Some(short) = short_open_label(item.label()) {
             at.get_or_insert(out.len());
-            group.push(relabel(item, short));
+            let item = relabel(item, short);
+            // Two of the same ("Terminal": mypaper's and Windows Terminal's own handler): keep
+            // the shell's, which opens exactly what the user installed.
+            match group.iter().position(|g| g.label() == item.label()) {
+                Some(i) if is_shell(&item) && !is_shell(&group[i]) => group[i] = item,
+                Some(_) => {}
+                None => group.push(item),
+            }
         } else {
             out.push(item);
         }
@@ -223,6 +230,17 @@ fn group_open(items: Vec<Item>) -> Vec<Item> {
     .with_icon(MenuIcon::Glyph(glyph::TERMINAL));
     out.insert(at.unwrap_or(out.len()), submenu);
     out
+}
+
+/// Does this item run through the shell's own menu (an installed extension's verb)?
+fn is_shell(item: &Item) -> bool {
+    matches!(
+        item.plain(),
+        Entry::Action {
+            command: Command::Shell { .. },
+            ..
+        }
+    )
 }
 
 /// "Open in Terminal" → "Terminal", "Open with Visual Studio" → "Visual Studio", "Open Git Bash
@@ -565,6 +583,32 @@ mod tests {
             panic!("New is a submenu")
         };
         assert_eq!(labels(new), ["Folder", "Shortcut", "", "Text Document"]);
+    }
+
+    #[test]
+    fn an_installed_terminal_handler_replaces_mypapers_own() {
+        let mut shell = shell();
+        shell.items.insert(
+            0,
+            ShellItem::Action {
+                label: "Open in Terminal".into(),
+                verb: "openinterminal".into(),
+                id: 90,
+                icon: None,
+                enabled: true,
+            },
+        );
+        let sources = Sources {
+            shell: Some(&shell),
+            mypaper: None,
+        };
+        let items = build_with(&DesktopMenu::default(), ViewState::default(), sources);
+        let open = items.iter().find(|i| i.label() == "Open in").unwrap();
+        let Entry::Submenu { items: open, .. } = open.plain() else {
+            panic!("Open in is a submenu")
+        };
+        assert_eq!(labels(open), ["Terminal", "Git Bash"]);
+        assert!(is_shell(&open[0]));
     }
 
     #[test]
