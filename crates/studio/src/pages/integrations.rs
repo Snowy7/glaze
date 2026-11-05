@@ -110,18 +110,6 @@ pub static LIST: &[Integration] = &[
         setup: "Connect finds T3 Code on this PC and reuses your pairing. On a first connection, paste one pairing code from T3 Settings > Connections. Allow status, diagnostics for usage, and thread controls to use every widget face.",
         privacy: "Your T3 grant stays in Windows Credential Manager. Threads and approvals run only on your click. No transcripts retained.",
     },
-    Integration {
-        name: "OBS Studio",
-        adds: "REC and LIVE in the top bar, scenes",
-        glyph: glyph::PULSE,
-        section: Some("obs"),
-        builtin: false,
-        module: Some("obs"),
-        secret: Some(("obs", "Password")),
-        fields: &[Field::Text { path: "/obs/endpoint", label: "Address", placeholder: "ws://127.0.0.1:4455" }],
-        setup: "In OBS: Tools › WebSocket Server Settings. Copy its password, then Paste password.",
-        privacy: "Talks to OBS on this PC. Outputs and scenes only: no meters or previews.",
-    },
 ];
 
 fn enabled(app: &App, i: &Integration) -> bool {
