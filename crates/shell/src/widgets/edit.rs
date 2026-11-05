@@ -594,7 +594,6 @@ pub fn widget_icon(id: &str) -> Icon {
         "weather" => Icon::CloudSun,
         "t3" => Icon::Terminal,
         "discord" => Icon::Message,
-        "obs" => Icon::Video,
         "grok" => Icon::Sparkles,
         _ => Icon::Apps,
     }
