@@ -1844,7 +1844,7 @@ impl Widgets {
             self.plugin_action(ui, id, hit);
             return;
         }
-        if matches!(m.kind, Widget::T3 | Widget::Grok | Widget::Discord) && hit == view::FIELD {
+        if matches!(m.kind, Widget::T3 | Widget::Discord) && hit == view::FIELD {
             self.open_field(id, None);
             return;
         }
@@ -2175,9 +2175,8 @@ impl Widgets {
             m.dirty = true;
             return;
         }
-        if matches!(m.kind, Widget::T3 | Widget::Grok) {
+        if m.kind == Widget::T3 {
             crate::integrations::t3_widgets::submit(m, &text);
-            crate::integrations::grok::submit(m, &text);
             m.dirty = true;
             return;
         }
