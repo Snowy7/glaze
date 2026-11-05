@@ -1,8 +1,11 @@
 //! Native desktop widgets and edit mode. One cropped DesktopChild surface per visible instance,
 //! one deadline queue, and sleeping service workers. No WebView, polling loop or ambient motion.
 mod control;
+mod coverage;
 mod data;
 mod edit;
+mod markdown;
+mod metrics;
 mod model;
 #[cfg(test)]
 mod tests;
@@ -14,12 +17,14 @@ use crate::inbox;
 use crate::integrations::media::WidgetMedia as Media;
 use anyhow::Result;
 use base64::Engine;
-use model::{Model, Task, Timer, Widget};
+use coverage::WindowEvents;
+#[cfg(test)]
+use model::Timer;
+use model::{Model, Task, Widget};
 use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, Holds, Reason};
 use mypaper_desktop::{
-    ConfigWatcher, DesktopEvents, DesktopHost, Monitor, WindowEvents, covered_monitors,
-    monitor_infos, watch_file,
+    ConfigWatcher, DesktopEvents, DesktopHost, Monitor, covered_monitors, monitor_infos, watch_file,
 };
 use mypaper_theme::{Color, Paint, TextTone};
 use mypaper_ui::{
@@ -59,6 +64,7 @@ pub const WM_DATA: u32 = WM_APP + 103;
 
 struct Entry {
     surface: Surface,
+    topmost: bool,
     model: Model,
     monitor: usize,
     rect: Rect,
@@ -71,6 +77,7 @@ struct Drag {
     original: Rect,
     pending: Rect,
     resize: bool,
+    edges: [bool; 4],
 }
 struct EditSurface {
     surface: Surface,
@@ -94,6 +101,10 @@ pub struct Probe {
 /// `on_event`, and include `timeout_ms` in the message wait. All methods are non-reentrant.
 pub struct Widgets {
     layout: Layout,
+    layout_error: Option<String>,
+    theme_path: Option<PathBuf>,
+    theme_watcher: Option<ConfigWatcher>,
+    accent: Color,
     path: PathBuf,
     registry: Registry,
     storage: Storage,
@@ -121,6 +132,8 @@ pub struct Widgets {
     held: bool,
     hidden: bool,
     reconcile_needed: bool,
+    order_due: Option<Instant>,
+    foreground: HWND,
     plates: BTreeMap<String, Vec<Plate>>,
     skin: look::Skin,
     presents: u64,
@@ -130,7 +143,7 @@ pub struct Widgets {
     motion_frame: bool,
 }
 impl Widgets {
-    pub fn new(ui: &mut Ui, window: HWND) -> Result<Self> {
+    pub fn new(ui: &mut Ui, window: HWND, initial_facts: &[(usize, isize)]) -> Result<Self> {
         let host = DesktopHost::find()?;
         let desktop_events = DesktopEvents::new(host)?;
         let _control = control::Control::new()?;
@@ -139,7 +152,20 @@ impl Widgets {
         let path = files::layout()?;
         let missing = !path.exists();
         // A broken file never gets a starter layout or migration written over it.
-        let mut layout = Layout::load(&path)?;
+        let (mut layout, layout_error) = match Layout::load(&path) {
+            Ok(layout) => (layout, None),
+            Err(error) => {
+                if let Ok(bytes) = std::fs::read(&path) {
+                    let _ = files::backup(&path, &bytes);
+                }
+                (
+                    Layout::default(),
+                    Some(format!(
+                        "Invalid widgets.json: {error:#}. Correct the file before editing."
+                    )),
+                )
+            }
+        };
         if layout.migrate(|id| registry.replacement(id)) {
             layout.save(&path)?;
         }
@@ -178,6 +204,10 @@ impl Widgets {
         let skin = load_skin(&config);
         let mut widgets = Self {
             layout,
+            layout_error,
+            theme_path: None,
+            theme_watcher: None,
+            accent: palette_accent(&config),
             path,
             registry,
             storage: Storage::new(files::user("widget-data")?),
@@ -205,6 +235,8 @@ impl Widgets {
             held: false,
             hidden: false,
             reconcile_needed: true,
+            order_due: None,
+            foreground: HWND::default(),
             plates: BTreeMap::new(),
             skin,
             presents: 0,
@@ -213,6 +245,10 @@ impl Widgets {
             ticker: Ticker::new()?,
             motion_frame: false,
         };
+        widgets.follow_config();
+        for &(wparam, lparam) in initial_facts {
+            widgets.fact(wparam, lparam);
+        }
         widgets.poll(ui);
         Ok(widgets)
     }
@@ -222,6 +258,7 @@ impl Widgets {
     pub fn raw_message(&mut self, msg: &MSG) {
         if (msg.message == WM_DISPLAY && msg.hwnd.is_invalid()) || msg.message == WM_TIMECHANGE {
             self.monitors = monitor_infos();
+            self.stats.refresh_devices();
             self.reconcile_needed = true;
             for entry in self.entries.values_mut() {
                 entry.model.dirty = true;
@@ -236,12 +273,14 @@ impl Widgets {
                 self.set_editing(ui, on);
             }
             WM_OVERLAY => {
-                self.layout.overlay = mode(msg.lparam, self.layout.overlay);
-                self.save_layout();
+                let mut next = self.layout.clone();
+                next.overlay = mode(msg.lparam, next.overlay);
+                self.commit_layout(next);
                 self.reconcile_needed = true;
             }
             WM_LAYOUT => match Layout::load(&self.path) {
                 Ok(mut layout) => {
+                    self.layout_error = None;
                     if layout.migrate(|id| self.registry.replacement(id))
                         && let Err(e) = layout.save(&self.path)
                     {
@@ -253,7 +292,16 @@ impl Widgets {
                         self.reconcile_needed = true;
                     }
                 }
-                Err(e) => log::warn!("widgets.json: {e:#}; retaining the valid live layout"),
+                Err(e) => {
+                    let message = format!(
+                        "widgets.json: {e:#}. Fix the file to resume arranging; edits are not saved."
+                    );
+                    if let Ok(bytes) = std::fs::read(&self.path) {
+                        let _ = files::backup(&self.path, &bytes);
+                    }
+                    self.layout_error = Some(message);
+                    self.reconcile_needed = true;
+                }
             },
             inbox::WM_CONFIG | inbox::WM_PALETTE => self.follow_config(),
             _ => {}
@@ -269,6 +317,16 @@ impl Widgets {
         if let Ok(config) = Config::load() {
             self.holds.apply(&config);
             self.skin = load_skin(&config);
+            self.accent = palette_accent(&config);
+            let path = mypaper_theme::locate(Some(&config.theme))
+                .ok()
+                .map(|d| d.join("theme.json"));
+            if path != self.theme_path {
+                self.theme_watcher = path
+                    .as_ref()
+                    .and_then(|p| watch_file(p, || inbox::post(inbox::WM_CONFIG, 0)).ok());
+                self.theme_path = path;
+            }
             self.reconcile_needed = true;
         }
     }
@@ -310,7 +368,11 @@ impl Widgets {
             .values()
             .flat_map(|e| [e.model.next, e.model.fetch_at, e.model.save_at]);
         entries
-            .chain([self.stats.deadline(), self.plugins.deadline()])
+            .chain([
+                self.stats.deadline(),
+                self.plugins.deadline(),
+                self.order_due,
+            ])
             .flatten()
             .min()
             .map_or(u32::MAX, |d| {
@@ -321,6 +383,14 @@ impl Widgets {
         self.costs.2 += 1;
         let instant = Instant::now();
         let now = Stamp::now();
+        // A foreground transition can precede Explorer's asynchronous Show Desktop reorder.
+        // One final repair after its animation settles avoids restacking for unrelated events.
+        // SAFETY: a read-only snapshot; HWND is used only for identity comparison.
+        let foreground = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() };
+        if foreground != self.foreground {
+            self.foreground = foreground;
+            self.order_due = Some(instant + Duration::from_millis(250));
+        }
         if self.desktop_events.take_lost() {
             self.finish_fields();
             self.entries.clear();
@@ -342,17 +412,25 @@ impl Widgets {
             }
         }
         if self.windows.take_changed() {
-            for entry in self.entries.values().filter(|e| e.model.visible) {
-                entry.surface.show();
-                let _ = entry.surface.keep_above_desktop();
+            // Explorer can move its anchor without sending our windows a position message.
+            // One band probe catches that; ordinary app/child churn needs no group repair.
+            if self
+                .entries
+                .values()
+                .find(|entry| {
+                    entry.model.visible
+                        && self
+                            .registry
+                            .get(&entry.model.placed.widget)
+                            .is_some_and(|widget| {
+                                widget.manifest.preset != mypaper_widgets::manifest::Preset::Overlay
+                            })
+                })
+                .is_some_and(|entry| !entry.surface.desktop_order_valid())
+            {
+                self.order_due
+                    .get_or_insert(instant + Duration::from_millis(50));
             }
-            for grid in &self.grids {
-                grid.surface.show();
-            }
-            if let Some(palette) = &self.palette {
-                palette.surface.show();
-            }
-
             let covered =
                 if std::env::var_os("MYPAPER_WIDGETS_IGNORE_COVERED").is_some_and(|v| v == "1") {
                     vec![false; self.monitors.len()]
@@ -368,6 +446,12 @@ impl Widgets {
         let hidden = reasons.contains(Reason::Locked) || reasons.contains(Reason::DisplayOff);
         let held = !reasons.is_empty();
         if held != self.held || hidden != self.hidden {
+            if held && self.editing {
+                self.cancel_drag();
+                self.editing = false;
+                self.grids.clear();
+                self.palette = None;
+            }
             self.held = held;
             self.hidden = hidden;
             self.reconcile_needed = true;
@@ -391,6 +475,23 @@ impl Widgets {
             }
             self.reconcile_needed = false;
         }
+        if self.order_due.is_some_and(|at| at <= instant) {
+            self.order_due = None;
+            // Moving a paired glass window can displace an earlier member of the band.
+            // A second pass converges the group; an already ordered surface is a no-op.
+            for _ in 0..2 {
+                for entry in self.entries.values().filter(|e| e.model.visible) {
+                    entry.surface.show();
+                }
+            }
+            for grid in &self.grids {
+                grid.surface.show();
+            }
+            if let Some(palette) = &self.palette {
+                palette.surface.show();
+                let _ = palette.surface.raise_in_desktop_band();
+            }
+        }
         while let Ok(msg) = self.rx.try_recv() {
             self.service_message(ui, msg, now, instant);
         }
@@ -406,17 +507,38 @@ impl Widgets {
             } = delivery
                 && let Some(entry) = self.entries.get_mut(&instance)
             {
-                let history = [
-                    stats.cpu,
-                    stats.memory.used as f64 / stats.memory.total.max(1) as f64 * 100.0,
-                    stats.gpu.unwrap_or(0.0),
-                ];
+                let before = metrics::visible(&entry.model);
+                let quick_changed =
+                    entry.model.stats.as_ref().is_none_or(|old| {
+                        old.battery != stats.battery || old.network != stats.network
+                    });
                 entry.model.stats = Some(stats);
-                entry.model.history.push_back(history);
-                if entry.model.history.len() > 60 {
-                    entry.model.history.pop_front();
+                let after = metrics::visible(&entry.model);
+                let spark = entry.model.str("variant", "rings") == "spark";
+                if spark {
+                    for metric in &after {
+                        let history = entry.model.history.entry(metric.id.clone()).or_default();
+                        let sample = if metric.id == "net" {
+                            entry
+                                .model
+                                .stats
+                                .as_ref()
+                                .and_then(|s| s.net)
+                                .map_or(0.0, |n| n.down)
+                        } else {
+                            metric.percent
+                        };
+                        history.push_back(sample);
+                        if history.len() > 60 {
+                            history.pop_front();
+                        }
+                    }
                 }
-                entry.model.dirty = true;
+                entry.model.dirty |= if entry.model.kind == Widget::QuickToggles {
+                    quick_changed
+                } else {
+                    spark || before != after
+                };
             }
         }
         let plugin_out = self.plugins.tick(instant);
@@ -434,8 +556,32 @@ impl Widgets {
                 if m.visible
                     && !self.held
                     && (m.next.is_some_and(|at| at <= instant)
-                        || (self.motion_frame && m.photo.fade.is_some()))
+                        || (self.motion_frame
+                            && (m.photo.fade.is_some()
+                                || m.action_at.is_some()
+                                || m.flip_at.is_some())))
                 {
+                    if m.kind == Widget::Clock {
+                        let changed = m.last_clock.is_some_and(|old| {
+                            old.clock(m.flag("format24", true), m.flag("showSeconds", false))
+                                != now.clock(m.flag("format24", true), m.flag("showSeconds", false))
+                        });
+                        if changed && m.str("variant", "desk") == "flip" {
+                            m.previous_clock = m.last_clock;
+                            m.flip_at = Some(instant);
+                        }
+                        m.last_clock = Some(now);
+                    }
+                    if m.flip_at.is_some_and(|at| {
+                        instant.saturating_duration_since(at) >= Duration::from_millis(280)
+                    }) {
+                        m.flip_at = None;
+                    }
+                    if m.action_at.is_some_and(|at| {
+                        instant.saturating_duration_since(at) >= Duration::from_millis(650)
+                    }) {
+                        m.action_at = None;
+                    }
                     m.next = None;
                     m.dirty = true;
                     if m.kind == Widget::Photo
@@ -508,10 +654,12 @@ impl Widgets {
         self.ticker.schedule(
             !self.held
                 && (self.drag.is_some()
-                    || self
-                        .entries
-                        .values()
-                        .any(|e| e.model.visible && e.model.photo.fade.is_some())),
+                    || self.entries.values().any(|e| {
+                        e.model.visible
+                            && (e.model.photo.fade.is_some()
+                                || e.model.action_at.is_some()
+                                || e.model.flip_at.is_some())
+                    })),
         );
     }
 
@@ -551,28 +699,28 @@ impl Widgets {
                 &instance.appearance,
                 &self.layout.appearance,
                 &look::base(&self.skin),
-                look::accent(None),
+                self.accent,
             );
             let placed = layout::place(instance, manifest, &grid, &appearance);
             let rect = screen_rect(&grid, placed.cell, placed.size, screen);
+            let overlay = manifest.preset == mypaper_widgets::manifest::Preset::Overlay;
+            let topmost = overlay && !self.editing;
             let visible = !self.hidden
-                && (self.editing || !self.covered.get(monitor).copied().unwrap_or(false))
-                && (self.editing || self.layout.overlay || instance.widget != "media-pill");
+                && (self.editing
+                    || overlay
+                    || !self.covered.get(monitor).copied().unwrap_or(false))
+                && (self.editing || self.layout.overlay || !overlay);
             if !self.entries.contains_key(&instance.instance) {
                 match Model::new(placed.clone(), &mut self.storage, now) {
                     Ok(model) => {
-                        let surface = Surface::new(
-                            Kind::DesktopChild {
-                                parent: host.icons_parent(),
-                            },
-                            &format!("mypaper widget {}", instance.instance),
-                            Role::Pane,
-                        )?;
+                        let surface =
+                            widget_surface(topmost, host.icons_parent(), &instance.instance)?;
                         let tokens = tokens(&placed.appearance);
                         self.entries.insert(
                             instance.instance.clone(),
                             Entry {
                                 surface,
+                                topmost,
                                 model,
                                 monitor,
                                 rect,
@@ -588,11 +736,19 @@ impl Widgets {
                 }
             }
             let entry = self.entries.get_mut(&instance.instance).unwrap();
+            if entry.topmost != topmost {
+                let surface = widget_surface(topmost, host.icons_parent(), &instance.instance)?;
+                finish_field(entry, &mut self.storage);
+                entry.surface = surface;
+                entry.topmost = topmost;
+                entry.model.dirty = true;
+            }
             let was_visible = entry.model.visible;
             let changed = entry.model.placed != placed;
             if changed {
                 entry.model.generation += 1;
                 entry.model.fetching = false;
+                entry.model.scroll = 0.0;
                 entry.model.icons.clear();
                 entry.model.fetch_at = None;
                 entry.model.photo = model::Photo::default();
@@ -613,6 +769,8 @@ impl Widgets {
                     entry.surface.release();
                     entry.surface.discard_events();
                     entry.model.artwork = None;
+                    entry.model.artwork_backdrop = None;
+                    entry.model.artwork_tint = None;
                     entry.model.icons.clear();
                     entry.model.photo = model::Photo::default();
                 }
@@ -635,14 +793,18 @@ impl Widgets {
                     self.stats.subscribe_fields(
                         &instance.instance,
                         "system",
-                        Duration::from_secs(2),
+                        if quick {
+                            Duration::from_secs(2)
+                        } else {
+                            entry.model.stats_interval()
+                        },
                         instant,
                         mypaper_widgets::stats::SampleFields {
                             gpu: !quick && entry.model.flag("gpu", true),
                             disks: !quick && entry.model.flag("disk", false),
                             net: !quick && entry.model.flag("net", true),
                             battery: quick || entry.model.flag("battery", true),
-                            network: quick,
+                            network: quick || entry.model.flag("net", true),
                         },
                     );
                 }
@@ -763,6 +925,10 @@ impl Widgets {
                 m.artwork = data
                     .get("artwork")
                     .and_then(|v| decode_url(ui, v, (256, 256)));
+                (m.artwork_backdrop, m.artwork_tint) = m
+                    .artwork
+                    .as_ref()
+                    .map_or((None, None), |art| artwork_material(art));
                 if let Some(object) = data.as_object_mut() {
                     object.insert("_at".into(), json!(now.ms));
                 }
@@ -773,6 +939,22 @@ impl Widgets {
     }
     fn answer(&mut self, ui: &mut Ui, answer: data::Answer, now: Stamp, instant: Instant) {
         match answer {
+            data::Answer::Activated {
+                instance,
+                generation,
+                hit,
+                result,
+            } => {
+                if let Some(entry) = self
+                    .entries
+                    .get_mut(&instance)
+                    .filter(|e| e.model.generation == generation)
+                {
+                    entry.model.action_hit = Some(hit);
+                    entry.model.notice = result.err();
+                    entry.model.dirty = true;
+                }
+            }
             data::Answer::Data {
                 instance,
                 generation,
@@ -850,8 +1032,13 @@ impl Widgets {
                     }
                     Err(e) => m.error = Some(e),
                 }
-                m.photo.change = (m.photo_paths().len() > 1).then_some(
-                    instant + Duration::from_secs_f64(m.num("interval", 15.0).clamp(5.0, 120.0)),
+                m.photo.change = (m.photo_paths().len() > 1 || m.error.is_some()).then_some(
+                    instant
+                        + Duration::from_secs_f64(if m.error.is_some() {
+                            5.0
+                        } else {
+                            m.num("interval", 15.0).clamp(5.0, 120.0)
+                        }),
                 );
                 m.dirty = true;
                 m.schedule(now, instant);
@@ -895,6 +1082,9 @@ impl Widgets {
         let path = if let Some(url) = mypaper_widgets::pick::parse_data_url(value) {
             if url.instance != id {
                 m.error = Some("Photo belongs to another instance".into());
+                m.photo.change = Some(Instant::now() + Duration::from_secs(5));
+                m.schedule(Stamp::now(), Instant::now());
+                m.dirty = true;
                 return;
             }
             files::user("widget-data")
@@ -941,7 +1131,7 @@ impl Widgets {
         }
         if m.flag("autoAdvance", false) && m.timer.mode != "custom" && now.ms - at < 2500 {
             let mode = m.timer.next_mode(&m.placed.settings);
-            m.timer = Timer::idle(&m.placed.settings, mode, m.timer.sessions);
+            m.timer = m.timer.enter(&m.placed.settings, mode);
             m.timer.ends_at = Some(now.ms + m.timer.total);
         }
         m.dirty = true;
@@ -949,7 +1139,7 @@ impl Widgets {
             log::warn!("timer storage: {e:#}");
         }
         if activity {
-            self.record_activity("timer", &now.date.key(), 1);
+            self.record_activity("timer", &Stamp::at(at).date.key(), 1);
         }
     }
     fn record_activity(&mut self, source: &str, day: &str, delta: i32) {
@@ -1018,11 +1208,17 @@ impl Widgets {
             self.cancel_drag();
             return;
         }
-        if matches!(event, Event::VisibilityChanged) {
+        if matches!(event, Event::VisibilityChanged | Event::Activated) {
             if let Some(entry) = self.entries.values().find(|e| e.surface.id() == surface)
                 && entry.model.visible
+                && (matches!(event, Event::Activated)
+                    || !entry.surface.is_visible()
+                    || !entry.surface.desktop_order_valid())
             {
-                entry.surface.show();
+                // Explorer restores windows in a batch. Repair the whole desktop band once
+                // after that batch, without a periodic z-order check or a content redraw.
+                self.order_due
+                    .get_or_insert(Instant::now() + Duration::from_millis(50));
             }
             return;
         }
@@ -1066,11 +1262,15 @@ impl Widgets {
         };
         if self.editing {
             match event {
+                Event::Key(key @ 37..=40) => self.edit_key(&id, *key),
                 Event::Key(27) => {
                     self.cancel_drag();
                     self.set_editing(ui, false);
                 }
                 Event::Press(p, Button::Left) => {
+                    if self.layout_error.is_some() {
+                        return;
+                    }
                     let entry = &self.entries[&id];
                     let hit = entry.surface.shown().hit_at(p.at).map(|h| h.id);
                     if matches!(hit, Some(view::REMOVE | view::DUPLICATE)) {
@@ -1078,6 +1278,7 @@ impl Widgets {
                     }
                     // SAFETY: capture is paired with release/cancel/drop on our own surface.
                     unsafe {
+                        entry.surface.take_focus();
                         SetCapture(entry.surface.hwnd());
                         let _ = SetFocus(Some(entry.surface.hwnd()));
                     }
@@ -1087,7 +1288,8 @@ impl Widgets {
                         start: p.screen,
                         original: entry.rect,
                         pending: entry.rect,
-                        resize: hit == Some(view::RESIZE),
+                        resize: hit.is_some_and(|h| view::resize_edges(h).is_some()),
+                        edges: hit.and_then(view::resize_edges).unwrap_or([false; 4]),
                     });
                 }
                 Event::Move(p) => {
@@ -1097,12 +1299,29 @@ impl Widgets {
                         let dx = (p.screen.0 - drag.start.0) as f32;
                         let dy = (p.screen.1 - drag.start.1) as f32;
                         drag.pending = if drag.resize {
-                            Rect::new(
-                                drag.original.left,
-                                drag.original.top,
-                                (drag.original.width() + dx).max(48.0),
-                                (drag.original.height() + dy).max(48.0),
-                            )
+                            let [left, top, right, bottom] = drag.edges;
+                            Rect {
+                                left: if left {
+                                    (drag.original.left + dx).min(drag.original.right - 48.0)
+                                } else {
+                                    drag.original.left
+                                },
+                                top: if top {
+                                    (drag.original.top + dy).min(drag.original.bottom - 48.0)
+                                } else {
+                                    drag.original.top
+                                },
+                                right: if right {
+                                    (drag.original.right + dx).max(drag.original.left + 48.0)
+                                } else {
+                                    drag.original.right
+                                },
+                                bottom: if bottom {
+                                    (drag.original.bottom + dy).max(drag.original.top + 48.0)
+                                } else {
+                                    drag.original.bottom
+                                },
+                            }
                         } else {
                             drag.original.offset(dx, dy)
                         };
@@ -1123,7 +1342,47 @@ impl Widgets {
             }
             return;
         }
+        if let Event::Key(key) = event
+            && self.widget_key(ui, &id, *key)
+        {
+            return;
+        }
         match event {
+            Event::Focus(hit) => {
+                let m = &mut self.entries.get_mut(&id).unwrap().model;
+                m.focus = Some(*hit);
+                m.dirty = true;
+            }
+            Event::Wheel(_, delta) => self.scroll(&id, -f32::from(*delta) / 120.0 * 48.0),
+            Event::Press(p, Button::Left) => {
+                let entry = self.entries.get_mut(&id).unwrap();
+                entry.surface.take_focus();
+                entry.model.pressed = entry.surface.shown().hit_at(p.at).map(|h| h.id);
+                entry.model.focus = entry.model.pressed.filter(|&h| h != view::BODY);
+                entry.model.notice = None;
+                entry.model.dirty = true;
+            }
+            Event::Move(p) => {
+                let entry = self.entries.get_mut(&id).unwrap();
+                let hit = entry.surface.shown().hit_at(p.at);
+                let hover = hit.map(|h| h.id);
+                if hover != entry.model.hover {
+                    entry.model.hover = hover;
+                    entry.model.tooltip = hit
+                        .filter(|h| h.id != view::BODY)
+                        .map(|h| h.label.to_string());
+                    if entry.model.kind == Widget::Media {
+                        entry.model.tooltip = Some(media_description(&entry.model, Stamp::now()));
+                    }
+                    entry.model.dirty = true;
+                }
+            }
+            Event::Leave => {
+                let m = &mut self.entries.get_mut(&id).unwrap().model;
+                m.dirty |= m.hover.take().is_some();
+                m.tooltip = None;
+                m.pressed = None;
+            }
             Event::TextChanged => {
                 let m = &mut self.entries.get_mut(&id).unwrap().model;
                 m.dirty = true;
@@ -1139,11 +1398,21 @@ impl Widgets {
             Event::TextSubmit => self.submit_field(&id),
             Event::Deactivated | Event::Key(27) => {
                 if let Some(entry) = self.entries.get_mut(&id) {
+                    // Activation messages can already be queued when a click opens the field.
+                    // Only commit a focusout that still describes the current foreground.
+                    if matches!(event, Event::Deactivated)
+                        // SAFETY: read-only foreground query against our live surface.
+                        && unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() }
+                            == entry.surface.hwnd()
+                    {
+                        return;
+                    }
                     finish_field(entry, &mut self.storage);
                     entry.model.dirty = true;
                 }
             }
             Event::Release(p, Button::Left) => {
+                self.entries.get_mut(&id).unwrap().model.pressed = None;
                 if let Some(hit) = self.entries[&id].surface.shown().hit_at(p.at).map(|h| h.id) {
                     self.action(ui, &id, hit);
                 }
@@ -1151,6 +1420,132 @@ impl Widgets {
             Event::Invoke(hit) => self.action(ui, &id, *hit),
             _ => {}
         }
+    }
+    fn scroll(&mut self, id: &str, delta: f32) {
+        let m = &mut self.entries.get_mut(id).unwrap().model;
+        let next = (m.scroll + delta).clamp(0.0, m.scroll_max.get());
+        if m.scroll != next {
+            m.scroll = next;
+            m.dirty = true;
+            m.tooltip = None;
+            m.hover = None;
+        }
+    }
+    fn widget_key(&mut self, ui: &mut Ui, id: &str, key: u16) -> bool {
+        let entry = &self.entries[id];
+        if key == 27 && entry.model.field.is_some() {
+            let entry = self.entries.get_mut(id).unwrap();
+            if entry.model.kind == Widget::Launcher
+                && let Some(field) = &entry.model.field
+                && field.text().is_ok_and(|text| !text.is_empty())
+            {
+                let _ = field.set_text("");
+                entry.model.notice = None;
+                entry.model.dirty = true;
+                return true;
+            }
+            if entry.model.kind == Widget::Todo || entry.model.kind == Widget::Calendar {
+                if let Some(field) = entry.model.field.take() {
+                    field.blur();
+                }
+                entry.surface.set_text_field(None);
+                entry.model.task_edit = None;
+                entry.model.event_draft = None;
+                entry.model.dirty = true;
+            } else {
+                finish_field(entry, &mut self.storage);
+            }
+            return true;
+        }
+        if entry.model.field_keyboard && key != 9 {
+            return false;
+        }
+        match key {
+            9 => {
+                if entry.model.kind == Widget::Todo && entry.model.field_keyboard {
+                    self.submit_field(id);
+                    let entry = self.entries.get_mut(id).unwrap();
+                    finish_field(entry, &mut self.storage);
+                }
+                let entry = self.entries.get_mut(id).unwrap();
+                if let Some(field) = &entry.model.field {
+                    if let Some(draft) = &mut entry.model.event_draft
+                        && let Ok(text) = field.text()
+                    {
+                        draft.capture(text);
+                    }
+                    field.blur();
+                    entry.surface.set_text_field(None);
+                    entry.model.field_keyboard = false;
+                }
+                let hits: Vec<_> = entry
+                    .surface
+                    .shown()
+                    .hits
+                    .iter()
+                    .filter(|h| h.role != Role::Pane)
+                    .cloned()
+                    .collect();
+                entry.model.focus = mypaper_ui::focus::step(
+                    &hits,
+                    entry.model.focus,
+                    if shift_down() { -1 } else { 1 },
+                );
+                if entry.model.focus == Some(view::FIELD)
+                    && let Some(field) = &entry.model.field
+                {
+                    entry.surface.set_text_field(Some(field.clone()));
+                    field.focus();
+                    entry.model.field_keyboard = true;
+                }
+                entry.model.dirty = true;
+            }
+            13 | 32 => {
+                let hit = entry.model.focus.or_else(|| {
+                    entry
+                        .surface
+                        .shown()
+                        .hits
+                        .iter()
+                        .find(|h| h.role != Role::Pane)
+                        .map(|h| h.id)
+                });
+                if let Some(hit) = hit {
+                    self.action(ui, id, hit);
+                }
+            }
+            113 | 46 if entry.model.kind == Widget::Todo => {
+                let index = entry.model.focus.and_then(|hit| {
+                    if (view::EDIT_TASK..view::EDIT_TASK + 300).contains(&hit) {
+                        Some(hit - view::EDIT_TASK)
+                    } else if (view::ITEM..view::ITEM + 300).contains(&hit) {
+                        Some(hit - view::ITEM)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(index) = index {
+                    self.action(
+                        ui,
+                        id,
+                        if key == 113 {
+                            view::EDIT_TASK
+                        } else {
+                            view::DELETE_TASK
+                        } + index,
+                    );
+                }
+            }
+            33 | 34 => {
+                let page = entry.model.scroll_page.get() * 0.9;
+                self.scroll(id, if key == 33 { -page } else { page });
+            }
+            36 => self.scroll(id, -f32::MAX),
+            35 => self.scroll(id, f32::MAX),
+            38 | 40 => self.scroll(id, if key == 38 { -32.0 } else { 32.0 }),
+            _ => return false,
+        }
+        true
     }
     fn action(&mut self, ui: &mut Ui, id: &str, hit: HitId) {
         let now = Stamp::now();
@@ -1178,7 +1573,14 @@ impl Widgets {
                     .checked_sub(view::ITEM)
                     .and_then(|i| view::TOGGLES.get(i as usize))
                 {
-                    self.worker.send(data::Work::Launch(tile.3.into()));
+                    m.action_hit = Some(hit);
+                    m.action_at = Some(Instant::now());
+                    self.worker.send(data::Work::Activate {
+                        instance: id.into(),
+                        generation: m.generation,
+                        hit,
+                        target: tile.3.into(),
+                    });
                 }
             }
             Widget::Launcher => {
@@ -1189,10 +1591,22 @@ impl Widgets {
                     .and_then(|i| m.list("shortcuts").get(i as usize))
                     .and_then(|v| v["target"].as_str())
                 {
-                    self.worker.send(data::Work::Launch(target.into()));
+                    let target = target.to_owned();
+                    m.action_hit = Some(hit);
+                    m.action_at = Some(Instant::now());
+                    self.worker.send(data::Work::Activate {
+                        instance: id.into(),
+                        generation: m.generation,
+                        hit,
+                        target,
+                    });
                 }
             }
             Widget::Calendar => {
+                if m.event_draft.is_some() {
+                    self.event_action(id, hit);
+                    return;
+                }
                 if hit == view::PRIMARY {
                     self.open_field(id, None);
                 } else if hit >= view::EDIT_TASK {
@@ -1206,6 +1620,10 @@ impl Widgets {
                         m.events.remove(index);
                         m.save_at = Some(Instant::now());
                     }
+                } else if hit == view::TODAY {
+                    m.selected = now.date;
+                    m.month = now.date.shift_month(0);
+                    m.scroll = 0.0;
                 } else if hit == view::PREVIOUS || hit == view::NEXT {
                     let delta = if hit == view::PREVIOUS { -1 } else { 1 };
                     if m.str("variant", "month") == "strip" {
@@ -1216,7 +1634,9 @@ impl Widgets {
                     }
                 } else if hit > view::ITEM && hit <= view::ITEM + 31 {
                     if m.str("variant", "month") == "strip" {
-                        let first = m.selected.add_days(-i64::from(m.selected.weekday()));
+                        let first = m.selected.add_days(-i64::from(
+                            (m.selected.weekday() + 7 - calendar_start(m)) % 7,
+                        ));
                         if let Some(day) = (0..7)
                             .map(|i| first.add_days(i))
                             .find(|d| d.day == hit - view::ITEM)
@@ -1238,24 +1658,26 @@ impl Widgets {
                             m.timer.remaining = (end - now.ms).max(0);
                         } else {
                             if m.timer.remaining == 0 {
-                                let mode = m.timer.next_mode(&m.placed.settings);
-                                m.timer = Timer::idle(&m.placed.settings, mode, m.timer.sessions);
+                                let mode = if m.timer.mode == "custom" {
+                                    "custom"
+                                } else {
+                                    m.timer.next_mode(&m.placed.settings)
+                                };
+                                m.timer = m.timer.enter(&m.placed.settings, mode);
                             }
                             m.timer.ends_at = Some(now.ms + m.timer.remaining);
                             m.timer.finished_at = None;
                         }
                     }
-                    view::RESET => {
-                        m.timer = Timer::idle(&m.placed.settings, &m.timer.mode, m.timer.sessions)
-                    }
+                    view::RESET => m.timer = m.timer.enter(&m.placed.settings, &m.timer.mode),
                     view::NEXT => {
                         let mode = m.timer.next_mode(&m.placed.settings);
-                        m.timer = Timer::idle(&m.placed.settings, mode, m.timer.sessions);
+                        m.timer = m.timer.enter(&m.placed.settings, mode);
                     }
                     hit if (view::MODE..view::MODE + 4).contains(&hit) => {
                         let mode =
                             ["focus", "short", "long", "custom"][(hit - view::MODE) as usize];
-                        m.timer = Timer::idle(&m.placed.settings, mode, m.timer.sessions);
+                        m.timer = m.timer.enter(&m.placed.settings, mode);
                     }
                     _ => {}
                 }
@@ -1270,12 +1692,11 @@ impl Widgets {
                     self.open_field(id, None);
                 } else if let Some(index) = hit.checked_sub(view::NOTE_TASK).map(|n| n as usize) {
                     let mut lines: Vec<_> = m.note.lines().map(str::to_owned).collect();
-                    if let Some(line) = lines.get_mut(index) {
-                        if line.starts_with("- [ ] ") {
-                            line.replace_range(3..4, "x");
-                        } else if line.starts_with("- [x] ") || line.starts_with("- [X] ") {
-                            line.replace_range(3..4, " ");
-                        }
+                    if let Some(line) = lines.get_mut(index)
+                        && let Some(at) = markdown::task_box(line)
+                    {
+                        let checked = line.as_bytes()[at] != b' ';
+                        line.replace_range(at..at + 1, if checked { " " } else { "x" });
                     }
                     let newline = m.note.ends_with('\n');
                     m.note = lines.join("\n");
@@ -1297,7 +1718,7 @@ impl Widgets {
                     let i = (hit - view::DELETE_TASK) as usize;
                     if i < m.tasks.len() {
                         m.tasks.remove(i);
-                        m.counted.clear();
+                        m.remove_counted(i);
                         m.save_at = Some(Instant::now());
                     }
                 } else if let Some(index) = hit
@@ -1343,6 +1764,13 @@ impl Widgets {
                     )));
                 }
             }
+            Widget::Weather if hit == view::RETRY => {
+                m.fetch_at = Some(Instant::now());
+                m.error = None;
+            }
+            Widget::Weather if hit == view::PRIVACY => self
+                .worker
+                .send(data::Work::Launch("ms-settings:privacy-location".into())),
             Widget::Weather if hit == view::PRIMARY => {
                 let location = m.data["current"]["location"]["name"]
                     .as_str()
@@ -1364,6 +1792,19 @@ impl Widgets {
         let entry = self.entries.get_mut(id).unwrap();
         let m = &mut entry.model;
         m.task_edit = index;
+        if m.kind == Widget::Calendar {
+            let event = index.and_then(|i| m.events.get(i));
+            m.event_draft = Some(model::EventDraft {
+                title: event.and_then(|e| e["title"].as_str()).unwrap_or("").into(),
+                date: event
+                    .and_then(|e| e["date"].as_str())
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| m.selected.key()),
+                time: event.and_then(|e| e["time"].as_str()).unwrap_or("").into(),
+                color: event.and_then(|e| e["color"].as_u64()).unwrap_or(0) as usize,
+                part: model::EventPart::Title,
+            });
+        }
         let scale = self.monitors[entry.monitor].dpi as f32 / 96.0 * entry.tokens.scale;
         let size = if m.kind == Widget::Notes {
             14.0 * m.num("fontScale", 1.0) as f32
@@ -1402,6 +1843,8 @@ impl Widgets {
                 }
                 entry.surface.set_text_field(Some(field.clone()));
                 field.focus();
+                m.field_keyboard = true;
+                m.focus = Some(view::FIELD);
                 m.field = Some(field);
                 m.dirty = true;
             }
@@ -1411,41 +1854,17 @@ impl Widgets {
     fn submit_field(&mut self, id: &str) {
         let entry = self.entries.get_mut(id).unwrap();
         let m = &mut entry.model;
-        let Some(field) = &m.field else {
+        let Some(field) = m.field.clone() else {
             return;
         };
         let Ok(text) = field.text() else {
             return;
         };
         if m.kind == Widget::Calendar {
-            let clean = text.trim();
-            if clean.is_empty() {
-                return;
-            }
-            let (clock, title) = clean
-                .split_once(' ')
-                .filter(|(clock, _)| {
-                    clock.len() == 5
-                        && clock.as_bytes()[2] == b':'
-                        && clock[..2].parse::<u32>().is_ok_and(|h| h < 24)
-                        && clock[3..].parse::<u32>().is_ok_and(|n| n < 60)
-                })
-                .map_or((None, clean), |(clock, title)| (Some(clock), title));
-            let title = title.chars().take(80).collect::<String>();
-            if let Some(index) = m.task_edit.take() {
-                if let Some(event) = m.events.get_mut(index) {
-                    event["title"] = json!(title);
-                    if let Some(time) = clock {
-                        event["time"] = json!(time);
-                    }
-                }
-            } else if m.events.len() < 500 {
-                m.events.push(json!({"id":format!("event-{}",time::epoch_ms()),"date":m.selected.key(),"title":title,"time":clock,"color":0}));
-            }
-            let _ = field.set_text("");
-            m.save_at = Some(Instant::now());
-            m.dirty = true;
-        } else if m.kind == Widget::Todo {
+            self.event_action(id, view::PRIMARY);
+            return;
+        }
+        if m.kind == Widget::Todo {
             let clean = text
                 .split_whitespace()
                 .collect::<Vec<_>>()
@@ -1456,6 +1875,7 @@ impl Widgets {
             if let Some(index) = m.task_edit.take() {
                 if clean.is_empty() {
                     m.tasks.remove(index);
+                    m.remove_counted(index);
                 } else if let Some(task) = m.tasks.get_mut(index) {
                     task.text = clean;
                 }
@@ -1466,21 +1886,93 @@ impl Widgets {
                 };
                 if m.str("addPosition", "bottom") == "top" {
                     m.tasks.insert(0, task);
-                    m.counted.clear();
+                    m.insert_counted(0);
+                    m.scroll = 0.0;
                 } else {
                     m.tasks.push(task);
+                    m.scroll = f32::MAX; // clamped by the next viewport layout to the newly added row.
                 }
             }
             let _ = field.set_text("");
             m.save_at = Some(Instant::now());
             m.dirty = true;
-        } else if m.kind == Widget::Launcher
-            && let Some(url) = search_url(&text, &m.placed.settings)
-        {
-            self.worker.send(data::Work::Launch(url));
-            let _ = field.set_text("");
+        } else if m.kind == Widget::Launcher {
+            if let Some(url) = search_url(&text, &m.placed.settings) {
+                self.worker.send(data::Work::Launch(url));
+                let _ = field.set_text("");
+                m.notice = None;
+            } else if !text.trim().is_empty() {
+                m.notice = Some("Set a valid HTTP(S) search URL containing {q} in Studio.".into());
+            }
             m.dirty = true;
         }
+    }
+    fn event_action(&mut self, id: &str, hit: HitId) {
+        let entry = self.entries.get_mut(id).unwrap();
+        let m = &mut entry.model;
+        if hit == view::CANCEL {
+            m.event_draft = None;
+            m.task_edit = None;
+            if let Some(field) = m.field.take() {
+                field.blur();
+            }
+            entry.surface.set_text_field(None);
+            m.notice = None;
+            m.dirty = true;
+            return;
+        }
+        let Some(draft) = &mut m.event_draft else {
+            return;
+        };
+        let Some(field) = &m.field else { return };
+        if let Ok(text) = field.text() {
+            draft.capture(text);
+        }
+        if hit == view::PRIMARY {
+            match draft.event() {
+                Ok(mut event) => {
+                    if let Some(index) = m.task_edit.take() {
+                        if let Some(existing) = m.events.get_mut(index) {
+                            event["id"] = existing["id"].clone();
+                            *existing = event;
+                        }
+                    } else if m.events.len() < 500 {
+                        m.events.push(event);
+                    } else {
+                        m.notice = Some("The calendar holds up to 500 events".into());
+                        m.dirty = true;
+                        return;
+                    }
+                    m.event_draft = None;
+                    if let Some(field) = m.field.take() {
+                        field.blur();
+                    }
+                    entry.surface.set_text_field(None);
+                    m.save_at = Some(Instant::now());
+                    m.notice = None;
+                }
+                Err(error) => m.notice = Some(error),
+            }
+        } else if (view::EVENT_COLOR..view::EVENT_COLOR + 6).contains(&hit) {
+            draft.color = (hit - view::EVENT_COLOR) as usize;
+        } else {
+            draft.part = match hit {
+                view::EVENT_DATE => model::EventPart::Date,
+                view::EVENT_TIME => model::EventPart::Time,
+                _ => model::EventPart::Title,
+            };
+            let text = match draft.part {
+                model::EventPart::Title => &draft.title,
+                model::EventPart::Date => &draft.date,
+                model::EventPart::Time => &draft.time,
+            };
+            let _ = field.set_text(text);
+            entry.surface.set_text_field(Some(field.clone()));
+            field.focus();
+            m.field_keyboard = true;
+            m.focus = Some(view::FIELD);
+        }
+        m.dirty = true;
     }
     fn finish_fields(&mut self) {
         for entry in self.entries.values_mut() {
@@ -1489,7 +1981,7 @@ impl Widgets {
     }
 
     fn set_editing(&mut self, ui: &mut Ui, on: bool) {
-        if on == self.editing {
+        if (on && (self.held || !self.holds.reasons().is_empty())) || on == self.editing {
             return;
         }
         self.finish_fields();
@@ -1533,7 +2025,9 @@ impl Widgets {
             });
         }
         for entry in self.entries.values() {
-            entry.surface.keep_above_desktop()?;
+            if entry.model.placed.widget != "media-pill" {
+                entry.surface.keep_above_desktop()?;
+            }
         }
         if let Some((index, monitor)) = self.monitors.iter().enumerate().find(|(_, m)| m.primary) {
             let names = self
@@ -1542,7 +2036,11 @@ impl Widgets {
                 .iter()
                 .map(|(id, i)| (id.clone(), i.manifest.name.clone()))
                 .collect::<Vec<_>>();
-            let (list, size) = edit::palette(&names, monitor.dpi as f32 / 96.0);
+            let (list, size) = edit::palette(
+                &names,
+                monitor.dpi as f32 / 96.0,
+                self.layout_error.as_deref(),
+            );
             let origin = (
                 monitor.work.x + (monitor.work.width - size.0 as i32) / 2,
                 monitor.work.y + 12,
@@ -1565,50 +2063,81 @@ impl Widgets {
         Ok(())
     }
     fn edit_action(&mut self, ui: &mut Ui, id: &str, hit: HitId) {
+        if self.layout_error.is_some() {
+            return;
+        }
         if hit == view::REMOVE {
-            self.forget(id);
-            if let Some(mut entry) = self.entries.remove(id) {
-                finish_field(&mut entry, &mut self.storage);
+            let mut next = self.layout.clone();
+            if next.remove(id).is_ok() && self.commit_layout(next) {
+                self.forget(id);
+                if let Some(mut entry) = self.entries.remove(id) {
+                    finish_field(&mut entry, &mut self.storage);
+                }
+                if let Ok(root) = files::user("widget-data") {
+                    mypaper_widgets::pick::remove_instance(&root, id);
+                    let _ = self.storage.remove(id);
+                }
+                self.reconcile_needed = true;
             }
-            let _ = self.layout.remove(id);
-            self.save_layout();
-            self.reconcile_needed = true;
         } else if hit == view::DUPLICATE {
             let Some(original) = self.layout.get(id).cloned() else {
                 return;
             };
-            let monitor = self.entries[id].monitor;
-            let grid = grid_for(&self.layout, &self.monitors[monitor]);
+            let grid = grid_for(&self.layout, &self.monitors[self.entries[id].monitor]);
             let manifest = &self.registry.get(&original.widget).unwrap().manifest;
             let (total, here) = self
                 .layout
                 .count_of(&original.widget, |i| i.monitor == original.monitor);
-            if manifest.instances.allows(total, here)
-                && let Some(cell) = edit::vacancy(
-                    &grid,
-                    original.size,
-                    &self.layout.instances,
-                    &original.monitor,
-                )
-                && let Ok(copy) = self.layout.duplicate(id, cell)
-            {
-                if let (Ok(from), Ok(to)) = (
-                    files::user(&format!("widget-data/{id}.json")),
-                    files::user(&format!("widget-data/{copy}.json")),
-                ) && from.exists()
-                {
-                    let _ = std::fs::copy(from, to);
+            if !manifest.instances.allows(total, here) {
+                self.edit_feedback(id, "This widget has reached its instance limit");
+                return;
+            }
+            let Some(cell) = edit::vacancy(
+                &grid,
+                original.size,
+                &self.layout.instances,
+                &original.monitor,
+            ) else {
+                self.edit_feedback(id, "No free space for a duplicate");
+                return;
+            };
+            let mut next = self.layout.clone();
+            let Ok(copy) = next.duplicate(id, cell) else {
+                return;
+            };
+            let copied = files::user("widget-data").and_then(|root| {
+                anyhow::ensure!(!root.join(&copy).exists(), "duplicate files already exist");
+                self.storage.duplicate(id, &copy)?;
+                if let Err(error) = mypaper_widgets::pick::copy_instance_checked(&root, id, &copy) {
+                    mypaper_widgets::pick::remove_instance(&root, &copy);
+                    let _ = self.storage.remove(&copy);
+                    return Err(error);
                 }
-                if let Ok(root) = files::user("widget-data") {
-                    mypaper_widgets::pick::copy_instance(&root, id, &copy);
-                }
-                self.save_layout();
+                Ok(())
+            });
+            if let Err(error) = copied {
+                self.edit_feedback(id, &format!("Could not duplicate: {error:#}"));
+                return;
+            }
+            if self.commit_layout(next) {
                 self.reconcile_needed = true;
+            } else if let Ok(root) = files::user("widget-data") {
+                mypaper_widgets::pick::remove_instance(&root, &copy);
+                let _ = self.storage.remove(&copy);
             }
         }
         let _ = ui;
     }
+    fn edit_feedback(&mut self, id: &str, message: &str) {
+        if let Some(entry) = self.entries.get_mut(id) {
+            entry.model.notice = Some(message.into());
+            entry.model.dirty = true;
+        }
+    }
     fn add(&mut self, ui: &mut Ui, id: String) {
+        if self.layout_error.is_some() {
+            return;
+        }
         let Some(index) = self.palette.as_ref().map(|p| p.monitor) else {
             return;
         };
@@ -1621,11 +2150,72 @@ impl Widgets {
         }
         let size = manifest.clamp_size(manifest.size.default);
         if let Some(cell) = edit::vacancy(&grid, size, &self.layout.instances, &monitor.device) {
-            self.layout.add(&id, &monitor.device, cell, size);
-            self.save_layout();
-            self.reconcile_needed = true;
-            self.poll(ui);
+            let mut next = self.layout.clone();
+            next.add(&id, &monitor.device, cell, size);
+            if self.commit_layout(next) {
+                self.reconcile_needed = true;
+                self.poll(ui);
+            }
         }
+    }
+    fn place_edit(
+        &mut self,
+        id: &str,
+        monitor: usize,
+        cell: [u32; 2],
+        size: [u32; 2],
+        resize: bool,
+    ) {
+        let screen = &self.monitors[monitor];
+        let grid = grid_for(&self.layout, screen);
+        let Some(instances) = edit::resolve(
+            &grid,
+            &self.layout.instances,
+            id,
+            &screen.device,
+            cell,
+            size,
+            resize,
+        ) else {
+            self.edit_feedback(
+                id,
+                "Not enough room. Move other widgets or choose a smaller size.",
+            );
+            return;
+        };
+        let mut next = self.layout.clone();
+        next.instances = instances;
+        if self.commit_layout(next) {
+            self.reconcile_needed = true;
+            if let Some(entry) = self.entries.get_mut(id) {
+                entry.model.notice = None;
+            }
+        }
+    }
+    fn edit_key(&mut self, id: &str, key: u16) {
+        let Some(instance) = self.layout.get(id) else {
+            return;
+        };
+        let monitor = self.entries[id].monitor;
+        let grid = grid_for(&self.layout, &self.monitors[monitor]);
+        let shift = shift_down();
+        let axis = if key == 37 || key == 39 { 0 } else { 1 };
+        let delta = if key == 37 || key == 38 { -1 } else { 1 };
+        let mut cell = instance.cell;
+        let mut size = instance.size;
+        if shift {
+            size[axis] = size[axis].saturating_add_signed(delta).max(1);
+            size = self
+                .registry
+                .get(&instance.widget)
+                .unwrap()
+                .manifest
+                .clamp_size(size);
+        } else {
+            cell[axis] = cell[axis].saturating_add_signed(delta);
+        }
+        let (cell, size) = grid.clamp(cell, size);
+        self.place_edit(id, monitor, cell, size, shift);
     }
     fn cancel_drag(&mut self) {
         if self.drag.take().is_some() {
@@ -1713,25 +2303,20 @@ impl Widgets {
                 .unwrap()
                 .manifest
                 .clamp_size(size);
-            let (cell, size) = grid.clamp(cell, size);
-            if edit::free(
-                &grid,
-                cell,
-                size,
-                &self.layout.instances,
-                &screen.device,
-                Some(&drag.id),
-            ) && let Some(instance) = self
-                .layout
-                .instances
-                .iter_mut()
-                .find(|i| i.instance == drag.id)
+            let (mut cell, size) = grid.clamp(cell, size);
+            if drag.resize
+                && let Some(original) = self.layout.get(&drag.id)
+                && original.monitor == screen.device
             {
-                instance.monitor = self.monitors[monitor].device.clone();
-                instance.cell = cell;
-                instance.size = size;
-                self.save_layout();
+                if drag.edges[0] {
+                    cell[0] = (original.cell[0] + original.size[0]).saturating_sub(size[0]);
+                }
+                if drag.edges[1] {
+                    cell[1] = (original.cell[1] + original.size[1]).saturating_sub(size[1]);
+                }
             }
+            let (cell, size) = grid.clamp(cell, size);
+            self.place_edit(&drag.id, monitor, cell, size, drag.resize);
         }
         self.reconcile_needed = true;
         for entry in self.entries.values_mut() {
@@ -1739,9 +2324,20 @@ impl Widgets {
         }
         self.poll(ui);
     }
-    fn save_layout(&self) {
-        if let Err(e) = self.layout.save(&self.path) {
-            log::error!("widgets.json save: {e:#}");
+    fn commit_layout(&mut self, next: Layout) -> bool {
+        if self.layout_error.is_some() {
+            return false;
+        }
+        match next.save(&self.path) {
+            Ok(()) => {
+                self.layout = next;
+                true
+            }
+            Err(error) => {
+                self.layout_error = Some(format!("Could not save layout: {error:#}"));
+                self.reconcile_needed = true;
+                false
+            }
         }
     }
     fn publish_plates(&mut self, force: bool) {
@@ -1767,14 +2363,23 @@ impl Widgets {
                         rect: e
                             .rect
                             .offset(-monitor.rect.x as f32, -monitor.rect.y as f32),
-                        radius: a.get("radius").and_then(Value::as_f64).unwrap_or(22.0) as f32
-                            * monitor.dpi as f32
-                            / 96.0,
+                        radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
                         material: Material {
-                            clarity: 1.0 - liquid.tint.unwrap_or(0.06),
-                            blur: liquid.blur.unwrap_or(12.0),
-                            refraction: liquid.refraction.unwrap_or(0.6),
-                            highlight: liquid.highlight.unwrap_or(0.55),
+                            clarity: 1.0
+                                - (liquid.tint.unwrap_or(0.06)
+                                    * a.get("opacity").and_then(Value::as_f64).unwrap_or(0.46)
+                                        as f32
+                                    / 0.46)
+                                    .clamp(0.0, 1.0),
+                            blur: (a.get("blur").and_then(Value::as_f64).unwrap_or(12.0) as f32
+                                * liquid.blur.unwrap_or(12.0)
+                                / 12.0)
+                                * monitor.dpi as f32
+                                / 96.0,
+                            refraction: liquid.refraction.unwrap_or(0.6)
+                                * liquid.intensity.unwrap_or(1.0),
+                            highlight: liquid.highlight.unwrap_or(0.55)
+                                * liquid.intensity.unwrap_or(1.0),
                             tint: Rgba::rgb8(tint.0, liquid.tint.unwrap_or(0.06)),
                         },
                     })
@@ -1802,6 +2407,18 @@ impl Drop for Widgets {
     }
 }
 
+fn widget_surface(topmost: bool, parent: HWND, instance: &str) -> Result<Surface> {
+    Surface::new_deferred_accessibility(
+        if topmost {
+            Kind::Popup { activate: true }
+        } else {
+            Kind::DesktopChild { parent }
+        },
+        &format!("mypaper widget {instance}"),
+        Role::Pane,
+    )
+}
+
 fn paint(
     entry: &mut Entry,
     ui: &mut Ui,
@@ -1822,6 +2439,9 @@ fn paint(
         .and_then(Value::as_f64)
         .unwrap_or(1.0) as f32
         * entry.dpi_scale;
+    if entry.model.kind == Widget::Clock && entry.model.last_clock.is_none() {
+        entry.model.last_clock = Some(now);
+    }
     let list = view::view(
         &entry.model,
         &entry.tokens,
@@ -1834,15 +2454,17 @@ fn paint(
         },
         &mut ui.text,
     );
-    let drawn = entry.surface.present(
+    let drawn = entry.surface.present_sparse(
         ui,
         (entry.rect.left as i32, entry.rect.top as i32),
         size,
         list,
     )?;
-    entry.surface.show();
-    if host.is_some() {
-        entry.surface.keep_above_desktop()?;
+    if !entry.surface.is_visible() {
+        entry.surface.show();
+        if host.is_some() && entry.model.placed.widget != "media-pill" {
+            entry.surface.keep_above_desktop()?;
+        }
     }
     if drawn {
         log::debug!(
@@ -1854,6 +2476,11 @@ fn paint(
     Ok(drawn)
 }
 fn finish_field(entry: &mut Entry, storage: &mut Storage) {
+    entry.model.field_keyboard = false;
+    if entry.model.kind == Widget::Calendar {
+        entry.model.event_draft = None;
+        entry.model.task_edit = None;
+    }
     if let Some(field) = entry.model.field.take() {
         if let Ok(text) = field.text() {
             if entry.model.kind == Widget::Notes {
@@ -1878,6 +2505,12 @@ fn finish_field(entry: &mut Entry, storage: &mut Storage) {
     {
         log::error!("widget storage: {e:#}");
     }
+}
+fn palette_accent(config: &Config) -> Color {
+    mypaper_theme::locate(Some(&config.theme))
+        .ok()
+        .and_then(|dir| mypaper_tweaks::palette::read().filter(|p| p.is_for(&dir)))
+        .map_or_else(|| look::accent(None), |p| p.palette.accent)
 }
 fn load_skin(config: &Config) -> look::Skin {
     let dir = mypaper_theme::locate(Some(&config.theme)).ok();
@@ -1997,4 +2630,79 @@ fn search_url(query: &str, settings: &serde_json::Map<String, Value>) -> Option<
     (template.contains("{q}")
         && (template.starts_with("https://") || template.starts_with("http://")))
     .then(|| template.replace("{q}", &mypaper_plugin_weather::http::encode(query)))
+}
+
+fn shift_down() -> bool {
+    // SAFETY: a read-only modifier query on the owning input thread.
+    unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetKeyState(0x10) < 0 }
+}
+fn calendar_start(m: &Model) -> u32 {
+    match m.str("weekStart", "auto").as_str() {
+        "sunday" => 0,
+        "monday" => 1,
+        "saturday" => 6,
+        _ => time::week_start(),
+    }
+}
+fn media_description(m: &Model, now: Stamp) -> String {
+    let advance = if m.data["playing"].as_bool() == Some(true) {
+        (now.ms - m.data["_at"].as_i64().unwrap_or(now.ms)).max(0) as f64 / 1000.0
+    } else {
+        0.0
+    };
+    format!(
+        "{} ? {}\n{} / {}",
+        m.data["title"].as_str().unwrap_or("Nothing playing"),
+        m.data["artist"].as_str().unwrap_or(""),
+        media_time(m.data["position"].as_f64().unwrap_or(0.0) + advance),
+        media_time(m.data["duration"].as_f64().unwrap_or(0.0))
+    )
+}
+fn media_time(seconds: f64) -> String {
+    let seconds = seconds.max(0.0) as u64;
+    format!("{}:{:02}", seconds / 60, seconds % 60)
+}
+
+/// A tiny box-filtered artwork backdrop and average tint, computed only when artwork changes.
+fn artwork_material(image: &mypaper_ui::Image) -> (Option<Arc<mypaper_ui::Image>>, Option<Rgba>) {
+    if image.width == 0 || image.height == 0 {
+        return (None, None);
+    }
+    let (width, height) = (16u32.min(image.width), 16u32.min(image.height));
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    let mut total = [0u64; 4];
+    for y in 0..height {
+        for x in 0..width {
+            let mut sum = [0u64; 4];
+            let mut count = 0;
+            for py in y * image.height / height..(y + 1) * image.height / height {
+                for px in x * image.width / width..(x + 1) * image.width / width {
+                    let at = ((py * image.width + px) * 4) as usize;
+                    for channel in 0..4 {
+                        sum[channel] += u64::from(image.pixels[at + channel]);
+                    }
+                    count += 1;
+                }
+            }
+            for channel in 0..4 {
+                pixels.push((sum[channel] / count.max(1)) as u8);
+                total[channel] += sum[channel];
+            }
+        }
+    }
+    let alpha = total[3].max(1) as f32;
+    let tint = Rgba::new(
+        total[2] as f32 / alpha,
+        total[1] as f32 / alpha,
+        total[0] as f32 / alpha,
+        1.0,
+    );
+    (
+        Some(Arc::new(mypaper_ui::Image {
+            width,
+            height,
+            pixels,
+        })),
+        Some(tint),
+    )
 }

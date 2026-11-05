@@ -163,10 +163,55 @@ impl WidgetMedia {
 fn widget_value(lease: Option<&Lease>) -> Value {
     match lease.map(Lease::snapshot).and_then(|s| s.data) {
         Some(Data::Media(s)) if !s.title.is_empty() || !s.artist.is_empty() => {
-            json!({"title":s.title,"artist":s.artist,"album":s.album,"app":s.app_id,"playing":s.playing,"artwork":s.artwork})
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+            widget_data(s, now)
         }
         _ => Value::Null,
     }
+}
+fn widget_data(s: mypaper_integrations::media::Snapshot, now: i64) -> Value {
+    let advance = if s.playing {
+        s.position_at_ms
+            .map_or(0, |at| now.saturating_sub(at).max(0))
+    } else {
+        0
+    };
+    let position = s.position_ms.map(|position| {
+        position
+            .saturating_add(advance)
+            .min(s.duration_ms.unwrap_or(i64::MAX)) as f64
+            / 1000.0
+    });
+    let duration = s.duration_ms.map(|duration| duration as f64 / 1000.0);
+    json!({"title":s.title,"artist":s.artist,"album":s.album,"app":s.app_id,"playing":s.playing,"artwork":s.artwork,
+        "position":position,"duration":duration,"_at":now})
+}
+
+#[cfg(test)]
+#[test]
+fn widget_timeline_interpolates_playback_and_preserves_paused_and_live_states() {
+    let mut snapshot = mypaper_integrations::media::Snapshot {
+        position_ms: Some(12_000),
+        duration_ms: Some(60_000),
+        position_at_ms: Some(100_000),
+        playing: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        widget_data(snapshot.clone(), 103_000)["position"],
+        json!(15.0)
+    );
+    assert_eq!(
+        widget_data(snapshot.clone(), 200_000)["position"],
+        json!(60.0)
+    );
+    snapshot.playing = false;
+    assert_eq!(widget_data(snapshot, 103_000)["position"], json!(12.0));
+    let live = widget_data(Default::default(), 103_000);
+    assert!(live["duration"].is_null() && live["position"].is_null());
 }
 fn widget_lease(state: &mut WidgetState) {
     if state.held || state.subs.is_empty() {

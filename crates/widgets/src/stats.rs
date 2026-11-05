@@ -7,8 +7,9 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use windows::Win32::Foundation::{ERROR_SUCCESS, FILETIME, HANDLE};
 use windows::Win32::NetworkManagement::IpHelper::{
-    FreeMibTable, GetIfTable2Ex, IF_TYPE_ETHERNET_CSMACD, IF_TYPE_SOFTWARE_LOOPBACK, MIB_IF_TABLE2,
-    MibIfTableRaw,
+    CancelMibChangeNotify2, FreeMibTable, GetIfEntry2, GetIfTable2Ex, IF_TYPE_ETHERNET_CSMACD,
+    IF_TYPE_SOFTWARE_LOOPBACK, MIB_IF_ROW2, MIB_IPINTERFACE_ROW, MIB_NOTIFICATION_TYPE,
+    MibIfTableRaw, NotifyIpInterfaceChange,
 };
 use windows::Win32::NetworkManagement::Ndis::{IfOperStatusUp, MediaConnectStateConnected};
 use windows::Win32::NetworkManagement::WiFi::{
@@ -181,11 +182,11 @@ fn ticks(time: FILETIME) -> u64 {
     (u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime)
 }
 
-fn read_counters() -> Counters {
+fn read_counters(interfaces: Option<&mut InterfaceCounters>) -> Counters {
     let (mut idle, mut kernel, mut user) = Default::default();
     // SAFETY: the out-pointers are valid FILETIMEs for the call.
     let _ = unsafe { GetSystemTimes(Some(&mut idle), Some(&mut kernel), Some(&mut user)) };
-    let table = interface_table();
+    let table = interfaces.and_then(InterfaceCounters::sample);
     Counters {
         at: Instant::now(),
         idle: ticks(idle),
@@ -203,39 +204,101 @@ struct Interfaces {
     ethernet: bool,
 }
 
-/// Bytes over the physical interfaces that are up, and whether a wired one has a link.
-fn interface_table() -> Option<Interfaces> {
-    let mut table: *mut MIB_IF_TABLE2 = std::ptr::null_mut();
-    // SAFETY: GetIfTable2 allocates the table, which FreeMibTable releases
-    // below; rows are read only while it is alive.
-    unsafe {
-        if GetIfTable2Ex(MibIfTableRaw, &mut table) != ERROR_SUCCESS || table.is_null() {
-            return None;
+/// Enumerate physical adapters only when Windows reports a topology change. Counter reads
+/// then query the cached adapter indices, avoiding the full IP helper table on every tick.
+struct InterfaceCounters {
+    indices: Vec<u32>,
+    changed: Box<std::sync::atomic::AtomicBool>,
+    notification: Option<HANDLE>,
+}
+impl InterfaceCounters {
+    fn new() -> Self {
+        let changed = Box::new(std::sync::atomic::AtomicBool::new(true));
+        let mut handle = HANDLE::default();
+        // SAFETY: the boxed flag has a stable address until CancelMibChangeNotify2 drains callbacks.
+        let status = unsafe {
+            NotifyIpInterfaceChange(
+                windows::Win32::Networking::WinSock::AF_UNSPEC,
+                Some(interface_changed),
+                Some(std::ptr::from_ref(changed.as_ref()).cast()),
+                false,
+                &mut handle,
+            )
+        };
+        Self {
+            indices: Vec::new(),
+            changed,
+            notification: (status == ERROR_SUCCESS).then_some(handle),
         }
-        let rows =
-            std::slice::from_raw_parts((*table).Table.as_ptr(), (*table).NumEntries as usize);
+    }
+    fn sample(&mut self) -> Option<Interfaces> {
+        use std::sync::atomic::Ordering;
+        if self.changed.swap(false, Ordering::AcqRel) || self.notification.is_none() {
+            let mut table = std::ptr::null_mut();
+            // SAFETY: the allocated table is released before returning, and its rows stay in bounds.
+            unsafe {
+                if GetIfTable2Ex(MibIfTableRaw, &mut table) != ERROR_SUCCESS || table.is_null() {
+                    self.changed.store(true, Ordering::Release);
+                    return None;
+                }
+                let rows = std::slice::from_raw_parts(
+                    (*table).Table.as_ptr(),
+                    (*table).NumEntries as usize,
+                );
+                self.indices = rows
+                    .iter()
+                    .filter(|row| {
+                        row.InterfaceAndOperStatusFlags._bitfield & 3 == 1
+                            && row.Type != IF_TYPE_SOFTWARE_LOOPBACK
+                    })
+                    .map(|row| row.InterfaceIndex)
+                    .collect();
+                FreeMibTable(table.cast());
+            }
+        }
         let mut found = Interfaces {
             rx: 0,
             tx: 0,
             ethernet: false,
         };
-        for row in rows.iter().filter(|row| {
-            let flags = row.InterfaceAndOperStatusFlags._bitfield;
-            let hardware = flags & 1 != 0;
-            let filter = flags & 2 != 0;
-            hardware
-                && !filter
-                && row.OperStatus == IfOperStatusUp
-                && row.Type != IF_TYPE_SOFTWARE_LOOPBACK
-        }) {
+        for &index in &self.indices {
+            let mut row = MIB_IF_ROW2 {
+                InterfaceIndex: index,
+                ..Default::default()
+            };
+            // SAFETY: GetIfEntry2 fills this owned row identified by its cached interface index.
+            if unsafe { GetIfEntry2(&mut row) } != ERROR_SUCCESS {
+                self.changed.store(true, Ordering::Release);
+                continue;
+            }
+            if row.OperStatus != IfOperStatusUp {
+                continue;
+            }
             found.rx += row.InOctets;
             found.tx += row.OutOctets;
             found.ethernet |= row.Type == IF_TYPE_ETHERNET_CSMACD
                 && row.MediaConnectState == MediaConnectStateConnected;
         }
-        FreeMibTable(table.cast());
         Some(found)
     }
+}
+impl Drop for InterfaceCounters {
+    fn drop(&mut self) {
+        if let Some(handle) = self.notification {
+            // SAFETY: cancellation waits for pending callbacks before the boxed flag is dropped.
+            let _ = unsafe { CancelMibChangeNotify2(handle) };
+        }
+    }
+}
+unsafe extern "system" fn interface_changed(
+    context: *const std::ffi::c_void,
+    _: *const MIB_IPINTERFACE_ROW,
+    _: MIB_NOTIFICATION_TYPE,
+) {
+    // SAFETY: registered with the address of InterfaceCounters' boxed flag; cancellation joins us.
+    unsafe { context.cast::<std::sync::atomic::AtomicBool>().as_ref() }
+        .unwrap()
+        .store(true, std::sync::atomic::Ordering::Release);
 }
 
 /// The battery from `GetSystemPowerStatus` fields: `None` when there isn't one (flag 128) or
@@ -495,8 +558,17 @@ impl GpuCounters {
             }
             self.engines.values_mut().for_each(|n| *n = 0.0);
             const LUID: [u16; 5] = [108, 117, 105, 100, 95];
+            let mut valid = false;
             for item in &self.buffer[..count as usize] {
                 if item.FmtValue.CStatus > 1 || item.szName.is_null() {
+                    continue;
+                }
+                let value = item.FmtValue.Anonymous.doubleValue;
+                if !value.is_finite() {
+                    continue;
+                }
+                valid = true;
+                if value == 0.0 {
                     continue;
                 }
                 let name = item.szName.as_wide();
@@ -504,10 +576,6 @@ impl GpuCounters {
                     continue;
                 };
                 let key = &name[at..];
-                let value = item.FmtValue.Anonymous.doubleValue;
-                if !value.is_finite() {
-                    continue;
-                }
                 if let Some(total) = self.engines.get_mut(key) {
                     *total += value;
                 } else {
@@ -519,6 +587,8 @@ impl GpuCounters {
                 .copied()
                 .reduce(f64::max)
                 .map(|n| n.clamp(0.0, 100.0))
+                .filter(|_| valid)
+                .or_else(|| valid.then_some(0.0))
         }
     }
 }
@@ -561,6 +631,7 @@ impl SampleFields {
 /// Reads the system; alive only while someone listens.
 struct Sampler {
     last: Counters,
+    interfaces: Option<InterfaceCounters>,
     gpu: Option<GpuCounters>,
     disks: Option<(Instant, Vec<Disk>)>,
     wlan: Wlan,
@@ -570,8 +641,9 @@ struct Sampler {
 impl Sampler {
     fn new() -> Self {
         Self {
-            last: read_counters(),
-            gpu: GpuCounters::open(),
+            last: read_counters(None),
+            interfaces: None,
+            gpu: None,
             disks: None,
             wlan: Wlan::new(),
             wifi: None,
@@ -579,7 +651,18 @@ impl Sampler {
     }
 
     fn sample(&mut self, fields: SampleFields) -> SystemStats {
-        let now = read_counters();
+        let interfaces = if fields.net || fields.network {
+            Some(self.interfaces.get_or_insert_with(InterfaceCounters::new))
+        } else {
+            None
+        };
+        let now = read_counters(interfaces);
+        if fields.gpu && self.gpu.is_none() {
+            self.gpu = GpuCounters::open();
+        }
+        if !fields.gpu {
+            self.gpu = None;
+        }
         let stats = SystemStats {
             cpu: cpu_percent(&self.last, &now),
             memory: memory(),
@@ -660,7 +743,22 @@ pub struct Stats {
 impl Stats {
     fn wake(&mut self, now: Instant) {
         if self.sampler.is_none() && !self.held && !(self.subs.is_empty() && self.once.is_empty()) {
-            self.sampler = Some(Sampler::new());
+            let mut sampler = Sampler::new();
+            if !self.once.is_empty() || self.subs.iter().any(|sub| sub.fields.gpu) {
+                sampler.gpu = GpuCounters::open();
+            }
+            if !self.once.is_empty()
+                || self
+                    .subs
+                    .iter()
+                    .any(|sub| sub.fields.net || sub.fields.network)
+            {
+                let mut interfaces = InterfaceCounters::new();
+                let initial = read_counters(Some(&mut interfaces));
+                sampler.last = initial;
+                sampler.interfaces = Some(interfaces);
+            }
+            self.sampler = Some(sampler);
             self.ready_at = Some(now + WARMUP);
         }
     }
@@ -710,6 +808,14 @@ impl Stats {
         self.sleep_if_idle();
     }
 
+    /// Reopen device-dependent caches after Windows reports a device change.
+    pub fn refresh_devices(&mut self) {
+        if let Some(sampler) = &mut self.sampler {
+            sampler.gpu = None;
+            sampler.disks = None;
+            sampler.wifi = None;
+        }
+    }
     /// Makes an instance's subscriptions due now (it just became visible).
     pub fn refresh(&mut self, instance: &str, now: Instant) {
         for sub in self.subs.iter_mut().filter(|s| s.instance == instance) {
@@ -807,7 +913,7 @@ mod tests {
             for _ in 0..500 {
                 match part {
                     0 => {
-                        let _ = read_counters();
+                        let _ = read_counters(sampler.interfaces.as_mut());
                     }
                     1 => {
                         let _ = memory();
@@ -836,11 +942,32 @@ mod tests {
     fn native_views_can_omit_expensive_fields_they_do_not_display() {
         let mut stats = Stats::default();
         let start = Instant::now();
-        stats.subscribe_fields("system-1", "system", Duration::from_secs(2), start,
-            SampleFields { gpu: false, disks: false, net: false, battery: false, network: false });
+        stats.subscribe_fields(
+            "system-1",
+            "system",
+            Duration::from_secs(2),
+            start,
+            SampleFields {
+                gpu: false,
+                disks: false,
+                net: false,
+                battery: false,
+                network: false,
+            },
+        );
         let out = stats.tick(start + WARMUP);
-        let Delivery::Event { stats: snapshot, .. } = &out[0] else { panic!("subscription result") };
-        assert!(snapshot.disks.is_none() && snapshot.gpu.is_none() && snapshot.net.is_none() && snapshot.network.is_none());
+        let Delivery::Event {
+            stats: snapshot, ..
+        } = &out[0]
+        else {
+            panic!("subscription result")
+        };
+        assert!(
+            snapshot.disks.is_none()
+                && snapshot.gpu.is_none()
+                && snapshot.net.is_none()
+                && snapshot.network.is_none()
+        );
         assert!(snapshot.memory.total > 0);
         stats.forget("system-1");
         assert!(stats.deadline().is_none());

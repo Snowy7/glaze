@@ -107,10 +107,15 @@ fn run() -> Result<()> {
                 if widgets_pending {
                     0
                 } else {
-                    shell.widgets.as_ref().map_or(
-                        windows::Win32::System::Threading::INFINITE,
-                        widgets::Widgets::timeout_ms,
-                    ).min(shell.bars.timeout()).min(shell.flyouts.timeout_ms())
+                    shell
+                        .widgets
+                        .as_ref()
+                        .map_or(
+                            windows::Win32::System::Threading::INFINITE,
+                            widgets::Widgets::timeout_ms,
+                        )
+                        .min(shell.bars.timeout())
+                        .min(shell.flyouts.timeout_ms())
                 },
                 QS_ALLINPUT,
                 MWMO_INPUTAVAILABLE,
@@ -151,14 +156,11 @@ fn run() -> Result<()> {
         if widgets_pending {
             widgets_pending = false;
             startup::ready("shell", "widgets_init_ms");
-            shell.widgets = widgets::Widgets::new(&mut ui, inbox.hwnd())
-                .inspect_err(|e| log::error!("widgets not started: {e:#}"))
-                .ok();
-            if let Some(widgets) = &mut shell.widgets {
-                for (wparam, lparam) in shell.pending_widget_facts.drain(..) {
-                    widgets.fact(wparam, lparam);
-                }
-            }
+            shell.widgets =
+                widgets::Widgets::new(&mut ui, inbox.hwnd(), &shell.pending_widget_facts)
+                    .inspect_err(|e| log::error!("widgets not started: {e:#}"))
+                    .ok();
+            shell.pending_widget_facts.clear();
             startup::ready("shell", "widgets_ready_ms");
         }
     }

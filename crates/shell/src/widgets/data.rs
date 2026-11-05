@@ -12,6 +12,12 @@ use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
 pub enum Work {
+    Activate {
+        instance: String,
+        generation: u64,
+        hit: u32,
+        target: String,
+    },
     Fetch {
         instance: String,
         generation: u64,
@@ -26,6 +32,12 @@ pub enum Work {
     Launch(String),
 }
 pub enum Answer {
+    Activated {
+        instance: String,
+        generation: u64,
+        hit: u32,
+        result: Result<(), String>,
+    },
     Data {
         instance: String,
         generation: u64,
@@ -79,6 +91,17 @@ impl Worker {
                     let http = Http::new(Duration::from_secs(8));
                     for work in rx {
                         let answer = match work {
+                            Work::Activate {
+                                instance,
+                                generation,
+                                hit,
+                                target,
+                            } => Answer::Activated {
+                                instance,
+                                generation,
+                                hit,
+                                result: launch(&target),
+                            },
                             Work::Fetch {
                                 instance,
                                 generation,
@@ -122,7 +145,9 @@ impl Worker {
                                 }
                             }
                             Work::Launch(target) => {
-                                launch(&target);
+                                if let Err(error) = launch(&target) {
+                                    log::warn!("{error}");
+                                }
                                 continue;
                             }
                         };
@@ -169,6 +194,7 @@ fn fetch_weather(
         }
         _ => {}
     }
+    params.insert("days".into(), json!(7));
     let params = Value::Object(params);
     let current = service.call("current", &params).map_err(|e| e.message)?;
     let forecast = service.call("forecast", &params).map_err(|e| e.message)?;
@@ -236,11 +262,11 @@ fn fetch_rss(http: &Http, settings: &Map<String, Value>) -> Result<Value, String
         return Err("Could not reach your feeds".into());
     }
     items.sort_by_key(|i| std::cmp::Reverse(i["published"].as_i64().unwrap_or(0)));
-    items.dedup_by(|a, b| a["link"] == b["link"] && a["title"] == b["title"]);
+    deduplicate(&mut items);
     items.truncate(number(settings, "maxItems", 12.0).clamp(3.0, 30.0) as usize);
     Ok(json!({"key":urls.join("|"),"items":items,"errors":errors,"at":super::time::epoch_ms()}))
 }
-fn launch(target: &str) {
+fn launch(target: &str) -> Result<(), String> {
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
     use windows::core::{HSTRING, w};
@@ -255,7 +281,21 @@ fn launch(target: &str) {
             SW_SHOWNORMAL,
         );
         if result.0 as isize <= 32 {
-            log::warn!("launch failed: {target}");
+            return Err(format!(
+                "Could not open {target} (Windows error {})",
+                result.0 as isize
+            ));
         }
     }
+    Ok(())
+}
+
+fn deduplicate(items: &mut Vec<Value>) {
+    let mut seen = std::collections::HashSet::new();
+    items.retain(|item| {
+        seen.insert((
+            item["link"].as_str().unwrap_or("").to_owned(),
+            item["title"].as_str().unwrap_or("").to_owned(),
+        ))
+    });
 }
