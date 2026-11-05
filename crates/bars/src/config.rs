@@ -692,6 +692,11 @@ pub enum Module {
     Language,
     /// A bell with the number of notifications.
     Notifications,
+    /// Optional native integrations configured in integrations.json.
+    T3,
+    Obs,
+    Docker,
+    Tailscale,
 }
 
 /// An entry of a module list: a built-in module, `custom:<id>`, or `|` (a break between islands,

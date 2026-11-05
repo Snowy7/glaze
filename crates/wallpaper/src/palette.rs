@@ -1,20 +1,20 @@
-//! Wallpaper palette: once per newly loaded theme, the engine renders the
-//! source's first frame into an offscreen target, shrinks it to a thumbnail
-//! on the GPU, reads that back once, and writes a dominant and an accent
-//! color to `%LOCALAPPDATA%\mypaper\palette.json` for core's `"auto"` colors.
-//! Never per frame: a theme load costs one extra draw and a 9 KB readback.
+//! Wallpaper palette: once per newly loaded theme, the engine shrinks the
+//! first screen's first kept frame (the wallpaper as drawn) to a thumbnail on
+//! the GPU, reads that back once, and writes a dominant and an accent color to
+//! `%LOCALAPPDATA%\mypaper\palette.json` for core's `"auto"` colors. Never per
+//! frame: a theme load costs one thumbnail blit and a 9 KB readback, and no
+//! screen-sized texture (on the integrated GPU a freed heap stays committed).
 
 use std::path::Path;
 use std::sync::mpsc;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use mypaper_theme::{Color, Fit};
 use mypaper_tweaks::color::Hsl;
 use mypaper_tweaks::palette::{Palette, Snapshot};
 
-use crate::gpu::Gpu;
-use crate::sources::{self, Frame, Source};
+use crate::gpu::{Gpu, KeptFrame};
+use crate::sources;
 
 /// Thumbnail size. 64 pixels of RGBA is exactly wgpu's 256-byte row alignment.
 const WIDTH: u32 = 64;
@@ -31,17 +31,10 @@ const HUE_BINS: usize = 24;
 const ACCENT_SATURATION: (f32, f32) = (0.6, 1.0);
 const ACCENT_LIGHTNESS: (f32, f32) = (0.45, 0.62);
 
-/// Draws `source`'s current frame offscreen at `size`, computes its palette
-/// and writes it for `theme`. Failures are logged: a palette is a nicety.
-pub fn publish(
-    gpu: &Gpu,
-    source: &mut dyn Source,
-    theme: &Path,
-    size: (u32, u32),
-    clock: Duration,
-    frame: u32,
-) {
-    let result = capture(gpu, source, size, clock, frame).and_then(|pixels| {
+/// Computes the palette of `kept` (a screen's just-drawn wallpaper) and writes it for
+/// `theme`. Failures are logged: a palette is a nicety.
+pub fn publish(gpu: &Gpu, kept: &KeptFrame, theme: &Path) {
+    let result = capture(gpu, kept).and_then(|pixels| {
         let palette = extract(&pixels).context("the first frame has no usable color")?;
         mypaper_tweaks::palette::write(&Snapshot {
             theme: theme.to_owned(),
@@ -59,27 +52,14 @@ pub fn publish(
     }
 }
 
-/// Renders the source offscreen, downsamples it with the shared blit
-/// (stretch) and reads the thumbnail back as RGB.
-fn capture(
-    gpu: &Gpu,
-    source: &mut dyn Source,
-    size: (u32, u32),
-    clock: Duration,
-    frame: u32,
-) -> Result<Vec<[u8; 3]>> {
+/// Downsamples the kept frame with the shared blit (stretch) and reads the thumbnail back
+/// as RGB.
+fn capture(gpu: &Gpu, kept: &KeptFrame) -> Result<Vec<[u8; 3]>> {
     let swap_red_blue = match gpu.format {
         wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb => true,
         wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => false,
         other => bail!("cannot read back {other:?}"),
     };
-    let full = gpu.texture(
-        "palette source",
-        size,
-        gpu.format,
-        wgpu::TextureUsages::RENDER_ATTACHMENT,
-        None,
-    );
     let small = gpu.texture(
         "palette thumbnail",
         (WIDTH, HEIGHT),
@@ -94,22 +74,10 @@ fn capture(
         mapped_at_creation: false,
     });
 
-    let full_view = full.create_view(&Default::default());
     let small_view = small.create_view(&Default::default());
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    source.render(
-        gpu,
-        Frame {
-            screen: 0,
-            size,
-            mouse: [0.0, 0.0],
-            clock,
-            frame,
-            view: &full_view,
-            encoder: &mut encoder,
-        },
-    );
-    let quad = gpu.blit.quad(&gpu.device, &full_view);
+    let size = (kept.texture.width(), kept.texture.height());
+    let quad = gpu.blit.quad(&gpu.device, &kept.view);
     quad.set(&gpu.queue, size, (WIDTH, HEIGHT), Fit::Stretch, 1.0);
     {
         let mut pass = sources::begin(

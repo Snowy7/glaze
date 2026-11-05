@@ -1,0 +1,14 @@
+[
+  {
+    "scenario": "real-look",
+    "run": 0,
+    "seconds": 60.0878954,
+    "private_mb": 375.17578125,
+    "cpu_core_pct": 4.368600335434614,
+    "cpu_machine_pct": 0.2730375209646634,
+    "visible_screens": 2,
+    "timing_file": null,
+    "sample_started_qpc": 3689593324246,
+    "sample_ended_qpc": 3690194203202
+  }
+]

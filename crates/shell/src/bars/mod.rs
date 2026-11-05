@@ -1,14 +1,14 @@
 //! Native top bar and dock. Windows services live in `mypaper-bars`; UI and motion live here.
 mod bar;
 mod icons;
-mod look;
+pub(crate) mod look;
 mod motion;
 mod preview;
-mod services;
+pub(crate) mod services;
 #[cfg(test)]
 mod tests;
 mod tray_menu;
-mod view;
+pub(crate) mod view;
 
 use crate::{flyouts, glass};
 use anyhow::Result;
@@ -47,6 +47,7 @@ use windows::Win32::{
 
 #[derive(Clone)]
 enum Command {
+    AppActions(Box<(providers::apps::Item, Rect, Monitor)>),
     Activate(isize),
     Close(isize),
     CloseAll(Vec<isize>),
@@ -1032,6 +1033,15 @@ impl Bars {
                     return;
                 };
                 let grouped = b.tokens.family == Family::Fluent;
+                if input == Trigger::Left
+                    && crate::integrations::module_click(
+                        &ModuleRef::Builtin(module),
+                        anchor,
+                        &monitor,
+                    )
+                {
+                    return;
+                }
                 let flyout = match (module, input) {
                     (Module::Start, Trigger::Left) => Some(flyouts::Kind::Launcher),
                     (Module::Clock | Module::Notifications, Trigger::Left) => {
@@ -1178,6 +1188,10 @@ impl Bars {
                                 Command::CloseAll(item.windows.iter().map(|w| w.hwnd).collect()),
                             ));
                         }
+                        entries.push(Entry::action(
+                            "Recent items and app actions",
+                            Command::AppActions(Box::new((item.clone(), anchor, monitor.clone()))),
+                        ));
                         self.open_menu(ui, entries, point);
                     }
                     _ => {}
@@ -1272,6 +1286,7 @@ impl Bars {
                 }
             }
             Command::Launch(path) => system::open(path),
+            Command::AppActions(data) => crate::integrations::open_app(&data.0, data.1, &data.2),
             Command::EmptyTrash => trash::empty(),
             Command::Pin(pin) => self.edit_pins(|pins| {
                 if !pins.iter().any(|p| p.path.eq_ignore_ascii_case(&pin.path)) {
@@ -1424,6 +1439,10 @@ impl Bars {
             b.dirty = true;
         }
     }
+    pub fn integration_changed(&mut self) {
+        self.subscribe();
+        self.dirty();
+    }
     fn subscribe(&mut self) {
         let topics = self
             .bars
@@ -1451,6 +1470,15 @@ impl Bars {
             .any(|b| b.topics().contains(&providers::actions::Topic::Tray))
             && (self.config.tray.host || self.config.taskbar.mode == TaskbarMode::Hide);
         self.services.subscribe(topics, &configs, seconds, tray);
+        crate::integrations::bar_subscriptions(
+            self.bars
+                .iter()
+                .filter(|b| b.shows_content())
+                .flat_map(|b| providers::actions::bar_modules(b.kind, &b.config)),
+            self.bars
+                .iter()
+                .any(|b| b.shows_content() && b.kind == BarKind::Dock),
+        );
         let trash = self.bars.iter().any(|b| {
             b.shows_content()
                 && b.kind == BarKind::Dock

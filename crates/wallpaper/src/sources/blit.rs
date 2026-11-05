@@ -17,6 +17,8 @@ struct Params {
 
 pub struct Blitter {
     pipeline: wgpu::RenderPipeline,
+    /// The same draw without blending, for a full-target opaque cover (see `BlitQuad::cover`).
+    opaque: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
 }
@@ -67,31 +69,33 @@ impl Blitter {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("blit"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let pipeline = |blend| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("blit"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &module,
+                    entry_point: Some("vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some("fs"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("blit"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -99,7 +103,8 @@ impl Blitter {
             ..Default::default()
         });
         Self {
-            pipeline,
+            pipeline: pipeline(Some(wgpu::BlendState::ALPHA_BLENDING)),
+            opaque: pipeline(None),
             layout,
             sampler,
         }
@@ -156,6 +161,15 @@ impl BlitQuad {
 
     pub fn draw(&self, blitter: &Blitter, pass: &mut wgpu::RenderPass<'_>) {
         pass.set_pipeline(&blitter.pipeline);
+        pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.draw(0..3, 0..1);
+    }
+
+    /// Like [`draw`](Self::draw) without blending. With a `Stretch` fit at opacity 1 it writes
+    /// every target pixel exactly as `draw` over any background would, so the pass needs no
+    /// clear: it may begin with `LoadOp::DontCare`.
+    pub fn cover(&self, blitter: &Blitter, pass: &mut wgpu::RenderPass<'_>) {
+        pass.set_pipeline(&blitter.opaque);
         pass.set_bind_group(0, &self.bind_group, &[]);
         pass.draw(0..3, 0..1);
     }

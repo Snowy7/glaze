@@ -192,7 +192,14 @@ fn contents(
         }
         return output;
     };
+    if let Some((label, glyph)) = crate::integrations::bar_content(&ModuleRef::Builtin(*module)) {
+        if !label.is_empty() {
+            add(label, Some(glyph), None, target);
+        }
+        return output;
+    }
     match module {
+        Module::T3 | Module::Obs | Module::Docker | Module::Tailscale => {}
         Module::Start => add(String::new(), Some("\u{e71d}"), None, target),
         Module::Search => add(
             if tokens.family == Family::Fluent {
@@ -219,7 +226,12 @@ fn contents(
                 );
             }
         }
-        Module::App => add(model.app_name.clone(), None, model.app_icon.clone(), target),
+        Module::App => add(
+            crate::integrations::app_title(&model.app_name),
+            None,
+            model.app_icon.clone(),
+            target,
+        ),
         Module::Clock => {
             let c = if kind == BarKind::Top {
                 &config.top.clock
@@ -976,6 +988,7 @@ pub fn dock(
                 color,
             });
         }
+        crate::integrations::dock_badge(&mut frame.list, ui, app, icon_rect, scale);
         if d.counter && app.windows.len() > 1 {
             let badge = Rect::new(
                 icon_rect.right - 14.0 * scale,

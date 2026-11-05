@@ -156,7 +156,7 @@ impl Launcher {
             .as_ref()
             .and_then(|p| std::fs::metadata(p).ok()?.modified().ok())
             .is_some_and(|at| SystemTime::now().duration_since(at).unwrap_or_default() < STALE);
-        let apps = cache
+        let mut apps = cache
             .as_ref()
             .and_then(|p| std::fs::read_to_string(p).ok())
             .and_then(|json| index::parse_cache(&json))
@@ -164,6 +164,7 @@ impl Launcher {
         if apps.is_empty() || !fresh {
             cx.lanes.apps(|builder| Reply::Apps(builder.build()));
         }
+        crate::integrations::launcher_entries(&mut apps);
         let history_path = files::local("launcher.json").ok();
         let history = history_path
             .as_deref()
@@ -343,6 +344,9 @@ impl Launcher {
         let Some(app) = self.shown().get(index).map(|a| (*a).clone()) else {
             return Effect::None;
         };
+        if crate::integrations::launcher_action(&app.path) {
+            return Effect::Switch(super::Kind::RoutineResult);
+        }
         system::open(app.path.clone());
         self.history.record(&app.id, &app.path, index::epoch_ms());
         if let Some(path) = &self.history_path {
@@ -765,6 +769,7 @@ impl Panel for Launcher {
         }
         self.apps = apps.clone();
         self.resolve_pins();
+        crate::integrations::launcher_entries(&mut self.apps);
         self.load_icons(cx);
         true
     }

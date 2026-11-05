@@ -2,7 +2,9 @@
 //! What gets drawn lives in `sources`; this module only owns the device,
 //! the swapchains and the shared fit/blit pipeline.
 
+use std::cell::Cell;
 use std::num::NonZeroIsize;
+use std::rc::Rc;
 
 use anyhow::{Context, Result, anyhow, bail};
 use mypaper_config::GpuPreference;
@@ -49,7 +51,7 @@ impl Opening {
             let instance = instance();
             let adapter =
                 pollster::block_on(instance.request_adapter(&adapter_options(None, preference)))?;
-            let (device, queue) = open_device(&adapter)?;
+            let (device, queue) = open_device(&adapter, crate::timing::requested())?;
             Ok(Opened {
                 instance,
                 adapter,
@@ -109,7 +111,7 @@ impl Gpu {
             adapter = pollster::block_on(
                 instance.request_adapter(&adapter_options(Some(first), preference)),
             )?;
-            (device, queue) = open_device(&adapter)?;
+            (device, queue) = open_device(&adapter, crate::timing::requested())?;
         }
         let info = adapter.get_info();
         log::info!(
@@ -144,8 +146,8 @@ impl Gpu {
         Ok((gpu, surfaces))
     }
 
-    /// A device with no windows, for tests that render to textures. `None`
-    /// on a machine without a DX12 GPU.
+    /// A device with no windows, for tests that render to textures, with timestamp queries
+    /// where the adapter has them (the frame lab). `None` on a machine without a DX12 GPU.
     #[cfg(test)]
     pub fn headless() -> Option<Self> {
         let instance = instance();
@@ -153,7 +155,7 @@ impl Gpu {
             instance.request_adapter(&adapter_options(None, GpuPreference::Integrated)),
         )
         .ok()?;
-        let (device, queue) = open_device(&adapter).ok()?;
+        let (device, queue) = open_device(&adapter, true).ok()?;
         let format = wgpu::TextureFormat::Bgra8Unorm;
         let blit = Blitter::new(&device, format);
         Some(Self {
@@ -236,10 +238,9 @@ pub struct Screen {
     pub paused: bool,
     /// Needs a frame even if the source is static (new, resized, resumed, reloaded).
     pub dirty: bool,
-    /// The swapchain images can be copied from (the backdrop needs it).
-    pub copy_src: bool,
-    /// Unmodified last wallpaper, at its source's render scale. Never contains glass.
-    pub kept: Option<KeptFrame>,
+    /// Unmodified last wallpaper, at its source's render scale. Never contains glass. Shared
+    /// by every screen of the same render size when the source draws one frame for all.
+    pub kept: Option<Rc<KeptFrame>>,
     pub glass_dirty: bool,
 }
 
@@ -247,6 +248,8 @@ pub struct KeptFrame {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub quad: crate::sources::blit::BlitQuad,
+    /// The engine frame whose wallpaper it holds, so screens that share it draw it once.
+    pub drawn: Cell<Option<u32>>,
 }
 
 impl KeptFrame {
@@ -264,10 +267,16 @@ impl KeptFrame {
             texture,
             view,
             quad,
+            drawn: Cell::new(None),
         }
     }
 
-    /// A full-scale frame copies directly when supported; a scaled frame uses the upscale blit.
+    pub fn size(&self) -> (u32, u32) {
+        (self.texture.width(), self.texture.height())
+    }
+
+    /// A full-scale frame copies directly when supported; a scaled frame uses the upscale blit,
+    /// which covers every pixel: no clear first, no blending (each a full-screen write here).
     pub fn restore(
         &self,
         gpu: &Gpu,
@@ -286,14 +295,15 @@ impl KeptFrame {
         } else {
             self.quad.set(
                 &gpu.queue,
-                (self.texture.width(), self.texture.height()),
+                self.size(),
                 (target.width(), target.height()),
                 mypaper_theme::Fit::Stretch,
                 1.0,
             );
-            let mut pass =
-                crate::sources::begin(encoder, view, wgpu::LoadOp::Clear(wgpu::Color::BLACK));
-            self.quad.draw(&gpu.blit, &mut pass);
+            // SAFETY: `cover` writes every pixel and reads none of the target before it does.
+            let load = wgpu::LoadOp::DontCare(unsafe { wgpu::LoadOpDontCare::enabled() });
+            let mut pass = crate::sources::begin(encoder, view, load);
+            self.quad.cover(&gpu.blit, &mut pass);
         }
     }
 }
@@ -315,11 +325,6 @@ impl Screen {
             config.present_mode = wgpu::PresentMode::Mailbox;
         }
         config.desired_maximum_frame_latency = 1;
-        // Lets the backdrop copy the finished frame out of the swapchain.
-        let copy_src = caps.usages.contains(wgpu::TextureUsages::COPY_SRC);
-        if copy_src {
-            config.usage |= wgpu::TextureUsages::COPY_SRC;
-        }
         if caps.usages.contains(wgpu::TextureUsages::COPY_DST) {
             config.usage |= wgpu::TextureUsages::COPY_DST;
         }
@@ -330,7 +335,6 @@ impl Screen {
             window,
             paused: false,
             dirty: true,
-            copy_src,
             kept: None,
             glass_dirty: false,
         })
@@ -388,21 +392,39 @@ fn instance() -> wgpu::Instance {
     wgpu::Instance::new(desc)
 }
 
-/// Opens the device and queue, routing GPU errors to the log.
-fn open_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue)> {
+/// Fixed 4 MiB suballocation blocks, the allocator's minimum. Anything larger (every screen-sized
+/// texture) gets a heap of exactly its own size. `MemoryUsage` grows blocks from 8 to 64 MiB and
+/// reserved 124 MiB for four 2560x1440 textures (56 MiB). On this integrated GPU every heap is
+/// private memory, and a released one is not given back (docs/engine-notes.md, Memory).
+const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::Manual {
+    suballocated_device_memory_block_size: 4 << 20..4 << 20,
+};
+
+/// Size of DX12's shader-visible view descriptor heap: every bind group's textures and buffers
+/// live in it while the group exists. wgpu's default, 1,000,000, is allocated up front and cost
+/// 92 MiB private here; the engine's bind groups (a few per screen, source and pyramid level, a
+/// few hundred for a large glTF scene) fit in this many with room to spare.
+const DESCRIPTORS: u32 = 16_384;
+
+/// Opens the device and queue, routing GPU errors to the log. `timing` adds the timestamp
+/// features the adapter supports.
+fn open_device(adapter: &wgpu::Adapter, timing: bool) -> Result<(wgpu::Device, wgpu::Queue)> {
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("mypaper"),
         // 16-bit normalized formats: the planes of 10-bit (P010) video.
         required_features: adapter.features().intersection(
             wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
-                | if crate::timing::requested() {
+                | if timing {
                     crate::timing::FEATURES
                 } else {
                     wgpu::Features::empty()
                 },
         ),
-        required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
-        memory_hints: wgpu::MemoryHints::MemoryUsage,
+        required_limits: wgpu::Limits {
+            max_non_sampler_bindings: DESCRIPTORS,
+            ..wgpu::Limits::default().using_resolution(adapter.limits())
+        },
+        memory_hints: MEMORY_HINTS,
         ..Default::default()
     }))?;
     device.on_uncaptured_error(std::sync::Arc::new(|e| log::error!("GPU: {e}")));

@@ -143,7 +143,8 @@ keeps pin dragging working outside the dock. There is no serialized command enve
 | power | Windows power menu |
 | stats | CPU/RAM, sampled every two seconds while shown; click Task Manager |
 | language | Current keyboard language/layout; opens Windows' layout switcher |
-| notifications | Count while shown; opens notifications |
+| notifications | Retained Windows toast count when live delivery is qualified; opens the notification center |
+| t3, obs, docker, tailscale | Optional shared native integration providers; [settings and qualification gates](integrations.md) |
 | custom:<id> | Bounded command output, with configured click actions |
 
 Clock tokens: `dddd ddd d dd MMMM MMM MM M yyyy yy HH H hh h mm ss tt`; `'literal'` and doubled
@@ -236,7 +237,7 @@ by the shell's loop after each pass over the input) opens it in the same pass. E
 | Kind | What it shows | Provider |
 |---|---|---|
 | Calendar | today, the time (a minute tick while open), a month to page through (`mypaper_ui::calendar::MonthGrid`) | Windows NLS names |
-| Notifications | toasts grouped by app, newest group first, stacked until opened; dismiss one, a group, or all; Do Not Disturb's state (its setting opens: no API changes it); the month underneath. Clock clicks open this. | `notifications` lane, read on open and every 3 s while open |
+| Notifications | Retained Windows toasts with app identity, optional text, dismiss/open-app and clear-all; the month underneath. Clock clicks open this. | One shared integration lease; Windows change events after qualification, otherwise snapshot on open/manual refresh. No polling. |
 | Quick | Wi-Fi and Bluetooth tiles (Wi-Fi's chevron opens the Wi-Fi list), power mode (cycles), battery saver, do not disturb, focus, night light (their settings), brightness, volume (mute; chevron opens the mixer), battery | `quick` lane, the endpoint volume |
 | Wifi | the radio switch, networks with signal, security and lock; Connect / Disconnect; a network that needs a password goes to **Windows' own prompt** (`ms-availablenetworks:`), enterprise ones to Settings; location-access and no-adapter states | `wifi` lane, refreshed by its scan notification |
 | Mixer | output devices (switching the default needs `audio.switchOutput`, else Sound settings), master volume, each app's volume and mute | `mixer` lane, refreshed by session events |

@@ -1,0 +1,14 @@
+[
+  {
+    "scenario": "real-look",
+    "run": 0,
+    "seconds": 20.0086942,
+    "private_mb": 455.83203125,
+    "cpu_core_pct": 3.123642121533348,
+    "cpu_machine_pct": 0.19522763259583426,
+    "visible_screens": 2,
+    "timing_file": "C:\\mypaper-targets\\hillclimb\\results\\base-rain-gpu.run0.jsonl",
+    "sample_started_qpc": 3610504642347,
+    "sample_ended_qpc": 3610704729293
+  }
+]

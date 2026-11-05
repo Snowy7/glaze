@@ -14,12 +14,17 @@
 //! - **Providers** run on lanes (`mypaper_bars::flyouts::Lane`) started on first use and
 //!   dropped a few seconds after the flyout closes; nothing polls while closed.
 
-mod calendar;
-mod kit;
+pub(crate) mod calendar;
+pub(crate) mod kit;
 mod language;
 mod launcher;
 pub mod look;
 mod mixer;
+#[cfg(test)]
+#[allow(
+    dead_code,
+    reason = "legacy notification grouping/calendar fixtures only; production uses integration leases"
+)]
 mod notifications;
 mod power;
 mod quick;
@@ -66,6 +71,9 @@ use crate::bars::Bars;
 /// What a bar click (or a Windows key shortcut) opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
+    Integration(mypaper_integrations::Provider),
+    AppActions,
+    RoutineResult,
     Calendar,
     Quick,
     Wifi,
@@ -134,6 +142,7 @@ pub enum Reply {
     Quick(mypaper_bars::flyouts::quick::Quick),
     Mixer(mypaper_bars::flyouts::mixer::MixerState),
     Wifi(mypaper_bars::flyouts::wifi::WifiState),
+    #[cfg(test)]
     Notifications(mypaper_bars::flyouts::notifications::NotificationList),
     Apps(Vec<mypaper_bars::flyouts::index::App>),
     Files(Vec<mypaper_bars::flyouts::index::RecentFile>),
@@ -330,6 +339,7 @@ impl Lanes {
         );
     }
 
+    #[cfg(test)]
     pub fn notifications(
         &mut self,
         job: impl FnOnce(&mut NotificationsLane) -> Reply + Send + 'static,
@@ -824,11 +834,14 @@ impl Flyouts {
             scale,
         };
         let panel: Box<dyn Panel> = match request.kind {
+            Kind::Integration(provider) => crate::integrations::panel(provider),
+            Kind::AppActions => crate::integrations::app_panel(),
+            Kind::RoutineResult => crate::integrations::routine_panel(),
             Kind::Calendar => Box::new(calendar::Calendar::new(&mut cx)),
             Kind::Quick => Box::new(quick::Quick::new(&mut cx)),
             Kind::Wifi => Box::new(wifi::Wifi::new(&mut cx)),
             Kind::Mixer => Box::new(mixer::Mixer::new(&mut cx)),
-            Kind::Notifications => Box::new(notifications::Center::new(&mut cx)),
+            Kind::Notifications => crate::integrations::notification_center(&mut cx),
             Kind::Power => Box::new(power::Power::new(&mut cx)),
             Kind::TrayOverflow => Box::new(tray::Overflow::new(&mut cx)),
             Kind::Language => Box::new(language::Language::new(&mut cx)),

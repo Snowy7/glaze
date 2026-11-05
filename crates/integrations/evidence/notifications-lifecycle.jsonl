@@ -1,0 +1,4 @@
+{"cpu_core_pct":0.0,"private_mib":1.34375,"provider":"Notifications","run":1,"stage":"disabled"}
+{"attempts":1,"availability":"Cached","provider":"Notifications","stage":"reconnect"}
+{"added_private_mib":1.69140625,"attempts":0,"availability":"Cached","cpu_core_pct":0.0,"deliveries":0,"private_mib":3.03515625,"provider":"Notifications","run":1,"snapshot_changes":0,"stage":"enabled"}
+{"private_mib":2.90234375,"stage":"stopped"}
