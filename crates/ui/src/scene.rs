@@ -4,6 +4,8 @@
 
 use std::sync::Arc;
 
+pub(crate) const ARC_STEP: f32 = std::f32::consts::TAU / 10.0;
+
 use accesskit::Role;
 
 use crate::geom::{Point, Rect, Rgba};
@@ -256,8 +258,8 @@ fn collect_damage(old: &[Op], new: &[Op], clip: Option<Rect>, out: &mut Vec<Rect
     }
 }
 
-/// The renderer constructs arcs in fixed quarter turns. Preserve complete unchanged quarters;
-/// the final partial quarter can change its curve approximation all the way to its start.
+/// Fixed tenth-turn prefixes keep unchanged pixels stable. The final partial segment can
+/// change its curve approximation back to its start, so damage that complete segment.
 fn arc_change(old: &Op, new: &Op) -> Option<Rect> {
     let (
         Op::Arc {
@@ -289,9 +291,9 @@ fn arc_change(old: &Op, new: &Op) -> Option<Rect> {
     {
         return None;
     }
-    let quarter = std::f32::consts::FRAC_PI_2;
-    let start = (before.min(*after).max(0.0) / quarter).floor() * quarter;
-    let end = ((before.max(*after).max(0.0) / quarter).ceil() * quarter).min(std::f32::consts::TAU);
+    let start = (before.min(*after).max(0.0) / ARC_STEP).floor() * ARC_STEP;
+    let end =
+        ((before.max(*after).max(0.0) / ARC_STEP).ceil() * ARC_STEP).min(std::f32::consts::TAU);
     let point = |angle: f32| Point::new(a.x + ar * angle.sin(), a.y - ar * angle.cos());
     let first = point(start);
     let mut rect = Rect::new(first.x, first.y, 0.0, 0.0);
@@ -421,8 +423,8 @@ mod tests {
         let after = list(vec![arc(0.21 * std::f32::consts::TAU)]);
         let regions = after.damage_regions(&before);
         assert_eq!(regions.len(), 1);
-        assert!(regions[0].width() < 50.0 && regions[0].height() < 50.0);
-        assert!(regions[0].left > 46.0 && regions[0].bottom < 54.0);
+        assert!(regions[0].width() < 20.0 && regions[0].height() < 40.0);
+        assert!(regions[0].left > 80.0 && regions[0].top > 30.0);
         assert_eq!(before.damage_regions(&after), regions);
     }
 

@@ -28,7 +28,7 @@ use windows::Win32::System::Com::{
 use windows_numerics::Vector2;
 
 use crate::geom::{PixelRect, Rect, Rgba};
-use crate::scene::{DisplayList, Op};
+use crate::scene::{ARC_STEP, DisplayList, Op};
 use crate::text::Text;
 
 #[cfg(test)]
@@ -599,11 +599,11 @@ impl Canvas {
                             },
                             D2D1_FIGURE_BEGIN_HOLLOW,
                         );
-                        // Canonical quarter-turn prefixes allow a meter to repaint only
-                        // changed quarters without moving the unchanged curve's pixels.
-                        let count = (sweep / std::f32::consts::FRAC_PI_2).ceil() as u32;
-                        for quarter in 1..=count {
-                            let angle = (quarter as f32 * std::f32::consts::FRAC_PI_2).min(*sweep);
+                        // Small fixed prefixes reduce meter damage while preserving every
+                        // pixel before the changing final segment.
+                        let count = (sweep / ARC_STEP).ceil() as u32;
+                        for segment in 1..=count {
+                            let angle = (segment as f32 * ARC_STEP).min(*sweep);
                             sink.AddArc(&D2D1_ARC_SEGMENT {
                                 point: Vector2 {
                                     X: center.x + radius * angle.sin(),
