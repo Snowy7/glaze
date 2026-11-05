@@ -101,6 +101,17 @@ fn fixture(id: &str, variant: &str) -> Model {
                     },
                 ]),
                 usage_day: Some("2026-11-05".into()),
+                history: Some(history()),
+                limits: vec![t3::Limit {
+                    driver: "codex".into(),
+                    provider: "Codex".into(),
+                    instance: "codex".into(),
+                    account: "alex@example.test".into(),
+                    window: "Weekly".into(),
+                    used_permille: 660,
+                    resets_at: Some("2026-11-10T12:00:00.000Z".into()),
+                    duration_mins: Some(7 * 24 * 60),
+                }],
                 ..Default::default()
             }))
         } else {
@@ -146,6 +157,42 @@ fn fixture(id: &str, variant: &str) -> Model {
         ];
     }
     model
+}
+
+/// 30 days of two providers' cost and tokens, shaped like a real usage summary.
+fn history() -> t3::History {
+    let days: Vec<String> = (7..=31)
+        .map(|d| format!("2026-10-{d:02}"))
+        .chain((1..=5).map(|d| format!("2026-11-{d:02}")))
+        .collect();
+    let wave = |phase: f64, scale: f64| -> Vec<u64> {
+        (0..30)
+            .map(|i| ((f64::from(i) * 0.7 + phase).sin().abs() * scale) as u64)
+            .collect()
+    };
+    t3::History {
+        days,
+        providers: vec![
+            t3::ProviderHistory {
+                provider: "claudeAgent".into(),
+                cost: wave(0.0, 600_000_000.0),
+                tokens: wave(0.0, 2_000_000_000.0),
+                sessions: 386,
+            },
+            t3::ProviderHistory {
+                provider: "codex".into(),
+                cost: wave(1.3, 250_000_000.0),
+                tokens: wave(1.3, 600_000_000.0),
+                sessions: 636,
+            },
+        ],
+        uncached: 261_000_000,
+        cached: 72_300_000_000,
+        cache_write: 685_000_000,
+        output: 201_000_000,
+        savings_microusd: 271_003_400_000,
+        cost_by_type: [0; 4],
+    }
 }
 
 fn draw(ui: &mut Ui, model: &Model, size: (u32, u32), scale: f32) -> DisplayList {
@@ -231,6 +278,7 @@ fn sheet(ui: &mut Ui, id: &str, variants: &[&str]) -> Image {
         } else {
             if let Some(Data::T3(state)) = &mut m.integration.snapshot.data {
                 state.usage = None;
+                state.history = None;
                 state.permissions.clear();
             }
             m.integration.routines.clear();
@@ -244,7 +292,7 @@ fn sheet(ui: &mut Ui, id: &str, variants: &[&str]) -> Image {
 fn t3_grok_dense_sizes_and_sheets() {
     let mut ui = Ui::new().unwrap();
     for (id, variants) in [
-        ("t3", &["running", "usage", "attention", "new"][..]),
+        ("t3", &["running", "usage", "limits", "attention", "new"][..]),
         ("grok", &["routines", "recent", "prompt"][..]),
     ] {
         for variant in variants {

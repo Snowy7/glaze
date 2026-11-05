@@ -119,7 +119,7 @@ pub(super) fn view(f: &mut Frame<'_>, state: &Snapshot, l: &Areas) {
     let list_end = if wide {
         summary.bottom
     } else {
-        y + row_h * providers.len().min(3) as f32
+        (y + row_h * providers.len().min(3) as f32).min(l.body.bottom)
     };
     for (p, p_cost, tokens) in &providers {
         if y + row_h > list_end + 1.0 {
