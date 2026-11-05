@@ -77,13 +77,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
     HWND_TOPMOST, ICONINFO, ISMEX_NOTIFY, ISMEX_SEND, InSendMessageEx, IsWindow, MSG,
     MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, OBJID_WINDOW, PM_REMOVE, PeekMessageW,
     PostMessageW, PostThreadMessageW, QS_ALLINPUT, RegisterClassExW, RegisterWindowMessageW,
-    ReplyMessage, SC_TASKLIST, SMTO_ABORTIFHUNG, SMTO_ERRORONEXIT, SWP_HIDEWINDOW, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SendMessageTimeoutW, SendNotifyMessageW,
-    SetWindowLongPtrW, SetWindowPos, TranslateMessage, UnregisterClassW, WINDOWPOS,
-    WINEVENT_OUTOFCONTEXT, WM_APP, WM_CLOSE, WM_COMMAND, WM_COPYDATA, WM_NCDESTROY, WM_QUIT,
-    WM_SYSCOMMAND, WM_USER, WM_WINDOWPOSCHANGED, WM_WINDOWPOSCHANGING, WNDCLASSEXW, WNDPROC,
-    WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
-    WS_VISIBLE,
+    ReplyMessage, SC_TASKLIST, SEND_MESSAGE_TIMEOUT_FLAGS, SMTO_ABORTIFHUNG, SMTO_BLOCK,
+    SMTO_ERRORONEXIT, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    SendMessageTimeoutW, SendNotifyMessageW, SetWindowLongPtrW, SetWindowPos, TranslateMessage,
+    UnregisterClassW, WINDOWPOS, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CLOSE, WM_COMMAND, WM_COPYDATA,
+    WM_NCDESTROY, WM_QUIT, WM_SYSCOMMAND, WM_USER, WM_WINDOWPOSCHANGED, WM_WINDOWPOSCHANGING,
+    WNDCLASSEXW, WNDPROC, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
 };
 use windows::core::{HSTRING, PCWSTR, PWSTR, w};
 
@@ -101,6 +101,10 @@ const NOTIFY_CLASS: PCWSTR = w!("TrayNotifyWnd");
 const WM_HOST_COMMAND: u32 = WM_APP + 40;
 /// How long a forward to Explorer may take (a hung Explorer must not hang the apps, or us).
 const FORWARD_TIMEOUT_MS: u32 = 10;
+/// ABORTIFHUNG alone still dispatches incoming sent messages while waiting. A callback can
+/// recursively relay to Explorer, extending a 10 ms wait across the entire nested chain.
+const FORWARD_FLAGS: SEND_MESSAGE_TIMEOUT_FLAGS =
+    SEND_MESSAGE_TIMEOUT_FLAGS(SMTO_ABORTIFHUNG.0 | SMTO_BLOCK.0 | SMTO_ERRORONEXIT.0);
 /// The same while the host stops: what's still queued gets a short chance.
 const SHUTDOWN_TIMEOUT_MS: u32 = FORWARD_TIMEOUT_MS;
 /// Forwards nested inside forwards (Explorer's answer can make an app call us again). A deeper
@@ -1063,7 +1067,7 @@ fn forward(msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
                     msg,
                     wparam,
                     lparam,
-                    SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
+                    FORWARD_FLAGS,
                     FORWARD_TIMEOUT_MS,
                     Some(&mut result),
                 );
@@ -1111,7 +1115,7 @@ fn copydata_to(
                 WM_COPYDATA,
                 wparam,
                 LPARAM(&raw const data as isize),
-                SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
+                FORWARD_FLAGS,
                 timeout_ms,
                 Some(&mut result),
             )
