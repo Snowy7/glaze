@@ -42,7 +42,7 @@ pub fn action_at(face: &Face, hit: HitId) -> Option<Hit> {
 
 fn collect(view: &View, out: &mut Vec<Hit>) {
     match view {
-        View::Stack { children, .. } | View::Row { children, .. } | View::Grid { children, .. } => {
+        View::Stack { children, .. } | View::List { children, .. } | View::Row { children, .. } | View::Grid { children, .. } => {
             children.iter().for_each(|c| collect(c, out))
         }
         View::Card { child, .. } => collect(child, out),
@@ -169,7 +169,7 @@ pub fn draw(f: &mut Frame<'_>, rect: Rect, title: &str, header: Icon, face: Opti
 
 /// Whether a node takes the free space of its stack (charts, empties, spacers).
 fn flexible(view: &View) -> bool {
-    matches!(view, View::Spacer | View::AreaChart { .. } | View::Empty { .. })
+    matches!(view, View::Spacer | View::AreaChart { .. } | View::Empty { .. } | View::List { .. })
 }
 
 /// A node's natural height at `width`.
@@ -220,7 +220,7 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
         View::LimitBar { .. } => f.px(22.0),
         View::SegmentedBar { .. } => f.px(8.0),
         View::Sparkline { .. } => f.px(28.0),
-        View::AreaChart { .. } | View::Empty { .. } => f.px(80.0),
+        View::AreaChart { .. } | View::Empty { .. } | View::List { .. } => f.px(80.0),
         View::Spacer | View::Unknown => 0.0,
     }
 }
@@ -232,7 +232,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
         id
     };
     match view {
-        View::Stack { children, gap } => {
+        View::Stack { children, gap } | View::List { children, gap } => {
             let gap = f.px(gap.unwrap_or(8.0));
             let fixed: f32 = children.iter().filter(|c| !flexible(c)).map(|c| height(f, c, rect.width())).sum();
             let flex = children.iter().filter(|c| flexible(c)).count();
