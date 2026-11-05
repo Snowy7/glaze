@@ -142,6 +142,16 @@ pub struct LimitBar<'a> {
 }
 
 pub fn limit_bar(f: &mut Frame<'_>, rect: Rect, bar: &LimitBar<'_>) {
+    draw_limit_bar(f, rect, bar, false);
+}
+
+/// A quota bar for narrow dashboard columns. Monograms and percentages keep their full text;
+/// the reset chip gives way when the column cannot fit all three.
+pub fn compact_limit_bar(f: &mut Frame<'_>, rect: Rect, bar: &LimitBar<'_>) {
+    draw_limit_bar(f, rect, bar, true);
+}
+
+fn draw_limit_bar(f: &mut Frame<'_>, rect: Rect, bar: &LimitBar<'_>, compact: bool) {
     let radius = f.px(5.0);
     let c = &f.theme.color;
     let (label, quiet, track) = (c.label, c.secondary, c.fill.with_alpha(c.fill.a * 0.6));
@@ -170,25 +180,44 @@ pub fn limit_bar(f: &mut Frame<'_>, rect: Rect, bar: &LimitBar<'_>) {
             bar.fill,
         );
     }
-    let pad = f.px(8.0);
+    let pad = f.px(if compact { 6.0 } else { 8.0 });
     let mut cursor = rect.left + pad;
     if let Some(badge) = bar.badge {
         let d = (rect.height() - f.px(10.0)).max(f.px(14.0)).min(f.px(20.0));
         let circle = Rect::new(cursor, rect.top + (rect.height() - d) / 2.0, d, d);
         f.fill(circle, d / 2.0, label.with_alpha(0.85));
-        f.text_in(circle, badge, TextRole::Caption, Rgba::rgb8([20, 20, 22], 1.0), Align::Center);
-        cursor = circle.right + f.px(6.0);
+        if compact {
+            let mut style = f.font(TextRole::Caption);
+            style.size = f.px(9.0);
+            style.weight = 600;
+            let (w, h) = f.text.measure(badge, &style);
+            let at = circle.place(w, h, Align::Center, Align::Center);
+            f.label_styled(at.left, at.top, badge, &style, Rgba::rgb8([20, 20, 22], 1.0), w + 1.0);
+        } else {
+            f.text_in(circle, badge, TextRole::Caption, Rgba::rgb8([20, 20, 22], 1.0), Align::Center);
+        }
+        cursor = circle.right + f.px(if compact { 4.0 } else { 6.0 });
     }
     let mut end = rect.right - pad;
     if let Some(reset) = bar.reset {
-        let style = f.font(TextRole::Caption);
+        let mut style = f.font(TextRole::Caption);
+        if compact { style.size = f.px(9.0); }
         let text = format!("↻ {reset}");
-        let w = f.text.measure(&text, &style).0 + f.px(12.0);
+        let w = f.text.measure(&text, &style).0 + f.px(if compact { 8.0 } else { 12.0 });
         let h = (rect.height() - f.px(8.0)).min(f.px(22.0));
         let chip = Rect::new(rect.right - f.px(4.0) - w, rect.top + (rect.height() - h) / 2.0, w, h);
-        f.fill(chip, f.px(4.0), Rgba::rgb8([0, 0, 0], 0.55));
-        f.text_in(chip, &text, TextRole::Caption, label, Align::Center);
-        end = chip.left - f.px(6.0);
+        let label_width = bar.label.map_or(0.0, |text| f.text.measure(text, &f.font(TextRole::Caption)).0);
+        if !compact || chip.left - f.px(4.0) >= cursor + label_width {
+            f.fill(chip, f.px(4.0), Rgba::rgb8([0, 0, 0], 0.55));
+            if compact {
+                let (w, h) = f.text.measure(&text, &style);
+                let at = chip.place(w, h, Align::Center, Align::Center);
+                f.label_styled(at.left, at.top, &text, &style, label, w + 1.0);
+            } else {
+                f.text_in(chip, &text, TextRole::Caption, label, Align::Center);
+            }
+            end = chip.left - f.px(if compact { 4.0 } else { 6.0 });
+        }
     }
     if let Some(text) = bar.label
         && end > cursor
@@ -196,7 +225,7 @@ pub fn limit_bar(f: &mut Frame<'_>, rect: Rect, bar: &LimitBar<'_>) {
         f.text_in(
             Rect::new(cursor, rect.top, end - cursor, rect.height()),
             text,
-            TextRole::Headline,
+            if compact { TextRole::Caption } else { TextRole::Headline },
             label,
             Align::Start,
         );
@@ -208,5 +237,41 @@ pub fn limit_bar(f: &mut Frame<'_>, rect: Rect, bar: &LimitBar<'_>) {
             f.px(1.5),
             quiet.with_alpha(1.0),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Interaction, Scheme, Style, Theme, Ui};
+
+    #[test]
+    fn compact_accounts_keep_initials_and_percent_at_dashboard_widths() {
+        let mut ui = Ui::new().unwrap();
+        let theme = Theme::new(Style::Liquid, Scheme::Dark, Rgba::rgb8([10, 132, 255], 1.0));
+        let input = Interaction::default();
+        for scale in [1.0, 1.5, 2.0] {
+            for width in [80.0, 112.0, 160.0] {
+                let mut f = Frame::new(&mut ui.text, &theme, scale, &input);
+                let rect = Rect::new(0.0, 0.0, width * scale, 30.0 * scale);
+                compact_limit_bar(&mut f, rect, &LimitBar {
+                    left: 0.57, pace: None, fill: theme.color.accent,
+                    badge: Some("ON"), label: Some("57%"), reset: Some("4d 1h"),
+                });
+                let text: Vec<_> = f.list.ops.iter().filter_map(|op| match op {
+                    Op::Text { text, rect, .. } => Some((text.as_ref(), *rect)),
+                    _ => None,
+                }).collect();
+                for expected in ["ON", "57%"] {
+                    assert!(text.iter().any(|(text, _)| *text == expected), "{expected}: width {width}, scale {scale}: {text:?}");
+                }
+                for (_, bounds) in &text {
+                    assert!(bounds.left >= rect.left && bounds.right <= rect.right && bounds.top >= rect.top && bounds.bottom <= rect.bottom);
+                }
+                for pair in text.windows(2) {
+                    assert!(pair[0].1.right <= pair[1].1.left || pair[1].1.right <= pair[0].1.left, "overlapping account text: {text:?}");
+                }
+            }
+        }
     }
 }
