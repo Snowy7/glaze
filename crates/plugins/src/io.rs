@@ -192,6 +192,21 @@ fn http(raw: *mut c_void) -> Result<Http, String> {
     if raw.is_null() { Err(windows::core::Error::from_thread().to_string()) } else { Ok(Http(raw)) }
 }
 
+/// One WinHTTP session for every websocket (a session per socket cost ~100 KiB each).
+fn session() -> Result<*mut c_void, String> {
+    static SESSION: Mutex<usize> = Mutex::new(0);
+    let mut session = SESSION.lock().expect("winhttp session");
+    if *session == 0 {
+        // SAFETY: opened once and kept for the process (WinHTTP sessions are thread-safe).
+        let raw = unsafe { WinHttpOpen(w!("mypaper-plugins/0.1"), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, PCWSTR::null(), PCWSTR::null(), 0) };
+        if raw.is_null() {
+            return Err(windows::core::Error::from_thread().to_string());
+        }
+        *session = raw as usize;
+    }
+    Ok(*session as *mut c_void)
+}
+
 /// The handshake: an upgrade GET with the plugin's headers and subprotocols.
 fn handshake(request: &SocketRequest) -> Result<WsHandle, String> {
     let (scheme, rest) = request.url.split_once("://").ok_or("expected a ws(s) URL")?;
@@ -213,11 +228,10 @@ fn handshake(request: &SocketRequest) -> Result<WsHandle, String> {
     let headers: Vec<u16> = headers.encode_utf16().collect();
     // SAFETY: handles are RAII values and every string outlives the call using it.
     unsafe {
-        let session = http(WinHttpOpen(w!("mypaper-plugins/0.1"), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, PCWSTR::null(), PCWSTR::null(), 0))?;
-        WinHttpSetTimeouts(session.0, 10_000, 10_000, 10_000, 15_000).map_err(|e| e.to_string())?;
-        let connection = http(WinHttpConnect(session.0, &HSTRING::from(host), port, 0))?;
+        let connection = http(WinHttpConnect(session()?, &HSTRING::from(host), port, 0))?;
         let flags = if secure { WINHTTP_FLAG_SECURE } else { WINHTTP_OPEN_REQUEST_FLAGS(0) };
         let req = http(WinHttpOpenRequest(connection.0, w!("GET"), &HSTRING::from(path), PCWSTR::null(), PCWSTR::null(), std::ptr::null(), flags))?;
+        WinHttpSetTimeouts(req.0, 10_000, 10_000, 10_000, 15_000).map_err(|e| e.to_string())?;
         WinHttpSetOption(Some(req.0), WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET, None).map_err(|e| e.to_string())?;
         WinHttpSendRequest(req.0, (!headers.is_empty()).then_some(headers.as_slice()), None, 0, 0, 0).map_err(|e| e.to_string())?;
         WinHttpReceiveResponse(req.0, std::ptr::null_mut()).map_err(|e| e.to_string())?;
