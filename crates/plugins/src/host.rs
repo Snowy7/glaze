@@ -28,6 +28,8 @@ pub const IDLE_UNLOAD: Duration = Duration::from_secs(30);
 pub const TIMER_GRID: Duration = Duration::from_millis(250);
 /// Window moves reach plugins at most once per this (one frame).
 pub const MOVE_FRAME: Duration = Duration::from_millis(16);
+/// The `action.instance` of a clicked toast's action.
+pub const TOAST_INSTANCE: &str = "toast";
 const STRIKES: usize = 3;
 const STRIKE_WINDOW: Duration = Duration::from_secs(300);
 
@@ -41,6 +43,9 @@ pub enum Input {
     Socket { plugin: String, event: SocketEvent },
     Pipe { plugin: String, event: PipeEvent },
     PipeHttp { plugin: String, id: u64, result: Result<crate::io::PipeReply, String> },
+    /// The user clicked a toast that carried `action`; it reaches the plugin as `event::action`
+    /// with the instance [`TOAST_INSTANCE`].
+    Toast { plugin: String, action: String },
     Eof,
 }
 
@@ -81,6 +86,8 @@ pub struct Host<W: Write> {
     moves: BTreeMap<u64, SystemEvent>,
     moves_due: Option<Instant>,
     notification_plugins: Vec<String>,
+    /// The topics last reported in [`HelperMsg::Demand`].
+    demand: Vec<String>,
 }
 
 fn size(size: SizeClass) -> WitSize {
@@ -93,7 +100,7 @@ fn size(size: SizeClass) -> WitSize {
 
 impl<W: Write> Host<W> {
     pub fn new(rt: Runtime, out: W, tx: Sender<Input>) -> Self {
-        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx, native: None, moves: BTreeMap::new(), moves_due: None, notification_plugins: Vec::new() }
+        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx, native: None, moves: BTreeMap::new(), moves_due: None, notification_plugins: Vec::new(), demand: Vec::new() }
     }
 
     pub fn out(&mut self) -> &mut W {
@@ -114,20 +121,8 @@ impl<W: Write> Host<W> {
     pub fn on_host(&mut self, message: HostMsg, now: Instant) -> bool {
         match message {
             HostMsg::Open { plugin, dir, instance, face, size, settings } => {
-                if !self.plugins.contains_key(&plugin) {
-                    let dir = PathBuf::from(dir);
-                    match Manifest::load(&dir) {
-                        Ok(manifest) if manifest.id == plugin => {
-                            let loaded = Loaded { manifest, dir, instance: None, faces: BTreeMap::new(), last: HashMap::new(), strikes: Vec::new(), retry_at: None, stopped: None, idle_since: None };
-                            self.plugins.insert(plugin.clone(), loaded);
-                        }
-                        Ok(_) => return true,
-                        Err(e) => {
-                            log::warn!("plugin {plugin} refused: {e:#}");
-                            self.status(&plugin, Status::Stopped(format!("{e:#}")));
-                            return true;
-                        }
-                    }
+                if !self.register(&plugin, dir) {
+                    return true;
                 }
                 let entry = self.plugins.get_mut(&plugin).expect("inserted above");
                 if !entry.manifest.contributes(&face) {
@@ -161,8 +156,15 @@ impl<W: Write> Host<W> {
                     self.deliver(&plugin, Event::Action(Action { instance, action, value }), now);
                 }
             }
-            HostMsg::Command { plugin, id } => {
-                if self.plugins.contains_key(&plugin) && self.ensure_loaded(&plugin, now).is_some() {
+            HostMsg::Command { plugin, dir, id } => {
+                // A shortcut or menu item may be the first use: load the plugin from its folder.
+                // With nothing of it visible, it unloads again after `IDLE_UNLOAD`.
+                if !self.register(&plugin, dir) {
+                    return true;
+                }
+                if !self.plugins[&plugin].manifest.invokable(&id) {
+                    log::warn!("plugin {plugin} has no command or menu item {id:?}");
+                } else if self.ensure_loaded(&plugin, now).is_some() {
                     self.deliver(&plugin, Event::Command(id), now);
                 }
             }
@@ -214,7 +216,41 @@ impl<W: Write> Host<W> {
         true
     }
 
+    /// Knows `plugin` (from the manifest in `dir`) if it doesn't yet; `false` if it's refused.
+    fn register(&mut self, plugin: &str, dir: String) -> bool {
+        if self.plugins.contains_key(plugin) {
+            return true;
+        }
+        let dir = PathBuf::from(dir);
+        match Manifest::load(&dir) {
+            Ok(manifest) if manifest.id == plugin => {
+                let loaded = Loaded { manifest, dir, instance: None, faces: BTreeMap::new(), last: HashMap::new(), strikes: Vec::new(), retry_at: None, stopped: None, idle_since: None };
+                self.plugins.insert(plugin.into(), loaded);
+                true
+            }
+            Ok(_) => false,
+            Err(e) => {
+                log::warn!("plugin {plugin} refused: {e:#}");
+                self.status(plugin, Status::Stopped(format!("{e:#}")));
+                false
+            }
+        }
+    }
+
+    /// The system topics a visible (placed, not held) loaded plugin subscribes to and may receive.
+    pub fn topics(&self) -> Vec<String> {
+        use crate::runtime::mypaper::plugin::events::Topic;
+        let topics = [(Topic::Windows, "windows"), (Topic::Monitors, "monitors"), (Topic::Media, "media"), (Topic::Power, "power"), (Topic::Theme, "theme")];
+        let visible: Vec<&Instance> = self.plugins.values().filter(|p| !self.held && !p.faces.is_empty()).filter_map(|p| p.instance.as_ref()).collect();
+        topics.into_iter().filter(|(topic, _)| visible.iter().any(|i| i.store.data().subscribed(*topic))).map(|(_, name)| name.to_owned()).collect()
+    }
+
     fn sync_notification_demand(&mut self) {
+        let topics = self.topics();
+        if topics != self.demand {
+            self.demand = topics.clone();
+            self.send(HelperMsg::Demand { topics });
+        }
         use crate::runtime::mypaper::plugin::events::Topic;
         let mut plugins: Vec<_> = self.plugins.iter().filter(|(_, p)| !self.held && !p.faces.is_empty()
             && p.instance.as_ref().is_some_and(|i| i.store.data().subscribed(Topic::Notifications)))
@@ -344,6 +380,12 @@ impl<W: Write> Host<W> {
                 if self.plugins.get(&event.plugin).is_some_and(|p| p.instance.is_some()) {
                     let message = NativeMessage { module: event.module, name: event.name, bytes: event.bytes };
                     self.deliver(&event.plugin, Event::NativeEvent(message), now);
+                }
+                true
+            }
+            Input::Toast { plugin, action } => {
+                if self.ensure_loaded(&plugin, now).is_some() {
+                    self.deliver(&plugin, Event::Action(Action { instance: TOAST_INSTANCE.into(), action, value: None }), now);
                 }
                 true
             }
@@ -503,9 +545,11 @@ impl<W: Write> Host<W> {
                         log::warn!("no pipe http thread: {e}");
                     }
                 }
-                Effect::Notify { title, body, plugin_name } => {
+                Effect::Notify { title, body, plugin_name, action } => {
+                    let (tx, plugin) = (self.tx.clone(), plugin.to_owned());
+                    let clicked = action.map(|action| move || { let _ = tx.send(Input::Toast { plugin: plugin.clone(), action: action.clone() }); });
                     let spawned = std::thread::Builder::new().name("toast".into()).stack_size(256 << 10).spawn(move || {
-                        if let Err(e) = crate::caps::notify(&plugin_name, &title, &body) {
+                        if let Err(e) = crate::caps::notify(&plugin_name, &title, &body, clicked) {
                             log::warn!("plugin {plugin_name}: toast failed: {e}");
                         }
                     });

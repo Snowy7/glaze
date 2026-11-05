@@ -2,7 +2,9 @@
 //! placed in a bar as `custom:<plugin>--<bar>`. The bars say which are placed ([`place`]), the
 //! widgets host opens each as a plugin instance `bar:<plugin>--<bar>` and hands its views back
 //! ([`sync`]), and the bars draw the view's text and icon as the module's label. A click is the
-//! view's first action (or `click`), routed back to the plugin as an action.
+//! view's first action (or `click`), routed back to the plugin as an action, unless the module
+//! names a `panel`: then the click opens that panel as a flyout (`flyouts::plugin_panel`), which
+//! the host opens as the instance `panel:<plugin>--<panel>` while it is on screen.
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,6 +22,16 @@ struct Shared {
     views: BTreeMap<String, Face>,
     /// Actions clicked since the host last synced: `(module, action)`.
     clicks: Vec<(String, String)>,
+    /// Placed module → the panel it opens (`hello--details`), from its manifest.
+    module_panels: BTreeMap<String, String>,
+    /// Panels on screen (`<plugin>--<panel>`) and their latest views.
+    panels: BTreeSet<String>,
+    panels_opened: BTreeSet<String>,
+    panel_views: BTreeMap<String, Face>,
+    /// `(panel instance, action)` clicked in a panel since the host last synced.
+    panel_clicks: Vec<(String, String)>,
+    /// Interned panel ids, so `flyouts::Kind::Plugin` stays `Copy`.
+    names: Vec<String>,
 }
 
 static SHARED: Mutex<Option<Shared>> = Mutex::new(None);
@@ -44,7 +56,57 @@ pub fn place(config: &BarsConfig) {
             _ => None,
         })
         .collect();
-    with(|s| s.placed = placed);
+    let module_panels = placed.iter().filter_map(|id| {
+        let (plugin, bar) = parse(id)?;
+        let (manifest, _) = mypaper_widgets::registry::find_plugin(plugin)?;
+        let panel = manifest.bars.iter().find(|b| b.id == bar)?.panel.clone()?;
+        manifest.panels.iter().any(|p| p.id == panel).then(|| (id.clone(), format!("{plugin}--{panel}")))
+    }).collect();
+    with(|s| {
+        s.placed = placed;
+        s.module_panels = module_panels;
+    });
+}
+
+/// The interned number of panel `id` (`<plugin>--<panel>`), for `flyouts::Kind::Plugin`.
+pub fn panel_number(id: &str) -> u16 {
+    with(|s| match s.names.iter().position(|n| n == id) {
+        Some(n) => n as u16,
+        None => {
+            s.names.push(id.to_owned());
+            (s.names.len() - 1) as u16
+        }
+    })
+}
+
+/// The panel id behind `panel_number`.
+pub fn panel_name(number: u16) -> Option<String> {
+    with(|s| s.names.get(number as usize).cloned())
+}
+
+/// A panel flyout opened (`true`) or closed: the host opens or closes its instance.
+pub fn show_panel(id: &str, shown: bool) {
+    with(|s| if shown { s.panels.insert(id.to_owned()) } else { s.panel_views.remove(id); s.panels.remove(id) });
+}
+
+/// The panel's latest view.
+pub fn panel_view(id: &str) -> Option<Face> {
+    with(|s| s.panel_views.get(id).cloned())
+}
+
+/// A click on a panel's action.
+pub fn panel_click(id: &str, action: String) {
+    with(|s| s.panel_clicks.push((panel_instance(id), action)));
+}
+
+/// The instance id of panel `id` in the plugin host.
+pub fn panel_instance(id: &str) -> String {
+    format!("panel:{id}")
+}
+
+/// The panel a click on module `id` opens, if it names one.
+pub fn panel_of(id: &str) -> Option<String> {
+    with(|s| s.module_panels.get(id).cloned())
 }
 
 /// What the bar shows for module `id`: its view's text, if the plugin drew one.
@@ -95,12 +157,32 @@ pub fn take_changed() -> bool {
     CHANGED.swap(false, Ordering::Relaxed)
 }
 
-/// What the widgets host does each tick, by instance id ([`instance`]): `(instance, plugin, bar)`
-/// to open, instances to close, and `(instance, action)` clicks to send.
+/// What the widgets host does each tick, by instance id ([`instance`], [`panel_instance`]):
+/// `(instance, plugin, face)` to open, instances to close, and `(instance, action)` clicks to send.
 pub struct Sync {
     pub open: Vec<(String, String, String)>,
     pub close: Vec<String>,
     pub clicks: Vec<(String, String)>,
+}
+
+/// [`sync`] for the panels on screen; a changed view returns `true` in `.1` (redraw the flyout).
+pub fn sync_panels(view: impl Fn(&str) -> Option<Face>) -> (Sync, bool) {
+    with(|s| {
+        let opened = std::mem::replace(&mut s.panels_opened, s.panels.clone());
+        let mut changed = false;
+        for id in &s.panels {
+            if let Some(latest) = view(&panel_instance(id)).filter(|f| s.panel_views.get(id) != Some(f)) {
+                s.panel_views.insert(id.clone(), latest);
+                changed = true;
+            }
+        }
+        let sync = Sync {
+            open: s.panels.iter().filter(|id| !opened.contains(*id)).filter_map(|id| parse(id).map(|(p, f)| (panel_instance(id), p.to_owned(), f.to_owned()))).collect(),
+            close: opened.iter().filter(|id| !s.panels.contains(*id)).map(|id| panel_instance(id)).collect(),
+            clicks: std::mem::take(&mut s.panel_clicks),
+        };
+        (sync, changed)
+    })
 }
 
 /// The instance id of module `id` in the plugin host.

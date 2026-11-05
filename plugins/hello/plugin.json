@@ -5,7 +5,10 @@
   "component": "hello.wasm",
   "api": "0.1",
   "faces": [{ "id": "main", "name": "Demo", "icon": "sparkles", "size": { "default": [8, 5], "min": [6, 4], "max": [12, 8] } }],
-  "bars": [{ "id": "clock", "name": "Hello clock", "size": { "default": [3, 1] } }],
+  "bars": [{ "id": "clock", "name": "Hello clock", "size": { "default": [3, 1] }, "panel": "details" }],
+  "panels": [{ "id": "details", "name": "Hello", "icon": "sparkles", "size": { "default": [7, 5] } }],
+  "menu": [{ "id": "say-hi", "label": "Say hi" }],
+  "commands": [{ "id": "say-hi", "label": "Say hi from Hello", "shortcut": "Ctrl+Alt+Shift+H" }],
   "styles": ["top-bar"],
-  "permissions": ["network:https://api.open-meteo.com"]
+  "permissions": ["network:https://api.open-meteo.com", "windows", "notifications", "desktop-menu", "shortcuts"]
 }

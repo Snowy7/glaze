@@ -8,6 +8,7 @@ mod markdown;
 mod metrics;
 pub(crate) mod model;
 mod plugin_faces;
+pub(crate) mod plugin_events;
 mod plugin_notifications;
 mod discord_migration;
 #[cfg(test)]
@@ -189,6 +190,7 @@ pub struct Widgets {
     icons: Icons,
     plugins: Plugins,
     plugin_notifications: plugin_notifications::Notifications,
+    plugin_events: plugin_events::Events,
     plugin_menu: Option<mypaper_ui::menu::Menu<(String, String, String)>>,
     worker: data::Worker,
     holds: Holds,
@@ -313,6 +315,7 @@ impl Widgets {
             icons: Icons::new(wake.clone()),
             plugins: Plugins::new(wake),
             plugin_notifications: Default::default(),
+            plugin_events: Default::default(),
             plugin_menu: None,
             worker: data::Worker::new(window),
             holds,
@@ -342,6 +345,7 @@ impl Widgets {
     /// Only handles the legacy display watcher's thread notification and clock changes; all
     /// other widget notifications use the shell inbox so COM modal waits preserve them.
     pub fn raw_message(&mut self, msg: &MSG) {
+        self.plugin_events.message(msg);
         if (msg.message == WM_DISPLAY && msg.hwnd.is_invalid()) || msg.message == WM_TIMECHANGE {
             self.cancel_drag();
             self.settling.clear();
@@ -796,6 +800,20 @@ impl Widgets {
         for (instance, action) in modules.clicks {
             self.plugins.face_action(&instance, &action, None);
         }
+        // Plugin panels on screen as flyouts: the same, as `panel:<plugin>--<panel>` instances.
+        let (panels, _) = crate::bars::plugin_modules::sync_panels(|instance| self.plugins.face_view(instance).cloned());
+        for (instance, plugin, panel) in panels.open {
+            if let Err(e) = self.plugins.open_face(&instance, &plugin, &panel, mypaper_plugin_sdk::SizeClass::Large, json!({}), instant) {
+                log::warn!("plugin panel {instance}: {e:?}");
+            }
+        }
+        for instance in panels.close {
+            self.plugins.close_face(&instance);
+        }
+        for (instance, action) in panels.clicks {
+            self.plugins.face_action(&instance, &action, None);
+        }
+        self.plugin_events.sync(&mut self.plugins, instant);
         self.sync_plugin_faces();
         self.plugin_notifications.sync(&self.plugins, |instance| {
             !self.held && self.entries.get(instance).is_none_or(|entry| entry.model.visible)

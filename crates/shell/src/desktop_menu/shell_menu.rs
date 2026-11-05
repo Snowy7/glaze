@@ -1074,7 +1074,7 @@ mod live {
         let root = items::build_with(
             &mypaper_config::DesktopMenu::default(),
             state,
-            Sources {
+            Sources { plugins: &[],
                 shell: Some(&snapshot),
                 mypaper: None,
             },

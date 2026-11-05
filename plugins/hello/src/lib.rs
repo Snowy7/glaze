@@ -1,9 +1,11 @@
-//! The proof plugin (docs/plugins.md): a widget face and a bar module, a top-bar style patch, a
-//! timer, actions, the network, and state that survives unloads. `spin` and `crash` exist to
+//! The proof plugin (docs/plugins.md): a widget face, a bar module that opens a panel, a
+//! desktop-menu item and a shortcut (`say-hi`, which raises a toast whose click comes back as
+//! an action), window-focus events, a top-bar style patch, a timer, actions, the network, and
+//! state that survives unloads. `spin` and `crash` exist to
 //! test the host's budget and trap isolation.
 use std::collections::BTreeMap;
 
-use mypaper_plugin_sdk::guest::{self, Event, Plugin, style, timers, ui};
+use mypaper_plugin_sdk::guest::{self, Event, Plugin, events, notify, style, timers, ui};
 use mypaper_plugin_sdk::{Role, Tone, View};
 
 #[derive(Default)]
@@ -12,13 +14,23 @@ struct Hello {
     tinted: bool,
     ticks: u32,
     fetched: Option<String>,
+    /// The process of the last focused window, and how many said hi.
+    focused: Option<String>,
+    hellos: u32,
     /// instance → face id
     open: BTreeMap<String, String>,
 }
 
 impl Hello {
     fn draw(&self, instance: &str, face: &str) {
-        let view = if face == "clock" {
+        let view = if face == "details" {
+            View::stack([
+                View::text(format!("Said hi {}×", self.hellos), Role::Headline),
+                View::tinted(format!("Focused: {}", self.focused.as_deref().unwrap_or("—")), Role::Caption, Tone::Secondary),
+                View::tinted(self.fetched.clone().unwrap_or_default(), Role::Caption, Tone::Tertiary),
+                View::row([View::button("Say hi", "say-hi"), View::button(if self.tinted { "Untint bar" } else { "Tint bar" }, "tint")]),
+            ])
+        } else if face == "clock" {
             // The bar draws the text; a click on the module is its first action (the tint).
             View::row([View::text(format!("hello · {}", self.ticks), Role::Caption), View::button(if self.tinted { "Untint" } else { "Tint" }, "tint")])
         } else {
@@ -49,6 +61,16 @@ impl Hello {
                 Draw::Text { x: 10.0, y: 4.0, text: "canvas".into(), role: Role::Caption, color: Tone::Secondary },
             ],
         }
+    }
+
+    fn say_hi(&mut self) {
+        self.hellos += 1;
+        let toast = notify::Notification { title: "Hello".into(), body: format!("Hi #{} from the Hello plugin", self.hellos), action: Some("hi".into()) };
+        if let Err(e) = notify::show(&toast) {
+            guest::log(&format!("toast refused: {e:?}"));
+        }
+        guest::log(&format!("said hi {}", self.hellos));
+        self.redraw();
     }
 
     fn redraw(&self) {
@@ -82,6 +104,9 @@ impl Plugin for Hello {
         if self.tinted {
             self.tint();
         }
+        if let Err(e) = events::subscribe(&[events::Topic::Windows]) {
+            guest::log(&format!("window events refused: {e:?}"));
+        }
         Ok(())
     }
 
@@ -104,7 +129,19 @@ impl Plugin for Hello {
                 self.ticks += 1;
                 self.redraw();
             }
+            Event::Command(id) if id == "say-hi" => self.say_hi(),
+            Event::Window(window) if matches!(window.kind, guest::bindings::exports::mypaper::plugin::lifecycle::WindowChange::Focused) => {
+                guest::log(&format!("focused {}", window.process));
+                self.focused = Some(window.process);
+                self.redraw();
+            }
+            Event::Action(action) if action.instance == "toast" => {
+                guest::log(&format!("toast clicked: {}", action.action));
+                self.fetched = Some("Toast clicked".into());
+                self.redraw();
+            }
             Event::Action(action) => match action.action.as_str() {
+                "say-hi" => self.say_hi(),
                 "click" => {
                     self.clicks += 1;
                     self.redraw();

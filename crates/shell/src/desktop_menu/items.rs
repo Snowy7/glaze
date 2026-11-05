@@ -68,6 +68,11 @@ pub enum Command {
         command: String,
         args: Vec<String>,
     },
+    /// A component plugin's `menu` item (`desktop-menu`), sent to it as `event::command`.
+    Plugin {
+        plugin: String,
+        id: String,
+    },
 }
 
 pub type Item = Entry<Command>;
@@ -91,6 +96,34 @@ pub struct Sources<'a> {
     pub shell: Option<&'a Snapshot>,
     /// mypaper's icon, for mypaper's items only where the icon font lacks their glyphs.
     pub mypaper: Option<&'a Arc<Image>>,
+    /// Plugins' menu items (`crate::widgets::plugin_events::menu_items`), already gated.
+    pub plugins: &'a [crate::widgets::plugin_events::Contribution],
+}
+
+/// A Segoe Fluent glyph for a plugin's kit icon name; other names get the app glyph.
+fn plugin_glyph(icon: Option<&str>) -> char {
+    match icon {
+        Some("sparkles" | "star") => '\u{E734}',
+        Some("cloud" | "weather") => '\u{E753}',
+        Some("globe" | "network") => '\u{E774}',
+        Some("code" | "terminal") => '\u{E943}',
+        Some("music" | "media") => '\u{E8D6}',
+        Some("chat" | "message") => '\u{E8BD}',
+        _ => glyph::APP,
+    }
+}
+
+/// One submenu per plugin, under its name and icon, holding its items in manifest order.
+fn plugin_items(plugins: &[crate::widgets::plugin_events::Contribution]) -> Vec<Item> {
+    let mut out: Vec<Item> = Vec::new();
+    for (n, item) in plugins.iter().enumerate() {
+        if n > 0 && plugins[n - 1].plugin == item.plugin {
+            continue;
+        }
+        let items = plugins[n..].iter().take_while(|c| c.plugin == item.plugin).map(|c| Entry::action(&c.label, Command::Plugin { plugin: c.plugin.clone(), id: c.id.clone() })).collect();
+        out.push(Entry::Submenu { label: item.name.clone(), items }.with_icon(MenuIcon::Glyph(plugin_glyph(item.icon.as_deref()))));
+    }
+    out
 }
 
 fn sort_label(key: SortKey) -> &'static str {
@@ -193,6 +226,10 @@ pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> V
                     .with_icon(mypaper(glyph::STUDIO)),
             ),
         }
+    }
+    if !sources.plugins.is_empty() {
+        items.push(Entry::Separator);
+        items.extend(plugin_items(sources.plugins));
     }
     tidy(group_open(items))
 }
@@ -525,7 +562,7 @@ mod tests {
     #[test]
     fn the_default_menu_is_windows_full_menu_then_mypapers() {
         let shell = shell();
-        let sources = Sources {
+        let sources = Sources { plugins: &[],
             shell: Some(&shell),
             mypaper: None,
         };
@@ -598,7 +635,7 @@ mod tests {
                 enabled: true,
             },
         );
-        let sources = Sources {
+        let sources = Sources { plugins: &[],
             shell: Some(&shell),
             mypaper: None,
         };
@@ -735,7 +772,7 @@ mod tests {
             can_paste: false,
         };
         let shell = shell();
-        let sources = Sources {
+        let sources = Sources { plugins: &[],
             shell: Some(&shell),
             mypaper: None,
         };
@@ -767,5 +804,27 @@ mod tests {
             assert_eq!(image.pixel(0, 0)[3], 0);
             mypaper_ui::golden::check(&image, &golden.join(format!("{name}.png"))).unwrap();
         }
+    }
+}
+
+#[cfg(test)]
+mod plugin_tests {
+    use super::*;
+    use crate::widgets::plugin_events::Contribution;
+
+    #[test]
+    fn plugin_items_sit_under_their_plugins_name_and_icon() {
+        let item = |plugin: &str, id: &str| Contribution { plugin: plugin.into(), name: format!("{plugin} name"), icon: Some("sparkles".into()), id: id.into(), label: id.to_uppercase(), shortcut: None };
+        let plugins = [item("hello", "a"), item("hello", "b"), item("other", "c")];
+        let items = build_with(&DesktopMenu::default(), ViewState::default(), Sources { plugins: &plugins, ..Sources::default() });
+        let submenus: Vec<_> = items.iter().rev().take(2).collect();
+        let Entry::Iconic { icon, item } = submenus[1] else { panic!("an icon") };
+        assert_eq!(*icon, MenuIcon::Glyph('\u{E734}'));
+        let Entry::Submenu { label, items } = &**item else { panic!("a submenu") };
+        assert_eq!(label, "hello name");
+        assert_eq!(items.len(), 2);
+        assert!(matches!(&items[1], Entry::Action { command: Command::Plugin { plugin, id }, .. } if plugin == "hello" && id == "b"));
+        assert_eq!(submenus[0].label(), "other name");
+        assert!(build(&DesktopMenu::default(), ViewState::default()).iter().all(|i| !matches!(i.plain(), Entry::Submenu { label, .. } if label.ends_with(" name"))));
     }
 }

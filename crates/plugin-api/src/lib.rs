@@ -28,7 +28,9 @@ pub mod wire {
         Open { plugin: String, dir: String, instance: String, face: String, size: SizeClass, settings: String },
         Close { instance: String },
         Action { instance: String, action: String, value: Option<String> },
-        Command { plugin: String, id: String },
+        /// A `commands` or `menu` contribution was invoked (a shortcut, a desktop-menu item). `dir`
+        /// is the plugin's folder, so the helper loads a plugin no face has opened yet.
+        Command { plugin: String, dir: String, id: String },
         /// The desktop is held (fullscreen, locked) or released.
         Held(bool),
         /// Asks for [`HelperMsg::Stats`] of every loaded plugin.
@@ -104,6 +106,9 @@ pub mod wire {
         Removed { plugin: String },
         /// Visible notification subscribers, already checked against manifest permissions.
         Notifications { plugins: Vec<String> },
+        /// The system-event topics (`windows`, `monitors`, `media`, `power`, `theme`) at least one
+        /// visible, permitted plugin subscribes to: the shell forwards only these (the lease).
+        Demand { topics: Vec<String> },
     }
 
     pub fn write<T: Serialize>(out: &mut impl Write, message: &T) -> io::Result<()> {

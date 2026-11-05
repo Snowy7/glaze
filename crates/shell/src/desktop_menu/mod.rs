@@ -299,7 +299,9 @@ impl DesktopMenu {
             shell.set_icon_size(icon_pixels(&self.settings.tokens, screen.dpi));
             shell.snapshot()
         });
+        let plugins = crate::widgets::plugin_events::menu_items();
         let sources = Sources {
+            plugins: &plugins,
             shell: snapshot.as_ref(),
             // Glyphs first; mypaper's mark only where neither icon font is installed.
             mypaper: self
@@ -390,6 +392,7 @@ impl DesktopMenu {
             Command::Terminal => open_terminal()?,
             Command::MoreOptions => replay_right_click(self.opened_at),
             Command::Custom { command, args } => run_custom(&command, &args)?,
+            Command::Plugin { plugin, id } => crate::widgets::plugin_events::invoke(&plugin, &id),
         }
         // The view changed (or may have): the icons may have moved.
         self.refresh_icons("a menu command");

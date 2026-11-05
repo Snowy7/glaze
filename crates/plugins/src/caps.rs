@@ -451,7 +451,11 @@ pub fn toast_xml(plugin_name: &str, title: &str, body: &str) -> String {
 }
 
 /// Shows a Windows toast from mypaper on a worker thread (WinRT activation can take a while).
-pub fn notify(plugin_name: &str, title: &str, body: &str) -> Result<(), String> {
+/// `clicked` runs when the user clicks the toast while the helper is alive (its `action`); the
+/// last few toasts are kept so their `Activated` handlers stay registered.
+pub fn notify(plugin_name: &str, title: &str, body: &str, clicked: Option<impl Fn() + Send + Sync + 'static>) -> Result<(), String> {
+    use std::sync::Mutex;
+    static KEPT: Mutex<Vec<windows::UI::Notifications::ToastNotification>> = Mutex::new(Vec::new());
     use windows::Data::Xml::Dom::XmlDocument;
     use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
     use windows::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, REG_SZ, RegCloseKey, RegCreateKeyW, RegSetValueExW};
@@ -470,6 +474,17 @@ pub fn notify(plugin_name: &str, title: &str, body: &str) -> Result<(), String> 
         let xml = XmlDocument::new()?;
         xml.LoadXml(&HSTRING::from(toast_xml(plugin_name, title, body)))?;
         let toast = ToastNotification::CreateToastNotification(&xml)?;
+        if let Some(clicked) = clicked {
+            toast.Activated(&windows::Foundation::TypedEventHandler::new(move |_, _| {
+                clicked();
+                Ok(())
+            }))?;
+            let mut kept = KEPT.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            if kept.len() >= 16 {
+                kept.remove(0);
+            }
+            kept.push(toast.clone());
+        }
         ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(TOAST_APP))?.Show(&toast)
     };
     show().map_err(|e| e.message())

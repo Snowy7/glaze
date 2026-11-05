@@ -61,6 +61,12 @@ pub struct Manifest {
     pub bars: Vec<FaceSpec>,
     #[serde(default)]
     pub panels: Vec<FaceSpec>,
+    /// Desktop-menu items (`desktop-menu`) and commands (`shortcuts` for their shortcut); the
+    /// helper delivers `event::command` only for these ids.
+    #[serde(default)]
+    pub menu: Vec<FaceSpec>,
+    #[serde(default)]
+    pub commands: Vec<FaceSpec>,
     #[serde(default)]
     pub styles: Vec<String>,
     #[serde(default)]
@@ -75,7 +81,7 @@ pub struct Manifest {
 }
 
 /// `location` is the legacy native weather exe's; no WIT capability uses it.
-const WORDS: [&str; 7] = ["launch", "notifications", "secrets", "storage", "windows", "native-code", "location"];
+const WORDS: [&str; 9] = ["launch", "notifications", "secrets", "storage", "windows", "native-code", "location", "desktop-menu", "shortcuts"];
 pub const SURFACES: [&str; 6] = ["top-bar", "dock", "panel", "menu", "widget", "glass"];
 
 impl Manifest {
@@ -108,6 +114,11 @@ impl Manifest {
         self.faces.iter().chain(&self.bars).chain(&self.panels).any(|f| f.id == face)
     }
 
+    /// Whether `id` is one of its `menu` items or `commands`.
+    pub fn invokable(&self, id: &str) -> bool {
+        self.menu.iter().chain(&self.commands).any(|c| c.id == id)
+    }
+
     fn memory_cap(&self) -> usize {
         self.limits.memory_mb.map_or(MEMORY_CAP, |mb| (mb as usize) << 20).min(MEMORY_CAP)
     }
@@ -132,7 +143,7 @@ pub enum Effect {
     /// Start the queued pipe `id`.
     Pipe { id: u64, name: String },
     PipeHttp { id: u64, name: String, method: &'static str, url: String, headers: Vec<(String, String)>, body: Option<Vec<u8>> },
-    Notify { title: String, body: String, plugin_name: String },
+    Notify { title: String, body: String, plugin_name: String, action: Option<String> },
     /// Run a resolved `process:<name>` executable; the result arrives as `event::http`.
     Process { id: u64, exe: PathBuf, args: Vec<String>, timeout_ms: u32 },
 }
@@ -425,7 +436,7 @@ impl mypaper::plugin::notify::Host for State {
         if notification.title.is_empty() || notification.title.len() + notification.body.len() > 2000 {
             return Err(WitError::Invalid("a title, and at most 2000 bytes of text".into()));
         }
-        self.effects.push(Effect::Notify { title: notification.title, body: notification.body, plugin_name: self.name.clone() });
+        self.effects.push(Effect::Notify { title: notification.title, body: notification.body, plugin_name: self.name.clone(), action: notification.action });
         Ok(())
     }
 }

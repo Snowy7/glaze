@@ -421,6 +421,8 @@ pub fn permission_text(permission: &str) -> Result<String> {
         "launch" => "Can open apps, files and links",
         "notifications" => "Can show notifications",
         "native-code" => "Runs native code outside the WebAssembly sandbox",
+        "desktop-menu" => "Adds items to the desktop menu",
+        "shortcuts" => "Registers global keyboard shortcuts",
         "location" => "Can request your location",
         _ => bail!("Unknown permission: {permission}"),
     }

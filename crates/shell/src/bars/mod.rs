@@ -1223,7 +1223,10 @@ impl Bars {
                 let module = match module {
                     ModuleRef::Builtin(module) => module,
                     ModuleRef::Custom(id) => {
-                        plugin_modules::click(&id);
+                        match plugin_modules::panel_of(&id).filter(|_| input == Trigger::Left) {
+                            Some(panel) => flyouts::open(flyouts::Kind::Plugin(plugin_modules::panel_number(&panel)), anchor, &monitor),
+                            None => { plugin_modules::click(&id); }
+                        }
                         return;
                     }
                     ModuleRef::Break => return,

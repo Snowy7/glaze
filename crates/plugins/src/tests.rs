@@ -227,3 +227,80 @@ fn compile_accepts_a_single_plugin_and_reports_refusals() {
     assert!(crate::host::compile_all(&rt,&[dir]).is_err());
     std::fs::remove_dir_all(root).unwrap();
 }
+
+fn has_live(frames: &[HelperMsg], plugin: &str) -> bool {
+    frames.iter().any(|f| matches!(f, HelperMsg::Status { plugin: p, status: Status::Live } if p == plugin))
+}
+
+#[test]
+fn a_command_loads_a_plugin_no_face_opened() {
+    let root = root("command", &["hello"]);
+    // No toast from a test run: without `notifications` the plugin's `notify.show` is refused.
+    let manifest = root.join("plugins/hello/plugin.json");
+    let text = std::fs::read_to_string(&manifest).unwrap().replace("\"notifications\", ", "");
+    std::fs::write(&manifest, text).unwrap();
+    let mut host = host(&root);
+    let dir = root.join("plugins/hello").to_string_lossy().into_owned();
+    host.on_host(HostMsg::Command { plugin: "hello".into(), dir: dir.clone(), id: "nope".into() }, Instant::now());
+    assert_eq!(host.loaded(), 0, "an undeclared command doesn't load the plugin");
+    host.on_host(HostMsg::Command { plugin: "hello".into(), dir, id: "say-hi".into() }, Instant::now());
+    assert_eq!(host.loaded(), 1);
+    assert!(has_live(&frames(&mut host), "hello"));
+    // Nothing of it is visible, so it unloads again after the idle period.
+    let now = Instant::now();
+    host.tick(now);
+    host.tick(now + crate::host::IDLE_UNLOAD + Duration::from_secs(1));
+    assert_eq!(host.loaded(), 0);
+}
+
+#[test]
+fn topic_demand_follows_visible_subscribers() {
+    let root = root("demand", &["hello"]);
+    let mut host = host(&root);
+    open(&mut host, &root, "hello", "w1");
+    let demand = |frames: &[HelperMsg]| frames.iter().rev().find_map(|f| match f { HelperMsg::Demand { topics } => Some(topics.clone()), _ => None });
+    assert_eq!(demand(&frames(&mut host)), Some(vec!["windows".to_owned()]), "hello subscribes to windows and holds the permission");
+    host.on_host(HostMsg::Held(true), Instant::now());
+    assert_eq!(demand(&frames(&mut host)), Some(Vec::new()), "nothing is wanted while the desktop is held");
+    host.on_host(HostMsg::Held(false), Instant::now());
+    assert_eq!(demand(&frames(&mut host)), Some(vec!["windows".to_owned()]));
+    host.on_host(HostMsg::Close { instance: "w1".into() }, Instant::now());
+    assert_eq!(demand(&frames(&mut host)), Some(Vec::new()), "a closed face releases the lease");
+}
+
+#[test]
+fn a_clicked_toast_comes_back_as_an_action() {
+    let root = root("toast", &["hello"]);
+    let mut host = host(&root);
+    open(&mut host, &root, "hello", "w1");
+    frames(&mut host);
+    host.on_input(Input::Toast { plugin: "hello".into(), action: "hi".into() }, Instant::now());
+    let caption = frames(&mut host).iter().rev().find_map(|f| match f {
+        HelperMsg::View { instance, face, .. } if instance == "w1" => {
+            let face: Face = serde_json::from_slice(face).unwrap();
+            serde_json::to_value(&face.body).unwrap()["children"][1]["text"].as_str().map(str::to_owned)
+        }
+        _ => None,
+    });
+    assert_eq!(caption.as_deref(), Some("Toast clicked"));
+}
+
+#[test]
+fn window_events_reach_a_subscribed_plugin() {
+    let root = root("focus", &["hello"]);
+    let mut host = host(&root);
+    let dir = root.join("plugins/hello").to_string_lossy().into_owned();
+    let message = HostMsg::Open { plugin: "hello".into(), dir, instance: "p1".into(), face: "details".into(), size: SizeClass::Large, settings: "{}".into() };
+    host.on_host(message, Instant::now());
+    frames(&mut host);
+    let focused = wire::SystemEvent::Window { change: wire::WindowChange::Focused, id: 7, title: "Notes".into(), process: "notepad.exe".into() };
+    host.on_host(HostMsg::System(focused), Instant::now());
+    let caption = frames(&mut host).iter().rev().find_map(|f| match f {
+        HelperMsg::View { instance, face, .. } if instance == "p1" => {
+            let face: Face = serde_json::from_slice(face).unwrap();
+            serde_json::to_value(&face.body).unwrap()["children"][1]["text"].as_str().map(str::to_owned)
+        }
+        _ => None,
+    });
+    assert_eq!(caption.as_deref(), Some("Focused: notepad.exe"));
+}

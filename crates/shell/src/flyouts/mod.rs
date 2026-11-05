@@ -22,6 +22,7 @@ mod launcher;
 pub mod look;
 mod mixer;
 pub(crate) mod notifications;
+mod plugin_panel;
 mod power;
 mod quick;
 mod settings_pages;
@@ -78,6 +79,8 @@ pub enum Kind {
     Power,
     TrayOverflow,
     Language,
+    /// A component plugin's panel, by its `bars::plugin_modules::panel_number`.
+    Plugin(u16),
 }
 
 /// A request from the bars, handled by [`Flyouts::process`] in the same loop pass.
@@ -905,6 +908,10 @@ impl Flyouts {
             Kind::TrayOverflow => Box::new(tray::Overflow::new(&mut cx)),
             Kind::Language => Box::new(language::Language::new(&mut cx)),
             Kind::Launcher => Box::new(launcher::Launcher::new(&mut cx, self.surface.hwnd())),
+            Kind::Plugin(number) => match crate::bars::plugin_modules::panel_name(number) {
+                Some(id) => Box::new(plugin_panel::PluginPanel::new(id)),
+                None => return,
+            },
         };
         let center_y = request.anchor.top + request.anchor.height() / 2.0;
         let monitor_mid = request.monitor.rect.y as f32 + request.monitor.rect.height as f32 / 2.0;

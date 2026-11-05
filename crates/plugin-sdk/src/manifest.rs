@@ -25,6 +25,9 @@ pub struct FaceSpec {
     /// A kit icon name for the picker and the header.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// A bar module's panel (one of `panels`): clicking the module opens it as a flyout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

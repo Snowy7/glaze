@@ -194,6 +194,8 @@ struct Helper {
     inbox: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wire::HelperMsg>>>,
     idle_since: Option<Instant>,
     notification_plugins: Vec<String>,
+    /// System topics a visible plugin subscribes to ([`wire::HelperMsg::Demand`]).
+    demand: Vec<String>,
 }
 
 /// The helper frame that opens (or re-sizes) a component face.
@@ -549,7 +551,7 @@ impl Plugins {
             let _ = frames.send(component_open(instance, slot));
         }
         log::info!("plugin runtime started");
-        self.helper = Some(Helper { child, generation, frames, inbox, idle_since: None, notification_plugins: Vec::new() });
+        self.helper = Some(Helper { child, generation, frames, inbox, idle_since: None, notification_plugins: Vec::new(), demand: Vec::new() });
         Ok(())
     }
 
@@ -606,6 +608,9 @@ impl Plugins {
                 wire::HelperMsg::Stats { .. } => {}
                 wire::HelperMsg::Notifications { plugins } => {
                     if let Some(helper) = &mut self.helper { helper.notification_plugins = plugins; }
+                }
+                wire::HelperMsg::Demand { topics } => {
+                    if let Some(helper) = &mut self.helper { helper.demand = topics; }
                 }
                 wire::HelperMsg::Removed { plugin } => {
                     if self.uninstalling.remove(&plugin) { self.finish_uninstall(&plugin); }
@@ -1197,6 +1202,26 @@ impl Plugins {
         }
     }
 
+    /// Whether a visible plugin subscribes to system topic `topic` (`windows`, `monitors`,
+    /// `media`, `power`, `theme`): the shell runs that source only while this holds.
+    pub fn wants(&self, topic: &str) -> bool {
+        !self.held && self.helper.as_ref().is_some_and(|h| h.demand.iter().any(|t| t == topic))
+    }
+
+    /// Invokes `plugin`'s `commands`/`menu` contribution `id` (a shortcut, a desktop-menu item),
+    /// starting the runtime if needed; the helper loads the plugin for it.
+    pub fn command(&mut self, plugin: &str, id: &str, now: Instant) -> Result<(), WidgetError> {
+        if self.preferences.disabled.contains(plugin) {
+            return Err(unavailable(format!("plugin {plugin} is disabled")));
+        }
+        let (_, dir) = self.find(plugin).filter(|(m, _)| m.component.is_some()).ok_or_else(|| unavailable(format!("plugin {plugin} isn't an installed component")))?;
+        let message = wire::HostMsg::Command { plugin: plugin.into(), dir: dir.to_string_lossy().into_owned(), id: id.into() };
+        if self.helper.is_none() {
+            self.to_helper(wire::HostMsg::Held(self.held), now)?; // starts it
+        }
+        self.to_helper(message, now)
+    }
+
     /// Instances of permitted notification subscribers. The shell checks actual visibility
     /// before acquiring its shared Windows notification lease.
     pub fn notification_instances(&self) -> Vec<&str> {
@@ -1255,7 +1280,7 @@ mod tests {
             wire::HelperMsg::Stats { plugin: "test".into(), memory: 1048576, cpu_us: 1234, events: 56 },
         ])));
         let child = Command::new("cmd").args(["/c", "exit", "0"]).creation_flags(CREATE_NO_WINDOW.0).spawn().unwrap();
-        plugins.helper = Some(Helper { child, generation: 17, frames, inbox, idle_since: None, notification_plugins: Vec::new() });
+        plugins.helper = Some(Helper { child, generation: 17, frames, inbox, idle_since: None, notification_plugins: Vec::new(), demand: Vec::new() });
         plugins.on_line(HELPER, 17, Some(String::new()), Instant::now());
         let stats = &plugins.studio.plugins["test"];
         assert_eq!((stats.memory, stats.cpu_us, stats.events), (1048576, 1234, 56));
