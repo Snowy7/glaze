@@ -2,7 +2,7 @@
 use super::*;
 use crate::widgets::{time::Stamp, views};
 use mypaper_integrations::{
-    Data, Snapshot, notifications, obs, t3,
+    Data, Snapshot, notifications, t3,
 };
 use mypaper_ui::{DisplayList, Image, Op, TextStyle, Tokens, Ui, golden, render};
 use mypaper_widgets::{layout::Placed, storage::Storage};
@@ -10,7 +10,7 @@ use serde_json::{Map, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
 const NOW: i64 = 1_793_875_200_000;
-const IDS: &[&str] = &["discord", "t3", "obs"];
+const IDS: &[&str] = &["discord", "t3"];
 
 fn model(id: &str, size: [u32; 2]) -> Model {
     let placed = Placed {
@@ -52,31 +52,6 @@ fn model(id: &str, size: [u32; 2]) -> Model {
                     thread("idle", "Explore a new wallpaper", t3::Status::Idle, None),
                 ],
                 projects: BTreeMap::from([("mypaper".into(), "mypaper".into())]),
-                ..Default::default()
-            })),
-            "obs" => Some(Data::Obs(obs::Snapshot {
-                recording: true,
-                streaming: true,
-                scene: "Desktop + camera".into(),
-                scenes: vec![
-                    "Desktop + camera".into(),
-                    "Camera".into(),
-                    "Be right back".into(),
-                ],
-                microphones: vec![obs::Microphone {
-                    name: "Desk microphone".into(),
-                    muted: false,
-                }],
-                record_clock: obs::Clock {
-                    elapsed_ms: 3_965_000,
-                    at_ms: NOW,
-                    advancing: true,
-                },
-                stream_clock: obs::Clock {
-                    elapsed_ms: 825_000,
-                    at_ms: NOW,
-                    advancing: true,
-                },
                 ..Default::default()
             })),
             _ => None,
@@ -164,7 +139,7 @@ fn size_sheets_have_pure_frames_bounded_hits_and_no_idle_deadlines() {
                     "{id} outlines glass"
                 );
                 m.schedule(Stamp::at(NOW), Instant::now());
-                assert_eq!(m.next.is_some(), id == "obs", "{id} has an idle deadline");
+                assert_eq!(m.next.is_some(), id == "{id} has an idle deadline");
                 m.visible = false;
                 m.schedule(Stamp::at(NOW), Instant::now());
                 assert!(m.next.is_none());
@@ -222,7 +197,6 @@ fn sheet(ui: &mut Ui, id: &str) -> Image {
                 m.integration.snapshot.data = match id {
                     "t3" => Some(Data::T3(Default::default())),
                     "discord" => Some(Data::Notifications(Default::default())),
-                    "obs" => Some(Data::Obs(Default::default())),
                     _ => None,
                 };
             }
@@ -257,15 +231,7 @@ fn add_widget(
 }
 
 #[test]
-fn obs_clock_stops_when_paused_or_disconnected_and_discord_filters_exact_app_identity() {
-    let mut obs = model("obs", [4, 2]);
-    let Some(Data::Obs(state)) = obs.integration.snapshot.data.as_mut() else {
-        unreachable!()
-    };
-    state.paused = true;
-    state.streaming = false;
-    obs.schedule(Stamp::at(NOW), Instant::now());
-    assert!(obs.next.is_none());
+fn stale_controls_are_disabled_and_discord_filters_exact_app_identity() {
     let mut ui = Ui::new().unwrap();
     let list = draw(&mut ui, &model("discord", [4, 4]), (360, 360), 1.0);
     assert!(
