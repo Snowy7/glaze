@@ -8,6 +8,9 @@ use std::{path::PathBuf, sync::Arc, time::Instant};
 
 const NOW: i64 = 1_793_875_200_000;
 
+#[path = "../../../../../plugins/docker/src/host_tests.rs"]
+mod docker;
+
 fn model(face: &Value, title: &str) -> Model {
     let placed = Placed {
         instance: "t3-plugin".into(),
