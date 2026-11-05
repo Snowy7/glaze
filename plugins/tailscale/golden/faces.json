@@ -112,7 +112,7 @@
             "color": "secondary",
             "kind": "text",
             "role": "caption",
-            "text": "100.64.0.24 ? 3 of 4 peers online"
+            "text": "100.64.0.24 · 3 of 4 peers online"
           },
           {
             "action": "exit",
@@ -295,7 +295,7 @@
             "color": "secondary",
             "kind": "text",
             "role": "caption",
-            "text": "100.64.0.24 ? 3 of 4 peers online"
+            "text": "100.64.0.24 · 3 of 4 peers online"
           },
           {
             "action": "exit",
@@ -451,7 +451,7 @@
             "color": "secondary",
             "kind": "text",
             "role": "caption",
-            "text": "No address ? 0 of 0 peers online"
+            "text": "No address · 0 of 0 peers online"
           },
           {
             "action": "exit",
@@ -913,7 +913,7 @@
             "color": "secondary",
             "kind": "text",
             "role": "caption",
-            "text": "100.64.0.24 ? 3 of 4 peers online"
+            "text": "100.64.0.24 · 3 of 4 peers online"
           },
           {
             "action": "exit",

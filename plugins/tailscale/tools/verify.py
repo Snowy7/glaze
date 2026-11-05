@@ -109,16 +109,21 @@ def main():
             # HostMsg::Open (0), SizeClass::Large (2), postcard length-prefixed strings.
             send(integer(0) + string("tailscale") + string(str(plugin)) + string(face) + string(face) + integer(2) + string("{}"))
         faces = {}
+        observed = {}
         stats = []
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
-            frame = messages.get(timeout=max(.1, deadline - time.monotonic()))
+            try:
+                frame = messages.get(timeout=max(.1, deadline - time.monotonic()))
+            except queue.Empty:
+                break
             if isinstance(frame, Exception):
                 raise frame
             kind = frame.integer()
             if kind == 0:
                 instance = frame.string()
                 face = json.loads(frame.blob())
+                observed[instance] = face
                 if face.get("footer") == "Snapshot · refresh for peers and traffic" and face.get("body", {}).get("kind") != "empty":
                     faces[instance] = face
                 if len(faces) == 3:
@@ -128,7 +133,8 @@ def main():
                 if status in (1, 2):
                     raise RuntimeError(f"{plugin_id}: {frame.string()}")
         if len(faces) != 3:
-            raise RuntimeError(f"only received {len(faces)} loaded faces")
+            (args.out_dir / "failed-faces.json").write_text(json.dumps(observed, indent=2), encoding="utf-8")
+            raise RuntimeError(f"only received {len(faces)} loaded faces: {[f.get('footer') for f in observed.values()]}")
         active = memory(process)
         send(integer(5))  # HostMsg::Stats, not a plugin action.
         idle_started = None

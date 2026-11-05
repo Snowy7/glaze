@@ -76,8 +76,9 @@ fn tailscale_component_masks_actions_rejects_stale_replies_and_reports_disconnec
 fn tailscale_pipe_http_provides_identity_without_impersonation_privileges() {
     use windows::Win32::{
         Foundation::{CloseHandle, HANDLE},
-        Security::RevertToSelf,
-        Storage::FileSystem::{PIPE_ACCESS_DUPLEX, ReadFile, WriteFile},
+        Security::{GetTokenInformation, RevertToSelf, SecurityAnonymous, SecurityIdentification, TokenImpersonationLevel, TOKEN_QUERY},
+        Storage::FileSystem::{FlushFileBuffers, PIPE_ACCESS_DUPLEX, ReadFile, WriteFile},
+        System::Threading::{GetCurrentThread, OpenThreadToken},
         System::Pipes::{ConnectNamedPipe, CreateNamedPipeW, ImpersonateNamedPipeClient, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT},
     };
     struct Server(HANDLE);
@@ -96,10 +97,19 @@ fn tailscale_pipe_http_provides_identity_without_impersonation_privileges() {
             let mut buffer = [0u8; 4096];
             let mut read = 0;
             ReadFile(server.0, Some(&mut buffer), Some(&mut read), None).unwrap();
-            let identity = ImpersonateNamedPipeClient(server.0).is_ok();
-            if identity { RevertToSelf().unwrap(); }
+            let impersonating = ImpersonateNamedPipeClient(server.0).is_ok();
+            let mut token = HANDLE::default();
+            let identity = if impersonating && OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, true, &mut token).is_ok() {
+                let mut level = SecurityAnonymous;
+                let mut needed = 0;
+                GetTokenInformation(token, TokenImpersonationLevel, Some((&raw mut level).cast()), size_of_val(&level) as u32, &mut needed).unwrap();
+                CloseHandle(token).unwrap();
+                level == SecurityIdentification
+            } else { false };
+            if impersonating { RevertToSelf().unwrap(); }
             let response = if identity { b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".as_slice() } else { b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n".as_slice() };
             WriteFile(server.0, Some(response), Some(&mut read), None).unwrap();
+            FlushFileBuffers(server.0).unwrap();
             identity
         }
     });
