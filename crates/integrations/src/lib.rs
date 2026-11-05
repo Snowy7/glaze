@@ -10,12 +10,10 @@ pub mod credentials;
 pub mod launcher;
 pub mod media;
 pub mod notifications;
-pub mod obs;
 pub mod pairing;
 pub mod t3;
 pub mod t3_auth;
 pub mod t3_client;
-pub mod grok;
 mod transport;
 
 use std::{
@@ -33,16 +31,14 @@ pub enum Provider {
     Notifications,
     Media,
     T3,
-    Obs,
     Calendar,
     Discord,
 }
 impl Provider {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 5] = [
         Self::Notifications,
         Self::Media,
         Self::T3,
-        Self::Obs,
         Self::Calendar,
         Self::Discord,
     ];
@@ -51,7 +47,6 @@ impl Provider {
             Self::Notifications => c.notifications.enabled,
             Self::Media => c.media.enabled,
             Self::T3 => c.t3.enabled,
-            Self::Obs => c.obs.enabled,
             Self::Calendar => c.calendar.enabled,
             Self::Discord => c.discord.enabled,
         }
@@ -71,7 +66,6 @@ pub enum Data {
     Notifications(notifications::Snapshot),
     Media(media::Snapshot),
     T3(t3::Snapshot),
-    Obs(obs::Snapshot),
     Calendar(calendar::Snapshot),
     Discord(discord::Snapshot),
 }
@@ -100,7 +94,6 @@ pub enum Action {
     /// Refresh a cached toast snapshot while its center is visible.
     RefreshNotifications,
     Media(media::Action),
-    Obs(obs::Action),
 }
 
 #[derive(Default)]
@@ -242,7 +235,6 @@ impl Hub {
                             Provider::Notifications => notifications::run(&config.notifications, &publish, &mut commands).await,
                             Provider::Media => media::run(&publish, &mut commands).await,
                             Provider::T3 => t3::run(&config.t3, &publish).await,
-                            Provider::Obs => obs::run(&config.obs, &publish, &mut commands).await,
                             Provider::Calendar => calendar::run(&config.calendar, &publish, &mut commands).await,
                             Provider::Discord => discord::run(&config.discord, &publish, &mut commands).await,
                         }
@@ -303,7 +295,6 @@ impl Lease {
                     Provider::Notifications,
                     Action::Dismiss(_) | Action::RefreshNotifications
                 ) | (Provider::Media, Action::Media(_))
-                    | (Provider::Obs, Action::Obs(_))
                     | (Provider::Discord, Action::DiscordVoice { .. })
             ),
             "action does not belong to this provider"
