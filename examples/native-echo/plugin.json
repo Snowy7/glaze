@@ -1,0 +1,7 @@
+{
+  "id": "native-echo",
+  "name": "Native echo",
+  "version": "0.1.0",
+  "native": ["native_echo.dll"],
+  "permissions": ["native-code"]
+}

@@ -4,15 +4,15 @@ use crate::{
     windows,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     io,
     os::windows::{io::OwnedHandle, process::CommandExt},
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{
-        Mutex,
+        Arc, Condvar, Mutex,
         atomic::{AtomicU64, Ordering},
-        mpsc::{self, Receiver, Sender, SyncSender},
+        mpsc::{self, Receiver, Sender},
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -62,6 +62,54 @@ pub struct NativeEvent {
     pub bytes: Vec<u8>,
 }
 
+#[derive(Default)]
+struct EventBuffer {
+    vendor: VecDeque<NativeEvent>,
+    restarts: VecDeque<NativeEvent>,
+}
+impl EventBuffer {
+    fn pop(&mut self) -> Option<NativeEvent> {
+        self.restarts
+            .pop_front()
+            .or_else(|| self.vendor.pop_front())
+    }
+}
+
+/// Vendor traffic is bounded; lifecycle notifications cannot be lost to a flood.
+#[derive(Default)]
+struct EventQueue {
+    buffer: Mutex<EventBuffer>,
+    available: Condvar,
+}
+impl EventQueue {
+    fn push(&self, event: NativeEvent, restart: bool) {
+        let Ok(mut buffer) = self.buffer.lock() else {
+            return;
+        };
+        if restart {
+            buffer.restarts.push_back(event);
+        } else if buffer.vendor.len() < 256 {
+            buffer.vendor.push_back(event);
+        } else {
+            return;
+        }
+        self.available.notify_one();
+    }
+    fn try_pop(&self) -> Option<NativeEvent> {
+        self.buffer.try_lock().ok()?.pop()
+    }
+    fn wait_pop(&self, timeout: Duration) -> Option<NativeEvent> {
+        let buffer = self.buffer.lock().ok()?;
+        let (mut buffer, _) = self
+            .available
+            .wait_timeout_while(buffer, timeout, |buffer| {
+                buffer.vendor.is_empty() && buffer.restarts.is_empty()
+            })
+            .ok()?;
+        buffer.pop()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HostInfo {
     pub pid: u32,
@@ -92,18 +140,35 @@ enum Request {
 /// Methods block: invoke on a worker lane. Drop kills and reaps every child.
 pub struct Supervisor {
     tx: Sender<Request>,
-    events: Mutex<Receiver<NativeEvent>>,
+    events: Arc<EventQueue>,
     worker: Option<JoinHandle<()>>,
 }
 impl Supervisor {
     pub fn new(host_exe: PathBuf, config: HostConfig) -> Self {
+        let config = HostConfig {
+            call_timeout: config
+                .call_timeout
+                .clamp(Duration::from_millis(1), Duration::from_secs(60)),
+            startup_timeout: config
+                .startup_timeout
+                .clamp(Duration::from_millis(1), Duration::from_secs(60)),
+            initial_backoff: config
+                .initial_backoff
+                .clamp(Duration::from_millis(1), Duration::from_secs(60)),
+            max_backoff: config
+                .max_backoff
+                .clamp(Duration::from_millis(1), Duration::from_secs(60)),
+            isolate_after: config.isolate_after.max(1),
+        };
         let (tx, rx) = mpsc::channel();
-        let (event_tx, event_rx) = mpsc::sync_channel(256);
+        let events = Arc::new(EventQueue::default());
+        let worker_events = events.clone();
         let wake = tx.clone();
-        let worker = thread::spawn(move || State::new(host_exe, config, event_tx, wake).run(rx));
+        let worker =
+            thread::spawn(move || State::new(host_exe, config, worker_events, wake).run(rx));
         Self {
             tx,
-            events: Mutex::new(event_rx),
+            events,
             worker: Some(worker),
         }
     }
@@ -144,12 +209,12 @@ impl Supervisor {
             reply,
         })
     }
-    /// Bounded queue (256); excess vendor events are dropped rather than growing RAM.
+    /// Bounded vendor queue (256); lifecycle notifications have a separate queue.
     pub fn try_event(&self) -> Option<NativeEvent> {
-        self.events.lock().ok()?.try_recv().ok()
+        self.events.try_pop()
     }
     pub fn recv_event_timeout(&self, timeout: Duration) -> Option<NativeEvent> {
-        self.events.lock().ok()?.recv_timeout(timeout).ok()
+        self.events.wait_pop(timeout)
     }
     pub fn hosts(&self) -> io::Result<Vec<HostInfo>> {
         self.request(Request::Hosts)
@@ -180,7 +245,7 @@ impl Connection {
         exe: &PathBuf,
         timeout: Duration,
         key: String,
-        events: SyncSender<NativeEvent>,
+        events: Arc<EventQueue>,
         wake: Sender<Request>,
     ) -> io::Result<Self> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -263,12 +328,7 @@ impl Connection {
             writer: Some(writer),
         })
     }
-    fn rpc(
-        &mut self,
-        frame: Frame,
-        timeout: Duration,
-        events: &SyncSender<NativeEvent>,
-    ) -> io::Result<Vec<u8>> {
+    fn rpc(&mut self, frame: Frame, timeout: Duration, events: &EventQueue) -> io::Result<Vec<u8>> {
         let request = frame.request;
         self.tx
             .as_ref()
@@ -324,13 +384,16 @@ impl Drop for Connection {
         }
     }
 }
-fn forward(events: &SyncSender<NativeEvent>, frame: Frame) {
-    let _ = events.try_send(NativeEvent {
-        plugin: frame.plugin,
-        module: frame.module,
-        name: frame.name,
-        bytes: frame.bytes,
-    });
+fn forward(events: &EventQueue, frame: Frame) {
+    events.push(
+        NativeEvent {
+            plugin: frame.plugin,
+            module: frame.module,
+            name: frame.name,
+            bytes: frame.bytes,
+        },
+        false,
+    );
 }
 
 struct Group {
@@ -343,7 +406,7 @@ struct Group {
 struct State {
     exe: PathBuf,
     config: HostConfig,
-    events: SyncSender<NativeEvent>,
+    events: Arc<EventQueue>,
     plugins: BTreeMap<String, PluginSpec>,
     wake: Sender<Request>,
     groups: BTreeMap<String, Group>,
@@ -355,7 +418,7 @@ impl State {
     fn new(
         exe: PathBuf,
         config: HostConfig,
-        events: SyncSender<NativeEvent>,
+        events: Arc<EventQueue>,
         wake: Sender<Request>,
     ) -> Self {
         Self {
@@ -470,12 +533,15 @@ impl State {
         }
         if restarted {
             for (plugin, module) in members {
-                let _ = self.events.try_send(NativeEvent {
-                    plugin,
-                    module,
-                    name: "native-module-restarted".to_owned(),
-                    bytes: Vec::new(),
-                });
+                self.events.push(
+                    NativeEvent {
+                        plugin,
+                        module,
+                        name: "native-module-restarted".to_owned(),
+                        bytes: Vec::new(),
+                    },
+                    true,
+                );
             }
         }
         Ok(())
@@ -673,5 +739,40 @@ impl State {
             }
             self.tick();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_flood_is_bounded_and_cannot_hide_restart_notifications() {
+        let events = EventQueue::default();
+        let event = NativeEvent {
+            plugin: "echo".into(),
+            module: "echo.dll".into(),
+            name: "data".into(),
+            bytes: vec![1],
+        };
+        for _ in 0..300 {
+            events.push(event.clone(), false);
+        }
+        events.push(
+            NativeEvent {
+                name: "native-module-restarted".into(),
+                ..event
+            },
+            true,
+        );
+        assert_eq!(
+            events.wait_pop(Duration::ZERO).unwrap().name,
+            "native-module-restarted"
+        );
+        let mut count = 0;
+        while events.try_pop().is_some() {
+            count += 1;
+        }
+        assert_eq!(count, 256);
     }
 }

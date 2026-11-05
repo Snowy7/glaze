@@ -388,7 +388,9 @@ to 1..=60000 ms. Ok contains opaque output; error contains a UTF-8 diagnostic.
 Replies preserve request/plugin/module/name. Event payload is opaque, without a
 timeout prefix. Malformed versions, lengths, kinds and UTF-8 are rejected before
 dispatch. The client caps inputs at 8 MiB minus framing headroom. Its public event
-queue is bounded to 256 items; excess vendor events are dropped.
+vendor-event queue is bounded to 256 items; excess vendor events are dropped.
+Restart notifications use a separate priority queue so vendor traffic cannot
+hide lifecycle changes. Drain the event pump for the supervisor's lifetime.
 
 ### Platform integration
 

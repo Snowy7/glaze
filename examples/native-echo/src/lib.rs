@@ -76,6 +76,12 @@ pub unsafe extern "C" fn mp_native_call(
         b"hang" => loop {
             std::thread::sleep(Duration::from_secs(60));
         },
+        b"background-crash" => {
+            std::thread::spawn(|| {
+                std::thread::sleep(Duration::from_millis(50));
+                std::process::abort();
+            });
+        }
         b"background" => {
             let bytes = input.to_vec();
             std::thread::spawn(move || {

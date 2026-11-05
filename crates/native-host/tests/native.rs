@@ -228,6 +228,19 @@ fn hung_call_is_killed_and_restarted_within_deadline() {
 }
 
 #[test]
+fn crash_from_background_thread_restarts_without_another_call() {
+    let supervisor = supervisor(Duration::from_secs(2));
+    supervisor
+        .activate(spec("background", Isolation::Shared))
+        .unwrap();
+    let old = pid(&supervisor, "background");
+    supervisor
+        .call("background", "native_echo.dll", "background-crash", b"")
+        .unwrap();
+    restarted(&supervisor, "background", old);
+}
+
+#[test]
 fn refuses_paths_outside_plugin_folder_including_symlink_targets() {
     let supervisor = supervisor(Duration::from_secs(2));
     for name in [
