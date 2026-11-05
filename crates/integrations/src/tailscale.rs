@@ -72,6 +72,10 @@ pub(crate) async fn run(
                 .await?;
         let mut state = Snapshot::default();
         apply(&mut state, &json!({"InitialStatus":status}));
+        ensure!(
+            !state.state.is_empty(),
+            "Tailscale returned an incompatible status snapshot"
+        );
         publish.set(Availability::Cached, Some(Data::Tailscale(state)));
         while let Some(action) = commands.recv().await {
             if let crate::Action::Tailscale { connected } = action {
@@ -120,6 +124,10 @@ pub(crate) async fn run(
                 publish.delivered();
                 ensure!(event.get("ErrMessage").and_then(Value::as_str).is_none_or(str::is_empty), "Tailscale reported a watch error");
                 apply(&mut state, &event);
+                if event.get("SelfChange").is_some() {
+                    let status=transport::pipe_json(&config.pipe,"GET","/localapi/v0/status?peers=false",None).await?;
+                    apply(&mut state,&json!({"InitialStatus":status}));
+                }
                 if !state.state.is_empty() {
                     publish.set(if config.live_verified { Availability::Live } else { Availability::Cached }, Some(Data::Tailscale(state.clone())));
                     if initial && !config.live_verified { return Ok(()); }

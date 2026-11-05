@@ -63,10 +63,16 @@ pub fn snapshot(list: &Value) -> Result<Snapshot> {
     Ok(Snapshot {
         containers: entries
             .iter()
-            .filter_map(|c| {
-                let state = c["State"].as_str()?.to_owned();
-                Some(Container {
-                    id: c["Id"].as_str()?.into(),
+            .map(|c| -> Result<Container> {
+                let state = c["State"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Docker container state is missing"))?
+                    .to_owned();
+                Ok(Container {
+                    id: c["Id"]
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("Docker container ID is missing"))?
+                        .into(),
                     name: c["Names"][0]
                         .as_str()
                         .unwrap_or("Container")
@@ -79,7 +85,7 @@ pub fn snapshot(list: &Value) -> Result<Snapshot> {
                     state,
                 })
             })
-            .collect(),
+            .collect::<Result<Vec<_>>>()?,
     })
 }
 pub(crate) async fn run(
@@ -92,10 +98,14 @@ pub(crate) async fn run(
         "select Docker's existing local context pipe in settings"
     );
     // Subscribe before the seed. An event is an invalidation, never a counter delta: no lost-update race.
+    // The server flushes headers before registering its subscriber. A bounded replay cut covers that gap.
+    let since = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs();
     let mut events = transport::pipe_request(
         &config.pipe,
         "GET",
-        &format!("/events?filters={}", filter(config, true)),
+        &format!("/events?since={since}&filters={}", filter(config, true)),
         None,
     )
     .await?;

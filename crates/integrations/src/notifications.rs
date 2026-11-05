@@ -25,6 +25,14 @@ pub struct Snapshot {
     pub cards: Vec<Card>,
     pub counts: BTreeMap<String, usize>,
 }
+/// Bound UTF-8 storage, including emoji, without splitting a scalar value.
+fn text(value: &str, bytes: usize) -> String {
+    let mut end = value.len().min(bytes);
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_owned()
+}
 
 /// Call on the UI thread, in response to the user's Enable/Grant access action. Never prompt at startup.
 pub fn request_access()
@@ -55,21 +63,14 @@ pub fn read(listener: &UserNotificationListener, show_text: bool) -> Result<Snap
                 .Visual()?
                 .GetBinding(&KnownNotificationBindings::ToastGeneric()?)
         {
-            for element in binding.GetTextElements()? {
-                texts.push(
-                    element
-                        .Text()?
-                        .to_string()
-                        .chars()
-                        .take(1024)
-                        .collect::<String>(),
-                );
+            for element in binding.GetTextElements()?.into_iter().take(3) {
+                texts.push(text(&element.Text()?.to_string(), 256));
             }
         }
         state.cards.push(Card {
             id: notification.Id()?,
             app_id,
-            app: info.DisplayInfo()?.DisplayName()?.to_string(),
+            app: text(&info.DisplayInfo()?.DisplayName()?.to_string(), 128),
             title: texts
                 .first()
                 .cloned()
@@ -81,6 +82,7 @@ pub fn read(listener: &UserNotificationListener, show_text: bool) -> Result<Snap
     state.cards.sort_by_key(|c| (std::cmp::Reverse(c.at), c.id));
     Ok(state)
 }
+
 struct Subscription {
     listener: UserNotificationListener,
     token: Option<i64>,
@@ -142,5 +144,15 @@ pub(crate) async fn run(
                 publish.set(availability.clone(), Some(Data::Notifications(read(&subscription.listener, config.show_text)?)));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn notification_text_limits_bound_bytes_and_keep_unicode_valid() {
+        assert_eq!(super::text("مرحبا", 5), "مر");
+        assert_eq!(super::text("🙂hello", 3), "");
+        assert_eq!(super::text(&"🙂".repeat(1024), 256).len(), 256);
     }
 }

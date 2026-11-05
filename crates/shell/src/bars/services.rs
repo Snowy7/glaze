@@ -1,4 +1,5 @@
 //! Bar subscriptions and their deadlines. Providers start only for visible modules.
+use crate::integrations::media::BarMedia as Media;
 use mypaper_bars::{
     self as services, BarsConfig, ModuleRef,
     actions::*,
@@ -13,7 +14,7 @@ use mypaper_bars::{
     },
     hooks::{self, Hooks},
     icons::{Icons, Source},
-    media::{Media, MediaInfo},
+    media::MediaInfo,
     network::{self, NetworkInfo, NetworkWatch},
     system::{self, Battery, Sampler, Stats},
     tray::{Tray, TrayItem},
@@ -185,7 +186,7 @@ impl Services {
                 self.sampler = on(Topic::Stats).then(Sampler::new);
                 self.stats_due = on(Topic::Stats).then_some(now + Duration::from_secs(2));
             }
-            self.notifications_due = on(Topic::Notifications).then_some(now);
+            self.notifications_due = None;
             if !on(Topic::Notifications) {
                 self.notification_lane = None;
             }
@@ -319,20 +320,6 @@ impl Services {
         if take_due(&mut self.custom_due, now) {
             self.custom_due = self.model.custom.tick(now);
         }
-        if take_due(&mut self.notifications_due, now) {
-            self.notifications_due = Some(now + Duration::from_secs(15));
-            if !self.notification_pending {
-                let dir = self.icons.dir().to_owned();
-                let waker = self.waker.clone();
-                flyouts::on_lane(
-                    &mut self.notification_lane,
-                    "notification-count",
-                    move || NotificationsLane::new(dir),
-                    move |n| waker.send(Msg::Flyout(Done::NotificationCount(n.count()))),
-                );
-                self.notification_pending = true;
-            }
-        }
         Changes {
             data: changed,
             config,
@@ -375,6 +362,7 @@ impl Services {
             .foreground
             .and_then(|w| self.apps.group_of(w))
             .cloned();
+        crate::integrations::foreground(group.as_ref());
         if let Some(g) = group {
             let d = self
                 .icons

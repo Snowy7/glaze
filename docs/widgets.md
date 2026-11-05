@@ -62,8 +62,8 @@ no form opens inside a desktop widget.
 | `quote` | deterministic daily/hourly selection or click to change |
 
 There is no ambient animation. Media spectrum capture is opt-in (`variant = "viz"`); otherwise
-there is no audio capture worker. Playing media updates progress once per second; paused media has
-no tick. Legacy photo motion, weather animation and media glow settings remain readable data but
+there is no audio capture worker. Media uses the [shared integration provider](integrations.md);
+playing and paused media have no progress tick. Legacy photo motion, weather animation and media glow settings remain readable data but
 produce no ambient animation. A default clock schedules the next minute boundary, calendars the
 next day, running timers the next displayed second, and paused timers nothing. Photo fades last
 350 ms. Network workers block on a channel between requests; HTTP never blocks the UI thread.

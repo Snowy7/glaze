@@ -92,6 +92,25 @@ fn main() -> anyhow::Result<()> {
         {
             let _ = rx.recv_timeout(Duration::from_secs(5));
         }
+        if args.iter().any(|arg| arg == "--retry") {
+            let before = lease.activity().attempts;
+            lease.retry();
+            let deadline = Instant::now() + Duration::from_secs(15);
+            while (lease.activity().attempts == before
+                || lease.snapshot().availability == Availability::Connecting)
+                && Instant::now() < deadline
+            {
+                let _ = rx.recv_timeout(Duration::from_secs(5));
+            }
+            anyhow::ensure!(
+                lease.activity().attempts > before,
+                "explicit retry did not restart the provider"
+            );
+            println!(
+                "{}",
+                serde_json::json!({"provider":format!("{provider:?}"),"stage":"reconnect","attempts":lease.activity().attempts-before,"availability":format!("{:?}",lease.snapshot().availability)})
+            );
+        }
         let status = format!("{:?}", lease.snapshot().availability);
         if matches!(
             lease.snapshot().availability,
