@@ -84,6 +84,100 @@ impl Rect {
         }
     }
 
+    /// The overlap of both (empty when they don't meet).
+    pub fn intersect(self, other: Rect) -> Self {
+        Self {
+            left: self.left.max(other.left),
+            top: self.top.max(other.top),
+            right: self.right.min(other.right),
+            bottom: self.bottom.min(other.bottom),
+        }
+    }
+
+    pub fn center(&self) -> Point {
+        Point::new(
+            (self.left + self.right) / 2.0,
+            (self.top + self.bottom) / 2.0,
+        )
+    }
+
+    /// Shrunk by `insets` (layout's padding).
+    pub fn inset(self, insets: crate::layout::Insets) -> Self {
+        Self {
+            left: self.left + insets.left,
+            top: self.top + insets.top,
+            right: self.right - insets.right,
+            bottom: self.bottom - insets.bottom,
+        }
+    }
+
+    /// The top `height` of this rectangle, and what is left under it after `gap`.
+    pub fn take_top(self, height: f32, gap: f32) -> (Self, Self) {
+        let cut = (self.top + height).min(self.bottom);
+        (
+            Self {
+                bottom: cut,
+                ..self
+            },
+            Self {
+                top: (cut + gap).min(self.bottom),
+                ..self
+            },
+        )
+    }
+
+    /// The bottom `height`, and what is left above it after `gap`.
+    pub fn take_bottom(self, height: f32, gap: f32) -> (Self, Self) {
+        let cut = (self.bottom - height).max(self.top);
+        (
+            Self { top: cut, ..self },
+            Self {
+                bottom: (cut - gap).max(self.top),
+                ..self
+            },
+        )
+    }
+
+    /// The left `width`, and what is left after `gap`.
+    pub fn take_left(self, width: f32, gap: f32) -> (Self, Self) {
+        let cut = (self.left + width).min(self.right);
+        (
+            Self {
+                right: cut,
+                ..self
+            },
+            Self {
+                left: (cut + gap).min(self.right),
+                ..self
+            },
+        )
+    }
+
+    /// The right `width`, and what is left after `gap`.
+    pub fn take_right(self, width: f32, gap: f32) -> (Self, Self) {
+        let cut = (self.right - width).max(self.left);
+        (
+            Self { left: cut, ..self },
+            Self {
+                right: (cut - gap).max(self.left),
+                ..self
+            },
+        )
+    }
+
+    /// A `width`×`height` box placed in this one by `x` and `y`, on whole pixels.
+    pub fn place(
+        &self,
+        width: f32,
+        height: f32,
+        x: crate::layout::Align,
+        y: crate::layout::Align,
+    ) -> Self {
+        let left = x.offset(self.left, self.width(), width);
+        let top = y.offset(self.top, self.height(), height);
+        Self::new(left.round(), top.round(), width, height)
+    }
+
     /// Whole pixels covering this rectangle, clipped to a `width`×`height` bitmap.
     pub fn pixels(&self, width: u32, height: u32) -> Option<PixelRect> {
         let left = self.left.floor().max(0.0) as u32;
