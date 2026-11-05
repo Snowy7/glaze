@@ -549,10 +549,11 @@ impl Bars {
             self.maximized_due.get_or_insert(now + Duration::from_millis(150));
         }
         if maximized_event || maximized_settled {
-            let foreground = maximized::Foreground::read(self.fullscreen.is_some());
+            let windows = maximized::ZOrder::read();
             for b in &mut self.bars {
                 let hide = b.hide_when_maximized()
-                    && foreground.as_ref().is_some_and(|f| f.hides(b.monitor.rect));
+                    && self.fullscreen.as_deref() != Some(&b.monitor.device)
+                    && windows.hides(b.monitor.rect);
                 b.maximized.observe(hide, now);
             }
         }
