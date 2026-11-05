@@ -146,6 +146,9 @@
             "kind": "stack"
           },
           {
+            "kind": "spacer"
+          },
+          {
             "fraction": 0.5699999928474426,
             "kind": "meter",
             "label": "Weekly · snowy7",
@@ -153,18 +156,17 @@
             "value": "57% left"
           },
           {
-            "fraction": 1.0,
-            "kind": "meter",
-            "label": "Weekly · Fable · snowy7",
-            "note": "full",
-            "value": "100% left"
+            "kind": "spacer"
           },
           {
             "fraction": 1.0,
             "kind": "meter",
-            "label": "Weekly · Fable · sn",
+            "label": "Weekly · Fable · 2 accounts",
             "note": "full",
             "value": "100% left"
+          },
+          {
+            "kind": "spacer"
           },
           {
             "children": [
@@ -253,14 +255,7 @@
           {
             "fraction": 1.0,
             "kind": "meter",
-            "label": "Weekly · Fable · snowy7",
-            "note": "full",
-            "value": "100% left"
-          },
-          {
-            "fraction": 1.0,
-            "kind": "meter",
-            "label": "Weekly · Fable · sn",
+            "label": "Weekly · Fable · 2 accounts",
             "note": "full",
             "value": "100% left"
           },

@@ -87,14 +87,45 @@ fn provider_name(provider: &str) -> &str {
     }
 }
 
+/// A model slug as people say it: `claude-opus-5-5` → `Opus 5.5`, `gpt-6.1-sol` → `GPT-6.1 Sol`.
+/// Names that are already readable (spaces, capitals) pass through.
+fn model_name(slug: &str) -> String {
+    if slug.contains(' ') || slug.chars().any(char::is_uppercase) {
+        return slug.into();
+    }
+    let rest = slug.strip_prefix("claude-").unwrap_or(slug);
+    let mut words: Vec<String> = Vec::new();
+    for part in rest.split('-').filter(|p| !p.is_empty() && !(p.len() >= 8 && p.chars().all(|c| c.is_ascii_digit()))) {
+        match words.last_mut() {
+            // Version digits join with dots: 5-5 → 5.5.
+            Some(last) if part.chars().all(|c| c.is_ascii_digit()) && last.chars().last().is_some_and(|c| c.is_ascii_digit()) => {
+                last.push('.');
+                last.push_str(part);
+            }
+            _ if part == "gpt" => words.push("GPT".into()),
+            _ => {
+                let mut chars = part.chars();
+                words.push(chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default());
+            }
+        }
+    }
+    // `GPT` and its version read as one word.
+    match words.as_slice() {
+        [first, version, ..] if first == "GPT" && version.starts_with(|c: char| c.is_ascii_digit()) => {
+            format!("GPT-{}", words[1..].join(" "))
+        }
+        _ => words.join(" "),
+    }
+}
+
 /// The quiet second line: model · how long, each part only when T3 knows it.
 fn detail(state: &State, thread: &Thread, agents: usize, now_ms: i64) -> Option<String> {
     let model = state
         .details
         .get(&thread.id)
-        .map(|d| d.model.as_str())
+        .map(|d| model_name(&d.model))
         .filter(|m| !m.is_empty())
-        .or_else(|| Some(provider_name(&thread.provider_instance_id)).filter(|p| !p.is_empty()));
+        .or_else(|| Some(provider_name(&thread.provider_instance_id).to_owned()).filter(|p| !p.is_empty()));
     let time = epoch_ms(&thread.updated_at).map(|at| {
         let span = ago(now_ms, at);
         if thread.attention() {
@@ -106,7 +137,7 @@ fn detail(state: &State, thread: &Thread, agents: usize, now_ms: i64) -> Option<
         }
     });
     let agents = (agents > 0).then(|| plural(agents, "agent"));
-    let parts: Vec<String> = [model.map(str::to_owned), time, agents].into_iter().flatten().collect();
+    let parts: Vec<String> = [model, time, agents].into_iter().flatten().collect();
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
@@ -374,6 +405,11 @@ fn limits(state: &State, size: SizeClass, now_ms: i64) -> View {
         let first = rows.len();
         for (window, accounts) in windows {
             let window = if window.trim().is_empty() { "Limit" } else { window };
+            // Every account at the same reading: one row says it for all of them.
+            if accounts.len() > 1 && accounts.iter().all(|a| a.used_permille == accounts[0].used_permille && a.resets_at == accounts[0].resets_at) {
+                rows.push(meter(accounts[0], format!("{window} · {} accounts", accounts.len()), now_ms));
+                continue;
+            }
             let names = account_names(accounts);
             let mut shown: Vec<(&Limit, String)> = accounts.iter().copied().zip(names).collect();
             // Tightest first when there are several, so a summary hides only the roomy ones.
@@ -395,6 +431,12 @@ fn limits(state: &State, size: SizeClass, now_ms: i64) -> View {
         // The header travels with its first row: a short tile never ends on a bare name.
         let lead = rows.remove(first);
         rows.insert(first, View::Stack { children: vec![header, lead], gap: Some(6.0) });
+    }
+    // Large tiles spread the meters over their height (macOS's large widgets) instead of
+    // leaving the bottom empty; the spacers shrink to nothing when the rows fill it.
+    if size == SizeClass::Large && rows.len() > 2 {
+        rows = rows.into_iter().flat_map(|row| [row, View::Spacer]).collect();
+        rows.pop();
     }
     View::List { children: rows, gap: Some(10.0) }
 }
@@ -519,4 +561,17 @@ fn composer(state: &State, size: SizeClass, pick: &Pick) -> View {
     }
     children.push(View::Spacer);
     View::Stack { children, gap: Some(8.0) }
+}
+
+#[test]
+fn model_slugs_read_as_names() {
+    for (slug, name) in [
+        ("claude-opus-5-5", "Opus 5.5"),
+        ("claude-sonnet-5-5-20260101", "Sonnet 5.5"),
+        ("gpt-6.1-sol", "GPT-6.1 Sol"),
+        ("GPT-6.1 Sol", "GPT-6.1 Sol"),
+        ("o3", "O3"),
+    ] {
+        assert_eq!(model_name(slug), name);
+    }
 }
