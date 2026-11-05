@@ -234,6 +234,35 @@ pub enum View {
         #[serde(default)]
         dot: bool,
     },
+    /// A quota or progress meter: `value` large at the start, `label` after it and `note` at the
+    /// end of the same line, and under them one clean bar filled to `fraction` in `color`
+    /// (the label's ink when unset). `mark` is a faint tick at that fraction (an even pace).
+    Meter {
+        value: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+        fraction: f32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        color: Option<Tone>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mark: Option<f32>,
+    },
+    /// A list row that is one click target end to end: `title` over a quiet `detail`, a status
+    /// `tag` pill in `tone` at the end. `nested` indents it under the row above (a subagent).
+    Item {
+        title: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tag: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tone: Option<Tone>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        action: Option<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        nested: bool,
+    },
     /// The escape hatch: drawing commands in kit points from the canvas's top left, `height`
     /// points tall and as wide as its slot. The shell draws them natively, clipped to the canvas.
     Canvas {

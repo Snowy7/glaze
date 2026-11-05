@@ -52,7 +52,7 @@ fn collect(view: &View, out: &mut Vec<Hit>) {
         View::Button { action, .. } | View::IconButton { action, .. } => out.push(Hit::Action(action.clone())),
         View::Field { action, .. } => out.push(Hit::Field(action.clone())),
         View::Select { action, options, selected, .. } => out.push(Hit::Select { action: action.clone(), options: options.clone(), selected: selected.clone() }),
-        View::ListRow { action: Some(action), .. } => out.push(Hit::Action(action.clone())),
+        View::ListRow { action: Some(action), .. } | View::Item { action: Some(action), .. } => out.push(Hit::Action(action.clone())),
         _ => {}
     }
 }
@@ -284,6 +284,12 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
         View::Sparkline { .. } => f.px(28.0),
         View::AreaChart { .. } | View::Empty { .. } | View::List { .. } => f.px(80.0),
         View::Canvas { height, .. } => f.px(height.clamp(0.0, 2048.0)),
+        View::Meter { .. } => f.line(TextRole::Title2) + f.px(13.0),
+        View::Item { detail, nested, .. } => match (detail, nested) {
+            (_, true) => f.line(TextRole::Callout) + f.px(8.0),
+            (Some(_), false) => f.line(TextRole::Headline) + f.line(TextRole::Footnote) + f.px(12.0),
+            (None, false) => f.line(TextRole::Headline) + f.px(12.0),
+        },
         View::Animated { child, .. } => self::height(f, child, width),
         View::Spacer | View::Unknown => 0.0,
     }
@@ -519,6 +525,75 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
                 let inner = Rect::new(pill.left + pad, pill.top, (pill.width() - pad * 2.0).max(0.0), pill.height());
                 f.text_in(inner, label, TextRole::Caption, ink, Align::Center);
             }
+        }
+        View::Meter { value, label, note, fraction, color, mark } => {
+            let c = f.theme.color;
+            let ink = tone(f, color.as_ref(), c.label);
+            let (line, rest) = rect.take_top(f.line(TextRole::Title2), f.px(5.0));
+            let (vw, _) = f.text.measure(value, &f.font(TextRole::Title2));
+            let (number, after) = line.take_left(vw.ceil().min(line.width()), f.px(8.0));
+            f.text_in(number, value, TextRole::Title2, ink, Align::Start);
+            // The label and note sit on the number's baseline; the note keeps its width.
+            let small = f.line(TextRole::Footnote);
+            let row = Rect::new(after.left, line.bottom - small - f.px(1.0), after.width().max(0.0), small);
+            let row = match note {
+                Some(note) => {
+                    let (nw, _) = f.text.measure(note, &f.font(TextRole::Footnote));
+                    let (end, start) = row.take_right(nw.ceil().min(row.width() * 0.62), f.px(8.0));
+                    f.text_in(end, note, TextRole::Footnote, c.tertiary, Align::End);
+                    start
+                }
+                None => row,
+            };
+            f.text_in(row, label, TextRole::Footnote, c.secondary, Align::Start);
+            let bar = Rect::new(rect.left, rest.top + f.px(1.0), rect.width(), f.px(6.0));
+            f.progress(bar, fraction.clamp(0.0, 1.0), Some(ink));
+            if let Some(mark) = mark.filter(|m| (0.0..=1.0).contains(m)) {
+                let x = (bar.left + bar.width() * mark).round();
+                f.fill(Rect::new(x - f.px(1.0), bar.top - f.px(2.0), f.px(2.0), bar.height() + f.px(4.0)), f.px(1.0), c.tertiary);
+            }
+        }
+        View::Item { title, detail, tag, tone: tag_tone, action, nested } => {
+            let c = f.theme.color;
+            let id = if action.is_some() { take_hit() } else { 0 };
+            let radius = f.px(f.theme.radius.small);
+            f.wash(id, rect, radius, true);
+            let inner = rect.inset(Insets::xy(f.px(8.0), 0.0));
+            let inner = if *nested { inner.take_left(f.px(14.0), 0.0).1 } else { inner };
+            let room = match tag {
+                Some(label) => {
+                    let ink = tone(f, tag_tone.as_ref(), c.secondary);
+                    let w = tag_width(f, label, false).min(inner.width() * 0.5);
+                    let (end, room) = inner.take_right(w, f.px(8.0));
+                    let pill = end.place(w, f.line(TextRole::Caption) + f.px(4.0), Align::End, Align::Center);
+                    f.fill(pill, pill.height() / 2.0, ink.with_alpha(0.16));
+                    let pad = f.px(7.0);
+                    let text = Rect::new(pill.left + pad, pill.top, (pill.width() - pad * 2.0).max(0.0), pill.height());
+                    f.text_in(text, label, TextRole::Caption, ink, Align::Center);
+                    room
+                }
+                None => inner,
+            };
+            let (role, ink) = if *nested { (TextRole::Callout, c.secondary) } else { (TextRole::Headline, c.label) };
+            match detail.as_deref().filter(|_| !*nested) {
+                Some(detail) => {
+                    let (th, dh) = (f.line(role), f.line(TextRole::Footnote));
+                    let top = (room.top + (room.height() - th - dh) / 2.0).round();
+                    f.text_in(Rect::new(room.left, top, room.width(), th), title, role, ink, Align::Start);
+                    f.text_in(Rect::new(room.left, top + th, room.width(), dh), detail, TextRole::Footnote, c.secondary, Align::Start);
+                }
+                None => {
+                    f.text_in(room, title, role, ink, Align::Start);
+                }
+            }
+            f.focus_ring(id, rect, radius);
+            let name = match (detail, tag) {
+                (Some(d), Some(t)) => format!("{title}, {d}, {t}"),
+                (Some(d), None) => format!("{title}, {d}"),
+                (None, Some(t)) => format!("{title}, {t}"),
+                (None, None) => title.clone(),
+            };
+            f.hit(id, rect, mypaper_ui::Role::Button, &name, true, None);
         }
         View::Spacer | View::Unknown => {}
     }
