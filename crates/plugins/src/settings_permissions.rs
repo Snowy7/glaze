@@ -18,7 +18,7 @@ pub fn resolve(permission: &str, settings: &Map<String, Value>) -> Result<String
     let key = permission.strip_prefix("network:ws://127.0.0.1:{settings.")
         .and_then(|s| s.strip_suffix('}')).filter(|k| !k.is_empty() && k.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-'));
     let key = key.ok_or_else(|| anyhow::anyhow!("invalid settings-derived network permission"))?;
-    let port = settings.get(key).and_then(Value::as_u64).filter(|p| (1..=65535).contains(p));
+    let port = settings.get(key).and_then(Value::as_f64).filter(|p| p.fract() == 0.0 && (1.0..=65535.0).contains(p)).map(|p| p as u16);
     ensure!(port.is_some(), "network port setting {key:?} must be an integer between 1 and 65535");
     Ok(format!("network:ws://127.0.0.1:{}", port.unwrap()))
 }
@@ -67,6 +67,7 @@ mod tests {
         let permission = "network:ws://127.0.0.1:{settings.port}";
         assert_eq!(resolve(permission, &defaults).unwrap(), "network:ws://127.0.0.1:4455");
         assert_eq!(resolve(permission, &configured).unwrap(), "network:ws://127.0.0.1:4466");
+        assert_eq!(resolve(permission, json!({"port":4466.0}).as_object().unwrap()).unwrap(), "network:ws://127.0.0.1:4466");
         for bad in [json!({"port":0}), json!({"port":65536}), json!({"port":"4455/evil"}), json!({"port":44.55})] {
             assert!(resolve(permission, bad.as_object().unwrap()).is_err());
         }
