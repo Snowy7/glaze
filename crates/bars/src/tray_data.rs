@@ -521,9 +521,19 @@ pub const APPBARDATA_SIZE: usize = 40;
 
 pub const ABM_QUERYPOS: u32 = 2;
 pub const ABM_SETPOS: u32 = 3;
+pub const ABM_GETSTATE: u32 = 4;
 pub const ABM_GETTASKBARPOS: u32 = 5;
 pub const ABM_GETAUTOHIDEBAR: u32 = 7;
 pub const ABM_GETAUTOHIDEBAREX: u32 = 11;
+
+/// A read-only app-bar request with no HWND or shared-memory payload.
+pub fn appbar_query(message: u32, pid: u32) -> [u8; APPBAR_SIZE] {
+    let mut bytes = [0u8; APPBAR_SIZE];
+    bytes[..4].copy_from_slice(&(APPBARDATA_SIZE as u32).to_le_bytes());
+    bytes[APPBAR_MESSAGE..APPBAR_MESSAGE + 4].copy_from_slice(&message.to_le_bytes());
+    bytes[APPBAR_PID..APPBAR_PID + 4].copy_from_slice(&pid.to_le_bytes());
+    bytes
+}
 
 /// Auto-hide lookups ignore the caller HWND; EX selects a monitor by its rectangle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -550,20 +560,21 @@ impl AutoHideQuery {
     }
 
     pub fn request(self, pid: u32) -> [u8; APPBAR_SIZE] {
-        let mut bytes = [0u8; APPBAR_SIZE];
-        bytes[..4].copy_from_slice(&(APPBARDATA_SIZE as u32).to_le_bytes());
+        let mut bytes = appbar_query(
+            if self.monitor.is_some() {
+                ABM_GETAUTOHIDEBAREX
+            } else {
+                ABM_GETAUTOHIDEBAR
+            },
+            pid,
+        );
         bytes[APPBAR_EDGE..APPBAR_EDGE + 4].copy_from_slice(&self.edge.to_le_bytes());
-        let message = if let Some(rect) = self.monitor {
+        if let Some(rect) = self.monitor {
             for (i, coordinate) in rect.into_iter().enumerate() {
                 bytes[APPBAR_RECT + i * 4..APPBAR_RECT + i * 4 + 4]
                     .copy_from_slice(&coordinate.to_le_bytes());
             }
-            ABM_GETAUTOHIDEBAREX
-        } else {
-            ABM_GETAUTOHIDEBAR
-        };
-        bytes[APPBAR_MESSAGE..APPBAR_MESSAGE + 4].copy_from_slice(&message.to_le_bytes());
-        bytes[APPBAR_PID..APPBAR_PID + 4].copy_from_slice(&pid.to_le_bytes());
+        }
         bytes
     }
 }
@@ -648,6 +659,21 @@ pub fn rect_reply(message: u32, [x, y, width, height]: [i32; 4]) -> isize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn taskbar_state_lookup_has_no_owner_or_shared_payload() {
+        let bytes = appbar_query(ABM_GETSTATE, 77);
+        assert_eq!(
+            parse_appbar(&bytes),
+            Some(AppBarMessage {
+                message: ABM_GETSTATE,
+                hwnd: 0,
+                shared: 0,
+                pid: 77,
+            })
+        );
+        assert_eq!(AutoHideQuery::parse(&bytes), None);
+    }
 
     #[test]
     fn auto_hide_lookup_keys_preserve_the_edge_and_signed_monitor_coordinates() {

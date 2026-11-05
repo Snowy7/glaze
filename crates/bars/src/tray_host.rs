@@ -73,23 +73,25 @@ use windows::Win32::UI::WindowsAndMessaging::{
     AllowSetForegroundWindow, CHILDID_SELF, CS_DBLCLKS, CopyIcon, CreateWindowExW, DefWindowProcW,
     DestroyIcon, DestroyWindow, DispatchMessageW, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
     EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_FOREGROUND, FindWindowW, GWL_STYLE, GetIconInfo,
-    GetWindowLongPtrW, GetWindowThreadProcessId, HICON, HWND_BROADCAST, HWND_TOPMOST, ICONINFO,
-    ISMEX_NOTIFY, ISMEX_SEND, InSendMessageEx, IsWindow, MSG, MWMO_INPUTAVAILABLE,
-    MsgWaitForMultipleObjectsEx, OBJID_WINDOW, PM_REMOVE, PeekMessageW, PostMessageW,
-    PostThreadMessageW, QS_ALLINPUT, RegisterClassExW, RegisterWindowMessageW, ReplyMessage,
-    SC_TASKLIST, SMTO_ABORTIFHUNG, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    SWP_SHOWWINDOW, SendMessageTimeoutW, SendNotifyMessageW, SetWindowLongPtrW, SetWindowPos,
-    TranslateMessage, UnregisterClassW, WINDOWPOS, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CLOSE,
-    WM_COMMAND, WM_COPYDATA, WM_NCDESTROY, WM_QUIT, WM_SYSCOMMAND, WM_USER, WM_WINDOWPOSCHANGED,
-    WM_WINDOWPOSCHANGING, WNDCLASSEXW, WNDPROC, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
+    GetShellWindow, GetWindowLongPtrW, GetWindowThreadProcessId, HICON, HWND_BROADCAST,
+    HWND_TOPMOST, ICONINFO, ISMEX_NOTIFY, ISMEX_SEND, InSendMessageEx, IsWindow, MSG,
+    MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, OBJID_WINDOW, PM_REMOVE, PeekMessageW,
+    PostMessageW, PostThreadMessageW, QS_ALLINPUT, RegisterClassExW, RegisterWindowMessageW,
+    ReplyMessage, SC_TASKLIST, SMTO_ABORTIFHUNG, SMTO_ERRORONEXIT, SWP_HIDEWINDOW, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SendMessageTimeoutW, SendNotifyMessageW,
+    SetWindowLongPtrW, SetWindowPos, TranslateMessage, UnregisterClassW, WINDOWPOS,
+    WINEVENT_OUTOFCONTEXT, WM_APP, WM_CLOSE, WM_COMMAND, WM_COPYDATA, WM_NCDESTROY, WM_QUIT,
+    WM_SYSCOMMAND, WM_USER, WM_WINDOWPOSCHANGED, WM_WINDOWPOSCHANGING, WNDCLASSEXW, WNDPROC,
+    WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    WS_VISIBLE,
 };
 use windows::core::{HSTRING, PCWSTR, PWSTR, w};
 
 use crate::tray::{reg_dword, reg_string, resolve_known_folder};
 use crate::tray_data::{
-    self, ABM_GETTASKBARPOS, ABM_QUERYPOS, ABM_SETPOS, APPBARDATA_SIZE, COPYDATA_APPBAR,
-    COPYDATA_ICON_RECT, COPYDATA_NOTIFY, Click, ICON_OFFSET, Icons, Owner, Setting, TrayItem,
+    self, ABM_GETSTATE, ABM_GETTASKBARPOS, ABM_QUERYPOS, ABM_SETPOS, APPBARDATA_SIZE,
+    COPYDATA_APPBAR, COPYDATA_ICON_RECT, COPYDATA_NOTIFY, Click, ICON_OFFSET, Icons, Owner,
+    Setting, TrayItem,
 };
 use crate::wake::{Msg, Waker};
 
@@ -98,9 +100,9 @@ const NOTIFY_CLASS: PCWSTR = w!("TrayNotifyWnd");
 /// Posted to the host's thread: commands are waiting in its channel.
 const WM_HOST_COMMAND: u32 = WM_APP + 40;
 /// How long a forward to Explorer may take (a hung Explorer must not hang the apps, or us).
-const FORWARD_TIMEOUT_MS: u32 = 2_000;
+const FORWARD_TIMEOUT_MS: u32 = 10;
 /// The same while the host stops: what's still queued gets a short chance.
-const SHUTDOWN_TIMEOUT_MS: u32 = 200;
+const SHUTDOWN_TIMEOUT_MS: u32 = FORWARD_TIMEOUT_MS;
 /// Forwards nested inside forwards (Explorer's answer can make an app call us again). A deeper
 /// chain is a window bouncing messages back to us; it gets 0.
 const MAX_DEPTH: u32 = 4;
@@ -273,10 +275,28 @@ impl Drop for TrayHost {
 // --- The host thread ------------------------------------------------------------------------
 
 /// Explorer's tray, as the host forwards to it.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct Explorer {
     tray: HWND,
     pid: u32,
+}
+
+/// A recycled HWND (or a different Explorer process) must never become the forward target.
+fn valid_tray_owner(expected: u32, actual: u32, shell: u32, ours: u32) -> bool {
+    actual != 0 && actual != ours && actual == expected && actual == shell
+}
+
+impl Explorer {
+    fn is_current(self) -> bool {
+        let (mut pid, mut shell_pid) = (0, 0);
+        // SAFETY: read-only queries; destroyed windows leave a zero PID.
+        unsafe {
+            GetWindowThreadProcessId(self.tray, Some(&mut pid));
+            GetWindowThreadProcessId(GetShellWindow(), Some(&mut shell_pid));
+        }
+        valid_tray_owner(self.pid, pid, shell_pid, std::process::id())
+            && crate::apps::class_name(self.tray) == "Shell_TrayWnd"
+    }
 }
 
 struct State {
@@ -335,7 +355,8 @@ fn find_explorer() -> Option<Explorer> {
     let mut pid = 0;
     // SAFETY: a read-only query.
     unsafe { GetWindowThreadProcessId(tray, Some(&mut pid)) };
-    Some(Explorer { tray, pid })
+    let explorer = Explorer { tray, pid };
+    explorer.is_current().then_some(explorer)
 }
 
 /// How long Explorer's process has been running.
@@ -589,6 +610,7 @@ fn run(commands: &Receiver<Command>, own: Sender<Command>, waker: Waker, band: O
                                     if session.hosting() && session.explorer_changed() {
                                         session.leave();
                                     }
+                                    invalidate_explorer_queries();
                                     if !session.hosting() {
                                         join_at = Some(Instant::now() + EXPLORER_SETTLE);
                                     }
@@ -610,7 +632,7 @@ fn run(commands: &Receiver<Command>, own: Sender<Command>, waker: Waker, band: O
             }
         }
         forward_queued(FORWARD_TIMEOUT_MS);
-        refresh_auto_hide();
+        refresh_explorer_queries();
         if with_state(|s| std::mem::take(&mut s.step_aside)).unwrap_or(false) {
             session.leave();
         }
@@ -650,8 +672,9 @@ impl Session {
 
     /// Explorer's tray isn't the one we forward to any more.
     fn explorer_changed(&self) -> bool {
-        let now = find_explorer().map(|e| e.tray);
-        with_state(|s| s.explorer.map(|e| e.tray) != now).unwrap_or(true)
+        // TaskbarCreated re-resolves both HWND and PID, including recycled window handles.
+        let now = find_explorer();
+        with_state(|s| s.explorer != now).unwrap_or(true)
     }
 
     /// Becomes the tray, if Explorer's is there and settled.
@@ -665,7 +688,7 @@ impl Session {
             return Join::Later(EXPLORER_SETTLE - age);
         }
         let band = with_state(|s| s.band).flatten();
-        let Some(auto_hide) = read_auto_hide(explorer) else {
+        let Some(auto_hide) = read_explorer_queries(explorer) else {
             return Join::Later(CHECK_EVERY);
         };
         let Some(window) = create_window(band) else {
@@ -699,7 +722,7 @@ impl Session {
             s.window = Some(window);
             s.explorer = Some(explorer);
         });
-        AUTO_HIDE.with(|cell| *cell.borrow_mut() = Some(auto_hide));
+        EXPLORER_QUERIES.with(|cell| *cell.borrow_mut() = Some(auto_hide));
         broadcast_taskbar_created();
         log::info!("tray: Shell_TrayWnd up; asked apps to add their icons");
         Join::Hosting
@@ -770,7 +793,7 @@ unsafe extern "system" fn on_explorer_event(
 }
 
 fn place(band: Option<Band>) {
-    invalidate_auto_hide();
+    invalidate_explorer_queries();
     let window = with_state(|s| {
         s.band = band;
         s.window
@@ -824,7 +847,7 @@ unsafe extern "system" fn tray_proc(
                 other => forward_copydata(wparam, other, &bytes),
             };
             let took = started.elapsed();
-            if took > Duration::from_millis(100) {
+            if took > Duration::from_millis(20) {
                 log::info!("tray: WM_COPYDATA {kind} took {took:?}");
             }
             return result;
@@ -886,34 +909,36 @@ unsafe extern "system" fn notify_proc(
 }
 
 fn explorer() -> Option<Explorer> {
-    let (explorer, ours) = with_state(|s| (s.explorer, s.window))?;
-    let explorer = explorer?;
-    let mut pid = 0;
-    // SAFETY: read-only validation of a cached handle, which Explorer can destroy or recycle.
-    unsafe { GetWindowThreadProcessId(explorer.tray, Some(&mut pid)) };
-    (Some(explorer.tray) != ours
-        && pid != std::process::id()
-        && pid == explorer.pid
-        && crate::apps::class_name(explorer.tray) == "Shell_TrayWnd")
-        .then_some(explorer)
+    with_state(|s| s.explorer)
+        .flatten()
+        .filter(|e| e.is_current())
 }
 
 /// Read-only lookups must not relay while Explorer is delivering app-bar callbacks: Chromium
-/// asks again for each edge from those callbacks, recursively nesting the same lookup.
-struct AutoHideBars {
+/// asks again for taskbar state and every auto-hide edge, recursively nesting the same lookups.
+struct ExplorerQueries {
+    taskbar_state: isize,
     values: HashMap<tray_data::AutoHideQuery, isize>,
     updated: Instant,
     refresh: bool,
 }
 
-fn read_auto_hide(explorer: Explorer) -> Option<AutoHideBars> {
+fn read_explorer_queries(explorer: Explorer) -> Option<ExplorerQueries> {
+    let taskbar_state = copydata_to(
+        explorer,
+        WPARAM(0),
+        COPYDATA_APPBAR,
+        &tray_data::appbar_query(ABM_GETSTATE, explorer.pid),
+        FORWARD_TIMEOUT_MS,
+    )?
+    .0;
     let monitors = mypaper_desktop::monitors()
         .into_iter()
         .map(|r| Some([r.x, r.y, r.x + r.width, r.y + r.height]));
     let queries = std::iter::once(None)
         .chain(monitors)
         .flat_map(|monitor| (0..4).map(move |edge| tray_data::AutoHideQuery { edge, monitor }));
-    let extra = AUTO_HIDE.with(|cell| {
+    let extra = EXPLORER_QUERIES.with(|cell| {
         cell.borrow()
             .as_ref()
             .map(|s| s.values.keys().copied().collect::<Vec<_>>())
@@ -925,7 +950,7 @@ fn read_auto_hide(explorer: Explorer) -> Option<AutoHideBars> {
             continue;
         }
         let result = copydata_to(
-            explorer.tray,
+            explorer,
             WPARAM(0),
             COPYDATA_APPBAR,
             &query.request(explorer.pid),
@@ -933,7 +958,8 @@ fn read_auto_hide(explorer: Explorer) -> Option<AutoHideBars> {
         )?;
         values.insert(query, result.0);
     }
-    Some(AutoHideBars {
+    Some(ExplorerQueries {
+        taskbar_state,
         values,
         updated: Instant::now(),
         refresh: false,
@@ -941,7 +967,7 @@ fn read_auto_hide(explorer: Explorer) -> Option<AutoHideBars> {
 }
 
 fn auto_hide_answer(query: tray_data::AutoHideQuery) -> LRESULT {
-    AUTO_HIDE.with(|cell| {
+    EXPLORER_QUERIES.with(|cell| {
         let mut cache = cell.borrow_mut();
         let Some(cache) = cache.as_mut() else {
             return LRESULT(0);
@@ -959,8 +985,21 @@ fn auto_hide_answer(query: tray_data::AutoHideQuery) -> LRESULT {
     })
 }
 
-fn invalidate_auto_hide() {
-    AUTO_HIDE.with(|cell| {
+/// Like auto-hide queries, GETSTATE can arrive from callbacks during a relay. Relaying it again
+/// pumps more app-bar requests recursively; serve the last Explorer snapshot instead.
+fn taskbar_state_answer() -> LRESULT {
+    EXPLORER_QUERIES.with(|cell| {
+        cell.borrow_mut().as_mut().map_or(LRESULT(0), |cache| {
+            if cache.updated.elapsed() >= CHECK_EVERY {
+                cache.refresh = true;
+            }
+            LRESULT(cache.taskbar_state)
+        })
+    })
+}
+
+fn invalidate_explorer_queries() {
+    EXPLORER_QUERIES.with(|cell| {
         if let Some(cache) = cell.borrow_mut().as_mut() {
             cache.refresh = true;
         }
@@ -968,8 +1007,8 @@ fn invalidate_auto_hide() {
 }
 
 /// Refresh off the window-procedure stack. Callbacks during the read see the previous snapshot.
-fn refresh_auto_hide() {
-    let refresh = AUTO_HIDE.with(|cell| {
+fn refresh_explorer_queries() {
+    let refresh = EXPLORER_QUERIES.with(|cell| {
         cell.borrow_mut().as_mut().is_some_and(|cache| {
             let refresh = std::mem::take(&mut cache.refresh);
             if refresh {
@@ -980,16 +1019,16 @@ fn refresh_auto_hide() {
     });
     if refresh
         && let Some(explorer) = explorer()
-        && let Some(snapshot) = read_auto_hide(explorer)
+        && let Some(snapshot) = read_explorer_queries(explorer)
     {
-        AUTO_HIDE.with(|cell| *cell.borrow_mut() = Some(snapshot));
+        EXPLORER_QUERIES.with(|cell| *cell.borrow_mut() = Some(snapshot));
     }
 }
 
 thread_local! {
     /// Synchronous forwards in progress on the host's thread (see [`MAX_DEPTH`]).
     static DEPTH: Cell<u32> = const { Cell::new(0) };
-    static AUTO_HIDE: RefCell<Option<AutoHideBars>> = const { RefCell::new(None) };
+    static EXPLORER_QUERIES: RefCell<Option<ExplorerQueries>> = const { RefCell::new(None) };
 }
 
 /// Runs a synchronous forward, or answers `refused` when too many are nested already.
@@ -1024,7 +1063,7 @@ fn forward(msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
                     msg,
                     wparam,
                     lparam,
-                    SMTO_ABORTIFHUNG,
+                    SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
                     FORWARD_TIMEOUT_MS,
                     Some(&mut result),
                 );
@@ -1041,23 +1080,21 @@ fn forward(msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
 /// (0 when it didn't answer).
 fn forward_copydata(wparam: WPARAM, kind: usize, bytes: &[u8]) -> LRESULT {
     explorer()
-        .and_then(|explorer| copydata_to(explorer.tray, wparam, kind, bytes, FORWARD_TIMEOUT_MS))
+        .and_then(|explorer| copydata_to(explorer, wparam, kind, bytes, FORWARD_TIMEOUT_MS))
         .unwrap_or(LRESULT(0))
 }
 
 /// `None` when the send failed or timed out: the receiver may still read what it was given
 /// later, so whatever the message points at must stay alive.
 fn copydata_to(
-    target: HWND,
+    target: Explorer,
     wparam: WPARAM,
     kind: usize,
     bytes: &[u8],
     timeout_ms: u32,
 ) -> Option<LRESULT> {
-    let mut pid = 0;
-    // SAFETY: a read-only query; no path may relay to our own process, even before STATE exists.
-    unsafe { GetWindowThreadProcessId(target, Some(&mut pid)) };
-    if pid == 0 || pid == std::process::id() {
+    // Validate every send, including snapshots taken before STATE exists and queued notifications.
+    if !target.is_current() {
         return None;
     }
     let data = COPYDATASTRUCT {
@@ -1070,11 +1107,11 @@ fn copydata_to(
         // SAFETY: `data` and `bytes` outlive the synchronous call; the system copies them across.
         let sent = unsafe {
             SendMessageTimeoutW(
-                target,
+                target.tray,
                 WM_COPYDATA,
                 wparam,
                 LPARAM(&raw const data as isize),
-                SMTO_ABORTIFHUNG,
+                SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
                 timeout_ms,
                 Some(&mut result),
             )
@@ -1140,7 +1177,7 @@ fn on_notify(wparam: WPARAM, mut bytes: Vec<u8>) -> LRESULT {
 fn forward_queued(timeout_ms: u32) {
     while let Some((wparam, bytes, copies)) = with_state(|s| s.forwards.pop_front()).flatten() {
         let delivered = explorer().is_none_or(|explorer| {
-            copydata_to(explorer.tray, wparam, COPYDATA_NOTIFY, &bytes, timeout_ms).is_some()
+            copydata_to(explorer, wparam, COPYDATA_NOTIFY, &bytes, timeout_ms).is_some()
         });
         if !delivered {
             // Explorer may still take the message later and copy the icons then: they stay.
@@ -1193,6 +1230,7 @@ fn on_appbar(wparam: WPARAM, mut bytes: Vec<u8>) -> LRESULT {
         return forward_copydata(wparam, COPYDATA_APPBAR, &bytes);
     };
     match message.message {
+        ABM_GETSTATE => taskbar_state_answer(),
         tray_data::ABM_GETAUTOHIDEBAR | tray_data::ABM_GETAUTOHIDEBAREX => {
             tray_data::AutoHideQuery::parse(&bytes).map_or(LRESULT(0), auto_hide_answer)
         }
@@ -1223,7 +1261,7 @@ fn on_appbar(wparam: WPARAM, mut bytes: Vec<u8>) -> LRESULT {
             let result = forward_copydata(wparam, COPYDATA_APPBAR, &bytes);
             // State changes, registrations and removals may replace an auto-hide owner.
             if matches!(message.message, ABM_SETSTATE | 1 | 8 | 12) {
-                invalidate_auto_hide();
+                invalidate_explorer_queries();
             }
             result
         }
@@ -1251,13 +1289,9 @@ fn rehomed_appbar(
             return LRESULT(0);
         }
         tray_data::retarget_appbar(bytes, ours.0 as usize as u64, explorer.pid);
-        let Some(result) = copydata_to(
-            explorer.tray,
-            wparam,
-            COPYDATA_APPBAR,
-            bytes,
-            FORWARD_TIMEOUT_MS,
-        ) else {
+        let Some(result) =
+            copydata_to(explorer, wparam, COPYDATA_APPBAR, bytes, FORWARD_TIMEOUT_MS)
+        else {
             // Explorer may still open the block once it gets to the message: it stays (a leak of
             // one small block beats Explorer reading freed memory).
             let _ = SHUnlockShared(theirs);
@@ -1709,6 +1743,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn target_must_still_belong_to_the_current_desktop_shell() {
+        let ours = 10;
+        let explorer = 20;
+        assert!(valid_tray_owner(explorer, explorer, explorer, ours));
+        for (expected, actual, shell) in [
+            (0, 0, 0),                  // no shell
+            (explorer, 0, explorer),    // destroyed HWND
+            (ours, ours, ours),         // our own tray, even if selected as the shell
+            (explorer, ours, explorer), // HWND recycled into our process
+            (explorer, 30, explorer),   // HWND recycled into another process
+            (explorer, explorer, 30),   // Explorer restarted; the cached PID is stale
+            (30, 30, explorer),         // another explorer.exe, not the desktop shell
+        ] {
+            assert!(!valid_tray_owner(expected, actual, shell, ours));
+        }
+    }
+
+    #[test]
+    fn taskbar_state_queries_inside_callbacks_do_not_relay_back_to_explorer() {
+        EXPLORER_QUERIES.with(|cell| {
+            *cell.borrow_mut() = Some(ExplorerQueries {
+                taskbar_state: 3,
+                values: HashMap::new(),
+                updated: Instant::now(),
+                refresh: false,
+            });
+        });
+        let request = tray_data::appbar_query(ABM_GETSTATE, 42);
+        nested((), || {
+            for _ in 0..100 {
+                assert_eq!(on_appbar(WPARAM(0), request.to_vec()).0, 3);
+                assert_eq!(DEPTH.get(), 1);
+            }
+        });
+        EXPLORER_QUERIES.with(|cell| cell.borrow_mut().take());
+    }
+
+    #[test]
     fn auto_hide_queries_inside_callbacks_use_the_snapshot_for_every_edge_and_monitor() {
         // SAFETY: an invisible test auto-hide owner, destroyed below.
         let window = unsafe {
@@ -1732,8 +1804,9 @@ mod tests {
             .into_iter()
             .flat_map(|monitor| (0..4).map(move |edge| tray_data::AutoHideQuery { edge, monitor }))
             .collect();
-        AUTO_HIDE.with(|cell| {
-            *cell.borrow_mut() = Some(AutoHideBars {
+        EXPLORER_QUERIES.with(|cell| {
+            *cell.borrow_mut() = Some(ExplorerQueries {
+                taskbar_state: 0,
                 values: queries
                     .iter()
                     .map(|&query| {
@@ -1767,7 +1840,7 @@ mod tests {
             }
         });
         assert_eq!(DEPTH.get(), 0);
-        AUTO_HIDE.with(|cell| {
+        EXPLORER_QUERIES.with(|cell| {
             cell.borrow_mut().take();
         });
         // SAFETY: this test owns the window.
@@ -1794,7 +1867,16 @@ mod tests {
             )
         }
         .unwrap();
-        let answer = copydata_to(window, WPARAM(0), COPYDATA_APPBAR, &[], 10);
+        let answer = copydata_to(
+            Explorer {
+                tray: window,
+                pid: std::process::id(),
+            },
+            WPARAM(0),
+            COPYDATA_APPBAR,
+            &[],
+            10,
+        );
         // SAFETY: the window belongs to this test.
         unsafe { DestroyWindow(window) }.unwrap();
         assert_eq!(answer, None);
