@@ -21,6 +21,8 @@ struct T3 {
     /// Placed faces: instance → (face, size).
     faces: BTreeMap<String, (String, SizeClass)>,
     picks: BTreeMap<String, faces::Pick>,
+    /// Each list face's options (show subagents, finished until read, max items).
+    options: BTreeMap<String, faces::Options>,
     /// The instance settings' `threadLinks` (thread id → link), merged across faces.
     links: BTreeMap<String, String>,
     availability: Option<Availability>,
@@ -53,7 +55,8 @@ impl T3 {
     fn draw(&self, instance: &str, snapshot: &Snapshot) {
         let Some((face, size)) = self.faces.get(instance) else { return };
         let pick = self.picks.get(instance).cloned().unwrap_or_default();
-        let mut view = faces::face(face, *size, snapshot, &pick, now_ms());
+        let options = self.options.get(instance).cloned().unwrap_or_default();
+        let mut view = faces::face_with(face, *size, snapshot, &pick, &options, now_ms());
         if let Some(notice) = &self.notice {
             view.footer = Some(notice.clone());
         }
@@ -230,6 +233,7 @@ impl T3 {
 
     fn open(&mut self, open: &FaceOpen) {
         let settings = guest::settings(open);
+        self.options.insert(open.instance.clone(), faces::Options::from_settings(&settings));
         if let Some(links) = settings["threadLinks"].as_object() {
             self.links.extend(links.iter().filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_owned()))));
         }
@@ -349,8 +353,14 @@ impl Plugin for T3 {
     fn on_event(&mut self, event: Event) {
         match event {
             Event::Open(open) | Event::Resize(open) => self.open(&open),
+            // Changed from the widget's Options… or Studio: redraw that face in place.
+            Event::Options(open) => {
+                self.options.insert(open.instance.clone(), faces::Options::from_settings(&guest::settings(&open)));
+                self.draw(&open.instance, &self.snapshot());
+            }
             Event::Close(instance) => {
                 self.faces.remove(&instance);
+                self.options.remove(&instance);
                 self.picks.remove(&instance);
                 if self.faces.is_empty() {
                     timers::cancel("minute");

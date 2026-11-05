@@ -5,8 +5,15 @@
   "component": "t3.wasm",
   "api": "0.1",
   "faces": [
-    { "id": "running", "name": "Running now", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } },
-    { "id": "attention", "name": "Needs you", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } },
+    { "id": "running", "name": "Running now", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] }, "options": [
+      { "type": "boolean", "key": "show-subagents", "label": "Show subagents", "default": true },
+      { "type": "boolean", "key": "show-finished", "label": "Show finished until read", "default": true },
+      { "type": "number", "key": "max-items", "label": "Max items", "min": 3, "max": 50, "step": 1, "default": 20 }
+    ] },
+    { "id": "attention", "name": "Needs you", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] }, "options": [
+      { "type": "boolean", "key": "show-subagents", "label": "Show subagents", "default": true },
+      { "type": "number", "key": "max-items", "label": "Max items", "min": 3, "max": 50, "step": 1, "default": 20 }
+    ] },
     { "id": "limits", "name": "Limits", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } },
     { "id": "usage", "name": "Usage", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } },
     { "id": "new", "name": "New thread", "icon": "terminal", "size": { "default": [8,5], "min": [4,3], "max": [12,10] } }

@@ -7,8 +7,42 @@ use crate::{Availability, Data, Snapshot};
 use mypaper_plugin_sdk::view::SelectOption;
 use mypaper_plugin_sdk::{Face, Role, Series, SizeClass, Tone, View};
 
-/// `face` at `size` from the provider's snapshot; `pick` is the New thread instance's choices.
+/// `face` at `size` with the default options (fixtures and benches).
 pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, pick: &Pick, now_ms: i64) -> Face {
+    face_with(face, size, snapshot, pick, &Options::default(), now_ms)
+}
+
+/// A Running now / Needs you instance's options (`options` in plugin.json; the widget's
+/// right-click Options… and Studio edit them, and they arrive in `face.open` / `face.options`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Options {
+    /// The subagent rows under each thread (the thread's line still counts them).
+    pub show_subagents: bool,
+    /// Running now keeps a finished thread, tagged Done, until it's read in T3.
+    pub show_finished: bool,
+    /// Rows listed at most; the footer still counts every thread.
+    pub max_items: usize,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self { show_subagents: true, show_finished: true, max_items: 20 }
+    }
+}
+
+impl Options {
+    pub fn from_settings(settings: &serde_json::Value) -> Self {
+        let d = Self::default();
+        Self {
+            show_subagents: settings["show-subagents"].as_bool().unwrap_or(d.show_subagents),
+            show_finished: settings["show-finished"].as_bool().unwrap_or(d.show_finished),
+            max_items: settings["max-items"].as_f64().map_or(d.max_items, |n| n.clamp(1.0, 200.0) as usize),
+        }
+    }
+}
+
+/// `face` at `size` from the provider's snapshot; `pick` is the New thread instance's choices.
+pub fn face_with(face: &str, size: SizeClass, snapshot: &Snapshot, pick: &Pick, options: &Options, now_ms: i64) -> Face {
     let mut summary = None;
     let body = match &snapshot.data {
         Some(Data::T3(state)) => match face {
@@ -23,8 +57,8 @@ pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, pick: &Pick, now_m
             "limits" => limits(state, size, now_ms),
             "usage" => usage(state, size),
             "new" => composer(state, size, pick),
-            "attention" => threads(state, size, true, now_ms, &mut summary),
-            _ => threads(state, size, false, now_ms, &mut summary),
+            "attention" => threads(state, size, true, options, now_ms, &mut summary),
+            _ => threads(state, size, false, options, now_ms, &mut summary),
         },
         None if face == "status" => View::text("T3", Role::Caption),
         None => match &snapshot.availability {
@@ -215,10 +249,12 @@ pub(crate) fn groups(state: &State, now_ms: i64) -> Vec<Group<'_>> {
     groups
 }
 
-fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64, summary: &mut Option<String>) -> View {
+fn threads(state: &State, size: SizeClass, attention: bool, options: &Options, now_ms: i64, summary: &mut Option<String>) -> View {
     let mut groups = groups(state, now_ms);
     if attention {
         groups.retain(|g| rank(g.1) == 0);
+    } else if !options.show_finished {
+        groups.retain(|g| g.1 != Pill::Done);
     }
     let agents: usize = groups.iter().map(|g| g.2.len()).sum();
     let count = groups.len();
@@ -253,10 +289,10 @@ fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64, summary
         };
     }
     let mut rows = Vec::new();
-    for (top, pill, agents) in &groups {
+    for (top, pill, agents) in groups.iter().take(options.max_items) {
         rows.push(item(top, *pill, detail(state, top, *pill, agents.len(), now_ms), false));
         // Large tiles list the agents under their thread; the rest are counted in the line above.
-        if size == SizeClass::Large {
+        if options.show_subagents && size == SizeClass::Large {
             for (agent, pill) in agents.iter().take(AGENTS_SHOWN) {
                 rows.push(item(agent, *pill, None, true));
             }
@@ -276,9 +312,10 @@ fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64, summary
             });
         }
     }
-    // One list node under the fixed chrome: it draws the whole rows that fit (a scroll view can
-    // wrap it as is); the footer keeps the full count.
-    View::List { children: rows, gap: Some(2.0) }
+    // One list scrolling under the fixed chrome (the shell scrolls it; the position is kept
+    // per face); the footer keeps the full count.
+    let list = View::List { children: rows, gap: Some(2.0) };
+    View::Scroll { id: if attention { "needs-you" } else { "running" }.into(), child: Box::new(list), on_reach_end: None }
 }
 
 fn left(limit: &Limit) -> f32 {

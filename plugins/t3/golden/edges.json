@@ -291,100 +291,108 @@
     "attention": {
       "large": {
         "body": {
-          "children": [
-            {
-              "action": "thread:t0",
-              "detail": "Codex · waiting <1m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 0",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t7",
-              "detail": "Codex · waiting 21m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 7",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t14",
-              "detail": "Codex · waiting 42m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 14",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t21",
-              "detail": "Codex · waiting 1h",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 21",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t28",
-              "detail": "Codex · waiting 1h",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 28",
-              "tone": "warning"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:t0",
+                "detail": "Codex · waiting <1m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 0",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t7",
+                "detail": "Codex · waiting 21m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 7",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t14",
+                "detail": "Codex · waiting 42m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 14",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t21",
+                "detail": "Codex · waiting 1h",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 21",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t28",
+                "detail": "Codex · waiting 1h",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 28",
+                "tone": "warning"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "needs-you",
+          "kind": "scroll"
         },
         "footer": "5 threads need you",
         "refresh": true
       },
       "medium": {
         "body": {
-          "children": [
-            {
-              "action": "thread:t0",
-              "detail": "Codex · waiting <1m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 0",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t7",
-              "detail": "Codex · waiting 21m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 7",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t14",
-              "detail": "Codex · waiting 42m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 14",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t21",
-              "detail": "Codex · waiting 1h",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 21",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t28",
-              "detail": "Codex · waiting 1h",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 28",
-              "tone": "warning"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:t0",
+                "detail": "Codex · waiting <1m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 0",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t7",
+                "detail": "Codex · waiting 21m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 7",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t14",
+                "detail": "Codex · waiting 42m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 14",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t21",
+                "detail": "Codex · waiting 1h",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 21",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t28",
+                "detail": "Codex · waiting 1h",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 28",
+                "tone": "warning"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "needs-you",
+          "kind": "scroll"
         },
         "footer": "5 threads need you",
         "refresh": true
@@ -661,500 +669,348 @@
     "running": {
       "large": {
         "body": {
-          "children": [
-            {
-              "action": "thread:t0",
-              "detail": "Codex · waiting <1m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 0",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t7",
-              "detail": "Codex · waiting 21m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 7",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t14",
-              "detail": "Codex · waiting 42m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 14",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t21",
-              "detail": "Codex · waiting 1h",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 21",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t28",
-              "detail": "Codex · waiting 1h",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 28",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t1",
-              "detail": "Codex · running 3m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 1",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t2",
-              "detail": "Codex · running 6m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 2",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t3",
-              "detail": "Codex · running 9m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 3",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t4",
-              "detail": "Codex · running 12m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 4",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t5",
-              "detail": "Codex · running 15m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 5",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t6",
-              "detail": "Codex · running 18m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 6",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t8",
-              "detail": "Codex · running 24m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 8",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t9",
-              "detail": "Codex · running 27m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 9",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t10",
-              "detail": "Codex · running 30m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 10",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t11",
-              "detail": "Codex · running 33m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 11",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t12",
-              "detail": "Codex · running 36m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 12",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t13",
-              "detail": "Codex · running 39m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 13",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t15",
-              "detail": "Codex · running 45m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 15",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t16",
-              "detail": "Codex · running 48m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 16",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t17",
-              "detail": "Codex · running 51m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 17",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t18",
-              "detail": "Codex · running 54m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 18",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t19",
-              "detail": "Codex · running 57m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 19",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t20",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 20",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t22",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 22",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t23",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 23",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t24",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 24",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t25",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 25",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t26",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 26",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t27",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 27",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t29",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 29",
-              "tone": "secondary"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:t0",
+                "detail": "Codex · waiting <1m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 0",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t7",
+                "detail": "Codex · waiting 21m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 7",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t14",
+                "detail": "Codex · waiting 42m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 14",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t21",
+                "detail": "Codex · waiting 1h",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 21",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t28",
+                "detail": "Codex · waiting 1h",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 28",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t1",
+                "detail": "Codex · running 3m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 1",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t2",
+                "detail": "Codex · running 6m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 2",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t3",
+                "detail": "Codex · running 9m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 3",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t4",
+                "detail": "Codex · running 12m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 4",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t5",
+                "detail": "Codex · running 15m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 5",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t6",
+                "detail": "Codex · running 18m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 6",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t8",
+                "detail": "Codex · running 24m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 8",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t9",
+                "detail": "Codex · running 27m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 9",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t10",
+                "detail": "Codex · running 30m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 10",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t11",
+                "detail": "Codex · running 33m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 11",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t12",
+                "detail": "Codex · running 36m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 12",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t13",
+                "detail": "Codex · running 39m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 13",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t15",
+                "detail": "Codex · running 45m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 15",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t16",
+                "detail": "Codex · running 48m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 16",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t17",
+                "detail": "Codex · running 51m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 17",
+                "tone": "secondary"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "running",
+          "kind": "scroll"
         },
         "footer": "30 running",
         "refresh": true
       },
       "medium": {
         "body": {
-          "children": [
-            {
-              "action": "thread:t0",
-              "detail": "Codex · waiting <1m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 0",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t7",
-              "detail": "Codex · waiting 21m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 7",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t14",
-              "detail": "Codex · waiting 42m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 14",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t21",
-              "detail": "Codex · waiting 1h",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 21",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t28",
-              "detail": "Codex · waiting 1h",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Thread number 28",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:t1",
-              "detail": "Codex · running 3m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 1",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t2",
-              "detail": "Codex · running 6m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 2",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t3",
-              "detail": "Codex · running 9m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 3",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t4",
-              "detail": "Codex · running 12m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 4",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t5",
-              "detail": "Codex · running 15m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 5",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t6",
-              "detail": "Codex · running 18m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 6",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t8",
-              "detail": "Codex · running 24m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 8",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t9",
-              "detail": "Codex · running 27m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 9",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t10",
-              "detail": "Codex · running 30m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 10",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t11",
-              "detail": "Codex · running 33m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 11",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t12",
-              "detail": "Codex · running 36m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 12",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t13",
-              "detail": "Codex · running 39m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 13",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t15",
-              "detail": "Codex · running 45m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 15",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t16",
-              "detail": "Codex · running 48m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 16",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t17",
-              "detail": "Codex · running 51m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 17",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t18",
-              "detail": "Codex · running 54m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 18",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t19",
-              "detail": "Codex · running 57m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 19",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t20",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 20",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t22",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 22",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t23",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 23",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t24",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 24",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t25",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 25",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t26",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 26",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t27",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 27",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:t29",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Thread number 29",
-              "tone": "secondary"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:t0",
+                "detail": "Codex · waiting <1m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 0",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t7",
+                "detail": "Codex · waiting 21m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 7",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t14",
+                "detail": "Codex · waiting 42m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 14",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t21",
+                "detail": "Codex · waiting 1h",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 21",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t28",
+                "detail": "Codex · waiting 1h",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Thread number 28",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:t1",
+                "detail": "Codex · running 3m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 1",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t2",
+                "detail": "Codex · running 6m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 2",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t3",
+                "detail": "Codex · running 9m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 3",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t4",
+                "detail": "Codex · running 12m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 4",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t5",
+                "detail": "Codex · running 15m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 5",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t6",
+                "detail": "Codex · running 18m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 6",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t8",
+                "detail": "Codex · running 24m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 8",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t9",
+                "detail": "Codex · running 27m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 9",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t10",
+                "detail": "Codex · running 30m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 10",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t11",
+                "detail": "Codex · running 33m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 11",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t12",
+                "detail": "Codex · running 36m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 12",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t13",
+                "detail": "Codex · running 39m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 13",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t15",
+                "detail": "Codex · running 45m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 15",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t16",
+                "detail": "Codex · running 48m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 16",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:t17",
+                "detail": "Codex · running 51m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Thread number 17",
+                "tone": "secondary"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "running",
+          "kind": "scroll"
         },
         "footer": "30 running",
         "refresh": true
@@ -1650,36 +1506,44 @@
     "running": {
       "large": {
         "body": {
-          "children": [
-            {
-              "action": "thread:solo",
-              "detail": "Codex",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Investigate why the dock's liquid glass rim flickers on the secondary monitor after a DPI change while a fullscreen app is open",
-              "tone": "secondary"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:solo",
+                "detail": "Codex",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Investigate why the dock's liquid glass rim flickers on the secondary monitor after a DPI change while a fullscreen app is open",
+                "tone": "secondary"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "running",
+          "kind": "scroll"
         },
         "footer": "1 running",
         "refresh": true
       },
       "medium": {
         "body": {
-          "children": [
-            {
-              "action": "thread:solo",
-              "detail": "Codex",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Investigate why the dock's liquid glass rim flickers on the secondary monitor after a DPI change while a fullscreen app is open",
-              "tone": "secondary"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:solo",
+                "detail": "Codex",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Investigate why the dock's liquid glass rim flickers on the secondary monitor after a DPI change while a fullscreen app is open",
+                "tone": "secondary"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "running",
+          "kind": "scroll"
         },
         "footer": "1 running",
         "refresh": true
@@ -1752,76 +1616,84 @@
     "attention": {
       "large": {
         "body": {
-          "children": [
-            {
-              "action": "thread:thread-0",
-              "detail": "Opus 5.5 · waiting 4m",
-              "kind": "item",
-              "tag": "Approval needed",
-              "title": "Review desktop permissions",
-              "tone": "warning"
-            },
-            {
-              "children": [
-                {
-                  "action": "approve:thread-0:approval",
-                  "icon": "check",
-                  "kind": "button",
-                  "label": "Approve",
-                  "primary": false
-                },
-                {
-                  "action": "deny:thread-0:approval",
-                  "kind": "button",
-                  "label": "Deny",
-                  "primary": false
-                }
-              ],
-              "columns": 2,
-              "gap": 6.0,
-              "kind": "grid"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:thread-0",
+                "detail": "Opus 5.5 · waiting 4m",
+                "kind": "item",
+                "tag": "Approval needed",
+                "title": "Review desktop permissions",
+                "tone": "warning"
+              },
+              {
+                "children": [
+                  {
+                    "action": "approve:thread-0:approval",
+                    "icon": "check",
+                    "kind": "button",
+                    "label": "Approve",
+                    "primary": false
+                  },
+                  {
+                    "action": "deny:thread-0:approval",
+                    "kind": "button",
+                    "label": "Deny",
+                    "primary": false
+                  }
+                ],
+                "columns": 2,
+                "gap": 6.0,
+                "kind": "grid"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "needs-you",
+          "kind": "scroll"
         },
         "footer": "Disconnected · showing last state",
         "refresh": true
       },
       "medium": {
         "body": {
-          "children": [
-            {
-              "action": "thread:thread-0",
-              "detail": "Opus 5.5 · waiting 4m",
-              "kind": "item",
-              "tag": "Approval needed",
-              "title": "Review desktop permissions",
-              "tone": "warning"
-            },
-            {
-              "children": [
-                {
-                  "action": "approve:thread-0:approval",
-                  "icon": "check",
-                  "kind": "button",
-                  "label": "Approve",
-                  "primary": false
-                },
-                {
-                  "action": "deny:thread-0:approval",
-                  "kind": "button",
-                  "label": "Deny",
-                  "primary": false
-                }
-              ],
-              "columns": 2,
-              "gap": 6.0,
-              "kind": "grid"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:thread-0",
+                "detail": "Opus 5.5 · waiting 4m",
+                "kind": "item",
+                "tag": "Approval needed",
+                "title": "Review desktop permissions",
+                "tone": "warning"
+              },
+              {
+                "children": [
+                  {
+                    "action": "approve:thread-0:approval",
+                    "icon": "check",
+                    "kind": "button",
+                    "label": "Approve",
+                    "primary": false
+                  },
+                  {
+                    "action": "deny:thread-0:approval",
+                    "kind": "button",
+                    "label": "Deny",
+                    "primary": false
+                  }
+                ],
+                "columns": 2,
+                "gap": 6.0,
+                "kind": "grid"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "needs-you",
+          "kind": "scroll"
         },
         "footer": "Disconnected · showing last state",
         "refresh": true
@@ -2083,268 +1955,276 @@
     "running": {
       "large": {
         "body": {
-          "children": [
-            {
-              "action": "thread:thread-0",
-              "detail": "Opus 5.5 · waiting 4m",
-              "kind": "item",
-              "tag": "Approval needed",
-              "title": "Review desktop permissions",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:thread-3",
-              "detail": "Codex · running 1m",
-              "kind": "item",
-              "tag": "Starting",
-              "title": "Decode server.getConfig without a Value tree",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-1",
-              "detail": "Opus 5.5 · running 12m · 4 agents",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Redesign the T3 faces in mypaper's own style",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:agent-0",
-              "kind": "item",
-              "nested": true,
-              "tag": "Working",
-              "title": "Check size sheet cell 1",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:agent-1",
-              "kind": "item",
-              "nested": true,
-              "tag": "Working",
-              "title": "Check size sheet cell 2",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:agent-2",
-              "kind": "item",
-              "nested": true,
-              "tag": "Working",
-              "title": "Check size sheet cell 3",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-2",
-              "detail": "GPT-6.1 Sol · running 25m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Fix half-size plugin layout",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-6",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 6",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-7",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 7",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-8",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 8",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-9",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 9",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-10",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 10",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-11",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 11",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-12",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 12",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-13",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 13",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-4",
-              "detail": "GPT-6.1 Sol · 18m ago",
-              "kind": "item",
-              "tag": "Done",
-              "title": "Wire the dock magnification spring",
-              "tone": "positive"
-            },
-            {
-              "action": "thread:thread-5",
-              "detail": "Codex · 1h ago",
-              "kind": "item",
-              "tag": "Failed",
-              "title": "Port Discord notifications",
-              "tone": "destructive"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:thread-0",
+                "detail": "Opus 5.5 · waiting 4m",
+                "kind": "item",
+                "tag": "Approval needed",
+                "title": "Review desktop permissions",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:thread-3",
+                "detail": "Codex · running 1m",
+                "kind": "item",
+                "tag": "Starting",
+                "title": "Decode server.getConfig without a Value tree",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-1",
+                "detail": "Opus 5.5 · running 12m · 4 agents",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Redesign the T3 faces in mypaper's own style",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:agent-0",
+                "kind": "item",
+                "nested": true,
+                "tag": "Working",
+                "title": "Check size sheet cell 1",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:agent-1",
+                "kind": "item",
+                "nested": true,
+                "tag": "Working",
+                "title": "Check size sheet cell 2",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:agent-2",
+                "kind": "item",
+                "nested": true,
+                "tag": "Working",
+                "title": "Check size sheet cell 3",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-2",
+                "detail": "GPT-6.1 Sol · running 25m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Fix half-size plugin layout",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-6",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 6",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-7",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 7",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-8",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 8",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-9",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 9",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-10",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 10",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-11",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 11",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-12",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 12",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-13",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 13",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-4",
+                "detail": "GPT-6.1 Sol · 18m ago",
+                "kind": "item",
+                "tag": "Done",
+                "title": "Wire the dock magnification spring",
+                "tone": "positive"
+              },
+              {
+                "action": "thread:thread-5",
+                "detail": "Codex · 1h ago",
+                "kind": "item",
+                "tag": "Failed",
+                "title": "Port Discord notifications",
+                "tone": "destructive"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "running",
+          "kind": "scroll"
         },
         "footer": "Disconnected · showing last state",
         "refresh": true
       },
       "medium": {
         "body": {
-          "children": [
-            {
-              "action": "thread:thread-0",
-              "detail": "Opus 5.5 · waiting 4m",
-              "kind": "item",
-              "tag": "Approval needed",
-              "title": "Review desktop permissions",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:thread-3",
-              "detail": "Codex · running 1m",
-              "kind": "item",
-              "tag": "Starting",
-              "title": "Decode server.getConfig without a Value tree",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-1",
-              "detail": "Opus 5.5 · running 12m · 4 agents",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Redesign the T3 faces in mypaper's own style",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-2",
-              "detail": "GPT-6.1 Sol · running 25m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Fix half-size plugin layout",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-6",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 6",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-7",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 7",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-8",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 8",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-9",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 9",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-10",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 10",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-11",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 11",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-12",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 12",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-13",
-              "detail": "Codex · running 1h",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Build native widget 13",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:thread-4",
-              "detail": "GPT-6.1 Sol · 18m ago",
-              "kind": "item",
-              "tag": "Done",
-              "title": "Wire the dock magnification spring",
-              "tone": "positive"
-            },
-            {
-              "action": "thread:thread-5",
-              "detail": "Codex · 1h ago",
-              "kind": "item",
-              "tag": "Failed",
-              "title": "Port Discord notifications",
-              "tone": "destructive"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:thread-0",
+                "detail": "Opus 5.5 · waiting 4m",
+                "kind": "item",
+                "tag": "Approval needed",
+                "title": "Review desktop permissions",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:thread-3",
+                "detail": "Codex · running 1m",
+                "kind": "item",
+                "tag": "Starting",
+                "title": "Decode server.getConfig without a Value tree",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-1",
+                "detail": "Opus 5.5 · running 12m · 4 agents",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Redesign the T3 faces in mypaper's own style",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-2",
+                "detail": "GPT-6.1 Sol · running 25m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Fix half-size plugin layout",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-6",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 6",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-7",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 7",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-8",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 8",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-9",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 9",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-10",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 10",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-11",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 11",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-12",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 12",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-13",
+                "detail": "Codex · running 1h",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Build native widget 13",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:thread-4",
+                "detail": "GPT-6.1 Sol · 18m ago",
+                "kind": "item",
+                "tag": "Done",
+                "title": "Wire the dock magnification spring",
+                "tone": "positive"
+              },
+              {
+                "action": "thread:thread-5",
+                "detail": "Codex · 1h ago",
+                "kind": "item",
+                "tag": "Failed",
+                "title": "Port Discord notifications",
+                "tone": "destructive"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "running",
+          "kind": "scroll"
         },
         "footer": "Disconnected · showing last state",
         "refresh": true
@@ -2584,92 +2464,100 @@
     "attention": {
       "large": {
         "body": {
-          "children": [
-            {
-              "action": "thread:s-approval",
-              "detail": "Codex · waiting 1m",
-              "kind": "item",
-              "tag": "Approval needed",
-              "title": "Wants to run cargo build",
-              "tone": "warning"
-            },
-            {
-              "children": [
-                {
-                  "action": "approve:s-approval:a",
-                  "icon": "check",
-                  "kind": "button",
-                  "label": "Approve",
-                  "primary": false
-                },
-                {
-                  "action": "deny:s-approval:a",
-                  "kind": "button",
-                  "label": "Deny",
-                  "primary": false
-                }
-              ],
-              "columns": 2,
-              "gap": 6.0,
-              "kind": "grid"
-            },
-            {
-              "action": "thread:s-input",
-              "detail": "Codex · waiting 3m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Asks which icon set to use",
-              "tone": "warning"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:s-approval",
+                "detail": "Codex · waiting 1m",
+                "kind": "item",
+                "tag": "Approval needed",
+                "title": "Wants to run cargo build",
+                "tone": "warning"
+              },
+              {
+                "children": [
+                  {
+                    "action": "approve:s-approval:a",
+                    "icon": "check",
+                    "kind": "button",
+                    "label": "Approve",
+                    "primary": false
+                  },
+                  {
+                    "action": "deny:s-approval:a",
+                    "kind": "button",
+                    "label": "Deny",
+                    "primary": false
+                  }
+                ],
+                "columns": 2,
+                "gap": 6.0,
+                "kind": "grid"
+              },
+              {
+                "action": "thread:s-input",
+                "detail": "Codex · waiting 3m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Asks which icon set to use",
+                "tone": "warning"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "needs-you",
+          "kind": "scroll"
         },
         "footer": "2 threads need you",
         "refresh": true
       },
       "medium": {
         "body": {
-          "children": [
-            {
-              "action": "thread:s-approval",
-              "detail": "Codex · waiting 1m",
-              "kind": "item",
-              "tag": "Approval needed",
-              "title": "Wants to run cargo build",
-              "tone": "warning"
-            },
-            {
-              "children": [
-                {
-                  "action": "approve:s-approval:a",
-                  "icon": "check",
-                  "kind": "button",
-                  "label": "Approve",
-                  "primary": false
-                },
-                {
-                  "action": "deny:s-approval:a",
-                  "kind": "button",
-                  "label": "Deny",
-                  "primary": false
-                }
-              ],
-              "columns": 2,
-              "gap": 6.0,
-              "kind": "grid"
-            },
-            {
-              "action": "thread:s-input",
-              "detail": "Codex · waiting 3m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Asks which icon set to use",
-              "tone": "warning"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:s-approval",
+                "detail": "Codex · waiting 1m",
+                "kind": "item",
+                "tag": "Approval needed",
+                "title": "Wants to run cargo build",
+                "tone": "warning"
+              },
+              {
+                "children": [
+                  {
+                    "action": "approve:s-approval:a",
+                    "icon": "check",
+                    "kind": "button",
+                    "label": "Approve",
+                    "primary": false
+                  },
+                  {
+                    "action": "deny:s-approval:a",
+                    "kind": "button",
+                    "label": "Deny",
+                    "primary": false
+                  }
+                ],
+                "columns": 2,
+                "gap": 6.0,
+                "kind": "grid"
+              },
+              {
+                "action": "thread:s-input",
+                "detail": "Codex · waiting 3m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Asks which icon set to use",
+                "tone": "warning"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "needs-you",
+          "kind": "scroll"
         },
         "footer": "2 threads need you",
         "refresh": true
@@ -2740,148 +2628,156 @@
     "running": {
       "large": {
         "body": {
-          "children": [
-            {
-              "action": "thread:s-approval",
-              "detail": "Codex · waiting 1m",
-              "kind": "item",
-              "tag": "Approval needed",
-              "title": "Wants to run cargo build",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:s-input",
-              "detail": "Codex · waiting 3m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Asks which icon set to use",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:s-work",
-              "detail": "Opus 5.5 · running 7m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Working on the dock spring",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:s-blocked",
-              "detail": "Codex · waiting 9m",
-              "kind": "item",
-              "tag": "Waiting",
-              "title": "Waits on another thread",
-              "tone": "tertiary"
-            },
-            {
-              "action": "thread:s-wait",
-              "detail": "Codex · waiting 15m · 2 agents",
-              "kind": "item",
-              "tag": "Waiting",
-              "title": "Idle, its subagents still running",
-              "tone": "tertiary"
-            },
-            {
-              "action": "thread:s-agent-1",
-              "kind": "item",
-              "nested": true,
-              "tag": "Working",
-              "title": "Subagent: render the sheet",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:s-agent-2",
-              "kind": "item",
-              "nested": true,
-              "tag": "Working",
-              "title": "Subagent: check light mode",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:s-done",
-              "detail": "Codex · 12m ago",
-              "kind": "item",
-              "tag": "Done",
-              "title": "Finished, not read yet",
-              "tone": "positive"
-            },
-            {
-              "action": "thread:s-failed",
-              "detail": "Codex · 20m ago",
-              "kind": "item",
-              "tag": "Failed",
-              "title": "Failed, never opened",
-              "tone": "destructive"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:s-approval",
+                "detail": "Codex · waiting 1m",
+                "kind": "item",
+                "tag": "Approval needed",
+                "title": "Wants to run cargo build",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:s-input",
+                "detail": "Codex · waiting 3m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Asks which icon set to use",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:s-work",
+                "detail": "Opus 5.5 · running 7m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Working on the dock spring",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:s-blocked",
+                "detail": "Codex · waiting 9m",
+                "kind": "item",
+                "tag": "Waiting",
+                "title": "Waits on another thread",
+                "tone": "tertiary"
+              },
+              {
+                "action": "thread:s-wait",
+                "detail": "Codex · waiting 15m · 2 agents",
+                "kind": "item",
+                "tag": "Waiting",
+                "title": "Idle, its subagents still running",
+                "tone": "tertiary"
+              },
+              {
+                "action": "thread:s-agent-1",
+                "kind": "item",
+                "nested": true,
+                "tag": "Working",
+                "title": "Subagent: render the sheet",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:s-agent-2",
+                "kind": "item",
+                "nested": true,
+                "tag": "Working",
+                "title": "Subagent: check light mode",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:s-done",
+                "detail": "Codex · 12m ago",
+                "kind": "item",
+                "tag": "Done",
+                "title": "Finished, not read yet",
+                "tone": "positive"
+              },
+              {
+                "action": "thread:s-failed",
+                "detail": "Codex · 20m ago",
+                "kind": "item",
+                "tag": "Failed",
+                "title": "Failed, never opened",
+                "tone": "destructive"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "running",
+          "kind": "scroll"
         },
         "footer": "5 running · 2 agents · 2 unread",
         "refresh": true
       },
       "medium": {
         "body": {
-          "children": [
-            {
-              "action": "thread:s-approval",
-              "detail": "Codex · waiting 1m",
-              "kind": "item",
-              "tag": "Approval needed",
-              "title": "Wants to run cargo build",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:s-input",
-              "detail": "Codex · waiting 3m",
-              "kind": "item",
-              "tag": "Needs input",
-              "title": "Asks which icon set to use",
-              "tone": "warning"
-            },
-            {
-              "action": "thread:s-work",
-              "detail": "Opus 5.5 · running 7m",
-              "kind": "item",
-              "tag": "Working",
-              "title": "Working on the dock spring",
-              "tone": "secondary"
-            },
-            {
-              "action": "thread:s-blocked",
-              "detail": "Codex · waiting 9m",
-              "kind": "item",
-              "tag": "Waiting",
-              "title": "Waits on another thread",
-              "tone": "tertiary"
-            },
-            {
-              "action": "thread:s-wait",
-              "detail": "Codex · waiting 15m · 2 agents",
-              "kind": "item",
-              "tag": "Waiting",
-              "title": "Idle, its subagents still running",
-              "tone": "tertiary"
-            },
-            {
-              "action": "thread:s-done",
-              "detail": "Codex · 12m ago",
-              "kind": "item",
-              "tag": "Done",
-              "title": "Finished, not read yet",
-              "tone": "positive"
-            },
-            {
-              "action": "thread:s-failed",
-              "detail": "Codex · 20m ago",
-              "kind": "item",
-              "tag": "Failed",
-              "title": "Failed, never opened",
-              "tone": "destructive"
-            }
-          ],
-          "gap": 2.0,
-          "kind": "list"
+          "child": {
+            "children": [
+              {
+                "action": "thread:s-approval",
+                "detail": "Codex · waiting 1m",
+                "kind": "item",
+                "tag": "Approval needed",
+                "title": "Wants to run cargo build",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:s-input",
+                "detail": "Codex · waiting 3m",
+                "kind": "item",
+                "tag": "Needs input",
+                "title": "Asks which icon set to use",
+                "tone": "warning"
+              },
+              {
+                "action": "thread:s-work",
+                "detail": "Opus 5.5 · running 7m",
+                "kind": "item",
+                "tag": "Working",
+                "title": "Working on the dock spring",
+                "tone": "secondary"
+              },
+              {
+                "action": "thread:s-blocked",
+                "detail": "Codex · waiting 9m",
+                "kind": "item",
+                "tag": "Waiting",
+                "title": "Waits on another thread",
+                "tone": "tertiary"
+              },
+              {
+                "action": "thread:s-wait",
+                "detail": "Codex · waiting 15m · 2 agents",
+                "kind": "item",
+                "tag": "Waiting",
+                "title": "Idle, its subagents still running",
+                "tone": "tertiary"
+              },
+              {
+                "action": "thread:s-done",
+                "detail": "Codex · 12m ago",
+                "kind": "item",
+                "tag": "Done",
+                "title": "Finished, not read yet",
+                "tone": "positive"
+              },
+              {
+                "action": "thread:s-failed",
+                "detail": "Codex · 20m ago",
+                "kind": "item",
+                "tag": "Failed",
+                "title": "Failed, never opened",
+                "tone": "destructive"
+              }
+            ],
+            "gap": 2.0,
+            "kind": "list"
+          },
+          "id": "running",
+          "kind": "scroll"
         },
         "footer": "5 running · 2 agents · 2 unread",
         "refresh": true
