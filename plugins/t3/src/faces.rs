@@ -92,19 +92,21 @@ fn plural(n: usize, word: &str) -> String {
 /// Top-level threads with their subagents rolled up (T3's own grouping).
 fn threads(state: &State, size: SizeClass, attention: bool) -> View {
     let wanted = |t: &Thread| if attention { t.attention() } else { t.running() };
-    let parent = |t: &Thread| state.details.get(&t.id).and_then(|d| d.parent_id.clone());
-    let mut tops: Vec<&Thread> = state.threads.iter().filter(|t| parent(t).is_none()).collect();
+    // One pass over the threads: the tops, and each wanted agent under its parent. Every redraw
+    // (a click included) runs this, so it must stay linear in the thread count.
+    let mut tops: Vec<&Thread> = Vec::new();
+    let mut agents_of: std::collections::HashMap<&str, Vec<&Thread>> = std::collections::HashMap::new();
+    for thread in &state.threads {
+        match state.details.get(&thread.id).and_then(|d| d.parent_id.as_deref()) {
+            None => tops.push(thread),
+            Some(parent) if wanted(thread) => agents_of.entry(parent).or_default().push(thread),
+            Some(_) => {}
+        }
+    }
     tops.sort_by(|a, b| b.attention().cmp(&a.attention()).then_with(|| b.updated_at.cmp(&a.updated_at)));
     let groups: Vec<(&Thread, Vec<&Thread>)> = tops
         .into_iter()
-        .map(|top| {
-            let agents = state
-                .threads
-                .iter()
-                .filter(|t| parent(t).as_deref() == Some(top.id.as_str()) && wanted(t))
-                .collect::<Vec<_>>();
-            (top, agents)
-        })
+        .map(|top| (top, agents_of.get(top.id.as_str()).cloned().unwrap_or_default()))
         .filter(|(top, agents)| wanted(top) || !agents.is_empty())
         .collect();
     let agents: usize = groups.iter().map(|g| g.1.len()).sum();

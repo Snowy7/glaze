@@ -672,7 +672,8 @@ mod tests {
         assert_eq!(state.details["thread-00000007"].model, "");
     }
 
-    /// `cargo test --release -- --ignored --nocapture baseline_decode_peak`: the heap peak of
+    /// `cargo test --release -- --ignored --nocapture --test-threads=1 baseline_decode_peak` (the
+    /// counter is process-wide, so run it alone): the heap peak of
     /// decoding a ~2.4 MiB baseline on top of the frame itself (the guest's linear memory keeps
     /// its peak, so this is roughly what T3 costs for good).
     #[test]
@@ -686,6 +687,23 @@ mod tests {
         decode(&mut state, &frame);
         let (peak, kept) = (PEAK.load(Relaxed) - before, LIVE.load(Relaxed) - before);
         println!("frame {:.2} MiB, decode peak +{:.2} MiB, kept {:.2} MiB", frame.len() as f64 / 1048576.0, peak as f64 / 1048576.0, kept as f64 / 1048576.0);
+    }
+
+    /// `cargo test --release -- --ignored --nocapture redraw_cost`: what one click costs, which is
+    /// a redraw of every face (wasm runs this ~1.5-3x slower than native).
+    #[test]
+    #[ignore]
+    fn redraw_cost() {
+        let mut state = Snapshot::default();
+        decode(&mut state, &baseline(3000));
+        let snapshot = crate::Snapshot { availability: crate::Availability::Live, data: Some(crate::Data::T3(state)) };
+        let started = std::time::Instant::now();
+        for face in ["running", "attention", "limits", "status"] {
+            for size in [mypaper_plugin_sdk::SizeClass::Small, mypaper_plugin_sdk::SizeClass::Large] {
+                std::hint::black_box(crate::faces::face(face, size, &snapshot, &Default::default(), 0));
+            }
+        }
+        println!("8 face draws over 3000 threads: {:.1} ms", started.elapsed().as_secs_f64() * 1000.0);
     }
 
     #[test]
