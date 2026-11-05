@@ -17,11 +17,24 @@
             "text": "need your input · 1 thread"
           },
           {
-            "action": "thread:thread-0",
-            "detail": "Approval needed · GPT-6.1 Sol",
-            "icon": "message",
-            "kind": "list_row",
-            "title": "Review desktop permissions"
+            "children": [
+              {
+                "action": "thread:thread-0",
+                "detail": "GPT-6.1 Sol",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Review desktop permissions",
+                "trailing": ""
+              },
+              {
+                "color": "#fcd34d",
+                "dot": false,
+                "kind": "tag",
+                "label": "Pending Approval"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
             "children": [
@@ -54,11 +67,24 @@
       "body": {
         "children": [
           {
-            "action": "thread:thread-0",
-            "detail": "Approval needed · GPT-6.1 Sol",
-            "icon": "message",
-            "kind": "list_row",
-            "title": "Review desktop permissions"
+            "children": [
+              {
+                "action": "thread:thread-0",
+                "detail": "GPT-6.1 Sol",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Review desktop permissions",
+                "trailing": ""
+              },
+              {
+                "color": "#fcd34d",
+                "dot": false,
+                "kind": "tag",
+                "label": "Pending Approval"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
             "children": [
@@ -94,11 +120,26 @@
             "kind": "spacer"
           },
           {
-            "align": "start",
-            "color": "warning",
-            "kind": "text",
-            "role": "large_title",
-            "text": "1"
+            "children": [
+              {
+                "align": "start",
+                "color": "warning",
+                "kind": "text",
+                "role": "large_title",
+                "text": "1"
+              },
+              {
+                "color": "#fcd34d",
+                "dot": true,
+                "kind": "tag",
+                "label": "Pending Approval"
+              },
+              {
+                "kind": "spacer"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
             "align": "start",
@@ -703,144 +744,404 @@
             "text": "running · 20 threads"
           },
           {
-            "action": "thread:thread-0",
-            "detail": "Approval needed · GPT-6.1 Sol",
-            "icon": "message",
-            "kind": "list_row",
-            "title": "Review desktop permissions"
+            "children": [
+              {
+                "action": "thread:thread-0",
+                "detail": "GPT-6.1 Sol",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Review desktop permissions",
+                "trailing": ""
+              },
+              {
+                "color": "#fcd34d",
+                "dot": false,
+                "kind": "tag",
+                "label": "Pending Approval"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-1",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 2"
+            "children": [
+              {
+                "action": "thread:thread-1",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 2",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-2",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 3"
+            "children": [
+              {
+                "action": "thread:thread-2",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 3",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-3",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 4"
+            "children": [
+              {
+                "action": "thread:thread-3",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 4",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-4",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 5"
+            "children": [
+              {
+                "action": "thread:thread-4",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 5",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-5",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 6"
+            "children": [
+              {
+                "action": "thread:thread-5",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 6",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-6",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 7"
+            "children": [
+              {
+                "action": "thread:thread-6",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 7",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-7",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 8"
+            "children": [
+              {
+                "action": "thread:thread-7",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 8",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-8",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 9"
+            "children": [
+              {
+                "action": "thread:thread-8",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 9",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-9",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 10"
+            "children": [
+              {
+                "action": "thread:thread-9",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 10",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-10",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 11"
+            "children": [
+              {
+                "action": "thread:thread-10",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 11",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-11",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 12"
+            "children": [
+              {
+                "action": "thread:thread-11",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 12",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-12",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 13"
+            "children": [
+              {
+                "action": "thread:thread-12",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 13",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-13",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 14"
+            "children": [
+              {
+                "action": "thread:thread-13",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 14",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-14",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 15"
+            "children": [
+              {
+                "action": "thread:thread-14",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 15",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-15",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 16"
+            "children": [
+              {
+                "action": "thread:thread-15",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 16",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-16",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 17"
+            "children": [
+              {
+                "action": "thread:thread-16",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 17",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-17",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 18"
+            "children": [
+              {
+                "action": "thread:thread-17",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 18",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-18",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 19"
+            "children": [
+              {
+                "action": "thread:thread-18",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 19",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-19",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 20"
+            "children": [
+              {
+                "action": "thread:thread-19",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 20",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           }
         ],
         "gap": 2.0,
@@ -853,144 +1154,404 @@
       "body": {
         "children": [
           {
-            "action": "thread:thread-0",
-            "detail": "Approval needed · GPT-6.1 Sol",
-            "icon": "message",
-            "kind": "list_row",
-            "title": "Review desktop permissions"
+            "children": [
+              {
+                "action": "thread:thread-0",
+                "detail": "GPT-6.1 Sol",
+                "icon": "message",
+                "kind": "list_row",
+                "title": "Review desktop permissions",
+                "trailing": ""
+              },
+              {
+                "color": "#fcd34d",
+                "dot": false,
+                "kind": "tag",
+                "label": "Pending Approval"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-1",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 2"
+            "children": [
+              {
+                "action": "thread:thread-1",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 2",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-2",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 3"
+            "children": [
+              {
+                "action": "thread:thread-2",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 3",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-3",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 4"
+            "children": [
+              {
+                "action": "thread:thread-3",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 4",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-4",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 5"
+            "children": [
+              {
+                "action": "thread:thread-4",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 5",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-5",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 6"
+            "children": [
+              {
+                "action": "thread:thread-5",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 6",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-6",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 7"
+            "children": [
+              {
+                "action": "thread:thread-6",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 7",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-7",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 8"
+            "children": [
+              {
+                "action": "thread:thread-7",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 8",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-8",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 9"
+            "children": [
+              {
+                "action": "thread:thread-8",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 9",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-9",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 10"
+            "children": [
+              {
+                "action": "thread:thread-9",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 10",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-10",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 11"
+            "children": [
+              {
+                "action": "thread:thread-10",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 11",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-11",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 12"
+            "children": [
+              {
+                "action": "thread:thread-11",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 12",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-12",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 13"
+            "children": [
+              {
+                "action": "thread:thread-12",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 13",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-13",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 14"
+            "children": [
+              {
+                "action": "thread:thread-13",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 14",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-14",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 15"
+            "children": [
+              {
+                "action": "thread:thread-14",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 15",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-15",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 16"
+            "children": [
+              {
+                "action": "thread:thread-15",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 16",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-16",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 17"
+            "children": [
+              {
+                "action": "thread:thread-16",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 17",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-17",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 18"
+            "children": [
+              {
+                "action": "thread:thread-17",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 18",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-18",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 19"
+            "children": [
+              {
+                "action": "thread:thread-18",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 19",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
-            "action": "thread:thread-19",
-            "detail": "Working · GPT-6.1 Sol",
-            "icon": "terminal",
-            "kind": "list_row",
-            "title": "Build native widget 20"
+            "children": [
+              {
+                "action": "thread:thread-19",
+                "detail": "GPT-6.1 Sol",
+                "icon": "terminal",
+                "kind": "list_row",
+                "title": "Build native widget 20",
+                "trailing": ""
+              },
+              {
+                "color": "#7dd3fc",
+                "dot": false,
+                "kind": "tag",
+                "label": "Working"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           }
         ],
         "gap": 2.0,
@@ -1006,11 +1567,26 @@
             "kind": "spacer"
           },
           {
-            "align": "start",
-            "color": "label",
-            "kind": "text",
-            "role": "large_title",
-            "text": "20"
+            "children": [
+              {
+                "align": "start",
+                "color": "label",
+                "kind": "text",
+                "role": "large_title",
+                "text": "20"
+              },
+              {
+                "color": "#fcd34d",
+                "dot": true,
+                "kind": "tag",
+                "label": "Pending Approval"
+              },
+              {
+                "kind": "spacer"
+              }
+            ],
+            "gap": 6.0,
+            "kind": "row"
           },
           {
             "align": "start",

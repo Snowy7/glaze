@@ -19,8 +19,8 @@ pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, pick: &Pick, now_m
             "limits" => limits(state, size, now_ms),
             "usage" => usage(state, size),
             "new" => composer(state, size, pick),
-            "attention" => threads(state, size, true),
-            _ => threads(state, size, false),
+            "attention" => threads(state, size, true, now_ms),
+            _ => threads(state, size, false, now_ms),
         },
         None if face == "status" => View::text("T3", Role::Caption),
         None => match &snapshot.availability {
@@ -37,25 +37,54 @@ pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, pick: &Pick, now_m
     Face { body, footer: Some(footer), refresh: true }
 }
 
-fn status(thread: &Thread) -> &'static str {
+/// T3's own sidebar status pill (`resolveThreadStatusPill`): its label and its dark-theme ink
+/// (Tailwind amber/indigo/sky/red/emerald-300). States T3 leaves unbadged get a muted tag.
+fn pill(thread: &Thread) -> (&'static str, Tone) {
     use crate::t3::Status;
+    let hex = |h: &str| Tone::Hex(h.into());
     if let Some(request) = &thread.pending_runtime_request {
-        return if matches!(request.kind.as_str(), "user_input" | "user-input") { "Question for you" } else { "Approval needed" };
+        return if matches!(request.kind.as_str(), "user_input" | "user-input") {
+            ("Awaiting Input", hex("#a5b4fc"))
+        } else {
+            ("Pending Approval", hex("#fcd34d"))
+        };
     }
     match thread.status {
-        Status::Idle => "Idle",
-        Status::Queued => "Queued",
-        Status::Preparing => "Preparing",
-        Status::Starting => "Starting",
-        Status::Running => "Working",
-        Status::Waiting => "Waiting",
-        Status::Completed => "Completed",
-        Status::Failed => "Failed",
-        Status::Cancelled => "Cancelled",
-        Status::Interrupted => "Interrupted",
-        Status::RolledBack => "Rolled back",
+        Status::Running | Status::Waiting => ("Working", hex("#7dd3fc")),
+        Status::Queued | Status::Preparing | Status::Starting => ("Connecting", hex("#7dd3fc")),
+        Status::Failed => ("Failed", hex("#fca5a5")),
+        Status::Completed => ("Completed", hex("#6ee7b7")),
+        Status::Idle => ("Idle", Tone::Secondary),
+        Status::Cancelled | Status::Interrupted => ("Interrupted", Tone::Secondary),
+        Status::RolledBack => ("Rolled back", Tone::Secondary),
     }
 }
+
+fn tag(thread: &Thread, dot: bool) -> View {
+    let (label, color) = pill(thread);
+    View::Tag { label: label.into(), color, dot }
+}
+
+/// A thread row with its status tag at the end; a click opens the thread in T3.
+fn thread_row(thread: &Thread, detail: String) -> View {
+    View::Row {
+        children: vec![
+            View::ListRow {
+                title: thread.title.clone(),
+                detail: Some(detail),
+                icon: Some(if thread.attention() { "message" } else { "terminal" }.into()),
+                // Empty: no chevron between the row and its tag.
+                trailing: Some(String::new()),
+                action: Some(format!("thread:{}", thread.id)),
+            },
+            tag(thread, false),
+        ],
+        gap: Some(6.0),
+    }
+}
+
+/// Finished within the last two hours: Running now's "recent completions".
+const RECENT_MS: i64 = 2 * 3600 * 1000;
 
 fn footer(face: &str, snapshot: &Snapshot) -> String {
     match &snapshot.availability {
@@ -90,7 +119,7 @@ fn plural(n: usize, word: &str) -> String {
 }
 
 /// Top-level threads with their subagents rolled up (T3's own grouping).
-fn threads(state: &State, size: SizeClass, attention: bool) -> View {
+fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64) -> View {
     let wanted = |t: &Thread| if attention { t.attention() } else { t.running() };
     // One pass over the threads: the tops, and each wanted agent under its parent. Every redraw
     // (a click included) runs this, so it must stay linear in the thread count.
@@ -120,9 +149,29 @@ fn threads(state: &State, size: SizeClass, attention: bool) -> View {
             format!("{} · {}", plural(count, "thread"), plural(agents, "agent"))
         };
         let tone = if attention && count > 0 { Tone::Warning } else { Tone::Label };
-        return metric(count.to_string(), caption, tone);
+        let mut view = metric(count.to_string(), caption, tone);
+        // Small tiles: the first thread's status as a dot beside the number.
+        if let (Some((top, _)), View::Stack { children, .. }) = (groups.first(), &mut view) {
+            let value = children.remove(1);
+            children.insert(1, View::Row { children: vec![value, tag(top, true), View::Spacer], gap: Some(6.0) });
+        }
+        return view;
     }
-    if count == 0 {
+    // Running now also lists what finished lately, tagged Completed or Failed as in T3.
+    let recent: Vec<&Thread> = if attention {
+        Vec::new()
+    } else {
+        let mut done: Vec<&Thread> = state
+            .threads
+            .iter()
+            .filter(|t| t.finished() && !t.attention() && state.details.get(&t.id).and_then(|d| d.parent_id.as_ref()).is_none())
+            .filter(|t| epoch_ms(&t.updated_at).is_some_and(|at| now_ms - at < RECENT_MS))
+            .collect();
+        done.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        done.truncate(3);
+        done
+    };
+    if count == 0 && recent.is_empty() {
         return if attention {
             View::empty("check", "You're all caught up", "Approvals and questions show up here.")
         } else {
@@ -153,13 +202,16 @@ fn threads(state: &State, size: SizeClass, attention: bool) -> View {
             n if working == n => format!(" · {} working", plural(n, "agent")),
             n => format!(" · {} ({working} working)", plural(n, "agent")),
         };
-        children.push(View::ListRow {
-            title: top.title.clone(),
-            detail: Some(format!("{} · {model}{agents_note}", status(top))),
-            icon: Some(if top.attention() { "message" } else { "terminal" }.into()),
-            trailing: None,
-            action: Some(format!("thread:{}", top.id)),
-        });
+        children.push(thread_row(top, format!("{model}{agents_note}")));
+        // Large tiles have room for each agent: its title and its own tag, under its thread.
+        if size == SizeClass::Large {
+            for agent in agents {
+                children.push(View::Row {
+                    children: vec![View::tinted(format!("    ↳ {}", agent.title), Role::Caption, Tone::Secondary), tag(agent, false)],
+                    gap: Some(6.0),
+                });
+            }
+        }
         if attention
             && state.can_operate()
             && let Some(request) = top.pending_runtime_request.as_ref().filter(|r| r.approvable())
@@ -175,6 +227,10 @@ fn threads(state: &State, size: SizeClass, attention: bool) -> View {
                 gap: Some(6.0),
             });
         }
+    }
+    for done in recent {
+        let model = state.details.get(&done.id).map(|d| d.model.clone()).filter(|m| !m.is_empty()).unwrap_or_else(|| done.provider_instance_id.clone());
+        children.push(thread_row(done, model));
     }
     View::Stack { children, gap: Some(2.0) }
 }
