@@ -29,6 +29,14 @@ fn fixture(id: &str, root: PathBuf) -> Model {
     m.note =
         "# A quiet place\nIdeas, reminders and things to build.\n\nمرحبا بالعالم\n日本語のメモ"
             .into();
+    m.events = vec![
+        json!({"date":"2026-11-04","time":"09:30","title":"Design review","color":0}),
+        json!({"date":"2026-11-04","time":"16:00","title":"Gym","color":1}),
+        json!({"date":"2026-11-06","title":"Dad's birthday","color":4}),
+        json!({"date":"2026-11-12","time":"19:00","title":"Dinner with Sam","color":2}),
+    ];
+    m.selected = now().date;
+    m.month = now().date;
     m.tasks = vec![
         Task {
             text: "Plan the native desktop".into(),
@@ -48,7 +56,14 @@ fn fixture(id: &str, root: PathBuf) -> Model {
             json!({"title":"A Walk in the Rain","artist":"City Lights","playing":false,"position":68,"duration":213})
         }
         Widget::Weather => {
-            json!({"current":{"location":{"name":"Oslo"},"temperature":27,"condition":"Clear sky","code":0},"forecast":{"days":[{"date":"2026-11-04","max":28,"min":22},{"date":"2026-11-05","max":29,"min":23},{"date":"2026-11-06","max":28,"min":21}]}})
+            let codes = [0, 2, 3, 61, 95, 71, 45];
+            let days: Vec<_> = (0..7)
+                .map(|i| json!({"date": now().date.add_days(i).key(), "max": 28 + i % 3, "min": 21 + i % 2, "code": codes[i as usize]}))
+                .collect();
+            let hourly: Vec<_> = (0..12)
+                .map(|i| json!({"time": format!("2026-11-04T{:02}:00", (14 + i) % 24), "temperature": 27 - i / 3, "code": (i % 4).min(3), "is_day": i < 4}))
+                .collect();
+            json!({"current":{"location":{"name":"Oslo"},"temperature":27,"condition":"Clear sky","code":0},"forecast":{"days":days,"hourly":hourly}})
         }
         Widget::Rss => {
             json!({"items":[{"title":"A simpler native desktop takes shape","source":"mypaper","published":1793790000,"link":"https://example.com/one"},{"title":"Software rendering, small surfaces and a sleeping event loop","source":"Engineering","published":1793788000,"link":"https://example.com/two"}]})
@@ -421,6 +436,155 @@ fn long_content_scrolls_to_the_last_item_without_hits_outside_the_viewport() {
 }
 fn temp(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("mypaper-n4-{name}-{}", std::process::id()))
+}
+
+/// A vertical gradient as an image (premultiplied BGRA), for a stand-in wallpaper.
+fn gradient(width: u32, height: u32, top: [u8; 3], bottom: [u8; 3]) -> mypaper_ui::Image {
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    for y in 0..height {
+        let t = y as f32 / height.max(2) as f32;
+        let c = |i: usize| (top[i] as f32 + (bottom[i] as f32 - top[i] as f32) * t) as u8;
+        for _ in 0..width {
+            pixels.extend_from_slice(&[c(2), c(1), c(0), 255]);
+        }
+    }
+    mypaper_ui::Image {
+        width,
+        height,
+        pixels,
+    }
+}
+
+/// One widget at one size in one scheme, over its plate's stand-in glass (the engine draws
+/// the real glass): its content as an image and its plate's radius.
+fn widget_shot(ui: &mut Ui, m: &mut Model, size: (u32, u32), dark: bool) -> (mypaper_ui::Image, f32) {
+    m.placed
+        .appearance
+        .insert("text".into(), json!(if dark { "light" } else { "dark" }));
+    let tokens = tokens(&m.placed.appearance);
+    let list = view::view(
+        m,
+        &tokens,
+        view::Frame {
+            size,
+            scale: 1.0,
+            now: now(),
+            instant: Instant::now(),
+            editing: false,
+        },
+        &mut ui.text,
+    );
+    let rect = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
+    (
+        render(ui, &list, size.0, size.1).unwrap(),
+        view::plate_radius(m, rect, 1.0),
+    )
+}
+
+/// Size sheets for review: every widget at every allowed size, dark over a night backdrop and
+/// light over a day one, each on a stand-in for the engine's glass (its tint and shadow).
+#[test]
+#[ignore = "writes docs/media/native/widget-*.png; run when widget views change"]
+fn widget_size_sheets() {
+    const CELL: u32 = 96;
+    const GAP: u32 = 8;
+    let px = |n: u32| n * CELL + (n - 1) * GAP;
+    let mut ui = Ui::new().unwrap();
+    let root = temp("sheets");
+    let only = std::env::var("MYPAPER_SHEET").ok();
+    let registry = registry::builtins();
+    for (id, installed) in &registry.widgets {
+        if only.as_deref().is_some_and(|o| o != id) {
+            continue;
+        }
+        let mut sizes = installed.manifest.size.allowed.clone();
+        sizes.sort_by_key(|s| (s[1], s[0]));
+        let rows: Vec<u32> = sizes.iter().map(|s| s[1]).collect::<BTreeSet<_>>().into_iter().collect();
+        let margin = 24.0;
+        let label = 22.0;
+        let row_w = |h: u32| -> f32 {
+            sizes
+                .iter()
+                .filter(|s| s[1] == h)
+                .map(|s| px(s[0]) as f32 + margin)
+                .sum::<f32>()
+                + margin
+        };
+        let width = rows.iter().map(|&h| row_w(h)).fold(0.0, f32::max).ceil();
+        let half = rows
+            .iter()
+            .map(|&h| px(h) as f32 + label + margin)
+            .sum::<f32>()
+            + margin;
+        let height = (half * 2.0).ceil();
+        let mut list = DisplayList::default();
+        let mut m = fixture(id, root.clone());
+        for (pass, dark) in [true, false].into_iter().enumerate() {
+            let top = pass as f32 * half;
+            let (from, to) = if dark {
+                ([22, 30, 58], [40, 70, 96])
+            } else {
+                ([150, 190, 230], [228, 214, 196])
+            };
+            list.ops.push(Op::Image {
+                rect: Rect::new(0.0, top, width, half),
+                image: Arc::new(gradient(8, 64, from, to)),
+                opacity: 1.0,
+                source: None,
+            });
+            let theme = view::theme(&m, &tokens(&m.placed.appearance));
+            let glass = if dark {
+                Rgba::rgb8([28, 28, 30], 0.62)
+            } else {
+                Rgba::rgb8([245, 245, 247], 0.62)
+            };
+            let mut y = top + margin;
+            for &h in &rows {
+                let mut x = margin;
+                for size in sizes.iter().filter(|s| s[1] == h) {
+                    let (w, hh) = (px(size[0]), px(size[1]));
+                    let (image, radius) = widget_shot(&mut ui, &mut m, (w, hh), dark);
+                    let rect = Rect::new(x, y + label, w as f32, hh as f32);
+                    list.ops.push(Op::Text {
+                        rect: Rect::new(x + 2.0, y, 80.0, 18.0),
+                        text: format!("{}×{}", size[0], size[1]).into(),
+                        style: theme.font.style(mypaper_ui::TextRole::Footnote, 1.0),
+                        color: if dark {
+                            Rgba::new(1.0, 1.0, 1.0, 0.7)
+                        } else {
+                            Rgba::new(0.0, 0.0, 0.0, 0.6)
+                        },
+                    });
+                    list.ops.push(Op::Shadow {
+                        rect,
+                        radius,
+                        spread: 14.0,
+                        drop: 4.0,
+                        color: Rgba::new(0.0, 0.0, 0.0, if dark { 0.3 } else { 0.12 }),
+                    });
+                    list.ops.push(Op::Fill {
+                        rect,
+                        radius,
+                        color: glass,
+                    });
+                    list.ops.push(Op::Image {
+                        rect,
+                        image: Arc::new(image),
+                        opacity: 1.0,
+                        source: None,
+                    });
+                    x += w as f32 + margin;
+                }
+                y += px(h) as f32 + label + margin;
+            }
+        }
+        let image = render(&mut ui, &list, width as u32, height as u32).unwrap();
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("../../docs/media/native/widget-{id}.png"));
+        golden::write(&image, &path).unwrap();
+        eprintln!("wrote {}", path.display());
+    }
+    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]

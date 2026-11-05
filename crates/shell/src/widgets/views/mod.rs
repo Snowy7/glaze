@@ -13,7 +13,12 @@
 //! Add a widget: a file with `pub fn draw(c: &mut Ctx, body: Rect)` and one line in
 //! [`content`]'s match.
 
+mod calendar;
+mod clock;
 mod legacy;
+mod media;
+mod weather;
+mod integrations;
 
 use super::model::{Model, Widget};
 use super::time::Stamp;
@@ -122,25 +127,45 @@ pub struct Frame {
     pub editing: bool,
 }
 
-/// The kit theme a widget draws with: Liquid, in the scheme its text tone asks for, with the
-/// appearance's accent (else iOS's blue) and its font (or the clock's own).
+/// The kit theme a widget draws with: Liquid, in the scheme its text tone asks for, and its
+/// font (or the clock's own). The calm looks are monochrome, as the web widgets were: today's
+/// disc, rings, progress and "on" take the label's ink. A colour shows only when the widget
+/// asks for one (its own accent, or a lit style: depth, paper, aero, neon); data colours
+/// (events, prices, warnings) are the palette's.
 pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
-    let dark = mypaper_ui::theme::luminance(tokens.colors.text) > 0.5;
-    let accent = model
-        .placed
-        .appearance
-        .get("accent")
-        .and_then(|v| serde_json::from_value::<Paint>(v.clone()).ok())
-        .and_then(|paint| match paint {
-            Paint::Color(color) => Some(Rgba::rgb8(color.0, 1.0)),
-            _ => None,
-        })
-        .unwrap_or(mypaper_ui::theme::SYSTEM_BLUE);
+    // The notch pill is always the dark island.
+    let notch = model.placed.widget == "media-pill" && model.str("variant", "pill") == "notch";
+    let dark = notch || mypaper_ui::theme::luminance(tokens.colors.text) > 0.5;
+    let color = |map: &serde_json::Map<String, Value>| {
+        map.get("accent")
+            .and_then(|v| serde_json::from_value::<Paint>(v.clone()).ok())
+            .and_then(|paint| match paint {
+                Paint::Color(color) => Some(Rgba::rgb8(color.0, 1.0)),
+                _ => None,
+            })
+    };
+    let lit = matches!(
+        model.placed.appearance.get("style").and_then(Value::as_str),
+        Some("depth" | "paper" | "aero" | "neon")
+    );
+    let accent = color(&model.placed.own).or_else(|| {
+        lit.then(|| color(&model.placed.appearance))
+            .flatten()
+    });
     let mut theme = Theme::new(
         Style::Liquid,
         if dark { Scheme::Dark } else { Scheme::Light },
-        accent,
+        accent.unwrap_or(mypaper_ui::theme::SYSTEM_BLUE),
     );
+    if accent.is_none() {
+        let p = &mut theme.color;
+        (p.accent, p.on_accent) = if dark {
+            (Rgba::rgb8([242; 3], 1.0), Rgba::rgb8([17, 17, 19], 1.0))
+        } else {
+            (Rgba::rgb8([28, 28, 30], 1.0), Rgba::rgb8([255; 3], 1.0))
+        };
+        p.accent_wash = p.accent.with_alpha(if dark { 0.16 } else { 0.10 });
+    }
     let clock_font = model.str("font", "");
     let family = if model.kind == Widget::Clock && !clock_font.trim().is_empty() {
         clock_font.as_str().into()
@@ -181,8 +206,8 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
         rect,
         pad: 0.0,
     };
-    // Tighter in small widgets, macOS's 16 from a regular size up.
-    c.pad = c.px((rect.width().min(rect.height()) / scale * 0.08).clamp(12.0, 16.0));
+    // The web widgets' clamp(12px, 9cqmin, 22px), a little tighter at the top.
+    c.pad = c.px((rect.width().min(rect.height()) / scale * 0.09).clamp(12.0, 20.0));
     let radius = plate_radius(model, rect, scale);
     c.f.fill(rect, radius, Rgba::HIT);
     let surface = model
@@ -225,12 +250,8 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
 fn ported(kind: Widget) -> bool {
     !matches!(
         kind,
-        Widget::Clock
-            | Widget::Calendar
-            | Widget::Media
-            | Widget::QuickToggles
+        Widget::QuickToggles
             | Widget::Launcher
-            | Widget::Weather
             | Widget::System
             | Widget::Timer
             | Widget::Countdown
@@ -247,6 +268,16 @@ fn ported(kind: Widget) -> bool {
 /// One widget's content inside its padded body. One line per widget.
 fn content(c: &mut Ctx, body: Rect) {
     match c.m.kind {
+        Widget::Clock => clock::draw(c, body),
+        Widget::Calendar => calendar::draw(c, body),
+        Widget::Media => media::draw(c, body),
+        Widget::Weather => weather::draw(c, body),
+        Widget::Discord => integrations::discord::view(&mut c.f, c.m, c.rect, c.now.ms),
+        Widget::T3 => integrations::t3::view(&mut c.f, c.m, c.rect, c.now.ms),
+        Widget::Obs => integrations::obs::view(&mut c.f, c.m, c.rect, c.now.ms),
+        Widget::Docker => integrations::docker::view(&mut c.f, c.m, c.rect, c.now.ms),
+        Widget::Tailscale => integrations::tailscale::view(&mut c.f, c.m, c.rect, c.now.ms),
+        Widget::Grok => integrations::grok::view(&mut c.f, c.m, c.rect, c.now.ms),
         _ => {}
     }
     let _ = body;
@@ -450,6 +481,22 @@ impl Ctx<'_> {
             y += detail_line;
         }
     }
+}
+
+/// A text field: the kit's well, with the model's RichEdit field in it while one is open, else
+/// the placeholder. Hit [`FIELD`].
+pub fn field(c: &mut Ctx, rect: Rect, hint: &str, icon: Option<Icon>) {
+    let open = c.m.field.as_ref();
+    let inner = c.f.field_frame(rect, hint, open.is_none(), open.is_some(), icon);
+    if let Some(field) = open {
+        field.set_rect(inner);
+        c.f.push(Op::TextField {
+            rect: inner,
+            field: field.clone(),
+            revision: field.revision(),
+        });
+    }
+    c.hit(FIELD, rect, Role::TextInput, hint);
 }
 
 /// A notice (a failed action, a hint) along the bottom edge, up to two lines.
