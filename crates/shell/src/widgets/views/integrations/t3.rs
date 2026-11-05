@@ -221,7 +221,17 @@ fn threads(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas, attention:
             .cmp(&a.attention())
             .then_with(|| b.updated_at.cmp(&a.updated_at))
     });
-    let count = threads.len();
+    // Subagents roll up under their top-level thread: one item per proper thread.
+    let groups = families(state, &threads);
+    let agents: usize = groups.iter().map(|g| g.agents.len()).sum();
+    let tops = groups.iter().filter(|g| g.top_matches).count();
+    let count = groups.len();
+    let counts = match (tops, agents) {
+        (t, 0) => plural(t, "thread"),
+        (0, a) => plural(a, "agent"),
+        (t, a) => format!("{} · {}", plural(t, "thread"), plural(a, "agent")),
+    };
+    let threads: Vec<(usize, &Thread)> = groups.iter().map(|g| (g.index, g.actionable)).collect();
     if l.compact {
         metric(
             f,
@@ -230,7 +240,7 @@ fn threads(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas, attention:
             if attention {
                 "need your input"
             } else {
-                "threads & agents"
+                &counts
             },
             if attention && count > 0 {
                 f.theme.color.warning
@@ -269,10 +279,10 @@ fn threads(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas, attention:
             f,
             summary,
             &count.to_string(),
-            if attention {
-                "need your input"
+            &if attention {
+                format!("need your input · {counts}")
             } else {
-                "running threads & agents"
+                format!("running · {counts}")
             },
             f.theme.color.label,
         );
@@ -287,26 +297,34 @@ fn threads(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas, attention:
         .set(count.saturating_sub(visible) as f32 * row_h);
     m.scroll_page.set(body.height());
     let first = (m.scroll.max(0.0) / row_h).floor() as usize;
-    for (row, (index, thread)) in threads.iter().skip(first).take(visible).enumerate() {
+    for (row, ((index, thread), group)) in threads
+        .iter()
+        .zip(&groups)
+        .skip(first)
+        .take(visible)
+        .enumerate()
+    {
         let top = body.top + row as f32 * row_h;
-        let detail = state.details.get(&thread.id);
-        let model = detail.map_or(thread.provider_instance_id.as_str(), |d| {
+        let detail = state.details.get(&group.top.id);
+        let model = detail.map_or(group.top.provider_instance_id.as_str(), |d| {
             if d.model.is_empty() {
-                thread.provider_instance_id.as_str()
+                group.top.provider_instance_id.as_str()
             } else {
                 d.model.as_str()
             }
         });
-        let subtitle = format!(
-            "{} · {}{}",
-            status(thread),
-            model,
-            if detail.is_some_and(|d| d.agent) {
-                " · agent"
-            } else {
-                ""
-            }
-        );
+        let working = group.agents.iter().filter(|a| a.running()).count();
+        let agents = match group.agents.len() {
+            0 => String::new(),
+            n if attention => format!(" · {} needs you", plural(n, "agent")),
+            n if working == n => format!(" · {} working", plural(n, "agent")),
+            n => format!(" · {} ({working} working)", plural(n, "agent")),
+        };
+        let subtitle = if group.top_matches {
+            format!("{} · {model}{agents}", status(group.top))
+        } else {
+            format!("{} · {}", agents.trim_start_matches(" · "), status(thread))
+        };
         m.integration.t3.targets.borrow_mut().insert(
             THREAD + *index as u32,
             crate::integrations::t3_widgets::Target {
@@ -322,7 +340,7 @@ fn threads(f: &mut Frame<'_>, m: &Model, state: &Snapshot, l: &Areas, attention:
                 } else {
                     Icon::Terminal
                 }),
-                title: &thread.title,
+                title: &group.top.title,
                 subtitle: Some(&subtitle),
                 accessory: Accessory::Chevron,
                 selected: false,
@@ -701,3 +719,68 @@ pub(super) fn number(value: u64) -> String {
 #[cfg(test)]
 #[path = "t3_tests.rs"]
 mod tests;
+
+fn plural(n: usize, noun: &str) -> String {
+    format!("{n} {noun}{}", if n == 1 { "" } else { "s" })
+}
+
+/// A top-level thread and the matching subagents beneath it (at any depth).
+struct Family<'a> {
+    index: usize,
+    top: &'a Thread,
+    /// The thread a click acts on: the top one when it matches, else its first matching agent.
+    actionable: &'a Thread,
+    top_matches: bool,
+    agents: Vec<&'a Thread>,
+}
+
+/// Groups matching threads under their root thread, in the order the roots first appear.
+fn families<'a>(state: &'a Snapshot, matching: &[(usize, &'a Thread)]) -> Vec<Family<'a>> {
+    let root = |thread: &'a Thread| -> (usize, &'a Thread) {
+        let mut current = thread;
+        for _ in 0..16 {
+            let Some(parent) = state
+                .details
+                .get(&current.id)
+                .filter(|d| d.agent)
+                .and_then(|d| d.parent_id.as_deref())
+                .and_then(|id| state.threads.iter().find(|t| t.id == id))
+            else {
+                break;
+            };
+            current = parent;
+        }
+        let index = state
+            .threads
+            .iter()
+            .position(|t| std::ptr::eq(t, current))
+            .unwrap_or_default();
+        (index, current)
+    };
+    let mut out: Vec<Family<'a>> = Vec::new();
+    for &(index, thread) in matching {
+        let (top_index, top) = root(thread);
+        let is_top = std::ptr::eq(top, thread);
+        let family = match out.iter().position(|f| std::ptr::eq(f.top, top)) {
+            Some(i) => &mut out[i],
+            None => {
+                out.push(Family {
+                    index: if is_top { index } else { top_index },
+                    top,
+                    actionable: thread,
+                    top_matches: false,
+                    agents: Vec::new(),
+                });
+                out.last_mut().unwrap()
+            }
+        };
+        if is_top {
+            family.top_matches = true;
+            family.actionable = thread;
+            family.index = index;
+        } else {
+            family.agents.push(thread);
+        }
+    }
+    out
+}
