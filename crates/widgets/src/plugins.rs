@@ -157,6 +157,18 @@ impl Drop for Job {
     }
 }
 
+/// The plugin's own section of `integrations.json` (`{}` when there is none), sent in `initialize`.
+fn plugin_settings(id: &str) -> Value {
+    let config = crate::files::user("integrations.json")
+        .ok()
+        .and_then(|path| std::fs::read(path).ok())
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
+    match config.as_ref().and_then(|config| config.get(id)) {
+        Some(section @ Value::Object(_)) => section.clone(),
+        _ => json!({}),
+    }
+}
+
 /// A placed face of an SDK plugin (docs/plugins.md): who draws it and what it last drew.
 struct Slot {
     plugin: String,
@@ -532,7 +544,7 @@ impl Plugins {
         // Data plugins (no `sdk`) keep the protocol they were written for.
         let protocol = if manifest.sdk.is_some() { sdk::PROTOCOL } else { 1 };
         let params = json!({ "protocol": protocol, "sdk": format!("{}.{}", mypaper_plugin_sdk::SDK_MAJOR, mypaper_plugin_sdk::SDK_MINOR),
-                             "plugin": id, "dataDir": crate::files::plain(&data_dir) });
+                             "plugin": id, "dataDir": crate::files::plain(&data_dir), "settings": plugin_settings(&id) });
         let _ = tx.send(rpc::request(rpc::INIT_ID, "initialize", Some(&params)));
         Ok(Process {
             manifest,

@@ -59,7 +59,7 @@ Host â†’ plugin:
 
 | message | kind | params |
 |---|---|---|
-| `initialize` | request | `{ protocol: 2, sdk: "1.0", plugin, dataDir }` â†’ `{ sdk: "1.0" }` |
+| `initialize` | request | `{ protocol: 2, sdk: "1.0", plugin, dataDir, settings }` â†’ `{ sdk: "1.0" }` |
 | `shutdown` | request | — (exit promptly) |
 | `suspend`, `resume` | notification | — |
 | `face.open` | notification | `{ instance, face, size: "small"\|"medium"\|"large", settings }` |
@@ -133,6 +133,13 @@ sandboxed yet (AppContainer is the follow-up for downloaded plugins).
 
 `ctx.secret("key")` / `ctx.set_secret("key", Some(value))` (`None` deletes). The host namespaces keys per plugin, so
 one plugin can't read another's. Values never touch disk in plain text or the log.
+
+## Settings
+
+`initialize` carries `settings`: the plugin's own section of `%APPDATA%\mypaper\integrations.json`
+(the object under its id, `{}` when there is none), read once when the plugin starts;
+`ctx.settings()` returns it. Each placed instance's settings come with its `face.open`
+(`Event::Open { settings }`) and stay readable as `ctx.instance_settings(instance)` until it closes.
 
 ## Timers
 

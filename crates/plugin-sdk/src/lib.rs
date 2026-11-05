@@ -76,6 +76,10 @@ pub struct Ctx<M> {
     timers: BTreeMap<&'static str, (Instant, Option<Duration>)>,
     next_id: u64,
     closed: bool,
+    /// The plugin's section of `integrations.json`, from `initialize`.
+    settings: Value,
+    /// Each open instance's settings, from its latest `face.open`.
+    instances: BTreeMap<String, Value>,
 }
 
 /// Posts messages into the plugin's loop from any thread.
@@ -190,6 +194,17 @@ impl<M: Send + 'static> Ctx<M> {
         self.request(&request).map(drop)
     }
 
+    /// Plugin-level settings: the plugin's section of `integrations.json` (`{}` when unset), as
+    /// the host sent them in `initialize`.
+    pub fn settings(&self) -> &Value {
+        &self.settings
+    }
+
+    /// `instance`'s own settings from its latest `face.open` (`Null` once it's closed).
+    pub fn instance_settings(&self, instance: &str) -> &Value {
+        self.instances.get(instance).unwrap_or(&Value::Null)
+    }
+
     fn next_timer(&self) -> Option<(&'static str, Instant)> {
         self.timers.iter().map(|(id, (at, _))| (*id, *at)).min_by_key(|(_, at)| *at)
     }
@@ -244,6 +259,8 @@ fn serve<P: Plugin>(mut plugin: P, out: Box<dyn Write>, sender: Sender<Input<P::
         timers: BTreeMap::new(),
         next_id: 0,
         closed: false,
+        settings: json!({}),
+        instances: BTreeMap::new(),
     };
     while !ctx.closed {
         let input = if let Some(line) = ctx.backlog.pop_front() {
@@ -275,9 +292,23 @@ fn serve<P: Plugin>(mut plugin: P, out: Box<dyn Write>, sender: Sender<Input<P::
             Input::Closed => break,
             Input::Msg(msg) => plugin.on_event(&mut ctx, Event::Msg(msg)),
             Input::Line(line) => match protocol::parse_from_host(&line) {
-                FromHost::Message(message) => plugin.on_event(&mut ctx, event(message)),
+                FromHost::Message(message) => {
+                    match &message {
+                        HostMessage::Open { instance, settings, .. } => {
+                            ctx.instances.insert(instance.clone(), settings.clone());
+                        }
+                        HostMessage::Close { instance } => {
+                            ctx.instances.remove(instance);
+                        }
+                        _ => {}
+                    }
+                    plugin.on_event(&mut ctx, event(message));
+                }
                 FromHost::Call { id, method, params } => match method.as_str() {
                     "initialize" => {
+                        if let Some(settings @ Value::Object(_)) = params.get("settings") {
+                            ctx.settings = settings.clone();
+                        }
                         let sdk = format!("{SDK_MAJOR}.{SDK_MINOR}");
                         let line = protocol::result(&id, json!({ "sdk": sdk, "protocol": protocol::PROTOCOL }));
                         ctx.write(&line);
@@ -328,6 +359,30 @@ mod tests {
                 _ => {}
             }
         }
+    }
+
+    struct Settings;
+    impl Plugin for Settings {
+        type Msg = ();
+        fn on_event(&mut self, ctx: &mut Ctx<()>, event: Event<()>) {
+            if let Event::Open { instance, .. } = event {
+                let text = format!("{} {}", ctx.settings()["pipe"], ctx.instance_settings(&instance)["variant"]);
+                ctx.view(&instance, View::text(text, Role::Body).face());
+            }
+        }
+    }
+
+    #[test]
+    fn settings_reach_the_ctx() {
+        let out = run_lines(
+            Settings,
+            &[
+                r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocol":2,"settings":{"pipe":"p"}}}"#,
+                r#"{"jsonrpc":"2.0","method":"face.open","params":{"instance":"a","face":"f","settings":{"variant":"v"}}}"#,
+            ],
+        );
+        let view: Value = serde_json::from_str(out.lines().nth(1).unwrap()).unwrap();
+        assert_eq!(view["params"]["tree"]["body"]["text"], r#""p" "v""#);
     }
 
     #[test]
