@@ -41,7 +41,17 @@ fn peer_row(peer: &Peer, exit: Option<&str>, now: i64, traffic: bool) -> View {
 pub fn face(id: &str, size: SizeClass, state: &State, now: i64) -> Face {
     if id == "status" {
         let connected = state.error.is_none() && state.data.as_ref().is_some_and(|data| data.state == "Running");
-        return View::tinted(if connected { "Tailscale · Connected" } else { "Tailscale · Disconnected" }, Role::Caption, if connected { Tone::Positive } else { Tone::Secondary }).face();
+        let label = match (&state.data, &state.error) {
+            (_, Some(_)) => "Unavailable",
+            (Some(data), _) if data.state == "Running" => "Connected",
+            (Some(data), _) if data.state == "Stopped" => "Disconnected",
+            (Some(data), _) => data.state.as_str(),
+            _ => "Connecting…",
+        };
+        return View::row([
+            View::tinted(format!("Tailscale · {label}"), Role::Caption, if connected { Tone::Positive } else { Tone::Secondary }),
+            View::button("Refresh", "refresh"),
+        ]).face();
     }
     let mut face = match &state.data {
         None => View::empty("globe", if state.error.is_some() { "Tailscale unavailable" } else { "Connecting…" }, state.error.as_deref().unwrap_or("Reading the existing Tailscale service")).face(),

@@ -7,9 +7,11 @@ fn disconnected_or_unreachable_service_never_claims_a_green_connection() {
     for (backend, error) in [("Stopped", None), ("NeedsLogin", None), ("Running", Some("pipe closed".into()))] {
         let state = State { data: Some(tailscale::Snapshot { state: backend.into(), ..Default::default() }), error, ..Default::default() };
         for size in [SizeClass::Small, SizeClass::Medium, SizeClass::Large] {
-            let wire = serde_json::to_string(&faces::face("connection", size, &state, golden::NOW)).unwrap();
-            assert!(!wire.contains("\"Connected\""));
-            assert!(!wire.contains("\"positive\""));
+            for id in ["connection", "peers", "traffic", "status"] {
+                let wire = serde_json::to_string(&faces::face(id, size, &state, golden::NOW)).unwrap();
+                assert!(!wire.contains("Connected"));
+                assert!(!wire.contains("\"positive\""));
+            }
         }
     }
 }
