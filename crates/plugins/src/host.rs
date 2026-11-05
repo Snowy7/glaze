@@ -32,6 +32,13 @@ pub const MOVE_FRAME: Duration = Duration::from_millis(16);
 pub const TOAST_INSTANCE: &str = "toast";
 const STRIKES: usize = 3;
 const STRIKE_WINDOW: Duration = Duration::from_secs(300);
+/// Soft-budget overruns (`runtime::INPUT_BUDGET`/`EVENT_BUDGET`) are counted over this window:
+/// the first is a warning, [`THROTTLE_AFTER`] throttle the plugin for [`THROTTLE`], and
+/// [`RUNAWAY_AFTER`] stop it. A single slow event never stops a plugin.
+const OVERRUN_WINDOW: Duration = Duration::from_secs(60);
+const THROTTLE_AFTER: usize = 3;
+const THROTTLE: Duration = Duration::from_secs(5);
+const RUNAWAY_AFTER: usize = 20;
 
 /// What reaches the loop: shell frames and I/O completions from worker threads.
 pub enum Input {
@@ -66,6 +73,10 @@ struct Loaded {
     retry_at: Option<Instant>,
     stopped: Option<String>,
     idle_since: Option<Instant>,
+    /// Recent soft-budget overruns, and the end of the current throttle (its timers wait and
+    /// system events skip it until then; input and I/O are still delivered).
+    overruns: Vec<Instant>,
+    throttled: Option<Instant>,
 }
 
 pub struct Host<W: Write> {
@@ -224,7 +235,7 @@ impl<W: Write> Host<W> {
         let dir = PathBuf::from(dir);
         match Manifest::load(&dir) {
             Ok(manifest) if manifest.id == plugin => {
-                let loaded = Loaded { manifest, dir, instance: None, faces: BTreeMap::new(), last: HashMap::new(), strikes: Vec::new(), retry_at: None, stopped: None, idle_since: None };
+                let loaded = Loaded { manifest, dir, instance: None, faces: BTreeMap::new(), last: HashMap::new(), strikes: Vec::new(), retry_at: None, stopped: None, idle_since: None, overruns: Vec::new(), throttled: None };
                 self.plugins.insert(plugin.into(), loaded);
                 true
             }
@@ -297,6 +308,7 @@ impl<W: Write> Host<W> {
         };
         let ids: Vec<String> = self.plugins.iter().filter(|(_, p)|
             (topic != Topic::Notifications || !self.held && !p.faces.is_empty())
+            && !p.throttled.is_some_and(|until| until > now)
             && p.instance.as_ref().is_some_and(|i| i.store.data().subscribed(topic))).map(|(id, _)| id.clone()).collect();
         for id in ids {
             self.deliver(&id, wit.clone(), now);
@@ -459,13 +471,53 @@ impl<W: Write> Host<W> {
         Some(true)
     }
 
-    /// Delivers an event to a loaded plugin and applies what it asked for; a trap is a strike.
+    /// Delivers an event to a loaded plugin and applies what it asked for; a trap is a strike,
+    /// and finishing over the soft budget an [`overrun`](Self::overrun).
     pub fn deliver(&mut self, plugin: &str, event: Event, now: Instant) {
+        let input = matches!(event, Event::Action(_) | Event::Command(_));
         let Some(instance) = self.plugins.get_mut(plugin).and_then(|p| p.instance.as_mut()) else { return };
         match instance.event(&event) {
-            Ok(effects) => self.apply(plugin, effects, now),
+            Ok(effects) => {
+                let spent = instance.last;
+                self.apply(plugin, effects, now);
+                let budget = if input { crate::runtime::INPUT_BUDGET } else { crate::runtime::EVENT_BUDGET };
+                if spent > budget {
+                    self.overrun(plugin, spent, budget, now);
+                }
+            }
             Err(trap) => self.strike(plugin, &format!("{trap:#}"), now),
         }
+    }
+
+    /// An event that finished but took longer than its soft budget: warn on the first in the
+    /// window, throttle when it keeps happening, stop (with the reason, for Studio) only a plugin
+    /// that is slow all the time.
+    pub(crate) fn overrun(&mut self, plugin: &str, spent: Duration, budget: Duration, now: Instant) {
+        let Some(entry) = self.plugins.get_mut(plugin) else { return };
+        entry.overruns.retain(|t| now.duration_since(*t) < OVERRUN_WINDOW);
+        entry.overruns.push(now);
+        let (count, ms) = (entry.overruns.len(), spent.as_millis());
+        if count >= RUNAWAY_AFTER {
+            let reason = format!("kept using too much CPU ({count} slow events in a minute)");
+            log::warn!("plugin {plugin} stopped: {reason}");
+            self.unload(plugin);
+            let entry = self.plugins.get_mut(plugin).expect("unloaded, not removed");
+            entry.stopped = Some(reason.clone());
+            entry.throttled = None;
+            self.status(plugin, Status::Stopped(reason));
+        } else if count >= THROTTLE_AFTER {
+            if entry.throttled.is_none_or(|until| until <= now) {
+                log::warn!("plugin {plugin}: {count} slow events in a minute (this one {ms} ms, budget {} ms); throttling its timers and system events for {THROTTLE:?}", budget.as_millis());
+            }
+            entry.throttled = Some(now + THROTTLE);
+        } else if count == 1 {
+            log::warn!("plugin {plugin}: an event took {ms} ms (budget {} ms)", budget.as_millis());
+        }
+    }
+
+    /// Whether `plugin` is throttled at `now` (see [`overrun`](Self::overrun)).
+    fn throttled(&self, plugin: &str, now: Instant) -> Option<Instant> {
+        self.plugins.get(plugin)?.throttled.filter(|until| *until > now)
     }
 
     fn strike(&mut self, plugin: &str, why: &str, now: Instant) {
@@ -473,7 +525,7 @@ impl<W: Write> Host<W> {
         entry.instance = None; // a trapped instance can't be re-entered
         entry.strikes.retain(|t| now.duration_since(*t) < STRIKE_WINDOW);
         entry.strikes.push(now);
-        let reason = if why.contains("interrupt") { "used too much CPU".to_owned() } else { why.lines().next().unwrap_or(why).to_owned() };
+        let reason = if why.contains("interrupt") { "used too much CPU (one event ran over 1 s)".to_owned() } else { why.lines().next().unwrap_or(why).to_owned() };
         self.timers.retain(|_, (p, ..)| p != plugin);
         if entry.strikes.len() >= STRIKES {
             log::warn!("plugin {plugin} stopped after {STRIKES} traps: {why}");
@@ -626,6 +678,10 @@ impl<W: Write> Host<W> {
         }
         while let Some((&key, _)) = self.timers.first_key_value().filter(|((due, _), _)| *due <= now) {
             let (plugin, id, period) = self.timers.remove(&key).expect("first key");
+            if let Some(until) = self.throttled(&plugin, now) {
+                self.schedule(&plugin, id, until - now, period, now); // fires once the throttle ends
+                continue;
+            }
             if let Some(period) = period {
                 self.schedule(&plugin, id.clone(), period, Some(period), now);
             }

@@ -30,8 +30,14 @@ use mypaper::plugin::view::{Node, NodeKind};
 pub const MEMORY_CAP: usize = 32 << 20;
 /// Epoch tick while a plugin call runs. The ticker sleeps otherwise (idle 0% CPU).
 pub const TICK: Duration = Duration::from_millis(5);
-/// Per-event CPU budget in ticks (50 ms); `init` gets four times as much.
-pub const EVENT_TICKS: u64 = 10;
+/// The hard ceiling on one event, in ticks (1 s): past it the call traps as a runaway (a strike).
+/// `init` and `save` get twice as much.
+pub const EVENT_TICKS: u64 = 200;
+/// Soft budgets, checked after the call: an input event (an action, a command) should take at most
+/// this long, and anything else (I/O replies, timers, a big initial snapshot) at most
+/// [`EVENT_BUDGET`]. The host warns, then throttles; see `host.rs` `overrun`.
+pub const INPUT_BUDGET: Duration = Duration::from_millis(50);
+pub const EVENT_BUDGET: Duration = Duration::from_millis(250);
 const MAX_NODES: usize = 4096;
 
 // ---------------------------------------------------------------------------------------------
@@ -195,6 +201,16 @@ pub struct State {
     /// Connections opened and not yet reported closed (a `close` keeps the id until `closed`).
     live: std::collections::HashSet<u64>,
     pub images: images::Images,
+    /// Time this call spent in blocking host imports, which isn't the plugin's own work.
+    host_time: Duration,
+}
+
+/// Runs a blocking host import and books its time as the host's, not the plugin's.
+fn timed<T>(host_time: &mut Duration, f: impl FnOnce() -> T) -> T {
+    let started = Instant::now();
+    let result = f();
+    *host_time += started.elapsed();
+    result
 }
 
 impl WasiView for State {
@@ -422,7 +438,7 @@ impl mypaper::plugin::pipes::Host for State {
 impl mypaper::plugin::launch::Host for State {
     fn inspect(&mut self, app: String) -> Result<mypaper::plugin::launch::DesktopStatus, WitError> {
         self.allowed("launch")?;
-        caps::desktop_status(&app).map_err(failed)
+        timed(&mut self.host_time, || caps::desktop_status(&app)).map_err(failed)
     }
     fn open(&mut self, target: String) -> Result<(), WitError> {
         self.allowed("launch")?;
@@ -444,30 +460,30 @@ impl mypaper::plugin::notify::Host for State {
 impl mypaper::plugin::secrets::Host for State {
     fn get(&mut self, key: String) -> Result<Option<String>, WitError> {
         self.allowed("secrets")?;
-        caps::secret_get(&self.id, &key).map_err(failed)
+        timed(&mut self.host_time, || caps::secret_get(&self.id, &key)).map_err(failed)
     }
     fn set(&mut self, key: String, value: String) -> Result<(), WitError> {
         self.allowed("secrets")?;
-        caps::secret_set(&self.id, &key, &value).map_err(failed)
+        timed(&mut self.host_time, || caps::secret_set(&self.id, &key, &value)).map_err(failed)
     }
     fn remove(&mut self, key: String) -> Result<(), WitError> {
         self.allowed("secrets")?;
-        caps::secret_remove(&self.id, &key).map_err(failed)
+        timed(&mut self.host_time, || caps::secret_remove(&self.id, &key)).map_err(failed)
     }
 }
 
 impl mypaper::plugin::storage::Host for State {
     fn get(&mut self, key: String) -> Result<Option<Vec<u8>>, WitError> {
         self.allowed("storage")?;
-        caps::storage_get(&self.data_dir, &key).map_err(failed)
+        timed(&mut self.host_time, || caps::storage_get(&self.data_dir, &key)).map_err(failed)
     }
     fn set(&mut self, key: String, value: Vec<u8>) -> Result<(), WitError> {
         self.allowed("storage")?;
-        caps::storage_set(&self.data_dir, &key, &value).map_err(failed)
+        timed(&mut self.host_time, || caps::storage_set(&self.data_dir, &key, &value)).map_err(failed)
     }
     fn remove(&mut self, key: String) -> Result<(), WitError> {
         self.allowed("storage")?;
-        caps::storage_remove(&self.data_dir, &key).map_err(failed)
+        timed(&mut self.host_time, || caps::storage_remove(&self.data_dir, &key)).map_err(failed)
     }
 }
 
@@ -487,7 +503,7 @@ impl mypaper::plugin::system::Host for State {
     }
     fn foreground(&mut self) -> Result<Option<mypaper::plugin::system::WindowInfo>, WitError> {
         self.allowed("windows")?;
-        Ok(caps::foreground().map(|w| mypaper::plugin::system::WindowInfo { id: w.id, title: w.title, process: w.process, x: w.rect.0, y: w.rect.1, width: w.rect.2, height: w.rect.3 }))
+        Ok(timed(&mut self.host_time, caps::foreground).map(|w| mypaper::plugin::system::WindowInfo { id: w.id, title: w.title, process: w.process, x: w.rect.0, y: w.rect.1, width: w.rect.2, height: w.rect.3 }))
     }
 }
 
@@ -522,7 +538,7 @@ impl mypaper::plugin::process::Host for State {
 impl mypaper::plugin::files::Host for State {
     fn read(&mut self, path: String) -> Result<Option<Vec<u8>>, WitError> {
         self.allowed(&format!("file:{path}"))?;
-        caps::read_file(&path).map_err(failed)
+        timed(&mut self.host_time, || caps::read_file(&path)).map_err(failed)
     }
 }
 
@@ -818,17 +834,18 @@ impl Runtime {
             topics: Vec::new(),
             live: Default::default(),
             images: images::Images::default(),
+            host_time: Duration::ZERO,
         };
         let mut store = Store::new(&self.engine, data);
         store.limiter(|state| &mut state.limiter);
-        store.set_epoch_deadline(EVENT_TICKS * 4);
+        store.set_epoch_deadline(EVENT_TICKS * 2);
         let bindings = Plugin::instantiate(&mut store, component, &self.linker)?;
         let info = InitInfo { plugin: manifest.id.clone(), settings: serde_json::to_string(&settings)?, state };
         self.ticker.set(true);
         let result = bindings.mypaper_plugin_lifecycle().call_init(&mut store, &info);
         self.ticker.set(false);
         match result? {
-            Ok(()) => Ok(Instance { store, bindings, ticker: self.ticker.clone(), cpu: Duration::ZERO, events: 0 }),
+            Ok(()) => Ok(Instance { store, bindings, ticker: self.ticker.clone(), cpu: Duration::ZERO, last: Duration::ZERO, events: 0 }),
             Err(why) => bail!("init failed: {why}"),
         }
     }
@@ -838,27 +855,32 @@ pub struct Instance {
     pub store: Store<State>,
     bindings: Plugin,
     ticker: Ticker,
+    /// The plugin's own time across all events, and in the last one (blocking host imports
+    /// excluded), for stats and the soft budgets.
     pub cpu: Duration,
+    pub last: Duration,
     pub events: u64,
 }
 
 impl Instance {
-    /// Delivers one event within the CPU budget. `Err` is a trap (panic, out of memory, or the
-    /// budget ran out): the instance must be dropped.
+    /// Delivers one event under the hard ceiling. `Err` is a trap (panic, out of memory, or a
+    /// runaway past [`EVENT_TICKS`]): the instance must be dropped.
     pub fn event(&mut self, event: &Event) -> Result<Vec<Effect>> {
         self.store.set_epoch_deadline(EVENT_TICKS);
+        self.store.data_mut().host_time = Duration::ZERO;
         let started = Instant::now();
         self.ticker.set(true);
         let result = self.bindings.mypaper_plugin_lifecycle().call_on_event(&mut self.store, event);
         self.ticker.set(false);
-        self.cpu += started.elapsed();
+        self.last = started.elapsed().saturating_sub(self.store.data().host_time);
+        self.cpu += self.last;
         self.events += 1;
         let effects = std::mem::take(&mut self.store.data_mut().effects);
         result.map(|()| effects).map_err(Into::into)
     }
 
     pub fn save(&mut self) -> Result<Vec<u8>> {
-        self.store.set_epoch_deadline(EVENT_TICKS * 4);
+        self.store.set_epoch_deadline(EVENT_TICKS * 2);
         self.ticker.set(true);
         let result = self.bindings.mypaper_plugin_lifecycle().call_save(&mut self.store);
         self.ticker.set(false);

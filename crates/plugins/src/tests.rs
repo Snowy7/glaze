@@ -117,7 +117,7 @@ fn a_spinning_or_crashing_plugin_is_stopped_without_affecting_others() {
     let started = Instant::now();
     act(&mut host, "h1", "spin");
     let spun = started.elapsed();
-    assert!(spun < Duration::from_millis(500), "the budget stopped it after {spun:?}");
+    assert!(spun < Duration::from_millis(1500), "the hard ceiling (1 s) stopped it after {spun:?}");
     let out = frames(&mut host);
     assert!(out.iter().any(|f| matches!(f, HelperMsg::Status { plugin, status: Status::Restarting(why) } if plugin == "hello" && why.contains("CPU"))), "{out:?}");
 
@@ -136,6 +136,28 @@ fn a_spinning_or_crashing_plugin_is_stopped_without_affecting_others() {
     assert!(out.iter().any(|f| matches!(f, HelperMsg::Status { plugin, status: Status::Stopped(_) } if plugin == "hello")), "{out:?}");
     act(&mut host, "o1", "click");
     assert_eq!(headline(&frames(&mut host), "o1").as_deref(), Some("Clicked 2×"));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn slow_events_warn_then_throttle_and_only_a_constantly_slow_plugin_stops() {
+    let root = root("slow", &["hello"]);
+    let mut host = host(&root);
+    open(&mut host, &root, "hello", "h1");
+    frames(&mut host);
+    let (now, slow, budget) = (Instant::now(), Duration::from_millis(120), Duration::from_millis(50));
+    let stopped = |frames: &[HelperMsg]| frames.iter().any(|f| matches!(f, HelperMsg::Status { plugin, status: Status::Stopped(_) } if plugin == "hello"));
+    // One slow click, then a few more: a warning and a throttle, never a stop.
+    for i in 0..19 {
+        host.overrun("hello", slow, budget, now + Duration::from_millis(i));
+    }
+    assert!(!stopped(&frames(&mut host)));
+    act(&mut host, "h1", "click");
+    assert_eq!(headline(&frames(&mut host), "h1").as_deref(), Some("Clicked 1×"), "input still reaches a throttled plugin");
+    // Slow all the time: stopped, with the reason Studio shows.
+    host.overrun("hello", slow, budget, now + Duration::from_millis(20));
+    let out = frames(&mut host);
+    assert!(out.iter().any(|f| matches!(f, HelperMsg::Status { plugin, status: Status::Stopped(why) } if plugin == "hello" && why.contains("slow events"))), "{out:?}");
     let _ = std::fs::remove_dir_all(root);
 }
 
