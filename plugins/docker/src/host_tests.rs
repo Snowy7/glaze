@@ -34,6 +34,9 @@ fn docker_plugin_size_sheet_and_action_hits() {
         let model = docker_model(&faces[id][class]);
         let list = draw(&mut ui, &model, size);
         assert!(list.damage(&draw(&mut ui, &model, size)).is_none());
+        if id == "containers" {
+            assert!(list.hits.iter().any(|hit| hit.id == ACTION && hit.enabled), "{class}: first container action must fit");
+        }
         for hit in &list.hits {
             assert!(hit.rect.left >= 0.0 && hit.rect.top >= 0.0 && hit.rect.right <= size.0 as f32 && hit.rect.bottom <= size.1 as f32, "{id}/{class}: {} {:?}", hit.label, hit.rect);
             if id == "disconnected" && hit.id >= ACTION { assert!(!hit.enabled); }
