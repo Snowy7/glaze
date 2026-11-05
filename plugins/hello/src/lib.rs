@@ -19,17 +19,36 @@ struct Hello {
 impl Hello {
     fn draw(&self, instance: &str, face: &str) {
         let view = if face == "clock" {
-            View::text(format!("hello · {}", self.ticks), Role::Caption)
+            // The bar draws the text; a click on the module is its first action (the tint).
+            View::row([View::text(format!("hello · {}", self.ticks), Role::Caption), View::button(if self.tinted { "Untint" } else { "Tint" }, "tint")])
         } else {
             View::stack([
                 View::text(format!("Clicked {}×", self.clicks), Role::Headline),
                 View::tinted(self.fetched.clone().unwrap_or_else(|| "Not fetched yet".into()), Role::Caption, Tone::Secondary),
+                self.canvas(),
                 View::row([View::button("Click", "click"), View::button(if self.tinted { "Untint bar" } else { "Tint bar" }, "tint"), View::button("Fetch", "fetch")]),
             ])
         };
         let mut face = view.face();
         face.footer = Some(format!("{} s awake", self.ticks));
         ui::set_view(instance, face);
+    }
+
+    /// The canvas sample: a track, a dot that moves with the seconds, a wave path and a label.
+    fn canvas(&self) -> View {
+        use mypaper_plugin_sdk::{Draw, Paint};
+        let x = 12.0 + (self.ticks % 10) as f32 * 18.0;
+        View::Canvas {
+            height: 44.0,
+            commands: vec![
+                Draw::Rect { x: 0.0, y: 0.0, w: 200.0, h: 44.0, radius: 10.0, paint: Paint::Fill(Tone::Hex("#1d2a4a".into())) },
+                Draw::Path { d: "M8 30 C 40 6, 72 54, 104 30 C 136 6, 168 54, 192 30".into(), paint: Paint::Stroke(Tone::Accent, 2.0) },
+                Draw::Path { d: "M150 8 l6 12 l-12 0 Z".into(), paint: Paint::Fill(Tone::Warning) },
+                Draw::Circle { x, y: 22.0, r: 6.0, paint: Paint::Fill(Tone::Positive) },
+                Draw::Circle { x, y: 22.0, r: 9.0, paint: Paint::Stroke(Tone::Label, 1.0) },
+                Draw::Text { x: 10.0, y: 4.0, text: "canvas".into(), role: Role::Caption, color: Tone::Secondary },
+            ],
+        }
     }
 
     fn redraw(&self) {
