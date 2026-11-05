@@ -14,7 +14,6 @@ pub const SCENE: HitId = 6200;
 pub const ITEM: HitId = 6400;
 pub const RUN: HitId = 6800;
 
-#[derive(Default)]
 pub struct Model {
     lease: Option<Lease>,
     generation: Option<u64>,
@@ -25,6 +24,26 @@ pub struct Model {
     pub notice: Option<String>,
     pub thread_links: std::collections::BTreeMap<String, String>,
     pub observed_at_ms: i64,
+}
+impl Default for Model {
+    fn default() -> Self {
+        Self {
+            lease: None,
+            generation: None,
+            snapshot: Snapshot {
+                availability: Availability::Unavailable(
+                    "Connect this integration in Settings".into(),
+                ),
+                ..Default::default()
+            },
+            routines: Vec::new(),
+            runs: Vec::new(),
+            task: None,
+            notice: None,
+            thread_links: Default::default(),
+            observed_at_ms: 0,
+        }
+    }
 }
 impl Model {
     pub fn busy(&self) -> bool {
