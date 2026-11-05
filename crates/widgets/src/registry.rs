@@ -141,6 +141,12 @@ pub fn builtins() -> Registry {
     let manifest =
         WidgetManifest::parse(include_str!("catalog/grok.json"), "grok").expect("built-in schema");
     widgets.insert("grok".into(), Installed { manifest });
+    for (id, definition) in crate::custom::catalog() {
+        match definition.manifest(&id) {
+            Ok(manifest) => { widgets.insert(id, Installed { manifest }); }
+            Err(error) => log::warn!("Custom widget {id}: {error}"),
+        }
+    }
     Registry { widgets }
 }
 

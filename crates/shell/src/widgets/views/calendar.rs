@@ -16,6 +16,16 @@ pub fn event_color(index: usize) -> Rgba {
     Rgba::rgb8(EVENT_COLORS[index % EVENT_COLORS.len()], 1.0)
 }
 
+/// Imported calendars keep their provider colour; local events use the picker palette.
+fn source_color(event: &Value) -> Rgba {
+    if let Some(rgb) = event["calendarColor"].as_array().filter(|v| v.len() == 3) {
+        if let (Some(r), Some(g), Some(b)) = (rgb[0].as_u64(), rgb[1].as_u64(), rgb[2].as_u64()) {
+            return Rgba::rgb8([r.min(255) as u8, g.min(255) as u8, b.min(255) as u8], 1.0);
+        }
+    }
+    event_color(event["color"].as_u64().unwrap_or(0) as usize)
+}
+
 fn week_start(c: &Ctx) -> u32 {
     match c.m.str("weekStart", "auto").as_str() {
         "sunday" => 0,
@@ -123,7 +133,7 @@ fn day(c: &mut Ctx, cell: Rect, date: Date, size: f32, muted: bool) {
     c.f.hit(id, cell, Role::Button, &date.key(), true, Some(date == c.m.selected));
     let dots: Vec<_> = on(c.m, date)
         .iter()
-        .map(|(_, e)| event_color(e["color"].as_u64().unwrap_or(0) as usize))
+        .map(|(_, e)| source_color(e))
         .take(3)
         .collect();
     let weekend = matches!(date.weekday(), 0 | 6);
@@ -296,7 +306,7 @@ fn event_row(c: &mut Ctx, row: Rect, index: usize, event: &Value, date: Option<&
     c.control(edit, main, radius, Role::Button, "Edit event", None);
     let inner = main.inset(mypaper_ui::Insets::xy(c.px(6.0), 0.0));
     let (dot, rest) = inner.take_left(c.px(7.0), c.px(8.0));
-    let tint = event_color(event["color"].as_u64().unwrap_or(0) as usize);
+    let tint = source_color(event);
     let d = c.px(7.0);
     c.f.fill(dot.place(d, d, Align::Center, Align::Center), d / 2.0, tint);
     let time = event["time"].as_str().filter(|t| !t.is_empty());
@@ -463,7 +473,7 @@ fn next_event(c: &mut Ctx, r: Rect, e: &Value) {
     let color = c.color();
     let d = c.px(7.0);
     let (dot, rest) = r.take_left(d, c.px(6.0));
-    c.f.fill(dot.place(d, d, Align::Center, Align::Center), d / 2.0, event_color(e["color"].as_u64().unwrap_or(0) as usize));
+    c.f.fill(dot.place(d, d, Align::Center, Align::Center), d / 2.0, source_color(e));
     let label = match e["time"].as_str().filter(|t| !t.is_empty()) {
         Some(t) => format!("{t} {}", e["title"].as_str().unwrap_or("Event")),
         None => e["title"].as_str().unwrap_or("Event").to_owned(),

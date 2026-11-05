@@ -1,0 +1,8 @@
+{
+  "title": "Reading list",
+  "layout": "list",
+  "source": { "type": "file", "path": "reading-list.txt" },
+  "refreshSeconds": 60,
+  "size": [3, 3],
+  "caption": "Your list, from a local text file"
+}

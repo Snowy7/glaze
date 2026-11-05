@@ -3,6 +3,7 @@ pub mod appicon;
 pub mod audio;
 pub mod bridge;
 pub mod display;
+pub mod custom;
 pub mod files;
 pub mod layout;
 pub mod look;

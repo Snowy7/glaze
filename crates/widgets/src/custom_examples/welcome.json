@@ -1,0 +1,8 @@
+{
+  "title": "Daily focus",
+  "layout": "text",
+  "source": { "type": "static", "value": "Build complex things as simply as possible.\n\nOne useful thing at a time." },
+  "refreshSeconds": 0,
+  "size": [3, 2],
+  "caption": "Edit this file to make it yours"
+}

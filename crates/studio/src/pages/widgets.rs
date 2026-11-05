@@ -80,7 +80,38 @@ pub fn bar(app: &App, b: &mut B, bar: Rect, right: f32) -> f32 {
     let aw = b.button_width("Arrange on desktop", true, false);
     right -= aw + b.px(8.0);
     b.button(key("arrange"), Rect::new(right, y, aw, b.px(32.0)), "Arrange on desktop", Some(glyph::MOVE), ButtonKind::Secondary, true, Action::ArrangeOnDesktop);
+    let custom = b.button_width("New custom widget", true, false);
+    right -= custom + b.px(8.0);
+    b.button(key("new-custom-widget"), Rect::new(right, y, custom, b.px(32.0)), "New custom widget", Some(glyph::ADD), ButtonKind::Secondary, true, Action::Open("mypaper-custom:new".into()));
     crate::view::edit_tools(app, b, bar, right - b.px(6.0))
+}
+
+/// Creates one editable definition plus the examples, then opens the file in the user's editor.
+pub fn new_custom(app: &mut App) {
+    let result = (|| -> anyhow::Result<std::path::PathBuf> {
+        use std::io::Write;
+        let folder = mypaper_widgets::custom::install_examples()?;
+        for index in 1..=10000 {
+            let path = folder.join(format!("widget-{index}.json"));
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(mut file) => {
+                    file.write_all(mypaper_widgets::custom::EXAMPLES[0].1.as_bytes())?;
+                    return Ok(path);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {},
+                Err(e) => return Err(e.into()),
+            }
+        }
+        anyhow::bail!("Choose a new custom widget filename in your widgets folder")
+    })();
+    match result {
+        Ok(path) => {
+            app.registry = mypaper_widgets::registry::builtins();
+            crate::system::open(&path.to_string_lossy());
+            app.toast("Custom widget created. Edit its JSON, then add it from the catalog.", None);
+        }
+        Err(e) => app.toast(e.to_string(), None),
+    }
 }
 
 pub fn view(app: &App, b: &mut B, body: Rect) {
@@ -510,6 +541,7 @@ pub fn run(app: &mut App, action: Action) {
             app.nav.widget = id;
         }
         Action::AddWidgetSheet => {
+            app.registry = mypaper_widgets::registry::builtins();
             app.go(Page::Widgets);
             app.texts.remove(&FieldId::WidgetSearch);
             app.overlay = Some(Overlay::AddWidget);
@@ -812,13 +844,11 @@ pub fn add_sheet(app: &App, b: &mut B) {
     let rect = crate::view::sheet(app, b, "Add a widget", b.px(880.0), b.px(560.0));
     text_field(app, b, Rect::new(rect.left, rect.top, b.px(300.0), b.px(32.0)), FieldId::WidgetSearch, Some(glyph::SEARCH), "Search widgets", "", "Search widgets");
     let needle = app.text(&FieldId::WidgetSearch).trim().to_lowercase();
-    let categories: [(&str, &[&str]); 5] = [
-        ("Time", &["clock", "calendar", "countdown", "timer"]),
-        ("Media", &["now-playing", "media-pill", "photo"]),
-        ("Info", &["weather", "system-monitor", "rss", "crypto", "quote", "heatmap"]),
-        ("Productivity", &["todo", "notes"]),
-        ("Launch", &["launcher", "quick-toggles"]),
-    ];
+    let mut categories = std::collections::BTreeMap::<&str, Vec<&WidgetManifest>>::new();
+    for installed in app.registry.widgets.values() {
+        let manifest = &installed.manifest;
+        categories.entry(manifest.category.as_deref().unwrap_or("Other")).or_default().push(manifest);
+    }
     let view = key("add-widget-list");
     let area = Rect::new(rect.left, rect.top + b.px(44.0), rect.width(), rect.height() - b.px(56.0));
     b.scroll(view, area, app.nav.scroll(view), Action::None, |b, top| {
@@ -826,10 +856,9 @@ pub fn add_sheet(app: &App, b: &mut B) {
         let gap = b.px(12.0);
         let w = (area.width() - b.px(10.0) - gap * 2.0) / 3.0;
         let h = b.px(76.0);
-        for (category, ids) in categories {
-            let found: Vec<&WidgetManifest> = ids
-                .iter()
-                .filter_map(|id| app.registry.get(id).map(|m| &m.manifest))
+        for (category, manifests) in categories {
+            let found: Vec<&WidgetManifest> = manifests
+                .into_iter()
                 .filter(|m| needle.is_empty() || format!("{} {}", m.name, m.description.as_deref().unwrap_or("")).to_lowercase().contains(&needle))
                 .collect();
             if found.is_empty() {

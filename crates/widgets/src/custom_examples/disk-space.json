@@ -1,0 +1,13 @@
+{
+  "title": "C: drive used",
+  "layout": "gauge",
+  "source": {
+    "type": "command",
+    "program": "powershell.exe",
+    "args": ["-NoProfile", "-NonInteractive", "-Command", "$disk = Get-PSDrive C; [math]::Round(100 * $disk.Used / ($disk.Used + $disk.Free))"]
+  },
+  "refreshSeconds": 300,
+  "size": [2, 2],
+  "suffix": "%",
+  "caption": "Runs only while visible"
+}
