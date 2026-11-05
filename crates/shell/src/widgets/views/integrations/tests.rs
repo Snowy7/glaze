@@ -2,7 +2,7 @@
 use super::*;
 use crate::widgets::{time::Stamp, views};
 use mypaper_integrations::{
-    Data, Snapshot, config, docker, launcher, notifications, obs, t3,
+    Data, Snapshot, config, launcher, notifications, obs, t3,
 };
 use mypaper_ui::{DisplayList, Image, Op, TextStyle, Tokens, Ui, golden, render};
 use mypaper_widgets::{layout::Placed, storage::Storage};
@@ -10,7 +10,7 @@ use serde_json::{Map, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
 const NOW: i64 = 1_793_875_200_000;
-const IDS: [&str; 5] = ["discord", "t3", "obs", "docker", "grok"];
+const IDS: [&str; 5] = ["discord", "t3", "obs", "grok"];
 
 fn model(id: &str, size: [u32; 2]) -> Model {
     let placed = Placed {
@@ -78,75 +78,6 @@ fn model(id: &str, size: [u32; 2]) -> Model {
                     advancing: true,
                 },
                 ..Default::default()
-            })),
-            "docker" => Some(Data::Docker(docker::Snapshot {
-                containers: vec![
-                    docker::Container {
-                        id: "web".into(),
-                        name: "mypaper-web".into(),
-                        state: "running".into(),
-                        failed: false,
-                    },
-                    docker::Container {
-                        id: "db".into(),
-                        name: "development-postgres".into(),
-                        state: "running".into(),
-                        failed: false,
-                    },
-                    docker::Container {
-                        id: "worker".into(),
-                        name: "background-worker".into(),
-                        state: "exited".into(),
-                        failed: true,
-                    },
-                ],
-                usage: BTreeMap::from([
-                    (
-                        "web".into(),
-                        docker::Usage {
-                            cpu_hundredths: Some(1240),
-                            memory_bytes: 192 * 1_048_576,
-                            memory_limit: 2_147_483_648,
-                        },
-                    ),
-                    (
-                        "db".into(),
-                        docker::Usage {
-                            cpu_hundredths: Some(640),
-                            memory_bytes: 384 * 1_048_576,
-                            memory_limit: 2_147_483_648,
-                        },
-                    ),
-                ]),
-            })),
-            "discord" => Some(Data::Notifications(notifications::Snapshot {
-                cards: vec![
-                    notifications::Card {
-                        id: 1,
-                        app_id: "com.squirrel.Discord.Discord".into(),
-                        app: "Discord".into(),
-                        title: "Ada · Design room".into(),
-                        body: "The new widget layouts are ready.".into(),
-                        at: 0,
-                    },
-                    notifications::Card {
-                        id: 2,
-                        app_id: "com.squirrel.Discord.Discord".into(),
-                        app: "Discord".into(),
-                        title: "Lin · Native desktop".into(),
-                        body: "I left notes on the glass material.".into(),
-                        at: 0,
-                    },
-                    notifications::Card {
-                        id: 3,
-                        app_id: "other-app".into(),
-                        app: "Other".into(),
-                        title: "Never shown in Discord".into(),
-                        body: String::new(),
-                        at: 0,
-                    },
-                ],
-                counts: BTreeMap::new(),
             })),
             _ => None,
         },
@@ -317,7 +248,6 @@ fn sheet(ui: &mut Ui, id: &str) -> Image {
             _ => {
                 m.integration.snapshot.data = match id {
                     "t3" => Some(Data::T3(Default::default())),
-                    "docker" => Some(Data::Docker(Default::default())),
                     "discord" => Some(Data::Notifications(Default::default())),
                     "obs" => Some(Data::Obs(Default::default())),
                     _ => None,
@@ -365,16 +295,6 @@ fn obs_clock_stops_when_paused_or_disconnected_and_discord_filters_exact_app_ide
     obs.schedule(Stamp::at(NOW), Instant::now());
     assert!(obs.next.is_none());
     let mut ui = Ui::new().unwrap();
-    let mut docker = model("docker", [4, 4]);
-    docker.integration.snapshot.availability = Availability::Stale("fixture disconnect".into());
-    let stale = draw(&mut ui, &docker, (360, 360), 1.0);
-    assert!(
-        stale
-            .hits
-            .iter()
-            .filter(|hit| hit.id >= crate::integrations::widgets::ITEM)
-            .all(|hit| !hit.enabled)
-    );
     let list = draw(&mut ui, &model("discord", [4, 4]), (360, 360), 1.0);
     assert!(
         !list
