@@ -68,6 +68,21 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
   foreach ($plugin in "weather", "rss") {
     if (Test-Path "$From\$plugin.exe") { Copy-Item "$From\$plugin.exe" "$repo\plugins\$plugin\$plugin.exe" -Force }
   }
+  # The plugins this build ships: target\release\plugins, found before the repo's plugins\
+  # (files::bundled_plugins), with each plugin's manifest, component and command only. The SDK
+  # examples stay in the repo and are never installed for the user (hello registers a global
+  # shortcut and a desktop-menu item). Copies, not junctions: cleaning target\ must never reach
+  # into the repo. A rebuilt .wasm goes live with the next deploy.
+  $examples = "hello", "hello-ts"
+  $bundle = Join-Path $destination 'plugins'
+  if (Test-Path -LiteralPath $bundle) { Remove-Item -LiteralPath $bundle -Recurse -Force }
+  foreach ($dir in Get-ChildItem -LiteralPath "$repo\plugins" -Directory) {
+    if ($examples -contains $dir.Name -or -not (Test-Path -LiteralPath "$($dir.FullName)\plugin.json")) { continue }
+    $to = New-Item -ItemType Directory -Force (Join-Path $bundle $dir.Name)
+    Get-ChildItem -LiteralPath $dir.FullName -File |
+      Where-Object { $_.Name -eq 'plugin.json' -or $_.Extension -in '.wasm', '.exe' } |
+      Copy-Item -Destination $to.FullName -Force
+  }
   # The WebAssembly plugin runtime (docs/plugins.md), and the bundled components' AOT cache
   # (scripts/build-plugins.ps1 builds the .wasm files into their plugin folders).
   # mypaper-native-host runs plugins' own native modules, only while such a plugin is active.
@@ -78,7 +93,7 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
         Copy-Item -LiteralPath "$From\$exe.exe" -Destination "$destination\$exe.exe" -Force
       }
     }
-    Start-Process -FilePath "$destination\mypaper-plugins.exe" -ArgumentList "--compile", "`"$repo\plugins`"" -Wait -WindowStyle Hidden
+    Start-Process -FilePath "$destination\mypaper-plugins.exe" -ArgumentList "--compile", "`"$bundle`"" -Wait -WindowStyle Hidden
   }
   & "$PSScriptRoot\package\register.ps1" -PackagePath $identity -ExternalLocation $destination -Development
   Start-Process -FilePath "$destination\mypaper-core.exe" -WorkingDirectory $destination -WindowStyle Hidden
