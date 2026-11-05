@@ -1,0 +1,21 @@
+[package]
+name = "mypaper-plugins"
+description = "The plugin runtime: one Wasmtime engine hosting every WebAssembly component plugin, out of the shell (docs/plugins.md)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+env_logger.workspace = true
+log.workspace = true
+mypaper-plugin-api = { path = "../plugin-api" }
+mypaper-plugin-sdk = { path = "../plugin-sdk" }
+serde.workspace = true
+serde_json.workspace = true
+wasmtime = { version = "50", default-features = false, features = ["anyhow", "runtime", "cranelift", "component-model", "pooling-allocator", "std"] }
+wasmtime-wasi = { version = "50", default-features = false, features = ["p2"] }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Networking_WinHttp", "Win32_Graphics_Gdi", "Win32_System_Power", "Win32_System_ProcessStatus", "Win32_System_Threading"] }
+
+[lints]
+workspace = true

@@ -1423,6 +1423,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-plugin-docker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "mypaper-plugin-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
+name = "mypaper-plugin-obs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "futures-util",
+ "hyper",
+ "mypaper-plugin-sdk",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "mypaper-plugin-rss"
 version = "0.1.0"
 dependencies = [
@@ -1457,6 +1489,22 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "mypaper-plugin-tailscale"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "mypaper-plugin-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

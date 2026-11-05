@@ -12,3 +12,5 @@ packages/*/dist
 plugins/*/*.exe
 # Build output left by the deleted Tauri Studio (dist, node_modules, src-tauri/target); see v0.0.1.
 /apps/
+# WebAssembly plugin builds (scripts/build-plugins.ps1)
+plugins/*/*.wasm

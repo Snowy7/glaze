@@ -1,0 +1,23 @@
+# A WebAssembly component plugin (docs/plugins.md). Its own workspace: it builds for
+# wasm32-wasip2 only (`scripts/build-plugins.ps1`), never with the native workspace.
+[package]
+name = "hello"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
+
+[workspace]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

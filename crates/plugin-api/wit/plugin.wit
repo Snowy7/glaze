@@ -1,0 +1,297 @@
+// mypaper's plugin world (docs/plugins.md). Semver: minor bumps only add; this file is frozen
+// once a newer minor ships beside it.
+package mypaper:plugin@0.1.0;
+
+/// Shared value types.
+interface types {
+    enum size-class { small, medium, large }
+
+    /// A theme color role, or `#rrggbb` for brand fills. Roles follow the theme; hex doesn't.
+    variant tone { label, secondary, tertiary, accent, warning, destructive, positive, hex(string) }
+
+    /// The kit's text roles.
+    enum text-role { large-title, title1, title2, title3, headline, body, callout, subheadline, footnote, caption }
+
+    enum align { start, center, end }
+
+    variant error {
+        /// The manifest doesn't declare the permission this call needs.
+        denied(string),
+        /// Not available in this host (yet), or not on this machine.
+        unsupported(string),
+        invalid(string),
+        failed(string),
+    }
+}
+
+/// Declarative views: a flat pre-order node list (WIT has no recursive types).
+interface view {
+    use types.{tone, text-role, align};
+
+    record segment { fraction: f32, color: tone }
+    record series { label: string, values: list<f32>, color: option<tone> }
+    record select-option { label: string, value: string }
+
+    record text { text: string, role: text-role, color: option<tone>, align: align }
+    record icon { icon: string, size: option<f32>, color: option<tone> }
+    record button { label: string, action: string, icon: option<string>, primary: bool }
+    record icon-button { icon: string, label: string, action: string, enabled: bool }
+    record select { label: string, action: string, options: list<select-option>, selected: option<string> }
+    record field { placeholder: string, action: string }
+    record list-row { title: string, detail: option<string>, icon: option<string>, trailing: option<string>, action: option<string> }
+    record stat { label: string, value: string, detail: option<string> }
+    record metric { value: string, label: string, color: option<tone>, width: option<f32> }
+    record ring { fraction: f32, label: option<string>, color: option<tone> }
+    record limit-bar { left: f32, pace: option<f32>, color: option<tone>, badge: option<string>, label: option<string>, reset: option<string> }
+    record sparkline { values: list<f32>, color: option<tone> }
+    /// `x-labels`: first, middle, last.
+    record area-chart { series: list<series>, x-labels: list<string>, unit: option<string> }
+    record card { title: option<string> }
+    record empty { icon: option<string>, title: string, detail: option<string> }
+    record grid { columns: u8, gap: option<f32> }
+
+    /// The kit's spring for `animated` nodes: changes to the child animate with it.
+    record spring { stiffness: f32, damping: f32 }
+
+    /// Canvas drawing commands, in kit points from the canvas's top left; drawn natively.
+    record point { x: f32, y: f32 }
+    record rect { x: f32, y: f32, w: f32, h: f32 }
+    variant paint { fill(tone), stroke(tuple<tone, f32>) }
+    variant draw {
+        rect(tuple<rect, f32, paint>),
+        circle(tuple<point, f32, paint>),
+        line(tuple<point, point, tone, f32>),
+        /// SVG path data (`M L C Q Z`).
+        path(tuple<string, paint>),
+        text(tuple<point, string, text-role, tone>),
+        /// An image the plugin registered with `ui.put-image`.
+        image(tuple<rect, u32>),
+    }
+    record canvas { height: f32, commands: list<draw> }
+
+    /// `gap` for stack/row/list.
+    variant node-kind {
+        stack(option<f32>),
+        row(option<f32>),
+        %list(option<f32>),
+        grid(grid),
+        card(card),
+        text(text),
+        icon(icon),
+        button(button),
+        icon-button(icon-button),
+        select(select),
+        field(field),
+        list-row(list-row),
+        stat(stat),
+        metric(metric),
+        ring(ring),
+        limit-bar(limit-bar),
+        segmented-bar(list<segment>),
+        sparkline(sparkline),
+        area-chart(area-chart),
+        empty(empty),
+        spacer,
+        animated(spring),
+        canvas(canvas),
+    }
+
+    /// Followed by `children` direct children, each a whole subtree.
+    record node { kind: node-kind, children: u32 }
+
+    /// One face's body. The shell adds the chrome (header, footer, refresh button).
+    record face { nodes: list<node>, footer: option<string>, refresh: bool }
+}
+
+/// Faces, bar modules and panels: what the plugin shows.
+interface ui {
+    use view.{face};
+    use types.{error};
+    /// Replaces what `instance` shows. Unchanged faces are dropped by the host.
+    set-view: func(instance: string, face: face);
+    clear: func(instance: string);
+    /// Registers an image (BGRA8 premultiplied, `width * 4` stride) for canvas `image` draws;
+    /// the host moves it to the shell through shared memory. Returns its id.
+    put-image: func(width: u32, height: u32, pixels: list<u8>) -> result<u32, error>;
+}
+
+/// Restyling surfaces through theme tokens (manifest `styles`).
+interface style {
+    use types.{tone, error};
+    enum surface { top-bar, dock, panel, menu, widget, glass }
+    variant token-value { color(string), number(f32), tone(tone), flag(bool) }
+    record token { name: string, value: token-value }
+    record style-patch { surface: surface, tokens: list<token> }
+    apply: func(patch: style-patch) -> result<_, error>;
+    reset: func(surface: surface);
+}
+
+/// Coalesced timers; they arrive as `event::timer(id)`.
+interface timers {
+    use types.{error};
+    after: func(id: string, ms: u32);
+    /// Refused under 1000 ms.
+    every: func(id: string, ms: u32) -> result<_, error>;
+    cancel: func(id: string);
+}
+
+/// System event topics; window topics need `windows`.
+interface events {
+    use types.{error};
+    enum topic { windows, monitors, notifications, media, power, theme }
+    subscribe: func(topics: list<topic>) -> result<_, error>;
+    unsubscribe: func(topics: list<topic>);
+}
+
+/// Outbound HTTP to declared origins; replies arrive as `event::http`.
+interface http {
+    use types.{error};
+    record header { name: string, value: string }
+    enum method { get, post, put, patch, delete }
+    record request { method: method, url: string, headers: list<header>, body: option<list<u8>>, timeout-ms: option<u32> }
+    record response { status: u16, headers: list<header>, body: list<u8> }
+    record reply { id: u64, outcome: result<response, error> }
+    fetch: func(request: request) -> result<u64, error>;
+}
+
+/// WebSockets to declared origins; traffic arrives as `event::socket`.
+interface websocket {
+    use types.{error};
+    variant message { text(string), binary(list<u8>) }
+    variant socket-event { opened(u64), message(tuple<u64, message>), closed(tuple<u64, option<string>>) }
+    connect: func(url: string) -> result<u64, error>;
+    send: func(socket: u64, message: message) -> result<_, error>;
+    close: func(socket: u64);
+}
+
+/// Local named pipes (`pipe:<name>`); data arrives as `event::pipe`.
+interface pipes {
+    use types.{error};
+    variant pipe-event { data(tuple<u64, list<u8>>), closed(u64) }
+    open: func(name: string) -> result<u64, error>;
+    write: func(pipe: u64, bytes: list<u8>) -> result<_, error>;
+    close: func(pipe: u64);
+}
+
+interface launch {
+    use types.{error};
+    /// A URL, file or app (`launch`).
+    open: func(target: string) -> result<_, error>;
+}
+
+interface notify {
+    use types.{error};
+    record notification { title: string, body: string, action: option<string> }
+    show: func(notification: notification) -> result<_, error>;
+}
+
+/// The plugin's own Credential Manager namespace (`secrets`).
+interface secrets {
+    use types.{error};
+    get: func(key: string) -> result<option<string>, error>;
+    set: func(key: string, value: string) -> result<_, error>;
+    remove: func(key: string) -> result<_, error>;
+}
+
+/// Small per-plugin key-value storage (`storage`), each value at most 1 MiB.
+interface storage {
+    use types.{error};
+    get: func(key: string) -> result<option<list<u8>>, error>;
+    set: func(key: string, value: list<u8>) -> result<_, error>;
+    remove: func(key: string) -> result<_, error>;
+}
+
+/// Read-only Windows information.
+interface system {
+    use types.{error};
+    record monitor { id: string, x: s32, y: s32, width: u32, height: u32, scale: f32, primary: bool }
+    record theme-info { dark: bool, accent: string }
+    record power-info { on-battery: bool, percent: option<u8>, saver: bool }
+    record window-info { id: u64, title: string, process: string, x: s32, y: s32, width: u32, height: u32 }
+    monitors: func() -> list<monitor>;
+    theme: func() -> theme-info;
+    power: func() -> power-info;
+    /// Needs `windows`.
+    foreground: func() -> result<option<window-info>, error>;
+}
+
+/// The plugin's own native modules (`native-code`), run in mypaper's native host process;
+/// replies arrive as `event::native`.
+interface native {
+    use types.{error};
+    record native-reply { id: u64, outcome: result<list<u8>, error> }
+    record native-message { module: string, name: string, bytes: list<u8> }
+    call: func(module: string, method: string, bytes: list<u8>) -> result<u64, error>;
+}
+
+interface log {
+    enum level { debug, info, warn, error }
+    write: func(level: level, message: string);
+}
+
+/// What the host calls.
+interface lifecycle {
+    use types.{size-class};
+    use http.{reply};
+    use websocket.{socket-event};
+    use pipes.{pipe-event};
+    use native.{native-reply, native-message};
+
+    record init-info {
+        plugin: string,
+        /// The plugin's settings as JSON (`{}` when none).
+        settings: string,
+        /// What `save` returned before the last unload.
+        state: option<list<u8>>,
+    }
+    /// A face, bar module or panel; `face` is its manifest id.
+    record face-open { instance: string, face: string, size: size-class, settings: string }
+    record action { instance: string, action: string, value: option<string> }
+    record window-event { kind: window-change, id: u64, title: string, process: string }
+    enum window-change { opened, closed, focused, moved }
+
+    variant event {
+        open(face-open),
+        resize(face-open),
+        close(string),
+        action(action),
+        command(string),
+        timer(string),
+        http(reply),
+        socket(socket-event),
+        pipe(pipe-event),
+        native(native-reply),
+        native-event(native-message),
+        window(window-event),
+        monitors,
+        notification(string),
+        media(string),
+        power,
+        theme,
+        suspend,
+        resume,
+    }
+
+    init: func(info: init-info) -> result<_, string>;
+    on-event: func(event: event);
+    /// State to keep across an unload; handed back in `init`.
+    save: func() -> list<u8>;
+}
+
+world plugin {
+    import ui;
+    import style;
+    import timers;
+    import events;
+    import http;
+    import websocket;
+    import pipes;
+    import launch;
+    import notify;
+    import secrets;
+    import storage;
+    import system;
+    import native;
+    import log;
+    export lifecycle;
+}

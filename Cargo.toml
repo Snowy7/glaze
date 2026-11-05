@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "plugins/*", "tools/*"]
+# WebAssembly guests build for wasm32-wasip2 in their own workspaces (docs/plugins.md).
+exclude = ["plugins/hello", "plugins/weather/component"]
 
 [workspace.package]
 version = "0.1.0"

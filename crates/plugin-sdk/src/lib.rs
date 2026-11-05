@@ -7,6 +7,8 @@
 pub mod manifest;
 pub mod protocol;
 pub mod view;
+#[cfg(target_arch = "wasm32")]
+pub mod guest;
 
 pub use manifest::{FaceSpec, Manifest, Permission, allows, compatible};
 pub use protocol::HostMessage;
