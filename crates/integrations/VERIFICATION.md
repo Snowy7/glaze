@@ -363,9 +363,9 @@ core/shell/engine. It intentionally **skipped Studio because the user's Studio w
 the new Studio executable is built in `C:\mypaper-targets\main\release`, and needs copying after
 that window closes. Existing Studio was left untouched.
 
-Shared registry/model hooks coexist with the other integration agent's uncommitted edits in
-`crates/integrations/src/{lib,config}.rs` and `crates/shell/src/integrations/{mod,widgets}.rs`.
-The only necessary edit outside the owned directories is the small T3/Grok field-open, submit and
-draft-retention hooks in `crates/shell/src/widgets/mod.rs`. Do not discard these hooks when
-committing the shared files. Main implementation commits are `bde6e72`, `263af70`, `ea8ddeb` and
-`2a8c0da`; the final verification/cleanup commit follows. No push was made.
+The shared provider owner committed the registry/model hooks in **`b29f074`**, including the T3/Grok
+module declarations, default endpoint, demand hookup and shared model fields. The only necessary
+edit outside the owned directories is the small T3/Grok field-open, submit and draft-retention
+hooks in `crates/shell/src/widgets/mod.rs`; that shared commit includes them too. Main integration
+commits are `bde6e72`, `263af70`, `ea8ddeb`, `2a8c0da` and `c2e92b8`, with verification in
+`de64a1c` and the final cleanup commit. No push was made.

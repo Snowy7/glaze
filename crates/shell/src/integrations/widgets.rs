@@ -284,19 +284,6 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
                     })
                 })
         }
-        (_, Widget::Grok) => {
-            if state.task.is_none()
-                && let Some(routine) = hit
-                    .checked_sub(RUN)
-                    .and_then(|index| state.routines.get(index as usize))
-                    .cloned()
-            {
-                state.task = Some(super::Task::spawn(move || {
-                    launcher::start_routine(&routine)
-                }));
-            }
-            Ok(())
-        }
         _ => Ok(()),
     };
     state.notice = result.err().map(|error| error.to_string());
