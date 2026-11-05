@@ -1,0 +1,6 @@
+{"cpu_core_pct":0.0,"private_mib":1.265625,"provider":"Notifications","run":1,"stage":"disabled"}
+{"availability":"Live","stage":"watch_ready"}
+{"at_unix_us":1793847491980363,"availability":"Live","count":1,"deliveries":1,"ids":[96798],"stage":"notification_change"}
+{"at_unix_us":1793847492194070,"availability":"Live","count":0,"deliveries":2,"ids":[],"stage":"notification_change"}
+{"added_private_mib":1.625,"attempts":0,"availability":"Live","cpu_core_pct":0.0,"deliveries":0,"private_mib":2.6953125,"provider":"Notifications","run":1,"snapshot_changes":0,"stage":"enabled"}
+{"private_mib":2.1015625,"stage":"stopped"}

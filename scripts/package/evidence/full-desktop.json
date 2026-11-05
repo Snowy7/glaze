@@ -1,0 +1,50 @@
+﻿{
+    "label":  "notification-identity",
+    "at":  "2026-11-05T06:16:23",
+    "rows":  [
+                 {
+                     "part":  "mypaper-wallpaper",
+                     "pid":  65724,
+                     "cpu_core_pct":  4.3,
+                     "gpu3d_pct":  31.06,
+                     "gpu_copy_pct":  3.37,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  352,
+                     "private_mb":  311,
+                     "ws_mb":  75
+                 },
+                 {
+                     "part":  "mypaper-shell",
+                     "pid":  38900,
+                     "cpu_core_pct":  3.26,
+                     "gpu3d_pct":  0.02,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  31,
+                     "ws_mb":  85
+                 },
+                 {
+                     "part":  "mypaper-core",
+                     "pid":  19348,
+                     "cpu_core_pct":  0,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  2,
+                     "ws_mb":  14
+                 }
+             ],
+    "total":  {
+                  "part":  "TOTAL",
+                  "procs":  3,
+                  "cpu_core_pct":  7.56,
+                  "gpu3d_pct":  31.08,
+                  "gpu_video_pct":  0,
+                  "gpu_mem_mb":  352,
+                  "private_mb":  344,
+                  "ws_mb":  174
+              },
+    "theme":  "rain-city"
+}
