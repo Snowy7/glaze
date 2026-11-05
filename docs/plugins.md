@@ -109,13 +109,13 @@ fails with `error::denied` and the plugin keeps running.
 | interface | functions | permission |
 |---|---|---|
 | `lifecycle` (export) | `init(info) -> result<_, string>`, `on-event(event)`, `save() -> list<u8>` | — |
-| `ui` | `set-view(instance, face)`, `clear(instance)` | — |
+| `ui` | `set-view(instance, face)`, `clear(instance)`, `put-image(width, height, bgra) -> result<u32, error>`, `drop-image(id)` | — |
 | `style` | `apply(patch) -> result<_, error>`, `reset(surface)` | the surface in `styles` |
 | `timers` | `after(id, ms)`, `every(id, ms)`, `cancel(id)` | — |
 | `events` | `subscribe(list<topic>)`, `unsubscribe(list<topic>)` | `windows` for window topics |
 | `http` | `fetch(request) -> result<u64, error>`, with the reply arriving as `event::http` | `network:<origin>` |
-| `websocket` | `connect(url) -> result<u64, error>`, `send`, `close`, with `event::socket` | `network:<origin>` |
-| `pipes` | `open(name) -> result<u64, error>`, `write`, `close`, with `event::pipe` | `pipe:<name>` |
+| `websocket` | `connect(url)` or `connect-with({ url, headers, protocols })` `-> result<u64, error>`, `send`, `close`, with `event::socket` | `network:<origin>` |
+| `pipes` | `open(name) -> result<u64, error>`, `write`, `close`, with `event::pipe`; `http-request(name, request) -> result<u64, error>` with `event::http` | `pipe:<name>` |
 | `launch` | `open(target) -> result<_, error>` (URL, file or app) | `launch` |
 | `notify` | `show(notification) -> result<_, error>` | `notifications` |
 | `secrets` | `get(key) -> option<string>`, `set(key, value)`, `remove(key)` | `secrets` |
@@ -128,6 +128,66 @@ fails with `error::denied` and the plugin keeps running.
 request id at once, and the result arrives later as an event. A plugin never holds the runtime
 while it waits, and the per-event CPU budget measures only the plugin's own code. Fast local
 calls (`secrets`, `storage`, `system`) are synchronous.
+
+### Websockets, pipes, notifications, system events and images
+
+- **Websockets** go through WinHTTP, so Windows owns TLS, proxies and certificates.
+  `connect-with` adds request headers (`Authorization: Bearer …`, a ticket) and subprotocols
+  (`Sec-WebSocket-Protocol`, e.g. obs-websocket 5's `obswebsocket.json`). The URL must be `ws://`
+  or `wss://` and covered by a `network:` permission for that exact origin
+  (`network:wss://host[:port]`). Events: `opened(id)`, then `message(id, text | binary)` per whole
+  message (fragments joined, at most 4 MiB), then `closed(id, reason)` once (`none` after a
+  normal close, else the error or the server's close code). `close` sends a close frame and gives
+  the peer 3 s.
+- **Pipes**: `open` connects to `\\.\pipe\<name>` (manifest `pipe:<name>`). Names may contain `\`
+  (Tailscale's is `ProtectedPrefix\Administrators\Tailscale\tailscaled`) but no empty, `.` or `..`
+  part, `/` or `:`. Bytes arrive as `data(id, bytes)` chunks in stream order, then `closed(id)`.
+  Framing is the plugin's: Discord IPC (`discord-ipc-0`) is `u32 op, u32 len` (LE) and JSON,
+  written and parsed as plain bytes. `http-request(name, request)` sends one HTTP/1.1 request over
+  the pipe (`Connection: close`, the URL's host as `Host`, its path and query as the target) and
+  answers as `event::http` with status, headers and body (`Content-Length`, chunked, or to EOF):
+  the Docker engine (`pipe:docker_engine`, `http://docker/v1.43/containers/json`) and Tailscale's
+  LocalAPI (`http://local-tailscaled.sock/localapi/v0/status`).
+- **Threads and backpressure.** Each open connection has its own host threads, never one per
+  plugin: a websocket a reader and a writer (WinHTTP's synchronous receive can't be woken), a pipe
+  one thread on overlapped I/O. They sleep in the kernel between messages. `send` and `write`
+  queue and return at once, and fail (`failed`, "the send queue is full") while 4 MiB is queued.
+  A connection stops reading while 64 of its events wait undelivered, so a slow plugin slows the
+  peer instead of growing the helper. A plugin may have 8 websockets and 8 pipes open, and they
+  all close when it unloads, traps or is stopped. Request ids are unique across the helper, so a
+  late event from a dropped instance never reaches its replacement.
+- **Notifications**: `notify.show` raises a Windows toast from mypaper (AppUserModelID
+  `mypaper.Plugins`, display name "mypaper", registered under HKCU on first use) with the
+  plugin's title and body and "via <plugin name>" as the attribution line, from a worker thread.
+  The `action` field isn't delivered back yet.
+- **System events**: the shell sends `HostMsg::System(SystemEvent)` frames
+  (`Plugins::system_event` in `crates/widgets/src/plugins.rs`). The helper delivers each one only
+  to loaded plugins subscribed to its topic, and window events only to those holding `windows`.
+  Window moves are coalesced: the latest per window is kept and delivered once a frame (16 ms),
+  and an `opened`, `closed` or `focused` for that window replaces its pending move.
+  `notification` and `media` carry JSON from the shell's notification listener and media (SMTC)
+  provider.
+- **Images**: `ui.put-image(width, height, pixels)` (BGRA8 premultiplied, `width * 4` stride,
+  1–4096 px a side) copies the pixels into a pagefile-backed named mapping and returns its id.
+  `drop-image(id)` releases it, and unloading releases them all. A plugin holds at most 64 images
+  and 16 MiB of pixels. The shell's canvas renderer (`views::plugin::canvas`) opens the mapping
+  read-only by name:
+
+  ```text
+  name    Local\mypaper-image-<helper pid>-<id>    (ids are unique within the helper)
+  0..4    "MPI1"
+  4..8    width  u32 LE
+  8..12   height u32 LE
+  12..16  stride u32 LE (width * 4)
+  16..    height rows of stride bytes, BGRA8 premultiplied
+  ```
+- **`system.foreground`** (`windows`): the foreground window's handle as `id`, its title, process
+  image name (`code.exe`) and rect.
+
+The tests in `crates/plugins/src/caps_tests.rs` drive every capability through the probe plugin
+(`examples/probe`): a refusal without the permission, a round trip against a local websocket
+echo server and named-pipe servers, event routing and coalescing, and a native module call and
+event end to end (`examples/native-echo`).
 
 ### Events
 
@@ -252,6 +312,7 @@ live helper with the weather face placed):
 | infinite loop stopped (50 ms budget) | 49.5 ms |
 | weather: IP lookup + forecast, two HTTP round trips | < 1 s; each reply handled in 0.3–0.5 ms |
 | component sizes | hello.wasm 107 KB, weather.wasm 196 KB; `.cwasm` 430 / 740 KB |
+| per open websocket / pipe, client side (its threads, buffers and WinHTTP state) | ~230 KiB / ~45 KiB private (debug build, `cargo test -p mypaper-plugins measure -- --ignored --nocapture`) |
 
 ## Shell ↔ helper protocol
 
@@ -354,8 +415,10 @@ below). The native SDK types (`View`, `Face`, `Manifest`, `protocol`) stay in
 
 Working: the runtime (`crates/plugins`) with budgets, AOT cache, traps, unload and reload; the
 WIT world; the guest SDK; faces through the shell bridge and picker; HTTP; timers; secrets;
-storage; launch; system monitors, theme and power; native modules through
-`mypaper-native-host`; the `hello` and `weather` components.
+storage; launch; system monitors, theme, power and `foreground`; websockets (headers,
+subprotocols), pipes and HTTP over pipes; toasts; system-event routing with move coalescing;
+`ui.put-image` shared memory; native modules through `mypaper-native-host`; the `hello` and
+`weather` components.
 
 Shell side (2026-11-05, late): style patches restyle the top bar, dock and menus in place
 (tokens above); top-bar modules from plugins (`custom:<plugin>--<bar>`, below); the `canvas`
@@ -365,7 +428,10 @@ Not yet: plugin panels and flyouts opened from a module; dock modules; the `pane
 style surfaces; plugin `menu` items in the desktop menu and `commands` as global shortcuts;
 plugin modules in Studio's Bars module list (type `custom:<plugin>--<bar>` in `bars.json` for
 now); the shell opening `ui.put-image` mappings for canvases (the renderer side,
-`views::plugin::canvas::put_image`, is in place; the bridge has to pass the helper's pid).
+`views::plugin::canvas::put_image`, is in place; the bridge has to pass the helper's pid). The
+shell's system-event sources: `Plugins::system_event` exists, but the window hooks, monitor
+changes, notification listener, media provider, power and theme don't call it yet. A toast's
+`action` coming back as an event.
 
 ### Bar modules
 
