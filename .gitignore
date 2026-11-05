@@ -14,3 +14,7 @@ plugins/*/*.exe
 /apps/
 # WebAssembly plugin builds (scripts/build-plugins.ps1)
 plugins/*/*.wasm
+# WebAssembly guest workspaces build into their own target folders.
+plugins/*/target/
+plugins/*/*/target/
+examples/*/target/
