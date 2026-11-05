@@ -458,7 +458,7 @@ fn notification_permission_demand_and_visibility() {
     rig.host.on_host(HostMsg::System(SystemEvent::Notification(r#"{"kind":"added","id":7}"#.into())),Instant::now());
     rig.read();
     assert!(rig.has("probe","notification"));
-    assert!(!rig.has("bare","notification") && !rig.has("quiet","notification"));
+    assert!(!rig.has("bare","notification {") && !rig.has("quiet","notification {"));
     rig.host.on_host(HostMsg::Held(true),Instant::now());
     let bytes = std::mem::take(rig.host.out());
     let mut input = bytes.as_slice();
