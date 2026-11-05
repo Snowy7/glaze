@@ -152,6 +152,9 @@ pub enum Effect {
     Notify { title: String, body: String, plugin_name: String, action: Option<String> },
     /// Run a resolved `process:<name>` executable; the result arrives as `event::http`.
     Process { id: u64, exe: PathBuf, args: Vec<String>, timeout_ms: u32 },
+    /// Open a URL or app link (`launch.open`). ShellExecute starts the app and can outlast the
+    /// whole event budget, so it runs after the call, off the loop.
+    Launch(String),
 }
 
 /// Tracks linear memory against the plugin's cap (and reports it in stats).
@@ -442,7 +445,11 @@ impl mypaper::plugin::launch::Host for State {
     }
     fn open(&mut self, target: String) -> Result<(), WitError> {
         self.allowed("launch")?;
-        caps::launch(&target).map_err(failed)
+        if target.trim().is_empty() || target.len() > 4096 {
+            return Err(WitError::Invalid("a target of at most 4096 bytes".into()));
+        }
+        self.effects.push(Effect::Launch(target));
+        Ok(())
     }
 }
 

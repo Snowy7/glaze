@@ -609,6 +609,17 @@ impl<W: Write> Host<W> {
                         log::warn!("no toast thread: {e}");
                     }
                 }
+                Effect::Launch(target) => {
+                    let plugin = plugin.to_owned();
+                    let spawned = std::thread::Builder::new().name("launch".into()).stack_size(256 << 10).spawn(move || {
+                        if let Err(e) = crate::caps::launch(&target) {
+                            log::warn!("plugin {plugin}: launch failed: {e}");
+                        }
+                    });
+                    if let Err(e) = spawned {
+                        log::warn!("no launch thread: {e}");
+                    }
+                }
                 Effect::Process { id, exe, args, timeout_ms } => {
                     let (tx, plugin) = (self.tx.clone(), plugin.to_owned());
                     let spawned = std::thread::Builder::new().name("process".into()).stack_size(256 << 10).spawn(move || {
