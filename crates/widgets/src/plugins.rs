@@ -616,8 +616,8 @@ impl Plugins {
                     if self.uninstalling.remove(&plugin) { self.finish_uninstall(&plugin); }
                 }
                 wire::HelperMsg::Launched { plugin, target } => {
-                    log::debug!("plugin {plugin}: launched {target}; raising its app");
-                    raise_handler(&target);
+                    log::debug!("plugin {plugin}: opening {target}");
+                    open_and_raise(plugin, target);
                 }
             }
         }
@@ -1294,11 +1294,37 @@ fn scheme(target: &str) -> Option<&str> {
     valid.then_some(scheme)
 }
 
-/// Brings the app that handles a plugin's `launch.open` target to the front, from the shell (the
-/// process that got the click, so Windows lets it set the foreground). A running single-instance
-/// app (T3 Code) gets the link from its second instance and can't raise itself; one that is
-/// starting is waited for up to 5 s. Stops as soon as the foreground changes otherwise (the
-/// user moved on, or the app came forward by itself).
+/// Opens a plugin's `launch.open` target from the shell, off its thread (ShellExecute starts the
+/// app and can take a while), then raises the app that handles it. The shell got the click, so
+/// what it starts runs in the user's context and may come forward; opened from the hidden helper,
+/// T3 Code's second instance never handed the thread link to the running one.
+fn open_and_raise(plugin: String, target: String) {
+    let spawned = std::thread::Builder::new().name("launch".into()).stack_size(256 << 10).spawn(move || {
+        use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx};
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use windows::core::{HSTRING, w};
+        // SAFETY: COM for this thread (ShellExecute may use it); the strings outlive the call.
+        let code = unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+            ShellExecuteW(None, w!("open"), &HSTRING::from(target.as_str()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL)
+        };
+        if code.0 as usize <= 32 {
+            log::warn!("plugin {plugin}: opening {target} failed (ShellExecute {})", code.0 as usize);
+            return;
+        }
+        log::debug!("plugin {plugin}: opened {target}");
+        raise_handler(&target);
+    });
+    if let Err(e) = spawned {
+        log::warn!("no launch thread: {e}");
+    }
+}
+
+/// Brings the app that handles a launched target to the front, from the shell (the process that
+/// got the click, so Windows lets it set the foreground). One that is starting is waited for up
+/// to 5 s. Stops as soon as the foreground changes otherwise (the user moved on, or the app came
+/// forward by itself).
 fn raise_handler(target: &str) {
     use windows::Win32::UI::Shell::{ASSOCF_IS_PROTOCOL, ASSOCSTR_EXECUTABLE, AssocQueryStringW};
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;

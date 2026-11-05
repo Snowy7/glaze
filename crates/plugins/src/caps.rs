@@ -200,14 +200,6 @@ pub fn storage_remove(data_dir: &Path, key: &str) -> Result<(), String> {
     }
 }
 
-pub fn launch(target: &str) -> Result<(), String> {
-    use windows::Win32::UI::Shell::ShellExecuteW;
-    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-    // SAFETY: the strings outlive the call; ShellExecuteW returns > 32 on success.
-    let code = unsafe { ShellExecuteW(None, w!("open"), &HSTRING::from(target), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
-    if code.0 as usize > 32 { Ok(()) } else { Err(format!("ShellExecute failed ({})", code.0 as usize)) }
-}
-
 /// Public app status only. A stale marker cannot make a stopped app appear signed in.
 pub fn desktop_status(app: &str) -> Result<crate::runtime::mypaper::plugin::launch::DesktopStatus, String> {
     use std::io::Read;

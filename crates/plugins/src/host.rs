@@ -613,19 +613,11 @@ impl<W: Write> Host<W> {
                     }
                 }
                 Effect::Launch(target) => {
-                    log::debug!("plugin {plugin}: launch {target}");
-                    // The shell raises the app that handles it (it holds the click's foreground right).
-                    self.send(HelperMsg::Launched { plugin: plugin.into(), target: target.clone() });
-                    let plugin = plugin.to_owned();
-                    let spawned = std::thread::Builder::new().name("launch".into()).stack_size(256 << 10).spawn(move || {
-                        match crate::caps::launch(&target) {
-                            Ok(()) => log::debug!("plugin {plugin}: launched {target}"),
-                            Err(e) => log::warn!("plugin {plugin}: launch {target} failed: {e}"),
-                        }
-                    });
-                    if let Err(e) = spawned {
-                        log::warn!("no launch thread: {e}");
-                    }
+                    // The shell opens it: it got the click, so the app it starts may come forward,
+                    // and it starts it in the user's context. Opened from this hidden helper, T3
+                    // Code's second instance never handed the thread link to the running one.
+                    log::debug!("plugin {plugin}: launch {target} -> shell");
+                    self.send(HelperMsg::Launched { plugin: plugin.into(), target });
                 }
                 Effect::Process { id, exe, args, timeout_ms } => {
                     let (tx, plugin) = (self.tx.clone(), plugin.to_owned());
