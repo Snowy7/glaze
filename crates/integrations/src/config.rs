@@ -11,6 +11,7 @@ pub struct Config {
     pub launcher: Switch,
     pub t3: T3,
     pub obs: Obs,
+    /// Legacy read contract only; Docker now runs as the bundled component.
     pub docker: Docker,
     pub tailscale: Tailscale,
     pub grok: Grok,
