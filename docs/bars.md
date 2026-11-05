@@ -98,7 +98,7 @@ N6 adds the remaining native styles and bundled icon fonts.
 Liquid content sits over the engine's plate, with an invisible `Rgba::HIT` shape in the shell.
 Mono draws a tint locally; solid draws an opaque local fill. Neither needs a plate or capture.
 Font family/size/weight, radius, scheme, tint and solid fills remain data. App icons use their cached
-PNGs; module icons use the system icon font or a configured icon pack. Raster and SVG user-pack icons
+PNGs; module icons use the embedded mono/default or Symbols SVGs, the Fluent icon font, or a configured icon pack. Raster and SVG user-pack icons
 are decoded once on the CPU, cached across monitors and tinted for mono entries.
 
 CSS, gradient/image **surface fills**, noise, glow, neon and shaped corners are ignored with one
@@ -236,15 +236,15 @@ by the shell's loop after each pass over the input) opens it in the same pass. E
 
 | Kind | What it shows | Provider |
 |---|---|---|
-| Calendar | today, the time (a minute tick while open), a month to page through (`mypaper_ui::calendar::MonthGrid`) | Windows NLS names |
-| Notifications | Retained Windows toasts with app identity, optional text, dismiss/open-app and clear-all; the month underneath. Clock clicks open this. | One shared integration lease; Windows change events after qualification, otherwise snapshot on open/manual refresh. No polling. |
+| Calendar | today/time, localized month/weekdays, paging/Today, up to four labeled extra clocks with day/offset, Outlook Calendar link | Windows NLS and Globalization IANA zones, including DST |
+| Notifications | Retained Windows toasts grouped into expandable app stacks, real logos, age/text, swipe/card/group/all dismiss, DND/Settings and month underneath. Clock clicks open this. | One shared integration lease; qualified Windows events plus four-second reads while this panel is open. No closed-panel polling. |
 | Quick | Wi-Fi and Bluetooth tiles (Wi-Fi's chevron opens the Wi-Fi list), power mode (cycles), battery saver, do not disturb, focus, night light (their settings), brightness, volume (mute; chevron opens the mixer), battery | `quick` lane, the endpoint volume |
 | Wifi | the radio switch, networks with signal, security and lock; Connect / Disconnect; a network that needs a password goes to **Windows' own prompt** (`ms-availablenetworks:`), enterprise ones to Settings; location-access and no-adapter states | `wifi` lane, refreshed by its scan notification |
 | Mixer | output devices (switching the default needs `audio.switchOutput`, else Sound settings), master volume, each app's volume and mute | `mixer` lane, refreshed by session events |
 | Language | the installed layouts, the front app's checked; choosing switches it | `flyouts::language` |
 | Power | lock, sleep, sign out, restart, shut down; the last three ask first | `system::power` |
 | TrayOverflow | the unpinned tray icons; left and right clicks go to the app as from the bar | `Bars::tray`, `Bars::click_tray` |
-| Launcher | a windowless RichEdit search field (IME, Arabic, CJK) over the Start menu's apps; Up/Down choose, Enter runs, recent first with no query | `apps.json` index (rebuilt on the `apps` lane when missing or a day old), `launcher.json` history |
+| Launcher | Win11 pin grid or Compact list; RichEdit search/IME, Apps/Settings/Files ranking, all apps, pin menus, clipboard history, user/Settings/Power footer | `apps.json`, eight-second initial build, Start-folder watcher/ten-minute stale check; `launcher.json` usage count/recency |
 
 - **Win, Win+N, Win+A** open the launcher, notifications and quick settings, through the existing
   `winkey` hook, installed while `launcher.winKey` is on and the taskbar is hidden; a fullscreen app
@@ -262,7 +262,7 @@ by the shell's loop after each pass over the input) opens it in the same pass. E
   [ui.md](ui.md) "Glass under a surface" and engine-notes "Glass overlays".
 - **Data never blocks the first frame.** Panels draw at once from what they have; lane replies and
   worker news redraw them. Slow set-up (the endpoint volume, the keyboard layouts, launcher
-  icons) runs right after the window is shown (`Panel::opened`). Lanes stop 5 s after a close;
+  icons and the launcher's RichEdit DLL initialization) runs right after the window is shown (`Panel::opened`). Lanes stop 5 s after a close;
   nothing polls while closed.
 - **Panels** implement `flyouts::Panel` (`width`, `view(&mut Kit)`, `activate`, `context`,
   `slide`, `wheel`, `reply`, `changed`, `key`, `tick`, `opened`, `refresh`, `field`,
@@ -270,12 +270,26 @@ by the shell's loop after each pass over the input) opens it in the same pass. E
   switches, buttons, links, notices). Each control always emits the same ops, transparent at
   rest, so a hover redraws only that control.
 
-**A bar over a window (handed over).** Bars draw plates; while an app window overlaps a bar its
-plate is hidden behind that window. The switch is one call on the bar's surface, with no new API:
-`surface.set_glass(Some(Glass { body, radius, material }))` while a window overlaps it (and that
-bar publishes no plate), `set_glass(None)` when none does. An overlay is one rounded rectangle per
-window, so islands need one surface per island or stay on plates. This lives in `bars/**`
-(the bars follow-up agent's) and is not wired in this slice.
+**A bar over a window.** Every top-bar island has its own cropped HWND, hits and local focus.
+Window/location events update cached external window rectangles (DWM frame bounds exclude shadows).
+An overlapped island calls `surface.set_glass(Some(Glass { body, radius, material }))` and drops
+only its own wallpaper plate; uncovering calls `set_glass(None)` and restores the plate. The dock
+keeps one envelope surface for magnification. Hidden bars clear their overlays. Plate ids use the
+actual surface HWND. Unchanged geometry/content does not call `Surface::present` again.
+
+**Hover preparation.** A 60 ms dwell over a module that actually opens a flyout starts capture on
+a worker through a hidden, click-through client; it closes that client immediately and uses the
+engine's existing three-second warm session. Pointer-down does no capture work. Overrides to
+`none` or an explicit Windows panel do not warm. Moving away cancels a pending dwell. This shares
+the existing engine request protocol; no new capture mode or wallpaper quality change is involved.
+
+**mypaper's tray.** Core sends a copied typed menu model to the shell's message-only tray inbox.
+The shell acknowledges within a bounded 20 ms exchange, then shows `mypaper_ui::Menu<u32>` using
+the same material/tokens as flyouts and desktop/dock menus. A selection is posted back with its
+request nonce; core retains and executes the command/theme mapping. Missing or unresponsive
+shells use `TrackPopupMenu`; core and its panic hotkey have no UI-renderer dependency. Configured
+tray hosting remains alive while bars are hidden/fullscreen. Long menus scroll and keyboard
+selection stays in view; menu motion stops when settled.
 
 ### Live N3 measurements (2026-11-05)
 
@@ -316,6 +330,121 @@ from another process; glass is the engine's own open-to-glass log. A cold click 
   heap's high-water); each later open adds ≤2.8 MB and returns it.
 - No CJK IME is installed on this machine: CJK went in as committed text (Unicode input), not
   through an IME's composition window. Arabic used the real keyboard layout.
+
+### Bars/flyouts parity follow-up (2026-11-05)
+
+Implementation commits: `8ad9968` (shared menu tokens, scrolling/motion and UI helpers),
+`b1128c0` (bars/dock/flyout/tray closure), `389fe66` (merge native `9c35d30`),
+`fb46b82` (shared notification-provider integration and deferred launcher setup), `4ee2fcc`
+(panic inside the fallback menu), `eaa4406` (acknowledged tray-request commit), and `993f0ba`
+(command-delivery diagnostics). Integration registry hooks remain intact. The old notification
+panel wrapper now names the grouped center, which consumes the existing shared lease rather than
+starting another toast listener. Its four-second refresh action does not reconnect the provider.
+Disabling/changing integration settings clears the retained panel data.
+
+The top/dock follow-up also restores visible tooltips and keyboard focus/invoke, explicit Windows
+bypass actions, network/volume/custom status details, SVG masks and bundled glyph assets, titled
+button width, Close all, distinct running/attention indicators, taskbar desktop sliver and fitted,
+paged previews. The launcher retains Win11 and Compact, maps Grid/Dashboard explicitly, and restores
+Settings/file search, usage ranking, pins/context actions, all apps and clipboard history. Calendar
+zones use real IANA conversion; focused tests cover DST, fractional offsets and date rollover.
+The owned parity rows are updated; R03's remaining overlay-widget outcome belongs to H10's owner.
+Broader N6 appearance/motion customization remains listed separately in C06–C15/C25.
+
+**These commits do not establish a performance-gate pass.** Production core/shell/engine were built
+in this worktree's existing `target` and run under the desktop lock with isolated config, a still
+photo, six default widgets and liquid island bars/docks on both monitors. CPU is percent of one
+core. The latency harness uses a zero-duration press, checks that the previous popup is hidden,
+and measures release-to-visible externally. Hover trials dwell 160 ms before the click; the
+warm-up itself is armed after 60 ms. No pointer-down capture runs.
+
+| Check | Measured | Gate / result |
+|---|---|---|
+| Quick content, no hover, four cold trials | 3.05–5.87 ms; median 3.74 ms | ≤30 ms: pass |
+| Quick content after hover, four trials | 4.36–19.28 ms; median 5.40 ms | ≤30 ms: pass; no former ~30 ms click stall |
+| Launcher first content after hover | 19.16 ms | ≤30 ms: pass |
+| Glass after hover, Quick / launcher | 43.7–57.4 / 49.0 ms after opening | ≤300 ms: pass in these trials |
+| Glass without hover, four cold trials | 178.5–208.2 ms | ≤300 ms in these four; earlier test-binary cold probe was 347.8 ms |
+| Hover capture setup on its worker | 28.7–37.5 ms | off the click thread |
+| Own tray glass menu / Pause reply | 28.45 ms initially; 32.33 / 39.22 ms in final cold runs; Pause delivery verified | ≤30 ms content: **missed in final runs** |
+| One covered island / uncovered again | one engine overlay / zero | independent island switch: pass |
+| Settled bars / flyouts | zero redraws in a three-second bar interval; all nine panel closes report zero after motion | zero: pass |
+| Shell idle, three 60 s samples | 0.13, 0.10, 0.21%; median 0.13% | ≤0.1%: **fail** |
+| Shell over actual maximized fixtures | 0.23% in one 60 s sample; all six widgets confirmed hidden | ≤0.05%: **fail**, not a three-sample qualification |
+| Shell private memory, visible idle / maximized | 47 / 39 MiB | ≤40 MiB: visible fixture **fails** |
+| Shell before any popup / after the interaction sequence | 44.07 / 45.10 MiB | closed delta +1.03 MiB; per-open peak was not sampled |
+| Shell-unresponsive tray fallback | stock menu visible with shell suspended | pass |
+| Panic with suspended shell and fallback menu open | supervisor handles panic; desktop restored within 4.79–5.10 s | functional pass; includes existing child grace, not instant restoration |
+| First paint / all bars (process READY markers) | 282.6 / 515.4 ms | earlier first-paint budget remains missed; no recovery requalification |
+| Goldens/click/unit/integration tests | 200 passed; seven deliberately ignored | pass |
+
+The tray renderer itself logged 2.7–3.0 ms to show; core constructs the menu (including its bounded
+Explorer desktop-state read) before asking the shell. That cold-open path remains above budget.
+The first 300 ms config observation also missed a delivered Pause; the later check waits for the
+write and the trace confirms the same command id/nonce in shell and core.
+
+The earlier `production-final` rectangular-cover intervals (0.31/0.18/0.34% shell CPU) were not
+maximized and did not hide widgets, so they are retained as diagnostics and excluded from the
+maximized gate. The corrected fixture asserts zero visible widgets before sampling. No steady
+sampling/visual quality was reduced to obtain the figures above. The bar log still shows only
+minute-clock updates once settled; the remaining CPU cost needs profiling in the integrated shell.
+Animated-background overlay GPU/CPU, crash recovery, per-open peak memory, actual CJK composition
+live focus handback and screen-sharing were not requalified here; the earlier N3 evidence above is historical.
+
+The first tray harness mistakenly selected a hidden pooled submenu; it now searches visible
+windows and asserts closure before CPU sampling. A real island input test also exposed an invalid
+UI Automation focus id after cropping: crops retain only their own focus, and Surface validates
+focus before publication. A later panic test exposed Windows' stock modal menu swallowing the
+thread hotkey. Core now installs a scoped `WH_MSGFILTER` during that fallback, calls `EndMenu`, and
+reposts the hotkey to its ordinary supervisor pump; the live suspended-shell test passed afterward.
+
+Reproduce with `%TEMP%\mypaper-tools\native-bars-closure.ps1`: `-Production -Measure -Suffix
+production-final` for the interaction/idle sequence; `-Production -MaxOnly -Measure -Panic -Suffix
+maximized-qualified` for the corrected maximized diagnostic; `-Production -MaxOnly -TrayCheck -Panic -Suffix
+tray-final` for the short tray/panic check (`tray-trace` retains the clean command-delivery trace). Pass the built shell/core paths using `-ShellTest` and
+`-CoreTest`. Logs, screenshots and results JSON are in the matching `native-bars-closure-*`
+directories; `measure-bars-closure-*.json` contains the raw 60 s samples. Each script restores config
+environment/minimized windows, stops its fixtures and releases the lock in `finally`. After cache
+cleanup removed the old executable, the user requested restoration from this worktree's native
+`target/release/mypaper-core.exe`; no old main-checkout binary is used.
+
+Targeted `cargo check` and all-target clippy pass; clippy retains four inherited
+`items_after_test_module` warnings in bars. Tests run per crate: shell 44/2 ignored, UI 23/0,
+core 16/4, bars 107/1, integrations 10/0. Goldens for restored bar glyphs and the richer notification
+center were reviewed and updated; the initial stale notification golden failure passed after its
+WinRT fixture timestamps were corrected. Live release-test fixtures were used only during diagnosis;
+the reported final timing, CPU and panic results use production executables.
+
+Small changes outside the listed source ownership: `crates/shell/Cargo.toml` enables the DWM frame
+bounds API; `crates/shell/src/overlay_client.rs` adds the hover worker; the notification wrapper and
+the goldens/fixture timestamps in `crates/shell/src/integrations/` select the grouped presentation;
+`crates/integrations/src/{lib,notifications}.rs` add the visible-center refresh action and attempt
+every dismissal. No widget, Studio or engine source was changed by these commits.
+
+Exact additive interfaces:
+
+```rust
+// mypaper_bars::tray_menu; WM_COPYDATA to HWND_MESSAGE class "mypaper.shell.tray-menu".
+// dwData = MAGIC (0x4D50544D), wParam = core callback HWND; reply 1 means copied/accepted.
+pub enum Item {
+    Separator,
+    Action { label: String, id: u32, checked: bool, enabled: bool },
+    Submenu { label: String, items: Vec<Item> },
+}
+pub struct Request { pub nonce: usize, pub point: (i32, i32), pub items: Vec<Item> }
+// CHOSEN = WM_APP + 18: wParam = command id (0 = closed), lParam = request nonce.
+// SHOW = WM_APP + 19 to the shell inbox: wParam = core HWND, lParam = acknowledged nonce.
+// A copied request cannot open until SHOW. Late requests after a timeout stay uncommitted.
+// Core rejects stale nonces. The request acknowledgement is bounded to 20 ms.
+
+// mypaper_integrations::Action adds RefreshNotifications, valid only for Notifications.
+// shell::overlay_client
+pub fn warm(client: HWND, shape: mypaper_ui::glass::Shape);
+// mypaper_ui
+pub fn set_style(tokens: Option<Tokens>); // mypaper_ui::menu
+// DisplayList::translated(dx, dy); MonthGrid::view_with_weekdays(..., &[&str; 7]);
+// Surface::animation_frames(Duration) -> AnimationFrames (cancel on drop); Event::Frame.
+```
 
 ## Plate integration seam
 
