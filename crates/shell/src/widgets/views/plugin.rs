@@ -536,19 +536,22 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             let (vw, _) = f.text.measure(value, &f.font(TextRole::Title2));
             let (number, after) = line.take_left(vw.ceil().min(line.width()), f.px(8.0));
             f.text_in(number, value, TextRole::Title2, ink, Align::Start);
-            // The label and note sit on the number's baseline; the note keeps its width.
+            // The label and note sit on the number's baseline. On a narrow tile the note goes
+            // first, then the label, rather than either being cut to a stub.
             let small = f.line(TextRole::Footnote);
             let row = Rect::new(after.left, line.bottom - small - f.px(1.0), after.width().max(0.0), small);
+            let nw = note.as_deref().map_or(0.0, |n| f.text.measure(n, &f.font(TextRole::Footnote)).0.ceil());
             let row = match note {
-                Some(note) => {
-                    let (nw, _) = f.text.measure(note, &f.font(TextRole::Footnote));
-                    let (end, start) = row.take_right(nw.ceil().min(row.width() * 0.62), f.px(8.0));
+                Some(note) if nw + f.px(8.0 + 36.0) <= row.width() => {
+                    let (end, start) = row.take_right(nw, f.px(8.0));
                     f.text_in(end, note, TextRole::Footnote, c.tertiary, Align::End);
                     start
                 }
-                None => row,
+                _ => row,
             };
-            f.text_in(row, label, TextRole::Footnote, c.secondary, Align::Start);
+            if row.width() >= f.px(36.0) {
+                f.text_in(row, label, TextRole::Footnote, c.secondary, Align::Start);
+            }
             let bar = Rect::new(rect.left, rest.top + f.px(1.0), rect.width(), f.px(6.0));
             f.progress(bar, fraction.clamp(0.0, 1.0), Some(ink));
             if let Some(mark) = mark.filter(|m| (0.0..=1.0).contains(m)) {
@@ -564,6 +567,14 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             let inner = rect.inset(Insets::xy(f.px(8.0), 0.0));
             let inner = if *nested { inner.take_left(f.px(14.0), 0.0).1 } else { inner };
             let room = match tag {
+                // A narrow row keeps its title and shows the state as a dot.
+                Some(_) if inner.width() < f.px(220.0) => {
+                    let ink = tone(f, tag_tone.as_ref(), c.secondary);
+                    let (end, room) = inner.take_right(f.px(8.0), f.px(8.0));
+                    let d = f.px(7.0);
+                    f.fill(end.place(d, d, Align::Center, Align::Center), d / 2.0, ink);
+                    room
+                }
                 Some(label) => {
                     let ink = tone(f, tag_tone.as_ref(), c.secondary);
                     let w = tag_width(f, label, false).min(inner.width() * 0.5);
