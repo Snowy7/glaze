@@ -2,7 +2,7 @@
 //! with the kit, inside the standard integration chrome. Pure: no plugin I/O here. Actions are
 //! numbered in tree order, so a click maps back to its action id with [`action_at`].
 use mypaper_plugin_sdk::{Align as VAlign, Face, Role as VRole, Tone, View};
-use mypaper_ui::chart::{LimitBar, Series, area_chart, limit_bar};
+use mypaper_ui::chart::{LimitBar, Series, area_chart, compact_limit_bar};
 use mypaper_ui::kit::{Accessory, ButtonKind, Frame, Lead, Row};
 use mypaper_ui::layout::{Align, Insets, SizeClass};
 use mypaper_ui::{HitId, Point, Rect, Rgba, icons::Icon, theme::TextRole};
@@ -83,6 +83,14 @@ pub fn icon(name: &str) -> Icon {
         "layers" => Icon::Layers,
         "external" => Icon::External,
         "chevron-right" => Icon::ChevronRight,
+        "chevron-left" => Icon::ChevronLeft,
+        "chevron-up" => Icon::ChevronUp,
+        "chevron-down" => Icon::ChevronDown,
+        "upload" => Icon::Upload,
+        "download" => Icon::Download,
+        "edit" => Icon::Edit,
+        "camera" => Icon::Camera,
+        "more" => Icon::More,
         "play" => Icon::Play,
         "pause" => Icon::Pause,
         "tasks" => Icon::Tasks,
@@ -142,6 +150,17 @@ pub(crate) fn tone(f: &Frame<'_>, tone: Option<&Tone>, default: Rgba) -> Rgba {
                 _ => default,
             }
         }
+    }
+}
+
+/// Provider identities share their readable brand ink across chart lines and legend dots.
+/// Quota bars keep the plugin's darker track fill.
+fn brand_ink(f: &Frame<'_>, name: &str) -> Option<Rgba> {
+    let name = name.to_ascii_lowercase();
+    match name.as_str() {
+        "claude" | "claude code" | "claudeagent" | "claude-agent" => Some(Rgba::rgb8([217, 119, 87], 1.0)),
+        "codex" | "openai codex" => Some(f.theme.color.label),
+        _ => None,
     }
 }
 
@@ -242,7 +261,7 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
         View::Metric { .. } => f.px(36.0) + f.line(TextRole::Caption),
         View::IconButton { .. } => f.px(28.0),
         View::Ring { .. } => f.px(48.0),
-        View::LimitBar { .. } => f.px(22.0),
+        View::LimitBar { .. } => f.px(30.0),
         View::SegmentedBar { .. } => f.px(8.0),
         View::Sparkline { .. } => f.px(28.0),
         View::AreaChart { .. } | View::Empty { .. } | View::List { .. } => f.px(80.0),
@@ -357,10 +376,18 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
         View::Field { placeholder, .. } => {
             // Text entry goes through the host's RichEdit field (docs/plugins.md); drawn as its well.
             let id = take_hit();
-            f.button(id, rect, placeholder, None, ButtonKind::Gray, true);
+            f.field_frame(rect, placeholder, true, f.input.ring(id), None);
+            f.focus_ring(id, rect, f.control_radius(rect.height()));
+            f.hit(id, rect, mypaper_ui::Role::TextInput, placeholder, true, None);
         }
         View::ListRow { title, detail, icon: i, trailing, action } => {
             let id = if action.is_some() { take_hit() } else { 0 };
+            let rect = if i.is_none() && let Some(ink) = brand_ink(f, title) {
+                let (dot, rest) = rect.take_left(f.px(10.0), f.px(2.0));
+                let d = f.px(7.0);
+                f.fill(dot.place(d, d, Align::Center, Align::Center), d / 2.0, ink);
+                rest
+            } else { rect };
             let row = Row {
                 id,
                 lead: i.as_deref().map_or(Lead::None, |name| Lead::Icon(icon(name))),
@@ -421,7 +448,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
                 label: label.as_deref(),
                 reset: reset.as_deref(),
             };
-            limit_bar(f, rect, &bar);
+            compact_limit_bar(f, rect, &bar);
         }
         View::SegmentedBar { segments } => {
             let radius = rect.height() / 2.0;
@@ -449,7 +476,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             let kit: Vec<Series<'_>> = series
                 .iter()
                 .zip(&values)
-                .map(|(s, v)| Series { color: tone(f, s.color.as_ref(), f.theme.color.accent), values: v })
+                .map(|(s, v)| Series { color: brand_ink(f, &s.label).unwrap_or_else(|| tone(f, s.color.as_ref(), f.theme.color.accent)), values: v })
                 .collect();
             let unit = unit.clone().unwrap_or_default();
             let labels = [x_labels[0].as_str(), x_labels[1].as_str(), x_labels[2].as_str()];
@@ -471,5 +498,72 @@ fn compact_number(v: f64) -> String {
         a if a >= 1e6 => format!("{:.1}M", v / 1e6),
         a if a >= 1e3 => format!("{:.0}k", v / 1e3),
         _ => format!("{v:.0}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mypaper_ui::{Interaction, Op, Scheme, Style, Theme, Ui};
+
+    #[test]
+    fn fields_use_the_kit_well_and_keep_their_action() {
+        let mut ui = Ui::new().unwrap();
+        let theme = Theme::new(Style::Liquid, Scheme::Dark, Rgba::rgb8([10, 132, 255], 1.0));
+        let input = Interaction::default();
+        let mut f = Frame::new(&mut ui.text, &theme, 1.0, &input);
+        let field = View::Field { placeholder: "What should we build?".into(), action: "send".into() };
+        let rect = Rect::new(0.0, 0.0, 300.0, 32.0);
+        let mut next = ACTION;
+        node(&mut f, rect, &field, &mut next);
+        assert!(f.list.ops.iter().any(|op| matches!(op, Op::Fill { color, .. } if *color == theme.color.well)));
+        assert!(f.list.ops.iter().any(|op| matches!(op, Op::Text { text, color, .. } if text.as_ref() == "What should we build?" && *color == theme.color.tertiary)));
+        assert_eq!(f.list.hits[0].role, mypaper_ui::Role::TextInput);
+        assert_eq!(action_at(&field.face(), f.list.hits[0].id), Some(Hit::Field("send".into())));
+    }
+
+    #[test]
+    fn usage_legend_and_chart_share_readable_brand_inks() {
+        let faces: serde_json::Value = serde_json::from_str(include_str!("../../../../../plugins/t3/golden/faces.json")).unwrap();
+        let face: Face = serde_json::from_value(faces["usage"]["large"].clone()).unwrap();
+        let mut ui = Ui::new().unwrap();
+        let theme = Theme::new(Style::Liquid, Scheme::Dark, Rgba::rgb8([10, 132, 255], 1.0));
+        let input = Interaction::default();
+        let mut f = Frame::new(&mut ui.text, &theme, 1.0, &input);
+        draw(&mut f, Rect::new(0.0, 0.0, 540.0, 330.0), "Usage", Icon::Terminal, Some(&face), Status::Live);
+        for ink in [Rgba::rgb8([217, 119, 87], 1.0), theme.color.label] {
+            assert!(f.list.ops.iter().any(|op| matches!(op, Op::Fill { rect, radius, color } if *color == ink && *radius > 0.0 && rect.width() == 7.0)), "legend dot missing: {ink:?}");
+            assert!(f.list.ops.iter().any(|op| matches!(op, Op::Line { color, .. } if *color == ink)), "chart ink missing: {ink:?}");
+        }
+    }
+
+    /// Weather fixtures were captured from the actual WASM component with a saved Oslo
+    /// forecast and denied network permissions, using an isolated runtime data directory.
+    #[test]
+    fn weather_plugin_faces_render_on_the_kit() {
+        use mypaper_ui::{DisplayList, TextStyle, golden, render};
+        use std::{path::PathBuf, sync::Arc};
+        let faces: serde_json::Value = serde_json::from_str(include_str!("../../../../../plugins/weather/golden/faces.json")).unwrap();
+        let mut ui = Ui::new().unwrap();
+        let theme = Theme::new(Style::Liquid, Scheme::Dark, Rgba::rgb8([10, 132, 255], 1.0));
+        let input = Interaction::default();
+        let mut sheet = DisplayList::default();
+        sheet.ops.push(Op::Fill { rect: Rect::new(0.0, 0.0, 1176.0, 400.0), radius: 0.0, color: Rgba::rgb8([20, 25, 33], 1.0) });
+        sheet.ops.push(Op::Text { rect: Rect::new(24.0, 20.0, 1100.0, 24.0), text: "weather / now — compact · regular · large".into(), style: TextStyle::new("Segoe UI Variable", 14.0), color: Rgba::rgb8([220, 228, 240], 1.0) });
+        for (x, (width, height), class) in [(24.0, (180, 132), "small"), (228.0, (360, 220), "medium"), (612.0, (540, 330), "large")] {
+            let face: Face = serde_json::from_value(faces[class].clone()).unwrap();
+            let mut f = Frame::new(&mut ui.text, &theme, 1.0, &input);
+            draw(&mut f, Rect::new(0.0, 0.0, width as f32, height as f32), "Weather", Icon::CloudSun, Some(&face), Status::Live);
+            for hit in &f.list.hits {
+                assert!(hit.rect.left >= 0.0 && hit.rect.top >= 0.0 && hit.rect.right <= width as f32 && hit.rect.bottom <= height as f32);
+            }
+            let list = f.list;
+            let image = render(&mut ui, &list, width, height).unwrap();
+            let rect = Rect::new(x, 50.0, width as f32, height as f32);
+            sheet.ops.push(Op::Fill { rect, radius: 22.0, color: Rgba::rgb8([44, 52, 64], 1.0) });
+            sheet.ops.push(Op::Image { rect, image: Arc::new(image), opacity: 1.0, source: None });
+        }
+        let path = std::env::var_os("MYPAPER_WEATHER_SHEET").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/weather/golden/sizes.png"));
+        golden::check(&render(&mut ui, &sheet, 1176, 400).unwrap(), &path).unwrap();
     }
 }

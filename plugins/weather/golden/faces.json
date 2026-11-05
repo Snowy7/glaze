@@ -1,0 +1,175 @@
+{
+  "small": {
+    "body": {
+      "kind": "stack",
+      "children": [
+        {
+          "kind": "row",
+          "children": [
+            {
+              "kind": "icon",
+              "icon": "cloud-sun",
+              "size": 22
+            },
+            {
+              "kind": "text",
+              "text": "28°",
+              "role": "large_title",
+              "align": "start"
+            },
+            {
+              "kind": "spacer"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": "Partly cloudy",
+          "role": "caption",
+          "color": "secondary",
+          "align": "start"
+        }
+      ]
+    },
+    "footer": "Updated 00:00",
+    "refresh": true
+  },
+  "medium": {
+    "body": {
+      "kind": "stack",
+      "children": [
+        {
+          "kind": "text",
+          "text": "Oslo",
+          "role": "subheadline",
+          "color": "secondary",
+          "align": "start"
+        },
+        {
+          "kind": "row",
+          "children": [
+            {
+              "kind": "icon",
+              "icon": "cloud-sun",
+              "size": 30
+            },
+            {
+              "kind": "text",
+              "text": "28°",
+              "role": "large_title",
+              "align": "start"
+            },
+            {
+              "kind": "spacer"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": "Partly cloudy",
+          "role": "headline",
+          "align": "start"
+        },
+        {
+          "kind": "text",
+          "text": "H 31°  L 24°",
+          "role": "caption",
+          "color": "secondary",
+          "align": "start"
+        },
+        {
+          "kind": "spacer"
+        },
+        {
+          "kind": "sparkline",
+          "values": [
+            28,
+            29,
+            30,
+            31,
+            30,
+            29,
+            28,
+            27,
+            26,
+            25,
+            24,
+            24
+          ],
+          "color": "accent"
+        }
+      ]
+    },
+    "footer": "Updated 00:00",
+    "refresh": true
+  },
+  "large": {
+    "body": {
+      "kind": "stack",
+      "children": [
+        {
+          "kind": "text",
+          "text": "Oslo",
+          "role": "subheadline",
+          "color": "secondary",
+          "align": "start"
+        },
+        {
+          "kind": "row",
+          "children": [
+            {
+              "kind": "icon",
+              "icon": "cloud-sun",
+              "size": 30
+            },
+            {
+              "kind": "text",
+              "text": "28°",
+              "role": "large_title",
+              "align": "start"
+            },
+            {
+              "kind": "spacer"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": "Partly cloudy",
+          "role": "headline",
+          "align": "start"
+        },
+        {
+          "kind": "text",
+          "text": "H 31°  L 24°",
+          "role": "caption",
+          "color": "secondary",
+          "align": "start"
+        },
+        {
+          "kind": "spacer"
+        },
+        {
+          "kind": "sparkline",
+          "values": [
+            28,
+            29,
+            30,
+            31,
+            30,
+            29,
+            28,
+            27,
+            26,
+            25,
+            24,
+            24
+          ],
+          "color": "accent"
+        }
+      ]
+    },
+    "footer": "Updated 00:00",
+    "refresh": true
+  }
+}

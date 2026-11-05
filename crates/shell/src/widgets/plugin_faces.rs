@@ -40,10 +40,18 @@ impl Widgets {
             if m.kind != Widget::Plugin { continue; }
             let Some(face) = plugin_face(&m.placed) else { continue };
             let size = size_class(entry.rect.width(), entry.rect.height(), entry.dpi_scale * entry.tokens.scale);
-            let size_key = serde_json::to_value(size).unwrap_or_default();
+            let size_key = match size {
+                mypaper_plugin_sdk::SizeClass::Small => "small",
+                mypaper_plugin_sdk::SizeClass::Medium => "medium",
+                mypaper_plugin_sdk::SizeClass::Large => "large",
+            };
+            if m.data["opened_size"].as_str() == Some(size_key)
+                && m.data["opened_settings"].as_object() == Some(&m.placed.settings)
+                && m.data["opened_widget"].as_str() == Some(&m.placed.widget)
+            { continue; }
             let settings = serde_json::Value::Object(m.placed.settings.clone());
-            if m.data["opened_size"] == size_key && m.data["opened_settings"] == settings { continue; }
-            m.data["opened_size"] = size_key;
+            m.data["opened_size"] = size_key.into();
+            m.data["opened_widget"] = m.placed.widget.clone().into();
             m.data["opened_settings"] = settings.clone();
             if let Err(e) = self.plugins.open_face(&m.placed.instance, &face.plugin, &face.face, size, settings, Instant::now()) {
                 log::warn!("{}: {}", m.placed.instance, e.message);
