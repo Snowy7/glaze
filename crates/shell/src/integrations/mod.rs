@@ -1,7 +1,6 @@
 //! Integration UI/registration. Shared providers live in `mypaper-integrations`; all drawing stays here.
 pub mod media;
 pub mod widgets;
-pub mod t3_widgets;
 #[cfg(test)]
 #[path = "../../../../plugins/grok/src/host_tests.rs"]
 mod grok_plugin_tests;

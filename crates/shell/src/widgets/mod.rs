@@ -1851,10 +1851,6 @@ impl Widgets {
             self.plugin_action(ui, id, hit);
             return;
         }
-        if matches!(m.kind, Widget::T3) && hit == view::FIELD {
-            self.open_field(id, None);
-            return;
-        }
         if crate::integrations::widgets::action(m, hit) {
             return;
         }
@@ -2138,8 +2134,6 @@ impl Widgets {
             Ok(field) => {
                 let text = if m.kind == Widget::Notes {
                     m.note.as_str()
-                } else if m.kind == Widget::T3 {
-                    m.integration.t3.draft.as_str()
                 } else if m.kind == Widget::Calendar {
                     index
                         .and_then(|i| m.events.get(i))
@@ -2175,11 +2169,6 @@ impl Widgets {
         };
         if m.kind == Widget::Plugin {
             self.submit_plugin_field(id, text);
-            return;
-        }
-        if m.kind == Widget::T3 {
-            crate::integrations::t3_widgets::submit(m, &text);
-            m.dirty = true;
             return;
         }
         if m.kind == Widget::Calendar {
@@ -3534,9 +3523,7 @@ fn finish_field(entry: &mut Entry, storage: &mut Storage) {
     }
     if let Some(field) = entry.model.field.take() {
         if let Ok(text) = field.text() {
-            if entry.model.kind == Widget::T3 {
-                entry.model.integration.t3.draft = text;
-            } else if entry.model.kind == Widget::Notes {
+            if entry.model.kind == Widget::Notes {
                 entry.model.note = text;
             } else if entry.model.kind == Widget::Todo
                 && let Some(index) = entry.model.task_edit.take()

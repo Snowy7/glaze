@@ -1,7 +1,7 @@
 //! Visible built-in widgets lease the same providers as bars and panels.
 use crate::widgets::model::{Model as WidgetModel, Widget};
 use mypaper_integrations::{
-    Availability, Data, Lease, Provider, Snapshot, launcher,
+    Availability, Lease, Provider, Snapshot,
 };
 use mypaper_ui::HitId;
 
@@ -12,7 +12,6 @@ pub const SECONDARY: HitId = 6003;
 pub const ITEM: HitId = 6400;
 
 pub struct Model {
-    pub t3: super::t3_widgets::State,
     pub calendar: super::calendar::Model,
     pub custom: super::custom::Model,
     pub(super) lease: Option<Lease>,
@@ -26,7 +25,6 @@ pub struct Model {
 impl Default for Model {
     fn default() -> Self {
         Self {
-            t3: Default::default(),
             calendar: Default::default(),
             custom: Default::default(),
             lease: None,
@@ -59,7 +57,6 @@ impl Model {
 pub fn provider(kind: Widget) -> Option<Provider> {
     match kind {
         Widget::Calendar => Some(Provider::Calendar),
-        Widget::T3 => Some(Provider::T3),
         _ => None,
     }
 }
@@ -92,20 +89,8 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
                     state.lease = Some(lease);
                     Snapshot::default()
                 }
-                // T3 switches itself on: its CLI can grant access without a prompt.
-                Err(_) if widget.kind == Widget::T3 && mypaper_integrations::t3_auth::available() => {
-                    super::t3_widgets::connect(state, None);
-                    Snapshot::default()
-                }
                 Err(_) => Snapshot {
-                    availability: Availability::Unavailable(
-                        if widget.kind == Widget::T3 {
-                            "T3 Code is not running"
-                        } else {
-                            "Connect this integration in Settings"
-                        }
-                        .into(),
-                    ),
+                    availability: Availability::Unavailable("Connect this integration in Settings".into()),
                     ..Default::default()
                 },
             };
@@ -121,21 +106,6 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
         }
     }
     if let Some(result) = state.task.as_ref().and_then(super::Task::take) {
-        if widget.kind == Widget::T3
-            && result.is_ok()
-            && let Some(lease) = &state.lease
-            && !matches!(state.snapshot.data, Some(Data::T3(_)))
-        {
-            // Access was just granted; reconnect now rather than on the next refresh.
-            lease.retry();
-        }
-        if widget.kind == Widget::T3 && state.t3.submitted {
-            if result.is_ok() {
-                state.t3.draft.clear();
-                if let Some(field) = &widget.field {let _ = field.set_text("");}
-            }
-            state.t3.submitted = false;
-        }
         state.notice = result.err();
         state.task = None;
         widget.dirty = true;
@@ -146,17 +116,8 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
     }
 }
 
-pub(super) fn open(target: &str) -> anyhow::Result<()> {
-    launcher::open(&launcher::Recent {
-        title: String::new(),
-        target: target.into(),
-        arguments: String::new(),
-    })
-}
-
 /// Explicit hits only; verification never invokes vendor actions.
 pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
-    if widget.kind == Widget::T3 && hit != REFRESH {return super::t3_widgets::action(widget, hit);}
     if widget.kind == Widget::Custom { return super::custom::action(widget, hit); }
     if widget.kind == Widget::Calendar { return super::calendar::action(widget, hit); }
     if provider(widget.kind).is_none() {

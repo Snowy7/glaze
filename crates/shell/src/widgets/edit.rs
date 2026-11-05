@@ -592,7 +592,6 @@ pub fn widget_icon(id: &str) -> Icon {
         "rss" => Icon::Feed,
         "system-monitor" => Icon::Cpu,
         "weather" => Icon::CloudSun,
-        "t3" => Icon::Terminal,
         "discord" => Icon::Message,
         "grok" => Icon::Sparkles,
         _ => Icon::Apps,

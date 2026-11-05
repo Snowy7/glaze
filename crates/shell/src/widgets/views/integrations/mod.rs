@@ -1,9 +1,6 @@
 //! Integration faces use the public kit directly. No provider reads or side effects in a view.
 pub(crate) mod calendar;
 pub(crate) mod custom;
-pub(crate) mod t3;
-mod t3_limits;
-mod t3_usage;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

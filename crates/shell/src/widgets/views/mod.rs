@@ -294,7 +294,6 @@ fn content(c: &mut Ctx, body: Rect) {
         Widget::Crypto => crypto::draw(c, body),
         Widget::Heatmap => heatmap::draw(c, body),
         Widget::Quote => quote::draw(c, body),
-        Widget::T3 => integrations::t3::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Custom => integrations::custom::view(&mut c.f, c.m, c.rect),
         Widget::Plugin => plugin_face(c),
     }
