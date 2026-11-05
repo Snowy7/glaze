@@ -906,7 +906,7 @@
           "gap": 2.0,
           "kind": "list"
         },
-        "footer": "30 threads running",
+        "footer": "30 running",
         "refresh": true
       },
       "medium": {
@@ -1156,7 +1156,7 @@
           "gap": 2.0,
           "kind": "list"
         },
-        "footer": "30 threads running",
+        "footer": "30 running",
         "refresh": true
       },
       "small": {
@@ -1186,7 +1186,7 @@
           "gap": 2.0,
           "kind": "stack"
         },
-        "footer": "30 threads running",
+        "footer": "30 running",
         "refresh": true
       }
     },
@@ -1663,7 +1663,7 @@
           "gap": 2.0,
           "kind": "list"
         },
-        "footer": "1 thread running",
+        "footer": "1 running",
         "refresh": true
       },
       "medium": {
@@ -1681,7 +1681,7 @@
           "gap": 2.0,
           "kind": "list"
         },
-        "footer": "1 thread running",
+        "footer": "1 running",
         "refresh": true
       },
       "small": {
@@ -1711,7 +1711,7 @@
           "gap": 2.0,
           "kind": "stack"
         },
-        "footer": "1 thread running",
+        "footer": "1 running",
         "refresh": true
       }
     },
@@ -1757,7 +1757,7 @@
               "action": "thread:thread-0",
               "detail": "Opus 5.5 · waiting 4m",
               "kind": "item",
-              "tag": "Approve",
+              "tag": "Approval needed",
               "title": "Review desktop permissions",
               "tone": "warning"
             },
@@ -1795,7 +1795,7 @@
               "action": "thread:thread-0",
               "detail": "Opus 5.5 · waiting 4m",
               "kind": "item",
-              "tag": "Approve",
+              "tag": "Approval needed",
               "title": "Review desktop permissions",
               "tone": "warning"
             },
@@ -2088,7 +2088,7 @@
               "action": "thread:thread-0",
               "detail": "Opus 5.5 · waiting 4m",
               "kind": "item",
-              "tag": "Approve",
+              "tag": "Approval needed",
               "title": "Review desktop permissions",
               "tone": "warning"
             },
@@ -2234,7 +2234,7 @@
               "action": "thread:thread-0",
               "detail": "Opus 5.5 · waiting 4m",
               "kind": "item",
-              "tag": "Approve",
+              "tag": "Approval needed",
               "title": "Review desktop permissions",
               "tone": "warning"
             },
@@ -2576,6 +2576,376 @@
           "kind": "stack"
         },
         "footer": "Disconnected · showing last state",
+        "refresh": true
+      }
+    }
+  },
+  "states": {
+    "attention": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:s-approval",
+              "detail": "Codex · waiting 1m",
+              "kind": "item",
+              "tag": "Approval needed",
+              "title": "Wants to run cargo build",
+              "tone": "warning"
+            },
+            {
+              "children": [
+                {
+                  "action": "approve:s-approval:a",
+                  "icon": "check",
+                  "kind": "button",
+                  "label": "Approve",
+                  "primary": false
+                },
+                {
+                  "action": "deny:s-approval:a",
+                  "kind": "button",
+                  "label": "Deny",
+                  "primary": false
+                }
+              ],
+              "columns": 2,
+              "gap": 6.0,
+              "kind": "grid"
+            },
+            {
+              "action": "thread:s-input",
+              "detail": "Codex · waiting 3m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Asks which icon set to use",
+              "tone": "warning"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "2 threads need you",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:s-approval",
+              "detail": "Codex · waiting 1m",
+              "kind": "item",
+              "tag": "Approval needed",
+              "title": "Wants to run cargo build",
+              "tone": "warning"
+            },
+            {
+              "children": [
+                {
+                  "action": "approve:s-approval:a",
+                  "icon": "check",
+                  "kind": "button",
+                  "label": "Approve",
+                  "primary": false
+                },
+                {
+                  "action": "deny:s-approval:a",
+                  "kind": "button",
+                  "label": "Deny",
+                  "primary": false
+                }
+              ],
+              "columns": 2,
+              "gap": 6.0,
+              "kind": "grid"
+            },
+            {
+              "action": "thread:s-input",
+              "detail": "Codex · waiting 3m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Asks which icon set to use",
+              "tone": "warning"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "2 threads need you",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "warning",
+              "kind": "text",
+              "role": "large_title",
+              "text": "2"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "need you"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "2 threads need you",
+        "refresh": true
+      }
+    },
+    "limits": {
+      "large": {
+        "body": {
+          "detail": "Limits show once a provider reports them.",
+          "icon": "gauge",
+          "kind": "empty",
+          "title": "No limits reported"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Limits show once a provider reports them.",
+          "icon": "gauge",
+          "kind": "empty",
+          "title": "No limits reported"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "detail": "Limits show once a provider reports them.",
+          "icon": "gauge",
+          "kind": "empty",
+          "title": "No limits reported"
+        },
+        "footer": "Live from T3 Code",
+        "refresh": true
+      }
+    },
+    "running": {
+      "large": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:s-approval",
+              "detail": "Codex · waiting 1m",
+              "kind": "item",
+              "tag": "Approval needed",
+              "title": "Wants to run cargo build",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:s-input",
+              "detail": "Codex · waiting 3m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Asks which icon set to use",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:s-work",
+              "detail": "Opus 5.5 · running 7m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Working on the dock spring",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:s-blocked",
+              "detail": "Codex · waiting 9m",
+              "kind": "item",
+              "tag": "Waiting",
+              "title": "Waits on another thread",
+              "tone": "tertiary"
+            },
+            {
+              "action": "thread:s-wait",
+              "detail": "Codex · waiting 15m · 2 agents",
+              "kind": "item",
+              "tag": "Waiting",
+              "title": "Idle, its subagents still running",
+              "tone": "tertiary"
+            },
+            {
+              "action": "thread:s-agent-1",
+              "kind": "item",
+              "nested": true,
+              "tag": "Working",
+              "title": "Subagent: render the sheet",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:s-agent-2",
+              "kind": "item",
+              "nested": true,
+              "tag": "Working",
+              "title": "Subagent: check light mode",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:s-done",
+              "detail": "Codex · 12m ago",
+              "kind": "item",
+              "tag": "Done",
+              "title": "Finished, not read yet",
+              "tone": "positive"
+            },
+            {
+              "action": "thread:s-failed",
+              "detail": "Codex · 20m ago",
+              "kind": "item",
+              "tag": "Failed",
+              "title": "Failed, never opened",
+              "tone": "destructive"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "5 running · 2 agents · 2 unread",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "children": [
+            {
+              "action": "thread:s-approval",
+              "detail": "Codex · waiting 1m",
+              "kind": "item",
+              "tag": "Approval needed",
+              "title": "Wants to run cargo build",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:s-input",
+              "detail": "Codex · waiting 3m",
+              "kind": "item",
+              "tag": "Needs input",
+              "title": "Asks which icon set to use",
+              "tone": "warning"
+            },
+            {
+              "action": "thread:s-work",
+              "detail": "Opus 5.5 · running 7m",
+              "kind": "item",
+              "tag": "Working",
+              "title": "Working on the dock spring",
+              "tone": "secondary"
+            },
+            {
+              "action": "thread:s-blocked",
+              "detail": "Codex · waiting 9m",
+              "kind": "item",
+              "tag": "Waiting",
+              "title": "Waits on another thread",
+              "tone": "tertiary"
+            },
+            {
+              "action": "thread:s-wait",
+              "detail": "Codex · waiting 15m · 2 agents",
+              "kind": "item",
+              "tag": "Waiting",
+              "title": "Idle, its subagents still running",
+              "tone": "tertiary"
+            },
+            {
+              "action": "thread:s-done",
+              "detail": "Codex · 12m ago",
+              "kind": "item",
+              "tag": "Done",
+              "title": "Finished, not read yet",
+              "tone": "positive"
+            },
+            {
+              "action": "thread:s-failed",
+              "detail": "Codex · 20m ago",
+              "kind": "item",
+              "tag": "Failed",
+              "title": "Failed, never opened",
+              "tone": "destructive"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "list"
+        },
+        "footer": "5 running · 2 agents · 2 unread",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "children": [
+            {
+              "kind": "spacer"
+            },
+            {
+              "align": "start",
+              "color": "label",
+              "kind": "text",
+              "role": "large_title",
+              "text": "5"
+            },
+            {
+              "align": "start",
+              "color": "secondary",
+              "kind": "text",
+              "role": "caption",
+              "text": "running · 2 agents"
+            },
+            {
+              "kind": "spacer"
+            }
+          ],
+          "gap": 2.0,
+          "kind": "stack"
+        },
+        "footer": "5 running · 2 agents · 2 unread",
+        "refresh": true
+      }
+    },
+    "usage": {
+      "large": {
+        "body": {
+          "detail": "Usage appears after T3 reports it.",
+          "icon": "activity",
+          "kind": "empty",
+          "title": "No usage yet"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      },
+      "medium": {
+        "body": {
+          "detail": "Usage appears after T3 reports it.",
+          "icon": "activity",
+          "kind": "empty",
+          "title": "No usage yet"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
+        "refresh": true
+      },
+      "small": {
+        "body": {
+          "detail": "Usage appears after T3 reports it.",
+          "icon": "activity",
+          "kind": "empty",
+          "title": "No usage yet"
+        },
+        "footer": "30 days to 2026-11-05 · UTC",
         "refresh": true
       }
     }

@@ -77,10 +77,26 @@ struct ShellThread {
     // Only the count is retained in Snapshot. These records are bounded by the wire limit.
     #[serde(default)]
     pending_background_tasks: Vec<ShellTask>,
+    #[serde(default)]
+    blocked_on_thread_wait: bool,
+    #[serde(default)]
+    latest_run_completed_at: Option<String>,
+    #[serde(default)]
+    last_visited_at: Option<String>,
 }
 #[derive(Default, Deserialize)]
 #[serde(default)]
-struct ShellTask {}
+struct ShellTask {
+    kind: String,
+    awaited: bool,
+}
+impl ShellTask {
+    /// T3's `backgroundWorkHoldsCompletion`: subagents and background tasks hold a thread's
+    /// completion; commands and monitors only when the agent awaits them.
+    fn holds(&self) -> bool {
+        self.awaited || matches!(self.kind.as_str(), "subagent" | "background_task")
+    }
+}
 #[derive(Default, Deserialize)]
 #[serde(default)]
 struct ShellModel {
@@ -101,7 +117,12 @@ impl ShellThread {
             agent: self.lineage.relationship_to_parent.as_deref() == Some("subagent"),
             background_tasks: self.pending_background_tasks.len(),
         };
+        let held = self.pending_background_tasks.iter().any(ShellTask::holds);
         let thread = Thread {
+            blocked_on_thread_wait: self.blocked_on_thread_wait,
+            held,
+            latest_run_completed_at: self.latest_run_completed_at,
+            last_visited_at: self.last_visited_at,
             id: self.id,
             project_id: self.project_id,
             title: self.title,
@@ -152,6 +173,67 @@ pub struct Thread {
     pub active_run_id: Option<String>,
     pub pending_runtime_request: Option<Request>,
     pub updated_at: String,
+    /// Running, but only waiting on another thread (T3's `blockedOnThreadWait`).
+    #[serde(default)]
+    pub blocked_on_thread_wait: bool,
+    /// Background work holds its completion (a subagent, an awaited task).
+    #[serde(default)]
+    pub held: bool,
+    #[serde(default)]
+    pub latest_run_completed_at: Option<String>,
+    /// When the user last opened it in T3 (T3's read state).
+    #[serde(default)]
+    pub last_visited_at: Option<String>,
+}
+
+/// A thread's sidebar state, derived as T3's `resolveThreadStatusPill` does (approval, input,
+/// working, connecting, waiting, unseen failure, unseen completion; otherwise none).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pill {
+    Approval,
+    Input,
+    Working,
+    Connecting,
+    Waiting,
+    Failed,
+    Done,
+}
+
+fn instant(text: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(text).ok().map(|t| t.timestamp_millis())
+}
+
+impl Thread {
+    /// `agents_busy`: one of its subagents is still working, which keeps an idle parent Waiting.
+    pub fn pill(&self, agents_busy: bool) -> Option<Pill> {
+        if let Some(request) = &self.pending_runtime_request {
+            let input = matches!(request.kind.as_str(), "user_input" | "user-input");
+            return Some(if input { Pill::Input } else { Pill::Approval });
+        }
+        match self.status {
+            Status::Running if !self.blocked_on_thread_wait => return Some(Pill::Working),
+            Status::Waiting => return Some(Pill::Working),
+            Status::Preparing | Status::Starting | Status::Queued => return Some(Pill::Connecting),
+            _ => {}
+        }
+        if self.status == Status::Running || self.held || agents_busy {
+            return Some(Pill::Waiting);
+        }
+        let completed = self.latest_run_completed_at.as_deref().and_then(instant);
+        let visited = self.last_visited_at.as_deref().map(instant);
+        // Unopened failures count as unseen; unopened completions don't (T3's rule).
+        if self.status == Status::Failed {
+            return match (completed, visited) {
+                (Some(done), Some(Some(seen))) if done <= seen => None,
+                _ => Some(Pill::Failed),
+            };
+        }
+        match (completed, visited) {
+            (Some(done), Some(Some(seen))) if done > seen => Some(Pill::Done),
+            (Some(_), Some(None)) => Some(Pill::Done),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Request {

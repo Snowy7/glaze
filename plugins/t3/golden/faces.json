@@ -7,7 +7,7 @@
             "action": "thread:thread-0",
             "detail": "Opus 5.5 · waiting 4m",
             "kind": "item",
-            "tag": "Approve",
+            "tag": "Approval needed",
             "title": "Review desktop permissions",
             "tone": "warning"
           },
@@ -45,7 +45,7 @@
             "action": "thread:thread-0",
             "detail": "Opus 5.5 · waiting 4m",
             "kind": "item",
-            "tag": "Approve",
+            "tag": "Approval needed",
             "title": "Review desktop permissions",
             "tone": "warning"
           },
@@ -455,7 +455,7 @@
             "action": "thread:thread-0",
             "detail": "Opus 5.5 · waiting 4m",
             "kind": "item",
-            "tag": "Approve",
+            "tag": "Approval needed",
             "title": "Review desktop permissions",
             "tone": "warning"
           },
@@ -591,7 +591,7 @@
         "gap": 2.0,
         "kind": "list"
       },
-      "footer": "12 threads running · 4 agents",
+      "footer": "12 running · 4 agents · 2 unread",
       "refresh": true
     },
     "medium": {
@@ -601,7 +601,7 @@
             "action": "thread:thread-0",
             "detail": "Opus 5.5 · waiting 4m",
             "kind": "item",
-            "tag": "Approve",
+            "tag": "Approval needed",
             "title": "Review desktop permissions",
             "tone": "warning"
           },
@@ -713,7 +713,7 @@
         "gap": 2.0,
         "kind": "list"
       },
-      "footer": "12 threads running · 4 agents",
+      "footer": "12 running · 4 agents · 2 unread",
       "refresh": true
     },
     "small": {
@@ -743,7 +743,7 @@
         "gap": 2.0,
         "kind": "stack"
       },
-      "footer": "12 threads running · 4 agents",
+      "footer": "12 running · 4 agents · 2 unread",
       "refresh": true
     }
   },

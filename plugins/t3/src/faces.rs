@@ -2,7 +2,7 @@
 //! Drawn in mypaper's own calm style with the kit (no copied T3 chrome): monochrome rows and
 //! meters, colour only for state, totals in the footer so rows that don't fit are still counted.
 
-use crate::t3::{Limit, ModelChoice, Snapshot as State, Status, Thread};
+use crate::t3::{Limit, ModelChoice, Pill, Snapshot as State, Thread};
 use crate::{Availability, Data, Snapshot};
 use mypaper_plugin_sdk::view::SelectOption;
 use mypaper_plugin_sdk::{Face, Role, Series, SizeClass, Tone, View};
@@ -50,21 +50,26 @@ fn footer(face: &str, snapshot: &Snapshot, summary: Option<String>) -> String {
     }
 }
 
-/// A thread's state as a short tag in the theme's palette: neutral while working, amber when
-/// it waits on you, red or green once it ends.
-fn status(thread: &Thread) -> (&'static str, Tone) {
-    if let Some(request) = &thread.pending_runtime_request {
-        let input = matches!(request.kind.as_str(), "user_input" | "user-input");
-        return (if input { "Needs input" } else { "Approve" }, Tone::Warning);
+/// A thread's T3 state as a short tag in the theme's palette: neutral while working or
+/// waiting on its agents, amber when it waits on you, red or green once it ends unread.
+fn status(pill: Pill) -> (&'static str, Tone) {
+    match pill {
+        Pill::Approval => ("Approval needed", Tone::Warning),
+        Pill::Input => ("Needs input", Tone::Warning),
+        Pill::Working => ("Working", Tone::Secondary),
+        Pill::Connecting => ("Starting", Tone::Secondary),
+        Pill::Waiting => ("Waiting", Tone::Tertiary),
+        Pill::Failed => ("Failed", Tone::Destructive),
+        Pill::Done => ("Done", Tone::Positive),
     }
-    match thread.status {
-        Status::Running | Status::Waiting => ("Working", Tone::Secondary),
-        Status::Queued | Status::Preparing | Status::Starting => ("Starting", Tone::Secondary),
-        Status::Failed => ("Failed", Tone::Destructive),
-        Status::Completed => ("Done", Tone::Positive),
-        Status::Idle => ("Idle", Tone::Tertiary),
-        Status::Cancelled | Status::Interrupted => ("Stopped", Tone::Tertiary),
-        Status::RolledBack => ("Rolled back", Tone::Tertiary),
+}
+
+/// Needs you first, then what's working, then what finished unread; newest first in each.
+fn rank(pill: Pill) -> u8 {
+    match pill {
+        Pill::Approval | Pill::Input => 0,
+        Pill::Working | Pill::Connecting | Pill::Waiting => 1,
+        Pill::Failed | Pill::Done => 2,
     }
 }
 
@@ -119,7 +124,7 @@ fn model_name(slug: &str) -> String {
 }
 
 /// The quiet second line: model · how long, each part only when T3 knows it.
-fn detail(state: &State, thread: &Thread, agents: usize, now_ms: i64) -> Option<String> {
+fn detail(state: &State, thread: &Thread, pill: Pill, agents: usize, now_ms: i64) -> Option<String> {
     let model = state
         .details
         .get(&thread.id)
@@ -128,12 +133,10 @@ fn detail(state: &State, thread: &Thread, agents: usize, now_ms: i64) -> Option<
         .or_else(|| Some(provider_name(&thread.provider_instance_id).to_owned()).filter(|p| !p.is_empty()));
     let time = epoch_ms(&thread.updated_at).map(|at| {
         let span = ago(now_ms, at);
-        if thread.attention() {
-            format!("waiting {span}")
-        } else if thread.running() {
-            format!("running {span}")
-        } else {
-            format!("{span} ago")
+        match pill {
+            Pill::Approval | Pill::Input | Pill::Waiting => format!("waiting {span}"),
+            Pill::Working | Pill::Connecting => format!("running {span}"),
+            Pill::Failed | Pill::Done => format!("{span} ago"),
         }
     });
     let agents = (agents > 0).then(|| plural(agents, "agent"));
@@ -142,8 +145,8 @@ fn detail(state: &State, thread: &Thread, agents: usize, now_ms: i64) -> Option<
 }
 
 /// One thread as a whole-row target that opens it in T3.
-fn item(thread: &Thread, detail: Option<String>, nested: bool) -> View {
-    let (tag, tone) = status(thread);
+fn item(thread: &Thread, pill: Pill, detail: Option<String>, nested: bool) -> View {
+    let (tag, tone) = status(pill);
     View::Item {
         title: if thread.title.trim().is_empty() { "Untitled thread".into() } else { thread.title.clone() },
         detail,
@@ -154,8 +157,6 @@ fn item(thread: &Thread, detail: Option<String>, nested: bool) -> View {
     }
 }
 
-/// Finished within the last two hours: Running now's "recent completions".
-const RECENT_MS: i64 = 2 * 3600 * 1000;
 /// Subagents listed under their thread on large tiles; the rest are counted.
 const AGENTS_SHOWN: usize = 3;
 
@@ -175,60 +176,62 @@ fn parent<'a>(state: &'a State, thread: &Thread) -> Option<&'a str> {
     state.details.get(&thread.id).and_then(|d| d.parent_id.as_deref())
 }
 
-/// Running now / Needs you: top-level threads with their subagents grouped under them.
+/// Running now / Needs you: top-level threads with their subagents grouped under them. Each
+/// state is T3's own (`Thread::pill`): Running now keeps a finished thread, tagged Done or
+/// Failed, until it's read in T3; Needs you lists approvals and questions.
 fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64, summary: &mut Option<String>) -> View {
-    let wanted = |t: &Thread| if attention { t.attention() } else { t.running() };
-    // One pass over the threads: the tops, and each wanted agent under its parent. Every redraw
+    let shown = |pill: Pill| if attention { rank(pill) == 0 } else { true };
+    // One pass over the threads: the tops, and each live agent under its parent. Every redraw
     // (a click included) runs this, so it must stay linear in the thread count.
     let mut tops: Vec<&Thread> = Vec::new();
-    let mut agents_of: std::collections::HashMap<&str, Vec<&Thread>> = std::collections::HashMap::new();
+    let mut agents_of: std::collections::HashMap<&str, Vec<(&Thread, Pill)>> = std::collections::HashMap::new();
     for thread in &state.threads {
         match parent(state, thread) {
             None => tops.push(thread),
-            Some(parent) if wanted(thread) => agents_of.entry(parent).or_default().push(thread),
-            Some(_) => {}
+            Some(parent) => {
+                if let Some(pill) = thread.pill(false).filter(|p| rank(*p) < 2) {
+                    agents_of.entry(parent).or_default().push((thread, pill));
+                }
+            }
         }
     }
-    tops.sort_by(|a, b| b.attention().cmp(&a.attention()).then_with(|| b.updated_at.cmp(&a.updated_at)));
-    let groups: Vec<(&Thread, Vec<&Thread>)> = tops
+    let mut groups: Vec<(&Thread, Pill, Vec<(&Thread, Pill)>)> = tops
         .into_iter()
-        .map(|top| (top, agents_of.get(top.id.as_str()).cloned().unwrap_or_default()))
-        .filter(|(top, agents)| wanted(top) || !agents.is_empty())
+        .filter_map(|top| {
+            let agents = agents_of.remove(top.id.as_str()).unwrap_or_default();
+            // A subagent asking for something makes its thread need you, as in T3.
+            let asking = agents.iter().map(|a| a.1).find(|p| rank(*p) == 0);
+            let pill = asking.filter(|_| top.pill(false).is_none_or(|p| rank(p) > 0)).or_else(|| top.pill(!agents.is_empty()))?;
+            shown(pill).then_some((top, pill, agents))
+        })
         .collect();
-    let agents: usize = groups.iter().map(|g| g.1.len()).sum();
+    groups.sort_by(|a, b| rank(a.1).cmp(&rank(b.1)).then_with(|| b.0.updated_at.cmp(&a.0.updated_at)));
+    let agents: usize = groups.iter().map(|g| g.2.len()).sum();
     let count = groups.len();
-    let counted = match (attention, agents) {
-        (true, _) => format!("{} need you", plural(count, "thread")),
-        (false, 0) => format!("{} running", plural(count, "thread")),
-        (false, n) => format!("{} running · {}", plural(count, "thread"), plural(n, "agent")),
-    };
+    let active = groups.iter().filter(|g| rank(g.1) < 2).count();
+    let unread = count - active;
     if count > 0 {
-        *summary = Some(counted);
+        let mut parts = vec![if attention { format!("{} need you", plural(count, "thread")) } else { format!("{active} running") }];
+        if agents > 0 && !attention {
+            parts.push(plural(agents, "agent"));
+        }
+        if unread > 0 {
+            parts.push(format!("{unread} unread"));
+        }
+        *summary = Some(parts.join(" · "));
     }
     if size == SizeClass::Small {
-        let caption = match (attention, agents) {
-            (true, _) => "need you".into(),
-            (false, 0) => "running".into(),
-            (false, n) => format!("running · {}", plural(n, "agent")),
+        let (value, caption) = if attention {
+            (count, "need you".to_owned())
+        } else if unread > 0 && active == 0 {
+            (unread, "done · unread".to_owned())
+        } else {
+            (active, if agents > 0 { format!("running · {}", plural(agents, "agent")) } else { "running".to_owned() })
         };
         let tone = if attention && count > 0 { Tone::Warning } else { Tone::Label };
-        return metric(count.to_string(), caption, tone);
+        return metric(value.to_string(), caption, tone);
     }
-    // Running now also lists what finished lately, tagged Done or Failed.
-    let recent: Vec<&Thread> = if attention {
-        Vec::new()
-    } else {
-        let mut done: Vec<&Thread> = state
-            .threads
-            .iter()
-            .filter(|t| t.finished() && !t.attention() && parent(state, t).is_none())
-            .filter(|t| epoch_ms(&t.updated_at).is_some_and(|at| now_ms - at < RECENT_MS))
-            .collect();
-        done.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-        done.truncate(3);
-        done
-    };
-    if count == 0 && recent.is_empty() {
+    if count == 0 {
         return if attention {
             View::empty("check", "All caught up", "Approvals and questions show up here.")
         } else {
@@ -236,12 +239,12 @@ fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64, summary
         };
     }
     let mut rows = Vec::new();
-    for (top, agents) in &groups {
-        rows.push(item(top, detail(state, top, agents.len(), now_ms), false));
+    for (top, pill, agents) in &groups {
+        rows.push(item(top, *pill, detail(state, top, *pill, agents.len(), now_ms), false));
         // Large tiles list the agents under their thread; the rest are counted in the line above.
         if size == SizeClass::Large {
-            for agent in agents.iter().take(AGENTS_SHOWN) {
-                rows.push(item(agent, None, true));
+            for (agent, pill) in agents.iter().take(AGENTS_SHOWN) {
+                rows.push(item(agent, *pill, None, true));
             }
         }
         if attention
@@ -259,10 +262,8 @@ fn threads(state: &State, size: SizeClass, attention: bool, now_ms: i64, summary
             });
         }
     }
-    for done in recent {
-        rows.push(item(done, detail(state, done, 0, now_ms), false));
-    }
-    // A list draws only the whole rows that fit; the footer keeps the full count.
+    // One list node under the fixed chrome: it draws the whole rows that fit (a scroll view can
+    // wrap it as is); the footer keeps the full count.
     View::List { children: rows, gap: Some(2.0) }
 }
 

@@ -57,7 +57,16 @@ fn thread(id: &str, title: &str, status: Status, mins_ago: Option<i64>) -> Threa
         active_run_id: Some(format!("run-{id}")),
         pending_runtime_request: None,
         updated_at: mins_ago.map(before).unwrap_or_else(|| "2026-11-05".into()),
+        blocked_on_thread_wait: false,
+        held: false,
+        latest_run_completed_at: None,
+        last_visited_at: None,
     }
+}
+
+/// A thread that finished `mins_ago`, last opened in T3 `visited` minutes ago.
+fn finished(id: &str, title: &str, status: Status, mins_ago: i64, visited: Option<i64>) -> Thread {
+    Thread { latest_run_completed_at: Some(before(mins_ago)), last_visited_at: visited.map(before), ..thread(id, title, status, Some(mins_ago)) }
 }
 
 fn limit(driver: &str, provider: &str, account: &str, window: &str, used_permille: u32, resets_in_mins: Option<i64>) -> Limit {
@@ -109,8 +118,9 @@ pub fn fixture() -> Snapshot {
         thread("thread-1", "Redesign the T3 faces in mypaper's own style", Status::Running, Some(12)),
         thread("thread-2", "Fix half-size plugin layout", Status::Running, Some(25)),
         thread("thread-3", "Decode server.getConfig without a Value tree", Status::Starting, Some(1)),
-        thread("thread-4", "Wire the dock magnification spring", Status::Completed, Some(18)),
-        thread("thread-5", "Port Discord notifications", Status::Failed, Some(64)),
+        finished("thread-4", "Wire the dock magnification spring", Status::Completed, 18, Some(90)),
+        finished("thread-5", "Port Discord notifications", Status::Failed, 64, None),
+        finished("thread-read", "Already read, so not listed", Status::Completed, 30, Some(5)),
     ];
     threads.extend((0..4).map(|i| thread(&format!("agent-{i}"), &format!("Check size sheet cell {}", i + 1), Status::Running, Some(6))));
     threads.extend((6..14).map(|i| thread(&format!("thread-{i}"), &format!("Build native widget {i}"), Status::Running, Some(90 + i))));
@@ -163,7 +173,32 @@ pub fn edges() -> Vec<(&'static str, Snapshot)> {
     );
     let mut stale = fixture();
     stale.availability = Availability::Stale("socket closed".into());
+    // Every T3 sidebar state once (`Thread::pill`).
+    let mut input = thread("s-input", "Asks which icon set to use", Status::Waiting, Some(3));
+    input.pending_runtime_request = Some(t3::Request { id: "q".into(), kind: "user_input".into() });
+    let mut approval = thread("s-approval", "Wants to run cargo build", Status::Waiting, Some(1));
+    approval.pending_runtime_request = Some(t3::Request { id: "a".into(), kind: "command".into() });
+    let blocked = Thread { blocked_on_thread_wait: true, ..thread("s-blocked", "Waits on another thread", Status::Running, Some(9)) };
+    let states = snapshot(
+        Availability::Live,
+        vec![
+            approval,
+            input,
+            thread("s-work", "Working on the dock spring", Status::Running, Some(7)),
+            thread("s-wait", "Idle, its subagents still running", Status::Idle, Some(15)),
+            thread("s-agent-1", "Subagent: render the sheet", Status::Running, Some(2)),
+            thread("s-agent-2", "Subagent: check light mode", Status::Running, Some(4)),
+            blocked,
+            finished("s-done", "Finished, not read yet", Status::Completed, 12, Some(40)),
+            finished("s-failed", "Failed, never opened", Status::Failed, 20, None),
+            finished("s-read", "Finished and read: hidden", Status::Completed, 30, Some(2)),
+        ],
+        vec![("s-agent-1", agent_of("s-wait")), ("s-agent-2", agent_of("s-wait")), ("s-work", model("claude-opus-5-5"))],
+        vec![],
+        None,
+    );
     vec![
+        ("states", states),
         ("empty", snapshot(Availability::Live, vec![], vec![], vec![], None)),
         ("one", one),
         ("many", many),
@@ -214,6 +249,26 @@ fn check(name: &str, actual: Value) {
 fn faces_match_the_view_golden() {
     check("faces.json", faces());
     check("edges.json", edge_faces());
+}
+
+#[test]
+fn thread_states_follow_t3() {
+    use crate::t3::Pill;
+    let (_, states) = edges().into_iter().find(|e| e.0 == "states").unwrap();
+    let Some(Data::T3(state)) = &states.data else { unreachable!() };
+    let pill = |id: &str, busy| state.threads.iter().find(|t| t.id == id).unwrap().pill(busy);
+    assert_eq!(pill("s-approval", false), Some(Pill::Approval));
+    assert_eq!(pill("s-input", false), Some(Pill::Input));
+    assert_eq!(pill("s-work", false), Some(Pill::Working));
+    assert_eq!(pill("s-wait", true), Some(Pill::Waiting), "idle while its subagents run");
+    assert_eq!(pill("s-wait", false), None);
+    assert_eq!(pill("s-blocked", false), Some(Pill::Waiting));
+    assert_eq!(pill("s-done", false), Some(Pill::Done), "finished after the last visit");
+    assert_eq!(pill("s-read", false), None, "read in T3: off the list");
+    assert_eq!(pill("s-failed", false), Some(Pill::Failed));
+    let running = serde_json::to_string(&edge_faces()["states"]["running"]["large"]).unwrap();
+    assert!(running.contains("Finished, not read yet") && !running.contains("Finished and read"), "{running}");
+    assert!(running.contains("\"tag\":\"Waiting\""), "{running}");
 }
 
 #[test]
