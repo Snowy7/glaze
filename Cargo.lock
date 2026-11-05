@@ -1433,6 +1433,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-plugin-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "mypaper-plugin-weather"
 version = "0.1.0"
 dependencies = [
