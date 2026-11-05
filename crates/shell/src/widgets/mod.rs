@@ -21,6 +21,7 @@ use coverage::WindowEvents;
 #[cfg(test)]
 use model::Timer;
 use model::{Model, Task, Widget};
+use mypaper_bars::config::{self as bars_config, BarsConfig};
 use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, Holds, Reason};
 use mypaper_desktop::{DesktopEvents, DesktopHost, Monitor, covered_monitors, monitor_infos};
@@ -70,6 +71,7 @@ struct Entry {
     rect: Rect,
     tokens: Tokens,
     dpi_scale: f32,
+    presents: u64,
 }
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WorkCosts {
@@ -82,6 +84,7 @@ pub struct WorkCosts {
     order_us: u64,
     plate_us: u64,
     poll_us: u64,
+    edit_rebuilds: u64,
 }
 struct Drag {
     id: String,
@@ -90,6 +93,15 @@ struct Drag {
     pending: Rect,
     resize: bool,
     edges: [bool; 4],
+    monitor: usize,
+    cell: [u32; 2],
+    size: [u32; 2],
+    target: Option<(usize, [u32; 2], [u32; 2])>,
+}
+struct Settle {
+    from: Rect,
+    to: Rect,
+    start: Instant,
 }
 struct EditSurface {
     surface: Surface,
@@ -131,8 +143,13 @@ pub struct Widgets {
     _control: control::Control,
     _display: DisplayWatcher,
     _watcher: Option<FileWatch>,
+    _bars_watcher: Option<FileWatch>,
+    bars: BarsConfig,
     editing: bool,
     drag: Option<Drag>,
+    settling: BTreeMap<String, Settle>,
+    ghost: Option<EditSurface>,
+    edit_geometry_dirty: bool,
     grids: Vec<EditSurface>,
     palette: Option<EditSurface>,
     rx: mpsc::Receiver<Msg>,
@@ -185,8 +202,11 @@ impl Widgets {
             layout.save(&path)?;
         }
         let monitors = monitor_infos();
+        let bars = bars_config::path()
+            .and_then(|p| BarsConfig::load(&p))
+            .unwrap_or_default();
         if missing && let Some(primary) = monitors.iter().find(|m| m.primary) {
-            let grid = grid_for(&layout, primary);
+            let grid = grid_for_bars(&layout, primary, &bars);
             // The first-run default fits the plan's six-widget fixture. Existing layouts are
             // never reseeded, including an intentionally empty layout.
             let mut starter = Layout::default();
@@ -210,6 +230,9 @@ impl Widgets {
         let _watcher = FileWatch::new(&path, || inbox::post(WM_LAYOUT, 0))
             .inspect_err(|e| log::warn!("widget layout watcher: {e:#}"))
             .ok();
+        let _bars_watcher = bars_config::path()
+            .ok()
+            .and_then(|p| FileWatch::new(&p, || inbox::post(WM_APP + 105, 0)).ok());
         let (tx, rx) = mpsc::channel();
         let wake = Waker::for_window(tx, window, WM_DATA);
         let config = Config::load().unwrap_or_default();
@@ -235,8 +258,13 @@ impl Widgets {
             _control,
             _display,
             _watcher,
+            _bars_watcher,
+            bars,
             editing: false,
             drag: None,
+            settling: BTreeMap::new(),
+            ghost: None,
+            edit_geometry_dirty: true,
             grids: Vec::new(),
             palette: None,
             rx,
@@ -273,6 +301,9 @@ impl Widgets {
     /// other widget notifications use the shell inbox so COM modal waits preserve them.
     pub fn raw_message(&mut self, msg: &MSG) {
         if (msg.message == WM_DISPLAY && msg.hwnd.is_invalid()) || msg.message == WM_TIMECHANGE {
+            self.cancel_drag();
+            self.settling.clear();
+            self.edit_geometry_dirty = true;
             self.monitors = monitor_infos();
             self.stats.refresh_devices();
             self.reconcile_needed = true;
@@ -292,9 +323,10 @@ impl Widgets {
                 );
                 for (id, entry) in &self.entries {
                     log::info!(
-                        "widget checkpoint id={id} rect={:?} visible={}",
+                        "widget checkpoint id={id} rect={:?} visible={} presents={}",
                         entry.rect,
-                        entry.model.visible
+                        entry.model.visible,
+                        entry.presents
                     );
                 }
             }
@@ -317,6 +349,8 @@ impl Widgets {
                         log::warn!("widget migration: {e:#}");
                     }
                     if layout != self.layout {
+                        self.cancel_drag();
+                        self.settling.clear();
                         self.finish_fields();
                         self.layout = layout;
                         self.reconcile_needed = true;
@@ -333,6 +367,16 @@ impl Widgets {
                     self.reconcile_needed = true;
                 }
             },
+            message if message == WM_APP + 105 => {
+                if let Ok(bars) = bars_config::path().and_then(|p| BarsConfig::load(&p)) {
+                    self.cancel_drag();
+                    self.settling.clear();
+                    self.bars = bars;
+                    self.monitors = monitor_infos();
+                    self.edit_geometry_dirty = true;
+                    self.reconcile_needed = true;
+                }
+            }
             inbox::WM_CONFIG | inbox::WM_PALETTE => self.follow_config(),
             _ => {}
         }
@@ -692,7 +736,10 @@ impl Widgets {
         if self.motion_frame && self.drag.is_some() {
             self.drag_frame(ui, now, instant);
         }
-        let moving = self.motion_frame && self.drag.is_some();
+        let moving = self.motion_frame && (self.drag.is_some() || !self.settling.is_empty());
+        if self.motion_frame && !self.settling.is_empty() {
+            self.settle_frame(ui, now, instant);
+        }
         if plates_changed || moving {
             let measured = Instant::now();
             self.publish_plates(moving);
@@ -702,6 +749,7 @@ impl Widgets {
         self.ticker.schedule(
             !self.held
                 && (self.drag.is_some()
+                    || !self.settling.is_empty()
                     || self.entries.values().any(|e| {
                         e.model.visible
                             && (e.model.photo.fade.is_some()
@@ -718,6 +766,19 @@ impl Widgets {
         };
         let devices: Vec<_> = self.monitors.iter().map(|m| m.device.clone()).collect();
         let primary = self.monitors.iter().position(|m| m.primary).unwrap_or(0);
+        let mut constrained = self.layout.clone();
+        for monitor in &self.monitors {
+            let grid = grid_for_bars(&self.layout, monitor, &self.bars);
+            constrained.instances = edit::constrain(
+                &grid,
+                &constrained.instances,
+                &monitor.device,
+                &self.registry,
+            );
+        }
+        if constrained != self.layout {
+            self.commit_layout(constrained);
+        }
         let installed: BTreeSet<_> = self
             .layout
             .instances
@@ -743,7 +804,7 @@ impl Widgets {
             };
             let monitor = devices.iter().position(|d| d == device).unwrap();
             let screen = &self.monitors[monitor];
-            let grid = grid_for(&self.layout, screen);
+            let grid = grid_for_bars(&self.layout, screen, &self.bars);
             let appearance = look::resolve(
                 &instance.appearance,
                 &self.layout.appearance,
@@ -754,7 +815,10 @@ impl Widgets {
             let rect = screen_rect(&grid, placed.cell, placed.size, screen);
             let overlay = manifest.preset == mypaper_widgets::manifest::Preset::Overlay;
             let topmost = overlay && !self.editing;
-            let visible = !self.hidden
+            let visible = manifest
+                .fit_size(instance.size.map(f64::from), [grid.cols, grid.rows])
+                .is_some()
+                && !self.hidden
                 && (self.editing
                     || overlay
                     || !self.covered.get(monitor).copied().unwrap_or(false))
@@ -775,6 +839,7 @@ impl Widgets {
                                 rect,
                                 tokens,
                                 dpi_scale: screen.dpi as f32 / 96.0,
+                                presents: 0,
                             },
                         );
                     }
@@ -793,7 +858,13 @@ impl Widgets {
                 entry.model.dirty = true;
             }
             let was_visible = entry.model.visible;
-            let changed = entry.model.placed != placed;
+            // Cell/size changes do not invalidate content, decoded art, or service subscriptions.
+            let changed = entry.model.placed.widget != placed.widget
+                || entry.model.placed.settings != placed.settings;
+            entry.model.dirty |= entry.model.placed.appearance != placed.appearance
+                || entry.rect.width().round() != rect.width().round()
+                || entry.rect.height().round() != rect.height().round()
+                || entry.dpi_scale != screen.dpi as f32 / 96.0;
             if changed {
                 entry.model.generation += 1;
                 entry.model.fetching = false;
@@ -805,7 +876,19 @@ impl Widgets {
             }
             entry.tokens = tokens(&placed.appearance);
             entry.model.placed = placed;
-            entry.rect = rect;
+            if !self.settling.contains_key(&instance.instance)
+                && !self
+                    .drag
+                    .as_ref()
+                    .is_some_and(|d| d.id == instance.instance)
+            {
+                entry.rect = rect;
+                if visible && entry.surface.is_visible() {
+                    entry
+                        .surface
+                        .move_to((rect.left.round() as i32, rect.top.round() as i32))?;
+                }
+            }
             entry.monitor = monitor;
             entry.dpi_scale = screen.dpi as f32 / 96.0;
             entry.model.visible = visible;
@@ -828,7 +911,7 @@ impl Widgets {
                 self.stats.forget(&instance.instance);
                 self.media.forget(&instance.instance);
                 self.audio.forget(&instance.instance);
-            } else if !self.held && (!was_visible || changed || entry.model.dirty) {
+            } else if !self.held && (!was_visible || changed) {
                 entry.model.dirty = true;
                 entry.model.schedule(now, instant);
                 if matches!(
@@ -1239,6 +1322,7 @@ impl Widgets {
     pub fn on_event(&mut self, ui: &mut Ui, surface: SurfaceId, event: &Event) {
         if matches!(event, Event::DpiChanged(_)) {
             self.monitors = monitor_infos();
+            self.edit_geometry_dirty = true;
             if self.drag.is_none() {
                 self.finish_fields();
                 self.reconcile_needed = true;
@@ -1324,6 +1408,7 @@ impl Widgets {
                         let _ = SetFocus(Some(entry.surface.hwnd()));
                     }
                     self.motion_frame = true;
+                    self.settling.remove(&id);
                     self.drag = Some(Drag {
                         id,
                         start: p.screen,
@@ -1331,45 +1416,23 @@ impl Widgets {
                         pending: entry.rect,
                         resize: hit.is_some_and(|h| view::resize_edges(h).is_some()),
                         edges: hit.and_then(view::resize_edges).unwrap_or([false; 4]),
+                        monitor: entry.monitor,
+                        cell: entry.model.placed.cell,
+                        size: entry.model.placed.size,
+                        target: None,
                     });
                 }
                 Event::Move(p) => {
-                    if let Some(drag) = &mut self.drag
-                        && drag.id == id
-                    {
-                        let dx = (p.screen.0 - drag.start.0) as f32;
-                        let dy = (p.screen.1 - drag.start.1) as f32;
-                        drag.pending = if drag.resize {
-                            let [left, top, right, bottom] = drag.edges;
-                            Rect {
-                                left: if left {
-                                    (drag.original.left + dx).min(drag.original.right - 48.0)
-                                } else {
-                                    drag.original.left
-                                },
-                                top: if top {
-                                    (drag.original.top + dy).min(drag.original.bottom - 48.0)
-                                } else {
-                                    drag.original.top
-                                },
-                                right: if right {
-                                    (drag.original.right + dx).max(drag.original.left + 48.0)
-                                } else {
-                                    drag.original.right
-                                },
-                                bottom: if bottom {
-                                    (drag.original.bottom + dy).max(drag.original.top + 48.0)
-                                } else {
-                                    drag.original.bottom
-                                },
-                            }
-                        } else {
-                            drag.original.offset(dx, dy)
-                        };
+                    if self.drag.as_ref().is_some_and(|drag| drag.id == id) {
+                        self.update_drag_pointer(p.screen);
+                        self.motion_frame = true;
                     }
                 }
                 Event::Release(p, Button::Left) => {
                     if self.drag.is_some() {
+                        // The release may arrive before the next timer tick.
+                        self.update_drag_pointer(p.screen);
+                        self.drag_frame(ui, Stamp::now(), Instant::now());
                         self.drop_drag(ui);
                     } else {
                         let hit = self.entries[&id].surface.shown().hit_at(p.at).map(|h| h.id);
@@ -2029,8 +2092,17 @@ impl Widgets {
         self.poll(ui);
     }
     fn make_edit_surfaces(&mut self, ui: &mut Ui) -> Result<()> {
+        if !self.edit_geometry_dirty
+            && self.palette.is_some()
+            && self.grids.len() == self.monitors.len()
+        {
+            self.repaint_palette(ui);
+            return Ok(());
+        }
         self.grids.clear();
+        self.costs.edit_rebuilds += 1;
         self.palette = None;
+        self.ghost = None;
         let Some(host) = self.host else {
             return Ok(());
         };
@@ -2042,13 +2114,21 @@ impl Widgets {
                 "Widget grid",
                 Role::Pane,
             )?;
-            let size = (monitor.rect.width as u32, monitor.rect.height as u32);
+            let bounds = usable_screen(monitor, &self.bars);
+            let size = (
+                bounds.width().floor().max(1.0) as u32,
+                bounds.height().floor().max(1.0) as u32,
+            );
             let scale = monitor.dpi as f32 / 96.0;
+            let mut grid = grid_for_bars(&self.layout, monitor, &self.bars);
+            grid.origin[0] -= f64::from(bounds.left - monitor.rect.x as f32) / f64::from(scale);
+            grid.origin[1] -= f64::from(bounds.top - monitor.rect.y as f32) / f64::from(scale);
+            click_through(&surface);
             surface.present(
                 ui,
-                (monitor.rect.x, monitor.rect.y),
+                (bounds.left.ceil() as i32, bounds.top.ceil() as i32),
                 size,
-                edit::grid_view(&grid_for(&self.layout, monitor), size, scale),
+                edit::grid_view(&grid, size, scale),
             )?;
             surface.show();
             surface.keep_above_desktop()?;
@@ -2060,7 +2140,7 @@ impl Widgets {
         }
         for entry in self.entries.values() {
             if entry.model.placed.widget != "media-pill" {
-                entry.surface.keep_above_desktop()?;
+                entry.surface.raise_in_desktop_band()?;
             }
         }
         if let Some((index, monitor)) = self.monitors.iter().enumerate().find(|(_, m)| m.primary) {
@@ -2070,16 +2150,18 @@ impl Widgets {
                 .iter()
                 .map(|(id, i)| (id.clone(), i.manifest.name.clone()))
                 .collect::<Vec<_>>();
+            let bounds = usable_screen(monitor, &self.bars);
+            let scale = palette_scale(monitor, bounds);
             let (list, size) = edit::palette(
                 &names,
-                monitor.dpi as f32 / 96.0,
+                scale,
                 self.layout_error.as_deref(),
                 &Default::default(),
                 &mut ui.text,
             );
             let origin = (
-                monitor.work.x + (monitor.work.width - size.0 as i32) / 2,
-                monitor.work.y + 12,
+                (bounds.left + (bounds.width() - size.0 as f32) / 2.0).round() as i32,
+                (bounds.top + 10.0 * scale).ceil() as i32,
             );
             let mut surface = Surface::new(
                 Kind::DesktopChild {
@@ -2099,6 +2181,7 @@ impl Widgets {
                 hot: Default::default(),
             });
         }
+        self.edit_geometry_dirty = false;
         Ok(())
     }
     /// Draws the palette again with its hover and press state (only what changed reaches the
@@ -2118,7 +2201,7 @@ impl Widgets {
             .collect();
         let (list, size) = edit::palette(
             &names,
-            monitor.dpi as f32 / 96.0,
+            palette_scale(monitor, usable_screen(monitor, &self.bars)),
             self.layout_error.as_deref(),
             &palette.hot,
             &mut ui.text,
@@ -2149,7 +2232,11 @@ impl Widgets {
             let Some(original) = self.layout.get(id).cloned() else {
                 return;
             };
-            let grid = grid_for(&self.layout, &self.monitors[self.entries[id].monitor]);
+            let grid = grid_for_bars(
+                &self.layout,
+                &self.monitors[self.entries[id].monitor],
+                &self.bars,
+            );
             let manifest = &self.registry.get(&original.widget).unwrap().manifest;
             let (total, here) = self
                 .layout
@@ -2208,7 +2295,7 @@ impl Widgets {
             return;
         };
         let monitor = &self.monitors[index];
-        let grid = grid_for(&self.layout, monitor);
+        let grid = grid_for_bars(&self.layout, monitor, &self.bars);
         let manifest = &self.registry.get(&id).unwrap().manifest;
         let (total, here) = self.layout.count_of(&id, |i| i.monitor == monitor.device);
         if !manifest.instances.allows(total, here) {
@@ -2233,7 +2320,7 @@ impl Widgets {
         resize: bool,
     ) {
         let screen = &self.monitors[monitor];
-        let grid = grid_for(&self.layout, screen);
+        let grid = grid_for_bars(&self.layout, screen, &self.bars);
         let Some(instances) = edit::resolve(
             &grid,
             &self.layout.instances,
@@ -2252,6 +2339,29 @@ impl Widgets {
         let mut next = self.layout.clone();
         next.instances = instances;
         if self.commit_layout(next) {
+            let start = Instant::now();
+            for instance in &self.layout.instances {
+                if let Some(entry) = self.entries.get(&instance.instance) {
+                    let index = self
+                        .monitors
+                        .iter()
+                        .position(|m| m.device == instance.monitor)
+                        .unwrap_or(entry.monitor);
+                    let screen = &self.monitors[index];
+                    let grid = grid_for_bars(&self.layout, screen, &self.bars);
+                    let target = screen_rect(&grid, instance.cell, instance.size, screen);
+                    if entry.rect != target {
+                        self.settling.insert(
+                            instance.instance.clone(),
+                            Settle {
+                                from: entry.rect,
+                                to: target,
+                                start,
+                            },
+                        );
+                    }
+                }
+            }
             self.reconcile_needed = true;
             if let Some(entry) = self.entries.get_mut(id) {
                 entry.model.notice = None;
@@ -2263,32 +2373,78 @@ impl Widgets {
             return;
         };
         let monitor = self.entries[id].monitor;
-        let grid = grid_for(&self.layout, &self.monitors[monitor]);
+        let grid = grid_for_bars(&self.layout, &self.monitors[monitor], &self.bars);
         let shift = shift_down();
         let axis = if key == 37 || key == 39 { 0 } else { 1 };
         let delta = if key == 37 || key == 38 { -1 } else { 1 };
         let mut cell = instance.cell;
         let mut size = instance.size;
         if shift {
-            size[axis] = size[axis].saturating_add_signed(delta).max(1);
-            size = self
-                .registry
-                .get(&instance.widget)
-                .unwrap()
-                .manifest
-                .clamp_size(size);
+            let limits = [grid.cols - cell[0], grid.rows - cell[1]];
+            let Some(next) = edit::nudge_size(
+                &self.registry.get(&instance.widget).unwrap().manifest,
+                size,
+                axis,
+                delta,
+                limits,
+            ) else {
+                return;
+            };
+            size = next;
         } else {
             cell[axis] = cell[axis].saturating_add_signed(delta);
         }
         let (cell, size) = grid.clamp(cell, size);
         self.place_edit(id, monitor, cell, size, shift);
     }
-    fn cancel_drag(&mut self) {
-        if self.drag.take().is_some() {
-            for entry in self.entries.values_mut() {
-                entry.model.dirty = true;
+    fn update_drag_pointer(&mut self, point: (i32, i32)) {
+        let Some(drag) = &mut self.drag else { return };
+        let dx = (point.0 - drag.start.0) as f32;
+        let dy = (point.1 - drag.start.1) as f32;
+        drag.pending = if drag.resize {
+            let [left, top, right, bottom] = drag.edges;
+            Rect {
+                left: if left {
+                    (drag.original.left + dx).min(drag.original.right - 1.0)
+                } else {
+                    drag.original.left
+                },
+                top: if top {
+                    (drag.original.top + dy).min(drag.original.bottom - 1.0)
+                } else {
+                    drag.original.top
+                },
+                right: if right {
+                    (drag.original.right + dx).max(drag.original.left + 1.0)
+                } else {
+                    drag.original.right
+                },
+                bottom: if bottom {
+                    (drag.original.bottom + dy).max(drag.original.top + 1.0)
+                } else {
+                    drag.original.bottom
+                },
             }
-            self.reconcile_needed = true;
+        } else {
+            drag.original.offset(dx, dy)
+        };
+    }
+    fn cancel_drag(&mut self) {
+        if let Some(drag) = self.drag.take() {
+            if let Some(entry) = self.entries.get(&drag.id) {
+                self.settling.insert(
+                    drag.id,
+                    Settle {
+                        from: entry.rect,
+                        to: drag.original,
+                        start: Instant::now(),
+                    },
+                );
+                self.motion_frame = true;
+            }
+            if let Some(ghost) = &self.ghost {
+                ghost.surface.hide();
+            }
         }
         // SAFETY: releases only this thread's capture, if any.
         unsafe {
@@ -2296,103 +2452,226 @@ impl Widgets {
         }
     }
     fn drag_frame(&mut self, ui: &mut Ui, now: Stamp, instant: Instant) {
-        let Some(drag) = &mut self.drag else {
+        let Some(drag) = &mut self.drag else { return };
+        let Some(entry) = self.entries.get_mut(&drag.id) else {
             return;
         };
-        if let Some(entry) = self.entries.get_mut(&drag.id) {
+        let monitor = if drag.resize {
+            drag.monitor
+        } else {
             let center = (
-                drag.pending.left as i32 + drag.pending.width() as i32 / 2,
-                drag.pending.top as i32 + drag.pending.height() as i32 / 2,
+                (drag.pending.left + drag.pending.width() / 2.0) as i32,
+                (drag.pending.top + drag.pending.height() / 2.0) as i32,
             );
-            let mut dpi_changed = false;
-            if let Some((index, monitor)) = self
-                .monitors
+            self.monitors
                 .iter()
-                .enumerate()
-                .find(|(_, m)| m.rect.contains_point(center.0, center.1))
-            {
-                dpi_changed =
-                    entry.monitor != index || entry.dpi_scale != monitor.dpi as f32 / 96.0;
-                entry.monitor = index;
-                entry.dpi_scale = monitor.dpi as f32 / 96.0;
-                if !drag.resize {
-                    let grid = grid_for(&self.layout, monitor);
-                    let size = grid.rect([0, 0], entry.model.placed.size);
-                    drag.pending.right = drag.pending.left + size.width as f32 * entry.dpi_scale;
-                    drag.pending.bottom = drag.pending.top + size.height as f32 * entry.dpi_scale;
-                }
+                .position(|m| m.rect.contains_point(center.0, center.1))
+                .unwrap_or(entry.monitor)
+        };
+        let Some(screen) = self.monitors.get(monitor) else {
+            return;
+        };
+        let grid = grid_for_bars(&self.layout, screen, &self.bars);
+        let scale = screen.dpi as f32 / 96.0;
+        let local = drag
+            .pending
+            .offset(-screen.rect.x as f32, -screen.rect.y as f32);
+        let target = if drag.resize {
+            edit::resize_target(
+                &grid,
+                &self
+                    .registry
+                    .get(&entry.model.placed.widget)
+                    .unwrap()
+                    .manifest,
+                drag.cell,
+                drag.size,
+                RectF {
+                    x: f64::from(local.left / scale),
+                    y: f64::from(local.top / scale),
+                    width: f64::from(local.width() / scale),
+                    height: f64::from(local.height() / scale),
+                },
+                drag.edges,
+            )
+        } else {
+            // Keep cell size on a DPI transition, rather than inferring it from old pixels.
+            let size = self
+                .registry
+                .get(&entry.model.placed.widget)
+                .unwrap()
+                .manifest
+                .fit_size(drag.size.map(f64::from), [grid.cols, grid.rows]);
+            size.map(|size| {
+                let mut live = drag.pending;
+                let span = grid.rect([0, 0], size);
+                live.right = live.left + span.width as f32 * scale;
+                live.bottom = live.top + span.height as f32 * scale;
+                let live = edit::clamp_rect(live, usable_screen(screen, &self.bars));
+                let local = live.offset(-screen.rect.x as f32, -screen.rect.y as f32);
+                let (cell, _) = edit::snapped(&grid, local, f64::from(scale));
+                (grid.clamp(cell, size).0, size)
+            })
+        };
+        let Some((cell, size)) = target else { return };
+        drag.target = Some((monitor, cell, size));
+        let target_rect = screen_rect(&grid, cell, size, screen);
+        let valid = edit::resolve(
+            &grid,
+            &self.layout.instances,
+            &drag.id,
+            &screen.device,
+            cell,
+            size,
+            drag.resize,
+        )
+        .is_some();
+        let live = if drag.resize {
+            target_rect
+        } else {
+            edit::clamp_rect(
+                Rect::new(
+                    drag.pending.left,
+                    drag.pending.top,
+                    target_rect.width(),
+                    target_rect.height(),
+                ),
+                usable_screen(screen, &self.bars),
+            )
+        };
+        let redraw = entry.rect.width().round() != live.width().round()
+            || entry.rect.height().round() != live.height().round()
+            || entry.dpi_scale != scale;
+        entry.rect = live;
+        entry.monitor = monitor;
+        entry.dpi_scale = scale;
+        if redraw {
+            if let Err(e) = paint(entry, ui, now, instant, true, self.host) {
+                log::warn!("widget resize: {e:#}");
             }
-            entry.rect = drag.pending;
-            if drag.resize || dpi_changed {
-                entry.model.dirty = true;
-                if let Err(e) = paint(entry, ui, now, instant, true, self.host) {
-                    log::warn!("resizing widget: {e:#}");
+        } else if let Err(e) = entry
+            .surface
+            .move_to((live.left.round() as i32, live.top.round() as i32))
+        {
+            log::warn!("widget drag: {e:#}");
+        }
+        if self.ghost.is_none()
+            && let Some(host) = self.host
+        {
+            match Surface::new(
+                Kind::DesktopChild {
+                    parent: host.icons_parent(),
+                },
+                "Widget target",
+                Role::Pane,
+            ) {
+                Ok(surface) => {
+                    click_through(&surface);
+                    self.ghost = Some(EditSurface {
+                        surface,
+                        monitor,
+                        hot: Default::default(),
+                    });
                 }
+                Err(e) => log::warn!("widget target: {e:#}"),
+            }
+        }
+        if let Some(ghost) = &mut self.ghost {
+            ghost.monitor = monitor;
+            let size = (
+                target_rect.width().round() as u32,
+                target_rect.height().round() as u32,
+            );
+            if let Err(e) = ghost.surface.present(
+                ui,
+                (
+                    target_rect.left.round() as i32,
+                    target_rect.top.round() as i32,
+                ),
+                size,
+                edit::ghost_view(size, scale, valid),
+            ) {
+                log::warn!("widget target: {e:#}");
+            }
+            ghost.surface.show();
+            let _ = ghost.surface.raise_in_desktop_band();
+        }
+    }
+    fn settle_frame(&mut self, ui: &mut Ui, now: Stamp, instant: Instant) {
+        let mut finished = Vec::new();
+        for (id, motion) in &self.settling {
+            let t = instant
+                .saturating_duration_since(motion.start)
+                .as_secs_f32();
+            let done = t >= 0.24;
+            let k = if done {
+                1.0
             } else {
-                if let Err(e) = entry
-                    .surface
-                    .move_to((entry.rect.left as i32, entry.rect.top as i32))
-                {
-                    log::warn!("moving widget: {e:#}");
+                mypaper_ui::Spring::new(1.0, 1600.0, 80.0)
+                    .at(t)
+                    .clamp(0.0, 1.0)
+            };
+            let blend = |a: f32, b: f32| a + (b - a) * k;
+            if let Some(entry) = self.entries.get_mut(id) {
+                let rect = Rect {
+                    left: blend(motion.from.left, motion.to.left),
+                    top: blend(motion.from.top, motion.to.top),
+                    right: blend(motion.from.right, motion.to.right),
+                    bottom: blend(motion.from.bottom, motion.to.bottom),
+                };
+                let redraw = entry.rect.width().round() != rect.width().round()
+                    || entry.rect.height().round() != rect.height().round();
+                entry.rect = rect;
+                if redraw {
+                    let _ = paint(entry, ui, now, instant, self.editing, self.host);
+                } else {
+                    let _ = entry
+                        .surface
+                        .move_to((rect.left.round() as i32, rect.top.round() as i32));
                 }
-                let _ = entry.surface.keep_above_desktop();
             }
+            if done {
+                finished.push(id.clone());
+            }
+        }
+        for id in finished {
+            self.settling.remove(&id);
         }
     }
     fn drop_drag(&mut self, ui: &mut Ui) {
-        let Some(drag) = self.drag.take() else {
-            return;
-        };
-        // SAFETY: paired with this gesture's capture.
+        let Some(drag) = self.drag.take() else { return };
+        // SAFETY: paired with this gesture's capture, after taking drag so capture loss cannot cancel it.
         unsafe {
             let _ = ReleaseCapture();
         }
-        let center = (
-            drag.pending.left as i32 + drag.pending.width() as i32 / 2,
-            drag.pending.top as i32 + drag.pending.height() as i32 / 2,
-        );
-        if let Some((monitor, screen)) = self
-            .monitors
-            .iter()
-            .enumerate()
-            .find(|(_, m)| m.rect.contains_point(center.0, center.1))
-        {
-            let grid = grid_for(&self.layout, screen);
-            let local = drag
-                .pending
-                .offset(-screen.rect.x as f32, -screen.rect.y as f32);
-            let (cell, size) = edit::snapped(&grid, local, screen.dpi as f64 / 96.0);
-            let widget = self.layout.get(&drag.id).unwrap().widget.clone();
-            let size = self
-                .registry
-                .get(&widget)
-                .unwrap()
-                .manifest
-                .clamp_size(size);
-            let (mut cell, size) = grid.clamp(cell, size);
-            if drag.resize
-                && let Some(original) = self.layout.get(&drag.id)
-                && original.monitor == screen.device
-            {
-                if drag.edges[0] {
-                    cell[0] = (original.cell[0] + original.size[0]).saturating_sub(size[0]);
-                }
-                if drag.edges[1] {
-                    cell[1] = (original.cell[1] + original.size[1]).saturating_sub(size[1]);
-                }
-            }
-            let (cell, size) = grid.clamp(cell, size);
+        if let Some(ghost) = &self.ghost {
+            ghost.surface.hide();
+        }
+        let before = self.layout.clone();
+        if let Some((monitor, cell, size)) = drag.target {
             self.place_edit(&drag.id, monitor, cell, size, drag.resize);
         }
-        self.reconcile_needed = true;
-        for entry in self.entries.values_mut() {
-            entry.model.dirty = true;
+        if self.layout == before
+            && let Some(entry) = self.entries.get(&drag.id)
+        {
+            self.settling.insert(
+                drag.id,
+                Settle {
+                    from: entry.rect,
+                    to: drag.original,
+                    start: Instant::now(),
+                },
+            );
         }
+        self.motion_frame = true;
         self.poll(ui);
     }
     fn commit_layout(&mut self, next: Layout) -> bool {
         if self.layout_error.is_some() {
             return false;
+        }
+        if next == self.layout {
+            return true;
         }
         match next.save(&self.path) {
             Ok(()) => {
@@ -2510,6 +2789,28 @@ fn widget_surface(topmost: bool, parent: HWND, instance: &str) -> Result<Surface
     )
 }
 
+/// Edit guides are visual only. A monitor-sized layered window must never take a widget's drag.
+fn click_through(surface: &Surface) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GWL_EXSTYLE, GetWindowLongPtrW, SetWindowLongPtrW, WS_EX_TRANSPARENT,
+    };
+    // SAFETY: only our own layered edit surface's extended style is changed.
+    unsafe {
+        let style = GetWindowLongPtrW(surface.hwnd(), GWL_EXSTYLE);
+        SetWindowLongPtrW(
+            surface.hwnd(),
+            GWL_EXSTYLE,
+            style | WS_EX_TRANSPARENT.0 as isize,
+        );
+    }
+}
+fn palette_scale(monitor: &Monitor, bounds: Rect) -> f32 {
+    (monitor.dpi as f32 / 96.0)
+        .min(bounds.width() / 978.0)
+        .min(bounds.height() / 280.0)
+        .max(0.01)
+}
+
 /// Timeline and transport changes reuse decoded art and its blurred/tinted material.
 fn update_artwork(model: &mut Model, ui: &Ui, data: &Value) {
     if model.data.get("artwork") == data.get("artwork") {
@@ -2608,6 +2909,7 @@ fn paint(
         }
     }
     if drawn {
+        entry.presents += 1;
         log::debug!(
             "widget present instance={} widget={}",
             entry.model.placed.instance,
@@ -2680,18 +2982,41 @@ pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
         ..Tokens::default()
     }
 }
-fn grid_for(layout: &Layout, monitor: &Monitor) -> Grid {
+fn usable_for(monitor: &Monitor, bars: &BarsConfig) -> RectF {
     let scale = monitor.dpi as f64 / 96.0;
-    Grid::new(
-        &layout.grid,
-        icon_cell(),
+    let bars = bars
+        .for_monitor(&monitor.device, monitor.primary)
+        .unwrap_or_else(|_| bars.clone());
+    edit::usable_area(
+        RectF {
+            x: 0.0,
+            y: 0.0,
+            width: f64::from(monitor.rect.width) / scale,
+            height: f64::from(monitor.rect.height) / scale,
+        },
         RectF {
             x: f64::from(monitor.work.x - monitor.rect.x) / scale,
             y: f64::from(monitor.work.y - monitor.rect.y) / scale,
             width: f64::from(monitor.work.width) / scale,
             height: f64::from(monitor.work.height) / scale,
         },
+        &bars,
+        &monitor.device,
+        monitor.primary,
     )
+}
+fn usable_screen(monitor: &Monitor, bars: &BarsConfig) -> Rect {
+    let r = usable_for(monitor, bars);
+    let s = monitor.dpi as f32 / 96.0;
+    Rect::new(
+        monitor.rect.x as f32 + r.x as f32 * s,
+        monitor.rect.y as f32 + r.y as f32 * s,
+        r.width as f32 * s,
+        r.height as f32 * s,
+    )
+}
+fn grid_for_bars(layout: &Layout, monitor: &Monitor, bars: &BarsConfig) -> Grid {
+    Grid::new(&layout.grid, icon_cell(), usable_for(monitor, bars))
 }
 fn screen_rect(grid: &Grid, cell: [u32; 2], size: [u32; 2], monitor: &Monitor) -> Rect {
     let r = grid.rect(cell, size);
@@ -2833,4 +3158,11 @@ fn artwork_material(image: &mypaper_ui::Image) -> (Option<Arc<mypaper_ui::Image>
         })),
         Some(tint),
     )
+}
+
+// The live fixture builds a host-independent grid using the standard bar geometry.
+#[cfg(test)]
+fn grid_for(layout: &Layout, monitor: &Monitor) -> Grid {
+    let bars = BarsConfig::parse("{}").expect("default bar config");
+    grid_for_bars(layout, monitor, &bars)
 }
