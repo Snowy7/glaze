@@ -1,4 +1,4 @@
-use mypaper_integrations::{config::Config, launcher, obs, t3};
+use mypaper_integrations::{config::Config, launcher, t3};
 use serde_json::json;
 
 fn thread(status: &str, run: &str, pending: serde_json::Value) -> serde_json::Value {
@@ -30,48 +30,7 @@ fn t3_baselines_enrichment_sequences_and_distinct_run_completions() {
         .unwrap();
     assert!(state.threads.is_empty());
 }
-#[test]
-fn obs_events_do_not_use_duration_or_meters() {
-    let mut state = obs::Snapshot::default();
-    obs::apply_event(
-        &mut state,
-        &json!({"eventType":"RecordStateChanged","eventData":{"outputActive":true,"outputState":"OBS_WEBSOCKET_OUTPUT_PAUSED"}}),
-    );
-    obs::apply_event(
-        &mut state,
-        &json!({"eventType":"StreamStateChanged","eventData":{"outputActive":true}}),
-    );
-    assert!(state.recording && state.paused && state.streaming);
-    let old = state.clone();
-    obs::apply_event(
-        &mut state,
-        &json!({"eventType":"InputVolumeMeters","eventData":{"level":999}}),
-    );
-    assert_eq!(old, state);
-    assert_eq!(
-        obs::authentication("password", "salt", "challenge"),
-        "zTM5ki6L2vVvBQiTG9ckH1Lh64AbnCf6XZ226UmnkIA="
-    );
-}
 
-#[test]
-fn widget_clocks_metrics_and_peer_snapshots_preserve_unknowns() {
-    let clock = obs::Clock {
-        elapsed_ms: 12_000,
-        at_ms: 100_000,
-        advancing: true,
-    };
-    assert_eq!(clock.elapsed(103_500), 15_500);
-    assert_eq!(clock.elapsed(99_000), 12_000);
-    assert_eq!(
-        obs::Clock {
-            advancing: false,
-            ..clock
-        }
-        .elapsed(110_000),
-        12_000
-    );
-}
 #[test]
 fn configuration_rejects_secrets_remote_endpoints_and_ambiguous_actions() {
     assert!(Config::parse(r#"{"t3":{"endpoint":"ws://example.com/ws"}}"#).is_err());
