@@ -312,7 +312,7 @@ live helper with the weather face placed):
 | infinite loop stopped (50 ms budget) | 49.5 ms |
 | weather: IP lookup + forecast, two HTTP round trips | < 1 s; each reply handled in 0.3–0.5 ms |
 | component sizes | hello.wasm 107 KB, weather.wasm 196 KB; `.cwasm` 430 / 740 KB |
-| per open websocket / pipe, client side (its threads, buffers and WinHTTP state) | ~230 KiB / ~45 KiB private (debug build, `cargo test -p mypaper-plugins measure -- --ignored --nocapture`) |
+| per open websocket / pipe, client side (its threads, buffers and WinHTTP state) | ~230–360 KiB / ~45–85 KiB private, 8 of each, noisy across runs (`cargo test --release -p mypaper-plugins measure -- --ignored --nocapture`) |
 
 ## Shell ↔ helper protocol
 
