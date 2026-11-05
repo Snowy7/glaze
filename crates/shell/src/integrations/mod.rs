@@ -2,7 +2,9 @@
 pub mod media;
 pub mod widgets;
 pub mod t3_widgets;
-pub mod grok;
+#[cfg(test)]
+#[path = "../../../../plugins/grok/src/host_tests.rs"]
+mod grok_plugin_tests;
 pub mod calendar;
 pub mod custom;
 pub mod discord;
@@ -207,7 +209,6 @@ fn provider(module: &ModuleRef) -> Option<Provider> {
     match module {
         ModuleRef::Builtin(Module::Notifications) => Some(Provider::Notifications),
         ModuleRef::Builtin(Module::T3) => Some(Provider::T3),
-        ModuleRef::Builtin(Module::Obs) => Some(Provider::Obs),
         _ => None,
     }
 }
@@ -296,16 +297,9 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
             s.threads.iter().filter(|t| t.running()).count(),
             s.threads.iter().filter(|t| t.attention()).count()
         ),
-        Some(Data::Obs(s)) => format!(
-            "{}{}{}",
-            if s.recording { "REC " } else { "" },
-            if s.streaming { "LIVE " } else { "" },
-            s.scene
-        ),
         _ => match provider {
             Provider::Notifications => "Notifications",
             Provider::T3 => "T3",
-            Provider::Obs => "OBS",
             Provider::Media => "Media",
             Provider::Calendar => "Calendar",
             Provider::Discord => "Discord",
@@ -317,7 +311,6 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
         match provider {
             Provider::Notifications => "\u{ea8f}",
             Provider::T3 => "\u{e8f2}",
-            Provider::Obs => "\u{e714}",
             Provider::Media => "\u{e768}",
             Provider::Calendar => "\u{e787}",
             Provider::Discord => "\u{e8f2}",
@@ -343,9 +336,6 @@ pub fn module_click(module: &ModuleRef, anchor: Rect, monitor: &mypaper_desktop:
 }
 pub fn panel(provider: Provider) -> Box<dyn crate::flyouts::Panel> {
     Box::new(panels::Integration::new(provider))
-}
-pub fn routine_panel() -> Box<dyn crate::flyouts::Panel> {
-    panels::routine_panel()
 }
 pub fn notification_center(cx: &mut crate::flyouts::Cx) -> Box<dyn crate::flyouts::Panel> {
     Box::new(panels::NotificationCenter::new(cx))
@@ -457,28 +447,6 @@ pub fn launcher_entries(apps: &mut Vec<mypaper_bars::flyouts::index::App>) {
         "Discord: open direct messages".into(),
         "https://discord.com/channels/@me".into(),
     );
-    if config.grok.enabled {
-        for routine in config.grok.routines {
-            add(
-                format!("grok:{}", routine.id),
-                format!("Grok Bot: {}", routine.title),
-                format!("mypaper-integration:grok/{}", routine.id),
-            );
-        }
-    }
-}
-pub fn launcher_action(path: &str) -> bool {
-    let Some(id) = path.strip_prefix("mypaper-integration:grok/") else {
-        return false;
-    };
-    let config = config();
-    if config.launcher.enabled
-        && config.grok.enabled
-        && let Some(routine) = config.grok.routines.into_iter().find(|r| r.id == id)
-    {
-        panels::run_routine(routine);
-    }
-    true
 }
 
 /// One bounded worker result; the panel holds it, so late replies cannot affect a replacement panel.
