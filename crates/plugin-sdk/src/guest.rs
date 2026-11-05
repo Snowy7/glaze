@@ -219,6 +219,22 @@ fn flatten(view: &View, out: &mut Vec<v::Node>) {
                     unit: unit.clone(),
                 }),
                 View::Empty { icon, title, detail } => K::Empty(v::Empty { icon: icon.clone(), title: title.clone(), detail: detail.clone() }),
+                View::Meter { value, label, note, fraction, color, mark } => K::Meter(v::Meter {
+                    value: value.clone(),
+                    label: label.clone(),
+                    note: note.clone(),
+                    fraction: *fraction,
+                    color: tones(color),
+                    mark: *mark,
+                }),
+                View::Item { title, detail, tag, tone: t, action, nested } => K::Item(v::Item {
+                    title: title.clone(),
+                    detail: detail.clone(),
+                    tag: tag.clone(),
+                    tone: tones(t),
+                    action: action.clone(),
+                    nested: *nested,
+                }),
                 _ => K::Spacer,
             };
             out.push(leaf(kind));

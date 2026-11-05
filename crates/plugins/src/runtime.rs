@@ -682,6 +682,8 @@ fn node(nodes: &[Node], at: &mut usize, depth: u32) -> Result<sdk::View, String>
         NodeKind::Empty(e) => V::Empty { icon: e.icon.clone(), title: e.title.clone(), detail: e.detail.clone() },
         NodeKind::Spacer => V::Spacer,
         NodeKind::Canvas(c) => V::Canvas { height: c.height, commands: c.commands.iter().map(draw).collect() },
+        NodeKind::Meter(m) => V::Meter { value: m.value.clone(), label: m.label.clone(), note: m.note.clone(), fraction: m.fraction, color: tones(&m.color), mark: m.mark },
+        NodeKind::Item(i) => V::Item { title: i.title.clone(), detail: i.detail.clone(), tag: i.tag.clone(), tone: tones(&i.tone), action: i.action.clone(), nested: i.nested },
     })
 }
 

@@ -68,6 +68,10 @@ interface view {
         image(tuple<rect, u32>),
     }
     record canvas { height: f32, commands: list<draw> }
+    /// A quota meter: `value` large, `label` and `note` on its line, a bar filled to `fraction`.
+    record meter { value: string, label: string, note: option<string>, fraction: f32, color: option<tone>, mark: option<f32> }
+    /// A whole-row target: `title` over `detail`, a status `tag` in `tone`, `nested` under the row above.
+    record item { title: string, detail: option<string>, tag: option<string>, tone: option<tone>, action: option<string>, nested: bool }
 
     /// `gap` for stack/row/list.
     variant node-kind {
@@ -94,6 +98,8 @@ interface view {
         spacer,
         animated(spring),
         canvas(canvas),
+        meter(meter),
+        item(item),
     }
 
     /// Followed by `children` direct children, each a whole subtree.
