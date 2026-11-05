@@ -793,3 +793,58 @@ then removes its user installation, `%LOCALAPPDATA%\mypaper\plugins\cache\<id>-*
 `mypaper/integrations/plugin/<id>/`. A bundled plugin is hidden and disabled for this user;
 its shipped files stay with the application. Plugin preferences live in
 `%APPDATA%\mypaper\plugin-manager.json`; secrets never go into this file.
+
+## Discord component
+
+`plugins/discord` is an independent WASI workspace built by `scripts/build-plugins.ps1`.
+The `discord--main` face replaces the built-in Discord widget, preserving its instance,
+position, size and appearance. Existing application ID, channel IDs and RPC options move
+from `integrations.json` into that instance's settings; the legacy config fields remain
+readable for compatibility but no longer start a Discord provider.
+
+Discord RPC uses raw `pipes.open("discord-ipc-0")` / `write` bytes: little-endian opcode and
+length followed by JSON. The component retains partial frames, answers pings, bounds frame
+sizes, times out requests and uses Discord's authorization and token exchange for registered
+applications and testers. Voice controls require both the configured opt-in and a granted
+write scope. Bot REST goes through `http` to `https://discord.com`; it verifies `users/@me`
+is a bot before fetching channel history or sending. Sending uses a native `field`, channels
+use `select`, and replies disable automatic mentions. No personal account token is accepted.
+
+The four broker keys are `bot`, `client-secret`, `rpc-access` and `rpc-refresh`, under
+`mypaper/integrations/plugin/discord/`. Setup fields write directly to the broker. Migration
+copies the old `discord/*` values, reads them back to verify the copy, then deletes the old
+entries; a different existing plugin credential wins and leaves the old entry for recovery.
+Credentials and message content never enter the component's saved state. Token expiry and
+per-instance UI choices do. Refreshing credentials is automatic while RPC is connected;
+bot history refreshes on an explicit refresh or successful send.
+
+The component declares `pipe:discord-ipc-0`, `secrets`, `network:https://discord.com` and
+`notifications`. Windows notification previews reuse the shell's listener and its existing
+privacy settings. The dock's Discord badge continues to come from core Windows notifications.
+
+### Notification subscribers
+
+Subscribing to the `notifications` topic requires the manifest's `notifications` permission.
+The helper reports permitted subscribers to the shell. A shared notification lease exists
+only while at least one subscriber has a visible contribution, and is released on hold,
+close, unsubscribe, unload or helper exit. The shell forwards retained notification changes
+through `Plugins::system_event`; the helper routes them only to permitted subscribers.
+`event::notification` contains JSON:
+
+```json
+{"kind":"added","id":7,"card":{"id":7,"appId":"chat.app","app":"Chat","title":"Ada","body":"Hello","at":1790000000000}}
+{"kind":"removed","id":7}
+```
+
+An updated notification is another `added` with the same ID. Initial demand replays retained
+cards as additions. Title and body stay empty when the existing listener's privacy settings
+hide them. This bridge adds no polling and does not wire the other system-event sources.
+
+### Later: Discord Social SDK
+
+The Social SDK is not bundled or loaded by this component. It requires the user's own Discord
+application registration. A future plugin can ship a wrapper DLL and the vendor SDK as a
+declared `native` module with `native-code` permission, loaded on demand by
+`mypaper-native-host`. The WASM component would call that wrapper through `native.call` and
+receive callbacks as `native-event`; app configuration stays in plugin settings and secrets
+stay in the broker. It needs no SDK DLL in core or the shell.
