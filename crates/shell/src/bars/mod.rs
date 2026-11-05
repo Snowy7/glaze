@@ -1435,6 +1435,11 @@ impl Bars {
                             providers::apps::window_monitor(bar.surface.hwnd()),
                         );
                     }
+                    // A rebuild can spend time presenting several monitors. Re-establish each
+                    // band before its new surface appears, so maximized apps cannot enter it.
+                    if self.journal.is_some() {
+                        bar.reserve();
+                    }
                     // Present immediately: creating the remaining windows is not part of this
                     // surface's first-frame dependency chain.
                     bar.paint(

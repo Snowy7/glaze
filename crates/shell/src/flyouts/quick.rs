@@ -25,8 +25,6 @@ const MUTE: HitId = 11;
 const MIXER: HitId = 12;
 const SETTINGS: HitId = 13;
 const BLUETOOTH_MORE: HitId = 14;
-const POWER_MORE: HitId = 15;
-const HOTSPOT_MORE: HitId = 16;
 
 pub struct Quick {
     state: Option<provider::Quick>,
@@ -187,7 +185,7 @@ impl Panel for Quick {
             },
             Tile {
                 id: POWER,
-                more: Some(POWER_MORE),
+                more: None,
                 glyph: glyph::GAUGE,
                 label: "Power mode",
                 detail: power.map_or("Unavailable", power_label),
@@ -198,7 +196,7 @@ impl Panel for Quick {
         if let Some(on) = self.hotspot {
             tiles.push(Tile {
                 id: HOTSPOT,
-                more: Some(HOTSPOT_MORE),
+                more: None,
                 glyph: glyph::WIFI[3],
                 label: "Mobile hotspot",
                 detail: on_off(on),
@@ -265,8 +263,6 @@ impl Panel for Quick {
             WIFI_MORE => Effect::Switch(Kind::Wifi),
             BLUETOOTH => self.set_radio(RadioKind::Bluetooth, cx),
             BLUETOOTH_MORE => settings("ms-settings:bluetooth"),
-            POWER_MORE => settings("ms-settings:powersleep"),
-            HOTSPOT_MORE => settings("ms-settings:network-mobilehotspot"),
             POWER => {
                 if self.pending || self.refreshing {
                     return Effect::None;
