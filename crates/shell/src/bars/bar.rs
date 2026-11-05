@@ -25,7 +25,7 @@ use std::{
 
 thread_local! { static REPAINTS: Cell<u64> = const { Cell::new(0) }; }
 
-/// Logs the dock's mean rebuild and present time every 240
+/// Logs (debug) the dock's mean rebuild and present time every 240
 /// rebuilt frames (a magnification sweep's split between the view and the renderer).
 fn dock_timing(build: Duration, present: Duration) {
     thread_local!(static SUM: Cell<(u32, Duration, Duration)> = const { Cell::new((0, Duration::ZERO, Duration::ZERO)) });
@@ -33,7 +33,7 @@ fn dock_timing(build: Duration, present: Duration) {
         let (n, b, p) = sum.get();
         let (n, b, p) = (n + 1, b + build, p + present);
         if n == 240 {
-            log::info!("dock timing: build {:?} present {:?} per frame", b / n, p / n);
+            log::debug!("dock timing: build {:?} present {:?} per frame", b / n, p / n);
             sum.set((0, Duration::ZERO, Duration::ZERO));
         } else {
             sum.set((n, b, p));
