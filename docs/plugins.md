@@ -239,6 +239,10 @@ vocabulary SDK v1 already draws:
 `icon-button`, `select`, `field`, `list-row`, `stat`, `metric`, `ring`, `limit-bar`,
 `segmented-bar`, `sparkline`, `area-chart`, `empty`, `spacer`, plus `animated(spring)`, which
 animates its child's appearance and changes with the kit's spring, and `canvas(list<draw>)`.
+Added 2026-11-06 (cases at the end): `meter` (a big value, label and note on one line over one
+clean bar, an optional faint pace tick) and `item` (a whole-row target: title, quiet detail, a
+status pill, `nested` under the row above). A kind the WIT lacks never reaches the shell: the
+guest SDK lowers it to `spacer`, so a new SDK `View` needs its `node-kind` case too.
 
 Colors are `tone`: a theme **role** (`label`, `secondary`, `tertiary`, `accent`, `warning`,
 `destructive`, `positive`) or `hex("#rrggbb")` for brand fills. Sizes are kit points, and the
