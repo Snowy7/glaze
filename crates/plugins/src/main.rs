@@ -31,6 +31,9 @@ mod caps_tests;
 #[path = "../../../plugins/grok/src/runtime_tests.rs"]
 mod grok_runtime_tests;
 #[cfg(test)]
+#[path = "../../../plugins/discord/src/runtime_tests.rs"]
+mod discord_runtime_tests;
+#[cfg(test)]
 mod tests;
 
 use std::io::{BufWriter, Read};

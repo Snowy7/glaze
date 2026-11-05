@@ -650,9 +650,25 @@ impl Discord {
         let Ok(value) = serde_json::from_str::<Value>(payload) else {
             return;
         };
-        let cards = value["cards"].as_array().or_else(|| value.as_array());
+        if value["kind"] == "removed" {
+            let id = format!("toast:{}", value["id"]);
+            self.notifications.retain(|m| m.id != id);
+            return;
+        }
+        let single = if value["kind"] == "added" {
+            Some(vec![value["card"].clone()])
+        } else {
+            None
+        };
+        let cards = single
+            .as_ref()
+            .or_else(|| value["cards"].as_array())
+            .or_else(|| value.as_array());
         if let Some(cards) = cards {
-            self.notifications = cards
+            if single.is_none() {
+                self.notifications.clear();
+            }
+            let incoming: Vec<_> = cards
                 .iter()
                 .filter(|c| {
                     let id = c["app_id"]
@@ -669,11 +685,17 @@ impl Discord {
                 })
                 .take(30)
                 .map(|c| Message {
+                    id: format!("toast:{}", c["id"]),
                     author: model::text(c, "title"),
                     content: model::text(c, "body"),
                     ..Default::default()
                 })
                 .collect();
+            for message in incoming {
+                self.notifications.retain(|m| m.id != message.id);
+                self.notifications.insert(0, message);
+            }
+            self.notifications.truncate(30);
         }
     }
 }

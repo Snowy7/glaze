@@ -5,7 +5,7 @@
   "component": "discord.wasm",
   "api": "0.1",
   "faces": [{ "id": "main", "name": "Messages and call", "icon": "message", "size": { "default": [8, 5], "min": [4, 4], "max": [12, 12] } }],
-  "permissions": ["pipe:discord-ipc-0", "secrets", "network:https://discord.com"],
+  "permissions": ["pipe:discord-ipc-0", "secrets", "network:https://discord.com", "notifications"],
   "settings": [
     { "key": "clientId", "type": "string", "label": "Discord application ID", "default": "" },
     { "key": "channelIds", "type": "string", "label": "Bot channel IDs (comma separated, up to 8)", "default": "" },

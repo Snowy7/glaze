@@ -184,38 +184,43 @@
             "kind": "grid"
           },
           {
-            "action": "channel",
-            "kind": "select",
-            "label": "Channel",
-            "options": [
+            "children": [
               {
-                "label": "#42",
-                "value": "42"
+                "action": "channel",
+                "kind": "select",
+                "label": "Channel",
+                "options": [
+                  {
+                    "label": "#42",
+                    "value": "42"
+                  },
+                  {
+                    "label": "#43",
+                    "value": "43"
+                  }
+                ],
+                "selected": "42"
               },
               {
-                "label": "#43",
-                "value": "43"
+                "action": "send",
+                "kind": "field",
+                "placeholder": "Send as bot…"
               }
             ],
-            "selected": "42"
-          },
-          {
-            "action": "send",
-            "kind": "field",
-            "placeholder": "Send as bot…"
+            "columns": 2,
+            "gap": 4.0,
+            "kind": "grid"
           },
           {
             "children": [
               {
                 "action": "reply:100",
-                "detail": "The native widget layouts are ready.",
                 "icon": "message",
                 "kind": "list_row",
                 "title": "Ada · Design room"
               },
               {
                 "action": "reply:101",
-                "detail": "I left notes on the calendar.",
                 "icon": "message",
                 "kind": "list_row",
                 "title": "Lin · Desktop"
@@ -225,7 +230,7 @@
             "kind": "list"
           }
         ],
-        "gap": 4.0,
+        "gap": 2.0,
         "kind": "stack"
       },
       "footer": "Sends as bot · mentions disabled",
@@ -359,10 +364,11 @@
             "kind": "grid"
           },
           {
-            "detail": "",
-            "icon": "message",
-            "kind": "empty",
-            "title": "No recent messages"
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "No recent messages"
           },
           {
             "action": "setup",
@@ -371,7 +377,7 @@
             "primary": false
           }
         ],
-        "gap": 4.0,
+        "gap": 2.0,
         "kind": "stack"
       },
       "footer": "Windows notifications · not unread counts",
@@ -531,16 +537,42 @@
           {
             "children": [
               {
-                "detail": "The native widget layouts are ready.",
-                "icon": "message",
-                "kind": "list_row",
-                "title": "Ada · Design room"
+                "children": [
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Ada · Design room"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "The native widget layouts are ready."
+                  }
+                ],
+                "gap": 0.0,
+                "kind": "stack"
               },
               {
-                "detail": "I left notes on the calendar.",
-                "icon": "message",
-                "kind": "list_row",
-                "title": "Lin · Desktop"
+                "children": [
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Lin · Desktop"
+                  },
+                  {
+                    "align": "start",
+                    "color": "secondary",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "I left notes on the calendar."
+                  }
+                ],
+                "gap": 0.0,
+                "kind": "stack"
               }
             ],
             "gap": 2.0,
@@ -553,7 +585,7 @@
             "primary": false
           }
         ],
-        "gap": 4.0,
+        "gap": 2.0,
         "kind": "stack"
       },
       "footer": "Windows notifications · not unread counts",
@@ -599,21 +631,45 @@
           {
             "children": [
               {
-                "action": "mute",
-                "enabled": false,
-                "icon": "mic",
-                "kind": "icon_button",
-                "label": "Mute"
+                "children": [
+                  {
+                    "action": "mute",
+                    "enabled": false,
+                    "icon": "mic",
+                    "kind": "icon_button",
+                    "label": "Mute"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Mute"
+                  }
+                ],
+                "kind": "row"
               },
               {
-                "action": "deafen",
-                "enabled": false,
-                "icon": "headphones",
-                "kind": "icon_button",
-                "label": "Deafen"
+                "children": [
+                  {
+                    "action": "deafen",
+                    "enabled": false,
+                    "icon": "headphones",
+                    "kind": "icon_button",
+                    "label": "Deafen"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Deafen"
+                  }
+                ],
+                "kind": "row"
               }
             ],
-            "kind": "row"
+            "columns": 2,
+            "gap": 4.0,
+            "kind": "grid"
           },
           {
             "children": [
@@ -741,21 +797,45 @@
           {
             "children": [
               {
-                "action": "mute",
-                "enabled": false,
-                "icon": "mic",
-                "kind": "icon_button",
-                "label": "Mute"
+                "children": [
+                  {
+                    "action": "mute",
+                    "enabled": false,
+                    "icon": "mic",
+                    "kind": "icon_button",
+                    "label": "Mute"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Mute"
+                  }
+                ],
+                "kind": "row"
               },
               {
-                "action": "deafen",
-                "enabled": false,
-                "icon": "headphones",
-                "kind": "icon_button",
-                "label": "Deafen"
+                "children": [
+                  {
+                    "action": "deafen",
+                    "enabled": false,
+                    "icon": "headphones",
+                    "kind": "icon_button",
+                    "label": "Deafen"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Deafen"
+                  }
+                ],
+                "kind": "row"
               }
             ],
-            "kind": "row"
+            "columns": 2,
+            "gap": 4.0,
+            "kind": "grid"
           },
           {
             "children": [
@@ -877,27 +957,51 @@
           {
             "align": "start",
             "kind": "text",
-            "role": "callout",
+            "role": "caption",
             "text": "Design room"
           },
           {
             "children": [
               {
-                "action": "mute",
-                "enabled": false,
-                "icon": "mic",
-                "kind": "icon_button",
-                "label": "Mute"
+                "children": [
+                  {
+                    "action": "mute",
+                    "enabled": false,
+                    "icon": "mic",
+                    "kind": "icon_button",
+                    "label": "Mute"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Mute"
+                  }
+                ],
+                "kind": "row"
               },
               {
-                "action": "deafen",
-                "enabled": false,
-                "icon": "headphones",
-                "kind": "icon_button",
-                "label": "Deafen"
+                "children": [
+                  {
+                    "action": "deafen",
+                    "enabled": false,
+                    "icon": "headphones",
+                    "kind": "icon_button",
+                    "label": "Deafen"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Deafen"
+                  }
+                ],
+                "kind": "row"
               }
             ],
-            "kind": "row"
+            "columns": 2,
+            "gap": 4.0,
+            "kind": "grid"
           },
           {
             "children": [
@@ -913,7 +1017,7 @@
                     "align": "start",
                     "color": "positive",
                     "kind": "text",
-                    "role": "callout",
+                    "role": "caption",
                     "text": "Alex"
                   },
                   {
@@ -938,7 +1042,7 @@
                     "align": "start",
                     "color": "label",
                     "kind": "text",
-                    "role": "callout",
+                    "role": "caption",
                     "text": "Ada"
                   },
                   {
@@ -963,7 +1067,7 @@
                     "align": "start",
                     "color": "label",
                     "kind": "text",
-                    "role": "callout",
+                    "role": "caption",
                     "text": "Lin"
                   },
                   {
@@ -981,7 +1085,7 @@
             "kind": "list"
           }
         ],
-        "gap": 4.0,
+        "gap": 2.0,
         "kind": "stack"
       },
       "footer": "Read only · rpc.voice.write required",
@@ -1169,7 +1273,7 @@
             "placeholder": "Store RPC client secret…"
           }
         ],
-        "gap": 4.0,
+        "gap": 2.0,
         "kind": "stack"
       },
       "footer": "Credentials stay in Windows Credential Manager",
@@ -1215,21 +1319,45 @@
           {
             "children": [
               {
-                "action": "mute",
-                "enabled": true,
-                "icon": "mic",
-                "kind": "icon_button",
-                "label": "Mute"
+                "children": [
+                  {
+                    "action": "mute",
+                    "enabled": true,
+                    "icon": "mic",
+                    "kind": "icon_button",
+                    "label": "Mute"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Mute"
+                  }
+                ],
+                "kind": "row"
               },
               {
-                "action": "deafen",
-                "enabled": true,
-                "icon": "headphones",
-                "kind": "icon_button",
-                "label": "Deafen"
+                "children": [
+                  {
+                    "action": "deafen",
+                    "enabled": true,
+                    "icon": "headphones",
+                    "kind": "icon_button",
+                    "label": "Deafen"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Deafen"
+                  }
+                ],
+                "kind": "row"
               }
             ],
-            "kind": "row"
+            "columns": 2,
+            "gap": 4.0,
+            "kind": "grid"
           },
           {
             "children": [
@@ -1357,21 +1485,45 @@
           {
             "children": [
               {
-                "action": "mute",
-                "enabled": true,
-                "icon": "mic",
-                "kind": "icon_button",
-                "label": "Mute"
+                "children": [
+                  {
+                    "action": "mute",
+                    "enabled": true,
+                    "icon": "mic",
+                    "kind": "icon_button",
+                    "label": "Mute"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Mute"
+                  }
+                ],
+                "kind": "row"
               },
               {
-                "action": "deafen",
-                "enabled": true,
-                "icon": "headphones",
-                "kind": "icon_button",
-                "label": "Deafen"
+                "children": [
+                  {
+                    "action": "deafen",
+                    "enabled": true,
+                    "icon": "headphones",
+                    "kind": "icon_button",
+                    "label": "Deafen"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Deafen"
+                  }
+                ],
+                "kind": "row"
               }
             ],
-            "kind": "row"
+            "columns": 2,
+            "gap": 4.0,
+            "kind": "grid"
           },
           {
             "children": [
@@ -1493,27 +1645,51 @@
           {
             "align": "start",
             "kind": "text",
-            "role": "callout",
+            "role": "caption",
             "text": "Design room"
           },
           {
             "children": [
               {
-                "action": "mute",
-                "enabled": true,
-                "icon": "mic",
-                "kind": "icon_button",
-                "label": "Mute"
+                "children": [
+                  {
+                    "action": "mute",
+                    "enabled": true,
+                    "icon": "mic",
+                    "kind": "icon_button",
+                    "label": "Mute"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Mute"
+                  }
+                ],
+                "kind": "row"
               },
               {
-                "action": "deafen",
-                "enabled": true,
-                "icon": "headphones",
-                "kind": "icon_button",
-                "label": "Deafen"
+                "children": [
+                  {
+                    "action": "deafen",
+                    "enabled": true,
+                    "icon": "headphones",
+                    "kind": "icon_button",
+                    "label": "Deafen"
+                  },
+                  {
+                    "align": "start",
+                    "kind": "text",
+                    "role": "caption",
+                    "text": "Deafen"
+                  }
+                ],
+                "kind": "row"
               }
             ],
-            "kind": "row"
+            "columns": 2,
+            "gap": 4.0,
+            "kind": "grid"
           },
           {
             "children": [
@@ -1529,7 +1705,7 @@
                     "align": "start",
                     "color": "positive",
                     "kind": "text",
-                    "role": "callout",
+                    "role": "caption",
                     "text": "Alex"
                   },
                   {
@@ -1554,7 +1730,7 @@
                     "align": "start",
                     "color": "label",
                     "kind": "text",
-                    "role": "callout",
+                    "role": "caption",
                     "text": "Ada"
                   },
                   {
@@ -1579,7 +1755,7 @@
                     "align": "start",
                     "color": "label",
                     "kind": "text",
-                    "role": "callout",
+                    "role": "caption",
                     "text": "Lin"
                   },
                   {
@@ -1597,7 +1773,7 @@
             "kind": "list"
           }
         ],
-        "gap": 4.0,
+        "gap": 2.0,
         "kind": "stack"
       },
       "footer": "Connected · call controls",

@@ -65,22 +65,35 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
         if let Some(call) = c.call {
             nodes.push(View::text(
                 &call.channel,
-                if small { Role::Callout } else { Role::Headline },
+                if small { Role::Caption } else { Role::Headline },
             ));
-            nodes.push(View::row([
-                control(
-                    if call.muted { "Unmute" } else { "Mute" },
-                    "mute",
-                    "mic",
-                    call.can_control && !c.busy,
-                ),
-                control(
-                    if call.deafened { "Undeafen" } else { "Deafen" },
-                    "deafen",
-                    "headphones",
-                    call.can_control && !c.busy,
-                ),
-            ]));
+            nodes.push(View::Grid {
+                columns: 2,
+                gap: Some(4.0),
+                children: vec![
+                    View::row([
+                        control(
+                            if call.muted { "Unmute" } else { "Mute" },
+                            "mute",
+                            "mic",
+                            call.can_control && !c.busy,
+                        ),
+                        View::text(if call.muted { "Unmute" } else { "Mute" }, Role::Caption),
+                    ]),
+                    View::row([
+                        control(
+                            if call.deafened { "Undeafen" } else { "Deafen" },
+                            "deafen",
+                            "headphones",
+                            call.can_control && !c.busy,
+                        ),
+                        View::text(
+                            if call.deafened { "Undeafen" } else { "Deafen" },
+                            Role::Caption,
+                        ),
+                    ]),
+                ],
+            });
             nodes.push(View::List {
                 gap: Some(4.0),
                 children: call
@@ -99,7 +112,7 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
                             },
                             View::tinted(
                                 &p.name,
-                                Role::Callout,
+                                if small { Role::Caption } else { Role::Callout },
                                 if p.speaking {
                                     Tone::Positive
                                 } else {
@@ -157,22 +170,37 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
                         || m.channel_id == choice.channel
                 })
                 .take(30)
-                .map(|m| View::ListRow {
-                    title: m.author.clone(),
-                    detail: Some(if m.content.is_empty() {
-                        "Message content unavailable · check bot intent".into()
+                .map(|m| {
+                    if small && !c.bot {
+                        View::Stack {
+                            gap: Some(0.0),
+                            children: vec![
+                                View::text(&m.author, Role::Caption),
+                                View::tinted(&m.content, Role::Caption, Tone::Secondary),
+                            ],
+                        }
                     } else {
-                        m.content.clone()
-                    }),
-                    icon: Some("message".into()),
-                    trailing: None,
-                    action: (c.bot && !m.id.is_empty()).then(|| format!("reply:{}", m.id)),
+                        View::ListRow {
+                            title: m.author.clone(),
+                            detail: (!small).then(|| {
+                                if m.content.is_empty() {
+                                    "Message content unavailable · check bot intent".into()
+                                } else {
+                                    m.content.clone()
+                                }
+                            }),
+                            icon: Some("message".into()),
+                            trailing: None,
+                            action: (c.bot && !m.id.is_empty()).then(|| format!("reply:{}", m.id)),
+                        }
+                    }
                 })
                 .collect(),
         };
         if c.bot && !c.channels.is_empty() {
+            let mut composer = Vec::new();
             if c.channels.len() > 1 {
-                nodes.push(View::Select {
+                composer.push(View::Select {
                     label: "Channel".into(),
                     action: "channel".into(),
                     options: c
@@ -194,7 +222,7 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
                     ]));
                 }
             }
-            nodes.push(View::Field {
+            composer.push(View::Field {
                 placeholder: if c.busy {
                     "Sending…"
                 } else if choice.reply.is_some() {
@@ -205,11 +233,20 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
                 .into(),
                 action: "send".into(),
             });
+            if small {
+                nodes.push(View::Grid {
+                    columns: composer.len() as u8,
+                    gap: Some(4.0),
+                    children: composer,
+                });
+            } else {
+                nodes.extend(composer);
+            }
             nodes.push(list);
             footer = "Sends as bot · mentions disabled";
         } else {
             if c.messages.is_empty() {
-                nodes.push(View::empty("message","No recent messages",if small {""} else {"Windows notifications appear here. Add a bot token and channel IDs for history and sending."}));
+                nodes.push(if small {View::tinted("No recent messages",Role::Caption,Tone::Secondary)} else {View::empty("message","No recent messages","Windows notifications appear here. Add a bot token and channel IDs for history and sending.")});
             } else {
                 nodes.push(list);
             }
@@ -219,7 +256,7 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
     }
     let mut result = View::Stack {
         children: nodes,
-        gap: Some(if small { 4.0 } else { 6.0 }),
+        gap: Some(if small { 2.0 } else { 6.0 }),
     }
     .face();
     result.footer = Some(c.notice.unwrap_or(footer).into());
