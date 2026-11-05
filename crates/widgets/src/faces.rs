@@ -18,7 +18,8 @@ pub struct FaceMove {
 }
 
 /// Each port adds its own rows; the first matching row wins.
-pub const MOVED: &[FaceMove] = &[];
+pub const MOVED: &[FaceMove] = &[
+    FaceMove { widget: "tailscale", variant: None, face: "tailscale--connection" },];
 
 /// The face an instance of `widget` with `settings` moves to, if a row matches.
 pub fn face_for<'a>(table: &'a [FaceMove], widget: &str, settings: &Map<String, Value>) -> Option<&'a str> {
