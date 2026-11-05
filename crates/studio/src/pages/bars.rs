@@ -20,7 +20,7 @@ use crate::ui::{B, Col, inspector, label, section, setting};
 use crate::view::split;
 
 /// Presets shown as tiles (Neon glass loads as Floating: its decoration is gone).
-const PRESETS: [(&str, &str); 9] = [
+pub(crate) const PRESETS: [(&str, &str); 9] = [
     ("monochrome", "Monochrome"),
     ("macos", "macOS"),
     ("windows11", "Windows 11"),

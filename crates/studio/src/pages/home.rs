@@ -131,7 +131,7 @@ fn strip(app: &App, b: &mut B, rect: Rect) {
 }
 
 /// The active wallpaper, then the ones used recently (Studio remembers), then others.
-fn recent(app: &App) -> Vec<usize> {
+pub(crate) fn recent(app: &App) -> Vec<usize> {
     let mut out: Vec<usize> = app.library.active().into_iter().collect();
     if let Some(list) = app.get(DocId::Studio, "/recent_wallpapers").and_then(Value::as_array) {
         for name in list.iter().filter_map(Value::as_str) {

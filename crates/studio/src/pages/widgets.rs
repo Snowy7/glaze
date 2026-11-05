@@ -20,7 +20,7 @@ use crate::ui::{B, Col, inspector, label, section, swatches, text_field};
 use crate::view::split;
 
 /// The layout as the file says.
-fn layout(app: &App) -> Layout {
+pub(crate) fn layout(app: &App) -> Layout {
     let text = serde_json::to_string(&app.docs.doc(DocId::Widgets).raw).unwrap_or_default();
     Layout::parse(&text).unwrap_or_default()
 }
@@ -30,7 +30,7 @@ fn device(app: &App) -> String {
 }
 
 /// The instances showing on the stage's display.
-fn here(app: &App, layout: &Layout) -> Vec<Instance> {
+pub(crate) fn here(app: &App, layout: &Layout) -> Vec<Instance> {
     let devices: Vec<String> = app.monitors.iter().map(|m| m.device.clone()).collect();
     let primary = app.monitors.iter().position(|m| m.primary).unwrap_or(0);
     let device = device(app);

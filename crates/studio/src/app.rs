@@ -136,6 +136,8 @@ pub enum Msg {
 pub const WM_STUDIO: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 41;
 
 pub struct App {
+    /// Present only for the opt-in desktop panel; legacy Studio keeps its own navigation.
+    pub panel: Option<crate::panel::State>,
     pub plugins: crate::pages::plugins::State,
     pub docs: Docs,
     pub theme: Theme,
@@ -184,7 +186,10 @@ impl App {
     /// Studio as it opens: the files, the wallpapers, the machine.
     pub fn new(text: &mypaper_ui::Text, scale: f32, size: (u32, u32)) -> Self {
         let mut docs = Docs::load();
-        migrate(&mut docs);
+        let panel = crate::panel::enabled();
+        if !panel {
+            migrate(&mut docs);
+        }
         let appearance = Appearance::parse(
             docs.get(DocId::Studio, "/appearance")
                 .and_then(Value::as_str)
@@ -195,8 +200,14 @@ impl App {
         let mut app = Self::with(docs, theme, library, scale, size, false);
         app.monitors = mypaper_desktop::monitor_infos();
         app.system = System::probe();
-        app.restore_place();
-        if first_run_due(&app.docs) {
+        if panel {
+            app.panel = Some(crate::panel::State::default());
+            app.nav.display = app.monitors.iter().position(|m| m.primary).unwrap_or(0);
+            app.system.gpus();
+        } else {
+            app.restore_place();
+        }
+        if !panel && first_run_due(&app.docs) {
             app.overlay = Some(Overlay::FirstRun {
                 step: 0,
                 starter: 0,
@@ -252,6 +263,7 @@ impl App {
 
     fn with(docs: Docs, theme: Theme, library: Library, scale: f32, size: (u32, u32), fixture: bool) -> Self {
         Self {
+            panel: None,
             plugins: Default::default(),
             docs,
             theme,
@@ -645,6 +657,9 @@ impl App {
     /// One key press with its modifiers (Ctrl, Shift, Alt).
     pub fn key_with(&mut self, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) {
         self.dirty = true;
+        if self.panel.is_some() && crate::panel::on_key(self, vk, (ctrl, shift, alt)) {
+            return;
+        }
         match (ctrl, vk) {
             (true, 0x4B) => return self.run(Action::Palette), // K
             (true, 0x5A) if !shift => return self.run(Action::Undo), // Z
@@ -903,7 +918,8 @@ impl App {
             return;
         };
         let initial = self.field_initial(&id);
-        let size = self.theme.ty.style(mypaper_ui::controls::Font::Body, self.scale).size;
+        let size = self.theme.ty.style(mypaper_ui::controls::Font::Body, self.scale).size
+            * if self.panel.is_some() { 13.0 / 14.0 } else { 1.0 };
         let color = self.theme.palette.ink1;
         match mypaper_ui::TextField::new(hwnd, Rect::new(-1000.0, -1000.0, 10.0, 10.0), false, size, color) {
             Ok(field) => {
@@ -1220,7 +1236,7 @@ impl App {
     }
 
     fn remember_place(&mut self) {
-        if self.fixture {
+        if self.fixture || self.panel.is_some() {
             return;
         }
         let page = self.nav.page().key();
@@ -1357,6 +1373,8 @@ impl App {
                     self.system.gpus();
                 }
             }
+            Action::Panel(command) => crate::panel::run(self, command),
+            Action::Back if self.panel.is_some() => crate::panel::run(self, crate::panel::Command::Back),
             Action::Back => crate::pages::back(self),
             Action::Palette => {
                 self.texts.remove(&FieldId::Palette);
