@@ -330,10 +330,10 @@
             "kind": "spacer"
           },
           {
-            "action": "open",
-            "icon": "external",
+            "action": "connect",
+            "icon": "sparkles",
             "kind": "button",
-            "label": "Open Grok Bot",
+            "label": "Connect",
             "primary": true
           }
         ],

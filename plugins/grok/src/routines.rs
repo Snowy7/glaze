@@ -10,10 +10,10 @@ pub struct RoutineRun {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RoutineState { Sending, Accepted, Failed }
 
-pub fn routine_url(value: &str) -> Result<url::Url, String> {
-    let uri = url::Url::parse(value).map_err(|_| "Use an HTTPS routine webhook")?;
-    if uri.scheme() != "https" || uri.host_str().is_none() { return Err("Routine webhook must use HTTPS".into()); }
-    if !uri.username().is_empty() || uri.password().is_some() || uri.query().is_some() || uri.fragment().is_some() {
+pub fn routine_url(value: &str) -> Result<http::Uri, String> {
+    let uri: http::Uri = value.parse().map_err(|_| "Use an HTTPS routine webhook")?;
+    if uri.scheme_str() != Some("https") || uri.host().is_none() { return Err("Routine webhook must use HTTPS".into()); }
+    if uri.authority().is_none_or(|a| a.as_str().contains('@')) || uri.query().is_some() || value.contains('#') {
         return Err("Webhook credentials belong in the secrets broker, not the URL".into());
     }
     Ok(uri)
@@ -43,6 +43,6 @@ mod tests {
     #[test]
     fn webhooks_do_not_embed_credentials_or_accept_insecure_urls() {
         for bad in ["http://example.test/run", "https://key@example.test/run", "https://example.test/run?key=secret", "https://example.test/run#secret"] { assert!(routine_url(bad).is_err(), "{bad}"); }
-        assert_eq!(routine_url("https://example.test:9443/run").unwrap().origin().ascii_serialization(), "https://example.test:9443");
+        assert_eq!(routine_url("https://example.test:9443/run").unwrap().authority().unwrap().as_str(), "example.test:9443");
     }
 }

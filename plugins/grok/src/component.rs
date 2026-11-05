@@ -9,7 +9,7 @@ use crate::{config::Grok as Config, discovery::Discovery, faces, routines::{self
 #[derive(Default, Serialize, Deserialize)]
 struct Saved { connected: bool, runs: Vec<RoutineRun> }
 
-struct OpenFace { id: String, size: SizeClass, config: Config, advanced: bool }
+struct OpenFace { id: String, size: SizeClass, config: Config, advanced: bool, key_routine: Option<String> }
 
 #[derive(Default)]
 struct Grok {
@@ -34,7 +34,8 @@ impl Grok {
         };
         let size = match open.size { guest::SizeClass::Small => SizeClass::Small, guest::SizeClass::Medium => SizeClass::Medium, guest::SizeClass::Large => SizeClass::Large };
         let advanced = self.faces.get(&open.instance).is_some_and(|f| f.advanced);
-        self.faces.insert(open.instance, OpenFace { id: open.face, size, config, advanced });
+        let key_routine = self.faces.get(&open.instance).and_then(|f| f.key_routine.clone());
+        self.faces.insert(open.instance, OpenFace { id: open.face, size, config, advanced, key_routine });
         if let Err(error) = self.discover() { self.notice = Some(error); }
     }
 
@@ -49,14 +50,18 @@ impl Grok {
     }
 
     fn advanced(&self, open: &OpenFace) -> Face {
-        let mut children = vec![View::tinted("Webhook keys", Role::Headline, Tone::Secondary)];
+        let mut children = Vec::new();
         if open.config.routines.is_empty() {
             children.push(View::tinted("Add routines in this widget’s Advanced settings.", Role::Callout, Tone::Secondary));
         } else {
-            children.extend(open.config.routines.iter().map(|r| View::Field { placeholder: format!("Key for {}", r.title), action: format!("key:{}", r.id) }));
+            let selected = open.config.routines.iter().find(|r| Some(&r.id) == open.key_routine.as_ref()).unwrap_or(&open.config.routines[0]);
+            if open.size != SizeClass::Small {
+                children.push(View::Select { label: "Routine".into(), action: "key-routine".into(), options: open.config.routines.iter().map(|r| mypaper_plugin_sdk::view::SelectOption { label: r.title.clone(), value: r.id.clone() }).collect(), selected: Some(selected.id.clone()) });
+            }
+            children.push(View::Field { placeholder: format!("Key for {}", selected.title), action: format!("key:{}", selected.id) });
         }
         children.push(View::Button { label: "Back".into(), action: "advanced".into(), icon: None, primary: false });
-        Face { body: View::stack(children), footer: Some("Keys stay in Windows Credential Manager".into()), refresh: false }
+        Face { body: View::Stack { children, gap: Some(6.0) }, footer: Some("Keys stay in Windows Credential Manager".into()), refresh: false }
     }
 
     fn action(&mut self, instance: &str, action: &str, value: Option<String>) -> Result<(), String> {
@@ -73,6 +78,9 @@ impl Grok {
             "open" => launch::open("grokbot://app/v1/open").map_err(|_| "Install or open Grok Bot, then retry")?,
             "prompt" => launch::open(&routines::prompt_target(value.as_deref().unwrap_or_default())?).map_err(|_| "Grok Bot could not open. Start it, then retry.")?,
             "advanced" => if let Some(face) = self.faces.get_mut(instance) { face.advanced = !face.advanced; },
+            "key-routine" => if let Some(face) = self.faces.get_mut(instance) && face.advanced {
+                face.key_routine = value.filter(|id| face.config.routines.iter().any(|r| &r.id == id));
+            },
             _ => {
                 if let Some(id) = action.strip_prefix("run:") { self.run(instance, id)?; }
                 else if let Some(id) = action.strip_prefix("key:") {
@@ -98,7 +106,7 @@ impl Grok {
         let body = serde_json::to_vec(&routine.input).map_err(|_| "Invalid routine input")?;
         if body.len() > 64 * 1024 { return Err("Routine input exceeds 64 KiB".into()); }
         let request = http::Request {
-            method: http::Method::Post, url: url.into(),
+            method: http::Method::Post, url: url.to_string(),
             headers: vec![http::Header { name: "Authorization".into(), value: format!("Bearer {key}") }, http::Header { name: "Content-Type".into(), value: "application/json".into() }],
             body: Some(body), timeout_ms: Some(10_000),
         };
