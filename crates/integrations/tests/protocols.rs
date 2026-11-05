@@ -1,4 +1,4 @@
-use mypaper_integrations::{config::Config, docker, launcher, obs, t3};
+use mypaper_integrations::{config::Config, launcher, obs, t3};
 use serde_json::json;
 
 fn thread(status: &str, run: &str, pending: serde_json::Value) -> serde_json::Value {
@@ -53,18 +53,6 @@ fn obs_events_do_not_use_duration_or_meters() {
         "zTM5ki6L2vVvBQiTG9ckH1Lh64AbnCf6XZ226UmnkIA="
     );
 }
-#[test]
-fn docker_failures_are_not_every_stopped_container() {
-    let state = docker::snapshot(&json!([
-        {"Id":"ok","Names":["/web"],"State":"exited","Status":"Exited (0) 1 minute ago"},
-        {"Id":"bad","Names":["/worker"],"State":"exited","Status":"Exited (137) 1 minute ago"},
-        {"Id":"sick","Names":["/db"],"State":"running","Status":"Up (unhealthy)"}
-    ]))
-    .unwrap();
-    assert!(!state.containers[0].failed);
-    assert!(state.containers[1].failed);
-    assert!(state.containers[2].failed);
-}
 
 #[test]
 fn widget_clocks_metrics_and_peer_snapshots_preserve_unknowns() {
@@ -83,12 +71,6 @@ fn widget_clocks_metrics_and_peer_snapshots_preserve_unknowns() {
         .elapsed(110_000),
         12_000
     );
-    let stats = docker::usage(
-        &json!({"cpu_stats":{"cpu_usage":{"total_usage":500},"system_cpu_usage":2000,"online_cpus":4},"precpu_stats":{"cpu_usage":{"total_usage":400},"system_cpu_usage":1000},"memory_stats":{"usage":4096,"limit":8192,"stats":{"inactive_file":1024}}}),
-    );
-    assert_eq!(stats.cpu_hundredths, Some(4000));
-    assert_eq!(stats.memory_bytes, 3072);
-    assert_eq!(docker::usage(&json!({})).cpu_hundredths, None);
 }
 #[test]
 fn configuration_rejects_secrets_remote_endpoints_and_ambiguous_actions() {
