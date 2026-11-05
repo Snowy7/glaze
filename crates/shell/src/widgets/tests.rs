@@ -561,7 +561,7 @@ fn every_widget_renders_inside_its_frame_at_every_size() {
     let mut ui = Ui::new().unwrap();
     let root = temp("dense-sizes");
     let strict_all = std::env::var("MYPAPER_SIZES").is_ok_and(|v| v == "all");
-    let integrations = ["discord", "t3", "obs", "docker", "tailscale", "grok"];
+    let integrations = ["discord", "t3", "obs", "docker", "grok"];
     let mut failures = Vec::new();
     let mut reported = Vec::new();
     for (id, installed) in &registry::builtins().widgets {
@@ -619,7 +619,7 @@ fn widget_size_sheets() {
     let registry = registry::builtins();
     for (id, installed) in &registry.widgets {
         // The integration widgets keep their own goldens (`views/integrations`).
-        let integration = ["discord", "t3", "obs", "docker", "tailscale", "grok"].contains(&id.as_str());
+        let integration = ["discord", "t3", "obs", "docker", "grok"].contains(&id.as_str());
         if integration || only.as_deref().is_some_and(|o| o != id) {
             continue;
         }
