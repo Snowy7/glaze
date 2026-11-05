@@ -1,0 +1,14 @@
+{
+  "id": "obs",
+  "name": "OBS Studio",
+  "version": "0.1.0",
+  "sdk": "1.0",
+  "command": "obs-plugin.exe",
+  "faces": [
+    { "id": "controls", "name": "Controls", "icon": "video", "size": { "default": [8, 4], "min": [4, 4], "max": [12, 8] } }
+  ],
+  "permissions": ["secrets", "network:ws://127.0.0.1"],
+  "settings": [
+    { "key": "endpoint", "label": "WebSocket endpoint", "type": "string", "default": "ws://127.0.0.1:4455" }
+  ]
+}
