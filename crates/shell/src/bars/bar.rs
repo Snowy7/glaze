@@ -18,9 +18,16 @@ use mypaper_bars::{
 use mypaper_desktop::{Monitor, Rect as DesktopRect};
 use mypaper_ui::{Glass, Kind, Point, Rect, Role, Surface, SurfaceId, Ui};
 use std::{
+    cell::Cell,
     collections::HashMap,
     time::{Duration, Instant},
 };
+
+thread_local! { static REPAINTS: Cell<u64> = const { Cell::new(0) }; }
+
+pub(super) fn total_repaints() -> u64 {
+    REPAINTS.with(Cell::get)
+}
 
 pub struct Bar {
     pub surface: Surface,
@@ -41,7 +48,7 @@ pub struct Bar {
     presentation_dirty: bool,
     pub hidden: bool,
     pub dirty: bool,
-    pub(super) redraws: u64,
+    redraws: u64,
     pub hide_at: Option<Instant>,
     pub pointer: Option<Point>,
     pub reservation: Option<Reservation>,
@@ -572,6 +579,7 @@ impl Bar {
                 list,
             )? {
                 self.redraws += 1;
+                REPAINTS.with(|count| count.set(count.get() + 1));
                 log::debug!(
                     "bar {:?} {} redraw={} island={i}",
                     self.kind,

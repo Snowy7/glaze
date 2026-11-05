@@ -1,5 +1,5 @@
 //! Counts the shell loop's wake-ups by cause and logs them once a minute, on a wake (it never
-//! adds one). Quiet unless the loop's work ran more than 20 times a second on average (a stuck
+//! adds one). Quiet unless the loop's work ran more than 240 times a second on average (a stuck
 //! ticker, say); `MYPAPER_WAKES=1` logs every minute. Counting is a few integer bumps per wake.
 
 use std::collections::HashMap;
@@ -9,6 +9,7 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, MSG, WM_TIMER};
 
 const PERIOD: Duration = Duration::from_secs(60);
+const AUTO_REPORT_RATE: f32 = 240.0;
 
 /// Why the loop woke.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -75,13 +76,13 @@ impl Wakes {
             .or_default() += 1;
     }
 
-    /// Logs and resets once a period has passed, with `detail` appended.
-    pub fn report(&mut self, detail: impl FnOnce() -> String) {
+    /// Logs and resets once a period has passed; returns whether external counters should reset.
+    pub fn report(&mut self, detail: impl FnOnce() -> String) -> bool {
         let elapsed = self.since.elapsed();
         if elapsed < PERIOD {
-            return;
+            return false;
         }
-        if self.always || self.worked as f32 > 20.0 * elapsed.as_secs_f32() {
+        if self.always || self.worked as f32 > AUTO_REPORT_RATE * elapsed.as_secs_f32() {
             let mut causes: Vec<_> = self
                 .causes
                 .iter()
@@ -132,6 +133,7 @@ impl Wakes {
         self.causes.clear();
         self.messages.clear();
         self.spent.clear();
+        true
     }
 }
 

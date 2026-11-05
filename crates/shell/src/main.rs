@@ -187,7 +187,7 @@ fn run() -> Result<()> {
         at = wakes.spent("pump", at);
         let sent_only = cause.is_none();
         wakes.wake(cause.unwrap_or(Cause::Sent));
-        wakes.report(|| {
+        if wakes.report(|| {
             let bars: Vec<_> = bars::Bars::take_tick_costs()
                 .iter()
                 .map(|(part, d)| format!("{part} {:.1}", d.as_secs_f64() * 1e3))
@@ -199,7 +199,10 @@ fn run() -> Result<()> {
                 win_events.counts(),
                 shell.widgets.as_ref().map(widgets::Widgets::costs)
             )
-        });
+        }) {
+            // A suppressed minute still ends the bars' timing interval.
+            let _ = bars::Bars::take_tick_costs();
+        }
         if sent_only && *coalesced.get_or_insert(at + COALESCE) > at {
             continue;
         }

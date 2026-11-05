@@ -260,7 +260,7 @@ impl Bars {
     /// Cumulative stats samples, displayed changes, sampler microseconds and all bar repaints.
     pub fn stats_counts(&self) -> (u64, u64, u64, u64) {
         let (samples, changed, micros) = self.services.stats_costs;
-        (samples, changed, micros, self.bars.iter().map(|bar| bar.redraws).sum())
+        (samples, changed, micros, bar::total_repaints())
     }
     /// Which deadline [`timeout`](Self::timeout) waits for, for the shell loop's wake counts.
     pub fn timeout_source(&self) -> &'static str {
