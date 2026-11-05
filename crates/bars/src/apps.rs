@@ -483,8 +483,20 @@ fn window_aumid(hwnd: HWND) -> Option<String> {
     }
 }
 
-/// The process image path, lowercase.
+/// The process image path, lowercase. A running exe renamed aside (`deploy-local.ps1` moves an
+/// open Studio's to `<name>.exe.old-<stamp>`) is reported at its new name; it reads as the
+/// original exe in the same folder, so its icon and identity stay the app's.
 fn process_image(pid: u32) -> Option<String> {
+    process_image_path(pid).map(|path| renamed_aside(&path).unwrap_or(path))
+}
+
+/// `x.exe` for `x.exe.old-<anything>`.
+fn renamed_aside(path: &str) -> Option<String> {
+    let (exe, _) = path.rsplit_once(".exe.old-")?;
+    Some(format!("{exe}.exe"))
+}
+
+fn process_image_path(pid: u32) -> Option<String> {
     // SAFETY: a limited query handle, closed before returning; the buffer outlives the call.
     unsafe {
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
@@ -505,6 +517,16 @@ fn process_image(pid: u32) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_exe_renamed_aside_reads_as_the_original() {
+        let dir = r"d:\wallpaper\target\release";
+        assert_eq!(
+            renamed_aside(&format!(r"{dir}\mypaper-studio.exe.old-20261105183342")),
+            Some(format!(r"{dir}\mypaper-studio.exe"))
+        );
+        assert_eq!(renamed_aside(&format!(r"{dir}\mypaper-studio.exe")), None);
+    }
 
     fn app_window() -> Facts {
         Facts {
