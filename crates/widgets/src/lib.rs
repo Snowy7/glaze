@@ -4,6 +4,7 @@ pub mod audio;
 pub mod bridge;
 pub mod display;
 pub mod custom;
+pub mod faces;
 pub mod files;
 pub mod layout;
 pub mod look;

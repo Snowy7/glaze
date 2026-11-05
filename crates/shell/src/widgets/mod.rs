@@ -232,7 +232,7 @@ impl Widgets {
                 )
             }
         };
-        if layout_error.is_none() && (layout.migrate(|id| registry.replacement(id)) | upgraded) {
+        if layout_error.is_none() && (layout.migrate(|id| registry.replacement(id)) | moved_faces(&mut layout, &path) | upgraded) {
             layout.save(&path)?;
         }
         let monitors = monitor_infos();
@@ -394,7 +394,7 @@ impl Widgets {
                 Ok((mut layout, upgraded)) => {
                     self.registry = registry::builtins();
                     self.layout_error = None;
-                    if (layout.migrate(|id| self.registry.replacement(id)) | upgraded)
+                    if (layout.migrate(|id| self.registry.replacement(id)) | moved_faces(&mut layout, &self.path) | upgraded)
                         && let Err(e) = layout.save(&self.path)
                     {
                         log::warn!("widget migration: {e:#}");
@@ -3845,4 +3845,15 @@ fn artwork_material(image: &mypaper_ui::Image) -> (Option<Arc<mypaper_ui::Image>
 fn grid_for(layout: &Layout, monitor: &Monitor) -> Grid {
     let bars = BarsConfig::parse("{}").expect("default bar config");
     grid_for_bars(layout, monitor, &bars)
+}
+
+/// Moves built-in integration widgets onto their plugin faces (`mypaper_widgets::faces`), keeping
+/// the file as it was beside it (`widgets.json.faces`) before the first moved write.
+fn moved_faces(layout: &mut Layout, path: &std::path::Path) -> bool {
+    use mypaper_widgets::faces;
+    let moved = faces::migrate(layout, faces::MOVED, faces::face_installed);
+    if moved && let Ok(bytes) = std::fs::read(path) {
+        let _ = files::backup_tagged(path, "faces", &bytes);
+    }
+    moved
 }
