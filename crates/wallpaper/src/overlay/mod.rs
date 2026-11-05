@@ -60,7 +60,8 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, EVENT_OBJECT_DESTROY, GWLP_USERDATA,
-    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_MESSAGE, IsWindow, OBJID_WINDOW,
+    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_MESSAGE, IsWindow, MSG, OBJID_WINDOW,
+    PM_NOREMOVE, PM_QS_SENDMESSAGE, PeekMessageW,
     PostMessageW, RegisterClassExW, RegisterWindowMessageW, SetWindowDisplayAffinity,
     SetWindowLongPtrW, WDA_EXCLUDEFROMCAPTURE, WINEVENT_OUTOFCONTEXT, WM_APP, WM_COPYDATA,
     WNDCLASSEXW,
@@ -261,11 +262,19 @@ impl Overlays {
     /// Handles what arrived since the last call: requests, gone clients, waiting frames.
     /// Returns how many requests it handled.
     pub fn tick(&mut self) -> usize {
-        let requests = std::mem::take(&mut *self.inbox.requests.borrow_mut());
-        let handled = requests.len();
-        for request in requests {
-            if let Err(e) = self.handle(request) {
-                log::warn!("glass overlay {request:?}: {e:#}");
+        // A cold open takes the shell's sent requests while it works (see 	ake_sent); those
+        // run here, after it, in the order they came.
+        let mut handled = 0;
+        loop {
+            let requests = std::mem::take(&mut *self.inbox.requests.borrow_mut());
+            if requests.is_empty() {
+                break;
+            }
+            handled += requests.len();
+            for request in requests {
+                if let Err(e) = self.handle(request) {
+                    log::warn!("glass overlay {request:?}: {e:#}");
+                }
             }
         }
         if self.inbox.prune.take() {
@@ -383,6 +392,7 @@ impl Overlays {
                 .get_or_insert_with(|| Rc::new(Pipelines::new(&self.gpu.device)))
                 .clone();
             self.live = Some(Live::new(&self.gpu, capture, pipes, self.timing)?);
+            take_sent();
         }
         if !self.sessions.iter().any(|s| s.monitor == monitor) {
             let live = self.live.take().context("no overlays")?;
@@ -988,6 +998,15 @@ impl Drop for MessageWindow {
         // SAFETY: our own window, on its thread.
         let _ = unsafe { DestroyWindow(self.0) };
     }
+}
+
+/// Takes the requests the shell is sending now, into the queue (`tick` runs them next). A cold
+/// open blocks this thread longer than the shell waits for each request (50 ms), so without
+/// this a `Close` or `Place` sent meanwhile was refused and lost: the glass stayed open.
+fn take_sent() {
+    let mut msg = MSG::default();
+    // SAFETY: only dispatches messages sent to this thread's windows; nothing is removed.
+    let _ = unsafe { PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE) };
 }
 
 /// Moves `request`'s overlay window now if it is a `Place` that only moves it (same size, same
