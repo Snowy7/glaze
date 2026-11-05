@@ -82,6 +82,8 @@ fn sheet(rows: usize) -> (DisplayList, u32) {
 fn t3_plugin_edge_cases_render_on_the_kit() {
     let edges: Value = serde_json::from_str(include_str!("../../../../../plugins/t3/golden/edges.json")).unwrap();
     let rows = [
+        ("states", "running", "Running now"),
+        ("states", "attention", "Needs you"),
         ("empty", "running", "Running now"),
         ("empty", "attention", "Needs you"),
         ("empty", "limits", "Limits"),
