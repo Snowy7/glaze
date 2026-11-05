@@ -1,0 +1,23 @@
+[
+    {
+        "run":  1,
+        "configured_widgets":  6,
+        "spawn_to_first_bar_ms":  385.926,
+        "process_age_first_bar_ms":  180.5,
+        "widgets_init_ms":  1707.5
+    },
+    {
+        "run":  2,
+        "configured_widgets":  6,
+        "spawn_to_first_bar_ms":  185.923,
+        "process_age_first_bar_ms":  185.2,
+        "widgets_init_ms":  1309.3
+    },
+    {
+        "run":  3,
+        "configured_widgets":  6,
+        "spawn_to_first_bar_ms":  161.854,
+        "process_age_first_bar_ms":  160.9,
+        "widgets_init_ms":  1617.6
+    }
+]

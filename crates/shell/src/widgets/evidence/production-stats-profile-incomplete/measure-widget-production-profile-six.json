@@ -1,0 +1,50 @@
+{
+    "label":  "widget-production-profile-six",
+    "at":  "2026-11-05T09:06:10",
+    "rows":  [
+                 {
+                     "part":  "mypaper-wallpaper",
+                     "pid":  74304,
+                     "cpu_core_pct":  1.8,
+                     "gpu3d_pct":  31.41,
+                     "gpu_copy_pct":  3.36,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  336,
+                     "private_mb":  258,
+                     "ws_mb":  24
+                 },
+                 {
+                     "part":  "mypaper-widget-fixture",
+                     "pid":  41028,
+                     "cpu_core_pct":  0,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  3,
+                     "ws_mb":  20
+                 },
+                 {
+                     "part":  "mypaper-shell",
+                     "pid":  83244,
+                     "cpu_core_pct":  0.18,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  42,
+                     "ws_mb":  97
+                 }
+             ],
+    "total":  {
+                  "part":  "TOTAL",
+                  "procs":  3,
+                  "cpu_core_pct":  1.98,
+                  "gpu3d_pct":  31.41,
+                  "gpu_video_pct":  0,
+                  "gpu_mem_mb":  336,
+                  "private_mb":  303,
+                  "ws_mb":  141
+              },
+    "theme":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\themes\\rain-city"
+}

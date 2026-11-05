@@ -1,0 +1,43 @@
+[2026-11-05T06:31:14Z INFO  mypaper_wallpaper] theme: Rainy Hong Kong (non-commercial) (C:\Users\you\.t3\worktrees\wallpaper\t3-dcf0a0a7\themes\rain-city)
+[2026-11-05T06:31:14Z INFO  mypaper_wallpaper] desktop host: Layered { progman: HWND(0xbd0512), defview: HWND(0x1802fc) }
+[2026-11-05T06:31:14Z INFO  mypaper_desktop::startup] READY component=wallpaper windows_ms=137.5 epoch_us=1793860274973597
+[2026-11-05T06:31:15Z INFO  mypaper_wallpaper::gpu] GPU: AMD Radeon(TM) Graphics (Dx12), preference=Integrated
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=wallpaper device_ms=647.5 epoch_us=1793860275483584
+[2026-11-05T06:31:15Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) ready in 174.5ms
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=wallpaper source_ms=822.6 epoch_us=1793860275658654
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=wallpaper loop_ms=824.1 epoch_us=1793860275660146
+[2026-11-05T06:31:15Z INFO  mypaper_wallpaper::engine] held: display off
+[2026-11-05T06:31:15Z INFO  mypaper_wallpaper::overlay::capture] glass overlays: borderless capture allowed
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell main_ms=44.8 epoch_us=1793860275778386
+[2026-11-05T06:31:15Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell config_ms=59.2 epoch_us=1793860275792753
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=59.2 epoch_us=1793860275792761
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=62.6 epoch_us=1793860275796187
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell services_ms=62.7 epoch_us=1793860275796241
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=64.2 epoch_us=1793860275797768
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=64.2 epoch_us=1793860275797829
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=200.5 epoch_us=1793860275934097
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=wallpaper first_frame_ms=1154.1 epoch_us=1793860275990197
+[2026-11-05T06:31:15Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-05T06:31:16Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=358.6 epoch_us=1793860276092215
+[2026-11-05T06:31:16Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=358.7 epoch_us=1793860276092328
+[2026-11-05T06:31:16Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=611.1 epoch_us=1793860276344667
+[2026-11-05T06:31:17Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T06:31:17Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-05T06:31:17Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T06:31:17Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T06:31:17Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 167.3879ms
+[2026-11-05T06:31:17Z INFO  mypaper_wallpaper::trim] trimmed the working set
+[2026-11-05T06:31:18Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-05T06:31:18Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=2370.2 epoch_us=1793860278103807
+[2026-11-05T06:31:18Z INFO  mypaper_shell] running
+[2026-11-05T06:31:18Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=2444.6 epoch_us=1793860278178201
+[2026-11-05T06:31:18Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2836.0 epoch_us=1793860278569531
+[2026-11-05T06:31:26Z INFO  mypaper_bars::flyouts::index] launcher: 41 apps indexed in 1.4212299s
+[2026-11-05T06:32:19Z INFO  mypaper_shell::widgets] widget checkpoint presents=(0, 0) costs=WorkCosts { clock_us: 78, coverage_us: 548, stats_us: 1, paint_us: 0, polls: 149, orders: 1, order_us: 0, plate_us: 5, poll_us: 284493 }
+[2026-11-05T06:32:19Z INFO  mypaper_shell::widgets] widget checkpoint id=calendar-1 rect=Rect { left: -642.0, top: 49.0, right: -333.0, bottom: 370.5 } visible=false
+[2026-11-05T06:32:19Z INFO  mypaper_shell::widgets] widget checkpoint id=clock-1 rect=Rect { left: 1918.0, top: 40.0, right: 2227.0, bottom: 251.66667 } visible=false
+[2026-11-05T06:32:19Z INFO  mypaper_shell::widgets] widget checkpoint id=notes-1 rect=Rect { left: -642.0, top: 708.0, right: -438.6667, bottom: 919.6667 } visible=false
+[2026-11-05T06:32:19Z INFO  mypaper_shell::widgets] widget checkpoint id=now-playing-1 rect=Rect { left: 1918.0, top: 369.5, right: 2332.6667, bottom: 581.1667 } visible=false
+[2026-11-05T06:32:19Z INFO  mypaper_shell::widgets] widget checkpoint id=system-monitor-1 rect=Rect { left: 1918.0, top: 699.0, right: 2227.0, bottom: 910.6667 } visible=false
+[2026-11-05T06:32:19Z INFO  mypaper_shell::widgets] widget checkpoint id=weather-1 rect=Rect { left: -642.0, top: 378.5, right: -333.0, bottom: 590.1667 } visible=false

@@ -1,0 +1,23 @@
+N4_MEDIA paused_existing=false
+N4_READY pid=12672 monitors=2 seconds=300
+N4_MONITORS [("\\\\.\\DISPLAY1", 96), ("\\\\.\\DISPLAY2", 96)]
+N4_BASELINE counters=(25, 2)
+N4_SAMPLE wall_s=60.010 cpu_core_pct=0.15622 counters=(56, 3)
+N4_COST WorkCosts { clock_us: 202, coverage_us: 168074, stats_us: 53130, paint_us: 89270, polls: 230, orders: 1, order_us: 61, plate_us: 104, poll_us: 817402 }
+N4_THREADS ui_core_pct=0.13019 worker_core_pct=0.02604
+N4_PROFILE phase=six cpu_core_pct=0.15622
+N4_VISIBLE_HITS 6/6
+N4_BASELINE counters=(56, 3)
+N4_SAMPLE wall_s=60.012 cpu_core_pct=0.13018 counters=(57, 4)
+N4_COST WorkCosts { clock_us: 249, coverage_us: 168084, stats_us: 53132, paint_us: 90761, polls: 286, orders: 1, order_us: 61, plate_us: 113, poll_us: 855689 }
+N4_THREADS ui_core_pct=0.07811 worker_core_pct=0.05207
+N4_PROFILE phase=without-system cpu_core_pct=0.13018
+N4_VISIBLE_HITS 5/5
+N4_BASELINE counters=(57, 4)
+N4_SAMPLE wall_s=60.007 cpu_core_pct=0.05208 counters=(57, 4)
+N4_COST WorkCosts { clock_us: 327, coverage_us: 168099, stats_us: 53133, paint_us: 90761, polls: 393, orders: 1, order_us: 61, plate_us: 126, poll_us: 868627 }
+N4_THREADS ui_core_pct=0.05208 worker_core_pct=0.00000
+N4_PROFILE phase=bars-only cpu_core_pct=0.05208
+N4_VISIBLE_HITS 0/0
+N4_PROFILE_DONE
+N4_DONE drivers=[]
