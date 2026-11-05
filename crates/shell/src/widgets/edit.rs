@@ -595,7 +595,6 @@ pub fn widget_icon(id: &str) -> Icon {
         "t3" => Icon::Terminal,
         "discord" => Icon::Message,
         "obs" => Icon::Video,
-        "docker" => Icon::Layers,
         "grok" => Icon::Sparkles,
         _ => Icon::Apps,
     }
