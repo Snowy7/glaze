@@ -30,12 +30,18 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
   foreach ($c in Get-Process mypaper-core -ErrorAction SilentlyContinue) {
     foreach ($t in $c.Threads) { [DeployQuit]::PostThreadMessage([uint32]$t.Id, 0x12, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
   }
+  # An open Studio window belongs to the user: leave it running and skip its exe (locked) this time.
+  $copy = $names
+  if (Get-Process mypaper-studio -ErrorAction SilentlyContinue) {
+    Write-Warning "Studio is open; leaving it running and not updating mypaper-studio.exe"
+    $copy = $names | Where-Object { $_ -ne "mypaper-studio" }
+  }
   $deadline = (Get-Date).AddSeconds(20)
-  while ((Get-Process $names -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
-  if (Get-Process $names -ErrorAction SilentlyContinue) { throw "mypaper did not stop" }
+  while ((Get-Process $copy -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
+  if (Get-Process $copy -ErrorAction SilentlyContinue) { throw "mypaper did not stop" }
 
   New-Item -ItemType Directory -Force $destination | Out-Null
-  foreach ($exe in $names) {
+  foreach ($exe in $copy) {
     if ([IO.Path]::GetFullPath("$From\$exe.exe") -ne [IO.Path]::GetFullPath("$destination\$exe.exe")) {
       Copy-Item -LiteralPath "$From\$exe.exe" -Destination "$destination\$exe.exe" -Force
     }
