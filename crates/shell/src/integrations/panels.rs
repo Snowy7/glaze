@@ -14,7 +14,7 @@ use mypaper_ui::{
     Accessory, ButtonKind, Frame, HitId, Lead, ListRow, Rect, Scroll, TextRole,
 };
 use std::time::Instant;
-use std::{cell::RefCell, path::PathBuf};
+use std::cell::RefCell;
 
 const RETRY: HitId = 10;
 const PRIMARY: HitId = 20;
