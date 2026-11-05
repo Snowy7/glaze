@@ -38,6 +38,36 @@ impl Spring {
         }
     }
 
+    /// A spring in Apple's terms (SwiftUI `spring(duration:bounce:)`), as liquid-rust models
+    /// it (github.com/al1h3n/liquid-rust, `src/motion.rs`, MIT/Apache-2.0): `duration` is
+    /// the perceptual settle time in seconds, `bounce` 0 for none, up to 0.95 for a lot,
+    /// negative for an over-damped curve. ω₀ = 2π / duration; ζ = 1 − bounce (bounce ≥ 0)
+    /// or 1 / (1 + bounce).
+    pub const fn apple(duration: f32, bounce: f32) -> Self {
+        let bounce = if bounce > 0.95 {
+            0.95
+        } else if bounce < -0.95 {
+            -0.95
+        } else {
+            bounce
+        };
+        let duration = if duration < 0.001 { 0.001 } else { duration };
+        let w0 = std::f32::consts::TAU / duration;
+        let zeta = if bounce >= 0.0 {
+            1.0 - bounce
+        } else {
+            1.0 / (1.0 + bounce)
+        };
+        Self::new(1.0, w0 * w0, 2.0 * zeta * w0)
+    }
+
+    /// SwiftUI `.smooth`: no overshoot.
+    pub const SMOOTH: Self = Self::apple(0.5, 0.0);
+    /// SwiftUI `.snappy`: a little overshoot, for layout and morphs.
+    pub const SNAPPY: Self = Self::apple(0.5, 0.15);
+    /// SwiftUI `.interactiveSpring`: tight follow of a press or a drag.
+    pub const INTERACTIVE: Self = Self::apple(0.15, 0.14);
+
     /// The position `t` seconds after release.
     pub fn at(&self, t: f32) -> f32 {
         let (m, k, c, t) = (

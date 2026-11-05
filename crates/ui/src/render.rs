@@ -9,14 +9,18 @@ use windows::Win32::Graphics::Direct2D::Common::{
 };
 use windows::Win32::Graphics::Direct2D::{
     D2D1_ANTIALIAS_MODE_ALIASED, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, D2D1_BITMAP_PROPERTIES,
-    D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_FEATURE_LEVEL_DEFAULT,
-    D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_SOFTWARE, D2D1_RENDER_TARGET_USAGE_NONE,
-    D2D1_ROUNDED_RECT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE, D2D1CreateFactory, ID2D1Bitmap,
-    ID2D1Factory, ID2D1PathGeometry, ID2D1RenderTarget, ID2D1SolidColorBrush,
+    D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT, D2D1_FACTORY_TYPE_SINGLE_THREADED,
+    D2D1_FEATURE_LEVEL_DEFAULT, D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+    D2D1_RENDER_TARGET_USAGE_NONE, D2D1_ROUNDED_RECT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE,
+    D2D1CreateFactory, ID2D1Bitmap, ID2D1Factory, ID2D1PathGeometry, ID2D1RenderTarget,
+    ID2D1SolidColorBrush, ID2D1StrokeStyle,
 };
 use windows::Win32::Graphics::DirectWrite::{
-    DWRITE_PIXEL_GEOMETRY_FLAT, DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC, IDWriteRenderingParams,
+    DWRITE_GRID_FIT_MODE_DISABLED, DWRITE_GRID_FIT_MODE_ENABLED, DWRITE_PIXEL_GEOMETRY_FLAT,
+    DWRITE_RENDERING_MODE1, DWRITE_RENDERING_MODE1_GDI_CLASSIC, DWRITE_RENDERING_MODE1_NATURAL,
+    DWRITE_RENDERING_MODE1_NATURAL_SYMMETRIC, IDWriteFactory3, IDWriteRenderingParams,
 };
+use windows::core::Interface;
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Imaging::{
     CLSID_WICImagingFactory, GUID_WICPixelFormat32bppPBGRA, IWICBitmap, IWICImagingFactory,
@@ -260,7 +264,82 @@ pub struct Ui {
     params: IDWriteRenderingParams,
 }
 
+/// How DirectWrite rasterizes text: always grayscale (layered windows have alpha, so no
+/// ClearType), with fixed parameters rather than the machine's ClearType tuning, so golden
+/// images and every machine look the same. [`TextQuality::default`] is what every surface
+/// uses; the gallery's text lab (`docs/media/native/kit-text.png`) compares the others.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextQuality {
+    pub gamma: f32,
+    /// Grayscale enhanced contrast: thickens the coverage of light strokes.
+    pub contrast: f32,
+    pub mode: TextMode,
+    /// Hint vertical stems and heights to whole pixels.
+    pub grid_fit: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextMode {
+    /// Subpixel positions, antialiased in both directions (DirectWrite's default above 12 px).
+    NaturalSymmetric,
+    /// Subpixel positions, antialiased horizontally only.
+    Natural,
+    /// Whole-pixel advances and full hinting, as GDI.
+    GdiClassic,
+}
+
+impl Default for TextQuality {
+    /// Chosen in the text lab (docs/ui.md, "Text"): Windows' grayscale defaults (gamma 1.8,
+    /// grayscale contrast 1.0) with vertical hinting. The old parameters set contrast 0.5
+    /// through the ClearType-only field, which drew light text thin and grey on glass.
+    fn default() -> Self {
+        Self {
+            gamma: 1.8,
+            contrast: 1.0,
+            mode: TextMode::NaturalSymmetric,
+            grid_fit: true,
+        }
+    }
+}
+
+impl TextQuality {
+    fn params(self, text: &Text) -> Result<IDWriteRenderingParams> {
+        let mode: DWRITE_RENDERING_MODE1 = match self.mode {
+            TextMode::NaturalSymmetric => DWRITE_RENDERING_MODE1_NATURAL_SYMMETRIC,
+            TextMode::Natural => DWRITE_RENDERING_MODE1_NATURAL,
+            TextMode::GdiClassic => DWRITE_RENDERING_MODE1_GDI_CLASSIC,
+        };
+        let grid = if self.grid_fit {
+            DWRITE_GRID_FIT_MODE_ENABLED
+        } else {
+            DWRITE_GRID_FIT_MODE_DISABLED
+        };
+        // SAFETY: documented factory calls with plain values.
+        unsafe {
+            let factory: IDWriteFactory3 = text.factory().cast().context("DirectWrite 3")?;
+            let params = factory
+                .CreateCustomRenderingParams(
+                    self.gamma,
+                    self.contrast,
+                    self.contrast,
+                    0.0,
+                    DWRITE_PIXEL_GEOMETRY_FLAT,
+                    mode,
+                    grid,
+                )
+                .context("text rendering parameters")?;
+            Ok(params.cast()?)
+        }
+    }
+}
+
 impl Ui {
+    /// Rasterizes the text of canvases made from now on with `quality` (the text lab).
+    pub fn set_text_quality(&mut self, quality: TextQuality) -> Result<()> {
+        self.params = quality.params(&self.text)?;
+        Ok(())
+    }
+
     /// Decode a photo/icon to bounded premultiplied pixels. Keep this result, not the original
     /// full-resolution image, while a widget is visible.
     pub fn decode_image(&self, bytes: &[u8], max_size: (u32, u32)) -> Result<Image> {
@@ -322,18 +401,7 @@ impl Ui {
                 CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)
                     .context("WIC")?;
             let text = Text::new()?;
-            // Fixed grayscale parameters, not the user's ClearType tuning: layered windows have
-            // alpha (no ClearType), and golden images must not depend on the machine's settings.
-            let params = text
-                .factory()
-                .CreateCustomRenderingParams(
-                    1.8,
-                    0.5,
-                    0.0,
-                    DWRITE_PIXEL_GEOMETRY_FLAT,
-                    DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,
-                )
-                .context("text rendering parameters")?;
+            let params = TextQuality::default().params(&text)?;
             Ok(Self {
                 text,
                 d2d,
@@ -431,6 +499,10 @@ pub(crate) struct Canvas {
     brush: ID2D1SolidColorBrush,
     images: RefCell<HashMap<usize, (Arc<Image>, ID2D1Bitmap)>>,
     arcs: RefCell<HashMap<[u32; 4], ID2D1PathGeometry>>,
+    /// Icon outlines on their 24-unit grid, made on first use.
+    icons: RefCell<HashMap<crate::icons::Icon, Option<ID2D1PathGeometry>>>,
+    /// Round caps and joins, for icons.
+    round: ID2D1StrokeStyle,
 }
 
 impl Canvas {
@@ -464,12 +536,28 @@ impl Canvas {
             target.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             target.SetTextRenderingParams(&ui.params);
             let brush = target.CreateSolidColorBrush(&color(Rgba::TRANSPARENT), None)?;
+            use windows::Win32::Graphics::Direct2D::{
+                D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND, D2D1_STROKE_STYLE_PROPERTIES,
+            };
+            let round = ui.d2d.CreateStrokeStyle(
+                &D2D1_STROKE_STYLE_PROPERTIES {
+                    startCap: D2D1_CAP_STYLE_ROUND,
+                    endCap: D2D1_CAP_STYLE_ROUND,
+                    dashCap: D2D1_CAP_STYLE_ROUND,
+                    lineJoin: D2D1_LINE_JOIN_ROUND,
+                    miterLimit: 10.0,
+                    ..Default::default()
+                },
+                None,
+            )?;
             Ok(Self {
                 bitmap,
                 target,
                 brush,
                 images: RefCell::new(HashMap::new()),
                 arcs: RefCell::new(HashMap::new()),
+                icons: RefCell::new(HashMap::new()),
+                round,
             })
         }
     }
@@ -638,7 +726,7 @@ impl Canvas {
                             },
                             layout,
                             brush,
-                            D2D1_DRAW_TEXT_OPTIONS_NONE,
+                            D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
                         );
                         let _ = layout.SetFontStyle(DWRITE_FONT_STYLE_NORMAL, range);
                         let _ = layout.SetStrikethrough(false, range);
@@ -724,6 +812,12 @@ impl Canvas {
                         }
                     }
                 }
+                Op::Icon {
+                    rect,
+                    icon,
+                    weight,
+                    color: c,
+                } => self.icon(*rect, *icon, *weight, *c),
                 Op::TextField { rect, field, .. } => {
                     if let Err(e) = field.draw(t, *rect) {
                         log::error!("text field: {e:#}");
@@ -779,7 +873,7 @@ impl Canvas {
                             X: rect.left,
                             Y: rect.top,
                         };
-                        t.DrawTextLayout(origin, layout, brush, D2D1_DRAW_TEXT_OPTIONS_NONE);
+                        t.DrawTextLayout(origin, layout, brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                     }
                 }
                 Op::Image {
@@ -856,6 +950,114 @@ impl Canvas {
                     }
                 }
             }
+        }
+    }
+
+    /// Builds `icon`'s outline (on its 24-unit grid) as Direct2D geometry.
+    fn outline(&self, icon: crate::icons::Icon) -> Option<ID2D1PathGeometry> {
+        use crate::icons::Seg;
+        use windows::Win32::Graphics::Direct2D::Common::{
+            D2D_SIZE_F, D2D1_BEZIER_SEGMENT, D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_END_CLOSED,
+            D2D1_FIGURE_END_OPEN,
+        };
+        use windows::Win32::Graphics::Direct2D::{
+            D2D1_ARC_SEGMENT, D2D1_ARC_SIZE_LARGE, D2D1_ARC_SIZE_SMALL,
+            D2D1_QUADRATIC_BEZIER_SEGMENT, D2D1_SWEEP_DIRECTION_CLOCKWISE,
+            D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+        };
+        let v = |p: crate::geom::Point| Vector2 { X: p.x, Y: p.y };
+        // SAFETY: documented calls on a geometry made here; the sink is closed before use.
+        unsafe {
+            let path = self.target.GetFactory().ok()?.CreatePathGeometry().ok()?;
+            let sink = path.Open().ok()?;
+            let mut open = false;
+            for seg in icon.segments() {
+                match seg {
+                    Seg::Move(p) => {
+                        if open {
+                            sink.EndFigure(D2D1_FIGURE_END_OPEN);
+                        }
+                        sink.BeginFigure(v(p), D2D1_FIGURE_BEGIN_FILLED);
+                        open = true;
+                    }
+                    Seg::Line(p) => sink.AddLine(v(p)),
+                    Seg::Cubic(a, b, p) => sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: v(a),
+                        point2: v(b),
+                        point3: v(p),
+                    }),
+                    Seg::Quad(a, p) => sink.AddQuadraticBezier(&D2D1_QUADRATIC_BEZIER_SEGMENT {
+                        point1: v(a),
+                        point2: v(p),
+                    }),
+                    Seg::Arc {
+                        to,
+                        rx,
+                        ry,
+                        rotation,
+                        large,
+                        sweep,
+                    } => sink.AddArc(&D2D1_ARC_SEGMENT {
+                        point: v(to),
+                        size: D2D_SIZE_F {
+                            width: rx,
+                            height: ry,
+                        },
+                        rotationAngle: rotation,
+                        sweepDirection: if sweep {
+                            D2D1_SWEEP_DIRECTION_CLOCKWISE
+                        } else {
+                            D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE
+                        },
+                        arcSize: if large {
+                            D2D1_ARC_SIZE_LARGE
+                        } else {
+                            D2D1_ARC_SIZE_SMALL
+                        },
+                    }),
+                    Seg::Close if open => {
+                        sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+                        open = false;
+                    }
+                    Seg::Close => {}
+                }
+            }
+            if open {
+                sink.EndFigure(D2D1_FIGURE_END_OPEN);
+            }
+            sink.Close().ok()?;
+            Some(path)
+        }
+    }
+
+    /// # Safety
+    /// Must run between `BeginDraw` and `EndDraw`.
+    unsafe fn icon(&self, rect: Rect, icon: crate::icons::Icon, weight: f32, c: Rgba) {
+        let scale = rect.width() / 24.0;
+        if scale <= 0.0 {
+            return;
+        }
+        let mut cache = self.icons.borrow_mut();
+        let Some(geometry) = cache.entry(icon).or_insert_with(|| self.outline(icon)) else {
+            return;
+        };
+        let t = &self.target;
+        // SAFETY: per this function's contract.
+        unsafe {
+            self.brush.SetColor(&color(c));
+            t.SetTransform(&windows_numerics::Matrix3x2 {
+                M11: scale,
+                M12: 0.0,
+                M21: 0.0,
+                M22: scale,
+                M31: rect.left,
+                M32: rect.top,
+            });
+            if icon.filled() {
+                t.FillGeometry(&*geometry, &self.brush, None);
+            }
+            t.DrawGeometry(&*geometry, &self.brush, weight / scale, &self.round);
+            t.SetTransform(&windows_numerics::Matrix3x2::identity());
         }
     }
 

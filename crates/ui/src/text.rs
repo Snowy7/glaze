@@ -10,22 +10,35 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use windows::Win32::Graphics::DirectWrite::{
-    DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+    DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_AXIS_TAG_OPTICAL_SIZE, DWRITE_FONT_AXIS_TAG_WEIGHT,
+    DWRITE_FONT_AXIS_VALUE, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
     DWRITE_FONT_WEIGHT, DWRITE_HIT_TEST_METRICS, DWRITE_LINE_METRICS, DWRITE_TEXT_METRICS,
-    DWRITE_WORD_WRAPPING_NO_WRAP, DWRITE_WORD_WRAPPING_WRAP, DWriteCreateFactory, IDWriteFactory,
-    IDWriteTextFormat, IDWriteTextLayout,
+    DWRITE_TEXT_RANGE, DWRITE_WORD_WRAPPING_NO_WRAP, DWRITE_WORD_WRAPPING_WRAP,
+    DWriteCreateFactory, IDWriteFactory, IDWriteFactory6, IDWriteTextFormat, IDWriteTextLayout,
+    IDWriteTextLayout1,
 };
-use windows::core::{BOOL, HSTRING, w};
+use windows::core::{BOOL, HSTRING, Interface, w};
 
 /// How a run of text looks. `size` is in device pixels when it reaches the renderer; in
 /// [`crate::Tokens`] it is in design pixels.
+///
+/// The family [`VARIABLE`] ("Segoe UI Variable") is drawn through its variable axes: any
+/// `weight` (500 medium included) and an optical size that follows the design size, as
+/// Windows 11 itself draws it. Other families use their named faces.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextStyle {
     pub family: Arc<str>,
     pub size: f32,
     /// 100..=900, 400 regular, 600 semibold.
     pub weight: u16,
+    /// Extra space after every character, device px (negative tightens display sizes).
+    pub tracking: f32,
+    /// The optical size in points for variable fonts; 0 takes it from `size`.
+    pub optical: f32,
 }
+
+/// Segoe UI Variable's typographic family: its `wght` and `opsz` axes are used directly.
+pub const VARIABLE: &str = "Segoe UI Variable";
 
 impl TextStyle {
     pub fn new(family: &str, size: f32) -> Self {
@@ -33,13 +46,21 @@ impl TextStyle {
             family: family.into(),
             size,
             weight: 400,
+            tracking: 0.0,
+            optical: 0.0,
         }
     }
 
-    /// The same style at `scale` times the size.
+    /// The same style at `scale` times the size (the optical size stays: it is physical).
     pub fn scaled(&self, scale: f32) -> Self {
         Self {
             size: self.size * scale,
+            tracking: self.tracking * scale,
+            optical: if self.optical > 0.0 {
+                self.optical
+            } else {
+                self.size * 0.75
+            },
             ..self.clone()
         }
     }
@@ -49,6 +70,8 @@ impl TextStyle {
             family: self.family.clone(),
             size: self.size.to_bits(),
             weight: self.weight,
+            tracking: self.tracking.to_bits(),
+            optical: self.optical.to_bits(),
         }
     }
 }
@@ -58,6 +81,8 @@ struct FormatKey {
     family: Arc<str>,
     size: u32,
     weight: u16,
+    tracking: u32,
+    optical: u32,
 }
 
 /// A laid-out string, its size, and when it was last used.
@@ -253,6 +278,15 @@ impl Text {
                 .CreateTextLayout(&wide, &format, 4096.0, 4096.0)
                 .inspect_err(|e| log::debug!("text layout: {e}"))
                 .ok()?;
+            if style.tracking != 0.0
+                && let Ok(layout) = layout.cast::<IDWriteTextLayout1>()
+            {
+                let range = DWRITE_TEXT_RANGE {
+                    startPosition: 0,
+                    length: wide.len() as u32,
+                };
+                let _ = layout.SetCharacterSpacing(0.0, style.tracking, 0.0, range);
+            }
             let mut metrics = DWRITE_TEXT_METRICS::default();
             layout.GetMetrics(&mut metrics).ok()?;
             Some(Laid {
@@ -271,6 +305,39 @@ impl Text {
         }
         // SAFETY: documented calls; the strings outlive them.
         let format = unsafe {
+            if &*style.family == VARIABLE
+                && let Ok(factory) = self.factory.cast::<IDWriteFactory6>()
+            {
+                let optical = if style.optical > 0.0 {
+                    style.optical
+                } else {
+                    style.size * 0.75
+                };
+                let axes = [
+                    DWRITE_FONT_AXIS_VALUE {
+                        axisTag: DWRITE_FONT_AXIS_TAG_WEIGHT,
+                        value: f32::from(style.weight),
+                    },
+                    DWRITE_FONT_AXIS_VALUE {
+                        axisTag: DWRITE_FONT_AXIS_TAG_OPTICAL_SIZE,
+                        value: optical,
+                    },
+                ];
+                let made = factory
+                    .CreateTextFormat(
+                        &HSTRING::from(VARIABLE),
+                        None,
+                        &axes,
+                        style.size,
+                        w!("en-us"),
+                    )
+                    .and_then(|f| f.cast::<IDWriteTextFormat>());
+                if let Ok(format) = made {
+                    format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP).ok()?;
+                    self.formats.insert(key, format.clone());
+                    return Some(format);
+                }
+            }
             let format = self
                 .factory
                 .CreateTextFormat(

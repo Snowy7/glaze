@@ -76,6 +76,14 @@ pub enum Op {
         style: TextStyle,
         color: Rgba,
     },
+    /// A vector icon ([`crate::icons`]) filling the square `rect`, stroked `weight` device
+    /// pixels wide with round caps and joins (and filled too for `Icon::filled` ones).
+    Icon {
+        rect: Rect,
+        icon: crate::icons::Icon,
+        weight: f32,
+        color: Rgba,
+    },
     /// A soft shadow under `rect`: `spread` pixels of falloff, moved down by `drop`.
     Shadow {
         rect: Rect,
@@ -111,6 +119,7 @@ impl Op {
             .inflate(width / 2.0 + 1.0),
             Self::Image { rect, .. } | Self::TextField { rect, .. } => rect.inflate(1.0),
             Self::Fill { rect, .. } => rect.inflate(1.0),
+            Self::Icon { rect, weight, .. } => rect.inflate(weight + 1.0),
             Self::Stroke { rect, width, .. } => rect.inflate(width / 2.0 + 1.0),
             Self::Line {
                 from, to, width, ..
@@ -180,6 +189,7 @@ impl DisplayList {
                     Op::Image { rect, .. }
                     | Op::TextField { rect, .. }
                     | Op::Fill { rect, .. }
+                    | Op::Icon { rect, .. }
                     | Op::Stroke { rect, .. }
                     | Op::Text { rect, .. }
                     | Op::Emphasis { rect, .. }

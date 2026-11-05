@@ -208,6 +208,8 @@ impl Type {
             family: family.clone(),
             size: size * scale * self.text_scale,
             weight,
+            tracking: 0.0,
+            optical: 0.0,
         }
     }
 
