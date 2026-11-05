@@ -215,7 +215,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         }
     });
     let mut ui = Ui::new().unwrap();
-    let mut config=BarsConfig::parse(r#"{"top":{"left":[],"center":[],"right":["notifications","t3","obs","docker"]}}"#).unwrap();
+    let mut config=BarsConfig::parse(r#"{"top":{"left":[],"center":[],"right":["notifications","t3","obs"]}}"#).unwrap();
     config.resolve(Vec::new);
     let tokens = look::Tokens::resolve(
         &config.top.look,
