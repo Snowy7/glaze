@@ -259,6 +259,9 @@ impl T3 {
             Some(("thread", thread)) => {
                 let link = self.links.get(thread).cloned().or_else(|| self.state.thread_link(thread));
                 let opened = link.ok_or_else(|| "Refresh to load the T3 thread link.".to_owned()).and_then(|link| launch::open(&link).map_err(|e| format!("{e:?}")));
+                if let Err(e) = &opened {
+                    guest::log(&format!("T3: couldn't open thread {thread}: {e}"));
+                }
                 self.notice = opened.err().map(|e| format!("Couldn't open the thread · {e}"));
             }
             None if action == "project" || action == "model" => {

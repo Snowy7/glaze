@@ -303,8 +303,11 @@ impl Snapshot {
     pub(crate) fn configure(&mut self, value: &crate::t3_client::Metadata) {
         self.omit_older_settled = value.shell_older_settled;
         self.omit_idle_subagents = value.shell_thread_families;
-        self.environment_id =
-            Some(value.environment.environment_id.clone()).filter(|s| !s.is_empty());
+        // A config stream snapshot may come without the environment; thread links still need
+        // the one `server.getConfig` gave, so only a non-empty id replaces it.
+        if !value.environment.environment_id.is_empty() {
+            self.environment_id = Some(value.environment.environment_id.clone());
+        }
         self.models.clear();
         self.limits.clear();
         for provider in value.providers.iter().filter(|p| p.enabled && p.installed) {
