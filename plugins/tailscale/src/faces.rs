@@ -32,13 +32,17 @@ fn peer_row(peer: &Peer, exit: Option<&str>, now: i64, traffic: bool) -> View {
     let selected = exit == Some(peer.id.as_str());
     View::ListRow {
         title: peer.name.split('.').next().unwrap_or(&peer.name).into(),
-        detail: Some(detail), icon: Some("desktop".into()),
+        detail: Some(detail), icon: Some(if traffic { "activity" } else { "globe" }.into()),
         trailing: Some(if selected { "Exit node" } else if peer.exit_option && peer.online { "Use as exit" } else if peer.online { "Online" } else { "Offline" }.into()),
         action: (peer.exit_option && peer.online && !peer.id.is_empty()).then(|| if selected { "exit:none".into() } else { format!("exit:{}", peer.id) }),
     }
 }
 
 pub fn face(id: &str, size: SizeClass, state: &State, now: i64) -> Face {
+    if id == "status" {
+        let connected = state.error.is_none() && state.data.as_ref().is_some_and(|data| data.state == "Running");
+        return View::tinted(if connected { "Tailscale · Connected" } else { "Tailscale · Disconnected" }, Role::Caption, if connected { Tone::Positive } else { Tone::Secondary }).face();
+    }
     let mut face = match &state.data {
         None => View::empty("globe", if state.error.is_some() { "Tailscale unavailable" } else { "Connecting…" }, state.error.as_deref().unwrap_or("Reading the existing Tailscale service")).face(),
         Some(data) => {
@@ -74,10 +78,12 @@ pub fn face(id: &str, size: SizeClass, state: &State, now: i64) -> Face {
                     else { nodes.push(peers(if size == SizeClass::Large { 4 } else { 2 }, false)); }
                     stack(nodes, 3.0)
                 }
-                (_, SizeClass::Medium) => View::row([
-                    stack([headline, caption(address), caption(count), control], 4.0),
-                    stack([choose_exit, peers(2, false)], 3.0),
-                ]),
+                (_, SizeClass::Medium) => stack([
+                    View::row([headline, control]),
+                    caption(format!("{address} · {count}")),
+                    choose_exit,
+                    peers(1, false),
+                ], 3.0),
                 _ => {
                     let mut nodes = vec![View::row([headline, control]), caption(format!("{address} · {count}")), choose_exit, caption(traffic)];
                     nodes.push(peers(3, false));
