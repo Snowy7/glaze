@@ -1,5 +1,7 @@
 //! Runtime tests against the real `hello` component (`scripts/build-plugins.ps1` builds it into
 //! `plugins/hello/hello.wasm`).
+#[path = "../../../plugins/docker/src/runtime_tests.rs"]
+mod docker;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
