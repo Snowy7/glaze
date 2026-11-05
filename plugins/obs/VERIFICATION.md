@@ -31,3 +31,11 @@ Release helper measurements (`mypaper-plugins --bench plugins/obs`, one sample o
 
 The linear-memory result is also confirmed by both runtime tests. Whole-process numbers include
 the runtime, compiler/cache mapping and I/O setup; they are not the plugin's linear-memory size.
+
+`scripts/deploy-local.ps1 -From C:/mypaper-targets/main/release` completed under its desktop lock.
+The open Studio window was preserved, with the new executable installed for its next launch.
+The deployed shell's [offline widget capture](golden/live-offline.png) was taken at native DPI
+under the same lock, with OBS closed and no synthetic input. It shows the clean offline title,
+setup hint and refresh affordance. The temporary verification instance was removed afterward;
+the user's layout was preserved. At capture the shared helper (weather, T3 and OBS loaded) used
+36.86 MiB working set / 28.18 MiB private bytes. This combined sample is not an OBS-only delta.
