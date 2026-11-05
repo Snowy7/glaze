@@ -1,12 +1,9 @@
-//! Replaceable unstable LocalAPI adapter. Never watches engine/peer traffic or starts a VPN node.
-use crate::{Action, Publish, transport};
-use anyhow::{Result, ensure};
+//! Pure LocalAPI status decoding and masked preference patches. No OS access in the guest.
+use crate::Action;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tokio::sync::mpsc;
 
-/// InitialState | InitialPrefs | NoNetMap | InitialStatus. Old incompatible versions fail visibly.
-pub const WATCH_MASK: u32 = 2 | 4 | 8192 | 16384;
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Snapshot {
     pub state: String,
     pub addresses: Vec<String>,
@@ -27,52 +24,7 @@ pub fn prefs(action: &Action) -> Option<Value> {
     }
 }
 
-async fn refresh(pipe: &str, state: &mut Snapshot, publish: &Publish, live: bool) -> Result<()> {
-    let status = transport::pipe_json(pipe, "GET", "/localapi/v0/status", None).await?;
-    // A full status replaces vanished peers and clears an exit node that was switched off.
-    *state = Snapshot::default();
-    apply(state, &json!({"InitialStatus":status}));
-    ensure!(!state.state.is_empty(), "Tailscale returned an incompatible status snapshot");
-    publish.set(state.clone(), live);
-    Ok(())
-}
-
-async fn action(pipe: &str, command: Action, state: &mut Snapshot, publish: &Publish, live: bool) -> Result<()> {
-    if let Some(patch) = prefs(&command) {
-        let result = transport::pipe_json(pipe, "PATCH", "/localapi/v0/prefs", Some(patch)).await;
-        let ok = result.is_ok();
-        publish.action_result(result.map(|_| ()));
-        if !ok { return Ok(()); }
-    }
-    refresh(pipe, state, publish, live).await
-}
-
-/// Snapshot mode stays asleep until refresh/action. Opt-in live mode watches only the IPN bus.
-pub(crate) async fn run(pipe: &str, live: bool, publish: &Publish, commands: &mut mpsc::Receiver<Action>) -> Result<()> {
-    let mut state = Snapshot::default();
-    refresh(pipe, &mut state, publish, live).await?;
-    if !live {
-        while let Some(command) = commands.recv().await { action(pipe, command, &mut state, publish, false).await?; }
-        return Ok(());
-    }
-    let mut stream = transport::pipe_request(pipe, "GET", &format!("/localapi/v0/watch-ipn-bus?mask={WATCH_MASK}"), None).await?;
-    loop {
-        tokio::select! {
-            command = commands.recv() => match command {
-                Some(command) => action(pipe, command, &mut state, publish, true).await?,
-                None => return Ok(()),
-            },
-            event = stream.next() => {
-                let event = event?.ok_or_else(|| anyhow::anyhow!("Tailscale IPN bus closed"))?;
-                ensure!(event.get("ErrMessage").and_then(Value::as_str).is_none_or(str::is_empty), "Tailscale reported a watch error");
-                apply(&mut state, &event);
-                if event.get("SelfChange").is_some() { refresh(pipe, &mut state, publish, true).await?; }
-                else { publish.set(state.clone(), true); }
-            }
-        }
-    }
-}
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Peer {
     pub id: String,
     pub name: String,

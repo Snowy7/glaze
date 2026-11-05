@@ -1,5 +1,6 @@
 use super::*;
 use serde_json::json;
+use mypaper_plugin_sdk::SizeClass;
 
 #[test]
 fn disconnected_or_unreachable_service_never_claims_a_green_connection() {
@@ -27,5 +28,8 @@ fn peer_metadata_unknowns_and_preferences_are_preserved() {
     assert!(tailscale::prefs(&Action::Refresh).is_none());
     assert_eq!(faces::bytes(None), "Unavailable");
     assert_eq!(faces::bytes(Some(0)), "0 B");
-    assert_eq!(tailscale::WATCH_MASK & 1, 0);
+    assert!(allowed_exit(&golden::fixture(), "home"));
+    assert!(allowed_exit(&golden::fixture(), ""));
+    assert!(!allowed_exit(&golden::fixture(), "pc"));
+    assert!(!allowed_exit(&golden::fixture(), "untrusted"));
 }

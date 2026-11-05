@@ -29,11 +29,20 @@
             "text": "100.64.0.24 · 3 of 4 peers online"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "Exit node · home-server"
+            "action": "exit",
+            "kind": "select",
+            "label": "Exit node · home-server",
+            "options": [
+              {
+                "label": "No exit node",
+                "value": ""
+              },
+              {
+                "label": "home-server",
+                "value": "home"
+              }
+            ],
+            "selected": "home"
           },
           {
             "align": "start",
@@ -41,12 +50,6 @@
             "kind": "text",
             "role": "caption",
             "text": "↓ 1.1 GiB · ↑ 58.0 MiB"
-          },
-          {
-            "action": "exit:none",
-            "kind": "button",
-            "label": "Stop using exit node",
-            "primary": false
           },
           {
             "children": [
@@ -74,7 +77,7 @@
               }
             ],
             "gap": 0.0,
-            "kind": "stack"
+            "kind": "list"
           }
         ],
         "gap": 3.0,
@@ -122,11 +125,20 @@
           {
             "children": [
               {
-                "align": "start",
-                "color": "secondary",
-                "kind": "text",
-                "role": "caption",
-                "text": "Exit node · home-server"
+                "action": "exit",
+                "kind": "select",
+                "label": "Exit node · home-server",
+                "options": [
+                  {
+                    "label": "No exit node",
+                    "value": ""
+                  },
+                  {
+                    "label": "home-server",
+                    "value": "home"
+                  }
+                ],
+                "selected": "home"
               },
               {
                 "children": [
@@ -147,7 +159,7 @@
                   }
                 ],
                 "gap": 0.0,
-                "kind": "stack"
+                "kind": "list"
               }
             ],
             "gap": 3.0,
@@ -220,11 +232,20 @@
             "text": "100.64.0.24 · 3 of 4 peers online"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "Exit node · home-server"
+            "action": "exit",
+            "kind": "select",
+            "label": "Exit node · home-server",
+            "options": [
+              {
+                "label": "No exit node",
+                "value": ""
+              },
+              {
+                "label": "home-server",
+                "value": "home"
+              }
+            ],
+            "selected": "home"
           },
           {
             "align": "start",
@@ -232,12 +253,6 @@
             "kind": "text",
             "role": "caption",
             "text": "↓ 1.1 GiB · ↑ 58.0 MiB"
-          },
-          {
-            "action": "exit:none",
-            "kind": "button",
-            "label": "Stop using exit node",
-            "primary": false
           },
           {
             "children": [
@@ -265,7 +280,7 @@
               }
             ],
             "gap": 0.0,
-            "kind": "stack"
+            "kind": "list"
           }
         ],
         "gap": 3.0,
@@ -313,11 +328,20 @@
           {
             "children": [
               {
-                "align": "start",
-                "color": "secondary",
-                "kind": "text",
-                "role": "caption",
-                "text": "Exit node · home-server"
+                "action": "exit",
+                "kind": "select",
+                "label": "Exit node · home-server",
+                "options": [
+                  {
+                    "label": "No exit node",
+                    "value": ""
+                  },
+                  {
+                    "label": "home-server",
+                    "value": "home"
+                  }
+                ],
+                "selected": "home"
               },
               {
                 "children": [
@@ -338,7 +362,7 @@
                   }
                 ],
                 "gap": 0.0,
-                "kind": "stack"
+                "kind": "list"
               }
             ],
             "gap": 3.0,
@@ -411,11 +435,16 @@
             "text": "No address · 0 of 0 peers online"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "Exit node · None"
+            "action": "exit",
+            "kind": "select",
+            "label": "Exit node · None",
+            "options": [
+              {
+                "label": "No exit node",
+                "value": ""
+              }
+            ],
+            "selected": ""
           },
           {
             "align": "start",
@@ -427,7 +456,7 @@
           {
             "children": [],
             "gap": 0.0,
-            "kind": "stack"
+            "kind": "list"
           }
         ],
         "gap": 3.0,
@@ -475,16 +504,21 @@
           {
             "children": [
               {
-                "align": "start",
-                "color": "secondary",
-                "kind": "text",
-                "role": "caption",
-                "text": "Exit node · None"
+                "action": "exit",
+                "kind": "select",
+                "label": "Exit node · None",
+                "options": [
+                  {
+                    "label": "No exit node",
+                    "value": ""
+                  }
+                ],
+                "selected": ""
               },
               {
                 "children": [],
                 "gap": 0.0,
-                "kind": "stack"
+                "kind": "list"
               }
             ],
             "gap": 3.0,
@@ -539,17 +573,20 @@
             "text": "3 of 4 peers online"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "Exit node · home-server"
-          },
-          {
-            "action": "exit:none",
-            "kind": "button",
-            "label": "Stop using exit node",
-            "primary": false
+            "action": "exit",
+            "kind": "select",
+            "label": "Exit node · home-server",
+            "options": [
+              {
+                "label": "No exit node",
+                "value": ""
+              },
+              {
+                "label": "home-server",
+                "value": "home"
+              }
+            ],
+            "selected": "home"
           },
           {
             "children": [
@@ -584,7 +621,7 @@
               }
             ],
             "gap": 0.0,
-            "kind": "stack"
+            "kind": "list"
           }
         ],
         "gap": 3.0,
@@ -604,17 +641,20 @@
             "text": "3 of 4 peers online"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "Exit node · home-server"
-          },
-          {
-            "action": "exit:none",
-            "kind": "button",
-            "label": "Stop using exit node",
-            "primary": false
+            "action": "exit",
+            "kind": "select",
+            "label": "Exit node · home-server",
+            "options": [
+              {
+                "label": "No exit node",
+                "value": ""
+              },
+              {
+                "label": "home-server",
+                "value": "home"
+              }
+            ],
+            "selected": "home"
           },
           {
             "children": [
@@ -635,7 +675,7 @@
               }
             ],
             "gap": 0.0,
-            "kind": "stack"
+            "kind": "list"
           }
         ],
         "gap": 3.0,
@@ -727,7 +767,7 @@
               }
             ],
             "gap": 0.0,
-            "kind": "stack"
+            "kind": "list"
           }
         ],
         "gap": 5.0,
@@ -773,7 +813,7 @@
               }
             ],
             "gap": 0.0,
-            "kind": "stack"
+            "kind": "list"
           }
         ],
         "gap": 5.0,
@@ -843,11 +883,20 @@
             "text": "100.64.0.24 · 3 of 4 peers online"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "Exit node · home-server"
+            "action": "exit",
+            "kind": "select",
+            "label": "Exit node · home-server",
+            "options": [
+              {
+                "label": "No exit node",
+                "value": ""
+              },
+              {
+                "label": "home-server",
+                "value": "home"
+              }
+            ],
+            "selected": "home"
           },
           {
             "align": "start",
@@ -855,12 +904,6 @@
             "kind": "text",
             "role": "caption",
             "text": "↓ 1.1 GiB · ↑ 58.0 MiB"
-          },
-          {
-            "action": "exit:none",
-            "kind": "button",
-            "label": "Stop using exit node",
-            "primary": false
           },
           {
             "children": [
@@ -888,7 +931,7 @@
               }
             ],
             "gap": 0.0,
-            "kind": "stack"
+            "kind": "list"
           }
         ],
         "gap": 3.0,
@@ -936,11 +979,20 @@
           {
             "children": [
               {
-                "align": "start",
-                "color": "secondary",
-                "kind": "text",
-                "role": "caption",
-                "text": "Exit node · home-server"
+                "action": "exit",
+                "kind": "select",
+                "label": "Exit node · home-server",
+                "options": [
+                  {
+                    "label": "No exit node",
+                    "value": ""
+                  },
+                  {
+                    "label": "home-server",
+                    "value": "home"
+                  }
+                ],
+                "selected": "home"
               },
               {
                 "children": [
@@ -961,7 +1013,7 @@
                   }
                 ],
                 "gap": 0.0,
-                "kind": "stack"
+                "kind": "list"
               }
             ],
             "gap": 3.0,
