@@ -3,6 +3,8 @@ import argparse
 import ctypes
 from ctypes import wintypes
 import json
+import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 import queue
 import shutil
@@ -149,7 +151,10 @@ def main():
                     idle_started = time.monotonic()
                     time.sleep(args.seconds)
                     send(integer(5))
-        summary = {"read_only": True, "faces": list(faces), "baseline": baseline, "active": active,
+        summary = {"read_only": True, "measured_at_utc": datetime.now(timezone.utc).isoformat(),
+                   "helper_sha256": hashlib.sha256(args.exe.read_bytes()).hexdigest(),
+                   "component_sha256": hashlib.sha256((plugin / "tailscale.wasm").read_bytes()).hexdigest(),
+                   "faces": list(faces), "baseline": baseline, "active": active,
                    "added_private_mib": active["private_mib"] - baseline["private_mib"],
                    "idle_seconds": time.monotonic() - idle_started,
                    "idle_plugin_events": stats[1]["events"] - stats[0]["events"],
