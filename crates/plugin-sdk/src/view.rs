@@ -275,6 +275,17 @@ pub enum View {
         damping: f32,
         child: Box<View>,
     },
+    /// `child` (a list or stack) in a clipped viewport that takes the free height and scrolls
+    /// in the shell: wheel and touchpad glide locally, an overlay scrollbar fades, and the
+    /// plugin never sees scroll events. `id` keys the position, so it survives view updates
+    /// (keep it stable). `on_reach_end` is sent as an action once the end comes into view (load
+    /// more), and again only after the content grows.
+    Scroll {
+        id: String,
+        child: Box<View>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_reach_end: Option<String>,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -362,6 +373,11 @@ impl View {
             icon: None,
             primary: false,
         }
+    }
+
+    /// `child` scrolling in the shell, its position kept under `id`.
+    pub fn scroll(id: impl Into<String>, child: View) -> Self {
+        Self::Scroll { id: id.into(), child: Box::new(child), on_reach_end: None }
     }
 
     /// The face around this body, without a footer.

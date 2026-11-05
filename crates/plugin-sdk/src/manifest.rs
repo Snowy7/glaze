@@ -28,6 +28,11 @@ pub struct FaceSpec {
     /// A bar module's panel (one of `panels`): clicking the module opens it as a flyout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel: Option<String>,
+    /// Per-instance options (docs/plugins.md, "Face options"): entries of the widget settings
+    /// schema (`boolean`, `number`, `select`, `string`, each with `key`, `label`, `default`).
+    /// Kept raw; the shell validates them as the `<plugin>--<face>` widget's `settings`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

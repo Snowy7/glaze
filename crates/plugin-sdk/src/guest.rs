@@ -180,6 +180,7 @@ fn flatten(view: &View, out: &mut Vec<v::Node>) {
         View::Grid { children, columns, gap } => (K::Grid(v::Grid { columns: *columns, gap: *gap }), children),
         View::Card { title, child } => (K::Card(v::Card { title: title.clone() }), std::slice::from_ref(&**child)),
         View::Animated { stiffness, damping, child } => (K::Animated(v::Spring { stiffness: *stiffness, damping: *damping }), std::slice::from_ref(&**child)),
+        View::Scroll { id, child, on_reach_end } => (K::Scroll(v::Scroll { id: id.clone(), on_reach_end: on_reach_end.clone() }), std::slice::from_ref(&**child)),
         View::Canvas { height, commands } => {
             out.push(leaf(K::Canvas(v::Canvas { height: *height, commands: commands.iter().map(draw).collect() })));
             return;

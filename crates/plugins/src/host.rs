@@ -141,12 +141,25 @@ impl<W: Write> Host<W> {
                     return true;
                 }
                 entry.idle_since = None;
+                let settings = entry.manifest.with_defaults(&face, &settings);
                 let placed = Placed { face: face.clone(), size, settings: settings.clone() };
                 let reopened = entry.faces.insert(instance.clone(), placed).is_some();
                 self.owners.insert(instance.clone(), plugin.clone());
                 if self.ensure_loaded(&plugin, now) == Some(false) {
                     let open = FaceOpen { instance, face, size: self::size(size), settings };
                     self.deliver(&plugin, if reopened { Event::Resize(open) } else { Event::Open(open) }, now);
+                }
+            }
+            HostMsg::Options { instance, settings } => {
+                let Some(plugin) = self.owners.get(&instance).cloned() else { return true };
+                let Some(entry) = self.plugins.get_mut(&plugin) else { return true };
+                let Some(face) = entry.faces.get(&instance).map(|p| p.face.clone()) else { return true };
+                let settings = entry.manifest.with_defaults(&face, &settings);
+                let placed = entry.faces.get_mut(&instance).expect("found above");
+                placed.settings = settings.clone();
+                let open = FaceOpen { instance, face: placed.face.clone(), size: self::size(placed.size), settings };
+                if self.plugins.get(&plugin).is_some_and(|p| p.instance.is_some()) {
+                    self.deliver(&plugin, Event::Options(open), now);
                 }
             }
             HostMsg::Close { instance } => {

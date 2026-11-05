@@ -19,6 +19,8 @@ struct Hello {
     hellos: u32,
     /// instance → face id
     open: BTreeMap<String, String>,
+    /// The demo face's `greeting` option, by instance (docs/plugins.md, "Face options").
+    greetings: BTreeMap<String, String>,
 }
 
 impl Hello {
@@ -42,7 +44,10 @@ impl Hello {
             ])
         };
         let mut face = view.face();
-        face.footer = Some(format!("{} s awake", self.ticks));
+        face.footer = Some(match self.greetings.get(instance) {
+            Some(greeting) => format!("{greeting} · {} s awake", self.ticks),
+            None => format!("{} s awake", self.ticks),
+        });
         ui::set_view(instance, face);
     }
 
@@ -71,6 +76,13 @@ impl Hello {
         }
         guest::log(&format!("said hi {}", self.hellos));
         self.redraw();
+    }
+
+    /// Keeps the instance's `greeting` option for its footer.
+    fn greet(&mut self, open: &guest::FaceOpen) {
+        if let Some(greeting) = guest::settings(open)["greeting"].as_str() {
+            self.greetings.insert(open.instance.clone(), greeting.to_owned());
+        }
     }
 
     fn redraw(&self) {
@@ -112,7 +124,12 @@ impl Plugin for Hello {
 
     fn on_event(&mut self, event: Event) {
         match event {
+            Event::Options(open) => {
+                self.greet(&open);
+                self.draw(&open.instance, &open.face);
+            }
             Event::Open(open) | Event::Resize(open) => {
+                self.greet(&open);
                 if self.open.is_empty() {
                     let _ = timers::every("tick", 1000);
                 }

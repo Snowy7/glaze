@@ -41,6 +41,9 @@ pub mod wire {
         System(SystemEvent),
         /// Drop a plugin and its outstanding work before uninstalling its files.
         Remove { plugin: String, acknowledge: bool },
+        /// A placed instance's options changed (`settings` as JSON, all of them); delivered as
+        /// `event::options` without reopening the face.
+        Options { instance: String, settings: String },
     }
 
     /// How a plugin is doing, shown in its faces' footer.
@@ -148,6 +151,7 @@ fn split(view: &View) -> (View, &[View]) {
         Row { children, gap } => (Row { children: Vec::new(), gap: *gap }, children),
         Grid { children, columns, gap } => (Grid { children: Vec::new(), columns: *columns, gap: *gap }, children),
         Card { title, child } => (Card { title: title.clone(), child: Box::new(Spacer) }, std::slice::from_ref(&**child)),
+        Scroll { id, child, on_reach_end } => (Scroll { id: id.clone(), child: Box::new(Spacer), on_reach_end: on_reach_end.clone() }, std::slice::from_ref(&**child)),
         leaf => (leaf.clone(), &[]),
     }
 }

@@ -46,6 +46,10 @@ const MAX_NODES: usize = 4096;
 #[derive(Debug, Clone, Deserialize)]
 pub struct FaceSpec {
     pub id: String,
+    /// Per-instance options (docs/plugins.md, "Face options"); the helper fills in their
+    /// `default`s, so a plugin always gets every option.
+    #[serde(default)]
+    pub options: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -118,6 +122,23 @@ impl Manifest {
 
     pub fn contributes(&self, face: &str) -> bool {
         self.faces.iter().chain(&self.bars).chain(&self.panels).any(|f| f.id == face)
+    }
+
+    /// `settings` (an instance's JSON object) with every option of `face` present: a saved value
+    /// wins, a missing one takes the option's `default`. Anything unparsable stays as it was.
+    pub fn with_defaults(&self, face: &str, settings: &str) -> String {
+        let Some(spec) = self.faces.iter().find(|f| f.id == face).filter(|f| !f.options.is_empty()) else {
+            return settings.to_owned();
+        };
+        let Ok(serde_json::Value::Object(mut values)) = serde_json::from_str::<serde_json::Value>(if settings.trim().is_empty() { "{}" } else { settings }) else {
+            return settings.to_owned();
+        };
+        for option in &spec.options {
+            if let (Some(key), Some(default)) = (option["key"].as_str(), option.get("default")) {
+                values.entry(key).or_insert_with(|| default.clone());
+            }
+        }
+        serde_json::Value::Object(values).to_string()
     }
 
     /// Whether `id` is one of its `menu` items or `commands`.
@@ -683,6 +704,7 @@ fn node(nodes: &[Node], at: &mut usize, depth: u32) -> Result<sdk::View, String>
         NodeKind::Spacer => V::Spacer,
         NodeKind::Canvas(c) => V::Canvas { height: c.height, commands: c.commands.iter().map(draw).collect() },
         NodeKind::Meter(m) => V::Meter { value: m.value.clone(), label: m.label.clone(), note: m.note.clone(), fraction: m.fraction, color: tones(&m.color), mark: m.mark },
+        NodeKind::Scroll(s) => V::Scroll { id: s.id.clone(), child: Box::new(only(children)?), on_reach_end: s.on_reach_end.clone() },
         NodeKind::Item(i) => V::Item { title: i.title.clone(), detail: i.detail.clone(), tag: i.tag.clone(), tone: tones(&i.tone), action: i.action.clone(), nested: i.nested },
     })
 }

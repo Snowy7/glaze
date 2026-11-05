@@ -72,6 +72,9 @@ interface view {
     record meter { value: string, label: string, note: option<string>, fraction: f32, color: option<tone>, mark: option<f32> }
     /// A whole-row target: `title` over `detail`, a status `tag` in `tone`, `nested` under the row above.
     record item { title: string, detail: option<string>, tag: option<string>, tone: option<tone>, action: option<string>, nested: bool }
+    /// One child (a list or stack) scrolling in a clipped viewport, its position kept under
+    /// `id`; `on-reach-end` is sent as an action when the end comes into view.
+    record scroll { id: string, on-reach-end: option<string> }
 
     /// `gap` for stack/row/list.
     variant node-kind {
@@ -100,6 +103,7 @@ interface view {
         canvas(canvas),
         meter(meter),
         item(item),
+        scroll(scroll),
     }
 
     /// Followed by `children` direct children, each a whole subtree.
@@ -318,6 +322,9 @@ interface lifecycle {
         theme,
         suspend,
         resume,
+        /// The instance's options changed (`settings` holds them all, defaults filled in); the
+        /// face stays open at its size.
+        options(face-open),
     }
 
     init: func(info: init-info) -> result<_, string>;

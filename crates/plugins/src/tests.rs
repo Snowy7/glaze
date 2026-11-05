@@ -67,6 +67,26 @@ fn headline(frames: &[HelperMsg], instance: &str) -> Option<String> {
     })
 }
 
+fn footer(frames: &[HelperMsg], instance: &str) -> Option<String> {
+    frames.iter().rev().find_map(|f| match f {
+        HelperMsg::View { instance: i, face, .. } if i == instance => serde_json::from_slice::<Face>(face).unwrap().footer,
+        _ => None,
+    })
+}
+
+#[test]
+fn face_options_arrive_with_defaults_on_open_and_live_as_options() {
+    let root = root("options", &["hello"]);
+    let mut host = host(&root);
+    open(&mut host, &root, "hello", "o1");
+    assert_eq!(footer(&frames(&mut host), "o1").as_deref(), Some("Hi · 0 s awake"), "the default, though nothing was saved");
+    let settings = r#"{"greeting":"Salaam"}"#.into();
+    assert!(host.on_host(HostMsg::Options { instance: "o1".into(), settings }, Instant::now()));
+    assert_eq!(footer(&frames(&mut host), "o1").as_deref(), Some("Salaam · 0 s awake"), "delivered live, no reopen");
+    // An unknown instance is ignored, and the helper keeps running.
+    assert!(host.on_host(HostMsg::Options { instance: "nope".into(), settings: "{}".into() }, Instant::now()));
+}
+
 #[test]
 fn manifests_that_ask_for_too_much_are_refused() {
     let root = root("manifest", &["hello"]);
