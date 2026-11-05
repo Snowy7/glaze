@@ -305,7 +305,7 @@ fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: 
         crate::ui::tiles(b, c, key(("designs", name)), 2, false, &items, |b, i, pic| design_tile(app, b, bar, designs[i].0, pic));
     });
     section(b, col, "Layout", |b, c| {
-        let ids: &[&str] = if bar == Bar::Top { &["top_edge", "top_height", "top_shape"] } else { &["dock_style", "dock_edge", "dock_size", "dock_autohide", "dock_magnify"] };
+        let ids: &[&str] = if bar == Bar::Top { &["top_edge", "top_height", "top_shape", "top_hide_maximized"] } else { &["dock_style", "dock_edge", "dock_size", "dock_autohide", "dock_hide_maximized", "dock_magnify"] };
         for id in ids {
             setting(app, b, c, id);
         }

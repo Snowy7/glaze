@@ -2,6 +2,7 @@
 mod bar;
 pub(crate) mod icons;
 pub(crate) mod look;
+mod maximized;
 mod motion;
 mod preview;
 pub(crate) mod services;
@@ -248,6 +249,10 @@ impl Bars {
             self.tooltip_due.map(|t| t.0),
             self.warm_due.map(|t| t.0),
             self.bars.iter().filter_map(|b| b.hide_at).min(),
+            self.bars
+                .iter()
+                .filter_map(|b| b.maximized.deadline())
+                .min(),
         ]
         .into_iter()
         .flatten()
@@ -283,7 +288,17 @@ impl Bars {
             (self.preview_close, "bars.preview_close"),
             (self.tooltip_due.map(|t| t.0), "bars.tooltip"),
             (self.warm_due.map(|t| t.0), "bars.warm"),
-            (self.bars.iter().filter_map(|b| b.hide_at).min(), "bars.hide"),
+            (
+                self.bars.iter().filter_map(|b| b.hide_at).min(),
+                "bars.hide",
+            ),
+            (
+                self.bars
+                    .iter()
+                    .filter_map(|b| b.maximized.deadline())
+                    .min(),
+                "bars.maximized",
+            ),
         ]
         .into_iter()
         .filter_map(|(at, name)| Some((at?, name)))
@@ -389,6 +404,8 @@ impl Bars {
         self.hover_tick(ui, now);
         at = tick_spent("hover", at);
         let changes = self.services.tick(now);
+        let max_config = self.config_due.is_some_and(|at| at <= now);
+        let max_display = self.display_due.is_some_and(|at| at <= now);
         at = tick_spent("services", at);
         if changes.config || changes.theme {
             self.config_changed();
@@ -462,7 +479,7 @@ impl Bars {
             }
         }
         at = tick_spent("items", at);
-        if changes.data || changes.moved {
+        if changes.data || changes.moved || changes.windows {
             let windows: Vec<_> = self
                 .services
                 .apps
@@ -519,6 +536,19 @@ impl Bars {
             && self.config.taskbar.mode == TaskbarMode::Hide
         {
             providers::taskbar::hide_visible();
+        }
+        if changes.windows || changes.moved || max_config || max_display {
+            let foreground = maximized::Foreground::read(self.fullscreen.is_some());
+            for b in &mut self.bars {
+                let hide = b.hide_when_maximized()
+                    && foreground.as_ref().is_some_and(|f| f.hides(b.monitor.rect));
+                b.maximized.observe(hide, now);
+            }
+        }
+        for b in &mut self.bars {
+            if let Err(e) = b.tick_maximized(now) {
+                log::warn!("maximized auto-hide: {e:#}");
+            }
         }
         at = tick_spent("windows", at);
         let mut visibility_changed = false;

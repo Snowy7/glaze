@@ -675,6 +675,7 @@ pub static SETTINGS: &[Setting] = &[
     )
     .words("alignment"),
     custom("top_design", "Design", "", TOP),
+    sw("top_hide_maximized", "Hide when a window is maximized", "The dock slides away and comes back when you point at its edge", B, "/top/hide_when_maximized", false, TOP),
     ch(
         "top_edge",
         "Edge",
@@ -941,6 +942,7 @@ pub static SETTINGS: &[Setting] = &[
         DOCK,
     ),
     sw("dock_autohide", "Auto-hide", "", B, "/dock/autohide", false, DOCK),
+    sw("dock_hide_maximized", "Hide when a window is maximized", "The dock slides away and comes back when you point at its edge", B, "/dock/hide_when_maximized", true, DOCK),
     sw(
         "dock_magnify",
         "Magnify",

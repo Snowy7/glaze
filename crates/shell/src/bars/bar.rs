@@ -33,7 +33,11 @@ fn dock_timing(build: Duration, present: Duration) {
         let (n, b, p) = sum.get();
         let (n, b, p) = (n + 1, b + build, p + present);
         if n == 240 {
-            log::debug!("dock timing: build {:?} present {:?} per frame", b / n, p / n);
+            log::debug!(
+                "dock timing: build {:?} present {:?} per frame",
+                b / n,
+                p / n
+            );
             sum.set((0, Duration::ZERO, Duration::ZERO));
         } else {
             sum.set((n, b, p));
@@ -66,6 +70,7 @@ pub struct Bar {
     pub dirty: bool,
     redraws: u64,
     pub hide_at: Option<Instant>,
+    pub maximized: super::maximized::Debounce,
     pub pointer: Option<Point>,
     pub reservation: Option<Reservation>,
     pub band: DesktopRect,
@@ -166,6 +171,7 @@ impl Bar {
             dirty: true,
             redraws: 0,
             hide_at: None,
+            maximized: Default::default(),
             pointer: None,
             reservation,
             band,
@@ -253,7 +259,11 @@ impl Bar {
     /// What decides this bar's window and work-area reservation: its monitor, edge, band and
     /// auto-hide. A config change that keeps it updates the bar in place ([`Bar::restyle`]);
     /// only a change of it builds a new bar and reserves again.
-    pub fn geometry(kind: BarKind, config: &BarsConfig, monitor: &Monitor) -> impl PartialEq + use<> {
+    pub fn geometry(
+        kind: BarKind,
+        config: &BarsConfig,
+        monitor: &Monitor,
+    ) -> impl PartialEq + use<> {
         let band = if kind == BarKind::Top {
             config.top.band()
         } else {
@@ -301,9 +311,39 @@ impl Bar {
     pub fn topics(&self) -> std::collections::BTreeSet<mypaper_bars::actions::Topic> {
         bar_topics(self.kind, &self.config)
     }
+    pub fn hide_when_maximized(&self) -> bool {
+        match self.kind {
+            BarKind::Top => self.config.top.hide_when_maximized,
+            BarKind::Dock => self.config.dock.hide_when_maximized,
+        }
+    }
+    fn auto_hides(&self) -> bool {
+        (self.kind == BarKind::Dock && self.config.dock.autohide) || self.maximized.active
+    }
+    /// A visibility transition changes only this reservation. Explorer resizes maximized apps;
+    /// restored windows keep their positions (no global work-area setter or window enumeration).
+    pub fn tick_maximized(&mut self, now: Instant) -> Result<()> {
+        if let Some(hidden) = self.maximized.take_due(now) {
+            if hidden && self.edge_surface.is_none() {
+                self.edge_surface = Some(Surface::new_deferred_accessibility(
+                    Kind::Bar,
+                    "Reveal dock",
+                    Role::Toolbar,
+                )?);
+            }
+            if hidden {
+                self.reservation = None;
+            }
+            self.reserve();
+            self.hide_at = None;
+            self.slide
+                .target(if self.auto_hides() { 1.0 } else { 0.0 }, self.animate, now);
+            self.dirty = true;
+        }
+        Ok(())
+    }
     pub fn reserve(&mut self) {
-        if self.reservation.is_none() && !(self.kind == BarKind::Dock && self.config.dock.autohide)
-        {
+        if self.reservation.is_none() && !self.auto_hides() {
             self.reservation = Reservation::new(edge(self.kind, &self.config))
                 .inspect_err(|e| log::error!("app-bar reservation: {e:#}"))
                 .ok();
@@ -319,8 +359,7 @@ impl Bar {
             .reservation
             .as_mut()
             .and_then(|r| r.try_reserve(self.monitor.rect, thickness));
-        self.reserved =
-            granted.is_some() || (self.kind == BarKind::Dock && self.config.dock.autohide);
+        self.reserved = granted.is_some() || self.auto_hides();
         self.band = if let Some(band) = granted {
             band
         } else {
@@ -338,7 +377,7 @@ impl Bar {
         self.hover = None;
         self.pressed = None;
         self.dirty = true;
-        if self.config.dock.autohide && self.kind == BarKind::Dock {
+        if self.auto_hides() {
             self.hide_at = Some(now + Duration::from_secs(1));
         }
         self.zoom_to(None, now);
@@ -528,7 +567,7 @@ impl Bar {
         if rebuilt && self.kind == BarKind::Dock {
             dock_timing(built, timing.elapsed() - built);
         }
-        if self.slide.value >= 0.999 && self.config.dock.autohide && self.kind == BarKind::Dock {
+        if self.slide.value >= 0.999 && self.auto_hides() {
             if self.surface.is_visible() {
                 self.surface.hide();
             }
@@ -538,7 +577,12 @@ impl Bar {
         if first_paint && self.surface.is_visible() {
             mypaper_desktop::startup::ready("shell", "first_paint_ms");
         }
+        let auto_hides = self.auto_hides();
         if let Some(edge) = &mut self.edge_surface {
+            if !auto_hides {
+                edge.hide();
+                return Ok(moving);
+            }
             let e = appbar::settle(
                 self.monitor.work,
                 super::bar::edge(self.kind, &self.config),

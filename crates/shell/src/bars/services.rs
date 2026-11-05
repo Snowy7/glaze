@@ -88,6 +88,8 @@ pub struct Changes {
     pub config: bool,
     pub theme: bool,
     pub moved: bool,
+    /// Raw shared window events, before the app-list refresh debounce.
+    pub windows: bool,
     pub taskbar: bool,
 }
 
@@ -339,6 +341,7 @@ impl Services {
             config,
             theme,
             moved: bits & hooks::MOVED != 0,
+            windows: bits & (hooks::WINDOWS | hooks::FOREGROUND) != 0,
             taskbar: bits & hooks::TASKBAR_SHOWN != 0,
         }
     }

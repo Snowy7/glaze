@@ -222,6 +222,8 @@ pub struct TopConfig {
     pub monitors: Monitors,
     pub layout: TopLayout,
     pub position: TopPosition,
+    /// Slide away while the foreground app is maximized on this monitor.
+    pub hide_when_maximized: bool,
     /// The bar's own thickness, DIPs.
     pub height: f64,
     /// From the screen edges (and the gap between islands), DIPs. Missing: by layout.
@@ -256,6 +258,7 @@ impl Default for TopConfig {
             monitors: Monitors::All,
             layout: TopLayout::Strip,
             position: TopPosition::Top,
+            hide_when_maximized: false,
             height: 32.0,
             margin: None,
             padding: None,
@@ -548,6 +551,8 @@ pub struct DockConfig {
     /// Between items, DIPs. Missing: 6 (`floating`) or 4.
     pub spacing: Option<f64>,
     pub autohide: bool,
+    /// Release the dock band while the foreground app is maximized on this monitor.
+    pub hide_when_maximized: bool,
     pub magnify: Magnify,
     pub running: Running,
     /// One item per window instead of per app.
@@ -604,6 +609,7 @@ impl Default for DockConfig {
             padding: None,
             spacing: None,
             autohide: false,
+            hide_when_maximized: true,
             magnify: Magnify::default(),
             running: Running::All,
             split: false,
@@ -1297,6 +1303,36 @@ pub fn set(root: &mut Map<String, Value>, section: &str, key: &str, value: Value
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn maximized_hiding_defaults_and_monitor_overrides() {
+        let defaults = super::BarsConfig::parse("{}").unwrap();
+        assert!(defaults.dock.hide_when_maximized);
+        assert!(!defaults.top.hide_when_maximized);
+        let config = super::BarsConfig::parse(
+            r#"{
+            "dock": {"hide_when_maximized": false},
+            "top": {"hide_when_maximized": true},
+            "overrides": {"secondary": {"dock": {"hide_when_maximized": true}}}
+        }"#,
+        )
+        .unwrap();
+        assert!(
+            !config
+                .for_monitor("DISPLAY1", true)
+                .unwrap()
+                .dock
+                .hide_when_maximized
+        );
+        assert!(
+            config
+                .for_monitor("DISPLAY2", false)
+                .unwrap()
+                .dock
+                .hide_when_maximized
+        );
+        assert!(config.top.hide_when_maximized);
+    }
+
     use super::*;
     use crate::style::Family;
 
