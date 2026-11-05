@@ -1255,7 +1255,7 @@ mod tests {
             wire::HelperMsg::Stats { plugin: "test".into(), memory: 1048576, cpu_us: 1234, events: 56 },
         ])));
         let child = Command::new("cmd").args(["/c", "exit", "0"]).creation_flags(CREATE_NO_WINDOW.0).spawn().unwrap();
-        plugins.helper = Some(Helper { child, generation: 17, frames, inbox, idle_since: None });
+        plugins.helper = Some(Helper { child, generation: 17, frames, inbox, idle_since: None, notification_plugins: Vec::new() });
         plugins.on_line(HELPER, 17, Some(String::new()), Instant::now());
         let stats = &plugins.studio.plugins["test"];
         assert_eq!((stats.memory, stats.cpu_us, stats.events), (1048576, 1234, 56));
