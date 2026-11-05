@@ -31,3 +31,8 @@ Each is marked `mypaper:` in the source.
   window.
 - `Profiler` / `Renderer::profiler`: optional GPU timestamps between the renderer's passes, for
   the engine's frame lab (`crates/wallpaper/src/lab.rs`). Off (`None`) unless the lab sets it.
+- `glass.wgsl`, the same picture for less ALU (the lab's frames differ by at most 1/255, in
+  rounding): a lone shape's backdrop statistics (shadow adaptivity, light face) are read once
+  per vertex instead of per pixel; only the tone face in use is mapped; `refract_offset` is
+  Snell's law in closed form instead of atan/asin/tan; the lit rim and the rim shade share one
+  hole; the touch glow is skipped while it adds exactly zero.

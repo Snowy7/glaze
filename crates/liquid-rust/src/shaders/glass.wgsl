@@ -61,16 +61,27 @@ const PYRAMID_SIGMA0: f32 = 1.9;
 struct Varyings {
     @builtin(position) pos: vec4f,
     @location(0) @interpolate(flat) group: u32,
+    // mypaper: what the backdrop at the glass's centre decides (shadow adaptivity, light face),
+    // when it is the same for every pixel of the group (one shape); `z` is 1 when it is.
+    @location(1) @interpolate(flat) backdrop: vec4f,
 };
 
 @vertex
 fn vs_glass(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Varyings {
-    let b = groups[ii].bounds;
+    let grp = groups[ii];
+    let b = grp.bounds;
     let corner = vec2f(f32(vi & 1u), f32((vi >> 1u) & 1u));
     let px = mix(b.xy, b.zw, corner);
     var out: Varyings;
     out.pos = vec4f(px.x * globals.viewport.z * 2.0 - 1.0, 1.0 - px.y * globals.viewport.w * 2.0, 0.0, 1.0);
     out.group = ii;
+    // mypaper: a lone shape's centre and material are the group's, so its pixels all read the
+    // same two backdrop texels: read them once per vertex instead of once per pixel.
+    out.backdrop = vec4f(0.0);
+    if grp.info.y == 1u {
+        let center_uv = shapes[grp.info.x].center_half.xy * globals.viewport.zw;
+        out.backdrop = vec4f(shadow_adapt(center_uv), face_lightness(center_uv, materials[grp.info.x]), 1.0, 0.0);
+    }
     return out;
 }
 
@@ -291,6 +302,33 @@ fn frost(q: vec2f, sigma: f32) -> vec3f {
     return mix(bspline(uv, lo - 1.0), bspline(uv, lo), clamp(l - lo, 0.0, 1.0));
 }
 
+// mypaper: the backdrop statistics below, moved out of fs_glass unchanged so the vertex shader
+// can evaluate them once for a lone shape.
+
+// Apple: shadows grow over busy content (text), fade over flat light content.
+fn shadow_adapt(center_uv: vec2f) -> f32 {
+    let stats = textureSampleLevel(pyr, samp, center_uv, max(globals.misc.y - 4.0, 0.0));
+    let mean = luminance(stats.rgb);
+    let detail = sqrt(max(stats.a - mean * mean, 0.0));
+    return mix(0.7, 1.6, smoothstep(0.02, 0.12, detail)) * mix(1.0, 0.65, smoothstep(0.5, 0.85, mean));
+}
+
+// How far the face is light (1) rather than dark (0), from the scheme or the backdrop.
+fn face_lightness(center_uv: vec2f, mat: Material) -> f32 {
+    let top = max(globals.misc.y - 1.0, 0.0);
+    let bg = luminance(encode(textureSampleLevel(pyr, samp, center_uv, top).rgb));
+    // Small glass (adaptivity 1) flips at a backdrop of ~0.36, biased toward light: it only
+    // turns dark over genuinely dark content. Larger glass needs ever more contrasting content
+    // to flip, until (adaptivity 0) it never does and follows the scheme. Moving the threshold,
+    // rather than blending scheme and content by adaptivity, keeps the face fully light or
+    // fully dark: a 50/50 blend of the two faces is the flat grey Apple's glass never shows.
+    // mypaper: the scheme is per glass (`mat.shadow.w`), not `globals.misc.z`.
+    let scheme_edge = select(1.2, -0.2, mat.shadow.w > 0.5);
+    let flip = mix(scheme_edge, 0.36, mat.optics.y);
+    // Narrow, so content only briefly sits in between, where the faces blend toward grey.
+    return smoothstep(flip - 0.06, flip + 0.06, bg);
+}
+
 // Squircle bevel h(t) = (1 - (1 - t)^4)^(1/4): Apple's soft flat-to-curve profile.
 fn bevel_slope(t: f32) -> f32 {
     let u = 1.0 - t;
@@ -301,10 +339,12 @@ fn bevel_slope(t: f32) -> f32 {
 // Lateral travel (in units of glass thickness) of a vertical ray refracted by a
 // surface tilted by atan(slope).
 fn refract_offset(slope: f32, eta: f32) -> f32 {
-    // atan, not asin(slope / sqrt(1 + slope²)): at the very edge the slope is ~5600 and
-    // that ratio can round above 1, which made asin NaN and left black pixels on the rim.
-    let theta = atan(slope);
-    return tan(theta - asin(clamp(sin(theta) / eta, -1.0, 1.0)));
+    // mypaper: tan(θ - φ) with tan θ = slope and sin φ = sin θ / η, in closed form instead of
+    // atan, asin and tan (the same value, a fraction of the ALU). sin φ stays below 1 / η, so
+    // the square root never sees a negative number, even at the rim's slope of ~5600.
+    let sin_phi = slope * inverseSqrt(1.0 + slope * slope) / eta;
+    let tan_phi = sin_phi * inverseSqrt(1.0 - sin_phi * sin_phi);
+    return (slope - tan_phi) / (1.0 + slope * tan_phi);
 }
 
 // Inner shadow in Figma's sense: present where the shape is not covered by itself
@@ -332,14 +372,16 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
     let cov = coverage(d);
     let center_uv = field.attrs.yz * globals.viewport.zw;
 
+    // mypaper: a lone shape's backdrop statistics come from the vertex shader.
+    let lone = v.backdrop.z > 0.5;
+
     // Outside: drop shadow and the darkened hairline edge.
     var dark = 0.0;
     if cov < 1.0 {
-        let stats = textureSampleLevel(pyr, samp, center_uv, max(globals.misc.y - 4.0, 0.0));
-        let mean = luminance(stats.rgb);
-        let detail = sqrt(max(stats.a - mean * mean, 0.0));
-        // Apple: shadows grow over busy content (text), fade over flat light content.
-        let adapt = mix(0.7, 1.6, smoothstep(0.02, 0.12, detail)) * mix(1.0, 0.65, smoothstep(0.5, 0.85, mean));
+        var adapt = v.backdrop.x;
+        if !lone {
+            adapt = shadow_adapt(center_uv);
+        }
         var shadow = 0.0;
         if mat.shadow.z > 0.0 {
             let shadow_d = sdg_group(p - vec2f(0.0, mat.shadow.x), grp).x;
@@ -395,19 +437,19 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
 
     // Tone mapping: light and dark faces, chosen by scheme or by the backdrop.
     var g = encode(col);
-    let top = max(globals.misc.y - 1.0, 0.0);
-    let bg = luminance(encode(textureSampleLevel(pyr, samp, center_uv, top).rgb));
-    // Small glass (adaptivity 1) flips at a backdrop of ~0.36, biased toward light: it only
-    // turns dark over genuinely dark content. Larger glass needs ever more contrasting content
-    // to flip, until (adaptivity 0) it never does and follows the scheme. Moving the threshold,
-    // rather than blending scheme and content by adaptivity, keeps the face fully light or
-    // fully dark: a 50/50 blend of the two faces is the flat grey Apple's glass never shows.
-    // mypaper: the scheme is per glass (`mat.shadow.w`), not `globals.misc.z`.
-    let scheme_edge = select(1.2, -0.2, mat.shadow.w > 0.5);
-    let flip = mix(scheme_edge, 0.36, mat.optics.y);
-    // Narrow, so content only briefly sits in between, where the faces blend toward grey.
-    let lightness = smoothstep(flip - 0.06, flip + 0.06, bg);
-    g = mix(tone(g, mat.dark_a, mat.dark_b), tone(g, mat.light_a, mat.light_b), lightness);
+    var lightness = v.backdrop.y;
+    if !lone {
+        lightness = face_lightness(center_uv, mat);
+    }
+    // mypaper: a face that is fully light or fully dark (always, once the scheme decides) maps
+    // only that tone; mixing in the other with weight 0 changed nothing.
+    if lightness <= 0.0 {
+        g = tone(g, mat.dark_a, mat.dark_b);
+    } else if lightness >= 1.0 {
+        g = tone(g, mat.light_a, mat.light_b);
+    } else {
+        g = mix(tone(g, mat.dark_a, mat.dark_b), tone(g, mat.light_a, mat.light_b), lightness);
+    }
 
     // Stained-glass tint: keep hue and chroma, let lightness follow the backdrop.
     if mat.tint.w > 0.0 {
@@ -436,12 +478,14 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
     if -d < 45.0 * pt {
         let o = KIT_OFFSET * pt;
         let away = -to_light * o; // shadow offset that lights the edge facing the light
+        // mypaper: the lit rim and the rim shade share one hole (inner_shadow's distance).
+        let hole = sdg_group(p - away, grp).x - o;
         if mat.lighting.z > 0.0 {
-            let rims = inner_shadow(p, grp, away, o, rim_sigma) + inner_shadow(p, grp, -away, o, rim_sigma);
+            let rims = phi(hole, rim_sigma) + inner_shadow(p, grp, -away, o, rim_sigma);
             g += vec3f(mat.lighting.z * rims);
         }
         if mat.lighting.w > 0.0 {
-            g -= vec3f(mat.lighting.w * inner_shadow(p, grp, away, o, 15.0 * pt));
+            g -= vec3f(mat.lighting.w * phi(hole, 15.0 * pt));
         }
         if mat.edge.x > 0.0 {
             let h = -to_light * 1.25 * pt;
@@ -451,15 +495,18 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
     }
 
     // Touch: the glass lights up from the finger; the light spills onto nearby glass.
-    let tp = p - globals.touch.xy;
-    // Glass that isn't pressed only catches a little of it, so a held button doesn't outline
-    // the panels around it.
-    let spill = 0.25 + 0.75 * clamp(grp.geo.z, 0.0, 1.0);
-    let glow = spill * globals.touch.w * exp(-dot(tp, tp) / max(globals.touch.z * globals.touch.z, 1.0));
-    // Screen blend: light only fills the headroom that is left, so over light content
-    // the glass brightens a little instead of clipping to an opaque white disc, while
-    // over dark content it keeps nearly the full lift.
-    g += vec3f(0.22 * glow + 0.03 * grp.geo.z) * (1.0 - clamp(g, vec3f(0.0), vec3f(1.0)));
+    // mypaper: skipped while nothing touches or presses it, when it adds exactly zero.
+    if globals.touch.w != 0.0 || grp.geo.z != 0.0 {
+        let tp = p - globals.touch.xy;
+        // Glass that isn't pressed only catches a little of it, so a held button doesn't
+        // outline the panels around it.
+        let spill = 0.25 + 0.75 * clamp(grp.geo.z, 0.0, 1.0);
+        let glow = spill * globals.touch.w * exp(-dot(tp, tp) / max(globals.touch.z * globals.touch.z, 1.0));
+        // Screen blend: light only fills the headroom that is left, so over light content
+        // the glass brightens a little instead of clipping to an opaque white disc, while
+        // over dark content it keeps nearly the full lift.
+        g += vec3f(0.22 * glow + 0.03 * grp.geo.z) * (1.0 - clamp(g, vec3f(0.0), vec3f(1.0)));
+    }
 
     // Increase Contrast: a border in the label colour.
     if mat.edge.z > 0.0 {
