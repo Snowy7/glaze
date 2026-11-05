@@ -18,11 +18,8 @@ use crate::docs::{DocId, Op};
 use crate::theme::glyph;
 use crate::ui::{B, label, text_field};
 
-thread_local! {static ADVANCED: std::cell::RefCell<std::collections::BTreeSet<usize>> = const {std::cell::RefCell::new(std::collections::BTreeSet::new())};}
-
 /// One option of an integration, in `integrations.json`.
 pub enum Field {
-    Text { path: &'static str, label: &'static str, placeholder: &'static str },
     Switch { path: &'static str, label: &'static str, hint: &'static str },
 }
 
@@ -94,21 +91,6 @@ pub static LIST: &[Integration] = &[
         fields: &[],
         setup: "Plugins that sleep between fetches.",
         privacy: "Weather comes from Open-Meteo (no key); feeds from the addresses you add.",
-    },
-    Integration {
-        name: "T3 Code",
-        adds: "Running agents, usage, prompts and approvals",
-        glyph: glyph::TERMINAL,
-        section: Some("t3"),
-        builtin: false,
-        module: Some("t3"),
-        secret: Some(("t3", "Token")),
-        fields: &[
-            Field::Text { path: "/t3/endpoint", label: "Address", placeholder: "ws://127.0.0.1:3773/ws" },
-            Field::Switch { path: "/t3/liveVerified", label: "Live updates", hint: "Off: one snapshot when you open it" },
-        ],
-        setup: "Connect finds T3 Code on this PC and reuses your pairing. On a first connection, paste one pairing code from T3 Settings > Connections. Allow status, diagnostics for usage, and thread controls to use every widget face.",
-        privacy: "Your T3 grant stays in Windows Credential Manager. Threads and approvals run only on your click. No transcripts retained.",
     },
 ];
 
@@ -219,7 +201,7 @@ fn row(app: &App, b: &mut B, r: Rect, i: usize, item: &Integration) {
     let state = status(app, item);
     if state == "Connect" {
         let bw = b.button_width("Connect", false, true);
-        let action=if item.name == "T3 Code" {Action::Set(Edit::new(DocId::Studio,format!("/integration_on/{i}"),"Connect"),Value::Null)}else{Action::SelectIntegration(i)};
+        let action = Action::SelectIntegration(i);
         b.button(key(("connect-row", i)), Rect::new(r.right - bw - b.px(10.0), r.top + b.px(12.0), bw, b.px(28.0)), "Connect", None, ButtonKind::Secondary, true, action);
     } else {
         let (sw, _) = b.measure(state, &small);
@@ -287,17 +269,10 @@ fn details(app: &App, b: &mut B, area: Rect) {
             y += b.px(14.0);
         }
         // Setup and options.
-        b.text_at(x, y, if item.name == "T3 Code" {"Connection"} else {"Options"}, &heading, p.ink1);
+        b.text_at(x, y, "Options", &heading, p.ink1);
         y += b.px(28.0);
         y += b.paragraph(x, y, w, item.setup, &small, b.px(16.0), p.ink2) + b.px(10.0);
-        let local = item.name == "T3 Code";
-        let advanced = !local || ADVANCED.with_borrow(|set| set.contains(&i));
-        if local {
-            let aw = b.button_width(if advanced {"Hide advanced"}else{"Advanced"}, false, true);
-            b.button(key(("integration-advanced",i)),Rect::new(x,y,aw,b.px(28.0)),if advanced {"Hide advanced"}else{"Advanced"},None,ButtonKind::Ghost,true,Action::Set(Edit::new(DocId::Studio,format!("/integration_advanced/{i}"),"Advanced"),Value::Null));
-            y += b.px(38.0);
-        }
-        if advanced && let Some((_, name)) = item.secret {
+        if let Some((_, name)) = item.secret {
             let row = Rect::new(x, y, w, b.px(40.0));
             let stored = secret == Some(true);
             label(b, row, name, if stored { "Stored in Windows Credential Manager" } else { "Not set" }, None);
@@ -317,7 +292,7 @@ fn details(app: &App, b: &mut B, area: Rect) {
             b.button(key("grant-access"), Rect::new(x + w - gw, y + b.px(6.0), gw, b.px(28.0)), "Grant access", None, ButtonKind::Secondary, true, Action::Set(Edit::new(DocId::Studio, "/integration_access", "Access"), Value::Null));
             y += b.px(46.0);
         }
-        for field in item.fields.iter().filter(|_| advanced) {
+        for field in item.fields {
             match field {
                 Field::Switch { path, label: l, hint } => {
                     let value = app.get(DocId::Integrations, path).and_then(Value::as_bool).unwrap_or(false);
@@ -326,13 +301,7 @@ fn details(app: &App, b: &mut B, area: Rect) {
                     b.switch(key(("int-switch", *path)), Point::new(x + w - b.px(36.0), y + b.px(10.0)), value, l, Action::Toggle(Edit::new(DocId::Integrations, *path, *l), value));
                     y += b.px(46.0);
                 }
-                Field::Text { path, label: l, placeholder } => {
-                    let body = b.font(Font::Body);
-                    b.text_at(x, y, l, &body, p.ink1);
-                    let value = app.get(DocId::Integrations, path).and_then(Value::as_str).unwrap_or("").to_owned();
-                    text_field(app, b, Rect::new(x, y + b.px(22.0), w, b.px(32.0)), FieldId::Text(DocId::Integrations, (*path).into()), None, placeholder, &value, l);
-                    y += b.px(62.0);
-                }
+
             }
         }
         if item.section.is_none() || item.name == "Weather and RSS" {
@@ -351,10 +320,7 @@ fn details(app: &App, b: &mut B, area: Rect) {
 /// Integration actions (they arrive as Studio pseudo-paths through `pages::intercept`).
 pub fn intercept(app: &mut App, path: &str) -> bool {
     let n = |prefix: &str| path.strip_prefix(prefix).and_then(|n| n.parse::<usize>().ok());
-    if let Some(i) = n("/integration_advanced/") {
-        ADVANCED.with_borrow_mut(|set| {if !set.remove(&i){set.insert(i);}});
-        app.dirty=true;
-    } else if let Some(i) = n("/integration_on/") {
+    if let Some(i) = n("/integration_on/") {
         connect(app, i, true);
     } else if let Some(i) = n("/integration_off/") {
         connect(app, i, false);
@@ -403,19 +369,7 @@ fn module_ops(app: &App, module: &str, show: bool) -> Vec<Op> {
 fn connect(app: &mut App, i: usize, on: bool) {
     let Some(item) = LIST.get(i) else { return };
     let Some(section) = item.section else { return };
-    if on && !app.fixture && item.name == "T3 Code" {
-        let endpoint=app.get(DocId::Integrations,"/t3/endpoint").and_then(Value::as_str).unwrap_or("").to_owned();
-        match mypaper_integrations::pairing::connect_t3_blocking(&endpoint) {
-            Ok(true)=>{},Ok(false)=>return,Err(error)=>{app.alert(format!("Could not connect T3 Code: {error}"));return;}
-        }
-    }
     let mut ops = vec![Op { doc: DocId::Integrations, path: format!("/{section}/enabled"), value: Some(json!(on)) }];
-    if on && item.name == "T3 Code" {
-        ops.push(Op{doc:DocId::Integrations,path:"/t3/liveVerified".into(),value:Some(json!(true))});
-        if app.get(DocId::Integrations,"/t3/endpoint").and_then(Value::as_str).is_none_or(str::is_empty) {
-            ops.push(Op{doc:DocId::Integrations,path:"/t3/endpoint".into(),value:Some(json!(mypaper_integrations::t3_client::DEFAULT_ENDPOINT))});
-        }
-    }
     if let Some(module) = item.module
         && !item.builtin
     {

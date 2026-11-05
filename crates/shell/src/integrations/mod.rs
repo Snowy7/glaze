@@ -206,7 +206,6 @@ pub fn process() -> bool {
 fn provider(module: &ModuleRef) -> Option<Provider> {
     match module {
         ModuleRef::Builtin(Module::Notifications) => Some(Provider::Notifications),
-        ModuleRef::Builtin(Module::T3) => Some(Provider::T3),
         _ => None,
     }
 }
@@ -226,7 +225,6 @@ pub fn bar_subscriptions<'a>(modules: impl Iterator<Item = &'a ModuleRef>, dock:
         }
         wanted.retain(|p| match p {
             Provider::Notifications => state.config.notifications.live_verified,
-            Provider::T3 => state.config.t3.live_verified,
             _ => true,
         });
         if state.locked || state.display_off {
@@ -290,14 +288,8 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
         .filter(|s| s.availability == Availability::Live);
     let text = match live.and_then(|s| s.data.as_ref()) {
         Some(Data::Notifications(s)) => format!("{}", s.cards.len()),
-        Some(Data::T3(s)) => format!(
-            "{} running · {} need input",
-            s.threads.iter().filter(|t| t.running()).count(),
-            s.threads.iter().filter(|t| t.attention()).count()
-        ),
         _ => match provider {
             Provider::Notifications => "Notifications",
-            Provider::T3 => "T3",
             Provider::Media => "Media",
             Provider::Calendar => "Calendar",
         }
@@ -307,7 +299,6 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
         text,
         match provider {
             Provider::Notifications => "\u{ea8f}",
-            Provider::T3 => "\u{e8f2}",
             Provider::Media => "\u{e768}",
             Provider::Calendar => "\u{e787}",
         },

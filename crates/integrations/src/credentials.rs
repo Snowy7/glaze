@@ -16,7 +16,7 @@ fn target(key: &str) -> Result<Vec<u16>> {
         .collect())
 }
 
-/// Keys: `t3`, `t3-session`, `obs`, `grok/<routine-id>`. Values are opaque UTF-8 bytes, never logged.
+/// Keys: `obs`, `grok/<routine-id>`. Values are opaque UTF-8 bytes, never logged.
 pub fn write(key: &str, value: &str) -> Result<()> {
     ensure!(
         value.len() <= 2560 && !value.is_empty(),

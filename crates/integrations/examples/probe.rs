@@ -51,8 +51,7 @@ fn main() -> anyhow::Result<()> {
     let provider = match args.first().map(String::as_str) {
         Some("notifications") => Provider::Notifications,
         Some("media") => Provider::Media,
-        Some("t3") => Provider::T3,
-        _ => anyhow::bail!("expected notifications, media or t3"),
+        _ => anyhow::bail!("expected notifications or media"),
     };
     let live = args.iter().any(|s| s == "--live");
     if args.iter().any(|s| s == "--registration-only") {
@@ -99,9 +98,6 @@ fn main() -> anyhow::Result<()> {
     let mut config = Config::default();
     config.notifications.enabled = true;
     config.notifications.live_verified = live;
-    config.t3.enabled = true;
-    config.t3.endpoint = "ws://127.0.0.1:3773/ws".into();
-    config.t3.live_verified = live;
     for run in 0..runs {
         let (cpu, base) = usage()?;
         let began = Instant::now();

@@ -1,7 +1,7 @@
 //! Goldens and hit tests use exactly the panels registered in the native flyout controller.
 use super::*;
 use crate::flyouts::{build, look::Look};
-use mypaper_integrations::{media, notifications, t3};
+use mypaper_integrations::{media, notifications};
 use mypaper_ui::{Point, render};
 
 fn fixtures() -> Vec<(&'static str, Provider, Data)> {
@@ -32,51 +32,6 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
             }),
         ),
         (
-            "t3",
-            Provider::T3,
-            Data::T3(t3::Snapshot {
-                threads: vec![
-                    t3::Thread {
-                        id: "running".into(),
-                        project_id: "mypaper".into(),
-                        title: "Native app integrations".into(),
-                        provider_instance_id: "codex".into(),
-                        status: t3::Status::Running,
-                        latest_run_id: Some("r1".into()),
-                        active_run_id: Some("r1".into()),
-                        pending_runtime_request: None,
-                        updated_at: "2026-11-05".into(),
-                    },
-                    t3::Thread {
-                        id: "attention".into(),
-                        project_id: "mypaper".into(),
-                        title: "Review deployment choices".into(),
-                        provider_instance_id: "claude".into(),
-                        status: t3::Status::Waiting,
-                        latest_run_id: Some("r2".into()),
-                        active_run_id: Some("r2".into()),
-                        pending_runtime_request: Some(t3::Request {
-                            id: "q".into(),
-                            kind: "user-input".into(),
-                        }),
-                        updated_at: "2026-11-05".into(),
-                    },
-                    t3::Thread {
-                        id: "finished".into(),
-                        project_id: "mypaper".into(),
-                        title: "SMTC shared provider".into(),
-                        provider_instance_id: "codex".into(),
-                        status: t3::Status::Completed,
-                        latest_run_id: Some("r3".into()),
-                        active_run_id: None,
-                        pending_runtime_request: None,
-                        updated_at: "2026-11-05".into(),
-                    },
-                ],
-                ..Default::default()
-            }),
-        ),
-        (
             "media",
             Provider::Media,
             Data::Media(media::Snapshot {
@@ -94,12 +49,6 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
 fn integration_panels_match_goldens_receive_clicks_and_have_no_idle_damage() {
     STATE.with_borrow_mut(|s| {
         s.config = Config::default();
-        for id in ["running", "attention", "finished"] {
-            s.config
-                .t3
-                .thread_links
-                .insert(id.into(), format!("https://example.test/threads/{id}"));
-        }
     });
     let mut ui = Ui::new().unwrap();
     let look = Look::default();
@@ -190,7 +139,6 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
     use mypaper_bars::{BarsConfig, custom::Custom, wake::Waker};
     STATE.with_borrow_mut(|s| {
         s.config.notifications.enabled = true;
-        s.config.t3.enabled = true;
         for (_, provider, data) in fixtures() {
             s.fixtures.insert(
                 provider,
@@ -203,7 +151,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         }
     });
     let mut ui = Ui::new().unwrap();
-    let mut config=BarsConfig::parse(r#"{"top":{"left":[],"center":[],"right":["notifications","t3"]}}"#).unwrap();
+    let mut config=BarsConfig::parse(r#"{"top":{"left":[],"center":[],"right":["notifications","media"]}}"#).unwrap();
     config.resolve(Vec::new);
     let tokens = look::Tokens::resolve(
         &config.top.look,
@@ -215,7 +163,12 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         foreground: None,
         app_name: String::new(),
         app_icon: None,
-        media: None,
+        media: Some(mypaper_bars::media::MediaInfo {
+            title: "A Quiet Place".into(),
+            artist: "Hania Rani".into(),
+            app: "Music".into(),
+            playing: false,
+        }),
         volume: None,
         network: None,
         battery: None,
@@ -246,7 +199,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/integrations/golden/modules.png");
     mypaper_ui::golden::check(&image, &path).unwrap();
-    assert_eq!(frame.list.hits.len(), fixtures().len() - 1);
+    assert_eq!(frame.list.hits.len(), 2);
     for hit in &frame.list.hits {
         let center = Point::new(
             (hit.rect.left + hit.rect.right) / 2.0,

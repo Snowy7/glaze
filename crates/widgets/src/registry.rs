@@ -176,7 +176,7 @@ mod tests {
             let manifest = &installed.manifest;
             // Custom widgets (registered here too) may leave max open or skip the category.
             let max = manifest.size.max.unwrap_or([16; 2]);
-            let compiled = ["clock", "calendar", "weather", "t3", "notes", "heatmap"];
+            let compiled = ["clock", "calendar", "weather", "notes", "heatmap"];
             if compiled.contains(&manifest.id.as_str()) {
                 assert!(manifest.category.is_some(), "{} has a picker category", manifest.id);
             }
@@ -190,10 +190,6 @@ mod tests {
             }
         }
         let registry = super::builtins();
-        // The integration widgets step one cell at a time too (T3 at 6×8, between 4×8 and 8×8).
-        let t3 = &registry.get("t3").unwrap().manifest;
-        assert_eq!(t3.clamp_size([6, 8]), [6, 8]);
-        assert_eq!(t3.clamp_size([7, 5]), [7, 5]);
         let weather = &registry.get("weather").unwrap().manifest;
         assert_eq!(weather.fit_size([10.0, 12.0], [8, 10]), Some([8, 10]));
         assert_eq!(weather.fit_size([4.0, 4.0], [2, 2]), None);

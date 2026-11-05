@@ -2,8 +2,6 @@
 pub(crate) mod calendar;
 pub(crate) mod custom;
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod custom_tests;
 
 use crate::integrations::widgets::{CONNECT, REFRESH};

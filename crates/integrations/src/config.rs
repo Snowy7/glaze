@@ -9,7 +9,9 @@ pub struct Config {
     pub notifications: Notifications,
     pub media: Switch,
     pub launcher: Switch,
-    pub t3: T3,
+    /// Accepted and discarded: T3 settings and access now belong to the component plugin.
+    #[serde(rename = "t3", skip_serializing, deserialize_with = "ignore_legacy_t3")]
+    pub legacy_t3: (),
     pub obs: Obs,
     /// Legacy read contract only; Docker now runs as the bundled component.
     pub docker: Docker,
@@ -24,7 +26,7 @@ impl Default for Config {
             notifications: Notifications::default(),
             media: Switch { enabled: true },
             launcher: Switch { enabled: true },
-            t3: T3::default(),
+            legacy_t3: (),
             obs: Obs::default(),
             docker: Docker::default(),
             tailscale: Tailscale::default(),
@@ -80,26 +82,8 @@ pub struct Notifications {
     pub app_ids: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct T3 {
-    pub enabled: bool,
-    pub endpoint: String,
-    pub protocol_version: u32,
-    pub live_verified: bool,
-    /// Copied hosted links; the client never invents an OS URI or reads T3's credential files.
-    pub thread_links: BTreeMap<String, String>,
-}
-impl Default for T3 {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            endpoint: crate::t3_client::DEFAULT_ENDPOINT.into(),
-            protocol_version: 2,
-            live_verified: false,
-            thread_links: BTreeMap::new(),
-        }
-    }
+fn ignore_legacy_t3<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<(), D::Error> {
+    <serde::de::IgnoredAny as Deserialize>::deserialize(deserializer).map(|_| ())
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -174,7 +158,7 @@ impl Config {
             ensure!(id.len() <= 20 && id.bytes().all(|b| b.is_ascii_digit()), "Discord IDs must be numeric snowflakes");
         }
         ensure!(config.discord.pipe.is_empty() || config.discord.pipe.strip_prefix(r"\\.\pipe\discord-ipc-").is_some_and(|s| s.len() == 1 && s.as_bytes()[0].is_ascii_digit()), "Expected a local Discord IPC pipe");
-        for endpoint in [&config.t3.endpoint, &config.obs.endpoint]
+        for endpoint in [&config.obs.endpoint]
             .into_iter()
             .filter(|s| !s.is_empty())
         {
@@ -205,12 +189,6 @@ impl Config {
             let uri: hyper::Uri = routine.url.parse()?;
             ensure!(uri.scheme_str() == Some("https") && uri.host().is_some(), "routine webhook must use HTTPS");
             ensure!(uri.authority().is_some_and(|a| !a.as_str().contains('@')) && uri.query().is_none() && !routine.url.contains('#'), "webhook credentials belong in Credential Manager, not the URL");
-        }
-        for link in config.t3.thread_links.values() {
-            ensure!(
-                link.starts_with("https://") && !link.contains(['\r', '\n']),
-                "thread links must be copied HTTPS links"
-            );
         }
         Ok(config)
     }

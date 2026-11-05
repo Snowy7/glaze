@@ -983,7 +983,7 @@ pub fn add_sheet(app: &App, b: &mut B, bar: Bar) {
     b.text_at(rect.left, y, "From integrations", &caption, p.ink3);
     y += b.px(20.0);
     let small = b.font(Font::Caption);
-    b.text_at(rect.left, y, "Integration modules (T3 Code, OBS) arrive with their integrations.", &small, p.ink4);
+    b.text_at(rect.left, y, "Plugin bar modules are available in Studio > Plugins.", &small, p.ink4);
     y += b.px(30.0);
     b.text_at(rect.left, y, "Your own", &caption, p.ink3);
     let field_w = rect.width() - b.px(90.0);

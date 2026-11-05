@@ -19,7 +19,6 @@ pub struct Model {
     pub snapshot: Snapshot,
     pub(super) task: Option<super::Task<()>>,
     pub notice: Option<String>,
-    pub thread_links: std::collections::BTreeMap<String, String>,
     pub observed_at_ms: i64,
 }
 impl Default for Model {
@@ -37,7 +36,6 @@ impl Default for Model {
             },
             task: None,
             notice: None,
-            thread_links: Default::default(),
             observed_at_ms: 0,
         }
     }
@@ -81,8 +79,6 @@ pub fn sync(widget: &mut WidgetModel, active: bool) {
         state.calendar.invalidate();
         state.lease = None;
         state.generation = Some(generation);
-        let config = super::config();
-        state.thread_links = config.t3.thread_links.clone();
         if let Some(provider) = provider(widget.kind) {
             state.snapshot = match super::acquire(provider) {
                 Ok(lease) => {

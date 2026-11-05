@@ -9,10 +9,6 @@ pub mod credentials;
 pub mod launcher;
 pub mod media;
 pub mod notifications;
-pub mod pairing;
-pub mod t3;
-pub mod t3_auth;
-pub mod t3_client;
 mod transport;
 
 use std::{
@@ -29,21 +25,18 @@ use tokio::sync::{mpsc, watch};
 pub enum Provider {
     Notifications,
     Media,
-    T3,
     Calendar,
 }
 impl Provider {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 3] = [
         Self::Notifications,
         Self::Media,
-        Self::T3,
         Self::Calendar,
     ];
     pub fn enabled(self, c: &config::Config) -> bool {
         match self {
             Self::Notifications => c.notifications.enabled,
             Self::Media => c.media.enabled,
-            Self::T3 => c.t3.enabled,
             Self::Calendar => c.calendar.enabled,
         }
     }
@@ -61,7 +54,6 @@ pub enum Availability {
 pub enum Data {
     Notifications(notifications::Snapshot),
     Media(media::Snapshot),
-    T3(t3::Snapshot),
     Calendar(calendar::Snapshot),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -228,7 +220,6 @@ impl Hub {
                         match provider {
                             Provider::Notifications => notifications::run(&config.notifications, &publish, &mut commands).await,
                             Provider::Media => media::run(&publish, &mut commands).await,
-                            Provider::T3 => t3::run(&config.t3, &publish).await,
                             Provider::Calendar => calendar::run(&config.calendar, &publish, &mut commands).await,
                         }
                     };

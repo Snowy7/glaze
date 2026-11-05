@@ -114,8 +114,7 @@ pub fn module_topic(module: &ModuleRef) -> Option<Topic> {
         Module::Start
         | Module::Search
         | Module::Quick
-        | Module::Power
-        | Module::T3 => None,
+        | Module::Power => None,
     }
 }
 

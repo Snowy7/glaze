@@ -11,14 +11,12 @@ use mypaper_integrations::{
 use mypaper_ui::icons::Icon;
 use mypaper_ui::layout::{Align, Stack};
 use mypaper_ui::{
-    Accessory, ButtonKind, Frame, HitId, Lead, ListRow, Rect, Scroll, TextRole,
+    Accessory, Frame, HitId, Lead, ListRow, Rect, Scroll, TextRole,
 };
 use std::time::Instant;
-use std::cell::RefCell;
 
 const RETRY: HitId = 10;
 const PRIMARY: HitId = 20;
-const SECONDARY: HitId = 21;
 const LIST: HitId = 1000;
 pub struct Integration {
     provider: Provider,
@@ -55,18 +53,6 @@ fn line(f: &mut Frame, column: &mut Stack, text: &str) {
 fn notice(f: &mut Frame, column: &mut Stack, icon: Icon, title: &str, detail: Option<&str>) {
     let h = f.empty(column.rest(), Some(icon), title, detail);
     column.next(h);
-}
-
-/// Buttons side by side across the column, `(id, label, kind)`.
-fn buttons(f: &mut Frame, column: &mut Stack, buttons: &[(HitId, &str, ButtonKind)]) {
-    let row = column.next(f.px(f.theme.metrics.control));
-    let gap = f.px(8.0);
-    let n = buttons.len().max(1) as f32;
-    let w = (row.width() - gap * (n - 1.0)) / n;
-    for (i, &(id, label, kind)) in buttons.iter().enumerate() {
-        let r = Rect::new((row.left + i as f32 * (w + gap)).round(), row.top, w.round(), row.height());
-        f.button(id, r, label, None, kind, true);
-    }
 }
 
 /// `rows` in a scroll view from `column`, as tall as they are up to the room left.
@@ -117,7 +103,6 @@ impl Integration {
         match self.provider {
             Provider::Notifications => "Notifications",
             Provider::Media => "Now playing",
-            Provider::T3 => "T3 Code",
             Provider::Calendar => "Calendar",
         }
     }
@@ -203,62 +188,6 @@ impl Panel for Integration {
                         .collect();
                     list(f, &mut column, &self.scroll, &rows);
                 }
-                Some(Data::T3(state)) => {
-                    let running = state.threads.iter().filter(|t| t.running()).count();
-                    let attention = state.threads.iter().filter(|t| t.attention()).count();
-                    section(
-                        f,
-                        &mut column,
-                        &format!("{running} running · {attention} need input"),
-                    );
-                    let config = super::config();
-                    let details: Vec<String> = state
-                        .threads
-                        .iter()
-                        .map(|thread| {
-                            format!(
-                                "{} · {} · {}",
-                                state
-                                    .projects
-                                    .get(&thread.project_id)
-                                    .unwrap_or(&thread.project_id),
-                                thread.provider_instance_id,
-                                if thread.attention() {
-                                    "Needs input".into()
-                                } else {
-                                    format!("{:?}", thread.status)
-                                }
-                            )
-                        })
-                        .collect();
-                    let rows: Vec<ListRow> = state
-                        .threads
-                        .iter()
-                        .zip(&details)
-                        .enumerate()
-                        .map(|(i, (thread, detail))| ListRow {
-                            id: LIST + i as u32,
-                            lead: Lead::Badge(Icon::Message, thread.attention()),
-                            title: &thread.title,
-                            subtitle: Some(detail),
-                            accessory: Accessory::None,
-                            selected: false,
-                            enabled: config.t3.thread_links.contains_key(&thread.id),
-                        })
-                        .collect();
-                    if state.threads.is_empty() {
-                        notice(f, &mut column, Icon::Message, "No active or recent threads", None);
-                    }
-                    if !state.threads.is_empty() && config.t3.thread_links.is_empty() {
-                        // The hint stays above the list, which takes the rest.
-                        line(
-                            f,
-                            &mut column,
-                            "Copy thread links from T3 into Integration settings to enable Open.",
-                        );
-                    }
-                    list(f, &mut column, &self.scroll, &rows);
-                }
                 Some(Data::Media(state)) => {
                     let c = f.theme.color;
                     let mut rest =
@@ -308,15 +237,6 @@ impl Panel for Integration {
                     mypaper_bars::system::open(format!("shell:AppsFolder\\{}", card.app_id));
                     Effect::Close
                 }
-            }
-            Data::T3(s) if id >= LIST => {
-                if let Some(thread) = s.threads.get((id - LIST) as usize)
-                    && let Some(link) = super::config().t3.thread_links.get(&thread.id)
-                {
-                    mypaper_bars::system::open(link.clone());
-                    return Effect::Close;
-                }
-                Effect::None
             }
             Data::Media(_) if id == PRIMARY => {
                 self.action(Action::Media(mypaper_integrations::media::Action::Toggle))
