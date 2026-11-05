@@ -298,3 +298,131 @@ The runtime, WIT world, guest SDK, `hello` and the weather component are in plac
 monitor, media and notification topics, websockets and the canvas renderer are wired in WIT but
 stubbed in the host (they return `error::unsupported` or never fire). See the "Stubbed" list
 in the host's `README` section of `crates/plugins/src/main.rs`.
+
+## Native modules
+
+A component that needs a vendor DLL ships a thin C wrapper and its vendor DLLs in
+its own plugin folder. Its manifest adds `"native": ["module.dll"]` and the
+`native-code` permission. The platform passes those declarations to
+`mypaper_native_host::Supervisor`; an undeclared module or missing permission is
+refused. Native code has the user's OS privileges: process separation contains
+crashes and hangs, and is not an OS security sandbox.
+
+Only `mypaper-native-host.exe` loads DLLs. The shell and the WASM helper never do.
+Constructing the supervisor starts no process. `activate` starts a host only for
+a plugin with a nonempty native list. Shared hosting is the default;
+`Isolation::Plugin` puts all of one plugin's modules in a separate process. After
+three failures attributed to a module, it moves to its own host automatically.
+For a background crash with no call in flight, all modules in the affected host
+are suspects and repeated crashes isolate them individually. Isolation persists
+for the supervisor's lifetime. Hosts restart automatically with exponential
+backoff (200 ms initially, capped at 10 s by default). Each affected module gets
+the `native-module-restarted` event after the replacement finishes initialization.
+Calls in flight fail and are never replayed automatically.
+
+`deactivate` stops unused hosts immediately. Because the ABI deliberately has no
+shutdown entry point, libraries and callback contexts remain loaded for the
+process lifetime. Removing a module from a shared host recycles that host and
+reinitializes its remaining active modules, which also receive restarted events.
+Dropping the supervisor kills and reaps its children; a kill-on-close Windows Job
+also kills them if the WASM helper crashes. The host has no UI and starts with
+crash dialogs disabled. Init, call and free share a deadline (default 5 s,
+configurable up to 60 s); expiry kills that host only. Calls are serialized by the
+supervisor; put it on the platform's blocking worker lane, never the UI/WASM event
+thread.
+
+### C ABI 1
+
+The authoritative header is `crates/native-host/include/mypaper_native.h`.
+Wrappers export exactly these three C functions, using the host's architecture:
+
+```c
+int mp_native_init(const mp_host *host);
+int mp_native_call(const char *method, const uint8_t *in, size_t in_len,
+                   uint8_t **out, size_t *out_len);
+void mp_native_free(uint8_t *out, size_t out_len);
+```
+
+`mp_host` contains `abi_version = 1`, an opaque `context`, and
+`emit(context, event_name, bytes, len)`. Init/call/free run serially on the dispatch
+thread. Emit is safe from any thread, including during init or call; it copies
+borrowed bytes before returning and can block on pipe backpressure. Host table
+and context remain valid until process exit. Names are NUL-terminated UTF-8;
+payloads are opaque bytes. A null byte pointer requires length zero. Modules
+return zero for success and nonzero for errors; no exception or unwind may cross
+the boundary. A successful call transfers its output allocation to the host,
+which copies it and calls the module's free on the same dispatch thread. Failure
+must leave output null/zero. See the header for full ownership rules.
+
+The loader accepts DLL basenames only, canonicalizes the plugin directory and
+DLL independently, and refuses traversal, absolute names, alternate streams,
+subfolders, and symlinks that resolve outside that directory. The host repeats
+the client's checks. `LoadLibraryExW` uses an absolute path with
+`LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32`; CWD, PATH and
+the executable directory are excluded. Vendor dependencies belong next to the
+wrapper; Windows system dependencies may come from System32. Do not modify an
+installed plugin folder while active. Native permission holders can themselves
+load arbitrary code; these checks constrain the broker's loader.
+
+### Native pipe protocol 1
+
+This pipe connects the WASM helper (server) to a disposable native host (client).
+It is local-only, single-instance, uniquely named, and verifies the client's PID
+against the spawned process. Overlapped reads and writes permit events while a
+call or read is pending. All integers are little-endian:
+
+```text
+u32 body_len                         // excludes this length, 16..=8 MiB
+u8 version = 1
+u8 kind                              // load=1, call=2, shutdown=3, ok=4, error=5, event=6
+u64 request_id                       // 0 for unsolicited module events
+u16 plugin_len; u8 plugin[plugin_len] // UTF-8
+u16 module_len; u8 module[module_len] // UTF-8 DLL basename
+u16 name_len;   u8 name[name_len]     // method or event name, UTF-8
+u8 bytes[remaining]
+```
+
+Load payload: `u32 timeout_ms` followed by the UTF-8 canonical plugin directory.
+Call payload: `u32 timeout_ms` followed by opaque input. The host clamps deadlines
+to 1..=60000 ms. Ok contains opaque output; error contains a UTF-8 diagnostic.
+Replies preserve request/plugin/module/name. Event payload is opaque, without a
+timeout prefix. Malformed versions, lengths, kinds and UTF-8 are rejected before
+dispatch. The client caps inputs at 8 MiB minus framing headroom. Its public event
+queue is bounded to 256 items; excess vendor events are dropped.
+
+### Platform integration
+
+Add `mypaper-native-host = { path = "../native-host" }` to `crates/plugins`.
+The library uses only Rust std and Win32, with no WASM or vendor dependencies:
+
+```rust,ignore
+use mypaper_native_host::{Supervisor, HostConfig, PluginSpec, Isolation};
+
+let native = Supervisor::new(sibling_native_host_exe, HostConfig::default());
+native.activate(PluginSpec {
+    id: manifest.id.clone(), folder: plugin_folder,
+    native: manifest.native.clone(), permissions: manifest.permissions.clone(),
+    isolation: Isolation::Shared,
+})?;
+// Run this on a blocking worker, then complete the WIT request id with its result.
+let output = native.call(&manifest.id, "module.dll", "method", &input)?;
+while let Some(event) = native.try_event() {
+    // Deliver only to event.plugin as WIT event::native (name/module/bytes).
+}
+native.deactivate(&manifest.id)?; // when the WASM instance is unloaded
+```
+
+`recv_event_timeout` supports a dedicated event pump. `hosts()` exposes live PIDs,
+module membership and isolation for diagnostics. The helper should own one
+supervisor, wrapping it in `Arc` if its I/O workers share it. Connect the manifest's
+per-plugin isolation option to `Isolation::Plugin`; default to `Shared`.
+`HostConfig` exposes `call_timeout`, `startup_timeout`, `initial_backoff`,
+`max_backoff`, and `isolate_after`. Treat `WouldBlock` as temporary restart backoff.
+
+`examples/native-echo` is a dependency-free Rust C-ABI wrapper demonstrating echo,
+a background-thread event, a deliberate crash, and a deliberate hang. The native
+host integration suite uses real DLLs, child processes and named pipes to test
+round-trips, events, permission/containment checks, shared and isolated lifecycle,
+crash recovery, automatic isolation, and hang deadlines. It never drives the
+user's desktop. Measurements and the reproducible harness live in
+`crates/native-host/MEASUREMENTS.md`.

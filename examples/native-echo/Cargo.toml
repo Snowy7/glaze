@@ -1,0 +1,11 @@
+[package]
+name = "mypaper-native-echo"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+# Standalone vendor-style example; not part of the desktop workspace.
+[workspace]
