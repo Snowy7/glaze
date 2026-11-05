@@ -69,7 +69,6 @@ use crate::bars::Bars;
 pub enum Kind {
     Integration(mypaper_integrations::Provider),
     AppActions,
-    RoutineResult,
     Calendar,
     Quick,
     Wifi,
@@ -897,7 +896,6 @@ impl Flyouts {
         let panel: Box<dyn Panel> = match request.kind {
             Kind::Integration(provider) => crate::integrations::panel(provider),
             Kind::AppActions => crate::integrations::app_panel(),
-            Kind::RoutineResult => crate::integrations::routine_panel(),
             Kind::Calendar => Box::new(calendar::Calendar::new(&mut cx)),
             Kind::Quick => Box::new(quick::Quick::new(&mut cx)),
             Kind::Wifi => Box::new(wifi::Wifi::new(&mut cx)),
