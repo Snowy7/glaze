@@ -14,6 +14,8 @@
 mod bench;
 mod caps;
 mod host;
+mod images;
+mod io;
 mod native;
 mod runtime;
 #[cfg(test)]

@@ -14,7 +14,10 @@ use mypaper_plugin_api::{SizeClass, diff};
 use mypaper_plugin_sdk::view::Face;
 
 use crate::runtime::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen};
-use crate::runtime::mypaper::plugin::http::{Reply, Response};
+use crate::runtime::mypaper::plugin::http::{Header, Reply, Response};
+use crate::runtime::mypaper::plugin::pipes::PipeEvent;
+use crate::runtime::mypaper::plugin::websocket::SocketEvent;
+use mypaper_plugin_api::wire::{SystemEvent, WindowChange};
 use crate::runtime::mypaper::plugin::native::{NativeMessage, NativeReply};
 use crate::runtime::mypaper::plugin::types::{Error as WitError, SizeClass as WitSize};
 use crate::runtime::{Effect, Instance, Manifest, Runtime};
@@ -23,6 +26,8 @@ use crate::runtime::{Effect, Instance, Manifest, Runtime};
 pub const IDLE_UNLOAD: Duration = Duration::from_secs(30);
 /// Timers are rounded up to this grid so one wake serves every timer due together.
 pub const TIMER_GRID: Duration = Duration::from_millis(250);
+/// Window moves reach plugins at most once per this (one frame).
+pub const MOVE_FRAME: Duration = Duration::from_millis(16);
 const STRIKES: usize = 3;
 const STRIKE_WINDOW: Duration = Duration::from_secs(300);
 
@@ -32,6 +37,9 @@ pub enum Input {
     Http { plugin: String, id: u64, result: Result<crate::caps::Fetched, String> },
     Native { plugin: String, id: u64, result: Result<Vec<u8>, String> },
     NativeEvent(mypaper_native_host::NativeEvent),
+    Socket { plugin: String, event: SocketEvent },
+    Pipe { plugin: String, event: PipeEvent },
+    PipeHttp { plugin: String, id: u64, result: Result<crate::io::PipeReply, String> },
     Eof,
 }
 
@@ -68,6 +76,9 @@ pub struct Host<W: Write> {
     tx: Sender<Input>,
     /// The native-module lane, started by the first plugin that declares `native` modules.
     native: Option<crate::native::Lane>,
+    /// The latest move per window, flushed at `moves_due`.
+    moves: BTreeMap<u64, SystemEvent>,
+    moves_due: Option<Instant>,
 }
 
 fn size(size: SizeClass) -> WitSize {
@@ -80,7 +91,7 @@ fn size(size: SizeClass) -> WitSize {
 
 impl<W: Write> Host<W> {
     pub fn new(rt: Runtime, out: W, tx: Sender<Input>) -> Self {
-        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx, native: None }
+        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx, native: None, moves: BTreeMap::new(), moves_due: None }
     }
 
     pub fn out(&mut self) -> &mut W {
@@ -184,8 +195,63 @@ impl<W: Write> Host<W> {
                 }
                 return false;
             }
+            HostMsg::System(event) => self.on_system(event, now),
         }
         true
+    }
+
+    /// Routes a system event to the plugins subscribed to its topic. Moves are coalesced: the
+    /// latest per window is kept and flushed once a frame ([`MOVE_FRAME`]) by `tick`.
+    fn on_system(&mut self, event: SystemEvent, now: Instant) {
+        if let SystemEvent::Window { change, id, .. } = &event {
+            if *change == WindowChange::Moved {
+                self.moves.insert(*id, event);
+                self.moves_due.get_or_insert(now + MOVE_FRAME);
+                return;
+            }
+            self.moves.remove(id); // opened/closed/focused supersede a pending move
+        }
+        self.broadcast(event, now);
+    }
+
+    fn broadcast(&mut self, event: SystemEvent, now: Instant) {
+        use crate::runtime::exports::mypaper::plugin::lifecycle::{WindowChange as W, WindowEvent};
+        use crate::runtime::mypaper::plugin::events::Topic;
+        let (topic, wit) = match event {
+            SystemEvent::Window { change, id, title, process } => {
+                let kind = match change {
+                    WindowChange::Opened => W::Opened,
+                    WindowChange::Closed => W::Closed,
+                    WindowChange::Focused => W::Focused,
+                    WindowChange::Moved => W::Moved,
+                };
+                (Topic::Windows, Event::Window(WindowEvent { kind, id, title, process }))
+            }
+            SystemEvent::Monitors => (Topic::Monitors, Event::Monitors),
+            SystemEvent::Notification(json) => (Topic::Notifications, Event::Notification(json)),
+            SystemEvent::Media(json) => (Topic::Media, Event::Media(json)),
+            SystemEvent::Power => (Topic::Power, Event::Power),
+            SystemEvent::Theme => (Topic::Theme, Event::Theme),
+        };
+        let ids: Vec<String> = self.plugins.iter().filter(|(_, p)| p.instance.as_ref().is_some_and(|i| i.store.data().subscribed(topic))).map(|(id, _)| id.clone()).collect();
+        for id in ids {
+            self.deliver(&id, wit.clone(), now);
+        }
+    }
+
+    /// Hands an I/O event to its plugin and returns the connection's read credit; a closed
+    /// connection is forgotten.
+    fn deliver_io(&mut self, plugin: &str, id: u64, closed: bool, event: Event, now: Instant) {
+        let Some(instance) = self.plugins.get_mut(plugin).and_then(|p| p.instance.as_mut()) else { return };
+        let state = instance.store.data_mut();
+        if closed {
+            state.closed(id);
+        } else if let Some(conn) = state.conn(id) {
+            conn.delivered();
+        } else {
+            return; // the plugin closed it; drop what was still in flight
+        }
+        self.deliver(plugin, event, now);
     }
 
     /// A worker's I/O completion.
@@ -203,6 +269,43 @@ impl<W: Write> Host<W> {
                 if self.plugins.get(&plugin).is_some_and(|p| p.instance.is_some()) {
                     let outcome = result.map_err(WitError::Failed);
                     self.deliver(&plugin, Event::Native(NativeReply { id, outcome }), now);
+                }
+                true
+            }
+            Input::Socket { plugin, event } => {
+                use crate::runtime::mypaper::plugin::websocket::SocketEvent as S;
+                let (id, closed) = match &event {
+                    S::Opened(id) => (*id, false),
+                    S::Message((id, _)) => (*id, false),
+                    S::Closed((id, _)) => (*id, true),
+                };
+                // `opened` carries no credit; give it back so the count stays exact.
+                if matches!(event, S::Opened(_)) {
+                    if let Some(i) = self.plugins.get_mut(&plugin).and_then(|p| p.instance.as_mut())
+                        && i.store.data().conn(id).is_some()
+                    {
+                        self.deliver(&plugin, Event::Socket(event), now);
+                    }
+                } else {
+                    self.deliver_io(&plugin, id, closed, Event::Socket(event), now);
+                }
+                true
+            }
+            Input::Pipe { plugin, event } => {
+                use crate::runtime::mypaper::plugin::pipes::PipeEvent as P;
+                let (id, closed) = match &event {
+                    P::Data((id, _)) => (*id, false),
+                    P::Closed(id) => (*id, true),
+                };
+                self.deliver_io(&plugin, id, closed, Event::Pipe(event), now);
+                true
+            }
+            Input::PipeHttp { plugin, id, result } => {
+                if self.plugins.get(&plugin).is_some_and(|p| p.instance.is_some()) {
+                    let outcome = result
+                        .map(|r| Response { status: r.status, headers: r.headers.into_iter().map(|(name, value)| Header { name, value }).collect(), body: r.body })
+                        .map_err(WitError::Failed);
+                    self.deliver(&plugin, Event::Http(Reply { id, outcome }), now);
                 }
                 true
             }
@@ -348,6 +451,36 @@ impl<W: Write> Host<W> {
                         let _ = self.tx.send(Input::Native { plugin: plugin.into(), id, result: Err("the native host isn't running".into()) });
                     }
                 },
+                Effect::Socket { id, request } => {
+                    if let Some(conn) = self.plugins.get(plugin).and_then(|p| p.instance.as_ref()).and_then(|i| i.store.data().conn(id)) {
+                        crate::io::start_socket(conn, id, plugin.into(), request, self.tx.clone());
+                    }
+                }
+                Effect::Pipe { id, name } => {
+                    if let Some(conn) = self.plugins.get(plugin).and_then(|p| p.instance.as_ref()).and_then(|i| i.store.data().conn(id)) {
+                        crate::io::start_pipe(conn, id, plugin.into(), name, self.tx.clone());
+                    }
+                }
+                Effect::PipeHttp { id, name, method, url, headers, body } => {
+                    let (tx, plugin) = (self.tx.clone(), plugin.to_owned());
+                    let spawned = std::thread::Builder::new().name("pipe http".into()).stack_size(256 << 10).spawn(move || {
+                        let result = crate::io::pipe_http(&name, method, &url, &headers, body.as_deref());
+                        let _ = tx.send(Input::PipeHttp { plugin, id, result });
+                    });
+                    if let Err(e) = spawned {
+                        log::warn!("no pipe http thread: {e}");
+                    }
+                }
+                Effect::Notify { title, body, plugin_name } => {
+                    let spawned = std::thread::Builder::new().name("toast".into()).stack_size(256 << 10).spawn(move || {
+                        if let Err(e) = crate::caps::notify(&plugin_name, &title, &body) {
+                            log::warn!("plugin {plugin_name}: toast failed: {e}");
+                        }
+                    });
+                    if let Err(e) = spawned {
+                        log::warn!("no toast thread: {e}");
+                    }
+                }
                 Effect::Fetch { id, method, url, headers, body, timeout_ms } => {
                     let (tx, plugin) = (self.tx.clone(), plugin.to_owned());
                     let spawned = std::thread::Builder::new().name("fetch".into()).stack_size(256 << 10).spawn(move || {
@@ -394,6 +527,12 @@ impl<W: Write> Host<W> {
 
     /// Fires due timers, retries throttled plugins and unloads idle ones.
     pub fn tick(&mut self, now: Instant) {
+        if self.moves_due.is_some_and(|due| due <= now) {
+            self.moves_due = None;
+            for (_, event) in std::mem::take(&mut self.moves) {
+                self.broadcast(event, now);
+            }
+        }
         while let Some((&key, _)) = self.timers.first_key_value().filter(|((due, _), _)| *due <= now) {
             let (plugin, id, period) = self.timers.remove(&key).expect("first key");
             if let Some(period) = period {
@@ -424,7 +563,7 @@ impl<W: Write> Host<W> {
     pub fn deadline(&self) -> Option<Instant> {
         let timer = self.timers.keys().next().map(|(due, _)| *due);
         let plugins = self.plugins.values().flat_map(|p| [p.retry_at.filter(|_| p.instance.is_none()), p.idle_since.filter(|_| p.instance.is_some()).map(|t| t + IDLE_UNLOAD)]);
-        timer.into_iter().chain(plugins.flatten()).min()
+        timer.into_iter().chain(self.moves_due).chain(plugins.flatten()).min()
     }
 
     pub fn loaded(&self) -> usize {

@@ -2,8 +2,10 @@
 //! per-plugin `ResourceLimiter`, epoch interruption for the per-event CPU budget, and the AOT
 //! cache. Host imports only record [`Effect`]s; the loop in `host.rs` applies them after the
 //! call returns, so a plugin call never blocks on I/O.
+use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -15,11 +17,12 @@ use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, ResourceLimiter, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
-use crate::caps;
+use crate::{caps, images, io};
 
 wasmtime::component::bindgen!({ path: "../plugin-api/wit", world: "plugin" });
 
 use exports::mypaper::plugin::lifecycle::{Event, InitInfo};
+use mypaper::plugin::events::Topic;
 use mypaper::plugin::types::{Error as WitError, Tone};
 use mypaper::plugin::view::{Node, NodeKind};
 
@@ -48,6 +51,8 @@ pub struct Limits {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Manifest {
     pub id: String,
+    #[serde(default)]
+    pub name: String,
     pub component: String,
     pub api: String,
     #[serde(default)]
@@ -83,7 +88,7 @@ impl Manifest {
         for permission in &manifest.permissions {
             let known = WORDS.contains(&permission.as_str())
                 || permission.strip_prefix("network:").is_some_and(|o| caps::origin_allowed(&[permission.clone()], o))
-                || permission.strip_prefix("pipe:").is_some_and(|name| !name.is_empty() && !name.contains(['\\', '/']));
+                || permission.strip_prefix("pipe:").is_some_and(io::pipe_name_ok);
             ensure!(known, "unknown or malformed permission {permission:?}");
         }
         for surface in &manifest.styles {
@@ -117,6 +122,12 @@ pub enum Effect {
     Cancel(String),
     Fetch { id: u64, method: &'static str, url: String, headers: Vec<(String, String)>, body: Option<Vec<u8>>, timeout_ms: u32 },
     Native { id: u64, module: String, method: String, bytes: Vec<u8> },
+    /// Start the queued websocket `id` (its [`io::Conn`] is in the store).
+    Socket { id: u64, request: io::SocketRequest },
+    /// Start the queued pipe `id`.
+    Pipe { id: u64, name: String },
+    PipeHttp { id: u64, name: String, method: &'static str, url: String, headers: Vec<(String, String)>, body: Option<Vec<u8>> },
+    Notify { title: String, body: String, plugin_name: String },
 }
 
 /// Tracks linear memory against the plugin's cap (and reports it in stats).
@@ -158,7 +169,12 @@ pub struct State {
     native: Vec<String>,
     data_dir: PathBuf,
     pub effects: Vec<Effect>,
-    next_request: u64,
+    /// The manifest's display name, for notification attribution.
+    name: String,
+    sockets: HashMap<u64, io::Conn>,
+    pipes: HashMap<u64, io::Conn>,
+    topics: Vec<Topic>,
+    pub images: images::Images,
 }
 
 impl WasiView for State {
@@ -176,9 +192,24 @@ impl State {
             Err(WitError::Denied(format!("the manifest doesn't declare {permission:?}")))
         }
     }
+    /// Unique across the process, so a late event from a dropped instance's request can never
+    /// match a new instance's id.
     fn request_id(&mut self) -> u64 {
-        self.next_request += 1;
-        self.next_request
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    }
+    /// The topics this plugin subscribed to (the host routes system events by them).
+    pub fn subscribed(&self, topic: Topic) -> bool {
+        self.topics.contains(&topic) && (topic != Topic::Windows || self.permissions.iter().any(|p| p == "windows"))
+    }
+    /// The open websocket or pipe `id`, to start its thread or return delivery credit.
+    pub fn conn(&self, id: u64) -> Option<&io::Conn> {
+        self.sockets.get(&id).or_else(|| self.pipes.get(&id))
+    }
+    /// Forgets a connection whose thread ended.
+    pub fn closed(&mut self, id: u64) {
+        self.sockets.remove(&id);
+        self.pipes.remove(&id);
     }
 }
 
@@ -199,8 +230,11 @@ impl mypaper::plugin::ui::Host for State {
     fn clear(&mut self, instance: String) {
         self.effects.push(Effect::Clear(instance));
     }
-    fn put_image(&mut self, _width: u32, _height: u32, _pixels: Vec<u8>) -> Result<u32, WitError> {
-        Err(WitError::Unsupported("images arrive with the canvas renderer".into()))
+    fn put_image(&mut self, width: u32, height: u32, pixels: Vec<u8>) -> Result<u32, WitError> {
+        self.images.put(width, height, &pixels).map_err(WitError::Invalid)
+    }
+    fn drop_image(&mut self, id: u32) {
+        self.images.remove(id);
     }
 }
 
@@ -262,29 +296,28 @@ impl mypaper::plugin::timers::Host for State {
 
 impl mypaper::plugin::events::Host for State {
     fn subscribe(&mut self, topics: Vec<mypaper::plugin::events::Topic>) -> Result<(), WitError> {
-        if topics.contains(&mypaper::plugin::events::Topic::Windows) {
+        if topics.contains(&Topic::Windows) {
             self.allowed("windows")?;
         }
-        // System topics are accepted and recorded; their sources land with the shell event bridge.
+        for topic in topics {
+            if !self.topics.contains(&topic) {
+                self.topics.push(topic);
+            }
+        }
         Ok(())
     }
-    fn unsubscribe(&mut self, _topics: Vec<mypaper::plugin::events::Topic>) {}
+    fn unsubscribe(&mut self, topics: Vec<mypaper::plugin::events::Topic>) {
+        self.topics.retain(|t| !topics.contains(t));
+    }
 }
 
 impl mypaper::plugin::http::Host for State {
     fn fetch(&mut self, request: mypaper::plugin::http::Request) -> Result<u64, WitError> {
-        use mypaper::plugin::http::Method;
         if !caps::origin_allowed(&self.permissions, &request.url) {
             log::warn!("plugin {}: refused fetch of an undeclared origin", self.id);
             return Err(WitError::Denied(format!("no network permission for {}", request.url.split('?').next().unwrap_or(""))));
         }
-        let method = match request.method {
-            Method::Get => "GET",
-            Method::Post => "POST",
-            Method::Put => "PUT",
-            Method::Patch => "PATCH",
-            Method::Delete => "DELETE",
-        };
+        let method = http_method(request.method);
         let id = self.request_id();
         let headers = request.headers.into_iter().map(|h| (h.name, h.value)).collect();
         let timeout_ms = request.timeout_ms.unwrap_or(15_000);
@@ -293,28 +326,68 @@ impl mypaper::plugin::http::Host for State {
     }
 }
 
+fn http_method(method: mypaper::plugin::http::Method) -> &'static str {
+    use mypaper::plugin::http::Method;
+    match method {
+        Method::Get => "GET",
+        Method::Post => "POST",
+        Method::Put => "PUT",
+        Method::Patch => "PATCH",
+        Method::Delete => "DELETE",
+    }
+}
+
 impl mypaper::plugin::websocket::Host for State {
     fn connect(&mut self, url: String) -> Result<u64, WitError> {
-        if !caps::origin_allowed(&self.permissions, &url) {
-            return Err(WitError::Denied(format!("no network permission for {url}")));
+        self.connect_with(mypaper::plugin::websocket::ConnectRequest { url, headers: Vec::new(), protocols: Vec::new() })
+    }
+    fn connect_with(&mut self, request: mypaper::plugin::websocket::ConnectRequest) -> Result<u64, WitError> {
+        if !request.url.starts_with("ws") || !caps::origin_allowed(&self.permissions, &request.url) {
+            log::warn!("plugin {}: refused a websocket to an undeclared origin", self.id);
+            return Err(WitError::Denied(format!("no network permission for {}", request.url.split('?').next().unwrap_or(""))));
         }
-        Err(WitError::Unsupported("websockets aren't wired in this host yet".into()))
+        if self.sockets.len() >= io::MAX_CONNECTIONS {
+            return Err(WitError::Failed(format!("at most {} open websockets", io::MAX_CONNECTIONS)));
+        }
+        let id = self.request_id();
+        self.sockets.insert(id, io::socket().map_err(failed)?);
+        let headers = request.headers.into_iter().map(|h| (h.name, h.value)).collect();
+        self.effects.push(Effect::Socket { id, request: io::SocketRequest { url: request.url, headers, protocols: request.protocols } });
+        Ok(id)
     }
-    fn send(&mut self, _socket: u64, _message: mypaper::plugin::websocket::Message) -> Result<(), WitError> {
-        Err(WitError::Unsupported("websockets aren't wired in this host yet".into()))
+    fn send(&mut self, socket: u64, message: mypaper::plugin::websocket::Message) -> Result<(), WitError> {
+        self.sockets.get(&socket).ok_or_else(|| WitError::Invalid("no such socket".into()))?.send(message).map_err(failed)
     }
-    fn close(&mut self, _socket: u64) {}
+    fn close(&mut self, socket: u64) {
+        self.sockets.remove(&socket); // dropping the `Conn` closes it; `closed` still arrives
+    }
 }
 
 impl mypaper::plugin::pipes::Host for State {
     fn open(&mut self, name: String) -> Result<u64, WitError> {
         self.allowed(&format!("pipe:{name}"))?;
-        Err(WitError::Unsupported("pipes aren't wired in this host yet".into()))
+        if self.pipes.len() >= io::MAX_CONNECTIONS {
+            return Err(WitError::Failed(format!("at most {} open pipes", io::MAX_CONNECTIONS)));
+        }
+        let id = self.request_id();
+        self.pipes.insert(id, io::pipe().map_err(failed)?);
+        self.effects.push(Effect::Pipe { id, name });
+        Ok(id)
     }
-    fn write(&mut self, _pipe: u64, _bytes: Vec<u8>) -> Result<(), WitError> {
-        Err(WitError::Unsupported("pipes aren't wired in this host yet".into()))
+    fn write(&mut self, pipe: u64, bytes: Vec<u8>) -> Result<(), WitError> {
+        let conn = self.pipes.get(&pipe).ok_or_else(|| WitError::Invalid("no such pipe".into()))?;
+        conn.send(mypaper::plugin::websocket::Message::Binary(bytes)).map_err(failed)
     }
-    fn close(&mut self, _pipe: u64) {}
+    fn close(&mut self, pipe: u64) {
+        self.pipes.remove(&pipe);
+    }
+    fn http_request(&mut self, name: String, request: mypaper::plugin::http::Request) -> Result<u64, WitError> {
+        self.allowed(&format!("pipe:{name}"))?;
+        let id = self.request_id();
+        let headers = request.headers.into_iter().map(|h| (h.name, h.value)).collect();
+        self.effects.push(Effect::PipeHttp { id, name, method: http_method(request.method), url: request.url, headers, body: request.body });
+        Ok(id)
+    }
 }
 
 impl mypaper::plugin::launch::Host for State {
@@ -325,9 +398,13 @@ impl mypaper::plugin::launch::Host for State {
 }
 
 impl mypaper::plugin::notify::Host for State {
-    fn show(&mut self, _notification: mypaper::plugin::notify::Notification) -> Result<(), WitError> {
+    fn show(&mut self, notification: mypaper::plugin::notify::Notification) -> Result<(), WitError> {
         self.allowed("notifications")?;
-        Err(WitError::Unsupported("notifications aren't wired in this host yet".into()))
+        if notification.title.is_empty() || notification.title.len() + notification.body.len() > 2000 {
+            return Err(WitError::Invalid("a title, and at most 2000 bytes of text".into()));
+        }
+        self.effects.push(Effect::Notify { title: notification.title, body: notification.body, plugin_name: self.name.clone() });
+        Ok(())
     }
 }
 
@@ -377,7 +454,7 @@ impl mypaper::plugin::system::Host for State {
     }
     fn foreground(&mut self) -> Result<Option<mypaper::plugin::system::WindowInfo>, WitError> {
         self.allowed("windows")?;
-        Err(WitError::Unsupported("foreground window info lands with the window events".into()))
+        Ok(caps::foreground().map(|w| mypaper::plugin::system::WindowInfo { id: w.id, title: w.title, process: w.process, x: w.rect.0, y: w.rect.1, width: w.rect.2, height: w.rect.3 }))
     }
 }
 
@@ -659,7 +736,11 @@ impl Runtime {
             native: manifest.native.clone(),
             data_dir: self.data_dir(&manifest.id),
             effects: Vec::new(),
-            next_request: 0,
+            name: if manifest.name.is_empty() { manifest.id.clone() } else { manifest.name.clone() },
+            sockets: HashMap::new(),
+            pipes: HashMap::new(),
+            topics: Vec::new(),
+            images: images::Images::default(),
         };
         let mut store = Store::new(&self.engine, data);
         store.limiter(|state| &mut state.limiter);

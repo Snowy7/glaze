@@ -255,8 +255,103 @@ pub fn dark() -> bool {
     read.is_ok() && value == 0
 }
 
+pub struct Window {
+    pub id: u64,
+    pub title: String,
+    pub process: String,
+    pub rect: (i32, i32, u32, u32),
+}
+
+/// The foreground window: its handle as the id, title, process image name and rect.
+pub fn foreground() -> Option<Window> {
+    use windows::Win32::Foundation::{CloseHandle, RECT};
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId};
+    // SAFETY: plain queries on the foreground window; buffers are sized and owned here, and the
+    // process handle is closed.
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return None;
+        }
+        let mut title = [0u16; 512];
+        let len = GetWindowTextW(hwnd, &mut title).max(0) as usize;
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        let mut process = String::new();
+        if let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            let mut path = [0u16; 1024];
+            let mut size = path.len() as u32;
+            if QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, windows::core::PWSTR(path.as_mut_ptr()), &mut size).is_ok() {
+                let full = String::from_utf16_lossy(&path[..size as usize]);
+                process = full.rsplit('\\').next().unwrap_or_default().to_owned();
+            }
+            let _ = CloseHandle(handle);
+        }
+        let mut r = RECT::default();
+        let _ = GetWindowRect(hwnd, &mut r);
+        Some(Window { id: hwnd.0 as u64, title: String::from_utf16_lossy(&title[..len]), process, rect: (r.left, r.top, (r.right - r.left).max(0) as u32, (r.bottom - r.top).max(0) as u32) })
+    }
+}
+
+/// mypaper's toast identity for plugins (an unpackaged AppUserModelID, registered on first use).
+pub const TOAST_APP: &str = "mypaper.Plugins";
+
+fn xml_escape(text: &str) -> String {
+    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// The toast XML: the plugin's title and body, attributed "via <plugin name>".
+pub fn toast_xml(plugin_name: &str, title: &str, body: &str) -> String {
+    format!(
+        r#"<toast><visual><binding template="ToastGeneric"><text>{}</text><text>{}</text><text placement="attribution">via {}</text></binding></visual></toast>"#,
+        xml_escape(title),
+        xml_escape(body),
+        xml_escape(plugin_name)
+    )
+}
+
+/// Shows a Windows toast from mypaper on a worker thread (WinRT activation can take a while).
+pub fn notify(plugin_name: &str, title: &str, body: &str) -> Result<(), String> {
+    use windows::Data::Xml::Dom::XmlDocument;
+    use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
+    use windows::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, REG_SZ, RegCloseKey, RegCreateKeyW, RegSetValueExW};
+    // SAFETY: registers the AppUserModelID's display name under HKCU (idempotent); strings
+    // outlive the calls and the key is closed.
+    unsafe {
+        let mut key = HKEY::default();
+        if RegCreateKeyW(HKEY_CURRENT_USER, &HSTRING::from(format!(r"Software\Classes\AppUserModelId\{TOAST_APP}")), &mut key).is_ok() {
+            let name: Vec<u8> = "mypaper\0".encode_utf16().flat_map(u16::to_le_bytes).collect();
+            let _ = RegSetValueExW(key, w!("DisplayName"), None, REG_SZ, Some(&name));
+            let _ = RegCloseKey(key);
+        }
+        let _ = windows::Win32::System::WinRT::RoInitialize(windows::Win32::System::WinRT::RO_INIT_MULTITHREADED);
+    }
+    let show = || -> windows::core::Result<()> {
+        let xml = XmlDocument::new()?;
+        xml.LoadXml(&HSTRING::from(toast_xml(plugin_name, title, body)))?;
+        let toast = ToastNotification::CreateToastNotification(&xml)?;
+        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(TOAST_APP))?.Show(&toast)
+    };
+    show().map_err(|e| e.message())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn toasts_escape_text_and_attribute_the_plugin() {
+        let xml = super::toast_xml("T3 <Code>", "Build & ship", "done \"now\"");
+        assert!(xml.contains("<text>Build &amp; ship</text>") && xml.contains("done &quot;now&quot;"), "{xml}");
+        assert!(xml.contains(r#"<text placement="attribution">via T3 &lt;Code&gt;</text>"#), "{xml}");
+    }
+
+    #[test]
+    fn the_foreground_window_has_a_process() {
+        if let Some(window) = super::foreground() {
+            assert!(window.id != 0);
+        }
+    }
+
     use super::*;
 
     #[test]

@@ -16,7 +16,7 @@ serde.workspace = true
 serde_json.workspace = true
 wasmtime = { version = "50", default-features = false, features = ["anyhow", "runtime", "cranelift", "component-model", "pooling-allocator", "std"] }
 wasmtime-wasi = { version = "50", default-features = false, features = ["p2"] }
-windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Networking_WinHttp", "Win32_Graphics_Gdi", "Win32_System_Power", "Win32_System_ProcessStatus", "Win32_System_Threading"] }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Networking_WinHttp", "Win32_Graphics_Gdi", "Win32_System_Power", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Pipes", "Win32_System_Memory", "Win32_System_WinRT", "UI_Notifications", "Data_Xml_Dom"] }
 
 [lints]
 workspace = true

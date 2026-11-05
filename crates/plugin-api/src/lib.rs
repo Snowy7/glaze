@@ -34,6 +34,9 @@ pub mod wire {
         /// Asks for [`HelperMsg::Stats`] of every loaded plugin.
         Stats,
         Shutdown,
+        /// A system event; the helper delivers it only to plugins that subscribed to its topic and
+        /// hold its permission (`windows` for window events), and coalesces moves to one a frame.
+        System(SystemEvent),
     }
 
     /// How a plugin is doing, shown in its faces' footer.
@@ -62,6 +65,28 @@ pub mod wire {
     pub struct StylePatch {
         pub surface: String,
         pub tokens: Vec<(String, TokenValue)>,
+    }
+
+    /// What the shell observed, for plugins subscribed to the topic (docs/plugins.md, "Events").
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    pub enum SystemEvent {
+        /// `id` is the window handle; `process` the image name (`code.exe`).
+        Window { change: WindowChange, id: u64, title: String, process: String },
+        Monitors,
+        /// The notification as JSON (app, title, body), from the shell's listener.
+        Notification(String),
+        /// The media session as JSON (title, artist, playing), from the shell's media provider.
+        Media(String),
+        Power,
+        Theme,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    pub enum WindowChange {
+        Opened,
+        Closed,
+        Focused,
+        Moved,
     }
 
     /// Helper → shell.
