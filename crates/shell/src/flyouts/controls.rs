@@ -1,5 +1,8 @@
-//! Quick-setting controls with authoritative readback. Unsupported Windows settings are not
-//! represented as switches. Reads run on the quick lane and never query slow display DDC/CI.
+//! Quick-setting controls with authoritative readback. Settings Windows has no public setter
+//! for (do not disturb, night light, airplane mode) go through `super::toggles`; ones nothing
+//! can switch are not represented. Reads run on the quick lane and never query slow display
+//! DDC/CI.
+use super::toggles;
 use mypaper_bars::flyouts::quick::{PowerMode, RadioInfo, RadioKind};
 use windows::Devices::Radios::{Radio, RadioAccessStatus, RadioKind as Kind, RadioState};
 use windows::Networking::Connectivity::NetworkInformation;
@@ -11,11 +14,15 @@ use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::core::{GUID, s, w};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct State {
     pub radios: Vec<RadioInfo>,
     pub power: Option<PowerMode>,
     pub hotspot: Option<bool>,
+    pub dnd: Option<bool>,
+    pub night_light: Option<bool>,
+    /// Only with a radio to switch (Windows hides airplane mode without one).
+    pub airplane: Option<bool>,
 }
 
 fn radios() -> windows::core::Result<Vec<Radio>> {
@@ -32,18 +39,24 @@ fn kind(radio: &Radio) -> Option<RadioKind> {
 }
 
 pub fn read() -> State {
-    State {
-        radios: radios()
-            .unwrap_or_default()
-            .iter()
-            .filter_map(|radio| {
-                Some(RadioInfo {
-                    kind: kind(radio)?,
-                    name: radio.Name().ok()?.to_string(),
-                    on: radio.State().ok()? == RadioState::On,
-                })
+    let radios: Vec<_> = radios()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|radio| {
+            Some(RadioInfo {
+                kind: kind(radio)?,
+                name: radio.Name().ok()?.to_string(),
+                on: radio.State().ok()? == RadioState::On,
             })
-            .collect(),
+        })
+        .collect();
+    State {
+        airplane: (!radios.is_empty())
+            .then(toggles::airplane::read)
+            .flatten(),
+        dnd: toggles::dnd::read(),
+        night_light: toggles::night_light::read(),
+        radios,
         power: power_mode(),
         hotspot: hotspot().ok().and_then(|manager| {
             match manager.TetheringOperationalState().ok()? {

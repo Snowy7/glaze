@@ -1,17 +1,27 @@
-//! Quick settings with real system controls. DND, Focus, Night light and Energy saver have
-//! no unrestricted setter, so they are not switches here. Secondary clicks open Settings.
+//! Quick settings, laid out as macOS's Control Center on the kit: toggle tiles two to a row,
+//! the display and sound sliders in their own cards, the battery and Settings at the foot.
+//!
+//! Every tile is a real switch with live system readback (`controls`, read every second while
+//! open): radios, power mode and the hotspot through documented APIs; do not disturb, night
+//! light and airplane mode through `toggles` (undocumented, read back after each change). A
+//! tile shows the state Windows reports, never the one asked for. Secondary clicks open the
+//! matching Settings page.
 
 use std::time::{Duration, Instant};
 
 use mypaper_bars::audio::Volume;
-use mypaper_bars::flyouts::quick::{self as provider, PowerMode, RadioKind};
+use mypaper_bars::flyouts::quick::{PowerMode, RadioKind};
 use mypaper_bars::network::{self, Kind as Link, NetworkInfo};
 use mypaper_bars::system::{self, Battery};
 use mypaper_bars::wake::Msg;
-use mypaper_ui::{HitId, Point};
+use mypaper_ui::icons::Icon;
+use mypaper_ui::kit::Frame;
+use mypaper_ui::layout::{self, Align, Stack};
+use mypaper_ui::{HitId, Rect, TextRole, Tile};
 
 use super::controls;
-use super::kit::{DECORATION, Kit, Tile, glyph};
+use super::kit::Kit;
+use super::toggles::Toggle;
 use super::{Cx, Effect, Kind, Panel, Reply};
 
 const WIFI: HitId = 1;
@@ -19,6 +29,9 @@ const WIFI_MORE: HitId = 2;
 const BLUETOOTH: HitId = 3;
 const POWER: HitId = 4;
 const HOTSPOT: HitId = 5;
+const DND: HitId = 6;
+const NIGHT_LIGHT: HitId = 7;
+const AIRPLANE: HitId = 8;
 const BRIGHTNESS: HitId = 9;
 const VOLUME: HitId = 10;
 const MUTE: HitId = 11;
@@ -26,17 +39,24 @@ const MIXER: HitId = 12;
 const SETTINGS: HitId = 13;
 const BLUETOOTH_MORE: HitId = 14;
 
+/// A tile's height and the gap between tiles, design px.
+const TILE: f32 = 58.0;
+const GAP: f32 = 10.0;
+
 pub struct Quick {
-    state: Option<provider::Quick>,
+    /// What Windows reports (radios, power mode, the toggles), `None` until first read.
+    live: Option<controls::State>,
+    /// The display's brightness, 0–100 (its own slower read: DDC/CI).
+    display: Option<u32>,
     volume: Option<Volume>,
     network: NetworkInfo,
     battery: Option<Battery>,
     /// The brightness being dragged (applied when the drag ends: DDC/CI is slow).
     brightness: Option<u32>,
     error: Option<String>,
+    /// A change is on its way; tiles wait for its readback.
     pending: bool,
     refreshing: bool,
-    hotspot: Option<bool>,
     display_due: Instant,
 }
 
@@ -46,7 +66,8 @@ impl Quick {
         cx.lanes
             .quick(|_| Reply::QuickControl(controls::read(), None));
         Self {
-            state: None,
+            live: None,
+            display: None,
             // The endpoint (COM activation, tens of ms cold) is opened once on screen.
             volume: None,
             network: network::read(None),
@@ -55,16 +76,21 @@ impl Quick {
             error: None,
             pending: true,
             refreshing: false,
-            hotspot: None,
             display_due: Instant::now() + Duration::from_secs(5),
         }
     }
 
     /// Shown with this state (tests).
     #[cfg(test)]
-    pub fn with(state: provider::Quick, volume: Option<Volume>, battery: Option<Battery>) -> Self {
+    pub fn with(
+        live: controls::State,
+        display: Option<u32>,
+        volume: Option<Volume>,
+        battery: Option<Battery>,
+    ) -> Self {
         Self {
-            state: Some(state),
+            live: Some(live),
+            display,
             volume,
             network: NetworkInfo {
                 kind: Link::Wifi,
@@ -76,13 +102,12 @@ impl Quick {
             error: None,
             pending: false,
             refreshing: false,
-            hotspot: None,
             display_due: Instant::now() + Duration::from_secs(5),
         }
     }
 
     fn radio(&self, kind: RadioKind) -> Option<bool> {
-        self.state
+        self.live
             .as_ref()?
             .radios
             .iter()
@@ -101,6 +126,144 @@ impl Quick {
         self.pending = true;
         change_radio(cx, kind, !on);
         Effect::Redraw
+    }
+
+    /// Flips `toggle` from the state Windows last reported, then reads everything back.
+    fn flip(&mut self, toggle: Toggle, on: Option<bool>, cx: &mut Cx) -> Effect {
+        let Some(on) = on.filter(|_| !self.pending && !self.refreshing) else {
+            return Effect::None;
+        };
+        self.pending = true;
+        cx.lanes.quick(move |_| {
+            let error = toggle.set(!on).err();
+            Reply::QuickControl(controls::read(), error)
+        });
+        Effect::Redraw
+    }
+
+    /// The tiles, in Control Center's order: connectivity, then focus and display, then power.
+    fn tiles(&self) -> Vec<(Tile<'static>, String)> {
+        let live = self.live.as_ref();
+        let loading = live.is_none();
+        let enabled = !self.pending;
+        let on_off = |on: bool| if on { "On" } else { "Off" };
+        let mut tiles = Vec::new();
+        let wifi = self.radio(RadioKind::Wifi);
+        let wifi_detail = match wifi {
+            None if loading => "…".to_owned(),
+            None => "Unavailable".to_owned(),
+            Some(true) => self
+                .network
+                .name
+                .clone()
+                .filter(|_| self.network.kind == Link::Wifi)
+                .unwrap_or_else(|| "On".into()),
+            Some(false) => "Off".into(),
+        };
+        tiles.push((
+            Tile {
+                id: WIFI,
+                icon: Icon::Wifi(3),
+                title: "Wi-Fi",
+                subtitle: "",
+                on: wifi == Some(true),
+                enabled: wifi.is_some() && enabled,
+                more: Some(WIFI_MORE),
+            },
+            wifi_detail,
+        ));
+        let bluetooth = self.radio(RadioKind::Bluetooth);
+        tiles.push((
+            Tile {
+                id: BLUETOOTH,
+                icon: Icon::Bluetooth,
+                title: "Bluetooth",
+                subtitle: "",
+                on: bluetooth == Some(true),
+                enabled: bluetooth.is_some() && enabled,
+                more: Some(BLUETOOTH_MORE),
+            },
+            match bluetooth {
+                None if loading => "…".into(),
+                None => "Unavailable".into(),
+                Some(on) => on_off(on).into(),
+            },
+        ));
+        let mut toggle = |id, icon, title, state: Option<bool>| {
+            if let Some(on) = state {
+                tiles.push((
+                    Tile {
+                        id,
+                        icon,
+                        title,
+                        subtitle: "",
+                        on,
+                        enabled,
+                        more: None,
+                    },
+                    on_off(on).into(),
+                ));
+            }
+        };
+        toggle(DND, Icon::Moon, "Do Not Disturb", live.and_then(|l| l.dnd));
+        toggle(
+            NIGHT_LIGHT,
+            Icon::NightLight,
+            "Night Light",
+            live.and_then(|l| l.night_light),
+        );
+        toggle(
+            AIRPLANE,
+            Icon::Airplane,
+            "Airplane Mode",
+            live.and_then(|l| l.airplane),
+        );
+        toggle(
+            HOTSPOT,
+            Icon::Hotspot,
+            "Hotspot",
+            live.and_then(|l| l.hotspot),
+        );
+        let power = live.and_then(|l| l.power);
+        tiles.push((
+            Tile {
+                id: POWER,
+                icon: Icon::Gauge,
+                title: "Power Mode",
+                subtitle: "",
+                on: power.is_some_and(|p| p != PowerMode::Balanced),
+                enabled: power.is_some() && enabled,
+                more: None,
+            },
+            match power {
+                None if loading => "…".into(),
+                None => "Unavailable".into(),
+                Some(mode) => power_label(mode).into(),
+            },
+        ));
+        tiles
+    }
+
+    /// A card with a title row (and buttons at its right) over a Control Center slider.
+    fn slider_card(
+        f: &mut Frame,
+        rect: Rect,
+        title: &str,
+        buttons: &[(HitId, Icon, &str)],
+        slider: (HitId, f32, &str, Icon),
+    ) {
+        let c = f.theme.color;
+        let inner = f.card(rect);
+        let (head, rest) = inner.take_top(f.px(24.0), f.px(6.0));
+        let mut label = head;
+        for &(id, icon, name) in buttons.iter().rev() {
+            let (button, left) = label.take_right(f.px(26.0), f.px(2.0));
+            f.icon_button(id, button, icon, 26.0, name, false);
+            label = left;
+        }
+        f.text_in(label, title, TextRole::Headline, c.label, Align::Start);
+        let (id, value, name, icon) = slider;
+        f.slider(id, rest, value, name, Some(icon));
     }
 }
 
@@ -140,134 +303,111 @@ fn next_power(mode: PowerMode) -> PowerMode {
 
 impl Panel for Quick {
     fn width(&self) -> f32 {
-        340.0
+        360.0
     }
 
     fn view(&self, kit: &mut Kit) {
-        let state = self.state.as_ref();
-        let on_off = |on: bool| if on { "On" } else { "Off" };
-        let wifi = self.radio(RadioKind::Wifi);
-        let wifi_detail = match wifi {
-            None if state.is_none() => "…".to_owned(),
-            None => "Unavailable".to_owned(),
-            Some(true) => self
-                .network
-                .name
-                .clone()
-                .filter(|_| self.network.kind == Link::Wifi)
-                .unwrap_or_else(|| "On".into()),
-            Some(false) => "Off".into(),
-        };
-        let bluetooth = self.radio(RadioKind::Bluetooth);
-        let power = state.and_then(|s| s.power);
-        let mut tiles = vec![
-            Tile {
-                id: WIFI,
-                more: Some(WIFI_MORE),
-                glyph: glyph::WIFI[3],
-                label: "Wi-Fi",
-                detail: &wifi_detail,
-                on: wifi == Some(true),
-                enabled: wifi.is_some() && !self.pending,
-            },
-            Tile {
-                id: BLUETOOTH,
-                more: Some(BLUETOOTH_MORE),
-                glyph: glyph::BLUETOOTH,
-                label: "Bluetooth",
-                detail: match bluetooth {
-                    None if state.is_none() => "…",
-                    None => "Unavailable",
-                    Some(on) => on_off(on),
-                },
-                on: bluetooth == Some(true),
-                enabled: bluetooth.is_some() && !self.pending,
-            },
-            Tile {
-                id: POWER,
-                more: None,
-                glyph: glyph::GAUGE,
-                label: "Power mode",
-                detail: power.map_or("Unavailable", power_label),
-                on: power.is_some_and(|p| p != PowerMode::Balanced),
-                enabled: power.is_some() && !self.pending,
-            },
-        ];
-        if let Some(on) = self.hotspot {
-            tiles.push(Tile {
-                id: HOTSPOT,
-                more: None,
-                glyph: glyph::WIFI[3],
-                label: "Mobile hotspot",
-                detail: on_off(on),
-                on,
-                enabled: !self.pending,
-            });
-        }
-        kit.tiles(&tiles);
-        if let Some(level) = self.brightness.or(state.and_then(|s| s.brightness)) {
-            kit.slider(
-                BRIGHTNESS,
-                level as f32 / 100.0,
-                "Brightness",
-                Some((DECORATION, glyph::BRIGHTNESS, "Brightness")),
-                None,
-            );
-        }
-        if let Some(volume) = self.volume {
-            let level = if volume.muted { 0.0 } else { volume.level };
-            let icon = if volume.muted || level == 0.0 {
-                glyph::MUTE
-            } else {
-                glyph::VOLUME[((level * 3.0).ceil() as usize).min(3)]
-            };
-            kit.slider(
-                VOLUME,
-                level,
-                "Volume",
-                Some((MUTE, icon, if volume.muted { "Unmute" } else { "Mute" })),
-                Some((MIXER, glyph::CHEVRON_RIGHT, "Volume mixer")),
-            );
-        }
-        if let Some(error) = &self.error {
-            kit.paragraph(error, 2, kit.look.dim());
-        }
-        kit.separator();
-        let height = kit.px(30.0);
-        let center = kit.y + height / 2.0;
-        if let Some(b) = self.battery {
-            let text = format!(
-                "{}%{}",
-                b.percent,
-                if b.charging { " · Charging" } else { "" }
-            );
-            let style = kit.font(13.0, 400);
-            let (_, h) = kit.text.measure(&text, &style);
-            let (left, room) = (kit.left, kit.width() - kit.px(40.0));
-            kit.text_at(left, center - h / 2.0, &text, &style, kit.look.dim(), room);
-        }
-        let right = kit.right;
-        kit.icon_button(
-            SETTINGS,
-            Point::new(right - kit.px(15.0), center),
-            glyph::SETTINGS,
-            "All settings",
-        );
-        kit.y += height;
+        let tiles = self.tiles();
+        let brightness = self.brightness.or(self.display);
+        let volume = self.volume;
+        let battery = self.battery;
+        let error = self.error.as_deref();
+        kit.frame(|f, area| {
+            let c = f.theme.color;
+            let gap = f.px(GAP);
+            let mut column = Stack::column(area, gap);
+            // The tiles, two to a row.
+            let height = f.px(TILE);
+            let rows = tiles.len().div_ceil(2);
+            let grid = column.next(rows as f32 * height + rows.saturating_sub(1) as f32 * gap);
+            for (i, (tile, subtitle)) in tiles.iter().enumerate() {
+                let tile = Tile {
+                    subtitle: subtitle.as_str(),
+                    ..tile.clone()
+                };
+                f.tile(&tile, layout::grid(grid, 2, gap, height, i));
+            }
+            // Display and Sound, each a card with a Control Center slider.
+            let card = f.px(24.0) + f.px(6.0) + f.px(28.0) + 2.0 * f.px(f.theme.metrics.pad);
+            if let Some(level) = brightness {
+                Self::slider_card(
+                    f,
+                    column.next(card),
+                    "Display",
+                    &[],
+                    (BRIGHTNESS, level as f32 / 100.0, "Brightness", Icon::Brightness),
+                );
+            }
+            if let Some(volume) = volume {
+                let level = if volume.muted { 0.0 } else { volume.level };
+                let icon = if volume.muted || level == 0.0 {
+                    Icon::Mute
+                } else {
+                    Icon::Volume(((level * 3.0).ceil() as u8).min(3))
+                };
+                let mute = if volume.muted { "Unmute" } else { "Mute" };
+                Self::slider_card(
+                    f,
+                    column.next(card),
+                    "Sound",
+                    &[
+                        (MUTE, if volume.muted { Icon::Mute } else { Icon::Speaker }, mute),
+                        (MIXER, Icon::ChevronRight, "Volume mixer"),
+                    ],
+                    (VOLUME, level, "Volume", icon),
+                );
+            }
+            if let Some(error) = error {
+                let width = column.rect.width();
+                let lines = f.line_count(error, TextRole::Footnote, width, 2);
+                let at = column.next(lines as f32 * f.line(TextRole::Footnote));
+                f.paragraph(at.left, at.top, width, error, TextRole::Footnote, c.secondary, 2);
+            }
+            // The foot: the battery, and all of Settings.
+            let foot = column.next(f.px(28.0));
+            let (button, rest) = foot.take_right(f.px(28.0), f.px(8.0));
+            f.icon_button(SETTINGS, button, Icon::Settings, 28.0, "All settings", false);
+            if let Some(b) = battery {
+                let text = format!(
+                    "{}%{}",
+                    b.percent,
+                    if b.charging { " · Charging" } else { "" }
+                );
+                let (icon, text_rect) = rest.take_left(f.px(20.0), f.px(6.0));
+                let level = if b.charging {
+                    Icon::Charging
+                } else {
+                    Icon::Battery((b.percent / 10).min(10) as u8)
+                };
+                f.icon(icon, level, 16.0, c.secondary);
+                f.text_in(text_rect, &text, TextRole::Callout, c.secondary, Align::Start);
+            }
+            area.top + column.used()
+        });
     }
 
     fn activate(&mut self, id: HitId, cx: &mut Cx) -> Effect {
         self.error = None;
+        let live = self.live.as_ref();
+        let (dnd, night, airplane, hotspot) = (
+            live.and_then(|l| l.dnd),
+            live.and_then(|l| l.night_light),
+            live.and_then(|l| l.airplane),
+            live.and_then(|l| l.hotspot),
+        );
         match id {
             WIFI => self.set_radio(RadioKind::Wifi, cx),
             WIFI_MORE => Effect::Switch(Kind::Wifi),
             BLUETOOTH => self.set_radio(RadioKind::Bluetooth, cx),
             BLUETOOTH_MORE => settings("ms-settings:bluetooth"),
+            DND => self.flip(Toggle::Dnd, dnd, cx),
+            NIGHT_LIGHT => self.flip(Toggle::NightLight, night, cx),
+            AIRPLANE => self.flip(Toggle::Airplane, airplane, cx),
             POWER => {
                 if self.pending || self.refreshing {
                     return Effect::None;
                 }
-                let Some(mode) = self.state.as_ref().and_then(|s| s.power) else {
+                let Some(mode) = live.and_then(|l| l.power) else {
                     return Effect::None;
                 };
                 let next = next_power(mode);
@@ -279,10 +419,7 @@ impl Panel for Quick {
                 Effect::Redraw
             }
             HOTSPOT => {
-                if self.pending || self.refreshing {
-                    return Effect::None;
-                }
-                let Some(on) = self.hotspot else {
+                let Some(on) = hotspot.filter(|_| !self.pending && !self.refreshing) else {
                     return Effect::None;
                 };
                 self.pending = true;
@@ -335,41 +472,21 @@ impl Panel for Quick {
     fn reply(&mut self, reply: &Reply, cx: &mut Cx) -> bool {
         match reply {
             Reply::Quick(state) => {
-                let mut state = state.clone();
-                // The slow brightness response must not overwrite more recent radio/power state.
-                if let Some(current) = &self.state {
-                    state.radios = current.radios.clone();
-                    state.power = current.power;
-                }
-                let changed = self.brightness.is_some() || self.state.as_ref() != Some(&state);
-                self.state = Some(state);
+                // Only the display comes from here; the switches from `QuickControl`.
+                let changed = self.brightness.is_some() || self.display != state.brightness;
+                self.display = state.brightness;
                 self.brightness = None;
                 changed
             }
             Reply::QuickControl(live, error) => {
-                let changed = self.pending
-                    || self.hotspot != live.hotspot
-                    || error.is_some()
-                    || self
-                        .state
-                        .as_ref()
-                        .is_none_or(|s| s.radios != live.radios || s.power != live.power);
+                let changed =
+                    self.pending || error.is_some() || self.live.as_ref() != Some(live);
                 self.pending = false;
                 self.refreshing = false;
-                self.hotspot = live.hotspot;
                 if error.is_some() {
                     self.error = error.clone();
                 }
-                let state = self.state.get_or_insert_with(|| provider::Quick {
-                    radios: vec![],
-                    brightness: None,
-                    power: None,
-                    saver: None,
-                    dnd: None,
-                    focus: None,
-                });
-                state.radios = live.radios.clone();
-                state.power = live.power;
+                self.live = Some(live.clone());
                 changed
             }
             Reply::Failed(e) => {
@@ -394,6 +511,9 @@ impl Panel for Quick {
             BLUETOOTH => settings("ms-settings:bluetooth"),
             POWER => settings("ms-settings:powersleep"),
             HOTSPOT => settings("ms-settings:network-mobilehotspot"),
+            DND => settings("ms-settings:notifications"),
+            NIGHT_LIGHT => settings("ms-settings:nightlight"),
+            AIRPLANE => settings("ms-settings:network-airplanemode"),
             _ => Effect::None,
         }
     }

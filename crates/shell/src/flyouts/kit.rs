@@ -6,7 +6,11 @@
 
 use std::sync::Arc;
 
-use mypaper_ui::{DisplayList, Hit, HitId, Image, Op, Point, Rect, Rgba, Role, Text, TextStyle};
+use mypaper_ui::interact::Interaction;
+use mypaper_ui::kit::Frame;
+use mypaper_ui::{
+    DisplayList, Hit, HitId, Image, Op, Point, Rect, Rgba, Role, Text, TextStyle, Theme,
+};
 
 use super::look::Look;
 
@@ -74,6 +78,8 @@ pub struct Tile<'a> {
 pub struct Kit<'a> {
     pub text: &'a mut Text,
     pub look: &'a Look,
+    /// The kit's theme for this look (`Look::theme`).
+    pub theme: Theme,
     /// Device pixels per design pixel.
     pub s: f32,
     pub list: DisplayList,
@@ -90,27 +96,56 @@ pub struct Kit<'a> {
     pub focus: Option<HitId>,
 }
 
-/// The panel's inner padding, design px.
-pub const PAD: f32 = 14.0;
 /// The id of a glyph that only decorates (an icon before a slider that is not a button).
 pub const DECORATION: HitId = 0;
 
 impl<'a> Kit<'a> {
     /// A kit for a panel `width` device pixels wide, its content starting under the padding.
     pub fn new(text: &'a mut Text, look: &'a Look, s: f32, width: f32) -> Self {
+        let theme = look.theme();
+        let pad = (theme.metrics.pad * s).round();
         Self {
             text,
             look,
+            theme,
             s,
             list: DisplayList::default(),
-            left: PAD * s,
-            right: width - PAD * s,
-            y: PAD * s,
+            left: pad,
+            right: width - pad,
+            y: pad,
             limit: f32::MAX,
             hover: None,
             pressed: None,
             focus: None,
         }
+    }
+
+    /// The panel's padding, device px.
+    pub fn pad(&self) -> f32 {
+        (self.theme.metrics.pad * self.s).round()
+    }
+
+    /// Draws with the kit (docs/ui.md "The kit"): `draw` gets a [`Frame`] in this flyout's theme
+    /// and input state, and the room left (from `y` to `limit`, inside the padding). It returns
+    /// the bottom of what it drew, where the next block goes.
+    pub fn frame(&mut self, draw: impl FnOnce(&mut Frame, Rect) -> f32) {
+        let input = Interaction {
+            hover: self.hover,
+            pressed: self.pressed,
+            focus: self.focus,
+            focus_visible: self.focus.is_some(),
+        };
+        let area = Rect::new(
+            self.left,
+            self.y,
+            self.right - self.left,
+            (self.limit - self.y).max(0.0),
+        );
+        let mut f = Frame::new(self.text, &self.theme, self.s, &input);
+        let bottom = draw(&mut f, area);
+        self.list.ops.append(&mut f.list.ops);
+        self.list.hits.append(&mut f.list.hits);
+        self.y = bottom.round();
     }
 
     pub fn px(&self, v: f32) -> f32 {
@@ -656,23 +691,29 @@ impl<'a> Kit<'a> {
         self.y += self.px(10.0);
     }
 
-    /// The panel's body, filling the whole window: glass under it, or the style's own fill
-    /// with a hairline. The engine's glass is opaque and tinted for legibility (the flyout's
-    /// clarity), and covers our own widgets behind it, so on glass the body only takes clicks:
-    /// no fill and no outline over it. Goes first, under everything else.
-    pub fn body(list: &mut DisplayList, size: (f32, f32), radius: f32, look: &Look, glass: bool) {
+    /// The panel's body, filling the whole window at the theme's surface radius (`radius`,
+    /// device px): with glass only an invisible hit fill (the engine draws the glass and its one
+    /// rim, `Frame::surface`'s contract); without, the theme's surface and, for Solid, its one
+    /// hairline. Goes first, under everything else.
+    pub fn body(
+        list: &mut DisplayList,
+        size: (f32, f32),
+        radius: f32,
+        theme: &Theme,
+        glass: bool,
+    ) {
         let rect = Rect::new(0.0, 0.0, size.0, size.1);
         let mut ops = vec![Op::Fill {
             rect,
             radius,
-            color: if glass { Rgba::HIT } else { look.fill },
+            color: if glass { Rgba::HIT } else { theme.color.surface },
         }];
-        if !glass {
+        if let Some(border) = theme.border.filter(|_| !glass) {
             ops.push(Op::Stroke {
                 rect: rect.inflate(-0.5),
-                radius,
+                radius: radius - 0.5,
                 width: 1.0,
-                color: look.ink.with_alpha(0.12),
+                color: border,
             });
         }
         ops.append(&mut list.ops);

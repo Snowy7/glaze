@@ -14,7 +14,10 @@ use mypaper_ui::{HitId, Image, Op, Point, Rect, TextField};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{VK_DOWN, VK_NEXT, VK_PRIOR, VK_UP};
 
-use super::kit::{Icon, Kit, PAD, Row, glyph};
+use super::kit::{Icon, Kit, Row, glyph};
+
+/// The panel padding (the kit theme's `metrics.pad`), design px.
+const PAD: f32 = 12.0;
 use super::{Cx, Effect, LIST, Panel, PanelCommand, Reply};
 use mypaper_bars::config::{LauncherLayout, Pinned};
 use mypaper_ui::Entry;

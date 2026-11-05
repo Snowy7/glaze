@@ -10,7 +10,8 @@ use mypaper_bars::style::{Family, Look as BarLook, NativeStyle, Scheme};
 use mypaper_config::Config;
 use mypaper_theme::{Appearance, LoadedTheme, Paint, TextTone};
 use mypaper_ui::interact::State;
-use mypaper_ui::{GlassMaterial, Ink, Rgba, Text, icons};
+use mypaper_ui::theme::Radii;
+use mypaper_ui::{GlassMaterial, Ink, Rgba, Scheme as UiScheme, Style, Text, Theme, icons};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Look {
@@ -119,10 +120,11 @@ impl Look {
             radius: bar
                 .radius
                 .or(appearance.radius)
+                // The kit's surface radii (`Theme::new`).
                 .unwrap_or(match bar.family.unwrap_or_default() {
                     Family::Fluent => 8.0,
-                    Family::Macos => 18.0,
-                    Family::Material => 24.0,
+                    Family::Macos => 24.0,
+                    Family::Material => 28.0,
                     Family::Mono => 16.0,
                 })
                 .max(4.0),
@@ -142,11 +144,34 @@ impl Look {
         }
     }
 
+    /// The kit's theme for the flyouts (docs/ui.md "The kit"): the bar's family picks the style
+    /// (Fluent → Fluent, Material → OneUi, Mono → Mono, macOS → Liquid, or Solid with no glass
+    /// and an opaque fill), the ink the scheme, and the accent carries over. The body's radius
+    /// is the look's (the user's `radius`, else the kit's), cards concentric inside it.
+    pub fn theme(&self) -> Theme {
+        let dark = mypaper_ui::theme::luminance(self.ink) > 0.5;
+        let style = match self.family {
+            Family::Fluent => Style::Fluent,
+            Family::Material => Style::OneUi,
+            Family::Mono => Style::Mono,
+            Family::Macos if self.glass.is_none() && self.fill.a >= 1.0 => Style::Solid,
+            Family::Macos => Style::Liquid,
+        };
+        let scheme = if dark { UiScheme::Dark } else { UiScheme::Light };
+        let mut theme = Theme::new(style, scheme, self.accent);
+        if theme.radius.surface != self.radius {
+            theme.radius.card = Radii::concentric(self.radius, theme.metrics.pad, 6.0);
+            theme.radius.surface = self.radius;
+        }
+        theme
+    }
+
     /// Menus share the active family, font, colors and material with the panels.
     pub fn menu_tokens(&self) -> mypaper_ui::Tokens {
         let base = mypaper_ui::Tokens::default();
         mypaper_ui::Tokens {
-            radius: self.radius,
+            // Concentric with a flyout of the same look across a menu's 6 px inset.
+            radius: Radii::concentric(self.radius, 6.0, 8.0),
             font: mypaper_ui::TextStyle::new(&self.font, 13.0),
             icons: self.icons.clone(),
             material: mypaper_ui::Material { tint: self.fill },

@@ -1,9 +1,9 @@
-//! The notification center: Windows' toasts from the shared integration lease,
+﻿//! The notification center: Windows' toasts from the shared integration lease,
 //! grouped by app with the newest group first. A group of several is a
 //! stack (its newest card, and the cards under it peeking out) until clicked open. Each card
-//! dismisses with its ×, a group with its own, everything with "Clear all". Do not disturb
-//! shows its state and opens its setting (there is no API to change it). The month sits under
-//! the list, as Windows 11 puts it (the clock opens this center).
+//! dismisses with its Ã—, a group with its own, everything with "Clear all". The bell switches
+//! do not disturb (`toggles::dnd`) and shows what Windows reads back. The month sits under the
+//! list, as Windows 11 puts it (the clock opens this center).
 //!
 //! Drawn with the kit (`mypaper_ui::kit`, docs/ui.md "Porting a surface"): the header and the
 //! month never move; only the list scrolls, inside a viewport whose height depends on the
@@ -19,19 +19,17 @@ use std::time::{Duration, Instant};
 
 use mypaper_bars::flyouts::index::epoch_ms;
 use mypaper_bars::flyouts::notifications::{Notification, NotificationList};
-use mypaper_bars::flyouts::quick::Dnd;
-use mypaper_bars::style::Family;
 use mypaper_bars::system;
 use mypaper_integrations::{Action, Availability, Data, Lease, Provider};
 use mypaper_ui::icons::Icon;
 use mypaper_ui::interact::Interaction;
 use mypaper_ui::kit::{ButtonKind, Frame};
 use mypaper_ui::layout::{Align, Stack};
-use mypaper_ui::{HitId, Image, Op, Rect, Role, Scheme, Scroll, Style, TextRole, Theme};
+use mypaper_ui::{HitId, Image, Op, Rect, Role, Scroll, TextRole};
 
 use super::calendar::Calendar;
 use super::kit::Kit;
-use super::look::Look;
+use super::toggles;
 use super::{Cx, Effect, LIST, Panel, Reply};
 
 const CLEAR_ALL: HitId = 10;
@@ -102,26 +100,13 @@ pub fn ago(at: u64, now: u64) -> String {
     }
 }
 
-/// The kit's theme for the flyouts' look (the bar's family and scheme, the accent).
-pub fn theme(look: &Look) -> Theme {
-    let dark = mypaper_ui::theme::luminance(look.ink) > 0.5;
-    let style = match look.family {
-        Family::Fluent => Style::Fluent,
-        Family::Material => Style::OneUi,
-        Family::Mono => Style::Mono,
-        Family::Macos if look.glass.is_none() && look.fill.a >= 1.0 => Style::Solid,
-        Family::Macos => Style::Liquid,
-    };
-    let scheme = if dark { Scheme::Dark } else { Scheme::Light };
-    Theme::new(style, scheme, look.accent)
-}
-
 pub struct Center {
     list: Option<NotificationList>,
     groups: Vec<Group>,
     /// Groups opened from their stack.
     open: BTreeSet<String>,
-    dnd: Option<Dnd>,
+    /// Do not disturb, as Windows reports it (`toggles::dnd`).
+    dnd: Option<bool>,
     icons: Vec<Option<Arc<Image>>>,
     calendar: Calendar,
     /// The current time for "ago" labels (refreshed with each read).
@@ -140,7 +125,7 @@ pub struct Center {
 
 impl Center {
     pub fn new(cx: &mut Cx) -> Self {
-        cx.lanes.quick(|lane| Reply::Quick(lane.read()));
+        cx.lanes.quick(|_| Reply::Dnd(toggles::dnd::read(), None));
         let lease = crate::integrations::acquire(Provider::Notifications);
         let error = lease.as_ref().err().map(ToString::to_string);
         Self {
@@ -151,7 +136,7 @@ impl Center {
             icons: Vec::new(),
             calendar: Calendar::new(cx),
             now: epoch_ms(),
-            scroll: Scroll::new(&theme(cx.look).motion),
+            scroll: Scroll::new(&cx.look.theme().motion),
             poll_at: Instant::now(),
             lease: lease.ok(),
             revision: u64::MAX,
@@ -170,7 +155,7 @@ impl Center {
             groups,
             list: Some(list),
             open: BTreeSet::new(),
-            dnd: Some(Dnd::Off),
+            dnd: Some(false),
             calendar,
             now,
             scroll: Scroll::default(),
@@ -283,7 +268,7 @@ impl Panel for Center {
     }
 
     fn view(&self, kit: &mut Kit) {
-        let theme = theme(kit.look);
+        let theme = kit.theme.clone();
         let input = Interaction {
             hover: kit.hover,
             pressed: kit.pressed,
@@ -305,7 +290,7 @@ impl Panel for Center {
         let has_any = !self.groups.is_empty();
         let mut buttons = vec![(
             DND,
-            if self.dnd.is_some_and(|d| d != Dnd::Off) {
+            if self.dnd == Some(true) {
                 Icon::BellOff
             } else {
                 Icon::Bell
@@ -373,7 +358,7 @@ impl Panel for Center {
         }
         match &self.list {
             None if self.error.is_none() && self.availability == Availability::Connecting => {
-                notice(&mut f, &mut column, "Loading notifications…", None)
+                notice(&mut f, &mut column, "Loading notificationsâ€¦", None)
             }
             None => {}
             Some(NotificationList { error: Some(_), .. }) => {
@@ -470,7 +455,18 @@ impl Panel for Center {
                 }
                 Effect::Redraw
             }
-            DND | SETTINGS => {
+            DND => {
+                // Switched for real, then read back (`toggles::dnd`); unknown state: no guess.
+                let Some(on) = self.dnd else {
+                    return Effect::None;
+                };
+                cx.lanes.quick(move |_| {
+                    let error = toggles::dnd::set(!on).err();
+                    Reply::Dnd(toggles::dnd::read(), error)
+                });
+                Effect::None
+            }
+            SETTINGS => {
                 system::open("ms-settings:notifications".into());
                 Effect::Close
             }
@@ -577,9 +573,10 @@ impl Panel for Center {
                 }
                 true
             }
-            Reply::Quick(quick) => {
-                let changed = self.dnd != quick.dnd;
-                self.dnd = quick.dnd;
+            // A refused change is logged by `toggles`; the bell shows what Windows reads back.
+            Reply::Dnd(dnd, _) => {
+                let changed = self.dnd != *dnd;
+                self.dnd = *dnd;
                 changed
             }
             _ => false,
@@ -826,7 +823,8 @@ impl Center {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::flyouts::{Panel as _, build};
+    use crate::flyouts::look::Look;
+    use crate::flyouts::build;
 
     fn many() -> Center {
         let now = 1_793_869_260_000;

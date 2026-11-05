@@ -23,6 +23,7 @@ mypaper-widgets = { path = "../widgets" }
 mypaper-plugin-weather = { path = "../../plugins/weather" }
 serde.workspace = true
 base64 = "0.22"
+windows-core = "0.62"
 
 anyhow.workspace = true
 log.workspace = true

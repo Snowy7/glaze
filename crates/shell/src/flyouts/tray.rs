@@ -64,7 +64,7 @@ impl Overflow {
 
 impl Panel for Overflow {
     fn width(&self) -> f32 {
-        (COLUMNS as f32) * 44.0 + 2.0 * super::kit::PAD - 4.0
+        (COLUMNS as f32) * 44.0 + 2.0 * 12.0 - 4.0
     }
 
     fn view(&self, kit: &mut Kit) {

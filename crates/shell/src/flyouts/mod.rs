@@ -27,6 +27,7 @@ mod quick;
 mod settings_pages;
 #[cfg(test)]
 mod tests;
+mod toggles;
 mod tray;
 mod wifi;
 
@@ -59,7 +60,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
 
-use self::kit::{Kit, PAD};
+use self::kit::Kit;
 use self::look::Look;
 use crate::bars::Bars;
 
@@ -136,6 +137,8 @@ pub enum PanelCommand {
 pub enum Reply {
     Quick(mypaper_bars::flyouts::quick::Quick),
     QuickControl(controls::State, Option<String>),
+    /// Do not disturb as Windows reports it, and why a change failed (`toggles::dnd`).
+    Dnd(Option<bool>, Option<String>),
     Mixer(mypaper_bars::flyouts::mixer::MixerState),
     Wifi(mypaper_bars::flyouts::wifi::WifiState),
     NotificationIcons(Vec<(String, Option<String>)>),
@@ -968,6 +971,7 @@ impl Flyouts {
             glass.is_some(),
         );
         let (width, height) = (size.0 as f32, size.1 as f32);
+        // The body's radius (`Look::theme`): the glass has exactly the body's shape.
         let radius = (self.look.radius * s).round();
         open.size = size;
         open.origin = place(
@@ -1318,19 +1322,19 @@ pub fn build(
 ) -> (mypaper_ui::DisplayList, (u32, u32)) {
     let width = (panel.width() * s).round();
     let mut kit = Kit::new(text, look, s, width);
-    kit.limit = max_height - PAD * s;
+    let pad = kit.pad();
+    kit.limit = max_height - pad;
     (kit.hover, kit.pressed, kit.focus) = state;
     panel.view(&mut kit);
-    let height = (kit.y + PAD * s).round().min(max_height);
-    let mut list = kit.list;
+    let height = (kit.y + pad).round().min(max_height);
+    let radius = (kit.theme.radius.surface * s).round();
+    let Kit {
+        mut list,
+        theme,
+        ..
+    } = kit;
     list.focus = state.2;
-    Kit::body(
-        &mut list,
-        (width, height),
-        (look.radius * s).round(),
-        look,
-        glass,
-    );
+    Kit::body(&mut list, (width, height), radius, &theme, glass);
     (list, (width as u32, height as u32))
 }
 

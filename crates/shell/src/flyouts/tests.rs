@@ -7,7 +7,7 @@ use mypaper_bars::flyouts::index::{App, History};
 use mypaper_bars::flyouts::language::Layout;
 use mypaper_bars::flyouts::mixer::{Device, MixerState, Session};
 use mypaper_bars::flyouts::notifications::{Notification, NotificationList};
-use mypaper_bars::flyouts::quick::{Dnd, PowerMode, Quick as QuickState, RadioInfo, RadioKind};
+use mypaper_bars::flyouts::quick::{PowerMode, RadioInfo, RadioKind};
 use mypaper_bars::flyouts::wifi::{Network, Security, WifiState};
 use mypaper_bars::system::Battery;
 use mypaper_bars::tray_data::TrayItem;
@@ -16,6 +16,7 @@ use mypaper_ui::{Kind as SurfaceKind, Point, Role, Surface, TextField, Ui, rende
 use windows::Win32::Foundation::SYSTEMTIME;
 
 use super::calendar::Calendar;
+use super::controls;
 use super::language::Language;
 use super::launcher::{self, Launcher};
 use super::look::Look;
@@ -96,7 +97,7 @@ fn notifications() -> NotificationList {
 }
 
 fn panels(ui: &mut Ui, surface: &Surface) -> Vec<(&'static str, Box<dyn Panel>)> {
-    let quick = QuickState {
+    let quick = controls::State {
         radios: vec![
             RadioInfo {
                 kind: RadioKind::Wifi,
@@ -109,11 +110,11 @@ fn panels(ui: &mut Ui, surface: &Surface) -> Vec<(&'static str, Box<dyn Panel>)>
                 on: false,
             },
         ],
-        brightness: Some(60),
         power: Some(PowerMode::Balanced),
-        saver: None,
-        dnd: Some(Dnd::Off),
-        focus: None,
+        hotspot: None,
+        dnd: Some(true),
+        night_light: Some(false),
+        airplane: Some(false),
     };
     let wifi = WifiState {
         networks: vec![
@@ -210,6 +211,7 @@ fn panels(ui: &mut Ui, surface: &Surface) -> Vec<(&'static str, Box<dyn Panel>)>
             "quick",
             Box::new(Quick::with(
                 quick,
+                Some(60),
                 Some(Volume {
                     level: 0.4,
                     muted: false,
