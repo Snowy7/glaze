@@ -31,8 +31,9 @@ const GRANT: HitId = 14;
 const STUDIO: HitId = 15;
 /// A group's clear button: `GROUP + index`.
 const GROUP: HitId = 500;
-/// A card: `LIST + 2 * index` (the card) and `+ 1` (its dismiss button), in flat list order.
-const CARD: HitId = LIST;
+/// A card: `CARD + 2 * index` (the card) and `+ 1` (its dismiss button), in flat list order.
+// The shared provider permits 512 app groups; reserve their full clear-button range.
+const CARD: HitId = LIST + 1_000;
 const TOGGLE_GROUP: HitId = 20_000;
 
 /// How often the open center reads the list again.
