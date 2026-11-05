@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+mypaper-plugin-sdk = { path = "../plugin-sdk" }
 mypaper-config.workspace = true
 mypaper-desktop.workspace = true
 mypaper-theme.workspace = true

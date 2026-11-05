@@ -7,6 +7,7 @@ mod edit;
 mod markdown;
 mod metrics;
 pub(crate) mod model;
+mod plugin_faces;
 #[cfg(test)]
 mod tests;
 pub(crate) mod time;
@@ -774,6 +775,7 @@ impl Widgets {
         for out in plugin_out {
             self.deliver(ui, out, now);
         }
+        self.sync_plugin_faces();
         let ids: Vec<_> = self.entries.keys().cloned().collect();
         for id in ids {
             let (save, fetch, photo, timer) = if let Some(entry) = self.entries.get_mut(&id) {
@@ -972,7 +974,8 @@ impl Widgets {
                 && (self.editing || self.layout.overlay || !overlay);
             if !self.entries.contains_key(&instance.instance) {
                 match Model::new(placed.clone(), &mut self.storage, now) {
-                    Ok(model) => {
+                    Ok(mut model) => {
+                        plugin_faces::open_plugin_face(&mut self.plugins, &mut model);
                         let surface =
                             widget_surface(topmost, host.icons_parent(), &instance.instance)?;
                         let tokens = tokens(&placed.appearance);
@@ -1125,6 +1128,7 @@ impl Widgets {
         self.media.forget(id);
         self.audio.forget(id);
         self.plugins.forget(id);
+        self.plugins.close_face(id);
     }
     fn service_message(&mut self, ui: &mut Ui, msg: Msg, now: Stamp, instant: Instant) {
         match msg {
@@ -1150,6 +1154,7 @@ impl Widgets {
                 for item in out {
                     self.deliver(ui, item, now);
                 }
+                self.sync_plugin_faces();
             }
             Msg::Picked(_) => {}
         }
@@ -1810,6 +1815,10 @@ impl Widgets {
         let entry = self.entries.get_mut(id).unwrap();
         let m = &mut entry.model;
         m.dirty = true;
+        if m.kind == Widget::Plugin {
+            self.plugin_action(id, hit);
+            return;
+        }
         if matches!(m.kind, Widget::T3 | Widget::Grok | Widget::Discord) && hit == view::FIELD {
             self.open_field(id, None);
             return;

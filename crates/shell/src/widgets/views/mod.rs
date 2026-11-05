@@ -30,6 +30,7 @@ mod todo;
 mod toggles;
 mod weather;
 mod integrations;
+pub(crate) mod plugin;
 
 use super::model::{Model, Widget};
 use super::time::Stamp;
@@ -296,7 +297,23 @@ fn content(c: &mut Ctx, body: Rect) {
         Widget::Tailscale => integrations::tailscale::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Grok => integrations::grok::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Custom => integrations::custom::view(&mut c.f, c.m, c.rect),
+        Widget::Plugin => plugin_face(c),
     }
+}
+
+/// An SDK plugin's face from the view the host cached in `m.data` (see `widgets::sync_plugin_faces`).
+fn plugin_face(c: &mut Ctx) {
+    let data = &c.m.data;
+    let face = serde_json::from_value::<mypaper_plugin_sdk::Face>(data["face"].clone()).ok();
+    let status = match data["status"].as_str() {
+        Some("live") => plugin::Status::Live,
+        Some("restarting") => plugin::Status::Restarting,
+        Some("failed") => plugin::Status::Failed(data["why"].as_str().unwrap_or("Unavailable")),
+        _ => plugin::Status::Starting,
+    };
+    let title = data["title"].as_str().unwrap_or_default();
+    let icon = plugin::icon(data["icon"].as_str().unwrap_or_default());
+    plugin::draw(&mut c.f, c.rect, title, icon, face.as_ref(), status);
 }
 
 /// One widget's list being built: the kit's frame plus the widget's inputs.

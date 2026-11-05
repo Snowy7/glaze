@@ -44,37 +44,37 @@ plugins/<id>/            bundled, built with the workspace
 ## Process model and lifecycle
 
 - The shell starts a plugin **lazily**, when a face of it is placed (or a data call arrives), inside a
-  kill-on-close Job object, and stops it 30 s after its last face closes. Nothing placed → no process.
-- A crash fails pending calls, shows the last view with a "Restarting…" footer, and restarts after
+  kill-on-close Job object, and stops it 30 s after its last face closes. Nothing placed â†’ no process.
+- A crash fails pending calls, shows the last view with a "Restartingâ€¦" footer, and restarts after
   2 s, doubling per crash up to a minute. A crash never reaches the shell.
 - While the desktop is held (fullscreen app, locked), the host sends `suspend`; `resume` when it's back.
 - The shell caches each instance's last view tree and redraws from it; a plugin that sends nothing
-  costs no frames ("nothing changes → nothing drawn").
+  costs no frames ("nothing changes â†’ nothing drawn").
 
 ## Protocol
 
 JSON-RPC 2.0, one JSON object per line on stdio (`\n`-framed; serde escapes newlines in strings).
 
-Host → plugin:
+Host â†’ plugin:
 
 | message | kind | params |
 |---|---|---|
-| `initialize` | request | `{ protocol: 2, sdk: "1.0", plugin, dataDir }` → `{ sdk: "1.0" }` |
-| `shutdown` | request | — (exit promptly) |
-| `suspend`, `resume` | notification | — |
+| `initialize` | request | `{ protocol: 2, sdk: "1.0", plugin, dataDir }` â†’ `{ sdk: "1.0" }` |
+| `shutdown` | request | â€” (exit promptly) |
+| `suspend`, `resume` | notification | â€” |
 | `face.open` | notification | `{ instance, face, size: "small"\|"medium"\|"large", settings }` |
 | `face.resize` | notification | `{ instance, size }` |
 | `face.close` | notification | `{ instance }` |
 | `action` | notification | `{ instance, action, value? }` (button id; `value` for text fields) |
 | any declared `methods` | request | protocol-1 data calls, unchanged |
 
-Plugin → host:
+Plugin â†’ host:
 
 | message | kind | params |
 |---|---|---|
 | `view` | notification | `{ instance, tree: View }`: replaces the instance's view |
 | `event` | notification | `{ event, data }` (protocol 1, unchanged) |
-| `secret.get` | request | `{ key }` → `{ value: string\|null }` (needs `secrets`) |
+| `secret.get` | request | `{ key }` â†’ `{ value: string\|null }` (needs `secrets`) |
 | `secret.set` | request | `{ key, value: string\|null }` (`null` deletes; needs `secrets`) |
 | `launch` | request | `{ target }` opens a URL/file/app (needs `launch`) |
 | `notify` | request | `{ title, body }` toast (needs `notifications`) |
@@ -92,19 +92,20 @@ scales them. Colors are **roles** (`label`, `secondary`, `tertiary`, `accent`, `
 |---|---|
 | `stack` / `row` | `children`, `gap?` (vertical / horizontal) |
 | `grid` | `children`, `columns`, `gap?` |
-| `text` | `text`, `role` (`TextRole`: `title`, `headline`, `subheadline`, `body`, `callout`, `caption`, …), `color?`, `align?` |
+| `text` | `text`, `role` (`TextRole`: `title`, `headline`, `subheadline`, `body`, `callout`, `caption`, â€¦), `color?`, `align?` |
 | `icon` | `icon` (kit icon name), `size?`, `color?` |
 | `button` | `label`, `action`, `icon?`, `primary?` |
 | `field` | `placeholder`, `action` (sends the text as `value` on submit) |
 | `list_row` | `title`, `detail?`, `icon?`, `trailing?`, `action?` |
 | `stat` | `label`, `value`, `detail?` |
 | `ring` | `fraction`, `label?`, `color?` |
-| `limit_bar` | `label`, `fraction` (used), `pace?`, `caption?`, `color?` |
+| `limit_bar` | `left` (fraction left), `pace?`, `color?`, `badge?`, `label?`, `reset?` (the kit's quota bar) |
 | `segmented_bar` | `segments: [{ fraction, color }]` |
 | `sparkline` | `values`, `color?` |
-| `area_chart` | `series: [{ label, values, color? }]`, `height?` |
+| `area_chart` | `series: [{ label, values, color? }]`, `x_labels: [first, middle, last]`, `unit?` (takes the free height) |
+| `card` | `title?`, `child`: the kit's grouped surface |
 | `empty` | `icon?`, `title`, `detail?` |
-| `spacer` | — (takes the free space) |
+| `spacer` | â€” (takes the free space) |
 
 A face sends one tree per size class (`small`, `medium`, `large`); the host asks with `face.open`/
 `face.resize`. Every face is wrapped in the standard integration chrome (icon + title header,
@@ -117,7 +118,7 @@ through it:
 
 | permission | grants |
 |---|---|
-| `secrets` | `secret.get`/`secret.set`, stored in Windows Credential Manager as `mypaper/plugin/<id>/<key>` |
+| `secrets` | `secret.get`/`secret.set`, stored in Windows Credential Manager as `mypaper/integrations/plugin/<id>/<key>` |
 | `launch` | `launch` |
 | `notifications` | `notify` |
 | `network:<origin>` | outbound connections to that origin |

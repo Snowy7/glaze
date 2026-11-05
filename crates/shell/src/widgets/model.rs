@@ -35,6 +35,8 @@ pub enum Widget {
     Tailscale,
     Grok,
     Custom,
+    /// A face drawn by an SDK plugin of the same id (docs/plugins.md); `data` holds its view.
+    Plugin,
 }
 impl Widget {
     pub fn of(id: &str) -> Option<Self> {
@@ -265,8 +267,9 @@ impl Model {
             .collect();
     }
     pub fn new(placed: Placed, storage: &mut Storage, now: Stamp) -> anyhow::Result<Self> {
-        let kind =
-            Widget::of(&placed.widget).ok_or_else(|| anyhow::anyhow!("unknown native widget"))?;
+        let kind = Widget::of(&placed.widget)
+            .or_else(|| plugin_face(&placed).map(|_| Widget::Plugin))
+            .ok_or_else(|| anyhow::anyhow!("unknown native widget"))?;
         let id = &placed.instance;
         let note = if kind == Widget::Notes {
             storage.get(id, "text")?.as_str().unwrap_or_default().into()
@@ -550,4 +553,27 @@ pub fn flag(settings: &Map<String, Value>, key: &str, default: bool) -> bool {
         .get(key)
         .and_then(Value::as_bool)
         .unwrap_or(default)
+}
+
+/// The SDK plugin face an instance shows: the plugin with the widget's id, and the face its
+/// `variant` setting names (else the plugin's first face). Title and icon come from the manifest.
+pub struct PluginFace {
+    pub plugin: String,
+    pub face: String,
+    pub title: String,
+    pub icon: String,
+}
+
+pub fn plugin_face(placed: &Placed) -> Option<PluginFace> {
+    let (manifest, _) = mypaper_widgets::registry::find_plugin(&placed.widget)?;
+    let wanted = placed.settings.get("variant").and_then(Value::as_str);
+    let face = wanted
+        .and_then(|w| manifest.faces.iter().find(|f| f.id == w))
+        .or(manifest.faces.first())?;
+    Some(PluginFace {
+        plugin: manifest.id.clone(),
+        face: face.id.clone(),
+        title: format!("{} · {}", manifest.name, face.name),
+        icon: face.icon.clone().unwrap_or_else(|| "more".into()),
+    })
 }

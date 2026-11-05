@@ -1462,6 +1462,7 @@ dependencies = [
  "mypaper-desktop",
  "mypaper-glass-ipc",
  "mypaper-integrations",
+ "mypaper-plugin-sdk",
  "mypaper-plugin-weather",
  "mypaper-theme",
  "mypaper-tweaks",

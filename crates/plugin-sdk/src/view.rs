@@ -141,16 +141,20 @@ pub enum View {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         color: Option<Tone>,
     },
-    /// A usage meter: `fraction` used, `pace` the share of the window still to run.
+    /// The kit's quota bar: `left` fills from the start, the used rest is hatched, `pace` marks
+    /// where an even burn would be, `badge` is a monogram, `reset` a countdown chip at the end.
     LimitBar {
-        label: String,
-        fraction: f32,
+        left: f32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pace: Option<f32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        caption: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         color: Option<Tone>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        badge: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reset: Option<String>,
     },
     SegmentedBar {
         segments: Vec<Segment>,
@@ -160,10 +164,20 @@ pub enum View {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         color: Option<Tone>,
     },
+    /// The kit's area chart: series overlaid in order (largest first), first/middle/last x
+    /// labels, ticks printed with `unit` appended. Takes the free height.
     AreaChart {
         series: Vec<Series>,
+        #[serde(default)]
+        x_labels: [String; 3],
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        height: Option<f32>,
+        unit: Option<String>,
+    },
+    /// A card: the kit's grouped surface around `child`, with an optional section title.
+    Card {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        child: Box<View>,
     },
     Empty {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -254,11 +268,12 @@ mod tests {
         let view = View::stack([
             View::tinted("3 running", Role::Headline, Tone::Accent),
             View::LimitBar {
-                label: "5h".into(),
-                fraction: 0.4,
+                left: 0.6,
                 pace: Some(0.5),
-                caption: None,
                 color: Some(Tone::Hex("#542e25".into())),
+                badge: Some("IS".into()),
+                label: Some("60%".into()),
+                reset: Some("3h 2m".into()),
             },
         ]);
         let wire = serde_json::to_value(&view).unwrap();
