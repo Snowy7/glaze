@@ -2,7 +2,7 @@
 use super::*;
 use crate::widgets::{time::Stamp, views};
 use mypaper_integrations::{
-    Data, Snapshot, config, launcher, notifications, obs, t3,
+    Data, Snapshot, notifications, obs, t3,
 };
 use mypaper_ui::{DisplayList, Image, Op, TextStyle, Tokens, Ui, golden, render};
 use mypaper_widgets::{layout::Placed, storage::Storage};
@@ -10,7 +10,7 @@ use serde_json::{Map, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
 const NOW: i64 = 1_793_875_200_000;
-const IDS: &[&str] = &["discord", "t3", "obs", "grok"];
+const IDS: &[&str] = &["discord", "t3", "obs"];
 
 fn model(id: &str, size: [u32; 2]) -> Model {
     let placed = Placed {
@@ -88,32 +88,6 @@ fn model(id: &str, size: [u32; 2]) -> Model {
             .integration
             .thread_links
             .insert(id.into(), format!("https://example.test/threads/{id}"));
-    }
-    if id == "grok" {
-        model.integration.routines = ["Morning brief", "Review my calendar", "Research watchlist"]
-            .iter()
-            .enumerate()
-            .map(|(index, title)| config::Routine {
-                id: format!("routine-{index}"),
-                title: (*title).into(),
-                url: "https://example.test/routine".into(),
-                input: json!({}),
-            })
-            .collect();
-        model.integration.runs = vec![
-            launcher::RoutineRun {
-                id: "routine-0".into(),
-                title: "Morning brief".into(),
-                state: launcher::RoutineState::Accepted,
-                at_ms: NOW - 3_600_000,
-            },
-            launcher::RoutineRun {
-                id: "routine-2".into(),
-                title: "Research watchlist".into(),
-                state: launcher::RoutineState::Failed,
-                at_ms: NOW - 7_200_000,
-            },
-        ];
     }
     model
 }
@@ -239,7 +213,6 @@ fn sheet(ui: &mut Ui, id: &str) -> Image {
                     availability: Availability::Unavailable("Finish setup in Settings".into()),
                     ..Default::default()
                 };
-                m.integration.routines.clear();
             }
             1 => {
                 m.integration.snapshot.availability =
