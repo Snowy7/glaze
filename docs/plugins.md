@@ -401,6 +401,163 @@ bundles `mypaper-plugins` and AOT-compiles them. A component that also has nativ
 them in `"native": ["x.dll"]` with the `native-code` permission. The host activates them when
 the plugin loads and deactivates them when it unloads or is stopped.
 
+## TypeScript
+
+`packages/plugin-sdk-ts` is an **experimental** SDK for the same WIT component contract.
+The default backend is **QuickJS** (`componentize-qjs`, through jco), chosen after measuring
+StarlingMonkey first. JavaScript stays inside the WASM helper, and each plugin keeps its own
+engine, linear memory, capability checks, event deadline and saved state.
+
+Build the counter example with pnpm (Node 24 was used for this prototype):
+
+```powershell
+pnpm --dir packages/plugin-sdk-ts install --frozen-lockfile
+pnpm --dir packages/plugin-sdk-ts typecheck
+pnpm --dir packages/plugin-sdk-ts test
+pnpm --dir plugins/hello-ts install --frozen-lockfile
+pnpm --dir plugins/hello-ts build
+target/release/mypaper-plugins.exe --bench plugins/hello-ts
+```
+
+This produces `plugins/hello-ts/hello-ts.wasm` and a `.cost.json` sidecar naming the backend,
+component bytes and experimental status. The example declares a **2 MiB** memory limit.
+The sidecar is build metadata; Studio does not consume it yet. WASM and intermediate build
+outputs are ignored, as for the Rust guests. `scripts/build-plugins.ps1` still builds only
+the Rust guests; build TypeScript explicitly before packaging/deploying.
+Integration must also add `plugins/hello-ts` to the root Cargo workspace's `exclude` list:
+its `plugins/*` glob otherwise treats this non-Cargo folder as a Rust crate. That shared-file
+edit is outside this SDK slice's ownership.
+
+```ts
+import { definePlugin, Role, ui, View } from '@mypaper/plugin-sdk';
+
+export const lifecycle = definePlugin({
+  onEvent(event) {
+    if (event.tag === 'open' || event.tag === 'resize') {
+      ui.setView(event.val.instance, View.stack([
+        View.text('Hello from TypeScript', Role.Headline),
+        View.button('Refresh', 'refresh'),
+      ]).face());
+    }
+  },
+});
+```
+
+`definePlugin({ init?, onEvent, save? })` exports the WIT lifecycle. `init(info, state)` gets
+the previous `Uint8Array`, and `save()` supplies the next one. `onEvent` receives the generated
+discriminated `Event` union (`event.tag`, `event.val`). Handlers are synchronous; returning a
+Promise is a type error. Use `http.fetch`, `timers.after/every`, etc., then handle their reply
+events. The pure QuickJS build stubs WASI; Node/DOM globals and browser `fetch`/timers are
+outside the supported SDK API. Its host calls go through the same manifest permissions as Rust. Throw a string
+or an `Error` from `init` to report initialization failure. Imported WIT failures throw a
+component error; `capabilityError(error)` safely extracts its typed `denied`, `unsupported`,
+`invalid` or `failed` payload. Missing WIT options are normalized to `undefined` on both engines.
+
+`View.text`, `tinted`, `stack`, `row`, `empty`, `button` and `.face()` have the exact Rust
+builder arguments and defaults. A face has mutable `footer` and `refresh` fields.
+`new View(kind, children?)` accepts the generated `NodeKind` for every other variant, including
+grid, card, charts, animated and canvas. `ui.setView` flattens the tree into WIT pre-order nodes
+with **direct** child counts. WIT numeric lists use `Float32Array`; bytes use `Uint8Array`.
+All capability namespaces are typed and exported, including the host's currently stubbed ones.
+The full counter with state and multiple face instances is in `plugins/hello-ts/src/index.ts`.
+
+The SDK carries a tested WIT snapshot from `8dfb5fd`, plus checked-in `jco types` output.
+Its build uses that snapshot so concurrent host-interface edits cannot silently change the
+component's required imports. `pnpm --dir packages/plugin-sdk-ts generate` copies the current
+`crates/plugin-api/wit` and regenerates declarations and host adapters; run it only when the
+matching helper is ready, and review the generated diff. Consumers can extend the example's
+`tsconfig.json` pattern to resolve the WIT module specifiers. The SDK is a local pnpm package,
+not a published registry package.
+
+### Measured cost and recommendation
+
+Measurements and raw samples are in `packages/plugin-sdk-ts/measurements/results.json`.
+The headless probe compiles **immutable runtime sources** from `bench/BASELINE`, with the same
+Wasmtime 50.0.1 and a 32 MiB memory cap. It raises only the core/component metadata slot limits
+from 128 to 512 KiB to let StarlingMonkey instantiate. The production helper is tested separately
+and remains unchanged. Cold means AOT compile + instantiate + init; warm means cached AOT
+deserialize + instantiate + init, with the engine already created. Each load sample uses a new
+process and empty scratch cache, so this does not claim a cold OS disk cache.
+
+Measured 2026-11-05 on Windows 26300 / Ryzen 7 7800X3D, medians of three fresh-process
+runs. Other agents were active: load and wall-event timings include shared-machine contention.
+Rust hello was rebuilt from the pinned source so another agent's build could not replace the
+comparison artifact. The existing 107 KB / 1.06 MiB Rust baseline is reproduced.
+The JS toolchain is jco 1.41.0, componentize-js 0.23.0 (StarlingMonkey), and
+componentize-qjs 0.5.0 (QuickJS).
+
+| measure | Rust hello | minimal TS / StarlingMonkey | minimal TS / QuickJS | hello-ts / SDK + QuickJS |
+|---|---:|---:|---:|---:|
+| component | 107.4 KiB | 12.04 MiB | 1.44 MiB | 1.49 MiB |
+| AOT cache | 430.2 KiB | 45.63 MiB | 5.64 MiB | 5.70 MiB |
+| cold load, ms | 131.20 | 29,818.26 | 2,780.98 | 2,579.28 |
+| warm load, ms | 0.60 | 17.52 | 4.03 | 2.72 |
+| instance linear memory on open, MiB | 1.06 | 9.06 | 1.38 | 1.44 |
+| instance after 11,000 events, MiB | 1.06 | 13.06 | 1.38 | 1.56 |
+| second active instance private-memory delta, MiB | 1.07 | 9.21 | 1.38 | 1.52 |
+| event CPU mean, microseconds | 3.1 | 85.9 | 23.4 | 54.7 |
+| event wall p50 / p99, microseconds | 2.2 / 4.1 | 85.4 / 1,138.5 | 20.0 / 204.2 | 54.5 / 295.2 |
+| deliberate infinite loop trapped after, ms | 51.65 | 54.14 | 54.74 | 54.50 |
+
+StarlingMonkey cold loads ranged **18.4–34.8 seconds**; SDK + QuickJS ranged **2.55–2.63 s**.
+The **unmodified production helper rejects StarlingMonkey**: its module needs 203,212 bytes of
+instance metadata against the 131,072-byte slot. In that helper the QuickJS SDK loads normally:
+one additional production run measured **1,831.9 ms cold / 1.88 ms warm**, 1.44 MiB linear memory,
+and +1.70 MiB process private memory on activation. The packaged example was separately run
+through 11,000 events under its own **2 MiB cap** and stayed at **1.56 MiB**.
+
+A separate fresh-process warm-load check includes the unique component mapping and first host
+calls, instead of just a second instance of an already mapped component. Rust added **1.34 MiB
+private / 0.43 MiB working set**, StarlingMonkey **10.04 / 19.10 MiB**, minimal QuickJS
+**1.91 / 2.31 MiB**, and SDK + QuickJS **1.98 / 2.68 MiB**. These are single supplementary
+samples, not three-run medians. Allocated linear memory, private bytes and resident file-backed
+code measure different costs: QuickJS fits the example's 2 MiB **linear** cap, while its total
+activation working set is above 2 MiB. Keep this a flagged prototype if the product gate means
+total resident memory per distinct plugin. Each JS plugin also carries its own AOT code mapping.
+
+Event timings exercise real guest calls and host-decoded view effects, without desktop input.
+The probe checks counter save/reload and loop interruption. CPU is current-thread kernel + user
+time over 10,000 events; p50/p99 are wall durations over 1,000 events. They include the WIT
+boundary and host view conversion, and exclude IPC and shell drawing. Rust hello draws its
+richer original face; the two minimal JS backends use identical source. The SDK row includes
+its option normalization and view builders. These small counter fixtures do not predict the
+peak memory or performance of arbitrary plugins; measure each plugin.
+
+The honest choices are:
+
+- **(a) Ship StarlingMonkey with a cost flag:** possible as an explicit high-memory tier, but it
+  exceeds the 0.5–2 MiB target and the current host's metadata pool limit. A Studio warning alone
+  cannot make it load. The build CLI requires `--backend starlingmonkey --allow-high-memory`,
+  writes the cost warning beside the component, and does not change the host's budgets.
+- **(b) Share one JS engine instance:** current jco supports
+  [script-only components](https://bytecodealliance.github.io/jco/advanced/script-only-components.html),
+  whose scripts share a JS realm. This needs a new host/broker and shares the memory/deadline
+  domain; it is not the current per-plugin isolation and capability model. Sharing compiled
+  engine code alone does not remove the separate heaps, as the
+  [ComponentizeJS explainer](https://github.com/bytecodealliance/ComponentizeJS#spidermonkey-embedding)
+  explains. Do not adopt this shortcut for independently trusted plugins.
+- **(c) Use a smaller engine: recommended, implemented here with QuickJS.** It keeps ordinary
+  TypeScript authoring and the current component/permission model while fitting the measured
+  linear-memory target, with the total activation costs above.
+  [componentize-qjs](https://github.com/andreiltd/componentize-qjs) is young, so
+  keep this SDK experimental and validate larger real plugins before promoting it. AssemblyScript
+  is another small-code route, but its [language limitations](https://www.assemblyscript.org/status.html)
+  and missing ordinary JS package compatibility require a different SDK/ABI effort; it was not
+  measured in this prototype.
+
+To reproduce on Windows with the Rust `wasm32-wasip2` target installed:
+
+```powershell
+cd packages/plugin-sdk-ts
+node scripts/measure.mjs
+```
+
+The command rebuilds Rust hello from the frozen source; `--rust-component <path>` can select
+an existing component instead. It builds its isolated release probe and both JS backends,
+takes three samples each, checks ABI/error handling,
+and probes the production helper. It creates only package-local build artifacts and temporary
+runtime data; it does not deploy, click, type, or change the live desktop.
+
 ## Legacy native plugins
 
 SDK v1 plugins (`"command": "x.exe"`, JSON-RPC 2.0 lines on stdio) still run, one process each,
