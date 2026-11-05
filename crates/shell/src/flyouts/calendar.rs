@@ -8,11 +8,13 @@ use mypaper_bars::clock;
 use mypaper_bars::config::ClockConfig;
 use mypaper_bars::system;
 use mypaper_ui::calendar::{Date, MonthGrid};
-use mypaper_ui::{HitId, Point, Rect};
+use mypaper_ui::icons::Icon;
+use mypaper_ui::layout::{Align, Stack};
+use mypaper_ui::{ButtonKind, Frame, HitId, Rect, TextRole};
 use windows::Win32::Foundation::SYSTEMTIME;
 use windows::Win32::System::SystemInformation::GetLocalTime;
 
-use super::kit::{Kit, glyph};
+use super::kit::{Kit, footer, link};
 use super::{Cx, Effect, Panel};
 
 const PREVIOUS: HitId = 1;
@@ -64,8 +66,10 @@ impl Calendar {
         calendar
     }
 
-    /// The month grid and its title, as the calendar and the notification center show it.
-    pub fn month(&self, kit: &mut Kit, buttons: bool) {
+    /// The month grid and its title from the top of `area`, as the calendar and the
+    /// notification center show it. The bottom of what it drew.
+    pub fn month(&self, f: &mut Frame, area: Rect, buttons: bool) -> f32 {
+        let c = f.theme.color;
         let title = clock::format(
             &ClockConfig {
                 seconds: false,
@@ -78,66 +82,36 @@ impl Calendar {
                 ..self.now
             },
         );
-        let style = kit.font(14.0, 600);
-        let height = kit.px(30.0);
-        let (_, h) = kit.text.measure(&title, &style);
-        let (left, y, room) = (kit.left, kit.y, kit.width() - kit.px(110.0));
-        kit.text_at(
-            left,
-            y + (height - h) / 2.0,
-            &title,
-            &style,
-            kit.look.ink,
-            room,
-        );
+        let (head, rest) = area.take_top(f.px(30.0), f.px(4.0));
+        let mut label = head;
         if buttons {
-            let center = y + height / 2.0;
-            let right = kit.right;
-            kit.icon_button(
-                NEXT,
-                Point::new(right - kit.px(15.0), center),
-                glyph::CHEVRON_RIGHT,
-                "Next month",
-            );
-            kit.icon_button(
-                PREVIOUS,
-                Point::new(right - kit.px(47.0), center),
-                glyph::CHEVRON_LEFT,
-                "Previous month",
-            );
+            for (id, icon, name) in [
+                (NEXT, Icon::ChevronRight, "Next month"),
+                (PREVIOUS, Icon::ChevronLeft, "Previous month"),
+            ] {
+                let (button, left) = label.take_right(f.px(28.0), f.px(2.0));
+                f.icon_button(id, button, icon, 28.0, name, false);
+                label = left;
+            }
             if self.shown
                 != (Date {
                     day: 1,
                     ..today(&self.now)
                 })
             {
-                let label = kit.font(12.0, 600);
-                let (w, th) = kit.text.measure("Today", &label);
-                let r = Rect::new(
-                    right - kit.px(70.0) - w - kit.px(12.0),
-                    y + kit.px(4.0),
-                    w + kit.px(12.0),
-                    height - kit.px(8.0),
-                );
-                kit.state(TODAY, r, kit.px(8.0));
-                let accent = kit.look.accent;
-                kit.text_at(
-                    r.left + kit.px(6.0),
-                    y + (height - th) / 2.0,
-                    "Today",
-                    &label,
-                    accent,
-                    w + 1.0,
-                );
-                kit.hit(TODAY, r, mypaper_ui::Role::Button, "Back to today", true);
+                let (w, _) = f.button_size("Today", false);
+                let (button, left) = label.take_right(w, f.px(4.0));
+                let button = button.place(w, f.px(26.0), Align::End, Align::Center);
+                f.button(TODAY, button, "Today", None, ButtonKind::Plain, true);
+                label = left;
             }
         }
-        kit.y += height + kit.px(4.0);
+        f.text_in(label, &title, TextRole::Title3, c.label, Align::Start);
         let grid = MonthGrid::new(self.shown, self.week_start);
         let rows = grid.cells.len() / 7 + 1;
-        let rect = Rect::new(kit.left, kit.y, kit.width(), kit.px(32.0) * rows as f32);
-        let font = kit.font(13.0, 400);
-        let (ink, accent) = (kit.look.ink, kit.look.accent.with_alpha(0.55));
+        let rect = Rect::new(rest.left, rest.top, rest.width(), f.px(32.0) * rows as f32);
+        let font = f.font(TextRole::Callout);
+        let (ink, accent) = (c.label, c.accent.with_alpha(0.55));
         let weekdays: [String; 7] = std::array::from_fn(|i| {
             clock::format(
                 &ClockConfig {
@@ -154,7 +128,7 @@ impl Calendar {
             )
         });
         grid.view_with_weekdays(
-            &mut kit.list,
+            &mut f.list,
             rect,
             today(&self.now),
             ink,
@@ -163,7 +137,7 @@ impl Calendar {
             &font,
             &weekdays.each_ref().map(String::as_str),
         );
-        kit.y = rect.bottom + kit.px(6.0);
+        rect.bottom
     }
 
     /// Pages the month: `PREVIOUS`, `NEXT` or `TODAY`.
@@ -215,64 +189,59 @@ impl Panel for Calendar {
         let weekday = format("dddd");
         let date = format("d MMMM yyyy");
         let time = format("HH:mm");
-        let small = kit.font(13.0, 400);
-        let big = kit.font(17.0, 600);
-        let clock = kit.font(28.0, 300);
-        let (tw, th) = kit.text.measure(&time, &clock);
-        let (left, y, room) = (kit.left, kit.y, kit.width() - tw - kit.px(12.0));
-        let (_, h1) = kit.text_at(left, y, &weekday, &small, kit.look.dim(), room);
-        let (_, h2) = kit.text_at(left, y + h1, &date, &big, kit.look.ink, room);
-        let block = (h1 + h2).max(th);
-        kit.text_at(
-            kit.right - tw,
-            y + (block - th) / 2.0,
-            &time,
-            &clock,
-            kit.look.ink,
-            tw + 1.0,
-        );
-        kit.y += block;
-        kit.separator();
-        self.month(kit, true);
-        for zone in &self.zones {
-            let label = zone.label.clone().unwrap_or_else(|| {
-                zone.zone
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(&zone.zone)
-                    .replace('_', " ")
-            });
-            let Some((time, detail)) = zone_clock(&zone.zone, self.utc_ms, &self.now) else {
-                continue;
-            };
-            let y = kit.y;
-            let title = kit.font(13.0, 600);
-            let small = kit.font(11.0, 400);
-            let clock = kit.font(20.0, 400);
-            let (w, h) = kit.text.measure(&time, &clock);
-            let left = kit.left;
-            let room = kit.width() - w - kit.px(12.0);
-            kit.text_at(left, y, &label, &title, kit.look.ink, room);
-            kit.text_at(
-                left,
-                y + kit.px(19.0),
-                &detail,
-                &small,
-                kit.look.dim(),
-                room,
-            );
-            kit.text_at(
-                kit.right - w,
-                y + (kit.px(44.0) - h) / 2.0,
-                &time,
-                &clock,
-                kit.look.ink,
-                w + 1.0,
-            );
-            kit.y += kit.px(44.0);
-        }
-        kit.footer_link(OUTLOOK, "Calendar");
-        kit.footer_link(SETTINGS, "Date & time settings");
+        let zones: Vec<_> = self
+            .zones
+            .iter()
+            .filter_map(|zone| {
+                let label = zone.label.clone().unwrap_or_else(|| {
+                    zone.zone
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or(&zone.zone)
+                        .replace('_', " ")
+                });
+                let (time, detail) = zone_clock(&zone.zone, self.utc_ms, &self.now)?;
+                Some((label, time, detail))
+            })
+            .collect();
+        kit.frame(|f, area| {
+            let c = f.theme.color;
+            let mut column = Stack::column(area, f.px(6.0));
+            // Today: the weekday over the date, the time at the right.
+            let head = column.next(f.line(TextRole::Callout) + f.line(TextRole::Title2));
+            let style = f.font(TextRole::LargeTitle);
+            let (w, _) = f.text.measure(&time, &style);
+            let (clock, text) = head.take_right(w.ceil(), f.px(12.0));
+            f.text_in(clock, &time, TextRole::LargeTitle, c.label, Align::End);
+            let (top, bottom) = text.take_top(f.line(TextRole::Callout), 0.0);
+            f.text_in(top, &weekday, TextRole::Callout, c.secondary, Align::Start);
+            f.text_in(bottom, &date, TextRole::Title2, c.label, Align::Start);
+            let line = column.next(f.px(9.0));
+            f.separator(line.left, line.right, line.top + f.px(4.0));
+            let bottom = self.month(f, column.rest(), true);
+            column.next(bottom - column.rest().top);
+            // Other clocks, one card.
+            if !zones.is_empty() {
+                let row = f.px(f.theme.metrics.row);
+                let pad = f.px(f.theme.metrics.pad);
+                let card = column.next(zones.len() as f32 * row + pad);
+                let inner = f.card(card).inflate(pad / 2.0);
+                let mut rows = Stack::column(Rect { top: card.top + pad / 2.0, ..inner }, 0.0);
+                for (label, time, detail) in &zones {
+                    let r = rows.next(row);
+                    let style = f.font(TextRole::Title1);
+                    let (w, _) = f.text.measure(time, &style);
+                    let (clock, text) = r.take_right(w.ceil(), f.px(12.0));
+                    f.text_in(clock, time, TextRole::Title1, c.label, Align::End);
+                    let (top, bottom) = text.inflate(-f.px(4.0)).take_top(f.line(TextRole::Headline), 0.0);
+                    f.text_in(top, label, TextRole::Headline, c.label, Align::Start);
+                    f.text_in(bottom, detail, TextRole::Footnote, c.secondary, Align::Start);
+                }
+            }
+            footer(f, &mut column, OUTLOOK, "Calendar");
+            link(f, &mut column, SETTINGS, "Date & time settings");
+            area.top + column.used()
+        });
     }
 
     fn activate(&mut self, id: HitId, _: &mut Cx) -> Effect {

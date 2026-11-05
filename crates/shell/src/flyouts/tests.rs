@@ -177,8 +177,8 @@ fn panels(ui: &mut Ui, surface: &Surface) -> Vec<(&'static str, Box<dyn Panel>)>
         surface.hwnd(),
         Launcher::field_rect(s),
         false,
-        18.0 * s,
-        Look::default().ink,
+        Launcher::field_text(s),
+        Look::default().theme().color.label,
     )
     .unwrap();
     let app = |name: &str| App {

@@ -726,6 +726,11 @@ impl<'a> Kit<'a> {
 pub fn footer(f: &mut Frame, column: &mut mypaper_ui::Stack, id: HitId, label: &str) {
     let line = column.next(f.px(9.0));
     f.separator(line.left, line.right, line.top + f.px(4.0));
+    link(f, column, id, label);
+}
+
+/// A row from `column` with `label` and a chevron: a link to Settings or another flyout.
+pub fn link(f: &mut Frame, column: &mut mypaper_ui::Stack, id: HitId, label: &str) {
     let row = mypaper_ui::ListRow {
         id,
         lead: mypaper_ui::Lead::None,

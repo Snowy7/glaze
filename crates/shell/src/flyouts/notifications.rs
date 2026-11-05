@@ -399,12 +399,14 @@ impl Panel for Center {
                 });
             }
         }
-        kit.y = (top + column.used()).round() + f.px(8.0);
+        // The month, under a separator, in its fixed band.
+        let line = (top + column.used()).round() + f.px(8.0);
+        f.separator(left, right, line);
+        let month = Rect::new(left, line + f.px(8.0), right - left, f.px(MONTH));
+        kit.y = self.calendar.month(&mut f, month, true).round();
         let mut list = f.list;
         kit.list.ops.append(&mut list.ops);
         kit.list.hits.append(&mut list.hits);
-        kit.separator();
-        self.calendar.month(kit, true);
     }
 
     fn activate(&mut self, id: HitId, cx: &mut Cx) -> Effect {

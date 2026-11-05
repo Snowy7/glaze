@@ -5,16 +5,21 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use mypaper_bars::files;
 use mypaper_bars::flyouts::index::{self, App, History};
 use mypaper_bars::system;
-use mypaper_ui::{HitId, Image, Op, Point, Rect, TextField};
+use mypaper_ui::icons::Icon;
+use mypaper_ui::layout::{self, Align, Stack};
+use mypaper_ui::{
+    Accessory, ButtonKind, Frame, HitId, Image, Lead, ListRow, Op, Rect, Rgba, Role, Scroll, TextField,
+    TextRole,
+};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{VK_DOWN, VK_NEXT, VK_PRIOR, VK_UP};
 
-use super::kit::{Icon, Kit, Row, glyph};
+use super::kit::Kit;
 
 /// The panel padding (the kit theme's `metrics.pad`), design px.
 const PAD: f32 = 12.0;
@@ -22,7 +27,7 @@ use super::{Cx, Effect, LIST, Panel, PanelCommand, Reply};
 use mypaper_bars::config::{LauncherLayout, Pinned};
 use mypaper_ui::Entry;
 
-/// Rows shown at once.
+/// Result rows the list shows before it scrolls.
 const ROWS: usize = 8;
 const ALL: HitId = 10;
 const SETTINGS: HitId = 11;
@@ -188,6 +193,7 @@ pub fn results<'a>(apps: &'a [App], history: &History, query: &str) -> Vec<&'a A
 pub struct Launcher {
     field: Option<TextField>,
     window: Option<HWND>,
+    /// Where the search text goes (device px): inside the field's well, after its glyph.
     field_rect: Rect,
     query: String,
     apps: Vec<App>,
@@ -195,8 +201,10 @@ pub struct Launcher {
     history_path: Option<PathBuf>,
     /// The result chosen with the keyboard.
     chosen: usize,
-    /// The first result shown.
+    /// The pinned grid's first cell (it pages by rows of six; lists scroll).
     top: usize,
+    /// The results' (or the clipboard's) scroll position: only that list scrolls.
+    scroll: Scroll,
     icons: Vec<(String, Option<Arc<Image>>)>,
     loading: bool,
     compact: bool,
@@ -212,17 +220,26 @@ pub struct Launcher {
     user: String,
 }
 
+/// The search field's well and the text's rectangle inside it at scale `s` (device px): the
+/// well spans the panel inside its padding; the text starts after the search glyph.
+fn field_rects(s: f32) -> (Rect, Rect) {
+    let px = |v: f32| (v * s).round();
+    let width = px(Launcher::WIDTH);
+    let well = Rect::new(px(PAD), px(PAD), width - 2.0 * px(PAD), px(FIELD));
+    let inner = Rect {
+        left: well.left + px(10.0) + px(18.0) + px(6.0),
+        right: well.right - px(10.0),
+        ..well
+    };
+    (well, inner)
+}
+
+/// The search text's size, design px (Spotlight's large field).
+const FIELD_TEXT: f32 = 17.0;
+
 impl Launcher {
     pub fn new(cx: &mut Cx, window: HWND) -> Self {
-        let s = cx.scale;
-        let width = Self::WIDTH * s;
-        let icon = 30.0 * s;
-        let field_rect = Rect::new(
-            PAD * s + icon,
-            PAD * s,
-            width - 2.0 * PAD * s - icon,
-            FIELD * s,
-        );
+        let field_rect = field_rects(cx.scale).1;
         let cache = files::local("apps.json").ok();
         let fresh = cache
             .as_ref()
@@ -261,6 +278,7 @@ impl Launcher {
             history_path,
             chosen: 0,
             top: 0,
+            scroll: Scroll::new(&cx.look.theme().motion),
             icons: Vec::new(),
             compact,
             all_apps: false,
@@ -283,11 +301,10 @@ impl Launcher {
     /// A launcher over `apps` with `field` (tests), as it opens at scale 1.
     #[cfg(test)]
     pub fn with(field: TextField, apps: Vec<App>, history: History) -> Self {
-        let icon = 30.0;
         Self {
             field: Some(field),
             window: None,
-            field_rect: Rect::new(PAD + icon, PAD, Self::WIDTH - 2.0 * PAD - icon, FIELD),
+            field_rect: field_rects(1.0).1,
             query: String::new(),
             loading: false,
             apps,
@@ -295,6 +312,7 @@ impl Launcher {
             history_path: None,
             chosen: 0,
             top: 0,
+            scroll: Scroll::default(),
             icons: Vec::new(),
             compact: true,
             all_apps: false,
@@ -330,13 +348,12 @@ impl Launcher {
     /// The field's rectangle at scale `s` (tests create the field there).
     #[cfg(test)]
     pub fn field_rect(s: f32) -> Rect {
-        let icon = 30.0 * s;
-        Rect::new(
-            PAD * s + icon,
-            PAD * s,
-            (Self::WIDTH - 2.0 * PAD) * s - icon,
-            FIELD * s,
-        )
+        field_rects(s).1
+    }
+
+    /// The search text's size at scale `s`, device px.
+    pub fn field_text(s: f32) -> f32 {
+        FIELD_TEXT * s
     }
 
     fn grid(&self) -> bool {
@@ -388,13 +405,20 @@ impl Launcher {
         found
     }
 
-    /// Decodes the icons of the rows on screen (and keeps no others).
+    /// Decodes the icons of the results on screen and a few around them (and keeps no others).
     fn load_icons(&mut self, cx: &mut Cx) {
+        let (first, count) = if self.grid() {
+            (self.top, 12)
+        } else {
+            let row = (self.theme_row() * cx.scale).round().max(1.0);
+            let first = (self.scroll.offset(Instant::now()) / row) as usize;
+            (first.saturating_sub(4), ROWS + 8)
+        };
         let wanted: Vec<(String, Option<String>)> = self
             .shown()
             .into_iter()
-            .skip(self.top)
-            .take(if self.grid() { 12 } else { ROWS })
+            .skip(first)
+            .take(count)
             .map(|a| (a.id.clone(), a.icon.clone()))
             .collect();
         self.icons = wanted
@@ -404,6 +428,11 @@ impl Launcher {
                 (id, image)
             })
             .collect();
+    }
+
+    /// A result row's height, design px (the kit's single-line row).
+    fn theme_row(&self) -> f32 {
+        36.0
     }
 
     fn icon(&self, id: &str) -> Option<Arc<Image>> {
@@ -438,13 +467,6 @@ impl Launcher {
             return Effect::None;
         }
         self.chosen = (self.chosen as isize + delta).rem_euclid(count as isize) as usize;
-        let rows = if self.grid() {
-            12
-        } else if self.clipboard_open {
-            6
-        } else {
-            ROWS
-        };
         if self.grid() {
             let row = self.chosen / 6;
             if row < self.top / 6 {
@@ -452,15 +474,96 @@ impl Launcher {
             } else if row >= self.top / 6 + 2 {
                 self.top = (row - 1) * 6;
             }
-        } else if self.chosen < self.top {
-            self.top = self.chosen;
-        } else if self.chosen >= self.top + rows {
-            self.top = self.chosen + 1 - rows;
+        } else {
+            // Keep the chosen row in the viewport (it glides there).
+            let s = cx.scale;
+            let (tops, _) = if self.clipboard_open {
+                let row = (self.theme_row() * s).round();
+                ((0..count).map(|i| i as f32 * row).collect(), 0.0)
+            } else {
+                positions(&self.shown(), &self.history, &self.query, s)
+            };
+            if let Some(&top) = tops.get(self.chosen) {
+                let row = (self.theme_row() * s).round();
+                self.scroll.reveal(top, top + row, Instant::now());
+            }
         }
         self.load_icons(cx);
         Effect::Redraw
     }
+
+    /// Back to the top of a new list.
+    fn restart(&mut self) {
+        self.chosen = 0;
+        self.top = 0;
+        self.scroll.reset();
+    }
+
+    /// A pinned app in the grid: its icon over its name, centred.
+    fn cell(&self, f: &mut Frame, n: usize, app: &App, r: Rect) {
+        let c = f.theme.color;
+        let id = LIST + n as HitId;
+        let radius = f.px(f.theme.radius.small + 4.0);
+        // Always pushed (transparent unless chosen), so choosing never shifts the list.
+        let chosen = if n == self.chosen { c.accent_wash } else { Rgba::TRANSPARENT };
+        f.fill(r, radius, chosen);
+        f.wash(id, r, radius, true);
+        let size = f.px(32.0);
+        let icon = Rect::new((r.left + (r.width() - size) / 2.0).round(), r.top + f.px(10.0), size, size);
+        match self.icon(&app.id) {
+            Some(image) => f.push(Op::Image {
+                rect: icon,
+                image,
+                opacity: 1.0,
+                source: None,
+            }),
+            None => f.icon(icon, Icon::Apps, 26.0, c.label),
+        }
+        let label = Rect::new(
+            r.left + f.px(4.0),
+            icon.bottom + f.px(6.0),
+            r.width() - f.px(8.0),
+            f.line(TextRole::Footnote),
+        );
+        f.text_in(label, &app.name, TextRole::Footnote, c.label, Align::Center);
+        f.focus_ring(id, r, radius);
+        f.hit(id, r, Role::Button, &app.name, true, None);
+    }
 }
+
+/// What a result is, for its section header: an app, a Settings page or a file.
+fn kind(app: &App) -> &'static str {
+    if app.id.starts_with("settings:") {
+        "Settings"
+    } else if app.id.starts_with("file:") {
+        "Files"
+    } else {
+        "Apps"
+    }
+}
+
+/// Each result's top in the scrolled list and the list's height (device px at `s`): a
+/// section header before each kind (apps, Settings pages, files), then its rows.
+fn positions(shown: &[&App], history: &History, query: &str, s: f32) -> (Vec<f32>, f32) {
+    let px = |v: f32| (v * s).round();
+    let (header, row) = (px(HEADER), px(36.0));
+    let mut tops = Vec::with_capacity(shown.len());
+    let mut y = 0.0;
+    let mut category = "";
+    let _ = (history, query);
+    for app in shown {
+        if kind(app) != category {
+            category = kind(app);
+            y += header;
+        }
+        tops.push(y);
+        y += row;
+    }
+    (tops, y)
+}
+
+/// A section header's height inside the list, design px.
+const HEADER: f32 = 26.0;
 
 impl Panel for Launcher {
     fn width(&self) -> f32 {
@@ -468,185 +571,184 @@ impl Panel for Launcher {
     }
 
     fn view(&self, kit: &mut Kit) {
-        let r = self.field_rect;
-        kit.glyph(
-            Point::new(kit.left + kit.px(12.0), r.top + r.height() / 2.0),
-            glyph::SEARCH,
-            16.0,
-            kit.look.dim(),
-        );
-        if self.query.is_empty() {
-            let style = kit.font(18.0, 400);
-            let (_, h) = kit.text.measure("Ag", &style);
-            kit.text_at(
-                r.left + kit.px(2.0),
-                r.top + (r.height() - h) / 2.0,
-                "Search apps",
-                &style,
-                kit.look.faint(),
-                r.width(),
-            );
-        }
-        if let Some(field) = &self.field {
-            kit.list.ops.push(Op::TextField {
-                rect: r,
-                field: field.clone(),
-                revision: field.revision(),
-            });
-            if let Some(caret) = field.caret() {
-                kit.fill(caret, 0.0, kit.look.ink);
-            }
-        }
-        kit.y = r.bottom + kit.px(8.0);
-        kit.separator();
         let shown = self.shown();
-        if self.clipboard_open {
-            kit.caption("Clipboard history");
-            match &self.clipboard {
-                None => kit.notice("Reading clipboard history..."),
-                Some(h) if !h.enabled => {
-                    kit.notice("Clipboard history is off");
-                    kit.footer_link(SETTINGS, "Clipboard settings");
+        kit.frame(|f, area| {
+            let c = f.theme.color;
+            // The field: a well with the search glyph, the placeholder, and the text itself.
+            let field = self.field_rect;
+            let well = Rect {
+                left: field.left - (f.px(10.0) + f.px(18.0) + f.px(6.0)),
+                right: field.right + f.px(10.0),
+                ..field
+            };
+            let radius = f.control_radius(well.height());
+            f.fill(well, radius, c.well);
+            let glyph = Rect {
+                left: well.left + f.px(10.0),
+                right: well.left + f.px(10.0) + f.px(18.0),
+                ..well
+            };
+            f.icon(glyph, Icon::Search, 16.0, c.secondary);
+            if self.query.is_empty() {
+                let mut style = f.font(TextRole::Title2);
+                style.weight = 400;
+                let (_, h) = f.text.measure("Ag", &style);
+                let y = field.top + (field.height() - h) / 2.0;
+                f.label_styled(field.left + f.px(2.0), y, "Search apps", &style, c.tertiary, field.width());
+            }
+            if let Some(text) = &self.field {
+                f.push(Op::TextField {
+                    rect: field,
+                    field: text.clone(),
+                    revision: text.revision(),
+                });
+                if let Some(caret) = text.caret() {
+                    f.fill(caret, 0.0, c.label);
                 }
-                Some(h) => {
-                    for (i, item) in h.entries.iter().enumerate().skip(self.top).take(6) {
-                        kit.row(Row {
-                            id: CLIP + i as HitId,
-                            icon: Icon::Glyph(glyph::APP),
-                            title: &item.text,
-                            detail: None,
-                            trailing: None,
-                            selected: i == self.chosen,
-                            enabled: true,
+            }
+            let mut column = Stack::column(Rect { top: well.bottom + f.px(10.0), ..area }, f.px(4.0));
+            // The foot keeps its room: a separator and the row of buttons.
+            let foot = f.px(9.0) + f.px(f.theme.metrics.control) + 2.0 * f.px(4.0);
+            let cap = f.px(ROWS as f32 * 36.0 + 2.0 * HEADER);
+            let room = (column.rest().height() - foot).min(cap).max(f.px(36.0));
+            if self.clipboard_open {
+                f.section_header(column.next(f.px(24.0)), "Clipboard history", None);
+                match &self.clipboard {
+                    None => {
+                        let h = f.empty(column.rest(), Some(Icon::Clipboard), "Reading clipboard history…", None);
+                        column.next(h);
+                    }
+                    Some(h) if !h.enabled => {
+                        let height = f.empty(column.rest(), Some(Icon::Clipboard), "Clipboard history is off", None);
+                        column.next(height);
+                        super::kit::link(f, &mut column, SETTINGS, "Clipboard settings");
+                    }
+                    Some(h) => {
+                        let row = f.px(36.0);
+                        let content = h.entries.len() as f32 * row;
+                        let viewport = column.next(content.min(room));
+                        let width = viewport.width();
+                        f.scroll(viewport, &self.scroll, Instant::now(), |f, at| {
+                            let mut list = Stack::column(Rect::new(at.x, at.y, width, content), 0.0);
+                            for (i, item) in h.entries.iter().enumerate() {
+                                let r = ListRow {
+                                    id: CLIP + i as HitId,
+                                    lead: Lead::Icon(Icon::Clipboard),
+                                    title: &item.text,
+                                    subtitle: None,
+                                    accessory: Accessory::None,
+                                    selected: i == self.chosen,
+                                    enabled: true,
+                                };
+                                f.row(&r, list.next(row));
+                            }
+                            content
                         });
                     }
                 }
-            }
-        } else if self.grid() {
-            kit.caption("Pinned");
-            let cell = kit.width() / 6.0;
-            let top = kit.y;
-            let first = self.top / 6 * 6;
-            for (n, app) in shown.iter().enumerate().skip(first).take(12) {
-                let i = n - first;
-                let r = Rect::new(
-                    kit.left + (i % 6) as f32 * cell,
-                    top + (i / 6) as f32 * kit.px(80.0),
-                    cell,
-                    kit.px(76.0),
-                );
-                let id = LIST + n as HitId;
-                if n == self.chosen {
-                    kit.fill(r, kit.px(8.0), kit.look.control());
-                }
-                kit.state(id, r, kit.px(8.0));
-                if let Some(image) = self.icon(&app.id) {
-                    kit.image(
-                        Rect::new(
-                            r.left + (cell - kit.px(28.0)) / 2.0,
-                            r.top + kit.px(8.0),
-                            kit.px(28.0),
-                            kit.px(28.0),
-                        ),
-                        image,
-                    );
+            } else if self.grid() {
+                f.section_header(column.next(f.px(24.0)), "Pinned", None);
+                if shown.is_empty() {
+                    let h = f.empty(column.rest(), Some(Icon::Pin), "Pin apps from All apps", None);
+                    column.next(h);
                 } else {
-                    kit.glyph(
-                        Point::new(r.left + cell / 2.0, r.top + kit.px(22.0)),
-                        glyph::APP,
-                        24.0,
-                        kit.look.ink,
-                    );
+                    let first = self.top / 6 * 6;
+                    let count = shown.len().saturating_sub(first).min(12);
+                    let (cell_h, gap) = (f.px(80.0), f.px(4.0));
+                    let rows = count.div_ceil(6);
+                    let grid = column.next(rows as f32 * cell_h + rows.saturating_sub(1) as f32 * gap);
+                    for (n, app) in shown.iter().enumerate().skip(first).take(12) {
+                        let r = layout::grid(grid, 6, gap, cell_h, n - first);
+                        self.cell(f, n, app, r);
+                    }
                 }
-                let style = kit.font(11.0, 400);
-                let label = kit.text.fit(&app.name, &style, cell - kit.px(8.0));
-                let (width, _) = kit.text.measure(&label, &style);
-                kit.text_at(
-                    r.left + (cell - width) / 2.0,
-                    r.top + kit.px(43.0),
-                    &label,
-                    &style,
-                    kit.look.ink,
-                    cell - kit.px(8.0),
-                );
-                kit.hit(id, r, mypaper_ui::Role::Button, &app.name, true);
-            }
-            kit.y =
-                top + kit.px(80.0) * shown.len().saturating_sub(first).min(12).div_ceil(6) as f32;
-            if shown.is_empty() {
-                kit.notice("Pin apps from All apps");
-            }
-            kit.caption("Recommended");
-            for (i, app) in self.recommended.iter().take(3).enumerate() {
-                kit.row(Row {
-                    id: RECOMMENDED + i as HitId,
-                    icon: Icon::Glyph(glyph::APP),
-                    title: &app.name,
-                    detail: None,
-                    trailing: None,
-                    selected: false,
-                    enabled: true,
-                });
-            }
-        } else if shown.is_empty() {
-            kit.notice(if self.loading {
-                "Finding apps…"
+                if !self.recommended.is_empty() {
+                    column.space(f.px(6.0));
+                    f.section_header(column.next(f.px(24.0)), "Recommended", None);
+                    for (i, app) in self.recommended.iter().take(3).enumerate() {
+                        let lead = self.icon(&app.id).map_or(Lead::Icon(Icon::File), Lead::Image);
+                        let r = ListRow {
+                            id: RECOMMENDED + i as HitId,
+                            lead,
+                            title: &app.name,
+                            subtitle: None,
+                            accessory: Accessory::None,
+                            selected: false,
+                            enabled: true,
+                        };
+                        let h = f.row_height(&r);
+                        f.row(&r, column.next(h));
+                    }
+                }
+            } else if shown.is_empty() {
+                let title = if self.loading { "Finding apps…" } else { "No apps match" };
+                let h = f.empty(column.rest(), Some(Icon::Search), title, None);
+                column.next(h);
             } else {
-                "No apps match"
-            });
-        } else {
-            if self.query.is_empty() && !self.history.recent.is_empty() {
-                kit.caption("Recent and all apps");
-            }
-            let mut category = "";
-            for (i, app) in shown.iter().enumerate().skip(self.top).take(ROWS) {
-                let kind = if app.id.starts_with("settings:") {
-                    "Settings"
-                } else if app.id.starts_with("file:") {
-                    "Files"
-                } else {
-                    "Apps"
-                };
-                if kind != category {
-                    kit.caption(kind);
-                    category = kind;
-                }
-                if kit.y + kit.px(82.0) > kit.limit {
-                    break;
-                }
-                let icon = self
-                    .icon(&app.id)
-                    .map_or(Icon::Glyph(glyph::APP), Icon::Image);
-                kit.row(Row {
-                    id: LIST + i as HitId,
-                    icon,
-                    title: &app.name,
-                    detail: None,
-                    trailing: None,
-                    selected: i == self.chosen,
-                    enabled: true,
+                // The results: a header per kind, then rows; only this list scrolls.
+                let (tops, content) = positions(&shown, &self.history, &self.query, f.s);
+                let viewport = column.next(content.min(room));
+                let width = viewport.width();
+                let (header, row) = (f.px(HEADER), f.px(36.0));
+                let recent = self.query.trim().is_empty() && !self.history.recent.is_empty();
+                f.scroll(viewport, &self.scroll, Instant::now(), |f, at| {
+                    let mut category = "";
+                    for (i, app) in shown.iter().enumerate() {
+                        let top = at.y + tops[i];
+                        if kind(app) != category {
+                            category = kind(app);
+                            let title = if recent && category == "Apps" { "Recent and all apps" } else { category };
+                            f.section_header(Rect::new(at.x, top - header, width, header), title, None);
+                        }
+                        let lead = match kind(app) {
+                            "Settings" => Lead::Icon(Icon::Settings),
+                            "Files" => self.icon(&app.id).map_or(Lead::Icon(Icon::File), Lead::Image),
+                            _ => self.icon(&app.id).map_or(Lead::Icon(Icon::Apps), Lead::Image),
+                        };
+                        let r = ListRow {
+                            id: LIST + i as HitId,
+                            lead,
+                            title: &app.name,
+                            subtitle: None,
+                            accessory: Accessory::None,
+                            selected: i == self.chosen,
+                            enabled: true,
+                        };
+                        f.row(&r, Rect::new(at.x, top, width, row));
+                    }
+                    content
                 });
+                let hint = format!("{} results  ·  ↑↓ to choose, Enter to open", shown.len());
+                let line = column.next(f.line(TextRole::Footnote));
+                f.text_in(line, &hint, TextRole::Footnote, c.tertiary, Align::Start);
             }
-            let style = kit.font(11.0, 400);
-            let hint = format!("{} apps  ·  ↑↓ to choose, Enter to open", shown.len());
-            let (left, y, room) = (kit.left, kit.y + kit.px(4.0), kit.width());
-            let (_, h) = kit.text_at(left, y, &hint, &style, kit.look.faint(), room);
-            kit.y += h + kit.px(4.0);
-        }
-        kit.separator();
-        if !self.user.is_empty() {
-            kit.caption(&self.user);
-        }
-        kit.buttons(&[
-            (
-                ALL,
-                if self.all_apps { "Pinned" } else { "All apps" },
-                false,
-            ),
-            (CLIPBOARD, "Clipboard", false),
-            (SETTINGS, "Settings", false),
-            (POWER, "Power", false),
-        ]);
+            // The foot: who is signed in, and the panel's buttons.
+            let line = column.next(f.px(9.0));
+            f.separator(line.left, line.right, line.top + f.px(4.0));
+            let bar = column.next(f.px(f.theme.metrics.control));
+            let mut rest = bar;
+            for (id, icon, name) in [
+                (POWER, Icon::Power, "Power"),
+                (SETTINGS, Icon::Settings, "Settings"),
+                (CLIPBOARD, Icon::Clipboard, "Clipboard"),
+            ] {
+                let (button, left) = rest.take_right(bar.height(), f.px(4.0));
+                f.icon_button(id, button, icon, f.theme.metrics.control, name, false);
+                rest = left;
+            }
+            let label = if self.all_apps { "Pinned" } else { "All apps" };
+            let (w, _) = f.button_size(label, true);
+            let (button, user) = rest.take_right(w, f.px(8.0));
+            let icon = if self.all_apps { Icon::Pin } else { Icon::Apps };
+            f.button(ALL, button, label, Some(icon), ButtonKind::Gray, true);
+            if !self.user.is_empty() {
+                let (badge, name) = user.take_left(bar.height(), f.px(8.0));
+                f.fill(badge, badge.height() / 2.0, c.fill);
+                f.icon(badge, Icon::User, 15.0, c.secondary);
+                f.text_in(name, &self.user, TextRole::Callout, c.secondary, Align::Start);
+            }
+            column.rect.top + column.used()
+        });
     }
 
     fn activate(&mut self, id: HitId, cx: &mut Cx) -> Effect {
@@ -658,8 +760,7 @@ impl Panel for Launcher {
                 if let Some(field) = &self.field {
                     let _ = field.set_text("");
                 }
-                self.chosen = 0;
-                self.top = 0;
+                self.restart();
                 self.load_icons(cx);
                 Effect::Redraw
             }
@@ -677,8 +778,7 @@ impl Panel for Launcher {
             POWER => Effect::Switch(super::Kind::Power),
             CLIPBOARD => {
                 self.clipboard_open = !self.clipboard_open;
-                self.top = 0;
-                self.chosen = 0;
+                self.restart();
                 if self.clipboard_open {
                     cx.lanes.clipboard(|lane| Reply::Clipboard(lane.read()));
                 }
@@ -775,27 +875,23 @@ impl Panel for Launcher {
     }
 
     fn wheel(&mut self, _: Option<HitId>, delta: i16, cx: &mut Cx) -> Effect {
-        let count = if self.clipboard_open {
-            self.clipboard.as_ref().map_or(0, |h| h.entries.len())
-        } else {
-            self.shown().len()
-        };
         if self.grid() {
             return self.choose(if delta > 0 { -6 } else { 6 }, cx);
         }
-        let rows = if self.clipboard_open { 6 } else { ROWS };
-        let top = if delta > 0 {
-            self.top.saturating_sub(1)
-        } else {
-            (self.top + 1).min(count.saturating_sub(rows))
-        };
-        if top == self.top {
+        if !self.scroll.wheel(delta, cx.scale, Instant::now()) {
             return Effect::None;
         }
-        self.top = top;
-        self.chosen = self.chosen.clamp(top, top + rows - 1);
         self.load_icons(cx);
         Effect::Redraw
+    }
+
+    fn tick(&mut self, now: Instant, cx: &mut Cx) -> (bool, Option<Instant>) {
+        // The list's glide and the scrollbar's fade; icons follow what comes into view.
+        let (scrolled, next) = self.scroll.tick(now);
+        if scrolled {
+            self.load_icons(cx);
+        }
+        (scrolled, next)
     }
 
     fn key(&mut self, key: u16, cx: &mut Cx) -> Option<Effect> {
@@ -860,7 +956,13 @@ impl Panel for Launcher {
     fn opened(&mut self, cx: &mut Cx) -> bool {
         // Load RichEdit after the first content frame; its cold DLL load must not delay the click.
         if let Some(window) = self.window.take() {
-            match TextField::new(window, self.field_rect, false, 18.0 * cx.scale, cx.look.ink) {
+            match TextField::new(
+                window,
+                self.field_rect,
+                false,
+                Self::field_text(cx.scale),
+                cx.look.theme().color.label,
+            ) {
                 Ok(field) => self.field = Some(field),
                 Err(e) => {
                     log::warn!("launcher search field: {e:#}; opening Start");
@@ -898,8 +1000,7 @@ impl Panel for Launcher {
             log::debug!("launcher: query {query:?}");
             self.query = query;
             self.clipboard_open = false;
-            self.chosen = 0;
-            self.top = 0;
+            self.restart();
             self.load_icons(cx);
         }
         // The caret or selection moved, or the text changed: the field redraws either way.
