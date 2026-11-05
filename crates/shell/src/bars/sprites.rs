@@ -14,14 +14,18 @@ use windows::Win32::Foundation::HWND;
 enum Key {
     /// An icon bitmap, shown at any size (DWM scales it).
     Image(Arc<Image>),
-    /// Any other operation, moved to its own canvas's origin: shown 1:1.
-    Op(Op),
+    /// Any other operation, moved to its own canvas's origin (its canvas size and rounded
+    /// debug form): shown 1:1.
+    Op(String),
 }
 
 pub struct Sprites {
     compositor: Compositor,
     /// Each sprite made, how, and whether this frame uses it.
     cache: Vec<(Key, Sprite, bool)>,
+    /// Sprites drawn and frames shown since the last log line (a sweep should draw none).
+    misses: u32,
+    frames: u32,
 }
 
 /// Plate tiles' length along the dock: fixed window positions, so a growing plate redraws only
@@ -33,6 +37,8 @@ impl Sprites {
         Ok(Self {
             compositor: Compositor::new(hwnd)?,
             cache: vec![],
+            misses: 0,
+            frames: 0,
         })
     }
 
@@ -127,6 +133,15 @@ impl Sprites {
             .map(|&(index, rect, opacity)| (&self.cache[index].1, rect, opacity))
             .collect();
         self.compositor.show(&shown)?;
+        self.frames += 1;
+        if self.frames == 240 {
+            log::info!(
+                "dock sprites: {} drawn in 240 frames, {} cached",
+                self.misses,
+                self.cache.len()
+            );
+            (self.frames, self.misses) = (0, 0);
+        }
         // Long-lived sprites only: drop the unused when the cache grows.
         if self.cache.len() > 160 {
             self.cache.retain(|(_, _, used)| *used);
@@ -172,20 +187,24 @@ impl Sprites {
         .ops
         .remove(0);
         let at = Rect::new(x, y, w, h);
+        // Moving by whole pixels leaves float noise in the fractions (4.369999 vs 4.370001):
+        // compare at a hundredth of a pixel.
+        let key = format!("{w}x{h} {moved:.2?}");
         if let Some(i) = self
             .cache
             .iter()
-            .position(|(k, ..)| matches!(k, Key::Op(o) if *o == moved))
+            .position(|(k, ..)| matches!(k, Key::Op(o) if *o == key))
         {
             return Ok((i, at));
         }
+        self.misses += 1;
         let list = DisplayList {
-            ops: vec![moved.clone()],
+            ops: vec![moved],
             ..Default::default()
         };
         let image = mypaper_ui::render(ui, &list, w as u32, h as u32)?;
         let sprite = self.compositor.sprite(&image)?;
-        self.cache.push((Key::Op(moved), sprite, true));
+        self.cache.push((Key::Op(key), sprite, true));
         Ok((self.cache.len() - 1, at))
     }
 }
