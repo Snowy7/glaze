@@ -365,7 +365,8 @@ impl<'a> Frame<'a> {
             return;
         }
         let at = rect.place(px, px, Align::Center, Align::Center);
-        let weight = (self.theme.icon_weight * px / 24.0).max(1.15 * self.s.min(1.5));
+        // Thin strokes go soft at small sizes: never under 1.35 px (at 1x).
+        let weight = (self.theme.icon_weight * px / 24.0).max(1.35 * self.s.min(1.5));
         self.push(Op::Icon {
             rect: at,
             icon,
@@ -517,16 +518,18 @@ impl<'a> Frame<'a> {
                 self.fill(bar, r, c.fill);
                 // The fill keeps the capsule's round start even near zero.
                 let at = bar.left + h + (bar.width() - h) * value;
-                let fill = if self.theme.style == crate::theme::Style::Mono {
-                    c.label
-                } else {
-                    c.knob
+                // Control Center's white fill on dark glass; on light surfaces white would
+                // vanish into the card, so the accent fills there. The glyph always sits on
+                // the fill (it starts a full capsule wide).
+                let (fill, glyph_ink) = match (self.theme.style, self.theme.dark()) {
+                    (crate::theme::Style::Mono, _) => (c.label, c.surface.with_alpha(1.0)),
+                    (_, true) => (c.knob, Rgba::new(0.0, 0.0, 0.0, 0.62)),
+                    (_, false) => (c.accent, c.on_accent),
                 };
                 self.fill(Rect { right: at, ..bar }, r, fill);
                 self.wash(id, bar, r, true);
                 let glyph = Rect::new(bar.left, bar.top, h, h);
-                // On the white fill the glyph is dark; it always sits over the fill.
-                self.icon(glyph, icon, 14.0, Rgba::new(0.0, 0.0, 0.0, 0.62));
+                self.icon(glyph, icon, 14.0, glyph_ink);
                 self.focus_ring(id, bar, r);
             }
             None => {
