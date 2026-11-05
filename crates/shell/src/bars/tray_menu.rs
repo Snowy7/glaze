@@ -88,6 +88,7 @@ impl Host {
     }
     fn finish(&mut self, id: u32) {
         if let Some((caller, nonce)) = self.caller.take() {
+            log::debug!("tray menu reply: command {id}, nonce {nonce}");
             // SAFETY: posting never waits on core, even if it has already exited.
             let _ = unsafe {
                 PostMessageW(

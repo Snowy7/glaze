@@ -172,6 +172,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(0)
         }
         wire::CHOSEN => {
+            log::debug!("tray menu reply: command {}, nonce {}", wparam.0, lparam.0);
             let themes = PENDING_MENU.with_borrow_mut(|pending| {
                 if pending.as_ref().is_some_and(|p| p.0 == lparam.0 as usize) {
                     pending.take().map(|p| p.1)
