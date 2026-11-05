@@ -241,6 +241,7 @@ impl Widgets {
         let (tx, rx) = mpsc::channel();
         let wake = Waker::for_window(tx, window, WM_DATA);
         let config = Config::load().unwrap_or_default();
+        apply_style(&config);
         let mut holds = Holds::default();
         holds.apply(&config);
         holds.set(Fact::OnBattery, mypaper_desktop::on_battery());
@@ -395,6 +396,12 @@ impl Widgets {
     fn follow_config(&mut self) {
         if let Ok(config) = Config::load() {
             self.holds.apply(&config);
+            if apply_style(&config) {
+                for entry in self.entries.values_mut() {
+                    entry.model.dirty = true;
+                }
+                self.publish_plates(true);
+            }
             self.skin = load_skin(&config);
             self.accent = palette_accent(&config);
             let path = mypaper_theme::locate(Some(&config.theme))
@@ -2728,13 +2735,23 @@ impl Widgets {
                         .and_then(Value::as_str)
                         .and_then(Color::parse)
                         .unwrap_or(look::DEFAULT_TINT);
-                    Some(Plate {
-                        id: e.surface.hwnd().0 as usize as u64,
-                        rect: e
-                            .rect
-                            .offset(-monitor.rect.x as f32, -monitor.rect.y as f32),
-                        radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
-                        material: Material {
+                    let opacity = a.get("opacity").and_then(Value::as_f64).unwrap_or(0.46) as f32;
+                    // The user's style picks the material (`theme::material`): none for Solid
+                    // and Mono (the view draws their body), flat frosted glass for One UI and
+                    // Fluent, Liquid Glass tuned by the theme's skin below.
+                    let style = mypaper_ui::theme::active();
+                    let base = mypaper_ui::theme::material(style, Rgba::rgb8(tint.0, opacity))?;
+                    let dpi = monitor.dpi as f32 / 96.0;
+                    let material = if !mypaper_ui::theme::lensed(style) {
+                        Material {
+                            clarity: base.clarity,
+                            blur: base.blur * dpi,
+                            refraction: 0.0,
+                            highlight: 0.0,
+                            tint: base.tint,
+                        }
+                    } else {
+                        Material {
                             clarity: 1.0
                                 - (liquid.tint.unwrap_or(0.06)
                                     * a.get("opacity").and_then(Value::as_f64).unwrap_or(0.46)
@@ -2751,7 +2768,15 @@ impl Widgets {
                             highlight: liquid.highlight.unwrap_or(0.55)
                                 * liquid.intensity.unwrap_or(1.0),
                             tint: Rgba::rgb8(tint.0, liquid.tint.unwrap_or(0.06)),
-                        },
+                        }
+                    };
+                    Some(Plate {
+                        id: e.surface.hwnd().0 as usize as u64,
+                        rect: e
+                            .rect
+                            .offset(-monitor.rect.x as f32, -monitor.rect.y as f32),
+                        radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
+                        material,
                     })
                 })
                 .collect();
@@ -2973,6 +2998,28 @@ fn finish_field(entry: &mut Entry, storage: &mut Storage) {
     {
         log::error!("widget storage: {e:#}");
     }
+}
+/// Makes the user's style (`look.widgets.style`, else `look.style`) the kit's active one, which
+/// widgets draw in; `true` when it changed.
+fn apply_style(config: &Config) -> bool {
+    use mypaper_config::look::Style as Look;
+    let style = match config
+        .look
+        .widgets
+        .as_ref()
+        .and_then(|w| w.style)
+        .or(config.look.style)
+        .unwrap_or_default()
+    {
+        Look::Liquid => mypaper_ui::Style::Liquid,
+        Look::Oneui => mypaper_ui::Style::OneUi,
+        Look::Fluent => mypaper_ui::Style::Fluent,
+        Look::Solid => mypaper_ui::Style::Solid,
+        Look::Mono => mypaper_ui::Style::Mono,
+    };
+    let changed = mypaper_ui::theme::active() != style;
+    mypaper_ui::theme::set_active(style);
+    changed
 }
 fn palette_accent(config: &Config) -> Color {
     mypaper_theme::locate(Some(&config.theme))

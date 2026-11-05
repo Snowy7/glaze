@@ -118,13 +118,18 @@ pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
             _ => 14.0 * scale,
         }
     } else {
-        model
+        let radius = model
             .placed
             .appearance
             .get("radius")
             .and_then(Value::as_f64)
-            .unwrap_or(22.0) as f32
-            * scale
+            .unwrap_or(22.0) as f32;
+        let radius = match mypaper_ui::theme::active() {
+            Style::Fluent => radius.min(8.0),
+            Style::OneUi => radius.max(26.0),
+            _ => radius,
+        };
+        radius * scale
     }
 }
 
@@ -164,7 +169,7 @@ pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
             .flatten()
     });
     let mut theme = Theme::new(
-        Style::Liquid,
+        mypaper_ui::theme::active(),
         if dark { Scheme::Dark } else { Scheme::Light },
         accent.unwrap_or(mypaper_ui::theme::SYSTEM_BLUE),
     );
@@ -227,6 +232,8 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
     match surface {
         "solid" => c.f.fill(rect, radius, tokens.material.tint.with_alpha(1.0)),
         "tint" => c.f.fill(rect, radius, tokens.material.tint),
+        "none" => {}
+        _ if theme.glass.is_none() => c.f.fill(rect, radius, theme.color.surface),
         _ => {}
     }
     c.f.hit(BODY, rect, Role::Pane, &model.placed.widget, true, None);
