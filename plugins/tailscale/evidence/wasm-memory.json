@@ -1,33 +1,36 @@
 {
   "read_only": true,
+  "measured_at_utc": "2026-11-05T21:35:44.084357+00:00",
+  "helper_sha256": "e7cda4294be8336af512b32bc489e3886e26a8afd3d9206629c8518745834f85",
+  "component_sha256": "820afb583ff2974efe40e979d035ed3be5fc33c6e9404f63551d218f67577527",
   "faces": [
     "connection",
     "peers",
     "traffic"
   ],
   "baseline": {
-    "private_mib": 4.6015625,
-    "working_set_mib": 9.265625
+    "private_mib": 4.59765625,
+    "working_set_mib": 9.68359375
   },
   "active": {
-    "private_mib": 7.83203125,
-    "working_set_mib": 18.15234375
+    "private_mib": 7.734375,
+    "working_set_mib": 16.41015625
   },
-  "added_private_mib": 3.23046875,
-  "idle_seconds": 20.000237300002482,
+  "added_private_mib": 3.13671875,
+  "idle_seconds": 20.009725800016895,
   "idle_plugin_events": 0,
   "idle_plugin_cpu_us": 0,
   "stats": [
     {
       "plugin": "tailscale",
       "linear_memory_bytes": 1376256,
-      "cpu_us": 1408,
+      "cpu_us": 1014,
       "events": 4
     },
     {
       "plugin": "tailscale",
       "linear_memory_bytes": 1376256,
-      "cpu_us": 1408,
+      "cpu_us": 1014,
       "events": 4
     }
   ]

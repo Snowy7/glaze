@@ -35,3 +35,22 @@ py -3 plugins/tailscale/tools/verify.py --exe target/release/mypaper-plugins.exe
 The probe isolates its app data, opens all three faces, waits for successful status data,
 and records a memory and idle-event sample. It never sends a vendor action. Its local face
 JSON contains real device names and addresses; keep it local.
+
+## Verified 2026-11-05
+
+- Committed archive `ff76186`: `cargo check --workspace --tests` and the full release workspace
+  build passed. Deployed through `scripts/deploy-local.ps1`, which holds the desktop lock.
+- Three pure guest tests, two real Wasmtime/pipe identity tests, three migration tests, and
+  the kit size-sheet check passed. The actual service's three faces were also rendered and
+  inspected through the production kit. No real VPN preference changes were sent.
+- The [size sheet](golden/sizes.png) covers connected, disconnected, unavailable, and empty
+  states at compact, regular, and large sizes, with bounded hits and no unchanged-view damage.
+- The [deployed-binary measurement](evidence/wasm-memory.json) records 1.31 MiB linear memory,
+  7.73 MiB total helper private memory, and a 3.14 MiB activation delta for all three faces.
+  The 20-second settled interval delivered zero plugin events and zero plugin CPU microseconds.
+  Linear memory meets the typical 0.5–2 MiB target; the measured process-private delta is
+  above 2 MiB and includes the component mapping, pipe work, and retained allocator pages.
+
+The shared HTTP pipe opener required a small host fix in `crates/plugins/src/io.rs`:
+identification-level security quality of service lets Tailscale authenticate the caller.
+The original opener returned HTTP 401 on this installation; the fixed opener returns 200.
