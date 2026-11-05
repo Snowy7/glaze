@@ -1697,7 +1697,8 @@ impl Widgets {
             Event::Press(p, Button::Left) => {
                 let entry = self.entries.get_mut(&id).unwrap();
                 entry.surface.take_focus();
-                entry.model.pressed = entry.surface.shown().hit_at(p.at).map(|h| h.id);
+                let over = entry.surface.shown().hit_at(p.at).map(|h| h.id);
+                left_button(&mut entry.model.pressed, event, over, false);
                 // A click focuses nothing (rings are for the keyboard); a field keeps its own.
                 entry.model.focus = entry.model.pressed.filter(|&h| h == view::FIELD);
                 entry.model.notice = None;
@@ -1744,10 +1745,19 @@ impl Widgets {
                     entry.model.dirty = true;
                 }
             }
+            Event::DoubleClick(..) => {
+                let m = &mut self.entries.get_mut(&id).unwrap().model;
+                left_button(&mut m.pressed, event, None, m.kind == Widget::Plugin);
+            }
             Event::Release(p, Button::Left) => {
-                self.entries.get_mut(&id).unwrap().model.pressed = None;
-                if let Some(hit) = self.entries[&id].surface.shown().hit_at(p.at).map(|h| h.id) {
-                    self.action(ui, &id, hit);
+                let entry = self.entries.get_mut(&id).unwrap();
+                let over = entry.surface.shown().hit_at(p.at).map(|h| h.id);
+                let armed = entry.model.pressed;
+                entry.model.dirty |= armed.is_some();
+                match left_button(&mut entry.model.pressed, event, over, false) {
+                    Some(hit) => self.action(ui, &id, hit),
+                    None if over.is_some() => log::info!("widget {id}: release over {over:?} without its press (armed {armed:?}): no action"),
+                    None => {}
                 }
             }
             Event::Invoke(hit) => self.action(ui, &id, *hit),
@@ -3332,6 +3342,50 @@ fn widget_surface(topmost: bool, parent: HWND, instance: &str) -> Result<Surface
         &format!("mypaper widget {instance}"),
         Role::Pane,
     )
+}
+
+/// A widget's left button against the hit its press armed (`pressed`, also drawn as the pressed
+/// state); returns the hit a click fires. Like the kit's buttons (`interact.rs`), only a release
+/// over the hit that was pressed fires it, once: a button-up with no press of ours behind it
+/// fires nothing. Before this every button-up ran the action under the pointer. On plugin
+/// widgets (`single`) a double-click's second press doesn't arm, so a double-click is one
+/// action: approve or send must not run twice.
+fn left_button(pressed: &mut Option<HitId>, event: &Event, over: Option<HitId>, single: bool) -> Option<HitId> {
+    match event {
+        Event::Press(_, Button::Left) => *pressed = over,
+        Event::DoubleClick(_, Button::Left) if single => *pressed = None,
+        Event::Release(_, Button::Left) => return pressed.take().filter(|&hit| Some(hit) == over),
+        _ => {}
+    }
+    None
+}
+
+#[cfg(test)]
+mod left_button_tests {
+    use super::left_button;
+    use mypaper_ui::{Button, Event, HitId, Point, Pointer};
+
+    /// Runs `events` over hit `row` and counts the clicks that fire.
+    fn clicks(events: &[Event], single: bool) -> usize {
+        let row: HitId = 800_002;
+        let mut pressed = None;
+        events.iter().filter(|e| left_button(&mut pressed, e, Some(row), single) == Some(row)).count()
+    }
+
+    #[test]
+    fn one_click_one_action() {
+        let p = Pointer { at: Point::new(10.0, 10.0), screen: (10, 10) };
+        let (press, release, double) = (Event::Press(p, Button::Left), Event::Release(p, Button::Left), Event::DoubleClick(p, Button::Left));
+        assert_eq!(clicks(&[press, release], true), 1);
+        assert_eq!(clicks(&[release, press, release, release], true), 1, "button-ups with no press of ours");
+        // What a double-click delivers: down, up, then WM_LBUTTONDBLCLK (a press and a double-click), up.
+        let double_click = [press, release, press, double, release];
+        assert_eq!(clicks(&double_click, true), 1, "a plugin widget's double-click is one action");
+        assert_eq!(clicks(&double_click, false), 2, "built-in widgets keep two");
+        let mut pressed = None;
+        left_button(&mut pressed, &press, Some(1), true);
+        assert_eq!(left_button(&mut pressed, &release, Some(2), true), None, "released over another hit");
+    }
 }
 
 /// Edit guides are visual only. A monitor-sized layered window must never take a widget's drag.
