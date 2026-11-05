@@ -446,6 +446,50 @@ pub fn set_style(tokens: Option<Tokens>); // mypaper_ui::menu
 // Surface::animation_frames(Duration) -> AnimationFrames (cancel on drop); Event::Frame.
 ```
 
+#### Native Studio merge and field audit
+
+`93400fb` merges native `6a5037e`. `shell::preview` and `lib.rs` stay unchanged from that baseline;
+Studio continues to call the actual bar/widget/menu views. The merge keeps both Surface's focus
+validation and its new application-window presentation path. Display-list translation now handles
+`Clip`/`Unclip`, and the obsolete shell test-binary desktop fixture is removed because the startup
+loop belongs to the binary, while its views now belong to the library.
+
+| Studio-written field | Native consumer / remaining row |
+|---|---|
+| Bar look style, scheme, family, radius and direct font size | token resolver and shared preview/native view |
+| Module weight, text/fill/edge colors, padding/radius/size | module view; a width-only edge now follows the bar rim, and zero width hides it |
+| Custom command arguments | typed argv in the custom provider, without shell re-parsing |
+| Taskbar button length, including titled buttons | explicit length wins over the 168 DIP default |
+| Root animation enabled/duration/curve and dock magnify timing | bar motion resolver |
+| Bar-wide border/shadow and item rest/hover/active styling | still partial, C10 |
+| Appearing style, hover/press, bounce/attention durations and popup opening timing | still partial, C14/C15; the menus-opening leaf currently drives bar slide |
+| Appearance font/content scale/shadow and dedicated OneUI/Fluent rendering | still partial, C06/C25 |
+
+The focused shared-preview test checks module weight/color/size, the width-only edge and a titled
+212 DIP taskbar button through `preview::bars`, rather than a duplicate Studio renderer. C06, C10
+and C13–C15/C25 now name the specific unsupported consumers. Native Studio's own rows and notes
+from N7 are preserved, and parity counts are recomputed.
+
+Post-merge checks: shell **45 passed / 1 ignored**, UI **25/0**, core **16/4**, bars **107/1**,
+integrations **10/0**, Studio **24/0**: **227 passed, six deliberately ignored**. Strict all-target
+clippy passes for shell/core. Studio's 14 affected light/dark golden images and their documentation
+copies were refreshed for the restored shared bar glyphs and reviewed; no Studio Rust source or
+preview substitute was introduced. These image/doc updates are the additional out-of-ownership
+edits needed to keep `cargo test -p mypaper-studio` passing.
+
+The main timing/CPU/memory table above predates the Studio merge. A short current-build probe
+(`studio-merged`) measured content at **4.59 ms**, with no-hover cold glass at **484.2 ms**. The
+separate `studio-idle-1` run measured hover-prepared content/glass at **8.21 / 58.2 ms**, then a
+60-second visible-widget idle sample at **0.29% shell CPU / 45 MiB private memory**: both idle
+gates still fail. Its closed post-popup reading was 46.17 MiB. The first probe's 33.1 MiB startup
+reading was not representative of settled memory, and is not used to claim a pass. These are
+single diagnostics, not three-sample current-build qualifications; maximized CPU was not rerun
+after this merge. The unresolved gates remain explicit. Release binaries for core, wallpaper, shell and
+the newly required native Studio are rebuilt in this worktree's existing target. Windows refused
+to replace the three running executables during publication; their linked artifacts are copied
+into `target/release` only after the old processes stop under the desktop lock. The normal core is
+then restarted there, using the user's saved configuration.
+
 ## Plate integration seam
 
 `crates/shell/src/glass.rs` is the only publication boundary:
