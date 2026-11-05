@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "paths": {
+      "mypaper:plugin/*@0.1.0": ["./src/generated/interfaces/mypaper-plugin-*.d.ts"],
+      "@mypaper/plugin-sdk": ["./src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "../../plugins/hello-ts/src/index.ts"]
+}

@@ -1,0 +1,13 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@mypaper/plugin-sdk':
+        specifier: link:../../packages/plugin-sdk-ts
+        version: link:../../packages/plugin-sdk-ts

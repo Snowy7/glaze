@@ -1,0 +1,25 @@
+{
+  "name": "@mypaper/plugin-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bytecodealliance/jco": "1.41.0",
+    "@bytecodealliance/componentize-js": "0.23.0",
+    "esbuild": "0.28.2"
+  },
+  "devDependencies": { "typescript": "7.0.2", "@types/node": "26.6.6" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./view": "./src/view.ts",
+    "./plugin": "./src/plugin.ts",
+    "./generated/*": "./src/generated/*",
+    "./tsconfig.json": "./tsconfig.json"
+  },
+  "bin": { "mypaper-plugin-build": "./scripts/build.mjs" },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "hello-ts",
+  "name": "Hello TypeScript (experimental)",
+  "version": "0.1.0",
+  "component": "hello-ts.wasm",
+  "api": "0.1",
+  "faces": [{ "id": "main", "name": "TypeScript demo", "icon": "sparkles", "size": { "default": [4, 3], "min": [2, 2] } }],
+  "permissions": [],
+  "limits": { "memory_mb": 2 }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@mypaper/hello-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "mypaper-plugin-build src/index.ts -o hello-ts.wasm",
+    "typecheck": "pnpm --dir ../../packages/plugin-sdk-ts typecheck"
+  },
+  "dependencies": { "@mypaper/plugin-sdk": "link:../../packages/plugin-sdk-ts" }
+}

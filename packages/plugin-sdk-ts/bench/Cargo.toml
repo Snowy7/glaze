@@ -1,0 +1,23 @@
+[package]
+name = "mypaper-ts-probe"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+log = "0.4"
+mypaper-plugin-api = { path = ".source/plugin-api" }
+mypaper-plugin-sdk = { path = ".source/plugin-sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+wasmtime = { version = "50", default-features = false, features = ["anyhow", "runtime", "cranelift", "component-model", "pooling-allocator", "std"] }
+wasmtime-wasi = { version = "50", default-features = false, features = ["p2"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Networking_WinHttp", "Win32_Graphics_Gdi", "Win32_System_Power", "Win32_System_ProcessStatus", "Win32_System_Threading"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

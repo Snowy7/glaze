@@ -1,0 +1,7 @@
+node_modules/
+dist/
+bench/.source/
+bench/target/
+measurements/*.wasm
+measurements/stock/
+measurements/minimal.js

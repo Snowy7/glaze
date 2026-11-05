@@ -1,0 +1,12 @@
+import { cp, mkdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { generateHostBindings } from './host-bindings.mjs';
+const sdk = new URL('../', import.meta.url);
+await mkdir(new URL('wit/', sdk), { recursive: true });
+await cp(new URL('../../crates/plugin-api/wit/', sdk), new URL('wit/', sdk), { recursive: true });
+const jco = fileURLToPath(new URL('node_modules/@bytecodealliance/jco/dist/jco.js', sdk));
+const result = spawnSync(process.execPath, [jco, 'types', 'wit', '--world-name', 'plugin', '--name', 'plugin', '-o', 'src/generated'], { cwd: sdk, stdio: 'inherit' });
+if (result.error) throw result.error;
+if (result.status !== 0) process.exit(result.status ?? 1);
+await generateHostBindings();
