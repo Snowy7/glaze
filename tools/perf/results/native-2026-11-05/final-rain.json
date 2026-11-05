@@ -1,0 +1,38 @@
+[
+  {
+    "scenario": "real-look",
+    "run": 0,
+    "seconds": 60.1293901,
+    "private_mb": 261.8359375,
+    "cpu_core_pct": 5.145154465819203,
+    "cpu_machine_pct": 0.3215721541137002,
+    "visible_screens": 2,
+    "timing_file": null,
+    "sample_started_qpc": 3669431017697,
+    "sample_ended_qpc": 3670032311601
+  },
+  {
+    "scenario": "real-look",
+    "run": 1,
+    "seconds": 60.0497537,
+    "private_mb": 253.1796875,
+    "cpu_core_pct": 4.579535852450965,
+    "cpu_machine_pct": 0.2862209907781853,
+    "visible_screens": 2,
+    "timing_file": null,
+    "sample_started_qpc": 3670141670313,
+    "sample_ended_qpc": 3670742167853
+  },
+  {
+    "scenario": "real-look",
+    "run": 2,
+    "seconds": 60.0436275,
+    "private_mb": 257.109375,
+    "cpu_core_pct": 4.241707415162417,
+    "cpu_machine_pct": 0.2651067134476511,
+    "visible_screens": 2,
+    "timing_file": null,
+    "sample_started_qpc": 3670837284996,
+    "sample_ended_qpc": 3671437721274
+  }
+]

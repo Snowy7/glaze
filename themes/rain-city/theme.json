@@ -20,6 +20,10 @@
           ],
           "format": "rgba32float"
         }
+      },
+      {
+        "binding": 5,
+        "bake": "still_frame"
       }
     ]
   }

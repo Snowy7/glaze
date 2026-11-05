@@ -15,7 +15,9 @@ mod desktop_menu;
 mod flyouts;
 mod glass;
 mod inbox;
+mod integrations;
 mod look;
+mod overlay_client;
 mod widgets;
 
 use std::process::ExitCode;
@@ -68,10 +70,12 @@ fn run() -> Result<()> {
     let _com = Com::init();
     let mut ui = Ui::new()?;
     startup::ready("shell", "factories_ms");
+    overlay_client::install();
     let bars = bars::Bars::new(&mut ui, bars_start)?;
     let inbox = Inbox::new()?;
     let _watchers = watch_files();
     let mut shell = Shell {
+        flyouts: flyouts::Flyouts::new(&ui, inbox.hwnd())?,
         inbox: inbox.hwnd(),
         menu: None,
         bars,
@@ -92,6 +96,7 @@ fn run() -> Result<()> {
             .copied()
             .chain(shell.widgets.as_ref().map(widgets::Widgets::timer_handle))
             .chain(shell.bars.handles())
+            .chain([shell.flyouts.handle()])
             .collect();
         // SAFETY: the parent's handle stays open for the whole loop.
         let woke = unsafe {
@@ -104,7 +109,8 @@ fn run() -> Result<()> {
                         windows::Win32::System::Threading::INFINITE,
                         widgets::Widgets::timeout_ms,
                     )
-                    .min(shell.bars.timeout()),
+                    .min(shell.bars.timeout())
+                    .min(shell.flyouts.timeout_ms()),
                 QS_ALLINPUT,
                 MWMO_INPUTAVAILABLE,
             )
@@ -158,12 +164,17 @@ struct Shell {
     /// The desktop right-click menu, while `desktop_menu.enabled`.
     menu: Option<DesktopMenu>,
     widgets: Option<widgets::Widgets>,
+    /// Calendar, quick settings, notifications, launcher and the other panels the bars open.
+    flyouts: flyouts::Flyouts,
 }
 
 impl Shell {
     /// Handles everything queued: inbox messages and input, in order, until both are empty.
     /// Handling one may call into Explorer and so let more arrive; they are handled here too.
     fn drain(&mut self, ui: &mut Ui) {
+        if integrations::process() {
+            self.bars.integration_changed();
+        }
         let mut config_changed = false;
         loop {
             if let Some(msg) = inbox::next() {
@@ -182,6 +193,10 @@ impl Shell {
                     }
                 }
             } else if let Some((id, event)) = next_event() {
+                if self.flyouts.owns(id) {
+                    self.flyouts.event(ui, &mut self.bars, id, &event);
+                    continue;
+                }
                 self.bars.event(ui, id, &event);
                 if let Some(widgets) = &mut self.widgets {
                     widgets.on_event(ui, id, &event);
@@ -196,13 +211,17 @@ impl Shell {
         if let Some(widgets) = &mut self.widgets {
             widgets.poll(ui);
         }
+        // What the bars asked to open, provider answers, and the open flyout's motion.
+        self.flyouts.process(ui, &mut self.bars);
         // The menu's look follows the theme and its palette, so both count.
         if config_changed {
             self.follow_config(ui);
+            self.flyouts.config_changed(ui, self.inbox);
         }
     }
 
     fn fact(&mut self, ui: &mut Ui, wparam: usize, lparam: isize) {
+        integrations::fact(wparam, lparam);
         self.bars.fact(wparam, lparam);
         if let Some(widgets) = &mut self.widgets {
             widgets.fact(wparam, lparam);

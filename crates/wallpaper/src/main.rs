@@ -21,8 +21,9 @@ mod control;
 mod engine;
 mod glass_pass;
 mod gpu;
-// Glass overlays: built and measured in N0.2 (examples/overlay_spike.rs); the engine loop drives
-// them from N3.
+#[cfg(test)]
+mod lab;
+// Glass overlays, driven by the loop below; their measuring calls serve the spike examples.
 #[allow(dead_code)]
 mod overlay;
 mod palette;
@@ -165,6 +166,14 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
     let mut live = Live::new(config, engine.theme_dir())?;
     let events = host.is_some().then(WindowEvents::install);
     let waiter = Waiter::new()?;
+    // Glass under the shell's popups (desktop mode only: a dev window must not take requests).
+    let mut overlays = host
+        .is_some()
+        .then(|| overlay::Overlays::new(engine.overlay_gpu()))
+        .transpose()
+        .inspect_err(|e| log::error!("glass overlays unavailable: {e:#}"))
+        .ok()
+        .flatten();
 
     let mut trimmer = Trimmer::new(engine.theme_dir());
     startup::ready("wallpaper", "loop_ms");
@@ -174,6 +183,11 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
         if let Some(code) = pump(&mut engine, &mut live) {
             break code;
         }
+        // Requests and capture frames arrived as messages in that pump.
+        let warm_at = overlays.as_mut().and_then(|o| {
+            o.tick();
+            o.deadline()
+        });
         if let Some(events) = &desktop_events {
             desktop_lost |= events.take_lost();
             if events.take_ready() {
@@ -206,7 +220,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
         match tick(&mut engine, events.as_ref()) {
             Flow::Wait(deadline) => waiter.wait(
                 earliest(
-                    desktop_at,
+                    earliest(desktop_at, warm_at),
                     earliest(earliest(deadline, trim_at), live.deadline()),
                 ),
                 &engine.glass_handles(),
@@ -215,6 +229,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
         }
     };
 
+    drop(overlays);
     drop(engine); // destroys our windows
     if let Some(host) = host {
         host.restore();

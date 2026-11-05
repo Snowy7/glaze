@@ -599,10 +599,10 @@
           "author": "mypaper contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale.",
+          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale; baked still-frame layer at binding 5.",
           "license_url": "https://opensource.org/license/mit/",
-          "bytes": 456,
-          "sha256": "bdf652d1fadb951213a72fe2bf201921bbf1f19aa376daf99a65bf3d1d8da380"
+          "bytes": 525,
+          "sha256": "d4e1282baffd89d64d054a4da7e4852789ea24b756ae45748377e4b63eb75d56"
         },
         {
           "path": "rain-city/rain.wgsl",
@@ -610,10 +610,10 @@
           "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
           "license": "CC-BY-NC-SA-3.0",
           "source": "https://github.com/rocksdanister/rain",
-          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained.",
+          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 5812,
-          "sha256": "cfd735995ad772d0a0e1276ae41103d350e8f1330bcbd350db5e6d10bf03d077"
+          "bytes": 7637,
+          "sha256": "a5f288cb2edb34f9e47937bed2ed231c51ec0d3671406349f505eca45d3fadba"
         },
         {
           "path": "rain-city/profile.wgsl",
@@ -682,10 +682,10 @@
           "author": "mypaper contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale.",
+          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale; baked still-frame layer at binding 5.",
           "license_url": "https://opensource.org/license/mit/",
-          "bytes": 455,
-          "sha256": "4413b669211c95f14a664b5ec15f29db2514d449e75ff54498ae2a435758eaf5"
+          "bytes": 524,
+          "sha256": "6c154842369b7e9e9d0a64889872fe269ae85307c9766128a0034aee16be4d7d"
         },
         {
           "path": "rain-city-amber/rain.wgsl",
@@ -693,10 +693,10 @@
           "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
           "license": "CC-BY-NC-SA-3.0",
           "source": "https://github.com/rocksdanister/rain",
-          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained.",
+          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 5818,
-          "sha256": "525d72ea3abc508f27e78a760d050355727b6679003dada94427ad115ee9936d"
+          "bytes": 7643,
+          "sha256": "d748f11f26a07eb525129ec4189e3ac6fdd49772a12f0fa457495b8b5085d437"
         },
         {
           "path": "rain-city-amber/profile.wgsl",
@@ -765,10 +765,10 @@
           "author": "mypaper contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale.",
+          "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale; baked still-frame layer at binding 5.",
           "license_url": "https://opensource.org/license/mit/",
-          "bytes": 457,
-          "sha256": "d01cb9157de7034d1d54cf4de9f9a67fb0c908f4c984c2abca2b9451b12bfe98"
+          "bytes": 526,
+          "sha256": "35b1f8b97c34945fc48efffa6c024ae2de1fd8dfe5303dcf26a055bd42a05f94"
         },
         {
           "path": "rain-city-midnight/rain.wgsl",
@@ -776,10 +776,10 @@
           "author": "Dani John (Rocksdanister); Martijn Steinrucken (BigWings)",
           "license": "CC-BY-NC-SA-3.0",
           "source": "https://github.com/rocksdanister/rain",
-          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained.",
+          "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 5818,
-          "sha256": "89109c8432b486b7cb95184bff767973a8b36d02a53d590c8f309ea4c977fa91"
+          "bytes": 7643,
+          "sha256": "7379f7f4010ee95724434301278de7fe3a8dca94c0f6abfd142c2bd0863f24b8"
         },
         {
           "path": "rain-city-midnight/profile.wgsl",

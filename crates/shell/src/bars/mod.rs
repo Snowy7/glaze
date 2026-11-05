@@ -1,13 +1,13 @@
 //! Native top bar and dock. Windows services live in `mypaper-bars`; UI and motion live here.
 mod bar;
 mod icons;
-mod look;
+pub(crate) mod look;
 mod motion;
 mod preview;
-mod services;
+pub(crate) mod services;
 #[cfg(test)]
 mod tests;
-mod view;
+pub(crate) mod view;
 
 use crate::{flyouts, glass};
 use anyhow::Result;
@@ -46,6 +46,7 @@ use windows::Win32::{
 
 #[derive(Clone)]
 enum Command {
+    AppActions(Box<(providers::apps::Item, Rect, Monitor)>),
     Activate(isize),
     Close(isize),
     Launch(String),
@@ -447,6 +448,34 @@ impl Bars {
         Ok(())
     }
 
+    /// The tray icons, pinned or not (the tray overflow flyout lists the unpinned ones).
+    pub fn tray(&self) -> &[providers::tray_data::TrayItem] {
+        &self.services.model.tray
+    }
+
+    /// Clicks tray icon `id` from outside a bar (the overflow flyout) as a bar click would;
+    /// `anchor` is the icon's screen rectangle.
+    pub fn click_tray(&self, id: &str, button: Button, point: (i32, i32), anchor: Rect) {
+        if self.services.tray_host.active() {
+            let click = match button {
+                Button::Right => Click::Right,
+                Button::Middle => Click::Middle,
+                Button::Left => Click::Left,
+            };
+            let rect = [anchor.left, anchor.top, anchor.width(), anchor.height()].map(|v| v as i32);
+            self.services
+                .tray_host
+                .click(id.into(), click, point, Some(rect));
+        } else {
+            let button = match button {
+                Button::Right => TrayButton::Right,
+                Button::Middle => TrayButton::Middle,
+                Button::Left => TrayButton::Left,
+            };
+            self.services.tray.click(id.into(), button);
+        }
+    }
+
     /// Current bar plates for the shell compositor. N4 can combine this with widget plates
     /// before calling the single monitor-replacement publisher.
     pub fn plates(&self, monitor: &Monitor) -> Vec<glass::Plate> {
@@ -699,6 +728,15 @@ impl Bars {
                     return;
                 };
                 let grouped = b.tokens.family == Family::Fluent;
+                if input == Trigger::Left
+                    && crate::integrations::module_click(
+                        &ModuleRef::Builtin(module),
+                        anchor,
+                        &monitor,
+                    )
+                {
+                    return;
+                }
                 let flyout = match (module, input) {
                     (Module::Start, Trigger::Left) => Some(flyouts::Kind::Launcher),
                     (Module::Clock | Module::Notifications, Trigger::Left) => {
@@ -839,6 +877,10 @@ impl Bars {
                         entries.extend(item.windows.iter().map(|w| {
                             Entry::action(&format!("Close {}", w.title), Command::Close(w.hwnd))
                         }));
+                        entries.push(Entry::action(
+                            "Recent items and app actions",
+                            Command::AppActions(Box::new((item.clone(), anchor, monitor.clone()))),
+                        ));
                         self.open_menu(ui, entries, point);
                     }
                     _ => {}
@@ -931,6 +973,7 @@ impl Bars {
             }
             Command::Close(w) => system::close(system::hwnd(w)),
             Command::Launch(path) => system::open(path),
+            Command::AppActions(data) => crate::integrations::open_app(&data.0, data.1, &data.2),
             Command::EmptyTrash => trash::empty(),
             Command::Pin(pin) => self.edit_pins(|pins| {
                 if !pins.iter().any(|p| p.path.eq_ignore_ascii_case(&pin.path)) {
@@ -1083,6 +1126,10 @@ impl Bars {
             b.dirty = true;
         }
     }
+    pub fn integration_changed(&mut self) {
+        self.subscribe();
+        self.dirty();
+    }
     fn subscribe(&mut self) {
         let topics = self
             .bars
@@ -1106,6 +1153,15 @@ impl Bars {
         });
         let tray = self.config.tray.host || self.config.taskbar.mode == TaskbarMode::Hide;
         self.services.subscribe(topics, &configs, seconds, tray);
+        crate::integrations::bar_subscriptions(
+            self.bars
+                .iter()
+                .filter(|b| b.shows_content())
+                .flat_map(|b| providers::actions::bar_modules(b.kind, &b.config)),
+            self.bars
+                .iter()
+                .any(|b| b.shows_content() && b.kind == BarKind::Dock),
+        );
         let trash = self.bars.iter().any(|b| {
             b.shows_content()
                 && b.kind == BarKind::Dock

@@ -314,9 +314,7 @@ impl Model {
                             },
                         ),
                 ),
-                Widget::Media => (self.flag("progress", true)
-                    && self.data["playing"].as_bool() == Some(true))
-                .then(|| instant + time::boundary(now.ms, 1000)),
+                Widget::Media => None,
                 Widget::Calendar | Widget::Heatmap => Some(
                     instant + Duration::from_millis((now.midnight_after() - now.ms).max(1) as u64),
                 ),

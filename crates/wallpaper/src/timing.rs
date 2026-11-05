@@ -32,7 +32,10 @@ struct Slot {
 pub struct Meta {
     pub screen: usize,
     pub frame: u32,
+    /// The submission shows a new wallpaper frame.
     pub wallpaper: bool,
+    /// It also ran the wallpaper pass (false when a screen sharing the kept frame did).
+    pub pass: bool,
     pub sequence: u64,
     pub published_qpc: u64,
     pub submit_qpc: u64,
@@ -176,10 +179,11 @@ impl Timing {
                             .to_string()
                     };
                     let line = format!(
-                        "{{\"screen\":{},\"frame\":{},\"wallpaper_drawn\":{},\"glass_drawn\":{},\"sequence\":{},\"wallpaper_ms\":{},\"restore_ms\":{},\"glass_ms\":{},\"publish_to_submit_ms\":{},\"publish_to_composition_ms\":{},\"submit_qpc\":{},\"qpc_frequency\":{}}}",
+                        "{{\"screen\":{},\"frame\":{},\"wallpaper_drawn\":{},\"wallpaper_pass\":{},\"glass_drawn\":{},\"sequence\":{},\"wallpaper_ms\":{},\"restore_ms\":{},\"glass_ms\":{},\"publish_to_submit_ms\":{},\"publish_to_composition_ms\":{},\"submit_qpc\":{},\"qpc_frequency\":{}}}",
                         m.screen,
                         m.frame,
                         m.wallpaper,
+                        m.pass,
                         m.glass,
                         m.sequence,
                         ms(0, 1),

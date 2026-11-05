@@ -52,6 +52,10 @@ struct State {
     format: CHARFORMATW,
     paragraph: PARAFORMAT,
     timers: RefCell<Vec<usize>>,
+    /// The caret RichEdit asks for (left, top, width, height) and whether it shows: a layered
+    /// window never shows the system caret, so views draw it from [`TextField::caret`].
+    caret: Cell<(i32, i32, i32, i32)>,
+    caret_shown: Cell<bool>,
 }
 impl State {
     fn invalidate(&self) {
@@ -124,6 +128,8 @@ impl TextField {
                 ..Default::default()
             },
             timers: RefCell::new(Vec::new()),
+            caret: Cell::new((0, 0, 1, 0)),
+            caret_shown: Cell::new(false),
         });
         let host: TextHost = Host {
             state: state.clone(),
@@ -165,6 +171,13 @@ impl TextField {
             LPARAM(if multiline { 500_000 } else { 4096 }),
         );
         Ok(field)
+    }
+    /// Where the caret is, in the surface's pixels, while it shows (steady: no blink timer).
+    pub fn caret(&self) -> Option<Rect> {
+        let state = &self.inner.state;
+        let (x, y, w, h) = state.caret.get();
+        (state.caret_shown.get() && h > 0)
+            .then(|| Rect::new(x as f32, y as f32, w.max(1) as f32, h as f32))
     }
     pub fn revision(&self) -> u64 {
         self.inner.state.revision.get()
@@ -326,6 +339,8 @@ impl ITextHost_Impl for Host_Impl {
         self.state.invalidate();
     }
     fn TxCreateCaret(&self, bitmap: HBITMAP, width: i32, height: i32) -> BOOL {
+        let (x, y, _, _) = self.state.caret.get();
+        self.state.caret.set((x, y, width, height));
         // SAFETY: synchronous host callback on the UI thread; the surface owns this HWND.
         unsafe {
             CreateCaret(self.state.window, Some(bitmap), width, height)
@@ -334,6 +349,9 @@ impl ITextHost_Impl for Host_Impl {
         }
     }
     fn TxShowCaret(&self, show: BOOL) -> BOOL {
+        if self.state.caret_shown.replace(show.as_bool()) != show.as_bool() {
+            self.state.invalidate();
+        }
         // SAFETY: synchronous host callback on the UI thread; the surface owns this HWND.
         unsafe {
             if show.as_bool() {
@@ -346,6 +364,10 @@ impl ITextHost_Impl for Host_Impl {
         }
     }
     fn TxSetCaretPos(&self, x: i32, y: i32) -> BOOL {
+        let (_, _, w, h) = self.state.caret.get();
+        if self.state.caret.replace((x, y, w, h)) != (x, y, w, h) {
+            self.state.invalidate();
+        }
         // SAFETY: synchronous host callback on the UI thread; the surface owns this HWND.
         unsafe { SetCaretPos(x, y).is_ok().into() }
     }
