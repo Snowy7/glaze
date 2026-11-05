@@ -112,7 +112,7 @@ fails with `error::denied` and the plugin keeps running.
 | `ui` | `set-view(instance, face)`, `clear(instance)`, `put-image(width, height, bgra) -> result<u32, error>`, `drop-image(id)` | — |
 | `style` | `apply(patch) -> result<_, error>`, `reset(surface)` | the surface in `styles` |
 | `timers` | `after(id, ms)`, `every(id, ms)`, `cancel(id)` | — |
-| `events` | `subscribe(list<topic>)`, `unsubscribe(list<topic>)` | `windows` for window topics |
+| `events` | `subscribe(list<topic>)`, `unsubscribe(list<topic>)` | `windows` for window topics; `notifications` for notification topics |
 | `http` | `fetch(request) -> result<u64, error>`, with the reply arriving as `event::http` | `network:<origin>` |
 | `websocket` | `connect(url)` or `connect-with({ url, headers, protocols })` `-> result<u64, error>`, `send`, `close`, with `event::socket` | `network:<origin>` |
 | `pipes` | `open(name) -> result<u64, error>`, `write`, `close`, with `event::pipe`; `http-request(name, request) -> result<u64, error>` with `event::http` | `pipe:<name>` |
