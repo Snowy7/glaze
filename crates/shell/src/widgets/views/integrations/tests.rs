@@ -225,7 +225,6 @@ fn sheet(ui: &mut Ui, id: &str) -> Image {
                     "obs" => Some(Data::Obs(Default::default())),
                     _ => None,
                 };
-                m.integration.runs.clear();
             }
         }
         add_widget(ui, &mut sheet, &m, (300, 210), x, 486.0);
