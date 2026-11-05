@@ -15,6 +15,7 @@ mod desktop_menu;
 mod flyouts;
 mod glass;
 mod inbox;
+mod integrations;
 mod look;
 mod overlay_client;
 mod widgets;
@@ -171,6 +172,9 @@ impl Shell {
     /// Handles everything queued: inbox messages and input, in order, until both are empty.
     /// Handling one may call into Explorer and so let more arrive; they are handled here too.
     fn drain(&mut self, ui: &mut Ui) {
+        if integrations::process() {
+            self.bars.integration_changed();
+        }
         let mut config_changed = false;
         loop {
             if let Some(msg) = inbox::next() {
@@ -217,6 +221,7 @@ impl Shell {
     }
 
     fn fact(&mut self, ui: &mut Ui, wparam: usize, lparam: isize) {
+        integrations::fact(wparam, lparam);
         self.bars.fact(wparam, lparam);
         if let Some(widgets) = &mut self.widgets {
             widgets.fact(wparam, lparam);

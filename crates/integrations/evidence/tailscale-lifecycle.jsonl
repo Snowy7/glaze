@@ -1,0 +1,4 @@
+{"cpu_core_pct":0.0,"private_mib":1.33984375,"provider":"Tailscale","run":1,"stage":"disabled"}
+{"attempts":1,"availability":"Cached","provider":"Tailscale","stage":"reconnect"}
+{"added_private_mib":0.26953125,"attempts":0,"availability":"Cached","cpu_core_pct":0.0,"deliveries":0,"private_mib":1.609375,"provider":"Tailscale","run":1,"snapshot_changes":0,"stage":"enabled"}
+{"private_mib":1.4375,"stage":"stopped"}

@@ -189,7 +189,10 @@ fn scheduled_ticks_stop_when_hidden_and_minute_clock_never_ticks_faster() {
     assert_eq!(media.next, None, "paused media has no progress timer");
     media.data["playing"] = json!(true);
     media.schedule(now, instant);
-    assert_eq!(media.next, Some(instant + Duration::from_secs(1)));
+    assert_eq!(
+        media.next, None,
+        "playing media changes only on SMTC events"
+    );
     let mut system = fixture("system-monitor", temp("scheduling"));
     system.schedule(now, instant);
     assert_eq!(

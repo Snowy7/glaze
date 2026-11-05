@@ -111,7 +111,14 @@ pub fn module_topic(module: &ModuleRef) -> Option<Topic> {
         Module::Stats => Some(Topic::Stats),
         Module::Language => Some(Topic::Language),
         Module::Notifications => Some(Topic::Notifications),
-        Module::Start | Module::Search | Module::Quick | Module::Power => None,
+        Module::Start
+        | Module::Search
+        | Module::Quick
+        | Module::Power
+        | Module::T3
+        | Module::Obs
+        | Module::Docker
+        | Module::Tailscale => None,
     }
 }
 
