@@ -967,6 +967,11 @@ impl Bars {
                     if let Some((_, Target::Dock(app))) = b.frame.target(p.at) {
                         self.preview_close = None;
                         if app.windows.is_empty() {
+                            // An app with no windows here has no previews: the open ones (the
+                            // previous app's) close as they do off the icons.
+                            if self.preview.is_some() {
+                                self.preview_close = Some(now + Duration::from_millis(280));
+                            }
                         } else if self.preview.as_ref().is_some_and(|v| v.key != app.key) {
                             // Open previews follow the pointer to the next app at once, in the
                             // same popup.

@@ -79,9 +79,9 @@ pub struct Bar {
     zoom: Vec<(f32, f32)>,
     zoom_due: bool,
     zoomed_at: Instant,
-    /// Most of one display refresh, at most 120 Hz's (a magnification frame costs ~0.8 ms of
-    /// software rendering; past 120 Hz that buys no visible smoothness): the zoom is laid out at
-    /// most this often.
+    /// Most of one display refresh, and at least 8 ms (at most 125 frames a second: a
+    /// magnification frame costs ~0.8 ms of software rendering, and past 120 Hz that buys no
+    /// visible smoothness): the zoom is laid out at most this often.
     frame_interval: Duration,
     pub animate: bool,
     /// Explorer has accepted this bar's current work-area reservation.
@@ -181,8 +181,8 @@ impl Bar {
             zoom_due: false,
             zoomed_at: Instant::now(),
             frame_interval: mypaper_ui::display_frame()
-                .max(Duration::from_micros(8_333))
-                .mul_f32(0.85),
+                .mul_f32(0.85)
+                .max(Duration::from_millis(8)),
             animate: slide_settings.enabled,
             reserved: autohide,
             magnify_animate: magnify_settings.enabled,
