@@ -12,6 +12,9 @@
 #![cfg_attr(not(test), windows_subsystem = "windows")]
 
 mod bench;
+#[cfg(test)]
+#[path = "../../../plugins/tailscale/src/runtime_tests.rs"]
+mod tailscale_component_tests;
 mod caps;
 mod host;
 mod images;
@@ -24,6 +27,9 @@ mod settings_permissions;
 mod obs_component_tests;
 #[cfg(test)]
 mod caps_tests;
+#[cfg(test)]
+#[path = "../../../plugins/grok/src/runtime_tests.rs"]
+mod grok_runtime_tests;
 #[cfg(test)]
 mod tests;
 

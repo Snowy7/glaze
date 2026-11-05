@@ -1,5 +1,5 @@
-//! A declared loopback origin may take its port from one numeric plugin setting.
-//! Substitution cannot change the scheme or host, and happens once when the instance loads.
+//! Reviewed settings may supply a loopback port or a list of HTTPS webhook origins.
+//! Expansion is validated and happens once when the instance loads.
 use anyhow::{Result, ensure};
 use serde_json::{Map, Value};
 
