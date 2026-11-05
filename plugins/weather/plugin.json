@@ -9,6 +9,6 @@
   "events": ["updated"],
   "component": "weather.wasm",
   "api": "0.1",
-  "faces": [{ "id": "now", "name": "Now", "icon": "cloud-sun", "size": { "default": [2, 2], "min": [2, 2], "max": [4, 4] } }],
+  "faces": [{ "id": "now", "name": "Now", "icon": "cloud-sun", "size": { "default": [8, 6], "min": [6, 4], "max": [16, 12] } }],
   "permissions": ["location", "network:https://api.open-meteo.com", "network:https://geocoding-api.open-meteo.com", "network:https://ipwho.is", "network:https://api.bigdatacloud.net"]
 }

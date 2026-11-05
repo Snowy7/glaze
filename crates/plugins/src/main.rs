@@ -7,8 +7,8 @@
 //!
 //! Stubbed for now (WIT is final, the host refuses with `error::unsupported`): websockets,
 //! pipes, notifications, `ui.put-image` and the canvas renderer, window/monitor/media/
-//! notification event sources, `system.foreground`, and `native` (routed to
-//! `crates/native-host` next).
+//! notification event sources, and `system.foreground`. `native` calls go to the plugin's own
+//! modules in `mypaper-native-host` (`native.rs`).
 #![cfg_attr(not(test), windows_subsystem = "windows")]
 
 mod bench;

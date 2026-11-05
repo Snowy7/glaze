@@ -11,6 +11,7 @@ env_logger.workspace = true
 log.workspace = true
 mypaper-plugin-api = { path = "../plugin-api" }
 mypaper-plugin-sdk = { path = "../plugin-sdk" }
+mypaper-native-host = { path = "../native-host" }
 serde.workspace = true
 serde_json.workspace = true
 wasmtime = { version = "50", default-features = false, features = ["anyhow", "runtime", "cranelift", "component-model", "pooling-allocator", "std"] }

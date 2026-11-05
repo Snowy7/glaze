@@ -15,6 +15,7 @@ use mypaper_plugin_sdk::view::Face;
 
 use crate::runtime::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen};
 use crate::runtime::mypaper::plugin::http::{Reply, Response};
+use crate::runtime::mypaper::plugin::native::{NativeMessage, NativeReply};
 use crate::runtime::mypaper::plugin::types::{Error as WitError, SizeClass as WitSize};
 use crate::runtime::{Effect, Instance, Manifest, Runtime};
 
@@ -29,6 +30,8 @@ const STRIKE_WINDOW: Duration = Duration::from_secs(300);
 pub enum Input {
     Host(HostMsg),
     Http { plugin: String, id: u64, result: Result<crate::caps::Fetched, String> },
+    Native { plugin: String, id: u64, result: Result<Vec<u8>, String> },
+    NativeEvent(mypaper_native_host::NativeEvent),
     Eof,
 }
 
@@ -63,6 +66,8 @@ pub struct Host<W: Write> {
     held: bool,
     out: W,
     tx: Sender<Input>,
+    /// The native-module lane, started by the first plugin that declares `native` modules.
+    native: Option<crate::native::Lane>,
 }
 
 fn size(size: SizeClass) -> WitSize {
@@ -75,7 +80,7 @@ fn size(size: SizeClass) -> WitSize {
 
 impl<W: Write> Host<W> {
     pub fn new(rt: Runtime, out: W, tx: Sender<Input>) -> Self {
-        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx }
+        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx, native: None }
     }
 
     pub fn out(&mut self) -> &mut W {
@@ -194,7 +199,46 @@ impl<W: Write> Host<W> {
                 }
                 true
             }
+            Input::Native { plugin, id, result } => {
+                if self.plugins.get(&plugin).is_some_and(|p| p.instance.is_some()) {
+                    let outcome = result.map_err(WitError::Failed);
+                    self.deliver(&plugin, Event::Native(NativeReply { id, outcome }), now);
+                }
+                true
+            }
+            Input::NativeEvent(event) => {
+                if self.plugins.get(&event.plugin).is_some_and(|p| p.instance.is_some()) {
+                    let message = NativeMessage { module: event.module, name: event.name, bytes: event.bytes };
+                    self.deliver(&event.plugin, Event::NativeEvent(message), now);
+                }
+                true
+            }
             Input::Eof => false,
+        }
+    }
+
+    /// Starts the plugin's native modules (if it declares any and may run native code).
+    fn activate_native(&mut self, plugin: &str) {
+        let Some(entry) = self.plugins.get(plugin) else { return };
+        let manifest = &entry.manifest;
+        if manifest.native.is_empty() || !manifest.permissions.iter().any(|p| p == "native-code") {
+            return;
+        }
+        if self.native.is_none() {
+            match crate::native::Lane::start(self.tx.clone()) {
+                Ok(lane) => self.native = Some(lane),
+                Err(e) => return log::warn!("no native lane: {e}"),
+            }
+        }
+        let job = crate::native::Job::Activate { plugin: plugin.into(), folder: entry.dir.clone(), native: manifest.native.clone(), permissions: manifest.permissions.clone() };
+        self.native.as_ref().expect("started above").send(job);
+    }
+
+    fn deactivate_native(&self, plugin: &str) {
+        if let Some(lane) = &self.native
+            && self.plugins.get(plugin).is_some_and(|p| !p.manifest.native.is_empty())
+        {
+            lane.send(crate::native::Job::Deactivate(plugin.into()));
         }
     }
 
@@ -230,6 +274,7 @@ impl<W: Write> Host<W> {
             .map(|(instance, p)| Event::Open(FaceOpen { instance: instance.clone(), face: p.face.clone(), size: size(p.size), settings: p.settings.clone() }))
             .collect();
         self.status(plugin, Status::Live);
+        self.activate_native(plugin);
         self.apply(plugin, effects, now);
         for open in opens {
             self.deliver(plugin, open, now);
@@ -256,6 +301,7 @@ impl<W: Write> Host<W> {
         if entry.strikes.len() >= STRIKES {
             log::warn!("plugin {plugin} stopped after {STRIKES} traps: {why}");
             entry.stopped = Some(reason.clone());
+            self.deactivate_native(plugin);
             self.status(plugin, Status::Stopped(reason));
         } else {
             let delay = Duration::from_secs(1 << (entry.strikes.len() - 1));
@@ -296,6 +342,12 @@ impl<W: Write> Host<W> {
                     self.schedule(plugin, id, period, Some(period), now);
                 }
                 Effect::Cancel(id) => self.timers.retain(|_, (p, t, _)| !(p == plugin && *t == id)),
+                Effect::Native { id, module, method, bytes } => match &self.native {
+                    Some(lane) => lane.send(crate::native::Job::Call { plugin: plugin.into(), id, module, method, bytes }),
+                    None => {
+                        let _ = self.tx.send(Input::Native { plugin: plugin.into(), id, result: Err("the native host isn't running".into()) });
+                    }
+                },
                 Effect::Fetch { id, method, url, headers, body, timeout_ms } => {
                     let (tx, plugin) = (self.tx.clone(), plugin.to_owned());
                     let spawned = std::thread::Builder::new().name("fetch".into()).stack_size(256 << 10).spawn(move || {
@@ -335,6 +387,7 @@ impl<W: Write> Host<W> {
             Err(e) => log::warn!("plugin {plugin}: save trapped ({e:#}); its last saved state stays"),
         }
         self.timers.retain(|_, (p, ..)| p != plugin);
+        self.deactivate_native(plugin);
         log::info!("plugin {plugin} unloaded");
         self.status(plugin, Status::Unloaded);
     }

@@ -1055,6 +1055,9 @@ pub struct PluginManifest {
     pub commands: Vec<Value>,
     #[serde(default)]
     pub limits: Option<Value>,
+    /// A component's native module DLLs (`native-code`), run by `mypaper-native-host`.
+    #[serde(default)]
+    pub native: Vec<String>,
     #[serde(default)]
     pub args: Vec<String>,
     #[serde(default)]

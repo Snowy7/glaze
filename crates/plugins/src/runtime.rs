@@ -62,6 +62,9 @@ pub struct Manifest {
     pub permissions: Vec<String>,
     #[serde(default)]
     pub limits: Limits,
+    /// Native module DLLs in the plugin folder (`native-code`), run by `mypaper-native-host`.
+    #[serde(default)]
+    pub native: Vec<String>,
 }
 
 /// `location` is the legacy native weather exe's; no WIT capability uses it.
@@ -113,6 +116,7 @@ pub enum Effect {
     Every(String, u32),
     Cancel(String),
     Fetch { id: u64, method: &'static str, url: String, headers: Vec<(String, String)>, body: Option<Vec<u8>>, timeout_ms: u32 },
+    Native { id: u64, module: String, method: String, bytes: Vec<u8> },
 }
 
 /// Tracks linear memory against the plugin's cap (and reports it in stats).
@@ -151,6 +155,7 @@ pub struct State {
     pub id: String,
     permissions: Vec<String>,
     styles: Vec<String>,
+    native: Vec<String>,
     data_dir: PathBuf,
     pub effects: Vec<Effect>,
     next_request: u64,
@@ -379,7 +384,12 @@ impl mypaper::plugin::system::Host for State {
 impl mypaper::plugin::native::Host for State {
     fn call(&mut self, module: String, method: String, bytes: Vec<u8>) -> Result<u64, WitError> {
         self.allowed("native-code")?;
-        crate::native::call(&self.id, &module, &method, &bytes).map_err(WitError::Unsupported)
+        if !self.native.contains(&module) {
+            return Err(WitError::Denied(format!("{module:?} isn't in the manifest's native modules")));
+        }
+        let id = self.request_id();
+        self.effects.push(Effect::Native { id, module, method, bytes });
+        Ok(id)
     }
 }
 
@@ -641,6 +651,7 @@ impl Runtime {
             id: manifest.id.clone(),
             permissions: manifest.permissions.clone(),
             styles: manifest.styles.clone(),
+            native: manifest.native.clone(),
             data_dir: self.data_dir(&manifest.id),
             effects: Vec::new(),
             next_request: 0,

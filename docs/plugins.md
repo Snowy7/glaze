@@ -49,7 +49,7 @@ and `obs` before they're ported) keep working through the same host bridge. See
   "menu":   [{ "id": "say-hi", "label": "Say hi" }],
   "commands": [{ "id": "refresh", "label": "Refresh hello", "shortcut": "Ctrl+Alt+H" }],
   "styles": ["top-bar"],
-  "permissions": ["network:https://api.open-meteo.com", "timers", "storage"],
+  "permissions": ["network:https://api.open-meteo.com", "storage"],
   "limits": { "memory_mb": 16 }
 }
 ```
@@ -77,8 +77,10 @@ installed ─(face placed / bar module on / command)→ loading → active ─(n
                                                        └──────────── state restored ─────────────┘
 ```
 
-1. **Install.** The host validates the manifest, checks that the component's imports match its
-   permissions, and **AOT-compiles** it to `%LOCALAPPDATA%\mypaper\plugins\cache\<id>-<hash>.cwasm`.
+1. **Install.** The host validates the manifest (known permissions and surfaces, `api` major,
+   the component inside the folder) and **AOT-compiles** the component to
+   `%LOCALAPPDATA%\mypaper\plugins\cache\<id>-<hash>.cwasm` (`mypaper-plugins --compile <root>`;
+   `deploy-local.ps1` runs it for the bundled plugins).
    The hash covers the component bytes and the engine's compatibility hash. Boot only
    deserializes this file, so there is no JIT at boot. A changed `.wasm` recompiles once.
 2. **Load.** The host instantiates the component and calls `lifecycle.init(info)` with the
@@ -100,9 +102,9 @@ a "Restarting…" footer. After 3 traps in 5 minutes the plugin is **stopped**. 
 ## Interfaces (WIT)
 
 `world plugin` imports `ui`, `style`, `timers`, `events`, `http`, `websocket`, `pipes`, `launch`,
-`notify`, `secrets`, `storage`, `system`, `native` and `log`. It exports `lifecycle`. Each
-import is a separate interface, so a component that doesn't use one doesn't import it, and the
-install check compares the imports against the permissions.
+`notify`, `secrets`, `storage`, `system`, `native` and `log`. It exports `lifecycle`. The host
+links every interface and checks the permission **on each call**, so an undeclared capability
+fails with `error::denied` and the plugin keeps running.
 
 | interface | functions | permission |
 |---|---|---|
@@ -216,11 +218,19 @@ inside the shell's kill-on-close Job object with the same restart backoff as oth
 it stops when the last plugin unloads. Frames are `[u32 len][postcard(HostMsg|HelperMsg)]`
 (`mypaper_plugin_api::wire`):
 
-- shell → helper: `Open { plugin, instance, face, size, settings }`, `Resize`, `Close`,
-  `Action { instance, action, value }`, `Command { plugin, id }`, `Held(bool)`, `Shutdown`.
-- helper → shell: `View { instance, face }` (the kit tree, changed faces only), `Status
-  { plugin, status }`, `Style { plugin, patch }`, `Unloaded { plugin }`, `Stats { plugin,
-  memory, fuel_ms }`.
+- shell → helper: `Open { plugin, dir, instance, face, size, settings }` (a repeat `Open` of a
+  placed instance is a resize), `Close`, `Action { instance, action, value }`,
+  `Command { plugin, id }`, `Held(bool)`, `Stats`, `Shutdown`.
+- helper → shell: `View { instance, face, changed }` (the kit tree as JSON inside the frame,
+  changed faces only; `changed` counts replaced subtrees), `Status { plugin, Live | Restarting |
+  Stopped | Unloaded }`, `Style { plugin, surface, patch? }`, `Stats { plugin, memory, cpu_us,
+  events }`.
+
+The shell reads frames on a thread, queues them, and wakes its loop once per batch through the
+existing plugin message (`Msg::Plugin` with the reserved id `HELPER`), so the shell's event loop
+didn't change. In the widget layout a component face is the widget `<plugin>.<face>` (the
+registry lists one per face, category "Plugins"), so it never collides with a built-in of the
+same name: `weather.now` is the component, `weather` the built-in widget.
 
 ## Packaging
 
@@ -254,7 +264,8 @@ natively.
 ## Writing one (Rust)
 
 ```rust
-use mypaper_plugin_sdk::guest::{self, Event, Plugin, View, Role, export};
+use mypaper_plugin_sdk::guest::{self, Event, Plugin};
+use mypaper_plugin_sdk::{Role, View, export};
 
 #[derive(Default)]
 struct Hello { clicks: u32 }
@@ -279,8 +290,12 @@ impl Hello {
 export!(Hello);
 ```
 
+The crate is a `cdylib` with its own `[workspace]` (the root `Cargo.toml` excludes guests).
 Build it with `cargo build --release --target wasm32-wasip2` and put the `.wasm` beside
-`plugin.json`. `scripts/deploy-local.ps1` builds and bundles the in-repo plugins.
+`plugin.json`. `scripts/build-plugins.ps1` builds the in-repo guests, and `deploy-local.ps1`
+bundles `mypaper-plugins` and AOT-compiles them. A component that also has native modules lists
+them in `"native": ["x.dll"]` with the `native-code` permission. The host activates them when
+the plugin loads and deactivates them when it unloads or is stopped.
 
 ## Legacy native plugins
 
@@ -294,10 +309,17 @@ below). The native SDK types (`View`, `Face`, `Manifest`, `protocol`) stay in
 
 ## Status (2026-11-05)
 
-The runtime, WIT world, guest SDK, `hello` and the weather component are in place. Window,
-monitor, media and notification topics, websockets and the canvas renderer are wired in WIT but
-stubbed in the host (they return `error::unsupported` or never fire). See the "Stubbed" list
-in the host's `README` section of `crates/plugins/src/main.rs`.
+Working: the runtime (`crates/plugins`) with budgets, AOT cache, traps, unload and reload; the
+WIT world; the guest SDK; faces through the shell bridge and picker; HTTP; timers; secrets;
+storage; launch; system monitors, theme and power; native modules through
+`mypaper-native-host`; the `hello` and `weather` components.
+
+Specified in WIT but stubbed in the host (`error::unsupported`, or the event never fires):
+websockets, pipes, notifications, `ui.put-image` and the `canvas` renderer, `animated` (drawn
+as its child), window, monitor, media and notification topics, and `system.foreground`. Style
+patches reach the shell (`Plugins::style_patches`) but aren't applied to the bar yet. Bar
+modules and panels are declared in manifests but aren't hosted by the bars yet, and only
+`faces` reach the picker.
 
 ## Native modules
 

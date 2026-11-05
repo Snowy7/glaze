@@ -70,9 +70,13 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
   }
   # The WebAssembly plugin runtime (docs/plugins.md), and the bundled components' AOT cache
   # (scripts/build-plugins.ps1 builds the .wasm files into their plugin folders).
+  # mypaper-native-host runs plugins' own native modules, only while such a plugin is active.
   if (Test-Path -LiteralPath "$From\mypaper-plugins.exe") {
-    if ([IO.Path]::GetFullPath("$From\mypaper-plugins.exe") -ne [IO.Path]::GetFullPath("$destination\mypaper-plugins.exe")) {
-      Copy-Item -LiteralPath "$From\mypaper-plugins.exe" -Destination "$destination\mypaper-plugins.exe" -Force
+    foreach ($exe in "mypaper-plugins", "mypaper-native-host") {
+      if ((Test-Path -LiteralPath "$From\$exe.exe") -and
+          [IO.Path]::GetFullPath("$From\$exe.exe") -ne [IO.Path]::GetFullPath("$destination\$exe.exe")) {
+        Copy-Item -LiteralPath "$From\$exe.exe" -Destination "$destination\$exe.exe" -Force
+      }
     }
     Start-Process -FilePath "$destination\mypaper-plugins.exe" -ArgumentList "--compile", "`"$repo\plugins`"" -Wait -WindowStyle Hidden
   }
