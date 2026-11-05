@@ -102,6 +102,9 @@ pub fn icon(name: &str) -> Icon {
         "cpu" => Icon::Cpu,
         "star" => Icon::Star,
         "heart" => Icon::Heart,
+        "mic" => Icon::Mic,
+        "headphones" => Icon::Headphones,
+        "settings" => Icon::Settings,
         _ => Icon::More,
     }
 }
