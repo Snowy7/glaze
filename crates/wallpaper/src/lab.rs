@@ -65,6 +65,8 @@ struct Lab {
     pass_resolve: wgpu::Buffer,
     pass_read: wgpu::Buffer,
     period: f64,
+    /// Wallpapers drawn so far (the kept frame's `drawn`).
+    drawn: u32,
 }
 
 impl Lab {
@@ -122,6 +124,7 @@ impl Lab {
             pass_resolve,
             pass_read,
             period,
+            drawn: 0,
         }
     }
 
@@ -144,13 +147,16 @@ impl Lab {
                     encoder: &mut encoder,
                 },
             );
+            // A new wallpaper in the kept frame, as the engine marks it.
+            self.drawn += 1;
+            self.kept.drawn.set(Some(self.drawn));
         }
         encoder.write_timestamp(&self.queries, 1);
         self.kept
             .restore(gpu, &self.target, &self.view, &mut encoder);
         encoder.write_timestamp(&self.queries, 2);
         self.glass
-            .encode(gpu, 0, &self.kept.texture, &self.target, wallpaper, &mut encoder);
+            .encode(gpu, 0, &self.kept, &self.target, &mut encoder);
         encoder.write_timestamp(&self.queries, 3);
         encoder
     }
@@ -461,12 +467,13 @@ fn memory() {
             },
         );
         kept.restore(&gpu, target, &view, &mut encoder);
+        kept.drawn.set(Some(1));
         gpu.queue.submit([encoder.finish()]);
     }
     step("first frames", Some(&gpu));
     for (i, (kept, target)) in kept.iter().zip(&targets).enumerate() {
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        glass.encode(&gpu, i, &kept.texture, target, true, &mut encoder);
+        glass.encode(&gpu, i, kept, target, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
     }
     step("glass on both", Some(&gpu));

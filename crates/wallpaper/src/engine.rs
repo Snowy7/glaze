@@ -501,14 +501,9 @@ impl Engine {
             if let (Some(timing), Some(slot)) = (&self.timing, timing_slot) {
                 timing.stamp(slot, 2, &mut encoder);
             }
-            let glass_drawn = self.glass.encode(
-                &self.gpu,
-                index,
-                &kept.texture,
-                &texture.texture,
-                wallpaper_due,
-                &mut encoder,
-            );
+            let glass_drawn =
+                self.glass
+                    .encode(&self.gpu, index, &kept, &texture.texture, &mut encoder);
             if let (Some(timing), Some(slot)) = (&self.timing, timing_slot) {
                 timing.stamp(slot, 3, &mut encoder);
                 timing.resolve(slot, &mut encoder);

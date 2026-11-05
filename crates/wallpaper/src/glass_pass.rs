@@ -18,7 +18,7 @@ use mypaper_desktop::{Rect, monitor_infos};
 use mypaper_glass_ipc::{Plate, Reader};
 use windows::Win32::Foundation::HANDLE;
 
-use crate::gpu::Gpu;
+use crate::gpu::{Gpu, KeptFrame};
 
 /// How a published material change fades in.
 const MATERIAL_FADE: lr::Spring = lr::Spring::SMOOTH;
@@ -40,12 +40,14 @@ struct Screen {
 }
 
 /// One renderer per kept frame that glass is drawn from: screens sharing a kept frame (one
-/// wallpaper pass for both) share its blur pyramid too.
+/// wallpaper pass for both) share its blur pyramid too, which then holds every screen's part.
 struct Shared {
     texture: wgpu::Texture,
     /// Its sRGB view: liquid-rust reads linear colour.
     view: wgpu::TextureView,
     renderer: lr::Renderer,
+    /// The kept frame's `drawn` when its pyramid was last built: the wallpaper it blurs.
+    drawn: Option<u32>,
 }
 
 pub struct GlassPass {
@@ -178,18 +180,19 @@ impl GlassPass {
     }
 
     /// Draws screen `index`'s glass into the swapchain image `target` (which already holds the
-    /// restored wallpaper), refracting the kept wallpaper `behind`. `behind` can be another size
-    /// than `target`: liquid-rust samples it by uv. `wallpaper_changed` says the kept frame was
-    /// redrawn since the last call, so the blur pyramid is rebuilt where the glass samples.
+    /// restored wallpaper), refracting the kept wallpaper `kept`. It can be another size than
+    /// `target`: liquid-rust samples it by uv. The blur pyramid is rebuilt where this screen's
+    /// glass samples once the kept frame holds a wallpaper it hasn't blurred (`kept.drawn`), so a
+    /// second screen showing the same frame only adds its own part.
     pub fn encode(
         &mut self,
         gpu: &Gpu,
         index: usize,
-        behind: &wgpu::Texture,
+        kept: &KeptFrame,
         target: &wgpu::Texture,
-        wallpaper_changed: bool,
         encoder: &mut wgpu::CommandEncoder,
     ) -> bool {
+        let behind = &kept.texture;
         let Some(screen) = self.screens.get_mut(index) else {
             return false;
         };
@@ -199,25 +202,27 @@ impl GlassPass {
         screen.updated = screen.animating.then_some(now);
         let drawn = !screen.ids.is_empty() || screen.animating;
         // Nothing left, not even glass fading out: this screen no longer holds a pyramid.
-        let fresh = drawn && screen.source.as_ref() != Some(behind);
         screen.source = drawn.then(|| behind.clone());
         let screens = &self.screens;
         self.shared.retain(|s| screens.iter().any(|screen| screen.source.as_ref() == Some(&s.texture)));
         if !drawn {
             return false;
         }
-        // A pyramid shared with another screen holds that screen's region: rebuild per screen.
-        let content_changed = wallpaper_changed || fresh || self.shared_by(behind) > 1;
         let srgb = gpu.format.add_srgb_suffix();
         let template = self.template.get_or_insert_with(|| lr::Renderer::new(&gpu.device, srgb));
         let shared = match self.shared.iter().position(|s| s.texture == *behind) {
             Some(i) => &mut self.shared[i],
             None => {
                 let view = behind.create_view(&wgpu::TextureViewDescriptor { format: Some(srgb), ..Default::default() });
-                self.shared.push(Shared { texture: behind.clone(), view, renderer: template.fork(&gpu.device) });
+                self.shared.push(Shared { texture: behind.clone(), view, renderer: template.fork(&gpu.device), drawn: None });
                 self.shared.last_mut().expect("just pushed")
             }
         };
+        // A wallpaper this pyramid hasn't blurred yet. A screen sharing the kept frame (drawn
+        // after another in the same wallpaper frame, or newly showing it) finds it blurred, and
+        // liquid-rust adds only the texels its own glass reads.
+        let content_changed = shared.drawn != kept.drawn.get();
+        shared.drawn = kept.drawn.get();
         let screen = &self.screens[index];
         let target_view = target.create_view(&wgpu::TextureViewDescriptor { format: Some(srgb), ..Default::default() });
         shared.renderer.render(
@@ -252,11 +257,6 @@ impl GlassPass {
     pub fn renderer(&mut self, index: usize) -> Option<&mut lr::Renderer> {
         let source = self.screens.get(index)?.source.clone()?;
         self.shared.iter_mut().find(|s| s.texture == source).map(|s| &mut s.renderer)
-    }
-
-    /// How many screens draw glass from `texture`.
-    fn shared_by(&self, texture: &wgpu::Texture) -> usize {
-        self.screens.iter().filter(|s| s.source.as_ref() == Some(texture)).count()
     }
 
     /// Releases old kept frames on theme switches, even while a screen stays hidden.

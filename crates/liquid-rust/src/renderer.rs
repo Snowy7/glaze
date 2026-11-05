@@ -109,6 +109,23 @@ struct Packed {
     layers: Vec<Layer>,
     /// Farthest any group samples beyond its bounds (refraction + blur), px.
     reach: f32,
+    /// mypaper: one per group, same index: what it reads from the content pyramid.
+    reads: Vec<Reads>,
+}
+
+/// mypaper: what one glass group reads from the content's blur pyramid, so a rebuild only
+/// redraws the texels glass will read (see [`Pyramid::build_reads`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Reads {
+    /// Where its frost samples: the group's bounds, px. The renderer adds its reach.
+    bounds: Bounds,
+    /// Its members' largest frost sigma (px, presence included): the highest level frost reads.
+    sigma: f32,
+    /// Bounding box of its members' centres, px, where the shader reads the backdrop's
+    /// statistics (shadow adaptivity, and the light face of adaptive glass).
+    centers: Bounds,
+    /// Whether its face flips with the backdrop's brightness (it then reads the top level).
+    adaptive: bool,
 }
 
 struct Member {
@@ -203,6 +220,7 @@ fn pack(scene: &Scene, layers: Layers, scale: f32, viewport: Vec2, out: &mut Pac
     out.groups.clear();
     out.layers.clear();
     out.reach = 0.0;
+    out.reads.clear();
     let s = scale;
     let screen = [0.0, 0.0, viewport.x, viewport.y];
 
@@ -215,6 +233,7 @@ fn pack(scene: &Scene, layers: Layers, scale: f32, viewport: Vec2, out: &mut Pac
 
         let first = out.shapes.len() as u32;
         let mut bounds = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+        let mut reads = Reads { bounds, sigma: 0.0, centers: bounds, adaptive: false };
         // How far the drop shadow reaches past the shapes, px.
         let mut margin: f32 = 2.0 * s;
         for member in &members {
@@ -237,16 +256,21 @@ fn pack(scene: &Scene, layers: Layers, scale: f32, viewport: Vec2, out: &mut Pac
                 stretch: [along, 1.0 / along, g.exponent, 0.0],
                 extra: [depth, 0.0, 0.0, 0.0],
             });
-            out.materials.push(material_gpu(&resolved, p, press, s, appearance.dark));
+            let material = material_gpu(&resolved, p, press, s, appearance.dark);
             margin = margin.max(m.shadow.offset_y.abs() * s + 1.5 * m.shadow.blur * s);
             out.reach = out.reach.max(depth * 1.2 * m.refraction + 8.0 * m.frost * 0.5 * s * p + 8.0);
             let c = g.center * s;
             let r = g.reach() * s;
             bounds = union(bounds, [c.x - r.x, c.y - r.y, c.x + r.x, c.y + r.y]);
+            reads.sigma = reads.sigma.max(material.optics[3]);
+            reads.centers = union(reads.centers, [c.x, c.y, c.x, c.y]);
+            reads.adaptive |= material.optics[1] > 0.0;
+            out.materials.push(material);
         }
 
         let k = spacing * s;
         let bounds = clamp_bounds(expand(bounds, margin + k * 0.25 + 1.0), screen);
+        out.reads.push(Reads { bounds, ..reads });
         // Members with the same material and size (a row of equal buttons) skip blending.
         let blend = out.materials[first as usize..].windows(2).any(|w| w[0] != w[1]);
         out.groups.push(GroupGpu { bounds, info: [first, members.len() as u32, u32::from(blend), 0], geo: [k, p, press, 0.0] });
@@ -325,6 +349,105 @@ struct Pyramid {
 
 const PYRAMID_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const MAX_LEVELS: u32 = 7;
+/// mypaper: `glass.wgsl`'s PYRAMID_SIGMA0, the blur sigma (px) of pyramid level 1.
+const PYRAMID_SIGMA0: f32 = 1.9;
+/// mypaper: rects a level's cache may hold before still content is blurred whole instead.
+const CACHE_RECTS: usize = 16;
+
+/// mypaper: rects of every pyramid level (`rects[level]`), in that level's texels.
+type LevelRects = Vec<Vec<Bounds>>;
+
+fn area(r: &Bounds) -> f32 {
+    (r[2] - r[0]).max(0.0) * (r[3] - r[1]).max(0.0)
+}
+
+/// mypaper: drops empty rects and merges any two whose bounding box costs no more texels than
+/// the two drawn apart, so overlapping glass doesn't downsample the same texels twice.
+fn merge(rects: &mut Vec<Bounds>) {
+    rects.retain(|r| area(r) > 0.0);
+    let mut merged = true;
+    while merged {
+        merged = false;
+        'outer: for i in 0..rects.len() {
+            for j in i + 1..rects.len() {
+                let u = union(rects[i], rects[j]);
+                if area(&u) <= area(&rects[i]) + area(&rects[j]) {
+                    rects[i] = u;
+                    rects.swap_remove(j);
+                    merged = true;
+                    break 'outer;
+                }
+            }
+        }
+    }
+}
+
+/// mypaper: a pyramid's shape: the target size it blurs and its level count.
+#[derive(Clone, Copy)]
+struct Layout {
+    size: (u32, u32),
+    levels: u32,
+}
+
+impl Layout {
+    fn mip_size(&self, level: usize) -> (u32, u32) {
+        ((self.size.0.div_ceil(2) >> level).max(1), (self.size.1.div_ceil(2) >> level).max(1))
+    }
+
+    /// mypaper: the texels of each level that glass making `reads` samples (frost sampling up
+    /// to `reach` px past a group's bounds), each with the halo the levels above need to
+    /// compute theirs exactly, merged per level. Levels nothing reads are left out.
+    fn rects(&self, reads: &[Reads], reach: f32) -> LevelRects {
+        let top = self.levels as f32;
+        let mut out: LevelRects = vec![Vec::new(); self.levels as usize];
+        for r in reads {
+            // The highest level `frost()` reads for this sigma (it also reads the one below).
+            let level = (r.sigma.max(1e-4) / PYRAMID_SIGMA0).log2() + 1.0;
+            if level > 0.0 {
+                let k = if level < 1.0 { 0.0 } else { level.min(top).floor().min(top - 1.0) };
+                self.add(&mut out, expand(r.bounds, reach), k as usize);
+            }
+            // fs_glass's backdrop statistics at the centres: shadow adaptivity, and the face of
+            // glass that flips with the content (whose top level is otherwise never read).
+            self.add(&mut out, r.centers, (top - 4.0).max(0.0) as usize);
+            if r.adaptive {
+                self.add(&mut out, r.centers, (top - 1.0).max(0.0) as usize);
+            }
+        }
+        for level in &mut out {
+            merge(level);
+        }
+        out
+    }
+
+    /// mypaper: adds `area` (level-0 px) at levels `0..=top`. A B-spline frost read or a
+    /// bilinear tap reaches under 3 texels around its sample, and a downsampled texel reads
+    /// its source 2 texels out (bilinear: 3) at the levels' size ratio.
+    fn add(&self, out: &mut LevelRects, area: Bounds, top: usize) {
+        let (w, h) = (self.size.0 as f32, self.size.1 as f32);
+        let mut halo = [3.0f32, 3.0];
+        for k in (0..=top).rev() {
+            let (mw, mh) = self.mip_size(k);
+            let (sx, sy) = (mw as f32 / w, mh as f32 / h);
+            let rect = [area[0] * sx - halo[0], area[1] * sy - halo[1], area[2] * sx + halo[0], area[3] * sy + halo[1]];
+            out[k].push(clamp_bounds(rect, [0.0, 0.0, mw as f32, mh as f32]));
+            if k > 0 {
+                let (pw, ph) = self.mip_size(k - 1);
+                halo = [halo[0] * pw as f32 / mw as f32 + 3.0, halo[1] * ph as f32 / mh as f32 + 3.0];
+            }
+        }
+    }
+
+    /// mypaper: every texel of every level.
+    fn whole(&self) -> LevelRects {
+        (0..self.levels as usize)
+            .map(|k| {
+                let (w, h) = self.mip_size(k);
+                vec![[0.0, 0.0, w as f32, h as f32]]
+            })
+            .collect()
+    }
+}
 
 impl Pyramid {
     fn new(device: &wgpu::Device, pipelines: &Pipelines, size: (u32, u32)) -> Self {
@@ -343,6 +466,43 @@ impl Pyramid {
         let mips: Vec<_> = (0..levels).map(|i| texture.create_view(&wgpu::TextureViewDescriptor { base_mip_level: i, mip_level_count: Some(1), ..Default::default() })).collect();
         let chain = mips[..mips.len() - 1].iter().map(|view| down_bind_group(device, &pipelines.down, &pipelines.sampler, view)).collect();
         Self { size, levels, full: texture.create_view(&wgpu::TextureViewDescriptor::default()), mips, chain }
+    }
+
+    /// mypaper: its shape, which is all the rect maths needs.
+    fn layout(&self) -> Layout {
+        Layout { size: self.size, levels: self.levels }
+    }
+
+    /// mypaper: [`Pyramid::build`] into `rects` of each level only.
+    fn build_rects(&self, pipelines: &Pipelines, encoder: &mut wgpu::CommandEncoder, first: &wgpu::BindGroup, rects: &LevelRects, profiler: &Option<Profiler>) {
+        const LEVELS: [&str; MAX_LEVELS as usize] = ["pyramid 0", "pyramid 1", "pyramid 2", "pyramid 3", "pyramid 4", "pyramid 5", "pyramid 6"];
+        for (i, mip) in self.mips.iter().enumerate() {
+            if rects[i].is_empty() {
+                continue;
+            }
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("liquid-rust downsample"),
+                color_attachments: &[Some(attachment(mip))],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            if i == 0 {
+                pass.set_pipeline(&pipelines.down_first);
+                pass.set_bind_group(0, first, &[]);
+            } else {
+                pass.set_pipeline(&pipelines.down);
+                pass.set_bind_group(0, &self.chain[i - 1], &[]);
+            }
+            for rect in &rects[i] {
+                if scissor(&mut pass, *rect, self.layout().mip_size(i)) {
+                    pass.draw(0..3, 0..1);
+                }
+            }
+            drop(pass);
+            stamp(profiler, encoder, LEVELS[i]);
+        }
     }
 
     /// Downsamples the texture `first` reads (see [`down_bind_group`]) into every level, only
@@ -528,8 +688,9 @@ pub struct Renderer {
     /// `layer_textures`, the first time glass overlaps glass.
     layered: Option<Pyramid>,
     layer_textures: Vec<wgpu::TextureView>,
-    /// Region of `pyramid` that currently holds a valid blur of the content.
-    cached: Option<Bounds>,
+    /// mypaper: the texels of each `pyramid` level that hold the current content's blur
+    /// (upstream: one region for all levels).
+    cached: Option<LevelRects>,
     packed: Packed,
     /// What the GPU buffers hold now, so a frame where nothing moved uploads nothing.
     uploaded: Uploaded,
@@ -731,14 +892,34 @@ impl Renderer {
         let pipelines = &self.pipelines;
         let binds = &mut self.binds;
         let profiler = &self.profiler;
-        let region = tail(0);
-        if frame.content_changed || !self.cached.is_some_and(|c| contains(c, region)) {
-            // Content that holds still is blurred across the whole screen, once: the glass
-            // can then move anywhere over it without another build.
-            let region = if frame.content_changed { region } else { screen };
+        // mypaper: rebuild only the texels each group reads (upstream: the bounding box of all
+        // of them, here nearly the whole screen), and keep what still content already has.
+        let needed = pyramid.layout().rects(&self.packed.reads, reach);
+        let build = match &mut self.cached {
+            Some(cached) if !frame.content_changed => {
+                let missing: LevelRects = needed.iter().zip(cached.iter()).map(|(need, have)| need.iter().filter(|r| !have.iter().any(|h| contains(*h, **r))).copied().collect()).collect();
+                if missing.iter().all(Vec::is_empty) {
+                    None
+                } else if cached.iter().zip(&missing).any(|(have, m)| have.len() + m.len() > CACHE_RECTS) {
+                    // Content that holds still under glass that keeps moving is blurred whole,
+                    // once: the glass can then move anywhere over it without another build.
+                    *cached = pyramid.layout().whole();
+                    Some(cached.clone())
+                } else {
+                    for (have, m) in cached.iter_mut().zip(&missing) {
+                        have.extend_from_slice(m);
+                    }
+                    Some(missing)
+                }
+            }
+            _ => {
+                self.cached = Some(needed.clone());
+                Some(needed)
+            }
+        };
+        if let Some(rects) = build {
             let first = binds.down_first.get(frame.content.clone(), |src| down_bind_group(device, &pipelines.down_first, &pipelines.sampler, src));
-            pyramid.build(pipelines, encoder, &first, region, profiler);
-            self.cached = Some(region);
+            pyramid.build_rects(pipelines, encoder, &first, &rects, profiler);
         }
 
         // Glass pass inputs: the shared buffers, the backdrop `src` and its blur pyramid.
@@ -973,6 +1154,33 @@ mod tests {
         let [own, scene_wide] = [&packed.materials[0], &packed.materials[1]];
         assert_eq!((own.shadow[3], scene_wide.shadow[3]), (0.0, 1.0), "dark glass in a light scene");
         assert!(own.dark_b[1] > scene_wide.dark_b[1], "its slider tints it further");
+    }
+
+    // mypaper: a pyramid rebuild covers what each group reads, not their bounding box.
+    #[test]
+    fn a_rebuild_covers_only_the_texels_glass_reads() {
+        let mut scene = Scene::new();
+        scene.appearance = crate::Appearance { adapt_to_content: false, ..Default::default() };
+        scene.add(Glass::new(Rect::new(8.0, 8.0, 1690.0, 27.0)));
+        scene.add(Glass::new(Rect::new(16.0, 59.0, 203.0, 147.0)));
+        scene.add(Glass::new(Rect::new(653.0, 896.0, 400.0, 51.0)));
+        while scene.update(1.0 / 60.0) {}
+        let mut packed = Packed::default();
+        pack(&scene, ALL_LAYERS, 1.5, Vec2::new(2560.0, 1440.0), &mut packed);
+        let layout = Layout { size: (2560, 1440), levels: 7 };
+        let rects = layout.rects(&packed.reads, packed.reach);
+        let texels = |level: &[Bounds]| level.iter().map(area).sum::<f32>();
+        let whole = 1280.0 * 720.0;
+        assert!(texels(&rects[0]) < 0.6 * whole, "level 0 is mostly skipped: {}", texels(&rects[0]) / whole);
+        let read = |r: &Reads| layout.rects(std::slice::from_ref(r), packed.reach);
+        for (group, reads) in packed.reads.iter().enumerate() {
+            for (level, need) in read(reads).iter().enumerate() {
+                for r in need {
+                    assert!(rects[level].iter().any(|h| contains(*h, *r)), "group {group} level {level}");
+                }
+            }
+        }
+        assert!(rects[4..].iter().all(Vec::is_empty), "nothing reads the top levels of glass that follows the scheme");
     }
 
     #[test]
