@@ -5,10 +5,10 @@
 //! `mypaper-plugins` serves the shell; `--compile <root>...` AOT-compiles every WASM plugin under
 //! the roots into the cache (install time); `--bench <plugin dir>...` prints the budget table.
 //!
-//! Stubbed for now (WIT is final, the host refuses with `error::unsupported`): websockets,
-//! pipes, notifications, `ui.put-image` and the canvas renderer, window/monitor/media/
-//! notification event sources, and `system.foreground`. `native` calls go to the plugin's own
-//! modules in `mypaper-native-host` (`native.rs`).
+//! Capabilities are `caps.rs` (HTTP, secrets, storage, launch, toasts, system info), `io.rs`
+//! (websockets, pipes, HTTP over pipes, each connection on its own threads), `images.rs`
+//! (`ui.put-image` shared memory) and `native.rs` (the plugin's own modules in
+//! `mypaper-native-host`). System events arrive from the shell as `HostMsg::System`.
 #![cfg_attr(not(test), windows_subsystem = "windows")]
 
 mod bench;

@@ -1,5 +1,6 @@
-//! Websockets and named pipes (docs/plugins.md › "I/O"). Host imports never block: `connect` and
-//! `open` hand back an id and queue a [`Conn`]; the host loop spawns its thread, which reports
+//! Websockets and named pipes (docs/plugins.md › "Websockets, pipes, notifications, system
+//! events and images"). Host imports never block: `connect` and `open` hand back an id and queue
+//! a [`Conn`]; the host loop spawns its thread, which reports
 //! traffic to the loop as events. Each open connection owns its threads (a websocket a reader
 //! and a writer, since WinHTTP's synchronous receive can't be woken; a pipe one overlapped-I/O
 //! thread), never one per plugin, and they sleep in the kernel between messages.
