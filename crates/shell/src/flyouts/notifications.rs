@@ -1,9 +1,14 @@
 //! The notification center: Windows' toasts from the shared integration lease,
 //! grouped by app with the newest group first. A group of several is a
-//! stack (its newest card, and how many are under it) until clicked open. Each card dismisses
-//! with its ×, a group with its own, everything with "Clear all". Do not disturb shows its
-//! state and opens its setting (there is no API to change it). The month sits under the list,
-//! as Windows 11 puts it (the clock opens this center).
+//! stack (its newest card, and the cards under it peeking out) until clicked open. Each card
+//! dismisses with its ×, a group with its own, everything with "Clear all". Do not disturb
+//! shows its state and opens its setting (there is no API to change it). The month sits under
+//! the list, as Windows 11 puts it (the clock opens this center).
+//!
+//! Drawn with the kit (`mypaper_ui::kit`, docs/ui.md "Porting a surface"): the header and the
+//! month never move; only the list scrolls, inside a viewport whose height depends on the
+//! cards, never on where the list is scrolled to. Touchpads scroll it pixel by pixel, a wheel
+//! notch glides, and the overlay scrollbar lives inside the viewport and fades when idle.
 //!
 //! The list is read when it opens and every few seconds while open; nothing runs while closed
 //! (the bar's badge has its own slower count).
@@ -15,12 +20,18 @@ use std::time::{Duration, Instant};
 use mypaper_bars::flyouts::index::epoch_ms;
 use mypaper_bars::flyouts::notifications::{Notification, NotificationList};
 use mypaper_bars::flyouts::quick::Dnd;
+use mypaper_bars::style::Family;
 use mypaper_bars::system;
 use mypaper_integrations::{Action, Availability, Data, Lease, Provider};
-use mypaper_ui::{HitId, Image, Point, Rect, Role};
+use mypaper_ui::icons::Icon;
+use mypaper_ui::interact::Interaction;
+use mypaper_ui::kit::{ButtonKind, Frame};
+use mypaper_ui::layout::{Align, Stack};
+use mypaper_ui::{HitId, Image, Op, Rect, Role, Scheme, Scroll, Style, TextRole, Theme};
 
 use super::calendar::Calendar;
-use super::kit::{Kit, glyph};
+use super::kit::Kit;
+use super::look::Look;
 use super::{Cx, Effect, LIST, Panel, Reply};
 
 const CLEAR_ALL: HitId = 10;
@@ -38,6 +49,8 @@ const TOGGLE_GROUP: HitId = 20_000;
 
 /// How often the open center reads the list again.
 const POLL: Duration = Duration::from_secs(4);
+/// The month's band under the list, design px.
+const MONTH: f32 = 276.0;
 
 /// Toasts of one app, newest first.
 #[derive(Debug, Clone, PartialEq)]
@@ -89,6 +102,20 @@ pub fn ago(at: u64, now: u64) -> String {
     }
 }
 
+/// The kit's theme for the flyouts' look (the bar's family and scheme, the accent).
+pub fn theme(look: &Look) -> Theme {
+    let dark = mypaper_ui::theme::luminance(look.ink) > 0.5;
+    let style = match look.family {
+        Family::Fluent => Style::Fluent,
+        Family::Material => Style::OneUi,
+        Family::Mono => Style::Mono,
+        Family::Macos if look.glass.is_none() && look.fill.a >= 1.0 => Style::Solid,
+        Family::Macos => Style::Liquid,
+    };
+    let scheme = if dark { Scheme::Dark } else { Scheme::Light };
+    Theme::new(style, scheme, look.accent)
+}
+
 pub struct Center {
     list: Option<NotificationList>,
     groups: Vec<Group>,
@@ -99,7 +126,10 @@ pub struct Center {
     calendar: Calendar,
     /// The current time for "ago" labels (refreshed with each read).
     now: u64,
-    scroll: usize,
+    /// The list's scroll position (only the list scrolls).
+    scroll: Scroll,
+    /// When the next read of the list is due (ticks also come for the scroll's motion).
+    poll_at: Instant,
     lease: Option<Lease>,
     revision: u64,
     generation: u64,
@@ -121,7 +151,8 @@ impl Center {
             icons: Vec::new(),
             calendar: Calendar::new(cx),
             now: epoch_ms(),
-            scroll: 0,
+            scroll: Scroll::new(&theme(cx.look).motion),
+            poll_at: Instant::now(),
             lease: lease.ok(),
             revision: u64::MAX,
             generation: crate::integrations::generation(),
@@ -142,7 +173,8 @@ impl Center {
             dnd: Some(Dnd::Off),
             calendar,
             now,
-            scroll: 0,
+            scroll: Scroll::default(),
+            poll_at: Instant::now(),
             lease: None,
             revision: 0,
             generation: crate::integrations::generation(),
@@ -197,7 +229,6 @@ impl Center {
             .map(|g| cx.image(g.icon.as_deref()))
             .collect();
         self.list = Some(list);
-        self.scroll = self.scroll.min(self.cards().len().saturating_sub(1));
         true
     }
 
@@ -252,95 +283,137 @@ impl Panel for Center {
     }
 
     fn view(&self, kit: &mut Kit) {
+        let theme = theme(kit.look);
+        let input = Interaction {
+            hover: kit.hover,
+            pressed: kit.pressed,
+            focus: kit.focus,
+            focus_visible: kit.focus.is_some(),
+        };
+        let (left, right, top) = (kit.left, kit.right, kit.y);
+        // The month takes a fixed band at the bottom; the list gets what is left.
+        let list_bottom = kit.limit - kit.px(MONTH);
+        let mut f = Frame::new(kit.text, &theme, kit.s, &input);
+        let c = theme.color;
+        let mut column = Stack::column(
+            Rect::new(left, top, right - left, (list_bottom - top).max(0.0)),
+            f.px(8.0),
+        );
+
+        // The header: the title, and its buttons at the right.
+        let head = column.next(f.px(32.0));
         let has_any = !self.groups.is_empty();
         let mut buttons = vec![(
             DND,
             if self.dnd.is_some_and(|d| d != Dnd::Off) {
-                glyph::MOON
+                Icon::BellOff
             } else {
-                glyph::BELL
+                Icon::Bell
             },
             "Do not disturb",
         )];
-        buttons.push((REFRESH, glyph::REFRESH, "Refresh notifications"));
+        buttons.push((REFRESH, Icon::Refresh, "Refresh notifications"));
         if has_any {
-            buttons.push((CLEAR_ALL, glyph::CLEAR, "Clear all"));
+            buttons.push((CLEAR_ALL, Icon::Close, "Clear all"));
         }
-        kit.header("Notifications", &buttons);
+        let mut title = head;
+        for (id, icon, label) in buttons.iter().rev() {
+            let (button, rest) = title.take_right(f.px(30.0), f.px(2.0));
+            f.icon_button(*id, button, *icon, 30.0, label, false);
+            title = rest;
+        }
+        f.text_in(title, "Notifications", TextRole::Title2, c.label, Align::Start);
+
+        // A notice in place of the list (access, errors, loading, empty).
+        let notice = |f: &mut Frame, column: &mut Stack, title: &str, detail: Option<&str>| {
+            let rect = column.rest();
+            let h = f.empty(rect, Some(Icon::Bell), title, detail);
+            column.next(h);
+        };
+        let buttons = |f: &mut Frame, column: &mut Stack, buttons: &[(HitId, &str)]| {
+            let row = column.next(f.px(theme.metrics.control));
+            let mut x = row.right;
+            for (id, label) in buttons.iter().rev() {
+                let (w, h) = f.button_size(label, false);
+                let r = Rect::new(x - w, row.top, w, h);
+                f.button(*id, r, label, None, ButtonKind::Gray, true);
+                x = r.left - f.px(8.0);
+            }
+        };
         if self.lease.is_none() && self.error.is_some() {
-            kit.notice("Enable Windows notifications in Studio to show retained toasts here.");
-            kit.buttons(&[(STUDIO, "Open Studio", false)]);
+            notice(
+                &mut f,
+                &mut column,
+                "Notifications are off",
+                Some("Enable Windows notifications in Studio to show retained toasts here."),
+            );
+            buttons(&mut f, &mut column, &[(STUDIO, "Open Studio")]);
         } else if let Some(error) = &self.error {
-            kit.notice(error);
-            kit.buttons(&[
-                (GRANT, "Grant notification access", false),
-                (SETTINGS, "Notification settings", false),
-            ]);
+            notice(&mut f, &mut column, "Notifications can't be read", Some(error));
+            buttons(
+                &mut f,
+                &mut column,
+                &[
+                    (GRANT, "Grant access"),
+                    (SETTINGS, "Notification settings"),
+                ],
+            );
         } else if let Availability::Stale(error) | Availability::Unavailable(error) =
             &self.availability
         {
-            kit.notice(error);
-            kit.buttons(&[
-                (GRANT, "Grant notification access", false),
-                (SETTINGS, "Notification settings", false),
-            ]);
+            notice(&mut f, &mut column, "Notifications can't be read", Some(error));
+            buttons(
+                &mut f,
+                &mut column,
+                &[
+                    (GRANT, "Grant access"),
+                    (SETTINGS, "Notification settings"),
+                ],
+            );
         }
-        // The month takes a fixed band at the bottom; the list gets what is left.
-        let month = kit.px(276.0);
-        let list_bottom = kit.limit - month;
-        let list_top = kit.y;
         match &self.list {
             None if self.error.is_none() && self.availability == Availability::Connecting => {
-                kit.notice("Loading notifications…")
+                notice(&mut f, &mut column, "Loading notifications…", None)
             }
             None => {}
             Some(NotificationList { error: Some(_), .. }) => {
-                kit.notice("Notifications can't be read. Turn on notification access in Settings.");
-                kit.buttons(&[(SETTINGS, "Notification settings", false)]);
+                notice(
+                    &mut f,
+                    &mut column,
+                    "Notifications can't be read",
+                    Some("Turn on notification access in Settings."),
+                );
+                buttons(&mut f, &mut column, &[(SETTINGS, "Notification settings")]);
             }
-            Some(_) if !has_any => kit.notice("No new notifications"),
+            Some(_) if !has_any => notice(&mut f, &mut column, "No new notifications", None),
             Some(_) => {
-                let mut group_shown = None;
-                for (n, (g, i)) in self
-                    .cards()
-                    .into_iter()
-                    .enumerate()
-                    .skip(self.scroll.min(self.cards().len().saturating_sub(1)))
-                {
-                    if kit.y + kit.px(84.0) > list_bottom {
-                        let style = kit.font(12.0, 400);
-                        let center = Point::new(kit.left + kit.width() / 2.0, kit.y + kit.px(8.0));
-                        kit.text_centered(center, "More notifications…", &style, kit.look.faint());
-                        kit.y += kit.px(18.0);
-                        break;
+                // The viewport's height follows the cards (up to the room there is), never the
+                // scroll position: scrolling never resizes the flyout.
+                let width = column.rect.width();
+                let cards = self.cards();
+                let mut content = 0.0;
+                let mut shown_group = None;
+                for &(g, i) in &cards {
+                    if shown_group != Some(g) {
+                        shown_group = Some(g);
+                        if self.open.contains(&self.groups[g].key) && self.groups[g].items.len() > 1 {
+                            content += f.px(28.0) + f.px(4.0);
+                        }
                     }
-                    let group = &self.groups[g];
-                    if group_shown != Some(g) {
-                        group_shown = Some(g);
-                        self.group_header(kit, g, group);
-                    }
-                    let stacked = !self.open.contains(&group.key) && group.items.len() > 1;
-                    self.card(
-                        kit,
-                        n,
-                        &group.items[i],
-                        stacked.then_some(group.items.len() - 1),
-                    );
+                    content += self.card_height(&mut f, g, i, width) + f.px(8.0);
                 }
+                content = (content - f.px(8.0)).max(0.0);
+                let room = column.rest().height();
+                let viewport = column.next(content.min(room));
+                f.scroll(viewport, &self.scroll, Instant::now(), |f, at| {
+                    self.list(f, &cards, Rect::new(at.x, at.y, width, content))
+                });
             }
         }
-        let count = self.cards().len();
-        if count > 3 && (self.scroll > 0 || kit.y >= list_bottom - kit.px(90.0)) {
-            let track = (list_bottom - list_top).max(kit.px(30.0));
-            let height = (track * (3.0 / count as f32)).max(kit.px(18.0));
-            let y = list_top
-                + (track - height) * self.scroll.min(count - 1) as f32 / (count - 1) as f32;
-            kit.fill(
-                Rect::new(kit.right + kit.px(6.0), y, kit.px(2.0), height),
-                kit.px(1.0),
-                kit.look.faint(),
-            );
-        }
+        kit.y = (top + column.used()).round() + f.px(8.0);
+        let mut list = f.list;
+        kit.list.ops.append(&mut list.ops);
+        kit.list.hits.append(&mut list.hits);
         kit.separator();
         self.calendar.month(kit, true);
     }
@@ -440,19 +513,13 @@ impl Panel for Center {
         }
     }
 
-    fn wheel(&mut self, id: Option<HitId>, delta: i16, _: &mut Cx) -> Effect {
-        // The list scrolls independently; paging the month keeps the selected card.
+    fn wheel(&mut self, id: Option<HitId>, delta: i16, cx: &mut Cx) -> Effect {
+        // The month pages on its own; everywhere else the wheel scrolls the list.
         if id.is_some_and(|id| (100..140).contains(&id)) {
             self.calendar.wheel_page(delta);
             return Effect::Redraw;
         }
-        let old = self.scroll;
-        self.scroll = if delta > 0 {
-            self.scroll.saturating_sub(1)
-        } else {
-            (self.scroll + 1).min(self.cards().len().saturating_sub(1))
-        };
-        if old != self.scroll {
+        if self.scroll.wheel(delta, cx.scale, Instant::now()) {
             Effect::Redraw
         } else {
             Effect::None
@@ -472,11 +539,7 @@ impl Panel for Center {
     fn key(&mut self, key: u16, _: &mut Cx) -> Option<Effect> {
         use windows::Win32::UI::Input::KeyboardAndMouse::{VK_NEXT, VK_PRIOR};
         if key == VK_NEXT.0 || key == VK_PRIOR.0 {
-            self.scroll = if key == VK_PRIOR.0 {
-                self.scroll.saturating_sub(1)
-            } else {
-                (self.scroll + 1).min(self.cards().len().saturating_sub(1))
-            };
+            self.scroll.page(key == VK_NEXT.0, Instant::now());
             return Some(Effect::Redraw);
         }
         None
@@ -579,159 +642,271 @@ impl Panel for Center {
     }
 
     fn tick(&mut self, now: Instant, cx: &mut Cx) -> (bool, Option<Instant>) {
+        // The scroll's glide and the scrollbar's fade tick at frame rate; the list's read and
+        // the minute only when due.
+        let (scrolled, scroll_next) = self.scroll.tick(now);
         let (minute, next_minute) = self.calendar.follow_clock(now);
-        if matches!(self.availability, Availability::Live | Availability::Cached)
-            && let Some(lease) = &self.lease
-        {
-            let _ = lease.action(Action::RefreshNotifications);
+        let mut ages = false;
+        if now >= self.poll_at {
+            self.poll_at = now + POLL;
+            if matches!(self.availability, Availability::Live | Availability::Cached)
+                && let Some(lease) = &self.lease
+            {
+                let _ = lease.action(Action::RefreshNotifications);
+            }
+            ages = self.list.clone().is_some_and(|list| self.accept(list, cx));
         }
-        let ages = self.list.clone().is_some_and(|list| self.accept(list, cx));
-        let next = [Some(now + POLL), next_minute].into_iter().flatten().min();
-        (minute || ages, next)
+        let next = [Some(self.poll_at), next_minute, scroll_next]
+            .into_iter()
+            .flatten()
+            .min();
+        (minute || ages || scrolled, next)
     }
 }
 
 impl Center {
-    fn group_header(&self, kit: &mut Kit, g: usize, group: &Group) {
-        let height = kit.px(28.0);
-        let icon = kit.px(16.0);
-        let y = kit.y;
-        kit.hit(
-            TOGGLE_GROUP + g as HitId,
-            Rect::new(kit.left, y, kit.width() - kit.px(35.0), height),
-            Role::Button,
-            &format!("Expand or collapse {}", group.app),
-            true,
-        );
-        match self.icons.get(g).cloned().flatten() {
-            Some(image) => kit.image(
-                Rect::new(kit.left, y + (height - icon) / 2.0, icon, icon),
-                image,
-            ),
-            None => {
-                let style = kit.font(12.0, 600);
-                let letter = group
-                    .app
-                    .chars()
-                    .next()
-                    .unwrap_or('?')
-                    .to_uppercase()
-                    .to_string();
-                kit.text_centered(
-                    Point::new(kit.left + icon / 2.0, y + height / 2.0),
-                    &letter,
-                    &style,
-                    kit.look.dim(),
-                );
+    /// The list's content from `rect`'s top: group headers of opened stacks, and cards.
+    /// Returns its height.
+    fn list(&self, f: &mut Frame, cards: &[(usize, usize)], rect: Rect) -> f32 {
+        let gap = f.px(8.0);
+        let mut column = Stack::column(rect, gap);
+        let mut shown_group = None;
+        for (n, &(g, i)) in cards.iter().enumerate() {
+            let group = &self.groups[g];
+            let open = self.open.contains(&group.key) && group.items.len() > 1;
+            if shown_group != Some(g) {
+                shown_group = Some(g);
+                if open {
+                    let head = column.next(f.px(28.0));
+                    column.space(-gap + f.px(4.0));
+                    self.group_header(f, g, group, head);
+                }
             }
+            let stacked = (!open && group.items.len() > 1).then_some(group.items.len() - 1);
+            let h = self.card_height(f, g, i, rect.width());
+            self.card(f, n, g, &group.items[i], stacked, column.next(h));
         }
-        let style = kit.font(12.0, 600);
-        let (_, h) = kit.text.measure("Ag", &style);
-        let (left, room) = (kit.left + icon + kit.px(8.0), kit.width() - kit.px(60.0));
-        kit.text_at(
-            left,
-            y + (height - h) / 2.0,
-            &group.app,
-            &style,
-            kit.look.dim(),
-            room,
-        );
-        let right = kit.right;
-        kit.icon_button(
-            GROUP + g as HitId,
-            Point::new(right - kit.px(15.0), y + height / 2.0),
-            glyph::CLOSE,
-            &format!("Clear {}", group.app),
-        );
-        kit.y += height + kit.px(2.0);
+        column.used()
     }
 
-    fn card(&self, kit: &mut Kit, n: usize, item: &Notification, under: Option<usize>) {
-        let id = CARD + 2 * n as HitId;
-        let pad = kit.px(12.0);
-        let top = kit.y;
-        let (left, width) = (kit.left, kit.width());
-        // Measure first: title, body (two lines), and the stack's count.
-        let title = kit.font(13.0, 600);
-        let body = kit.font(13.0, 400);
-        let small = kit.font(11.0, 400);
-        let when = ago(item.at, self.now);
-        let (ww, wh) = kit.text.measure(&when, &small);
-        let inner = width - 2.0 * pad;
-        let lines = kit.text.lines(&item.body, &body, inner, 2);
-        let (_, th) = kit.text.measure("Ag", &title);
-        let (_, bh) = kit.text.measure("Ag", &body);
-        let mut height = pad * 2.0 + th + bh * lines.len() as f32;
-        if under.is_some() {
-            height += kit.px(16.0);
+    /// A card's height: its padding, the app line, the title, up to three lines of body, and
+    /// the stack's peek.
+    fn card_height(&self, f: &mut Frame, g: usize, i: usize, width: f32) -> f32 {
+        let group = &self.groups[g];
+        let item = &group.items[i];
+        let pad = f.px(12.0);
+        let lines = if item.body.trim().is_empty() {
+            0
+        } else {
+            f.line_count(&item.body, TextRole::Callout, width - 2.0 * pad, 3)
+        };
+        let stacked = !self.open.contains(&group.key) && group.items.len() > 1;
+        let mut h = 2.0 * pad
+            + f.line(TextRole::Footnote)
+            + f.px(4.0)
+            + f.line(TextRole::Headline)
+            + lines as f32 * f.line(TextRole::Callout);
+        if stacked {
+            h += f.px(8.0);
         }
-        let rect = Rect::new(left, top, width, height);
-        let radius = kit.px(12.0);
-        if under.is_some() {
-            // The cards under it peek out below, narrower.
-            let peek = Rect::new(
-                left + kit.px(10.0),
-                top + kit.px(6.0),
-                width - kit.px(20.0),
-                height,
-            );
-            kit.fill(peek, radius, kit.look.control().with_alpha(0.06));
-        }
-        kit.fill(rect, radius, kit.look.control());
-        kit.state(id, rect, radius);
-        let room = inner - ww - kit.px(36.0);
-        kit.text_at(
-            left + pad,
-            top + pad,
-            &item.title,
-            &title,
-            kit.look.ink,
-            room,
-        );
-        kit.text_at(
-            rect.right - pad - kit.px(28.0) - ww,
-            top + pad + (th - wh) / 2.0,
-            &when,
-            &small,
-            kit.look.dim(),
-            ww + 1.0,
-        );
-        let mut y = top + pad + th;
-        for line in lines {
-            let (w, h) = kit.text.measure(&line, &body);
-            kit.list.ops.push(mypaper_ui::Op::Text {
-                rect: Rect::new(left + pad, y, w, h),
-                text: line,
-                style: body.clone(),
-                color: kit.look.dim(),
-            });
-            y += h;
-        }
-        if let Some(more) = under {
-            let label = format!("{more} more");
-            let (left, room) = (left + pad, inner);
-            kit.text_at(
-                left,
-                y + kit.px(2.0),
-                &label,
-                &small,
-                kit.look.faint(),
-                room,
-            );
-        }
-        kit.hit(
-            id,
-            rect,
-            Role::Button,
-            &format!("{}: {}", item.title, item.body),
+        h
+    }
+
+    /// An opened stack's header: the app, "Show less", and its clear button.
+    fn group_header(&self, f: &mut Frame, g: usize, group: &Group, rect: Rect) {
+        let (clear, rest) = rect.take_right(f.px(28.0), f.px(4.0));
+        f.icon_button(
+            GROUP + g as HitId,
+            clear,
+            Icon::Close,
+            24.0,
+            &format!("Clear {}", group.app),
             true,
         );
-        kit.icon_button(
-            id + 1,
-            Point::new(rect.right - pad - kit.px(6.0), top + pad + th / 2.0),
-            glyph::CLOSE,
-            "Dismiss",
+        f.section_header(
+            rest,
+            &group.app,
+            Some((TOGGLE_GROUP + g as HitId, "Show less")),
         );
-        kit.y += height + kit.px(8.0);
+    }
+
+    fn card(
+        &self,
+        f: &mut Frame,
+        n: usize,
+        g: usize,
+        item: &Notification,
+        under: Option<usize>,
+        rect: Rect,
+    ) {
+        let t = f.theme;
+        let c = t.color;
+        let id = CARD + 2 * n as HitId;
+        let radius = f.px(t.radius.card);
+        let peek = if under.is_some() { f.px(8.0) } else { 0.0 };
+        let body = Rect {
+            bottom: rect.bottom - peek,
+            ..rect
+        };
+        if under.is_some() {
+            // The cards under it peek out below, narrower and fainter. Only the part below
+            // the card is drawn: the card is translucent, and a second card showing through it
+            // would read as a second edge.
+            let below = Rect::new(
+                rect.left + f.px(12.0),
+                body.top + f.px(8.0),
+                rect.width() - f.px(24.0),
+                body.height(),
+            );
+            f.push(Op::Clip {
+                rect: Rect {
+                    top: body.bottom,
+                    ..rect
+                },
+            });
+            f.fill(below, radius, c.card.with_alpha(c.card.a * 0.6));
+            f.push(Op::Unclip);
+        }
+        f.fill(body, radius, c.card);
+        f.wash(id, body, radius, true);
+        let pad = f.px(12.0);
+        let inner = body.inflate(-pad);
+        // The app line: icon, app, time, and the dismiss button.
+        let (top, rest) = inner.take_top(f.line(TextRole::Footnote), f.px(4.0));
+        let icon = f.px(16.0);
+        let icon_rect = top.place(icon, icon, Align::Start, Align::Center);
+        match self.icons.get(g).cloned().flatten() {
+            Some(image) => f.push(Op::Image {
+                rect: icon_rect,
+                image,
+                opacity: 1.0,
+                source: None,
+            }),
+            None => f.icon(icon_rect, Icon::Bell, 13.0, c.secondary),
+        }
+        let (dismiss, top) = top.take_right(f.px(20.0), f.px(6.0));
+        let (when, app) = top.take_right(f.px(72.0), f.px(6.0));
+        let app_rect = Rect {
+            left: icon_rect.right + f.px(6.0),
+            ..app
+        };
+        let group = &self.groups[g];
+        f.text_in(app_rect, &group.app, TextRole::Footnote, c.secondary, Align::Start);
+        f.text_in(when, &ago(item.at, self.now), TextRole::Footnote, c.tertiary, Align::End);
+        let (title, rest) = rest.take_top(f.line(TextRole::Headline), 0.0);
+        f.text_in(title, &item.title, TextRole::Headline, c.label, Align::Start);
+        if !item.body.trim().is_empty() {
+            f.paragraph(
+                rest.left,
+                rest.top,
+                rest.width(),
+                &item.body,
+                TextRole::Callout,
+                c.secondary,
+                3,
+            );
+        }
+        f.focus_ring(id, body, radius);
+        let label = match under {
+            Some(more) => format!("{}: {}, {more} more", item.title, item.body),
+            None => format!("{}: {}", item.title, item.body),
+        };
+        f.hit(id, body, Role::Button, &label, true, None);
+        // Over the card's hit, so it wins.
+        let d = f.px(22.0);
+        let button = Rect::new(dismiss.right - d, dismiss.top + (dismiss.height() - d) / 2.0, d, d);
+        f.icon_button(id + 1, button, Icon::Close, 22.0, "Dismiss", false);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::flyouts::{Panel as _, build};
+
+    fn many() -> Center {
+        let now = 1_793_869_260_000;
+        let apps = ["Mail", "Messages", "Calendar", "Photos", "Teams", "Settings"];
+        let notifications = (0..12u32)
+            .map(|i| Notification {
+                id: i + 1,
+                app: apps[i as usize % apps.len()].into(),
+                aumid: Some(format!("app{}", i as usize % apps.len())),
+                package_family_name: None,
+                icon: None,
+                title: format!("Notification {i}"),
+                body: "A body long enough to wrap onto a second line of the card in the list."
+                    .into(),
+                at: now - u64::from(i) * 7 * 60_000,
+            })
+            .collect();
+        let mut center = Center::fixture(Data::Notifications(Default::default()));
+        center.list = None;
+        center.groups.clear();
+        let list = NotificationList {
+            notifications,
+            error: None,
+        };
+        center.groups = by_app(&list.notifications);
+        center.icons = vec![None; center.groups.len()];
+        center.list = Some(list);
+        center.now = now;
+        center
+    }
+
+    /// The scroll bug: wheel over the list scrolled whole cards, resized the flyout, and the
+    /// scrollbar ran down beside the month. Now only the list's viewport moves.
+    #[test]
+    fn only_the_list_scrolls_and_the_flyout_keeps_its_size() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let look = Look::default();
+        let mut center = many();
+        let draw = |ui: &mut mypaper_ui::Ui, center: &Center| {
+            build(center, &mut ui.text, &look, 1.0, 900.0, (None, None, None), false)
+        };
+        let (before, size) = draw(&mut ui, &center);
+        let fixed = |list: &mypaper_ui::DisplayList| -> Vec<(HitId, Rect)> {
+            list.hits
+                .iter()
+                .filter(|h| h.id < CARD && !(GROUP..CARD).contains(&h.id))
+                .map(|h| (h.id, h.rect))
+                .collect()
+        };
+        let viewport = |list: &mypaper_ui::DisplayList| {
+            list.ops
+                .iter()
+                .find_map(|op| match op {
+                    Op::Clipped { rect, .. } => Some(*rect),
+                    _ => None,
+                })
+                .expect("the list is a scroll view")
+        };
+        let port = viewport(&before);
+        assert!(center.scroll.max() > 0.0, "twelve cards overflow 900 px");
+        for delta in [-30, -90, -120] {
+            center.scroll.wheel(delta, 1.0, Instant::now());
+        }
+        let (after, size_after) = draw(&mut ui, &center);
+        assert_eq!(size, size_after, "scrolling never resizes the flyout");
+        assert_eq!(viewport(&after), port, "nor moves the viewport");
+        assert_eq!(fixed(&before), fixed(&after), "header and month stay put");
+        for hit in after.hits.iter().filter(|h| h.id >= CARD) {
+            assert!(
+                hit.rect.top >= port.top && hit.rect.bottom <= port.bottom,
+                "card hits stay inside the viewport: {:?}",
+                hit.rect
+            );
+        }
+        let first = |list: &mypaper_ui::DisplayList| {
+            list.hits.iter().find(|h| h.id == CARD).map(|h| h.rect.bottom)
+        };
+        assert_ne!(first(&before), first(&after), "the list moved");
+        if std::env::var_os("MYPAPER_SHOT").is_some() {
+            let dir = std::env::temp_dir().join("mypaper-golden");
+            for (name, list) in [("notifications-top", &before), ("notifications-scrolled", &after)] {
+                let image = mypaper_ui::render(&mut ui, list, size.0, size.1).unwrap();
+                mypaper_ui::golden::write(&image, &dir.join(format!("{name}.png"))).unwrap();
+            }
+        }
     }
 }
