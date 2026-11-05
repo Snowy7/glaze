@@ -219,7 +219,7 @@ remain readable data and do not regain renderers.
 
 ## Widget parity follow-up validation
 
-`src/widgets/check.ps1 [-Bless] [-Studio]` runs widget goldens/click targets and UI checks under the shared
+`src/widgets/check.ps1 [-Bless] [-Studio] [-BlessStudio]` runs widget goldens/click targets and UI checks under the shared
 desktop lock. `src/widgets/validate-live.ps1 [-Interactions] [-Samples 3]` runs this worktree's release
 engine with rain-city, production bars/dock and six production widgets, captures `docs/media/`, and
 uses the official 60-second measurement tool. It then launches the actual production shell three
@@ -268,7 +268,9 @@ screenshot is saved in `docs/media/widgets-native-glass.png`.
 The shared SMTC snapshot now exposes `position_ms`, `duration_ms` and `position_at_ms`
 (`Option<i64>`, Unix milliseconds for the last field), with timeline-change notifications.
 The adapter emits seconds plus `_at` for the existing widget view; unsupported/live timelines
-remain null. The provider has no sampling timer. The two necessary changes outside widget
+remain null. Timeline notifications read only the timeline; they do not reread track metadata.
+Decoded album art and its blurred/tinted material are retained until the artwork value changes.
+The provider has no sampling timer. The two necessary changes outside widget
 ownership are `crates/integrations/src/media.rs` and
 `crates/shell/src/integrations/media.rs`, so the shared adapter retains elapsed/duration parity.
 Desktop surfaces also emit `Event::Activated`; normal mouse activation permits keyboard editing

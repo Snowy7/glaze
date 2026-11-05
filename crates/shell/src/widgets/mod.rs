@@ -11,6 +11,7 @@ pub(crate) mod model;
 mod tests;
 pub(crate) mod time;
 pub(crate) mod view;
+mod watch;
 
 use crate::glass::{self, Material, Plate};
 use crate::inbox;
@@ -23,9 +24,7 @@ use model::Timer;
 use model::{Model, Task, Widget};
 use mypaper_config::Config;
 use mypaper_desktop::hold::{Fact, Holds, Reason};
-use mypaper_desktop::{
-    ConfigWatcher, DesktopEvents, DesktopHost, Monitor, covered_monitors, monitor_infos, watch_file,
-};
+use mypaper_desktop::{DesktopEvents, DesktopHost, Monitor, covered_monitors, monitor_infos};
 use mypaper_theme::{Color, Paint, TextTone};
 use mypaper_ui::{
     Button, Colors, Event, HitId, Kind, Rect, Rgba, Role, Surface, SurfaceId, TextField, TextStyle,
@@ -51,6 +50,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 use time::Stamp;
+use watch::FileWatch;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_SZ, RegGetValueW};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, SetFocus};
@@ -115,7 +115,7 @@ pub struct Widgets {
     layout: Layout,
     layout_error: Option<String>,
     theme_path: Option<PathBuf>,
-    theme_watcher: Option<ConfigWatcher>,
+    theme_watcher: Option<FileWatch>,
     accent: Color,
     path: PathBuf,
     registry: Registry,
@@ -128,7 +128,7 @@ pub struct Widgets {
     windows: WindowEvents,
     _control: control::Control,
     _display: DisplayWatcher,
-    _watcher: Option<ConfigWatcher>,
+    _watcher: Option<FileWatch>,
     editing: bool,
     drag: Option<Drag>,
     grids: Vec<EditSurface>,
@@ -204,7 +204,7 @@ impl Widgets {
             starter.save(&path)?;
             layout = starter;
         }
-        let _watcher = watch_file(&path, || inbox::post(WM_LAYOUT, 0))
+        let _watcher = FileWatch::new(&path, || inbox::post(WM_LAYOUT, 0))
             .inspect_err(|e| log::warn!("widget layout watcher: {e:#}"))
             .ok();
         let (tx, rx) = mpsc::channel();
@@ -336,7 +336,7 @@ impl Widgets {
             if path != self.theme_path {
                 self.theme_watcher = path
                     .as_ref()
-                    .and_then(|p| watch_file(p, || inbox::post(inbox::WM_CONFIG, 0)).ok());
+                    .and_then(|p| FileWatch::new(p, || inbox::post(inbox::WM_CONFIG, 0)).ok());
                 self.theme_path = path;
             }
             self.reconcile_needed = true;

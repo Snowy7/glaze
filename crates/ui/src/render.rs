@@ -72,6 +72,12 @@ fn marker_and_retained_clips_are_nested_and_balanced() {
     assert_eq!(image.pixel(10, 10), [0, 255, 0, 255]);
     assert_eq!(image.pixel(16, 16), [0, 0, 0, 0]);
     assert_eq!(image.pixel(25, 25), [255, 0, 0, 255]);
+    let translated = render(&mut ui, &list.translated(3.0, 2.0), 40, 40).unwrap();
+    for y in 0..32 {
+        for x in 0..32 {
+            assert_eq!(translated.pixel(x + 3, y + 2), image.pixel(x, y));
+        }
+    }
 }
 
 #[cfg(test)]
