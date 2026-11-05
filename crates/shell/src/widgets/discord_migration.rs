@@ -40,3 +40,28 @@ fn move_secret(key: &str) -> anyhow::Result<()> {
     anyhow::ensure!(credentials::read(&new)?.text()?==source.text()?,"broker credential verification failed");
     credentials::remove(&old)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn discord_credentials_are_verified_and_existing_plugin_values_win() -> anyhow::Result<()> {
+        let key=format!("migration-test-{}",std::process::id());
+        let old=format!("discord/{key}");
+        let new=format!("plugin/discord/{key}");
+        credentials::write(&old,"old-fixture")?;
+        credentials::write(&new,"new-fixture")?;
+        let result=(|| -> anyhow::Result<()> {
+            move_secret(&key)?;
+            assert_eq!(credentials::read(&old)?.text()?,"old-fixture");
+            assert_eq!(credentials::read(&new)?.text()?,"new-fixture");
+            credentials::remove(&new)?;
+            move_secret(&key)?;
+            assert!(credentials::read(&old).is_err());
+            assert_eq!(credentials::read(&new)?.text()?,"old-fixture");
+            Ok(())
+        })();
+        let _=credentials::remove(&old);let _=credentials::remove(&new);
+        result
+    }
+}
