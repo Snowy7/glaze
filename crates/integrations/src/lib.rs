@@ -5,7 +5,6 @@ pub mod calendar;
 pub mod calendar_http;
 pub mod calendar_oauth;
 pub mod calendar_setup;
-pub mod discord;
 pub mod credentials;
 pub mod launcher;
 pub mod media;
@@ -32,15 +31,13 @@ pub enum Provider {
     Media,
     T3,
     Calendar,
-    Discord,
 }
 impl Provider {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 4] = [
         Self::Notifications,
         Self::Media,
         Self::T3,
         Self::Calendar,
-        Self::Discord,
     ];
     pub fn enabled(self, c: &config::Config) -> bool {
         match self {
@@ -48,7 +45,6 @@ impl Provider {
             Self::Media => c.media.enabled,
             Self::T3 => c.t3.enabled,
             Self::Calendar => c.calendar.enabled,
-            Self::Discord => c.discord.enabled,
         }
     }
 }
@@ -67,7 +63,6 @@ pub enum Data {
     Media(media::Snapshot),
     T3(t3::Snapshot),
     Calendar(calendar::Snapshot),
-    Discord(discord::Snapshot),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Snapshot {
@@ -89,7 +84,6 @@ impl Default for Snapshot {
 
 #[derive(Clone, Debug)]
 pub enum Action {
-    DiscordVoice { muted: Option<bool>, deafened: Option<bool> },
     Dismiss(Vec<u32>),
     /// Refresh a cached toast snapshot while its center is visible.
     RefreshNotifications,
@@ -236,7 +230,6 @@ impl Hub {
                             Provider::Media => media::run(&publish, &mut commands).await,
                             Provider::T3 => t3::run(&config.t3, &publish).await,
                             Provider::Calendar => calendar::run(&config.calendar, &publish, &mut commands).await,
-                            Provider::Discord => discord::run(&config.discord, &publish, &mut commands).await,
                         }
                     };
                     tokio::select! {
@@ -295,7 +288,6 @@ impl Lease {
                     Provider::Notifications,
                     Action::Dismiss(_) | Action::RefreshNotifications
                 ) | (Provider::Media, Action::Media(_))
-                    | (Provider::Discord, Action::DiscordVoice { .. })
             ),
             "action does not belong to this provider"
         );
