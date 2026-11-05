@@ -389,13 +389,24 @@ impl<'a> Kit<'a> {
         let gap = self.px(8.0);
         let width = (self.width() - gap) / 2.0;
         let height = self.px(56.0);
-        let radius = self.px(14.0);
+        let radius = self.px(match self.look.family {
+            mypaper_bars::style::Family::Fluent => 6.0,
+            mypaper_bars::style::Family::Macos => 12.0,
+            mypaper_bars::style::Family::Material => 22.0,
+            mypaper_bars::style::Family::Mono => 14.0,
+        });
         for (i, tile) in tiles.iter().enumerate() {
             let x = self.left + (i % 2) as f32 * (width + gap);
             let y = self.y + (i / 2) as f32 * (height + gap);
             let rect = Rect::new(x, y, width, height);
             let (fill, ink) = if tile.on && tile.enabled {
-                (self.look.accent, self.look.on_accent)
+                match self.look.family {
+                    mypaper_bars::style::Family::Mono => (
+                        self.look.ink.with_alpha(0.85),
+                        self.look.fill.with_alpha(1.0),
+                    ),
+                    _ => (self.look.accent, self.look.on_accent),
+                }
             } else {
                 (self.look.control(), self.look.ink)
             };

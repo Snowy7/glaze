@@ -4,9 +4,12 @@
 //! processes apply them live) or a message to the supervisor loop, so the
 //! tray holds no state of its own.
 
+use mypaper_bars::tray_menu as wire;
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command as Process;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
 
 use anyhow::{Context, Result};
@@ -67,7 +70,10 @@ const ID_OVERLAY_WIDGETS: usize = 17;
 /// Theme `i` in the Themes submenu has id `ID_THEME + i`.
 const ID_THEME: usize = 100;
 
-/// Set once at startup; the window procedure needs them for re-adding the icon.
+// The window procedure also keeps a command snapshot until the shell replies.
+thread_local! { static PENDING_MENU: RefCell<Option<(usize, Vec<String>)>> = const { RefCell::new(None) }; }
+static NONCE: AtomicUsize = AtomicUsize::new(1);
+
 static ICON: AtomicIsize = AtomicIsize::new(0);
 static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
 
@@ -163,6 +169,19 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let x = i32::from(wparam.0 as u16 as i16);
             let y = i32::from((wparam.0 >> 16) as u16 as i16);
             show_menu(hwnd, x, y);
+            LRESULT(0)
+        }
+        wire::CHOSEN => {
+            let themes = PENDING_MENU.with_borrow_mut(|pending| {
+                if pending.as_ref().is_some_and(|p| p.0 == lparam.0 as usize) {
+                    pending.take().map(|p| p.1)
+                } else {
+                    None
+                }
+            });
+            if let Some(themes) = themes {
+                execute(hwnd, wparam.0, &themes);
+            }
             LRESULT(0)
         }
         WM_CONFIG_CHANGED => {
@@ -322,6 +341,7 @@ fn decode(id: usize, themes: &[String]) -> Option<Command> {
 }
 
 fn show_menu(hwnd: HWND, x: i32, y: i32) {
+    PENDING_MENU.with_borrow_mut(|pending| *pending = None);
     let config = Config::load().unwrap_or_else(|e| {
         log::warn!("{e:#}");
         Config::default()
@@ -433,6 +453,11 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
         append(menu, MF_SEPARATOR, 0, "");
         append(menu, MF_STRING, ID_QUIT, "Quit");
 
+        if show_shell_menu(hwnd, menu, (x, y), &themes) {
+            let _ = DestroyMenu(menu);
+            return;
+        }
+
         // Required so the menu closes when the user clicks elsewhere. This
         // only runs on the user's own right-click, so it steals nothing.
         let _ = SetForegroundWindow(hwnd);
@@ -451,7 +476,17 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
         id.0 as usize
     };
 
-    match decode(chosen, &themes) {
+    execute(hwnd, chosen, &themes);
+}
+
+fn execute(hwnd: HWND, chosen: usize, themes: &[String]) {
+    let bars = mypaper_bars::config::path()
+        .and_then(|p| BarsConfig::load(&p))
+        .unwrap_or_default();
+    let studio = std::env::current_exe()
+        .ok()
+        .and_then(|exe| find_studio(&exe));
+    match decode(chosen, themes) {
         Some(Command::TogglePause) => update_config(hwnd, |c| c.paused = !c.paused),
         Some(Command::SetTheme(name)) => update_config(hwnd, |c| c.theme = name),
         Some(Command::OpenStudio) => {
@@ -593,9 +628,132 @@ fn find_studio(exe: &Path) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+/// Copies the stock menu model; the shell presents the same command ids and checks.
+fn menu_items(menu: HMENU) -> Vec<wire::Item> {
+    use windows::Win32::UI::WindowsAndMessaging::*;
+    // SAFETY: the menu and all submenus remain alive throughout this read-only traversal.
+    unsafe {
+        (0..GetMenuItemCount(Some(menu)))
+            .filter_map(|i| {
+                let flags = GetMenuState(menu, i as u32, MF_BYPOSITION);
+                if flags == u32::MAX {
+                    return None;
+                }
+                if flags & MF_SEPARATOR.0 != 0 {
+                    return Some(wire::Item::Separator);
+                }
+                let mut text = [0u16; 512];
+                let len = GetMenuStringW(menu, i as u32, Some(&mut text), MF_BYPOSITION);
+                let label = String::from_utf16_lossy(&text[..len.max(0) as usize]);
+                let submenu = GetSubMenu(menu, i);
+                Some(
+                    if !submenu.is_invalid() && flags & (MF_GRAYED.0 | MF_DISABLED.0) == 0 {
+                        wire::Item::Submenu {
+                            label,
+                            items: menu_items(submenu),
+                        }
+                    } else {
+                        wire::Item::Action {
+                            label,
+                            id: GetMenuItemID(menu, i),
+                            checked: flags & MF_CHECKED.0 != 0,
+                            enabled: flags & (MF_GRAYED.0 | MF_DISABLED.0) == 0,
+                        }
+                    },
+                )
+            })
+            .collect()
+    }
+}
+
+/// Core sends a copied model and returns immediately; only an unavailable shell uses Win32.
+fn show_shell_menu(caller: HWND, menu: HMENU, point: (i32, i32), themes: &[String]) -> bool {
+    use windows::Win32::{System::DataExchange::COPYDATASTRUCT, UI::WindowsAndMessaging::*};
+    // SAFETY: look up our dedicated message-only inbox, then send owned bytes with a bounded wait.
+    unsafe {
+        let Ok(host) = FindWindowExW(Some(HWND_MESSAGE), None, wire::HOST, PCWSTR::null()) else {
+            return false;
+        };
+        let nonce = NONCE.fetch_add(1, Ordering::Relaxed);
+        let request = wire::Request {
+            nonce,
+            point,
+            items: menu_items(menu),
+        };
+        let Ok(bytes) = serde_json::to_vec(&request) else {
+            return false;
+        };
+        let packet = COPYDATASTRUCT {
+            dwData: wire::MAGIC,
+            cbData: bytes.len() as u32,
+            lpData: bytes.as_ptr() as _,
+        };
+        let mut result = 0usize;
+        let sent = SendMessageTimeoutW(
+            host,
+            WM_COPYDATA,
+            WPARAM(caller.0 as usize),
+            LPARAM(&packet as *const _ as isize),
+            SMTO_ABORTIFHUNG | SMTO_BLOCK,
+            20,
+            Some(&mut result),
+        );
+        if sent.0 == 0 || result != 1 {
+            return false;
+        }
+        PENDING_MENU.with_borrow_mut(|p| *p = Some((nonce, themes.to_vec())));
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The production tray loop for the exclusive-desktop IPC/fallback performance harness.
+    #[test]
+    #[ignore = "takes over the tray; launch only under IMPLEMENTING.md's desktop lock"]
+    fn live_tray_fixture() {
+        mypaper_desktop::init_logging();
+        mypaper_desktop::enable_dpi_awareness();
+        let _tray = Tray::new().unwrap();
+        let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
+        // SAFETY: the fixture's window and ordinary message loop live on this thread.
+        unsafe {
+            while windows::Win32::UI::WindowsAndMessaging::GetMessageW(&mut msg, None, 0, 0)
+                .as_bool()
+            {
+                let _ = windows::Win32::UI::WindowsAndMessaging::TranslateMessage(&msg);
+                windows::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
+            }
+        }
+    }
+
+    #[test]
+    fn tray_snapshot_preserves_disabled_commands_separators_checks_and_submenus() {
+        // SAFETY: these hidden menu handles are created/read/destroyed on this test thread.
+        unsafe {
+            let menu = CreatePopupMenu().unwrap();
+            let sub = CreatePopupMenu().unwrap();
+            append(menu, MF_STRING | MF_CHECKED, ID_PAUSE, "Pause");
+            append(menu, MF_SEPARATOR, 0, "");
+            append(sub, MF_STRING | MF_GRAYED, ID_STUDIO, "Studio");
+            append(menu, MF_POPUP, sub.0 as usize, "Tools");
+            let items = menu_items(menu);
+            assert!(
+                matches!(&items[0], wire::Item::Action { id, checked: true, enabled: true, .. } if *id == ID_PAUSE as u32)
+            );
+            assert!(matches!(items[1], wire::Item::Separator));
+            let wire::Item::Submenu { items, .. } = &items[2] else {
+                panic!("submenu")
+            };
+            assert!(matches!(
+                items[0],
+                wire::Item::Action { enabled: false, .. }
+            ));
+            let _ = DestroyMenu(menu);
+        }
+    }
 
     /// A scratch folder removed on drop.
     struct Scratch(PathBuf);

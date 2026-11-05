@@ -16,7 +16,7 @@ use mypaper_bars::{
     events::Reservation,
 };
 use mypaper_desktop::{Monitor, Rect as DesktopRect};
-use mypaper_ui::{Kind, Point, Rect, Role, Surface, Ui};
+use mypaper_ui::{Glass, GlassMaterial, Kind, Op, Point, Rect, Role, Surface, SurfaceId, Ui};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -31,6 +31,11 @@ pub struct Bar {
     pub frame: Frame,
     pub items: Vec<Item>,
     pub hover: Option<u32>,
+    pub focus: Option<u32>,
+    /// Extra islands, each a separate rounded overlay client.
+    islands: Vec<Surface>,
+    offsets: Vec<Point>,
+    windows: Vec<Rect>,
     pub hidden: bool,
     pub dirty: bool,
     redraws: u64,
@@ -111,6 +116,10 @@ impl Bar {
             },
             items: vec![],
             hover: None,
+            focus: None,
+            islands: vec![],
+            offsets: vec![],
+            windows: vec![],
             hidden: false,
             dirty: true,
             redraws: 0,
@@ -147,6 +156,37 @@ impl Bar {
 
     pub fn scale(&self) -> f32 {
         self.monitor.dpi as f32 / 96.0
+    }
+    pub fn owns(&self, id: SurfaceId) -> bool {
+        self.surface.id() == id || self.islands.iter().any(|s| s.id() == id)
+    }
+    pub fn input_offset(&self, id: SurfaceId) -> Point {
+        let index = if self.surface.id() == id {
+            0
+        } else {
+            self.islands
+                .iter()
+                .position(|s| s.id() == id)
+                .map_or(0, |i| i + 1)
+        };
+        self.offsets.get(index).copied().unwrap_or_default()
+    }
+    pub fn windows(&mut self, windows: &[Rect]) {
+        self.windows = windows.to_vec();
+    }
+    fn covered(&self, body: Rect) -> bool {
+        let origin = self.origin();
+        let body = body.offset(origin.0 as f32, origin.1 as f32);
+        self.windows.iter().any(|w| w.intersects(&body))
+    }
+    fn material(&self) -> Option<crate::glass::Material> {
+        if self.kind == BarKind::Top
+            && self.config.top.design == mypaper_bars::presets::TopDesign::Minimal
+        {
+            None
+        } else {
+            self.tokens.material
+        }
     }
     pub fn horizontal(&self) -> bool {
         matches!(edge(self.kind, &self.config), Edge::Top | Edge::Bottom)
@@ -267,6 +307,9 @@ impl Bar {
     ) -> Result<bool> {
         if self.hidden {
             self.surface.hide();
+            for island in &self.islands {
+                island.hide();
+            }
             if let Some(edge) = &self.edge_surface {
                 edge.hide();
             }
@@ -291,8 +334,16 @@ impl Bar {
             zoom_changed |= before != (scale.value, shift.value);
         }
         let had_animation = !self.animations.is_empty();
+        let attention = self.config.dock.attention;
         self.animations.retain(|key, (start, launch)| {
-            now.duration_since(*start) < Duration::from_secs(if *launch { 4 } else { 2 })
+            now.duration_since(*start).as_secs_f32()
+                < if *launch {
+                    4.0
+                } else if attention == mypaper_bars::config::AttentionStyle::Pulse {
+                    2.4
+                } else {
+                    1.8
+                }
                 && (!*launch
                     || self
                         .items
@@ -306,14 +357,11 @@ impl Bar {
             .map(|i| {
                 self.animations.get(&i.key).map_or(0.0, |(start, launch)| {
                     let t = now.duration_since(*start).as_secs_f32();
-                    (t * std::f32::consts::PI * 3.0).sin().abs()
-                        * 8.0
-                        * self.scale()
-                        * if *launch {
-                            1.0
-                        } else {
-                            (1.0 - t / 2.0).max(0.0)
-                        }
+                    if !*launch && attention == mypaper_bars::config::AttentionStyle::Pulse {
+                        -(0.7 + 0.3 * (t * std::f32::consts::TAU / 0.4).cos())
+                    } else {
+                        (t * std::f32::consts::PI / 0.6).sin().abs() * 8.0 * self.scale()
+                    }
                 })
             })
             .collect();
@@ -347,23 +395,27 @@ impl Bar {
                     self.hover,
                 )
             };
-            let origin = self.origin();
-            if self
-                .surface
-                .present(ui, origin, self.frame.size, self.frame.list.clone())?
+            self.focus = self
+                .focus
+                .filter(|id| self.frame.list.hits.iter().any(|h| h.id == *id));
+            self.frame.list.focus = self.focus;
+            if let Some(hit) = self
+                .frame
+                .list
+                .hits
+                .iter()
+                .find(|h| Some(h.id) == self.focus)
             {
-                self.redraws += 1;
-                log::debug!(
-                    "bar {:?} {} redraw={} size={:?}",
-                    self.kind,
-                    self.monitor.device,
-                    self.redraws,
-                    self.frame.size
-                );
+                self.frame.list.ops.push(Op::Stroke {
+                    rect: hit.rect.inflate(-2.0 * scale),
+                    radius: 4.0 * scale,
+                    width: 2.0 * scale,
+                    color: self.tokens.accent,
+                });
             }
             self.dirty = false;
         }
-        self.surface.move_to(self.origin())?;
+        self.present(ui)?;
         if self.slide.value >= 0.999 && self.config.dock.autohide && self.kind == BarKind::Dock {
             if self.surface.is_visible() {
                 self.surface.hide();
@@ -394,6 +446,85 @@ impl Bar {
             }
         }
         Ok(moving)
+    }
+
+    /// One HWND per island; dock keeps its envelope so magnified icons stay clickable.
+    fn present(&mut self, ui: &mut Ui) -> Result<()> {
+        let count = if self.kind == BarKind::Top {
+            self.frame.shapes.len().max(1)
+        } else {
+            1
+        };
+        while self.islands.len() + 1 < count {
+            self.islands.push(Surface::new_deferred_accessibility(
+                Kind::Bar,
+                "mypaper bar island",
+                Role::Toolbar,
+            )?);
+        }
+        self.islands.truncate(count - 1);
+        self.offsets.clear();
+        let origin = self.origin();
+        let visible = self.shows_content();
+        for i in 0..count {
+            let (body, radius) = self.frame.shapes.get(i).copied().unwrap_or((
+                Rect::new(0.0, 0.0, self.frame.size.0 as f32, self.frame.size.1 as f32),
+                0.0,
+            ));
+            let crop = if self.kind == BarKind::Top {
+                body.inflate(1.0)
+            } else {
+                Rect::new(0.0, 0.0, self.frame.size.0 as f32, self.frame.size.1 as f32)
+            };
+            let (list, offset, size) = if self.kind == BarKind::Top {
+                self.frame.crop(crop)
+            } else {
+                (self.frame.list.clone(), Point::default(), self.frame.size)
+            };
+            self.offsets.push(offset);
+            let glass = self
+                .material()
+                .filter(|_| self.covered(body))
+                .map(|m| Glass {
+                    body: body.offset(-offset.x, -offset.y),
+                    radius,
+                    material: GlassMaterial {
+                        clarity: m.clarity,
+                        blur: (m.blur * self.scale()).min(32.0),
+                        refraction: m.refraction,
+                        highlight: m.highlight,
+                        tint: m.tint,
+                    },
+                });
+            let surface = if i == 0 {
+                &mut self.surface
+            } else {
+                &mut self.islands[i - 1]
+            };
+            surface.set_glass(glass.filter(|_| visible));
+            if surface.present(
+                ui,
+                (origin.0 + offset.x as i32, origin.1 + offset.y as i32),
+                size,
+                list,
+            )? {
+                self.redraws += 1;
+                log::debug!(
+                    "bar {:?} {} redraw={} island={i}",
+                    self.kind,
+                    self.monitor.device,
+                    self.redraws
+                );
+            }
+            if visible {
+                if !surface.is_visible() {
+                    surface.show();
+                }
+            } else {
+                surface.hide();
+            }
+        }
+        Ok(())
     }
 
     pub fn origin(&self) -> (i32, i32) {
@@ -436,7 +567,7 @@ impl Bar {
         if self.hidden || self.slide.value >= 0.999 {
             return vec![];
         }
-        let Some(mut material) = self.tokens.material else {
+        let Some(mut material) = self.material() else {
             return vec![];
         };
         material.blur = (material.blur * self.scale()).min(32.0);
@@ -444,8 +575,14 @@ impl Bar {
         self.frame
             .shapes
             .iter()
-            .map(|(rect, radius)| Plate {
-                id: 0,
+            .enumerate()
+            .filter(|(_, (rect, _))| !self.covered(*rect) || !mypaper_ui::glass::available())
+            .map(|(i, (rect, radius))| Plate {
+                id: if i == 0 {
+                    self.surface.hwnd().0 as u64
+                } else {
+                    self.islands[i - 1].hwnd().0 as u64
+                },
                 rect: rect.offset(
                     (x - self.monitor.rect.x) as f32,
                     (y - self.monitor.rect.y) as f32,
@@ -454,5 +591,70 @@ impl Bar {
                 material,
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mypaper_ui::glass::{Backdrop, Shape};
+    use windows::Win32::Foundation::HWND;
+    struct Available;
+    impl Backdrop for Available {
+        fn available(&self) -> bool {
+            true
+        }
+        fn open(&self, _: HWND, _: Shape, _: f32, _: &GlassMaterial) -> bool {
+            true
+        }
+        fn place(&self, _: HWND, _: Shape, _: f32) {}
+        fn material(&self, _: HWND, _: &GlassMaterial) {}
+        fn close(&self, _: HWND) {}
+    }
+    #[test]
+    fn only_the_covered_island_loses_its_plate_and_uncover_restores_it() {
+        mypaper_ui::glass::install(std::rc::Rc::new(Available));
+        let config = BarsConfig::default();
+        let tokens = Tokens::resolve(
+            &config.top.look,
+            &Default::default(),
+            &mypaper_bars::accent::read(),
+        );
+        let monitor = Monitor {
+            device: "test".into(),
+            rect: DesktopRect {
+                x: -1280,
+                y: 0,
+                width: 1280,
+                height: 720,
+            },
+            work: DesktopRect {
+                x: -1280,
+                y: 32,
+                width: 1280,
+                height: 688,
+            },
+            dpi: 96,
+            primary: true,
+        };
+        let mut bar = Bar::new(BarKind::Top, config, monitor, tokens, false).unwrap();
+        bar.frame.size = (1280, 32);
+        bar.frame.shapes = [0.0, 500.0, 1000.0]
+            .map(|x| (Rect::new(x, 0.0, 100.0, 32.0), 10.0))
+            .to_vec();
+        for _ in 0..2 {
+            bar.islands.push(
+                Surface::new_deferred_accessibility(Kind::Bar, "Test island", Role::Toolbar)
+                    .unwrap(),
+            );
+        }
+        assert_eq!(bar.plates().len(), 3);
+        bar.windows(&[Rect::new(-760.0, 0.0, 40.0, 200.0)]);
+        let plates = bar.plates();
+        assert_eq!(plates.len(), 2);
+        assert_eq!(plates[0].rect.left, 0.0);
+        assert_eq!(plates[1].rect.left, 1000.0);
+        bar.windows(&[]);
+        assert_eq!(bar.plates().len(), 3);
     }
 }

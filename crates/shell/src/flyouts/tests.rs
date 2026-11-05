@@ -242,6 +242,23 @@ fn panels(ui: &mut Ui, surface: &Surface) -> Vec<(&'static str, Box<dyn Panel>)>
                 NOW_MS,
             )),
         ),
+        (
+            "calendar-zones",
+            Box::new(Calendar::with_zones(
+                now(),
+                NOW_MS as i64,
+                vec![
+                    mypaper_bars::config::Zone {
+                        zone: "America/New_York".into(),
+                        label: Some("New York".into()),
+                    },
+                    mypaper_bars::config::Zone {
+                        zone: "Asia/Kathmandu".into(),
+                        label: None,
+                    },
+                ],
+            )),
+        ),
         ("power", Box::new(Power::default())),
         ("power-confirm", Box::new(Power::asking(4))),
         (
@@ -269,6 +286,10 @@ fn panels(ui: &mut Ui, surface: &Surface) -> Vec<(&'static str, Box<dyn Panel>)>
                 tray("4", "Bluetooth devices"),
                 tray("5", "Discord"),
             ])),
+        ),
+        (
+            "launcher-win11",
+            Box::new(Launcher::win11(field.clone(), apps.clone())),
         ),
         (
             "launcher",

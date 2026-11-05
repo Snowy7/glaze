@@ -6,6 +6,76 @@ use mypaper_bars::{
 };
 use mypaper_ui::{Image, Op, Rgba, render};
 
+/// Runs the real shell from the test binary for the exclusive-desktop performance harness.
+#[test]
+#[ignore = "takes over the desktop; launch only under IMPLEMENTING.md's desktop lock"]
+fn live_desktop_fixture() {
+    mypaper_desktop::init_logging();
+    mypaper_desktop::enable_dpi_awareness();
+    crate::run().unwrap();
+}
+
+#[test]
+fn module_status_tooltips_keep_provider_details_and_custom_failures() {
+    let mut ui = Ui::new().unwrap();
+    let mut model = model();
+    model.network = Some(providers::network::NetworkInfo {
+        kind: providers::network::Kind::Wifi,
+        name: Some("Studio".into()),
+        signal: Some(42),
+    });
+    model.custom.outputs.insert(
+        "test".into(),
+        providers::custom::Output {
+            text: "ignored".into(),
+            tooltip: Some("Command timed out".into()),
+            error: true,
+            ..Default::default()
+        },
+    );
+    let mut config = BarsConfig::parse(
+        r#"{"top":{"left":["network","volume","custom:test"],"center":[],"right":[]}}"#,
+    )
+    .unwrap();
+    config.resolve(Vec::new);
+    let tokens = look::Tokens::resolve(
+        &config.top.look,
+        &Appearance::default(),
+        &providers::accent::read(),
+    );
+    let frame = view::top(
+        1280,
+        &config,
+        &model,
+        &tokens,
+        1.0,
+        &mut ui,
+        &mut Default::default(),
+        None,
+    );
+    assert!(
+        frame
+            .list
+            .hits
+            .iter()
+            .any(|h| h.label.as_ref() == "Command timed out")
+    );
+    assert!(
+        frame
+            .list
+            .hits
+            .iter()
+            .any(|h| h.label.contains("Studio") && h.label.contains("42%"))
+    );
+    assert!(
+        frame
+            .list
+            .hits
+            .iter()
+            .any(|h| h.label.contains("Volume 50%"))
+    );
+}
+
 #[test]
 fn future_deadlines_never_turn_into_busy_polling() {
     assert_eq!(services::wait_ms(Duration::ZERO), 0);
@@ -13,6 +83,74 @@ fn future_deadlines_never_turn_into_busy_polling() {
     assert_eq!(services::wait_ms(Duration::from_micros(1000)), 1);
     assert_eq!(services::wait_ms(Duration::from_micros(1001)), 2);
     assert_eq!(services::wait_ms(Duration::MAX), u32::MAX - 1);
+}
+
+#[test]
+fn island_crops_route_clicks_to_original_targets_and_keep_focus_inside_their_tree() {
+    let mut ui = Ui::new().unwrap();
+    let mut config = BarsConfig::parse(r#"{"top":{"layout":"islands","left":["start"],"center":["clock"],"right":["quick","power"]}}"#).unwrap();
+    config.resolve(Vec::new);
+    let tokens = look::Tokens::resolve(
+        &config.top.look,
+        &Appearance::default(),
+        &providers::accent::read(),
+    );
+    let mut frame = view::top(
+        1280,
+        &config,
+        &model(),
+        &tokens,
+        1.0,
+        &mut ui,
+        &mut Default::default(),
+        None,
+    );
+    let focused = frame.list.hits.last().unwrap().id;
+    frame.list.focus = Some(focused);
+    for (shape, _) in &frame.shapes {
+        let (list, offset, _) = frame.crop(shape.inflate(1.0));
+        assert_eq!(
+            list.focus.is_some(),
+            list.hits.iter().any(|h| h.id == focused)
+        );
+        for hit in &list.hits {
+            let center = Point::new(
+                (hit.rect.left + hit.rect.right) / 2.0,
+                (hit.rect.top + hit.rect.bottom) / 2.0,
+            );
+            assert_eq!(
+                frame
+                    .target(Point::new(center.x + offset.x, center.y + offset.y))
+                    .unwrap()
+                    .0,
+                hit.id
+            );
+        }
+    }
+}
+
+#[test]
+fn explicit_native_actions_bypass_custom_panels_and_hover_respects_overrides() {
+    for action in [
+        BuiltinAction::NativeStart,
+        BuiltinAction::NativeNotifications,
+        BuiltinAction::NativeQuickSettings,
+    ] {
+        assert_eq!(builtin_flyout(action), None);
+    }
+    assert_eq!(
+        builtin_flyout(BuiltinAction::Calendar),
+        Some(flyouts::Kind::Calendar)
+    );
+    let config = BarsConfig::parse(r#"{"modules":{"quick":{"click":{"left":"none"}}}}"#).unwrap();
+    assert!(!opens_flyout(
+        &Target::Module(ModuleRef::Builtin(Module::Quick)),
+        &config
+    ));
+    assert!(opens_flyout(
+        &Target::Module(ModuleRef::Builtin(Module::Clock)),
+        &config
+    ));
 }
 
 #[test]

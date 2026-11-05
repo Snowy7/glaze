@@ -27,7 +27,13 @@ impl Images {
                     .ok()
                     .map(|p| p.join("icons").join(name))
             })
-            .and_then(|dir| IconPack::load(&dir).ok().map(|data| Pack { dir, data }));
+            .and_then(|dir| IconPack::load(&dir).ok().map(|data| Pack { dir, data }))
+            .or_else(|| {
+                (pack == Some("mono")).then(|| Pack {
+                    dir: PathBuf::from("@builtin/mono"),
+                    data: mypaper_bars::icon_pack::bundled_mono(),
+                })
+            });
     }
     pub fn app(&self, app: &Item) -> Option<(String, bool)> {
         let p = self.pack.as_ref()?;
@@ -96,6 +102,23 @@ impl Images {
             e.mono.unwrap_or(p.data.mono),
         ))
     }
+    pub fn glyph(&self, key: &str, set: mypaper_bars::style::Glyphs) -> Option<(String, bool)> {
+        self.key(key).or_else(|| {
+            mypaper_bars::glyphs::svg(set, key).map(|_| {
+                (
+                    format!(
+                        "@glyph/{}/{key}.svg",
+                        if set == mypaper_bars::style::Glyphs::Symbols {
+                            "symbols"
+                        } else {
+                            "default"
+                        }
+                    ),
+                    true,
+                )
+            })
+        })
+    }
     pub fn get(&mut self, ui: &Ui, source: &str) -> Option<Arc<Image>> {
         self.load(ui, source, None)
     }
@@ -114,7 +137,22 @@ impl Images {
             .extension()
             .is_some_and(|x| x.eq_ignore_ascii_case("svg"))
         {
-            svg(&path)
+            if let Some(file) = source.replace('\\', "/").strip_prefix("@builtin/mono/") {
+                mypaper_bars::icon_pack::bundled_mono_icon(file).and_then(svg_bytes)
+            } else if let Some(source) = source.strip_prefix("@glyph/") {
+                let (set, file) = source.split_once('/')?;
+                mypaper_bars::glyphs::svg(
+                    if set == "symbols" {
+                        mypaper_bars::style::Glyphs::Symbols
+                    } else {
+                        mypaper_bars::style::Glyphs::Default
+                    },
+                    file.strip_suffix(".svg")?,
+                )
+                .and_then(svg_bytes)
+            } else {
+                svg(&path)
+            }
         } else {
             Image::load(ui, &path).ok()
         };
@@ -138,7 +176,10 @@ impl Images {
 
 fn svg(path: &Path) -> Option<Image> {
     let bytes = std::fs::read(path).ok()?;
-    let tree = resvg::usvg::Tree::from_data(&bytes, &resvg::usvg::Options::default()).ok()?;
+    svg_bytes(&bytes)
+}
+fn svg_bytes(bytes: &[u8]) -> Option<Image> {
+    let tree = resvg::usvg::Tree::from_data(bytes, &resvg::usvg::Options::default()).ok()?;
     let size = tree.size();
     let scale = 96.0 / size.width().max(size.height());
     let (width, height) = (

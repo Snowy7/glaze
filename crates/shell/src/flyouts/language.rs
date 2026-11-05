@@ -4,7 +4,6 @@
 use mypaper_bars::flyouts::language::{self, Layout};
 use mypaper_bars::system;
 use mypaper_ui::HitId;
-use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
 use super::kit::{Icon, Kit, Row, glyph};
 use super::{Cx, Effect, LIST, Panel};
@@ -19,9 +18,8 @@ pub struct Language {
 }
 
 impl Language {
-    pub fn new(_: &mut Cx) -> Self {
-        // SAFETY: a read-only query; the flyout has not taken the focus yet.
-        let window = unsafe { GetForegroundWindow() }.0 as isize;
+    pub fn new(cx: &mut Cx) -> Self {
+        let window = cx.bars.external_foreground();
         // The layouts come once it is on screen (a registry walk, ~15 ms).
         Self::with(Vec::new(), None, window)
     }

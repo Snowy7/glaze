@@ -21,6 +21,8 @@ const LOCATION: HitId = 4;
 const CONNECT: HitId = 5;
 const DISCONNECT: HitId = 6;
 const PROMPT: HitId = 7;
+const ETHERNET: HitId = 8;
+const VPN: HitId = 9;
 
 /// What a network takes to join from here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -207,9 +209,21 @@ impl Panel for Wifi {
             }
         }
         kit.footer_link(SETTINGS, "Network & internet settings");
+        kit.buttons(&[(ETHERNET, "Ethernet", false), (VPN, "VPN", false)]);
     }
 
     fn activate(&mut self, id: HitId, cx: &mut Cx) -> Effect {
+        if id == ETHERNET || id == VPN {
+            system::open(
+                if id == ETHERNET {
+                    "ms-settings:network-ethernet"
+                } else {
+                    "ms-settings:network-vpn"
+                }
+                .into(),
+            );
+            return Effect::Close;
+        }
         match id {
             RADIO => {
                 let Some(on) = self.radio else {

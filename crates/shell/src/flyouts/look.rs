@@ -113,7 +113,16 @@ impl Look {
             on_accent,
             fill,
             glass,
-            radius: bar.radius.or(appearance.radius).unwrap_or(16.0).max(4.0),
+            radius: bar
+                .radius
+                .or(appearance.radius)
+                .unwrap_or(match bar.family.unwrap_or_default() {
+                    Family::Fluent => 8.0,
+                    Family::Macos => 18.0,
+                    Family::Material => 24.0,
+                    Family::Mono => 16.0,
+                })
+                .max(4.0),
             font: font_family(
                 bar.font
                     .family
@@ -127,6 +136,26 @@ impl Look {
             win_key: true,
             first_day: None,
             switch_output: false,
+        }
+    }
+
+    /// Menus share the active family, font, colors and material with the panels.
+    pub fn menu_tokens(&self) -> mypaper_ui::Tokens {
+        let base = mypaper_ui::Tokens::default();
+        mypaper_ui::Tokens {
+            radius: self.radius,
+            font: mypaper_ui::TextStyle::new(&self.font, 13.0),
+            icons: self.icons.clone(),
+            material: mypaper_ui::Material { tint: self.fill },
+            colors: mypaper_ui::Colors {
+                text: self.ink,
+                text_dim: self.faint(),
+                hover: self.ink.with_alpha(0.12),
+                line: self.line(),
+                ..base.colors
+            },
+            glass: self.glass,
+            ..base
         }
     }
 

@@ -75,6 +75,22 @@ impl Frame {
             .hit_at(at)
             .map(|h| (h.id, self.targets[h.id as usize - 1].clone()))
     }
+
+    /// A cropped island keeps its original hit IDs, with only its own accessible focus node.
+    pub fn crop(&self, crop: Rect) -> (DisplayList, Point, (u32, u32)) {
+        let offset = Point::new(crop.left.floor(), crop.top.floor());
+        let mut list = self.list.clone();
+        list.ops.retain(|op| op.bounds().intersects(&crop));
+        list.hits.retain(|h| h.rect.intersects(&crop));
+        list.focus = list
+            .focus
+            .filter(|id| list.hits.iter().any(|h| h.id == *id));
+        let size = (
+            (crop.right.ceil() - offset.x) as u32,
+            (crop.bottom.ceil() - offset.y) as u32,
+        );
+        (list.translated(-offset.x, -offset.y), offset, size)
+    }
 }
 
 pub use super::icons::Images;
@@ -86,6 +102,9 @@ struct Content {
     icon: Option<String>,
     target: Target,
     width: f32,
+    tooltip: Option<String>,
+    dim: bool,
+    glyphs: mypaper_bars::style::Glyphs,
 }
 
 fn contents(
@@ -102,12 +121,30 @@ fn contents(
     let mut add =
         |text: String, glyph: Option<&'static str>, icon: Option<String>, target: Target| {
             let options = config.modules.get(module);
+            let design_weight = match (&module, config.top.design) {
+                (ModuleRef::Builtin(Module::App), mypaper_bars::presets::TopDesign::Macos)
+                    if kind == BarKind::Top =>
+                {
+                    700
+                }
+                (
+                    ModuleRef::Builtin(Module::Clock),
+                    mypaper_bars::presets::TopDesign::Monochrome,
+                ) if kind == BarKind::Top => 600,
+                _ => tokens.font.weight,
+            };
             let font = options
-                .map_or(tokens.font.clone(), |o| TextStyle {
-                    size: o.style.size.unwrap_or(tokens.font.size),
-                    weight: o.style.weight.unwrap_or(tokens.font.weight),
-                    ..tokens.font.clone()
-                })
+                .map_or(
+                    TextStyle {
+                        weight: design_weight,
+                        ..tokens.font.clone()
+                    },
+                    |o| TextStyle {
+                        size: o.style.size.unwrap_or(tokens.font.size),
+                        weight: o.style.weight.unwrap_or(design_weight),
+                        ..tokens.font.clone()
+                    },
+                )
                 .scaled(scale);
             let width = ui.text.measure(&text, &font).0.min(240.0 * scale)
                 + if glyph.is_some() || icon.is_some() {
@@ -120,8 +157,22 @@ fn contents(
                 glyph,
                 icon,
                 target,
-                width: (width + options.and_then(|o| o.style.padding).unwrap_or(7.0) * 2.0 * scale)
-                    .max(28.0 * scale),
+                width: if matches!(module, ModuleRef::Builtin(Module::Search))
+                    && tokens.family == Family::Fluent
+                {
+                    200.0 * scale
+                } else {
+                    (width + options.and_then(|o| o.style.padding).unwrap_or(7.0) * 2.0 * scale)
+                        .max(28.0 * scale)
+                },
+                tooltip: None,
+                dim: false,
+                glyphs: if kind == BarKind::Top {
+                    config.top.look.glyphs
+                } else {
+                    config.dock.look.glyphs
+                }
+                .unwrap_or_default(),
             });
         };
     let ModuleRef::Builtin(module) = module else {
@@ -131,9 +182,13 @@ fn contents(
             let label = if out.error {
                 "—".into()
             } else {
-                format!("{}{}", out.icon.as_deref().unwrap_or(""), out.text)
+                out.text.clone()
             };
-            add(label, None, None, target);
+            add(label, None, out.icon.clone(), target);
+            if let Some(c) = output.last_mut() {
+                c.tooltip = out.tooltip.clone();
+                c.dim = out.error;
+            }
         }
         return output;
     };
@@ -216,7 +271,14 @@ fn contents(
         Module::Network => add(
             String::new(),
             Some(match model.network.as_ref().map(|n| n.kind) {
-                Some(network::Kind::Wifi) => "\u{e701}",
+                Some(network::Kind::Wifi) => {
+                    match model.network.as_ref().and_then(|n| n.signal).unwrap_or(100) {
+                        0..=24 => "\u{e872}",
+                        25..=49 => "\u{e873}",
+                        50..=74 => "\u{e874}",
+                        _ => "\u{e701}",
+                    }
+                }
                 Some(network::Kind::Ethernet) => "\u{e839}",
                 _ => "\u{e871}",
             }),
@@ -231,6 +293,8 @@ fn contents(
                         "\u{e74f}"
                     } else if v.level < 0.33 {
                         "\u{e993}"
+                    } else if v.level < 0.67 {
+                        "\u{e994}"
                     } else {
                         "\u{e767}"
                     }),
@@ -275,6 +339,41 @@ fn contents(
             None,
             target,
         ),
+    }
+    for c in &mut output {
+        c.tooltip = match module {
+            Module::Network => Some(model.network.as_ref().map_or(
+                "Offline".into(),
+                |n| match n.kind {
+                    network::Kind::Wifi => format!(
+                        "{} · {}% signal",
+                        n.name.as_deref().unwrap_or("Wi-Fi"),
+                        n.signal.unwrap_or(0)
+                    ),
+                    network::Kind::Ethernet => "Ethernet".into(),
+                    network::Kind::None => "Offline".into(),
+                },
+            )),
+            Module::Volume => model.volume.as_ref().map(|v| {
+                format!(
+                    "Volume {}%{}",
+                    (v.level * 100.0).round(),
+                    if v.muted { " (muted)" } else { "" }
+                )
+            }),
+            Module::Tray => {
+                if let Target::Tray(id) = &c.target {
+                    model
+                        .tray
+                        .iter()
+                        .find(|i| &i.id == id)
+                        .map(|i| i.name.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
     }
     output
 }
@@ -327,16 +426,35 @@ fn item(
     } else {
         content.text.clone()
     };
-    let id = frame.hit(rect, &label, content.target.clone());
+    let id = frame.hit(
+        rect,
+        content.tooltip.as_deref().unwrap_or(&label),
+        content.target.clone(),
+    );
+    if tokens.family == Family::Fluent
+        && matches!(
+            content.target,
+            Target::Module(ModuleRef::Builtin(Module::Search))
+        )
+    {
+        frame.list.ops.push(Op::Fill {
+            rect: rect.inflate(-2.0 * scale),
+            radius: rect.height() / 2.0,
+            color: tokens.hover,
+        });
+    }
     let options = match &content.target {
         Target::Module(m) => config.modules.get(m),
         _ => None,
     };
-    let color = options
+    let mut color = options
         .and_then(|o| o.style.color.as_ref())
         .map_or(tokens.ink, |c| {
             look::resolve_color(c, tokens.ink, tokens.accent)
         });
+    if content.dim {
+        color.a *= 0.45;
+    }
     let radius = options.and_then(|o| o.style.radius).unwrap_or(5.0) * scale;
     if let Some(Paint::Color(c)) = options.and_then(|o| o.style.background.as_ref()) {
         frame.list.ops.push(Op::Fill {
@@ -366,22 +484,41 @@ fn item(
     let mut label = rect;
     let key = options
         .and_then(|o| o.icon.as_deref())
+        .or(content.icon.as_deref())
         .or(match &content.target {
             Target::Tray(_) => Some("chevron"),
             Target::Module(ModuleRef::Builtin(m)) => Some(match m {
                 Module::Start => "start",
                 Module::Search => "search",
-                Module::Network => "wifi-3",
-                Module::Volume => "volume-high",
+                Module::Network => match content.glyph {
+                    Some("\u{e872}") => "wifi-1",
+                    Some("\u{e873}") => "wifi-2",
+                    Some("\u{e874}") => "wifi-3",
+                    Some("\u{e839}") => "ethernet",
+                    Some("\u{e871}") => "offline",
+                    _ => "wifi-4",
+                },
+                Module::Volume => match content.glyph {
+                    Some("\u{e74f}") => "volume-mute",
+                    Some("\u{e993}") => "volume-low",
+                    Some("\u{e994}") => "volume-mid",
+                    _ => "volume-high",
+                },
                 Module::Quick => "quick",
                 Module::Power => "power",
                 Module::Battery => "battery",
-                Module::Media => "play",
+                Module::Media => {
+                    if content.glyph == Some("\u{e769}") {
+                        "pause"
+                    } else {
+                        "play"
+                    }
+                }
                 _ => "",
             }),
             _ => None,
         });
-    let packed = key.and_then(|key| images.key(key));
+    let packed = key.and_then(|key| images.glyph(key, content.glyphs));
     let icon = packed
         .as_ref()
         .and_then(|(source, mono)| images.load(ui, source, mono.then_some(color)))
@@ -389,7 +526,16 @@ fn item(
             options
                 .and_then(|o| o.icon.as_deref())
                 .or(content.icon.as_deref())
-                .and_then(|source| images.get(ui, source))
+                .and_then(|source| {
+                    images.load(
+                        ui,
+                        source,
+                        source
+                            .to_ascii_lowercase()
+                            .ends_with(".svg")
+                            .then_some(color),
+                    )
+                })
         });
     let g = Rect::new(
         rect.left + 7.0 * scale,
@@ -415,14 +561,32 @@ fn item(
             color,
         );
         label.left += 20.0 * scale;
+    } else if let Some(icon) = content.icon.as_deref().filter(|s| s.chars().count() <= 4) {
+        text(
+            &mut frame.list,
+            ui,
+            icon,
+            g,
+            &TextStyle::new("Segoe UI Emoji", 15.0 * scale),
+            color,
+        );
+        label.left += 20.0 * scale;
     }
-    let font = options
+    let design_weight = match content.target {
+        Target::Module(ModuleRef::Builtin(Module::App)) if tokens.family == Family::Macos => 700,
+        Target::Module(ModuleRef::Builtin(Module::Clock)) if tokens.family == Family::Mono => 600,
+        _ => tokens.font.weight,
+    };
+    let mut font = options
         .map_or(tokens.font.clone(), |o| TextStyle {
             size: o.style.size.unwrap_or(tokens.font.size),
-            weight: o.style.weight.unwrap_or(tokens.font.weight),
+            weight: o.style.weight.unwrap_or(design_weight),
             ..tokens.font.clone()
         })
         .scaled(scale);
+    if options.is_none() {
+        font.weight = design_weight;
+    }
     text(
         &mut frame.list,
         ui,
@@ -476,6 +640,13 @@ pub fn top(
     hover: Option<u32>,
 ) -> Frame {
     let t = &config.top;
+    let mut design_tokens = tokens.clone();
+    if t.design == mypaper_bars::presets::TopDesign::Minimal {
+        design_tokens.fill = Rgba::TRANSPARENT;
+        design_tokens.rim = Rgba::TRANSPARENT;
+        design_tokens.material = None;
+    }
+    let tokens = &design_tokens;
     let m = t.margin() as f32 * scale;
     let h = t.height as f32 * scale;
     let pad = t.padding.unwrap_or(5.0) as f32 * scale;
@@ -506,7 +677,7 @@ pub fn top(
     .min(available);
     let left = (width as f32 - w) / 2.0;
     let mut frame = Frame::new((width, (h + 2.0 * m).ceil() as u32));
-    if t.layout != TopLayout::Islands {
+    if t.layout != TopLayout::Islands && t.design != mypaper_bars::presets::TopDesign::Minimal {
         frame.panel(
             Rect::new(left, m, w, h),
             if t.layout == TopLayout::Strip {
@@ -529,6 +700,13 @@ pub fn top(
             for c in group {
                 let rect = Rect::new(x, m, c.width, h);
                 if rect.right <= width as f32 && rect.left >= 0.0 {
+                    if t.design == mypaper_bars::presets::TopDesign::Minimal {
+                        frame.list.ops.push(Op::Fill {
+                            rect,
+                            radius: 5.0 * scale,
+                            color: Rgba::HIT,
+                        });
+                    }
                     item(
                         &mut frame, c, rect, config, tokens, ui, images, scale, hover,
                     );
@@ -564,7 +742,7 @@ pub fn dock(
     let gap = d.spacing.unwrap_or(6.0) as f32 * scale;
     let length = if taskbar {
         if d.titles && horizontal {
-            168.0 * scale
+            d.button.unwrap_or(168.0) as f32 * scale
         } else {
             d.button.unwrap_or(d.size() + 16.0) as f32 * scale
         }
@@ -684,7 +862,8 @@ pub fn dock(
             continue;
         }
         let s = size * factor;
-        let hop = hops.get(i).copied().unwrap_or(0.0);
+        let motion = hops.get(i).copied().unwrap_or(0.0);
+        let hop = motion.max(0.0);
         let b = if forward {
             edge + hop
         } else {
@@ -718,7 +897,7 @@ pub fn dock(
             frame.list.ops.push(Op::Image {
                 rect: icon_rect,
                 image,
-                opacity: 1.0,
+                opacity: if motion < 0.0 { -motion } else { 1.0 },
                 source: None,
             });
         } else {
@@ -733,7 +912,9 @@ pub fn dock(
                     .to_string(),
                 icon_rect,
                 &TextStyle::new("Segoe UI", size * 0.55),
-                tokens.ink,
+                tokens
+                    .ink
+                    .with_alpha(if motion < 0.0 { -motion } else { 1.0 }),
             );
         }
         if taskbar && d.titles && horizontal {
@@ -754,7 +935,12 @@ pub fn dock(
             );
         }
         if !app.windows.is_empty() && d.indicator != IndicatorStyle::None {
-            let w = if active { 12.0 } else { 4.0 } * scale;
+            let (w, thickness, radius) = match d.indicator {
+                IndicatorStyle::Dot => (4.0, 4.0, 2.0),
+                IndicatorStyle::Bar => (length / scale * 0.65, 2.0, 0.0),
+                _ => (if active { 16.0 } else { 8.0 }, 4.0, 2.0),
+            };
+            let w = w * scale;
             let attention = app.windows.iter().any(|w| w.attention);
             let custom = if attention {
                 d.look.indicator.attention.as_ref()
@@ -778,11 +964,15 @@ pub fn dock(
             frame.list.ops.push(Op::Fill {
                 rect: convert(
                     a + (length - w) / 2.0,
-                    if forward { 1.0 } else { across - 3.0 * scale },
+                    if forward {
+                        1.0
+                    } else {
+                        across - (thickness + 1.0) * scale
+                    },
                     w,
-                    2.0 * scale,
+                    thickness * scale,
                 ),
-                radius: 2.0 * scale,
+                radius: radius * scale,
                 color,
             });
         }
@@ -809,6 +999,21 @@ pub fn dock(
         }
     }
     for (i, extra) in d.extras.iter().enumerate() {
+        if taskbar && *extra == Extra::Desktop {
+            let rect = convert(envelope - 6.0 * scale, 0.0, 6.0 * scale, across);
+            frame.hit(rect, "Show desktop", Target::Extra(*extra));
+            frame.list.ops.push(Op::Fill {
+                rect: convert(
+                    envelope - 6.0 * scale,
+                    4.0 * scale,
+                    scale,
+                    across - 8.0 * scale,
+                ),
+                radius: 0.0,
+                color: tokens.rim,
+            });
+            continue;
+        }
         let a =
             start + pad + apps.len() as f32 * (length + gap) + i as f32 * (size + gap) + maximum;
         let rect = convert(a, edge, size, size);
@@ -823,6 +1028,24 @@ pub fn dock(
             },
             Target::Extra(*extra),
         );
+        let key = if *extra == Extra::Desktop {
+            "desktop"
+        } else if model.trash_full {
+            "trash-full"
+        } else {
+            "trash"
+        };
+        if let Some((source, mono)) = images.glyph(key, d.look.glyphs.unwrap_or_default())
+            && let Some(image) = images.load(ui, &source, mono.then_some(tokens.ink))
+        {
+            frame.list.ops.push(Op::Image {
+                rect: rect.inflate(-4.0 * scale),
+                image,
+                opacity: 1.0,
+                source: None,
+            });
+            continue;
+        }
         text(
             &mut frame.list,
             ui,

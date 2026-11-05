@@ -48,6 +48,17 @@ pub enum LauncherLayout {
     Dashboard,
 }
 
+impl LauncherLayout {
+    /// The two retained native layouts. Old configuration names keep an explicit migration.
+    pub fn native(self) -> Self {
+        match self {
+            Self::Grid => Self::Win11,
+            Self::Dashboard => Self::Compact,
+            other => other,
+        }
+    }
+}
+
 /// `tray`: where the notification-area icons come from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]

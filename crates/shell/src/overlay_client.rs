@@ -30,6 +30,36 @@ pub fn install() {
     mypaper_ui::glass::install(Rc::new(Client::default()));
 }
 
+/// Starts WGC before a possible click. The bounded engine calls run on a worker so input
+/// delivery never waits for capture setup. Closing immediately keeps only its 3 s warmth.
+pub fn warm(client: HWND, shape: Shape) {
+    let client = client.0 as isize;
+    let _ = std::thread::Builder::new()
+        .name("glass-hover".into())
+        .spawn(move || {
+            let Some(engine) = request::find_engine() else {
+                return;
+            };
+            let client = HWND(client as _);
+            let start = std::time::Instant::now();
+            let _ = request::send(
+                engine,
+                &Request::Open {
+                    client,
+                    layer: Layer::Popup,
+                    rect: rect(shape),
+                    radius: 0.0,
+                    material: Material::CLEAR,
+                },
+            );
+            let _ = request::send(engine, &Request::Close { client });
+            log::debug!(
+                "hover capture setup: {:.1} ms",
+                start.elapsed().as_secs_f64() * 1000.0
+            );
+        });
+}
+
 #[derive(Default)]
 struct Client {
     /// The engine's request window, while it answers.

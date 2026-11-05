@@ -19,6 +19,7 @@ pub enum Done {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Watched {
     Core(Topic),
+    Apps,
     Mixer,
     Wifi,
 }

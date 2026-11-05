@@ -29,9 +29,10 @@ const SETTINGS: HitId = 12;
 const GROUP: HitId = 500;
 /// A card: `LIST + 2 * index` (the card) and `+ 1` (its dismiss button), in flat list order.
 const CARD: HitId = LIST;
+const TOGGLE_GROUP: HitId = 20_000;
 
 /// How often the open center reads the list again.
-const POLL: Duration = Duration::from_secs(3);
+const POLL: Duration = Duration::from_secs(4);
 
 /// Toasts of one app, newest first.
 #[derive(Debug, Clone, PartialEq)]
@@ -93,6 +94,7 @@ pub struct Center {
     calendar: Calendar,
     /// The current time for "ago" labels (refreshed with each read).
     now: u64,
+    scroll: usize,
 }
 
 impl Center {
@@ -108,6 +110,7 @@ impl Center {
             icons: Vec::new(),
             calendar: Calendar::new(cx),
             now: epoch_ms(),
+            scroll: 0,
         }
     }
 
@@ -122,6 +125,7 @@ impl Center {
             dnd: Some(Dnd::Off),
             calendar,
             now,
+            scroll: 0,
         }
     }
 
@@ -180,6 +184,7 @@ impl Panel for Center {
         // The month takes a fixed band at the bottom; the list gets what is left.
         let month = kit.px(276.0);
         let list_bottom = kit.limit - month;
+        let list_top = kit.y;
         match &self.list {
             None => kit.notice("…"),
             Some(NotificationList { error: Some(_), .. }) => {
@@ -189,7 +194,12 @@ impl Panel for Center {
             Some(_) if !has_any => kit.notice("No new notifications"),
             Some(_) => {
                 let mut group_shown = None;
-                for (n, (g, i)) in self.cards().into_iter().enumerate() {
+                for (n, (g, i)) in self
+                    .cards()
+                    .into_iter()
+                    .enumerate()
+                    .skip(self.scroll.min(self.cards().len().saturating_sub(1)))
+                {
                     if kit.y + kit.px(84.0) > list_bottom {
                         let style = kit.font(12.0, 400);
                         let center = Point::new(kit.left + kit.width() / 2.0, kit.y + kit.px(8.0));
@@ -212,6 +222,18 @@ impl Panel for Center {
                 }
             }
         }
+        let count = self.cards().len();
+        if count > 3 && (self.scroll > 0 || kit.y >= list_bottom - kit.px(90.0)) {
+            let track = (list_bottom - list_top).max(kit.px(30.0));
+            let height = (track * (3.0 / count as f32)).max(kit.px(18.0));
+            let y = list_top
+                + (track - height) * self.scroll.min(count - 1) as f32 / (count - 1) as f32;
+            kit.fill(
+                Rect::new(kit.right + kit.px(6.0), y, kit.px(2.0), height),
+                kit.px(1.0),
+                kit.look.faint(),
+            );
+        }
         kit.separator();
         self.calendar.month(kit, true);
     }
@@ -221,6 +243,14 @@ impl Panel for Center {
             return Effect::Redraw;
         }
         match id {
+            id if id >= TOGGLE_GROUP => {
+                if let Some(group) = self.groups.get((id - TOGGLE_GROUP) as usize)
+                    && !self.open.remove(&group.key)
+                {
+                    self.open.insert(group.key.clone());
+                }
+                Effect::Redraw
+            }
             DND | SETTINGS => {
                 system::open("ms-settings:notifications".into());
                 Effect::Close
@@ -273,20 +303,59 @@ impl Panel for Center {
     }
 
     fn wheel(&mut self, id: Option<HitId>, delta: i16, _: &mut Cx) -> Effect {
-        // Over the month it pages; the list is short enough to need no scrolling.
+        // The list scrolls independently; paging the month keeps the selected card.
         if id.is_some_and(|id| (100..140).contains(&id)) {
             self.calendar.wheel_page(delta);
+            return Effect::Redraw;
+        }
+        let old = self.scroll;
+        self.scroll = if delta > 0 {
+            self.scroll.saturating_sub(1)
+        } else {
+            (self.scroll + 1).min(self.cards().len().saturating_sub(1))
+        };
+        if old != self.scroll {
+            Effect::Redraw
+        } else {
+            Effect::None
+        }
+    }
+
+    fn swipe(&mut self, id: HitId, _: f32, cx: &mut Cx) -> Effect {
+        if let Some(index) = id.checked_sub(CARD)
+            && let Some(&(g, i)) = self.cards().get((index / 2) as usize)
+        {
+            self.dismiss(vec![self.groups[g].items[i].id], cx);
             return Effect::Redraw;
         }
         Effect::None
     }
 
+    fn key(&mut self, key: u16, _: &mut Cx) -> Option<Effect> {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{VK_NEXT, VK_PRIOR};
+        if key == VK_NEXT.0 || key == VK_PRIOR.0 {
+            self.scroll = if key == VK_PRIOR.0 {
+                self.scroll.saturating_sub(1)
+            } else {
+                (self.scroll + 1).min(self.cards().len().saturating_sub(1))
+            };
+            return Some(Effect::Redraw);
+        }
+        None
+    }
+
     fn reply(&mut self, reply: &Reply, cx: &mut Cx) -> bool {
         match reply {
             Reply::Notifications(list) => {
-                self.now = epoch_ms();
+                let now = epoch_ms();
+                let ages_changed = self.list.as_ref().is_some_and(|old| {
+                    old.notifications
+                        .iter()
+                        .any(|n| ago(n.at, now) != ago(n.at, self.now))
+                });
+                self.now = now;
                 if self.list.as_ref() == Some(list) {
-                    return false;
+                    return ages_changed;
                 }
                 self.groups = by_app(&list.notifications);
                 self.icons = self
@@ -322,17 +391,34 @@ impl Center {
         let height = kit.px(28.0);
         let icon = kit.px(16.0);
         let y = kit.y;
+        kit.hit(
+            TOGGLE_GROUP + g as HitId,
+            Rect::new(kit.left, y, kit.width() - kit.px(35.0), height),
+            Role::Button,
+            &format!("Expand or collapse {}", group.app),
+            true,
+        );
         match self.icons.get(g).cloned().flatten() {
             Some(image) => kit.image(
                 Rect::new(kit.left, y + (height - icon) / 2.0, icon, icon),
                 image,
             ),
-            None => kit.glyph(
-                Point::new(kit.left + icon / 2.0, y + height / 2.0),
-                glyph::BELL,
-                12.0,
-                kit.look.dim(),
-            ),
+            None => {
+                let style = kit.font(12.0, 600);
+                let letter = group
+                    .app
+                    .chars()
+                    .next()
+                    .unwrap_or('?')
+                    .to_uppercase()
+                    .to_string();
+                kit.text_centered(
+                    Point::new(kit.left + icon / 2.0, y + height / 2.0),
+                    &letter,
+                    &style,
+                    kit.look.dim(),
+                );
+            }
         }
         let style = kit.font(12.0, 600);
         let (_, h) = kit.text.measure("Ag", &style);
