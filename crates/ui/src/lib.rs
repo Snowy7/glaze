@@ -26,6 +26,7 @@ mod surface;
 mod text;
 pub mod text_field;
 mod tokens;
+mod watch;
 
 pub use app_window::{Chrome, Cursor, set_modal_hook};
 pub use geom::{PixelRect, Point, Rect, Rgba};
@@ -39,6 +40,7 @@ pub use surface::{Button, Event, Kind, Pointer, Surface, SurfaceId, next_event};
 pub use text::{Text, TextStyle};
 pub use text_field::TextField;
 pub use tokens::{Colors, Ink, Material, MenuMetrics, Step, Tokens, Typeface};
+pub use watch::FileWatch;
 
 /// Accessibility roles for [`Hit`] items.
 pub use accesskit::Role;

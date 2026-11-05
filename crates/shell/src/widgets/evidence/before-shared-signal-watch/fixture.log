@@ -1,0 +1,6 @@
+N4_MEDIA paused_existing=false
+N4_READY pid=16372 monitors=2 seconds=300
+N4_MONITORS [("\\\\.\\DISPLAY1", 96), ("\\\\.\\DISPLAY2", 96)]
+N4_CHECKPOINT elapsed_s=60.969 counters=(46, 3) visible=6/6 costs=WorkCosts { clock_us: 125, coverage_us: 54808, stats_us: 27918, paint_us: 82844, polls: 181, orders: 1, order_us: 304, plate_us: 105, poll_us: 656133 }
+N4_CHECKPOINT elapsed_s=266.605 counters=(151, 6) visible=6/6 costs=WorkCosts { clock_us: 432, coverage_us: 54907, stats_us: 119434, paint_us: 158158, polls: 619, orders: 1, order_us: 304, plate_us: 105, poll_us: 829180 }
+N4_DONE drivers=[]

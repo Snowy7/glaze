@@ -1,0 +1,11 @@
+N4_MEDIA paused_existing=false
+N4_CHECK app_activation=12/12
+N4_CHECK alpha_hit=1 widget_click=1 unicode_keyboard=1 z_order_after_click=1
+N4_CHECK show_desktop_and_restore=1
+N4_CHECK explorer_restart=1 recovered_widgets=6 dpi=[96, 96, 96, 96, 96, 96]
+N4_CHECK edit_drag=1 edit_resize=1 persisted_grid=1
+N4_CHECK overlay_topmost=1 overlay_desktop_while_editing=1 overlay_toggle=1
+N4_READY pid=25008 monitors=2 seconds=300
+N4_MONITORS [("\\\\.\\DISPLAY1", 96), ("\\\\.\\DISPLAY2", 96)]
+N4_CHECKPOINT elapsed_s=0.441 counters=(56, 8) visible=6/6 costs=WorkCosts { clock_us: 51, coverage_us: 1410072, stats_us: 3861, paint_us: 470671, polls: 291, orders: 7, order_us: 28836, plate_us: 237, poll_us: 3790246 }
+N4_DONE drivers=[]

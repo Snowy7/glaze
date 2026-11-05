@@ -1,0 +1,132 @@
+[2026-11-05T05:55:50Z INFO  mypaper_wallpaper] theme: Rainy Hong Kong (non-commercial) (C:\Users\you\.t3\worktrees\wallpaper\t3-dcf0a0a7\themes\rain-city)
+[2026-11-05T05:55:50Z INFO  mypaper_wallpaper] desktop host: Layered { progman: HWND(0xbd0512), defview: HWND(0x1802fc) }
+[2026-11-05T05:55:50Z INFO  mypaper_desktop::startup] READY component=wallpaper windows_ms=131.3 epoch_us=1793858150277240
+[2026-11-05T05:55:50Z INFO  mypaper_wallpaper::gpu] GPU: AMD Radeon(TM) Graphics (Dx12), preference=Integrated
+[2026-11-05T05:55:50Z INFO  mypaper_desktop::startup] READY component=wallpaper device_ms=699.3 epoch_us=1793858150845202
+[2026-11-05T05:55:51Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) ready in 166.5ms
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=wallpaper source_ms=866.3 epoch_us=1793858151012161
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=wallpaper loop_ms=867.9 epoch_us=1793858151013845
+[2026-11-05T05:55:51Z INFO  mypaper_wallpaper::overlay::capture] glass overlays: borderless capture allowed
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell main_ms=54.5 epoch_us=1793858151199867
+[2026-11-05T05:55:51Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell config_ms=65.8 epoch_us=1793858151211169
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=65.8 epoch_us=1793858151211176
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=69.5 epoch_us=1793858151214818
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell services_ms=69.5 epoch_us=1793858151214892
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=wallpaper first_frame_ms=1069.4 epoch_us=1793858151215338
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=71.1 epoch_us=1793858151216488
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=71.2 epoch_us=1793858151216534
+[2026-11-05T05:55:51Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-05T05:55:51Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180 (2 screens): ready after 65.5 ms (not waited on), copy 0.05 ms on the frame, write 2.01 ms off it
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=185.5 epoch_us=1793858151330826
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=320.5 epoch_us=1793858151465831
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=320.6 epoch_us=1793858151465961
+[2026-11-05T05:55:51Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=529.1 epoch_us=1793858151674470
+[2026-11-05T05:55:52Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T05:55:52Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-05T05:55:52Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T05:55:52Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T05:55:52Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 228.2908ms
+[2026-11-05T05:55:52Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-05T05:55:53Z INFO  mypaper_wallpaper::trim] trimmed the working set
+[2026-11-05T05:55:53Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=1914.6 epoch_us=1793858153059946
+[2026-11-05T05:55:53Z INFO  mypaper_shell] running
+[2026-11-05T05:55:53Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=2191.8 epoch_us=1793858153337139
+[2026-11-05T05:55:53Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2807.7 epoch_us=1793858153953105
+[2026-11-05T05:56:20Z INFO  mypaper_bars::flyouts::index] launcher: 41 apps indexed in 19.6390807s
+[2026-11-05T05:56:54Z INFO  mypaper_shell::widgets] widget checkpoint presents=(39, 2) costs=WorkCosts { clock_us: 76, coverage_us: 479, stats_us: 26194, paint_us: 41717, polls: 90, orders: 1, order_us: 46, plate_us: 37, poll_us: 581521 }
+[2026-11-05T05:56:54Z INFO  mypaper_shell::widgets] widget checkpoint id=calendar-1 rect=Rect { left: -642.0, top: 49.0, right: -333.0, bottom: 370.5 } visible=true
+[2026-11-05T05:56:54Z INFO  mypaper_shell::widgets] widget checkpoint id=clock-1 rect=Rect { left: 1918.0, top: 40.0, right: 2227.0, bottom: 251.66667 } visible=true
+[2026-11-05T05:56:54Z INFO  mypaper_shell::widgets] widget checkpoint id=notes-1 rect=Rect { left: -642.0, top: 708.0, right: -438.6667, bottom: 919.6667 } visible=true
+[2026-11-05T05:56:54Z INFO  mypaper_shell::widgets] widget checkpoint id=now-playing-1 rect=Rect { left: 1918.0, top: 369.5, right: 2332.6667, bottom: 581.1667 } visible=true
+[2026-11-05T05:56:54Z INFO  mypaper_shell::widgets] widget checkpoint id=system-monitor-1 rect=Rect { left: 1918.0, top: 699.0, right: 2227.0, bottom: 910.6667 } visible=true
+[2026-11-05T05:56:54Z INFO  mypaper_shell::widgets] widget checkpoint id=weather-1 rect=Rect { left: -642.0, top: 378.5, right: -333.0, bottom: 590.1667 } visible=true
+[2026-11-05T05:58:03Z INFO  mypaper_shell::widgets] widget checkpoint presents=(75, 4) costs=WorkCosts { clock_us: 308, coverage_us: 522, stats_us: 53813, paint_us: 68763, polls: 168, orders: 1, order_us: 46, plate_us: 37, poll_us: 638223 }
+[2026-11-05T05:58:03Z INFO  mypaper_shell::widgets] widget checkpoint id=calendar-1 rect=Rect { left: -642.0, top: 49.0, right: -333.0, bottom: 370.5 } visible=true
+[2026-11-05T05:58:03Z INFO  mypaper_shell::widgets] widget checkpoint id=clock-1 rect=Rect { left: 1918.0, top: 40.0, right: 2227.0, bottom: 251.66667 } visible=true
+[2026-11-05T05:58:03Z INFO  mypaper_shell::widgets] widget checkpoint id=notes-1 rect=Rect { left: -642.0, top: 708.0, right: -438.6667, bottom: 919.6667 } visible=true
+[2026-11-05T05:58:03Z INFO  mypaper_shell::widgets] widget checkpoint id=now-playing-1 rect=Rect { left: 1918.0, top: 369.5, right: 2332.6667, bottom: 581.1667 } visible=true
+[2026-11-05T05:58:03Z INFO  mypaper_shell::widgets] widget checkpoint id=system-monitor-1 rect=Rect { left: 1918.0, top: 699.0, right: 2227.0, bottom: 910.6667 } visible=true
+[2026-11-05T05:58:03Z INFO  mypaper_shell::widgets] widget checkpoint id=weather-1 rect=Rect { left: -642.0, top: 378.5, right: -333.0, bottom: 590.1667 } visible=true
+[2026-11-05T05:58:03Z INFO  mypaper_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-05T05:58:04Z INFO  mypaper_shell::widgets] native widgets stopped: presents=75 clock_presents=4
+[2026-11-05T05:58:04Z INFO  mypaper_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-05T05:58:04Z INFO  mypaper_shell] stopped
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell main_ms=66.3 epoch_us=1793858284348719
+[2026-11-05T05:58:04Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell config_ms=78.5 epoch_us=1793858284360887
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=78.5 epoch_us=1793858284360898
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=106.2 epoch_us=1793858284388613
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell services_ms=106.3 epoch_us=1793858284388675
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=108.4 epoch_us=1793858284390800
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=109.0 epoch_us=1793858284391409
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=220.5 epoch_us=1793858284502911
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=350.7 epoch_us=1793858284633124
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=350.8 epoch_us=1793858284633242
+[2026-11-05T05:58:04Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=563.3 epoch_us=1793858284845735
+[2026-11-05T05:58:05Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T05:58:05Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-05T05:58:05Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T05:58:05Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T05:58:05Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 221.0695ms
+[2026-11-05T05:58:05Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-05T05:58:05Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=1670.4 epoch_us=1793858285952801
+[2026-11-05T05:58:05Z INFO  mypaper_shell] running
+[2026-11-05T05:58:06Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=1951.9 epoch_us=1793858286234344
+[2026-11-05T05:58:06Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2551.8 epoch_us=1793858286834155
+[2026-11-05T05:58:06Z INFO  mypaper_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-05T05:58:07Z INFO  mypaper_shell::widgets] native widgets stopped: presents=7 clock_presents=1
+[2026-11-05T05:58:07Z INFO  mypaper_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-05T05:58:07Z INFO  mypaper_shell] stopped
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell main_ms=50.9 epoch_us=1793858287384398
+[2026-11-05T05:58:07Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell config_ms=63.6 epoch_us=1793858287397044
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=63.6 epoch_us=1793858287397051
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=96.3 epoch_us=1793858287429776
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell services_ms=96.4 epoch_us=1793858287429840
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=98.2 epoch_us=1793858287431624
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=98.6 epoch_us=1793858287432067
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=218.7 epoch_us=1793858287552156
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=348.0 epoch_us=1793858287681458
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=348.1 epoch_us=1793858287681584
+[2026-11-05T05:58:07Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=559.2 epoch_us=1793858287892639
+[2026-11-05T05:58:08Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T05:58:08Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-05T05:58:08Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T05:58:08Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T05:58:08Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 227.9387ms
+[2026-11-05T05:58:08Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-05T05:58:09Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=1695.1 epoch_us=1793858289028582
+[2026-11-05T05:58:09Z INFO  mypaper_shell] running
+[2026-11-05T05:58:09Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=1750.1 epoch_us=1793858289083532
+[2026-11-05T05:58:09Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2349.0 epoch_us=1793858289682455
+[2026-11-05T05:58:09Z INFO  mypaper_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-05T05:58:10Z INFO  mypaper_shell::widgets] native widgets stopped: presents=6 clock_presents=1
+[2026-11-05T05:58:10Z INFO  mypaper_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-05T05:58:10Z INFO  mypaper_shell] stopped
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell main_ms=42.7 epoch_us=1793858290294277
+[2026-11-05T05:58:10Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell config_ms=52.8 epoch_us=1793858290304367
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=52.8 epoch_us=1793858290304373
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=56.1 epoch_us=1793858290307636
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell services_ms=56.1 epoch_us=1793858290307682
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=57.6 epoch_us=1793858290309147
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=57.7 epoch_us=1793858290309197
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=166.9 epoch_us=1793858290418465
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=356.8 epoch_us=1793858290608384
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=357.0 epoch_us=1793858290608490
+[2026-11-05T05:58:10Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=608.7 epoch_us=1793858290860278
+[2026-11-05T05:58:11Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T05:58:11Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-05T05:58:11Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T05:58:11Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T05:58:11Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 104.9344ms
+[2026-11-05T05:58:11Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-05T05:58:11Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=1720.3 epoch_us=1793858291971847
+[2026-11-05T05:58:11Z INFO  mypaper_shell] running
+[2026-11-05T05:58:12Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=1762.7 epoch_us=1793858292014236
+[2026-11-05T05:58:12Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2357.3 epoch_us=1793858292608824
+[2026-11-05T05:58:12Z INFO  mypaper_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-05T05:58:13Z INFO  mypaper_shell::widgets] native widgets stopped: presents=7 clock_presents=1
+[2026-11-05T05:58:13Z INFO  mypaper_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-05T05:58:13Z INFO  mypaper_shell] stopped

@@ -113,6 +113,12 @@ impl Doc {
                 seen: text,
             },
             Err(e) => {
+                if id == DocId::Widgets
+                    && let Some(path) = &path
+                    && let Ok(bytes) = std::fs::read(path)
+                {
+                    let _ = mypaper_widgets::files::backup(path, &bytes);
+                }
                 let (raw, effective) = id.parse(id.empty()).expect("defaults parse");
                 Self {
                     path,
@@ -379,10 +385,15 @@ impl Docs {
         let path = self.doc(id).path.clone();
         let backup = match &path {
             Some(path) if path.exists() => {
-                let mut name = path.as_os_str().to_owned();
-                name.push(".bak");
-                let backup = PathBuf::from(name);
-                std::fs::copy(path, &backup).context("keeping a backup")?;
+                let backup = if id == DocId::Widgets {
+                    mypaper_widgets::files::backup(path, &std::fs::read(path)?)?
+                } else {
+                    let mut name = path.as_os_str().to_owned();
+                    name.push(".bak");
+                    let backup = PathBuf::from(name);
+                    std::fs::copy(path, &backup).context("keeping a backup")?;
+                    backup
+                };
                 Some(backup)
             }
             _ => None,
@@ -436,12 +447,7 @@ impl Docs {
         }
         let mut changes = Vec::new();
         for (id, before, raw, effective, text) in staged {
-            if let Some(path) = &self.doc(id).path
-                && let Err(e) = write_atomic(path, text.as_bytes())
-            {
-                self.saved = Saved::Failed(format!("{e:#}"));
-                return Err(e);
-            }
+            self.write(id, &raw)?;
             let doc = &mut self.docs[id.index()];
             doc.raw = raw.clone();
             doc.effective = effective;
@@ -470,7 +476,12 @@ impl Docs {
     fn write(&mut self, id: DocId, raw: &Value) -> Result<()> {
         let text = render(raw)?;
         if let Some(path) = &self.docs[id.index()].path {
-            write_atomic(path, text.as_bytes()).inspect_err(|e| {
+            let written = if id == DocId::Widgets {
+                mypaper_widgets::layout::Layout::save_value(raw, path)
+            } else {
+                write_atomic(path, text.as_bytes())
+            };
+            written.inspect_err(|e| {
                 self.saved = Saved::Failed(format!("{e:#}"));
             })?;
             self.saved = Saved::Done(Instant::now());
@@ -650,6 +661,47 @@ mod tests {
         );
         docs.start_over(DocId::Config, "{}").unwrap();
         assert!(docs.error(DocId::Config).is_none());
+    }
+
+    #[test]
+    fn widget_drag_commit_refuses_and_backs_up_an_external_parse_failure() {
+        let root = std::env::temp_dir().join(format!("mypaper-studio-write-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("widgets.json");
+        std::fs::write(&path, "{}").unwrap();
+        let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);
+        docs.docs[DocId::Widgets.index()].path = Some(path.clone());
+        docs.live(&[op(DocId::Widgets, "/overlay", Some(json!(false)))]).unwrap();
+        let malformed = b"{ invalid external edit\xff";
+        std::fs::write(&path, malformed).unwrap();
+        assert!(docs.commit_live("Overlay").is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), malformed);
+        assert_eq!(std::fs::read(root.join("widgets.json.bak")).unwrap(), malformed);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn starting_widgets_over_never_replaces_an_earlier_recovery_copy() {
+        let root =
+            std::env::temp_dir().join(format!("mypaper-studio-reset-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("widgets.json");
+        let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);
+        docs.docs[DocId::Widgets.index()].path = Some(path.clone());
+        std::fs::write(&path, "first malformed layout").unwrap();
+        let first = docs.start_over(DocId::Widgets, "{}").unwrap().unwrap();
+        std::fs::write(&path, "second malformed layout").unwrap();
+        let second = docs.start_over(DocId::Widgets, "{}").unwrap().unwrap();
+        assert_ne!(first, second);
+        assert_eq!(
+            std::fs::read_to_string(first).unwrap(),
+            "first malformed layout"
+        );
+        assert_eq!(
+            std::fs::read_to_string(second).unwrap(),
+            "second malformed layout"
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

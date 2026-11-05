@@ -7,13 +7,33 @@ use std::{
 };
 use tokio::sync::{Notify, mpsc};
 use windows::{
-    ApplicationModel::Package,
     Foundation::TypedEventHandler,
     UI::Notifications::Management::{
         UserNotificationListener, UserNotificationListenerAccessStatus,
     },
     UI::Notifications::{KnownNotificationBindings, NotificationKinds},
 };
+
+/// Identity queries must not retain a WinRT factory from an apartment that can be torn down
+/// (Studio creates previews on successive test threads). This Win32 query needs no apartment.
+fn package_family() -> Option<String> {
+    use windows::Win32::{
+        Foundation::ERROR_INSUFFICIENT_BUFFER,
+        Storage::Packaging::Appx::GetCurrentPackageFamilyName,
+    };
+    let mut len = 0;
+    // SAFETY: the first call asks for the size; the second owns a buffer of that many UTF-16 units.
+    unsafe {
+        if GetCurrentPackageFamilyName(&mut len, None) != ERROR_INSUFFICIENT_BUFFER || len == 0 {
+            return None;
+        }
+        let mut text = vec![0; len as usize];
+        GetCurrentPackageFamilyName(&mut len, Some(windows::core::PWSTR(text.as_mut_ptr())))
+            .ok()
+            .ok()?;
+        String::from_utf16(&text[..len.saturating_sub(1) as usize]).ok()
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Card {
@@ -47,7 +67,7 @@ pub fn request_access()
 /// Request first-run consent on the UI thread; completion invalidates consumers without blocking it.
 /// Windows persists Allowed/Denied. A per-package marker also remembers a dismissed prompt.
 pub fn request_access_once(completed: impl Fn() + Send + Sync + 'static) -> Result<()> {
-    let Ok(package) = Package::Current() else {
+    let Some(family) = package_family() else {
         log_snapshot_mode("package identity is absent");
         return Ok(());
     };
@@ -55,7 +75,6 @@ pub fn request_access_once(completed: impl Fn() + Send + Sync + 'static) -> Resu
     if listener.GetAccessStatus()? != UserNotificationListenerAccessStatus::Unspecified {
         return Ok(());
     }
-    let family = package.Id()?.FamilyName()?.to_string();
     let directory = std::path::PathBuf::from(
         std::env::var_os("LOCALAPPDATA")
             .ok_or_else(|| anyhow::anyhow!("LOCALAPPDATA is missing"))?,
@@ -161,7 +180,7 @@ pub(crate) async fn run(
     commands: &mut mpsc::Receiver<crate::Action>,
 ) -> Result<()> {
     let _com = crate::media::Com::new()?;
-    let packaged = Package::Current().is_ok();
+    let packaged = package_family().is_some();
     if !packaged {
         log_snapshot_mode("package identity is absent");
     }

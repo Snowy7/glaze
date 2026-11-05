@@ -522,14 +522,21 @@ pub fn run(app: &mut App, action: Action) {
             let Some(id) = app.nav.widget.clone() else { return };
             let l = layout(app);
             let Some(i) = l.get(&id).cloned() else { return };
+            let (total, here) = l.count_of(&i.widget, |other| other.monitor == i.monitor);
+            if app.registry.get(&i.widget).is_some_and(|widget| !widget.manifest.instances.allows(total, here)) {
+                app.alert("This widget has reached its instance limit");
+                return;
+            }
             match first_free(app, &l, i.size) {
                 Some(cell) => {
-                    let mut copy = serde_json::to_value(&i).unwrap_or_default();
-                    copy["instance"] = json!(l.new_id(&i.widget));
-                    copy["cell"] = json!(cell);
-                    let new_id = copy["instance"].as_str().unwrap_or_default().to_owned();
-                    app.apply("Duplicate widget", vec![Op { doc: DocId::Widgets, path: format!("/instances/{}", l.instances.len()), value: Some(copy) }]);
-                    app.nav.widget = Some(new_id);
+                    let duplicated = (|| -> anyhow::Result<String> {
+                        let root = mypaper_widgets::files::user("widget-data")?;
+                        duplicate(&mut app.docs, l, &id, cell, &root)
+                    })();
+                    match duplicated {
+                        Ok(new_id) => { app.nav.widget = Some(new_id); app.dirty = true; }
+                        Err(error) => app.alert(format!("Could not duplicate: {error:#}")),
+                    }
                 }
                 None => app.alert(format!("No room for another on Display {}", app.nav.display + 1)),
             }
@@ -607,6 +614,56 @@ pub fn run(app: &mut App, action: Action) {
             }
         }
         _ => {}
+    }
+}
+
+/// Copy content before committing its layout; rollback only the new instance on a failed write.
+fn duplicate(docs: &mut crate::docs::Docs, mut layout: Layout, id: &str, cell: [u32; 2], root: &std::path::Path) -> anyhow::Result<String> {
+    let new_id = layout.duplicate(id, cell)?;
+    anyhow::ensure!(!root.join(&new_id).exists(), "duplicate files already exist");
+    let mut storage = mypaper_widgets::storage::Storage::new(root.to_owned());
+    storage.duplicate(id, &new_id)?;
+    let copied = mypaper_widgets::pick::copy_instance_checked(root, id, &new_id).and_then(|()| {
+        docs.edit("Duplicate widget", &[Op {
+            doc: DocId::Widgets,
+            path: format!("/instances/{}", layout.instances.len() - 1),
+            value: Some(serde_json::to_value(layout.get(&new_id))?),
+        }])
+    });
+    if let Err(error) = copied {
+        mypaper_widgets::pick::remove_instance(root, &new_id);
+        let _ = storage.remove(&new_id);
+        return Err(error);
+    }
+    Ok(new_id)
+}
+
+#[cfg(test)]
+mod duplication_tests {
+    use super::*;
+    #[test]
+    fn studio_duplicates_owned_photos_and_rolls_back_when_the_layout_is_invalid() {
+        let root = std::env::temp_dir().join(format!("mypaper-studio-copy-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("photo-1/files")).unwrap();
+        std::fs::write(root.join("photo-1/files/picture.png"), b"picked picture").unwrap();
+        let url = mypaper_widgets::pick::data_url("photo", "photo-1", "picture.png");
+        let raw = json!({"instances":[{"instance":"photo-1","widget":"photo","monitor":"primary","cell":[0,0],"size":[2,2],"settings":{"images":[url]}}]}).to_string();
+        let mut storage = mypaper_widgets::storage::Storage::new(root.clone());
+        storage.set("photo-1", "current", Some(json!(url))).unwrap();
+        let mut docs = crate::docs::Docs::fixture(["{}", "{\"version\":1}", &raw, "{}"]);
+        let copied = duplicate(&mut docs, Layout::parse(&raw).unwrap(), "photo-1", [2,0], &root).unwrap();
+        let owned_url = mypaper_widgets::pick::data_url("photo", &copied, "picture.png");
+        assert_eq!(docs.doc(DocId::Widgets).raw["instances"][1]["settings"]["images"][0], owned_url);
+        assert_eq!(storage.get(&copied, "current").unwrap(), json!(owned_url));
+        mypaper_widgets::pick::remove_instance(&root, "photo-1");
+        assert_eq!(std::fs::read(root.join(&copied).join("files/picture.png")).unwrap(), b"picked picture");
+        let layout = Layout::parse(&docs.doc(DocId::Widgets).raw.to_string()).unwrap();
+        let mut broken = crate::docs::Docs::fixture(["{}", "{\"version\":1}", "broken", "{}"]);
+        assert!(duplicate(&mut broken, layout, &copied, [4,0], &root).is_err());
+        assert!(!root.join("photo-3").exists());
+        assert!(!root.join("photo-3.json").exists());
+        assert!(root.join(&copied).join("files/picture.png").exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
 

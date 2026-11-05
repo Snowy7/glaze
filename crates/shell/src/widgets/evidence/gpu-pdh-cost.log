@@ -1,0 +1,10 @@
+raw status=0 count=824 bytes=145950
+raw first=227386 second=134383231070117165 stamp=01dd6cef5501552d mult=1 status=0
+raw first=430613866 second=134383231070117165 stamp=01dd6cef5501552d mult=1 status=0
+raw first=124736256 second=134383231070117165 stamp=01dd6cef5501552d mult=1 status=0
+raw first=735317992 second=134383231070117165 stamp=01dd6cef5501552d mult=1 status=0
+raw first=693578 second=134383231070117165 stamp=01dd6cef5501552d mult=1 status=0
+raw first=18882 second=134383231070117165 stamp=01dd6cef5501552d mult=1 status=0
+kind=collect sample_wall_us=378.6 cpu_us=375.0 bad=0
+kind=formatted sample_wall_us=633.2 cpu_us=625.0 bad=0
+kind=raw sample_wall_us=309.5 cpu_us=312.5 bad=0

@@ -1,0 +1,68 @@
+[2026-11-05T06:07:31Z INFO  mypaper_wallpaper] theme: Rainy Hong Kong (non-commercial) (C:\Users\you\.t3\worktrees\wallpaper\t3-dcf0a0a7\themes\rain-city)
+[2026-11-05T06:07:31Z INFO  mypaper_wallpaper] desktop host: Layered { progman: HWND(0xbd0512), defview: HWND(0x1802fc) }
+[2026-11-05T06:07:31Z INFO  mypaper_desktop::startup] READY component=wallpaper windows_ms=133.9 epoch_us=1793858851884436
+[2026-11-05T06:07:32Z INFO  mypaper_wallpaper::gpu] GPU: AMD Radeon(TM) Graphics (Dx12), preference=Integrated
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=wallpaper device_ms=610.7 epoch_us=1793858852361258
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell main_ms=37.1 epoch_us=1793858852452352
+[2026-11-05T06:07:32Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell config_ms=48.4 epoch_us=1793858852463681
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=48.4 epoch_us=1793858852463688
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=52.0 epoch_us=1793858852467306
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell services_ms=52.1 epoch_us=1793858852467350
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=53.5 epoch_us=1793858852468823
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=53.6 epoch_us=1793858852468865
+[2026-11-05T06:07:32Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) ready in 162.0ms
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=wallpaper source_ms=773.1 epoch_us=1793858852523625
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=wallpaper loop_ms=802.9 epoch_us=1793858852553440
+[2026-11-05T06:07:32Z INFO  mypaper_wallpaper::overlay::capture] glass overlays: borderless capture allowed
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=161.0 epoch_us=1793858852576270
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=293.4 epoch_us=1793858852708734
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=293.6 epoch_us=1793858852708847
+[2026-11-05T06:07:32Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=517.0 epoch_us=1793858852932282
+[2026-11-05T06:07:33Z INFO  mypaper_desktop::startup] READY component=wallpaper first_frame_ms=1276.5 epoch_us=1793858853027035
+[2026-11-05T06:07:33Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-05T06:07:33Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180 (2 screens): ready after 55.1 ms (not waited on), copy 0.05 ms on the frame, write 3.59 ms off it
+[2026-11-05T06:07:33Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T06:07:33Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-05T06:07:33Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T06:07:34Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T06:07:34Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 160.506ms
+[2026-11-05T06:07:34Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-05T06:07:34Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=2091.0 epoch_us=1793858854506317
+[2026-11-05T06:07:34Z INFO  mypaper_shell] running
+[2026-11-05T06:07:34Z INFO  mypaper_wallpaper::trim] trimmed the working set
+[2026-11-05T06:07:34Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=2229.5 epoch_us=1793858854644786
+[2026-11-05T06:07:35Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2926.9 epoch_us=1793858855342205
+[2026-11-05T06:07:43Z INFO  mypaper_bars::flyouts::index] launcher: 41 apps indexed in 1.3833207s
+[2026-11-05T06:07:55Z INFO  mypaper_shell::widgets] widget checkpoint presents=(18, 1) costs=WorkCosts { clock_us: 38, coverage_us: 475, stats_us: 12127, paint_us: 28961, polls: 47, orders: 1, order_us: 46, plate_us: 32, poll_us: 555674 }
+[2026-11-05T06:07:55Z INFO  mypaper_shell::widgets] widget checkpoint id=calendar-1 rect=Rect { left: -642.0, top: 49.0, right: -333.0, bottom: 370.5 } visible=true
+[2026-11-05T06:07:55Z INFO  mypaper_shell::widgets] widget checkpoint id=clock-1 rect=Rect { left: 1918.0, top: 40.0, right: 2227.0, bottom: 251.66667 } visible=true
+[2026-11-05T06:07:55Z INFO  mypaper_shell::widgets] widget checkpoint id=notes-1 rect=Rect { left: -642.0, top: 708.0, right: -438.6667, bottom: 919.6667 } visible=true
+[2026-11-05T06:07:55Z INFO  mypaper_shell::widgets] widget checkpoint id=now-playing-1 rect=Rect { left: 1918.0, top: 369.5, right: 2332.6667, bottom: 581.1667 } visible=true
+[2026-11-05T06:07:55Z INFO  mypaper_shell::widgets] widget checkpoint id=system-monitor-1 rect=Rect { left: 1918.0, top: 699.0, right: 2227.0, bottom: 910.6667 } visible=true
+[2026-11-05T06:07:55Z INFO  mypaper_shell::widgets] widget checkpoint id=weather-1 rect=Rect { left: -642.0, top: 378.5, right: -333.0, bottom: 590.1667 } visible=true
+[2026-11-05T06:09:04Z INFO  mypaper_shell::widgets] widget checkpoint presents=(54, 3) costs=WorkCosts { clock_us: 121, coverage_us: 512, stats_us: 42780, paint_us: 55556, polls: 126, orders: 1, order_us: 46, plate_us: 32, poll_us: 614628 }
+[2026-11-05T06:09:04Z INFO  mypaper_shell::widgets] widget checkpoint id=calendar-1 rect=Rect { left: -642.0, top: 49.0, right: -333.0, bottom: 370.5 } visible=true
+[2026-11-05T06:09:04Z INFO  mypaper_shell::widgets] widget checkpoint id=clock-1 rect=Rect { left: 1918.0, top: 40.0, right: 2227.0, bottom: 251.66667 } visible=true
+[2026-11-05T06:09:04Z INFO  mypaper_shell::widgets] widget checkpoint id=notes-1 rect=Rect { left: -642.0, top: 708.0, right: -438.6667, bottom: 919.6667 } visible=true
+[2026-11-05T06:09:04Z INFO  mypaper_shell::widgets] widget checkpoint id=now-playing-1 rect=Rect { left: 1918.0, top: 369.5, right: 2332.6667, bottom: 581.1667 } visible=true
+[2026-11-05T06:09:04Z INFO  mypaper_shell::widgets] widget checkpoint id=system-monitor-1 rect=Rect { left: 1918.0, top: 699.0, right: 2227.0, bottom: 910.6667 } visible=true
+[2026-11-05T06:09:04Z INFO  mypaper_shell::widgets] widget checkpoint id=weather-1 rect=Rect { left: -642.0, top: 378.5, right: -333.0, bottom: 590.1667 } visible=true
+[2026-11-05T06:10:30Z INFO  mypaper_shell::widgets] widget checkpoint presents=(99, 4) costs=WorkCosts { clock_us: 242, coverage_us: 560, stats_us: 55525, paint_us: 91274, polls: 225, orders: 1, order_us: 46, plate_us: 37, poll_us: 667035 }
+[2026-11-05T06:10:30Z INFO  mypaper_shell::widgets] widget checkpoint id=calendar-1 rect=Rect { left: -642.0, top: 49.0, right: -333.0, bottom: 370.5 } visible=true
+[2026-11-05T06:10:30Z INFO  mypaper_shell::widgets] widget checkpoint id=clock-1 rect=Rect { left: 1918.0, top: 40.0, right: 2227.0, bottom: 251.66667 } visible=true
+[2026-11-05T06:10:30Z INFO  mypaper_shell::widgets] widget checkpoint id=notes-1 rect=Rect { left: -642.0, top: 708.0, right: -438.6667, bottom: 919.6667 } visible=true
+[2026-11-05T06:10:30Z INFO  mypaper_shell::widgets] widget checkpoint id=now-playing-1 rect=Rect { left: 1918.0, top: 369.5, right: 2332.6667, bottom: 581.1667 } visible=true
+[2026-11-05T06:10:30Z INFO  mypaper_shell::widgets] widget checkpoint id=system-monitor-1 rect=Rect { left: 1918.0, top: 699.0, right: 2227.0, bottom: 910.6667 } visible=true
+[2026-11-05T06:10:30Z INFO  mypaper_shell::widgets] widget checkpoint id=weather-1 rect=Rect { left: -642.0, top: 378.5, right: -333.0, bottom: 590.1667 } visible=true
+[2026-11-05T06:11:46Z INFO  mypaper_shell::widgets] widget checkpoint presents=(133, 5) costs=WorkCosts { clock_us: 339, coverage_us: 601, stats_us: 60103, paint_us: 115059, polls: 305, orders: 1, order_us: 46, plate_us: 42, poll_us: 698171 }
+[2026-11-05T06:11:46Z INFO  mypaper_shell::widgets] widget checkpoint id=calendar-1 rect=Rect { left: -642.0, top: 49.0, right: -333.0, bottom: 370.5 } visible=true
+[2026-11-05T06:11:46Z INFO  mypaper_shell::widgets] widget checkpoint id=clock-1 rect=Rect { left: 1918.0, top: 40.0, right: 2227.0, bottom: 251.66667 } visible=true
+[2026-11-05T06:11:46Z INFO  mypaper_shell::widgets] widget checkpoint id=notes-1 rect=Rect { left: -642.0, top: 708.0, right: -438.6667, bottom: 919.6667 } visible=true
+[2026-11-05T06:11:46Z INFO  mypaper_shell::widgets] widget checkpoint id=now-playing-1 rect=Rect { left: 1918.0, top: 369.5, right: 2332.6667, bottom: 581.1667 } visible=true
+[2026-11-05T06:11:46Z INFO  mypaper_shell::widgets] widget checkpoint id=system-monitor-1 rect=Rect { left: 1918.0, top: 699.0, right: 2227.0, bottom: 910.6667 } visible=true
+[2026-11-05T06:11:46Z INFO  mypaper_shell::widgets] widget checkpoint id=weather-1 rect=Rect { left: -642.0, top: 378.5, right: -333.0, bottom: 590.1667 } visible=true
+[2026-11-05T06:11:46Z INFO  mypaper_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-05T06:11:47Z INFO  mypaper_shell::widgets] native widgets stopped: presents=133 clock_presents=5
+[2026-11-05T06:11:47Z INFO  mypaper_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-05T06:11:47Z INFO  mypaper_shell] stopped

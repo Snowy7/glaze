@@ -1,0 +1,26 @@
+[2026-11-05T06:31:15Z INFO  mypaper_wallpaper::overlay::capture] glass overlays: borderless capture allowed
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell main_ms=44.8 epoch_us=1793860275778386
+[2026-11-05T06:31:15Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell config_ms=59.2 epoch_us=1793860275792753
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=59.2 epoch_us=1793860275792761
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=62.6 epoch_us=1793860275796187
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell services_ms=62.7 epoch_us=1793860275796241
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=64.2 epoch_us=1793860275797768
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=64.2 epoch_us=1793860275797829
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=200.5 epoch_us=1793860275934097
+[2026-11-05T06:31:15Z INFO  mypaper_desktop::startup] READY component=wallpaper first_frame_ms=1154.1 epoch_us=1793860275990197
+[2026-11-05T06:31:15Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-05T06:31:16Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=358.6 epoch_us=1793860276092215
+[2026-11-05T06:31:16Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=358.7 epoch_us=1793860276092328
+[2026-11-05T06:31:16Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=611.1 epoch_us=1793860276344667
+[2026-11-05T06:31:17Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T06:31:17Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-05T06:31:17Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T06:31:17Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T06:31:17Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 167.3879ms
+[2026-11-05T06:31:17Z INFO  mypaper_wallpaper::trim] trimmed the working set
+[2026-11-05T06:31:18Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-05T06:31:18Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=2370.2 epoch_us=1793860278103807
+[2026-11-05T06:31:18Z INFO  mypaper_shell] running
+[2026-11-05T06:31:18Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=2444.6 epoch_us=1793860278178201
+[2026-11-05T06:31:18Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2836.0 epoch_us=1793860278569531

@@ -109,6 +109,316 @@ fn now() -> Stamp {
         ms: 1793792220000,
     }
 }
+
+#[test]
+#[ignore = "compares real meter repaint strategies under the desktop lock"]
+fn profile_system_repaint_cost() {
+    use windows::Win32::{
+        Foundation::FILETIME,
+        System::Threading::{GetCurrentProcess, GetProcessTimes},
+    };
+    let busy = || {
+        let (mut a, mut b, mut k, mut u) = (
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+        );
+        // SAFETY: read-only accounting of this test process into valid outputs.
+        unsafe { GetProcessTimes(GetCurrentProcess(), &mut a, &mut b, &mut k, &mut u).unwrap() };
+        let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
+        ticks(k) + ticks(u)
+    };
+    let root = temp("meter-repaint-cost");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut ui = Ui::new().unwrap();
+    let mut m = fixture("system-monitor", root.clone());
+    m.placed.appearance.insert("style".into(), json!("liquid"));
+    let tokens = tokens(&m.placed.appearance);
+    let size = (m.placed.size[0] * 96 - 8, m.placed.size[1] * 96 - 8);
+    let frames: Vec<_> = (0..60)
+        .map(|i| {
+            let stats = m.stats.as_mut().unwrap();
+            stats.cpu = (i % 12) as f64;
+            stats.gpu = Some((17 + i % 7) as f64);
+            stats.net = Some(mypaper_widgets::stats::Net {
+                down: (i % 8) as f64 * 1000.0,
+                up: (i % 5) as f64 * 1000.0,
+            });
+            view::view(
+                &m,
+                &tokens,
+                view::Frame {
+                    size,
+                    scale: 1.0,
+                    now: now(),
+                    instant: Instant::now(),
+                    editing: false,
+                },
+                &mut ui.text,
+            )
+        })
+        .collect();
+    for sparse in [false, true] {
+        let mut surface = Surface::new(
+            Kind::Popup { activate: false },
+            "Widget repaint probe",
+            Role::Pane,
+        )
+        .unwrap();
+        for pass in 0..2 {
+            let count = if pass == 0 { 120 } else { 1000 };
+            let at = Instant::now();
+            let before = busy();
+            for i in 0..count {
+                let list = frames[i % frames.len()].clone();
+                if sparse {
+                    surface.present_sparse(&mut ui, (0, 0), size, list).unwrap();
+                } else {
+                    surface.present(&mut ui, (0, 0), size, list).unwrap();
+                }
+            }
+            if pass != 0 {
+                println!(
+                    "meter sparse={sparse} wall_us={} cpu_us={}",
+                    at.elapsed().as_micros() / count as u128,
+                    (busy() - before) / (count as u64 * 10)
+                );
+            }
+        }
+    }
+    for capacity in [64, 192] {
+        let mut ui = Ui::new().unwrap();
+        ui.text.set_capacity(capacity);
+        for pass in 0..2 {
+            let count = if pass == 0 { 120 } else { 1000 };
+            let at = Instant::now();
+            let before = busy();
+            for i in 0..count {
+                let stats = m.stats.as_mut().unwrap();
+                stats.cpu = (i % 12) as f64;
+                stats.gpu = Some((17 + i % 7) as f64);
+                stats.net = Some(mypaper_widgets::stats::Net {
+                    down: (i % 60) as f64 * 1000.0,
+                    up: (i % 17) as f64 * 1000.0,
+                });
+                std::hint::black_box(view::view(
+                    &m,
+                    &tokens,
+                    view::Frame {
+                        size,
+                        scale: 1.0,
+                        now: now(),
+                        instant: Instant::now(),
+                        editing: false,
+                    },
+                    &mut ui.text,
+                ));
+            }
+            if pass != 0 {
+                println!(
+                    "meter view cache={capacity} wall_us={} cpu_us={}",
+                    at.elapsed().as_micros() / count as u128,
+                    (busy() - before) / (count as u64 * 10)
+                );
+            }
+        }
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn media_timeline_updates_reuse_artwork_and_removing_art_clears_its_material() {
+    let ui = Ui::new().unwrap();
+    let root = temp("media-art-cache");
+    let path = root.join("cover.png");
+    let image = mypaper_ui::Image {
+        width: 2,
+        height: 2,
+        pixels: [40, 80, 160, 255].repeat(4),
+    };
+    golden::write(&image, &path).unwrap();
+    let uri = format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(std::fs::read(&path).unwrap())
+    );
+    let mut m = fixture("now-playing", root.clone());
+    let mut data = json!({"artwork":uri,"position":0,"playing":true});
+    update_artwork(&mut m, &ui, &data);
+    let art = m.artwork.clone().unwrap();
+    let material = m.artwork_backdrop.clone().unwrap();
+    m.data = data.clone();
+    data["position"] = json!(30);
+    data["playing"] = json!(false);
+    update_artwork(&mut m, &ui, &data);
+    assert!(Arc::ptr_eq(&art, m.artwork.as_ref().unwrap()));
+    assert!(Arc::ptr_eq(&material, m.artwork_backdrop.as_ref().unwrap()));
+    data["artwork"] = Value::Null;
+    update_artwork(&mut m, &ui, &data);
+    assert!(m.artwork.is_none() && m.artwork_backdrop.is_none() && m.artwork_tint.is_none());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn widget_styles_preserve_none_solid_and_explicit_text_controls() {
+    let mut ui = Ui::new().unwrap();
+    let mut m = fixture("quote", temp("appearance"));
+    for style in ["minimal", "depth", "paper", "aero", "liquid"] {
+        m.placed.appearance.insert("style".into(), json!(style));
+        for surface in ["none", "solid"] {
+            m.placed.appearance.insert("surface".into(), json!(surface));
+            let tokens = tokens(&m.placed.appearance);
+            let list = view::view(
+                &m,
+                &tokens,
+                view::Frame {
+                    size: (320, 128),
+                    scale: 1.0,
+                    now: now(),
+                    instant: Instant::now(),
+                    editing: false,
+                },
+                &mut ui.text,
+            );
+            let image = render(&mut ui, &list, 320, 128).unwrap();
+            assert_eq!(
+                image.pixel(8, 40)[3],
+                if surface == "none" { 1 } else { 255 },
+                "{style}/{surface}"
+            );
+            assert!(
+                list.ops
+                    .iter()
+                    .any(|op| matches!(op,Op::Text {color,..} if *color==tokens.colors.text)),
+                "{style}: explicit text colors survive"
+            );
+        }
+    }
+}
+
+#[test]
+fn metric_invalidation_uses_displayed_precision_and_stable_trace_identity() {
+    let mut m = fixture("system-monitor", temp("metrics"));
+    let before = metrics::visible(&m);
+    m.stats.as_mut().unwrap().cpu += 0.1;
+    assert_eq!(
+        before,
+        metrics::visible(&m),
+        "subprecision changes do not repaint"
+    );
+    m.stats.as_mut().unwrap().cpu += 1.0;
+    assert_ne!(before, metrics::visible(&m));
+    m.placed.settings.insert("cpu".into(), json!(false));
+    let selected = metrics::visible(&m);
+    assert_eq!(selected[0].id, "ram");
+    m.history.insert("ram".into(), [12.0, 42.0].into());
+    assert_eq!(m.history[&selected[0].id][1], 42.0);
+    assert!(metrics::visible(&m).iter().any(|metric| metric.id == "net"));
+}
+
+#[test]
+fn activity_credits_follow_insertions_and_deletions_and_long_break_resets_cycle() {
+    let mut todo = fixture("todo", temp("activity-indices"));
+    todo.counted.insert(0, "2026-11-03".into());
+    todo.counted.insert(2, "2026-11-04".into());
+    todo.insert_counted(0);
+    assert_eq!(todo.counted[&1], "2026-11-03");
+    todo.remove_counted(2);
+    assert_eq!(todo.counted[&1], "2026-11-03");
+    assert_eq!(todo.counted[&2], "2026-11-04");
+    let mut timer = Timer::idle(&todo.placed.settings, "long", 4);
+    timer = timer.enter(&todo.placed.settings, "focus");
+    assert_eq!(timer.sessions, 0);
+}
+
+#[test]
+fn event_editor_validates_date_time_and_preserves_legacy_wire_data() {
+    let mut draft = model::EventDraft {
+        title: "Appointment".into(),
+        date: "2026-11-04".into(),
+        time: "09:30".into(),
+        color: 3,
+        part: model::EventPart::Title,
+    };
+    let event = draft.event().unwrap();
+    assert_eq!(event["color"], 3);
+    assert_eq!(event["time"], "09:30");
+    draft.time = "25:01".into();
+    assert!(draft.event().is_err());
+    draft.time = String::new();
+    draft.date = "2026-02-30".into();
+    assert!(draft.event().is_err());
+    draft.date = "2026-02-28".into();
+    assert!(draft.event().is_ok());
+    assert_eq!(view::price_label(0.00001234, "usd"), "$0.0000123");
+    assert_eq!(view::price_label(0.00000000001234, "usd"), "$1.23e-11");
+    assert_eq!(view::price_label(1234.2, "jpy"), "¥1234");
+}
+
+#[test]
+fn long_content_scrolls_to_the_last_item_without_hits_outside_the_viewport() {
+    let mut ui = Ui::new().unwrap();
+    for id in ["notes", "todo", "rss", "calendar", "launcher"] {
+        let mut m = fixture(id, temp("scroll-content"));
+        match m.kind {
+            Widget::Notes => m.note = (0..80).map(|i| format!("* [ ] Task {i}\n")).collect(),
+            Widget::Todo => {
+                m.tasks = (0..80)
+                    .map(|i| Task {
+                        text: format!("Task {i}"),
+                        done: false,
+                    })
+                    .collect()
+            }
+            Widget::Rss => {
+                m.data["items"]=json!((0..30).map(|i|json!({"title":format!("Headline {i}"),"link":format!("https://example.com/{i}")})).collect::<Vec<_>>());
+                m.placed.settings.insert("maxItems".into(), json!(30));
+            }
+            Widget::Calendar => {
+                m.placed.settings.insert("variant".into(), json!("agenda"));
+                m.events = (0..80)
+                    .map(|i| json!({"date":"2026-11-05","title":format!("Event {i}")}))
+                    .collect();
+            }
+            Widget::Launcher => {
+                m.placed.settings.insert("variant".into(), json!("list"));
+                m.placed.settings.insert("shortcuts".into(),json!((0..24).map(|i|json!({"label":format!("App {i}"),"target":"https://example.com"})).collect::<Vec<_>>()));
+            }
+            _ => unreachable!(),
+        }
+        let tokens = tokens(&m.placed.appearance);
+        let frame = || view::Frame {
+            size: (320, 240),
+            scale: 1.0,
+            now: now(),
+            instant: Instant::now(),
+            editing: false,
+        };
+        let first = view::view(&m, &tokens, frame(), &mut ui.text);
+        assert!(m.scroll_max.get() > 0.0, "{id} has overflow");
+        m.scroll = m.scroll_max.get();
+        let last = view::view(&m, &tokens, frame(), &mut ui.text);
+        assert!(last.damage(&first).is_some(), "{id}: scroll repaints");
+        let expected = match m.kind {
+            Widget::Notes => view::NOTE_TASK + 79,
+            Widget::Todo => view::ITEM + 79,
+            Widget::Rss => view::ITEM + 29,
+            Widget::Calendar => view::EDIT_TASK + 79,
+            Widget::Launcher => view::ITEM + 23,
+            _ => unreachable!(),
+        };
+        assert!(
+            last.hits.iter().any(|h| h.id == expected),
+            "{id}: final item is reachable"
+        );
+        assert!(
+            last.hits
+                .iter()
+                .all(|h| h.rect.top >= 0.0 && h.rect.bottom <= 240.0),
+            "{id}: clipped hit geometry"
+        );
+    }
+}
 fn temp(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("mypaper-n4-{name}-{}", std::process::id()))
 }
@@ -120,10 +430,12 @@ fn every_native_widget_has_a_golden_and_hit_testable_body() {
     let stamp = now();
     let instant = Instant::now();
     for id in registry::builtins().widgets.keys() {
+        eprintln!("Checking golden: {id}");
         let m = fixture(id, root.clone());
         let size = match m.kind {
             Widget::Clock => (320, 180),
             Widget::Calendar => (320, 310),
+            Widget::Media if id == "media-pill" => (360, 96),
             Widget::Quote | Widget::Countdown => (320, 128),
             _ => (360, 240),
         };
@@ -145,8 +457,18 @@ fn every_native_widget_has_a_golden_and_hit_testable_body() {
             "{id}: body hit"
         );
         let image = render(&mut ui, &list, size.0, size.1).unwrap();
+        let radius = view::plate_radius(&m, Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32), 1.0)
+            .min(size.0 as f32 / 2.0)
+            .min(size.1 as f32 / 2.0);
         for y in 24..size.1 - 24 {
             for x in 24..size.0 - 24 {
+                let px = x as f32 + 0.5;
+                let py = y as f32 + 0.5;
+                let dx = px - px.clamp(radius, size.0 as f32 - radius);
+                let dy = py - py.clamp(radius, size.1 as f32 - radius);
+                if dx * dx + dy * dy > radius * radius {
+                    continue;
+                }
                 assert!(image.pixel(x, y)[3] >= 1, "{id}: alpha hole at {x},{y}");
             }
         }
@@ -190,8 +512,15 @@ fn scheduled_ticks_stop_when_hidden_and_minute_clock_never_ticks_faster() {
     media.data["playing"] = json!(true);
     media.schedule(now, instant);
     assert_eq!(
+        media.next,
+        Some(instant + Duration::from_secs(1)),
+        "visible elapsed/progress interpolates without polling SMTC"
+    );
+    media.data["duration"] = Value::Null;
+    media.schedule(now, instant);
+    assert_eq!(
         media.next, None,
-        "playing media changes only on SMTC events"
+        "unsupported/live timelines need no interpolation tick"
     );
     let mut system = fixture("system-monitor", temp("scheduling"));
     system.schedule(now, instant);
@@ -341,7 +670,7 @@ fn widget_actions_have_click_targets_and_edit_controls_cover_their_shapes() {
 fn desktop_kind_is_a_top_level_layered_tool_window() {
     use windows::Win32::UI::WindowsAndMessaging::{
         GWL_EXSTYLE, GWL_STYLE, GetParent, GetWindowLongPtrW, WS_CHILD, WS_EX_LAYERED,
-        WS_EX_TOOLWINDOW, WS_POPUP,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
     };
     let mut ui = Ui::new().unwrap();
     let parent = Surface::new(
@@ -376,6 +705,11 @@ fn desktop_kind_is_a_top_level_layered_tool_window() {
         assert_ne!(
             GetWindowLongPtrW(child.hwnd(), GWL_EXSTYLE) as u32 & WS_EX_LAYERED.0,
             0
+        );
+        assert_eq!(
+            GetWindowLongPtrW(child.hwnd(), GWL_EXSTYLE) as u32 & WS_EX_NOACTIVATE.0,
+            0,
+            "clicks activate keyboard editing; the position guard preserves desktop order"
         );
     }
     let frame = DisplayList {

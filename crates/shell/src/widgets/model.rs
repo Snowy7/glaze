@@ -5,6 +5,7 @@ use mypaper_ui::{Image, TextField};
 use mypaper_widgets::{layout::Placed, stats::SystemStats, storage::Storage};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -69,6 +70,18 @@ pub struct Timer {
     pub sessions: u32,
 }
 impl Timer {
+    /// Entering any new mode after a long break starts a fresh session cycle.
+    pub fn enter(&self, settings: &Map<String, Value>, mode: &str) -> Self {
+        Self::idle(
+            settings,
+            mode,
+            if self.mode == "long" {
+                0
+            } else {
+                self.sessions
+            },
+        )
+    }
     pub fn idle(settings: &Map<String, Value>, mode: &str, sessions: u32) -> Self {
         let key = match mode {
             "short" => "shortMinutes",
@@ -98,16 +111,14 @@ impl Timer {
     pub fn next_mode(&self, settings: &Map<String, Value>) -> &'static str {
         if self.mode == "focus" {
             if self.sessions > 0
-                && self
-                    .sessions
-                    .is_multiple_of(number(settings, "sessionsBeforeLong", 4.0) as u32)
+                && self.sessions.is_multiple_of(
+                    number(settings, "sessionsBeforeLong", 4.0).clamp(1.0, 12.0) as u32,
+                )
             {
                 "long"
             } else {
                 "short"
             }
-        } else if self.mode == "custom" {
-            "custom"
         } else {
             "focus"
         }
@@ -129,7 +140,65 @@ pub struct Photo {
     pub change: Option<Instant>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventPart {
+    Title,
+    Date,
+    Time,
+}
+pub struct EventDraft {
+    pub title: String,
+    pub date: String,
+    pub time: String,
+    pub color: usize,
+    pub part: EventPart,
+}
+impl EventDraft {
+    pub fn capture(&mut self, text: String) {
+        match self.part {
+            EventPart::Title => self.title = text,
+            EventPart::Date => self.date = text,
+            EventPart::Time => self.time = text,
+        }
+    }
+    pub fn event(&self) -> Result<Value, String> {
+        let title = self.title.trim();
+        if title.is_empty() {
+            return Err("Enter an event title".into());
+        }
+        let date = Date::parse(self.date.trim()).ok_or("Enter a valid date as YYYY-MM-DD")?;
+        let time = self.time.trim();
+        if !time.is_empty()
+            && !time.split_once(':').is_some_and(|(h, m)| {
+                h.len() == 2
+                    && m.len() == 2
+                    && h.parse::<u32>().is_ok_and(|h| h < 24)
+                    && m.parse::<u32>().is_ok_and(|m| m < 60)
+            })
+        {
+            return Err("Enter a time as HH:MM, or leave it empty for all day".into());
+        }
+        Ok(
+            json!({"id":format!("event-{}",time::epoch_ms()),"title":title.chars().take(80).collect::<String>(),
+            "date":date.key(),"time":time,"color":self.color.min(5)}),
+        )
+    }
+}
+
 pub struct Model {
+    pub scroll: f32,
+    pub scroll_max: Cell<f32>,
+    pub scroll_page: Cell<f32>,
+    pub focus: Option<mypaper_ui::HitId>,
+    pub hover: Option<mypaper_ui::HitId>,
+    pub tooltip: Option<String>,
+    pub notice: Option<String>,
+    pub pressed: Option<mypaper_ui::HitId>,
+    pub action_at: Option<Instant>,
+    pub action_hit: Option<mypaper_ui::HitId>,
+    pub flip_at: Option<Instant>,
+    pub last_clock: Option<Stamp>,
+    pub previous_clock: Option<Stamp>,
     pub placed: Placed,
     pub kind: Widget,
     pub data: Value,
@@ -138,16 +207,20 @@ pub struct Model {
     pub tasks: Vec<Task>,
     pub timer: Timer,
     pub events: Vec<Value>,
+    pub event_draft: Option<EventDraft>,
     pub month: Date,
     pub selected: Date,
     pub stats: Option<SystemStats>,
-    pub history: VecDeque<[f64; 3]>,
+    pub history: BTreeMap<String, VecDeque<f64>>,
     pub counts: BTreeMap<String, u32>,
     pub photo: Photo,
     pub icons: HashMap<usize, Arc<Image>>,
     pub artwork: Option<Arc<Image>>,
+    pub artwork_backdrop: Option<Arc<Image>>,
+    pub artwork_tint: Option<mypaper_ui::Rgba>,
     pub spectrum: Vec<f32>,
     pub field: Option<TextField>,
+    pub field_keyboard: bool,
     pub task_edit: Option<usize>,
     pub quote_offset: usize,
     pub visible: bool,
@@ -160,6 +233,23 @@ pub struct Model {
     pub save_at: Option<Instant>,
 }
 impl Model {
+    /// Session completion credits move with the task when inserting/removing list entries.
+    pub fn insert_counted(&mut self, at: usize) {
+        self.counted = self
+            .counted
+            .drain()
+            .map(|(index, day)| (index + usize::from(index >= at), day))
+            .collect();
+    }
+    pub fn remove_counted(&mut self, at: usize) {
+        self.counted = self
+            .counted
+            .drain()
+            .filter_map(|(index, day)| {
+                (index != at).then(|| (index - usize::from(index > at), day))
+            })
+            .collect();
+    }
     pub fn new(placed: Placed, storage: &mut Storage, now: Stamp) -> anyhow::Result<Self> {
         let kind =
             Widget::of(&placed.widget).ok_or_else(|| anyhow::anyhow!("unknown native widget"))?;
@@ -211,6 +301,19 @@ impl Model {
             data["coins"] = json!(coins);
         }
         Ok(Self {
+            scroll: 0.0,
+            scroll_max: Cell::new(0.0),
+            scroll_page: Cell::new(100.0),
+            focus: None,
+            hover: None,
+            tooltip: None,
+            notice: None,
+            pressed: None,
+            action_at: None,
+            action_hit: None,
+            flip_at: None,
+            last_clock: None,
+            previous_clock: None,
             placed,
             kind,
             data,
@@ -219,16 +322,20 @@ impl Model {
             tasks,
             timer,
             events,
+            event_draft: None,
             month: Date { day: 1, ..now.date },
             selected: now.date,
             stats: None,
-            history: VecDeque::new(),
+            history: BTreeMap::new(),
             counts: BTreeMap::new(),
             photo: Photo::default(),
             icons: HashMap::new(),
             artwork: None,
+            artwork_backdrop: None,
+            artwork_tint: None,
             spectrum: Vec::new(),
             field: None,
+            field_keyboard: false,
             task_edit: None,
             quote_offset: 0,
             visible: false,
@@ -246,6 +353,14 @@ impl Model {
     }
     pub fn num(&self, key: &str, default: f64) -> f64 {
         number(&self.placed.settings, key, default)
+    }
+    pub fn stats_interval(&self) -> Duration {
+        let value = self.str("interval", "2000");
+        Duration::from_millis(match value.as_str() {
+            "1000" => 1000,
+            "5000" => 5000,
+            _ => 2000,
+        })
     }
     pub fn flag(&self, key: &str, default: bool) -> bool {
         flag(&self.placed.settings, key, default)
@@ -314,7 +429,13 @@ impl Model {
                             },
                         ),
                 ),
-                Widget::Media => None,
+                // Interpolate displayed progress; the shared provider remains event-driven.
+                Widget::Media => (self.flag("progress", true)
+                    && self.data["playing"].as_bool() == Some(true)
+                    && self.data["duration"]
+                        .as_f64()
+                        .is_some_and(|duration| duration > 0.0))
+                .then(|| instant + time::boundary(now.ms, 1000)),
                 Widget::Calendar | Widget::Heatmap => Some(
                     instant + Duration::from_millis((now.midnight_after() - now.ms).max(1) as u64),
                 ),
@@ -354,6 +475,22 @@ impl Model {
                         self.photo.change
                     }
                 }
+                Widget::Rss if self.flag("showTime", true) => self.data["items"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|item| item["published"].as_i64())
+                    .filter_map(|published| {
+                        let age = (now.ms / 1000 - published).max(0);
+                        let quantum = match age {
+                            0..3600 => 60_000,
+                            3600..86400 => 3_600_000,
+                            86400..604800 => 86_400_000,
+                            _ => return None,
+                        };
+                        Some(instant + time::boundary(now.ms - published * 1000, quantum))
+                    })
+                    .min(),
                 _ => None,
             }
         };

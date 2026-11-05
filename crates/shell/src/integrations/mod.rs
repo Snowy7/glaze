@@ -6,8 +6,8 @@ mod tests;
 
 use mypaper_bars::{Module, ModuleRef};
 use mypaper_integrations::{Availability, Data, Hub, Lease, Provider, Snapshot, config::Config};
+use mypaper_ui::FileWatch;
 use mypaper_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Ui};
-use notify::Watcher;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -32,7 +32,7 @@ struct State {
     dirty: Arc<AtomicBool>,
     reload: Arc<AtomicBool>,
     consent_complete: Arc<AtomicBool>,
-    _watcher: Option<notify::RecommendedWatcher>,
+    _watcher: Option<FileWatch>,
     app: Option<(String, String)>,
     generation: u64,
     locked: bool,
@@ -70,23 +70,12 @@ impl State {
         });
         let reload = Arc::new(AtomicBool::new(false));
         let reload_flag = reload.clone();
-        let mut watcher =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                if event.is_ok_and(|e| {
-                    e.paths
-                        .iter()
-                        .any(|p| p.file_name().is_some_and(|n| n == "integrations.json"))
-                }) {
-                    reload_flag.store(true, Ordering::Release);
-                    wake(thread);
-                }
-            })
-            .ok();
-        if let Some(w) = &mut watcher
-            && let Some(parent) = config_path().parent()
-        {
-            let _ = w.watch(parent, notify::RecursiveMode::NonRecursive);
-        }
+        let watcher = FileWatch::new(&config_path(), move || {
+            reload_flag.store(true, Ordering::Release);
+            wake(thread);
+        })
+        .inspect_err(|e| log::warn!("integration config watcher: {e:#}"))
+        .ok();
         let config = load()
             .inspect_err(|e| log::warn!("integrations.json: {e:#}"))
             .unwrap_or_default();

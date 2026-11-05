@@ -1,0 +1,29 @@
+[
+    {
+        "run":  1,
+        "configured_widgets":  6,
+        "spawn_to_first_bar_ms":  237.782,
+        "process_age_first_bar_ms":  188.3,
+        "widgets_init_ms":  1985.8,
+        "pdh_loaded_at_first_bar":  false,
+        "private_mb_after_widgets":  26.41
+    },
+    {
+        "run":  2,
+        "configured_widgets":  6,
+        "spawn_to_first_bar_ms":  267.628,
+        "process_age_first_bar_ms":  207.8,
+        "widgets_init_ms":  1717.9,
+        "pdh_loaded_at_first_bar":  false,
+        "private_mb_after_widgets":  26.31
+    },
+    {
+        "run":  3,
+        "configured_widgets":  6,
+        "spawn_to_first_bar_ms":  250.344,
+        "process_age_first_bar_ms":  197.7,
+        "widgets_init_ms":  1645.1,
+        "pdh_loaded_at_first_bar":  false,
+        "private_mb_after_widgets":  26.39
+    }
+]

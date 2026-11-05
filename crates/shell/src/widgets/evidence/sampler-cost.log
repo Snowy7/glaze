@@ -1,0 +1,10 @@
+
+running 1 test
+test stats::tests::profile_sampler_cost ... sampler part=0 wall_us=96 cpu_us=62
+sampler part=1 wall_us=0 cpu_us=0
+sampler part=2 wall_us=469 cpu_us=406
+sampler part=3 wall_us=0 cpu_us=0
+sampler part=4 wall_us=437 cpu_us=0
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 126 filtered out; finished in 0.74s

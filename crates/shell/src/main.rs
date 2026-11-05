@@ -71,9 +71,8 @@ fn run() -> Result<()> {
         inbox: inbox.hwnd(),
         menu: None,
         bars,
-        widgets: widgets::Widgets::new(&mut ui, inbox.hwnd())
-            .inspect_err(|e| log::error!("widgets not started: {e:#}"))
-            .ok(),
+        widgets: None,
+        pending_widget_facts: Vec::new(),
     };
     shell.follow_config(&ui);
     shell.bars.tick(&mut ui);
@@ -81,6 +80,9 @@ fn run() -> Result<()> {
     log::info!("running");
 
     let mut msg = MSG::default();
+    // Bars::new has already presented its first frame. Yield through the message loop before
+    // any widget windows, fonts, providers or fetchers are initialized.
+    let mut widgets_pending = true;
     'run: loop {
         // Order matters: the parent, then the widgets' frame timer, then the bars' handles.
         let handles: Vec<HANDLE> = parent
@@ -94,15 +96,19 @@ fn run() -> Result<()> {
         let woke = unsafe {
             MsgWaitForMultipleObjectsEx(
                 (!handles.is_empty()).then_some(handles.as_slice()),
-                shell
-                    .widgets
-                    .as_ref()
-                    .map_or(
-                        windows::Win32::System::Threading::INFINITE,
-                        widgets::Widgets::timeout_ms,
-                    )
-                    .min(shell.bars.timeout())
-                    .min(shell.flyouts.timeout_ms()),
+                if widgets_pending {
+                    0
+                } else {
+                    shell
+                        .widgets
+                        .as_ref()
+                        .map_or(
+                            windows::Win32::System::Threading::INFINITE,
+                            widgets::Widgets::timeout_ms,
+                        )
+                        .min(shell.bars.timeout())
+                        .min(shell.flyouts.timeout_ms())
+                },
                 QS_ALLINPUT,
                 MWMO_INPUTAVAILABLE,
             )
@@ -139,6 +145,16 @@ fn run() -> Result<()> {
         }
         shell.drain(&mut ui);
         shell.bars.tick(&mut ui);
+        if widgets_pending {
+            widgets_pending = false;
+            startup::ready("shell", "widgets_init_ms");
+            shell.widgets =
+                widgets::Widgets::new(&mut ui, inbox.hwnd(), &shell.pending_widget_facts)
+                    .inspect_err(|e| log::error!("widgets not started: {e:#}"))
+                    .ok();
+            shell.pending_widget_facts.clear();
+            startup::ready("shell", "widgets_ready_ms");
+        }
     }
     drop(shell);
     if let Some(parent) = parent {
@@ -158,6 +174,7 @@ struct Shell {
     widgets: Option<widgets::Widgets>,
     /// Calendar, quick settings, notifications, launcher and the other panels the bars open.
     flyouts: flyouts::Flyouts,
+    pending_widget_facts: Vec<(usize, isize)>,
 }
 
 impl Shell {
@@ -217,6 +234,8 @@ impl Shell {
         self.bars.fact(wparam, lparam);
         if let Some(widgets) = &mut self.widgets {
             widgets.fact(wparam, lparam);
+        } else {
+            self.pending_widget_facts.push((wparam, lparam));
         }
         if let Some(menu) = &mut self.menu {
             menu.handle(

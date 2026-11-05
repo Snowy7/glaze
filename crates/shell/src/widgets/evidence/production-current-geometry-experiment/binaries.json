@@ -1,0 +1,14 @@
+[
+    {
+        "Path":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\target\\release\\mypaper-shell.exe",
+        "Hash":  "10540705EC219E7FB7EFBEB5C377D840D514DAA3EF870C260B5EDE2133B602A0"
+    },
+    {
+        "Path":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\target\\release\\mypaper-wallpaper.exe",
+        "Hash":  "AFBA5FE949377C7D3C714BD8C695ABBB9D3E46E5BBAFA954856C351AB1559CF9"
+    },
+    {
+        "Path":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\target\\release\\examples\\mypaper-widget-fixture.exe",
+        "Hash":  "7A1D82CC7CA25E26B8C5024E18409667D869CD9F35D524B05215E5F4BA5DF300"
+    }
+]

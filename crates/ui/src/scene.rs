@@ -4,6 +4,8 @@
 
 use std::sync::Arc;
 
+pub(crate) const ARC_STEP: f32 = std::f32::consts::TAU / 10.0;
+
 use accesskit::Role;
 
 use crate::geom::{Point, Rect, Rgba};
@@ -15,6 +17,17 @@ pub type HitId = u32;
 /// One paint operation, in the surface's device pixels, drawn in list order.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
+    /// A clipped group, used by windowless scroll views. Bounds never escape the viewport.
+    Clipped { rect: Rect, ops: Arc<[Op]> },
+    /// Markdown emphasis without changing the shared text style contract.
+    Emphasis {
+        rect: Rect,
+        text: Arc<str>,
+        style: TextStyle,
+        color: Rgba,
+        italic: bool,
+        strike: bool,
+    },
     /// A clockwise circular arc from twelve o'clock, in radians. Full turns draw an ellipse.
     Arc {
         center: Point,
@@ -82,6 +95,8 @@ impl Op {
     /// Every pixel this operation may touch, antialiasing included.
     pub fn bounds(&self) -> Rect {
         match self {
+            Self::Clipped { rect, .. } => *rect,
+            Self::Emphasis { rect, style, .. } => rect.inflate(2.0 + style.size * 0.1),
             Self::Arc {
                 center,
                 radius,
@@ -145,28 +160,36 @@ impl DisplayList {
     /// Moves a list into a cropped surface without changing its hit identities.
     pub fn translated(&self, dx: f32, dy: f32) -> Self {
         let mut list = self.clone();
-        for op in &mut list.ops {
-            match op {
-                Op::Arc { center, .. } => {
-                    center.x += dx;
-                    center.y += dy;
+        fn translate(ops: &mut [Op], dx: f32, dy: f32) {
+            for op in ops {
+                match op {
+                    Op::Clipped { rect, ops } => {
+                        *rect = rect.offset(dx, dy);
+                        translate(Arc::make_mut(ops), dx, dy);
+                    }
+                    Op::Arc { center, .. } => {
+                        center.x += dx;
+                        center.y += dy;
+                    }
+                    Op::Line { from, to, .. } => {
+                        from.x += dx;
+                        from.y += dy;
+                        to.x += dx;
+                        to.y += dy;
+                    }
+                    Op::Image { rect, .. }
+                    | Op::TextField { rect, .. }
+                    | Op::Fill { rect, .. }
+                    | Op::Stroke { rect, .. }
+                    | Op::Text { rect, .. }
+                    | Op::Emphasis { rect, .. }
+                    | Op::Clip { rect }
+                    | Op::Shadow { rect, .. } => *rect = rect.offset(dx, dy),
+                    Op::Unclip => {}
                 }
-                Op::Line { from, to, .. } => {
-                    from.x += dx;
-                    from.y += dy;
-                    to.x += dx;
-                    to.y += dy;
-                }
-                Op::Image { rect, .. }
-                | Op::TextField { rect, .. }
-                | Op::Fill { rect, .. }
-                | Op::Stroke { rect, .. }
-                | Op::Text { rect, .. }
-                | Op::Clip { rect }
-                | Op::Shadow { rect, .. } => *rect = rect.offset(dx, dy),
-                Op::Unclip => {}
             }
         }
+        translate(&mut list.ops, dx, dy);
         for hit in &mut list.hits {
             hit.rect = hit.rect.offset(dx, dy);
         }
@@ -181,21 +204,157 @@ impl DisplayList {
     /// What has to be redrawn to go from `old` to this list: the bounds of every operation that
     /// differs (position by position), or `None` when they paint the same.
     pub fn damage(&self, old: &DisplayList) -> Option<Rect> {
-        let count = self.ops.len().max(old.ops.len());
-        (0..count)
-            .filter_map(|i| match (old.ops.get(i), self.ops.get(i)) {
-                (Some(a), Some(b)) if a == b => None,
-                (a, b) => {
-                    // `Unclip` paints nothing and has no area.
-                    let bounds = |op: Option<&Op>| op.map(Op::bounds).filter(|r| !r.is_empty());
-                    match (bounds(a), bounds(b)) {
-                        (Some(a), Some(b)) => Some(a.union(b)),
-                        (one, other) => one.or(other),
-                    }
-                }
-            })
-            .reduce(Rect::union)
+        damage_ops(&old.ops, &self.ops)
     }
+
+    /// Disjoint damage for dashboards: a CPU and network change need not redraw the labels
+    /// or meters between them. Layered-window presentation still happens just once.
+    pub fn damage_regions(&self, old: &DisplayList) -> Vec<Rect> {
+        let mut regions = Vec::new();
+        collect_damage(&old.ops, &self.ops, None, &mut regions);
+        let mut merged: Vec<Rect> = Vec::new();
+        for mut rect in regions {
+            while let Some(index) = merged
+                .iter()
+                .position(|old| old.inflate(1.0).intersects(&rect))
+            {
+                rect = rect.union(merged.swap_remove(index));
+            }
+            merged.push(rect);
+            if merged.len() > 64 {
+                return self.damage(old).into_iter().collect();
+            }
+        }
+        merged
+    }
+}
+
+fn collect_damage(old: &[Op], new: &[Op], clip: Option<Rect>, out: &mut Vec<Rect>) {
+    for i in 0..old.len().max(new.len()) {
+        let changed = match (old.get(i), new.get(i)) {
+            (Some(a), Some(b)) if a == b => continue,
+            (
+                Some(Op::Clipped {
+                    rect: a,
+                    ops: before,
+                }),
+                Some(Op::Clipped {
+                    rect: b,
+                    ops: after,
+                }),
+            ) if a == b => {
+                let clip = clip.map_or(*a, |outer| intersection(outer, *a));
+                collect_damage(before, after, Some(clip), out);
+                continue;
+            }
+            (Some(a), Some(b)) => arc_change(a, b).unwrap_or_else(|| a.bounds().union(b.bounds())),
+            (Some(one), None) | (None, Some(one)) => one.bounds(),
+            (None, None) => continue,
+        };
+        let changed = clip.map_or(changed, |clip| intersection(changed, clip));
+        if !changed.is_empty() {
+            out.push(changed);
+        }
+    }
+}
+
+/// Fixed tenth-turn prefixes keep unchanged pixels stable. The final partial segment can
+/// change its curve approximation back to its start, so damage that complete segment.
+fn arc_change(old: &Op, new: &Op) -> Option<Rect> {
+    let (
+        Op::Arc {
+            center: a,
+            radius: ar,
+            sweep: before,
+            width: aw,
+            color: ac,
+        },
+        Op::Arc {
+            center: b,
+            radius: br,
+            sweep: after,
+            width: bw,
+            color: bc,
+        },
+    ) = (old, new)
+    else {
+        return None;
+    };
+    if a != b
+        || ar != br
+        || aw != bw
+        || ac != bc
+        || !before.is_finite()
+        || !after.is_finite()
+        || *before >= std::f32::consts::TAU - 0.0001
+        || *after >= std::f32::consts::TAU - 0.0001
+    {
+        return None;
+    }
+    let start = (before.min(*after).max(0.0) / ARC_STEP).floor() * ARC_STEP;
+    let end =
+        ((before.max(*after).max(0.0) / ARC_STEP).ceil() * ARC_STEP).min(std::f32::consts::TAU);
+    let point = |angle: f32| Point::new(a.x + ar * angle.sin(), a.y - ar * angle.cos());
+    let first = point(start);
+    let mut rect = Rect::new(first.x, first.y, 0.0, 0.0);
+    for angle in [
+        end,
+        std::f32::consts::FRAC_PI_2,
+        std::f32::consts::PI,
+        3.0 * std::f32::consts::FRAC_PI_2,
+    ] {
+        if angle >= start && angle <= end {
+            let p = point(angle);
+            rect.left = rect.left.min(p.x);
+            rect.right = rect.right.max(p.x);
+            rect.top = rect.top.min(p.y);
+            rect.bottom = rect.bottom.max(p.y);
+        }
+    }
+    Some(rect.inflate(aw / 2.0 + 2.0))
+}
+fn intersection(a: Rect, b: Rect) -> Rect {
+    Rect {
+        left: a.left.max(b.left),
+        top: a.top.max(b.top),
+        right: a.right.min(b.right),
+        bottom: a.bottom.min(b.bottom),
+    }
+}
+
+fn damage_ops(old: &[Op], new: &[Op]) -> Option<Rect> {
+    let count = new.len().max(old.len());
+    (0..count)
+        .filter_map(|i| match (old.get(i), new.get(i)) {
+            (Some(a), Some(b)) if a == b => None,
+            (
+                Some(Op::Clipped {
+                    rect: a,
+                    ops: before,
+                }),
+                Some(Op::Clipped {
+                    rect: b,
+                    ops: after,
+                }),
+            ) if a == b => {
+                let changed = damage_ops(before, after)?;
+                let clipped = Rect {
+                    left: changed.left.max(a.left),
+                    top: changed.top.max(a.top),
+                    right: changed.right.min(a.right),
+                    bottom: changed.bottom.min(a.bottom),
+                };
+                (!clipped.is_empty()).then_some(clipped)
+            }
+            (a, b) => {
+                let bounds = |op: Option<&Op>| op.map(Op::bounds).filter(|r| !r.is_empty());
+                match (bounds(a), bounds(b)) {
+                    (Some(a), Some(b)) => Some(a.union(b)),
+                    (one, other) => one.or(other),
+                }
+            }
+        })
+        .reduce(Rect::union)
 }
 
 #[cfg(test)]
@@ -223,6 +382,66 @@ mod tests {
         let mut b = a.clone();
         b.focus = Some(3);
         assert_eq!(b.damage(&a), None);
+    }
+
+    #[test]
+    fn a_changed_scrolled_meter_damages_its_own_bounds_and_not_the_whole_viewport() {
+        let viewport = Rect::new(0.0, 0.0, 400.0, 300.0);
+        let before = list(vec![Op::Clipped {
+            rect: viewport,
+            ops: vec![fill(0.0), fill(100.0), fill(300.0)].into(),
+        }]);
+        let after = list(vec![Op::Clipped {
+            rect: viewport,
+            ops: vec![fill(0.0), fill(105.0), fill(300.0)].into(),
+        }]);
+        assert_eq!(
+            after.damage(&before),
+            Some(Rect::new(99.0, 0.0, 17.0, 11.0))
+        );
+        let outside = list(vec![Op::Clipped {
+            rect: viewport,
+            ops: vec![fill(0.0), fill(100.0), fill(500.0)].into(),
+        }]);
+        let changed_outside = list(vec![Op::Clipped {
+            rect: viewport,
+            ops: vec![fill(0.0), fill(100.0), fill(510.0)].into(),
+        }]);
+        assert_eq!(changed_outside.damage(&outside), None);
+    }
+
+    #[test]
+    fn meter_sweep_damage_keeps_the_unchanged_ring() {
+        let arc = |sweep| Op::Arc {
+            center: Point::new(50.0, 50.0),
+            radius: 40.0,
+            sweep,
+            width: 3.0,
+            color: Rgba::HIT,
+        };
+        let before = list(vec![arc(0.20 * std::f32::consts::TAU)]);
+        let after = list(vec![arc(0.21 * std::f32::consts::TAU)]);
+        let regions = after.damage_regions(&before);
+        assert_eq!(regions.len(), 1);
+        assert!(regions[0].width() < 20.0 && regions[0].height() < 40.0);
+        assert!(regions[0].left > 80.0 && regions[0].top > 30.0);
+        assert_eq!(before.damage_regions(&after), regions);
+    }
+
+    #[test]
+    fn sparse_damage_keeps_distant_changes_separate_and_merges_neighbors() {
+        let before = list(vec![fill(0.0), fill(15.0), fill(100.0)]);
+        let after = list(vec![fill(4.0), fill(17.0), fill(110.0)]);
+        let mut regions = after.damage_regions(&before);
+        regions.sort_by(|a, b| a.left.total_cmp(&b.left));
+        assert_eq!(
+            regions,
+            vec![
+                Rect::new(-1.0, -1.0, 29.0, 12.0),
+                Rect::new(99.0, -1.0, 22.0, 12.0),
+            ]
+        );
+        assert!(before.damage_regions(&before).is_empty());
     }
 
     #[test]

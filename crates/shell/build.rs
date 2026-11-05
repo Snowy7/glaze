@@ -8,4 +8,10 @@ fn main() {
         "cargo:rustc-link-arg-bin=mypaper-shell=/MANIFESTINPUT:{}",
         manifest.display()
     );
+    // Widget GPU sampling and HTTP fetchers start after the first bar. Keep their DLL
+    // initialization behind those first API calls too, instead of paying it in the PE loader.
+    println!("cargo:rustc-link-arg=/DEFAULTLIB:delayimp.lib");
+    for library in ["pdh.dll", "winhttp.dll"] {
+        println!("cargo:rustc-link-arg=/DELAYLOAD:{library}");
+    }
 }

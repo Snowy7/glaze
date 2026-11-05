@@ -1,0 +1,39 @@
+{
+    "label":  "widget-parity-3",
+    "at":  "2026-11-05T06:04:01",
+    "rows":  [
+                 {
+                     "part":  "mypaper-widget-fixture",
+                     "pid":  79912,
+                     "cpu_core_pct":  0.21,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  33,
+                     "ws_mb":  84
+                 },
+                 {
+                     "part":  "mypaper-wallpaper",
+                     "pid":  80992,
+                     "cpu_core_pct":  4.61,
+                     "gpu3d_pct":  28.98,
+                     "gpu_copy_pct":  3.33,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  336,
+                     "private_mb":  255,
+                     "ws_mb":  26
+                 }
+             ],
+    "total":  {
+                  "part":  "TOTAL",
+                  "procs":  2,
+                  "cpu_core_pct":  4.82,
+                  "gpu3d_pct":  28.98,
+                  "gpu_video_pct":  0,
+                  "gpu_mem_mb":  336,
+                  "private_mb":  288,
+                  "ws_mb":  110
+              },
+    "theme":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\themes\\rain-city"
+}

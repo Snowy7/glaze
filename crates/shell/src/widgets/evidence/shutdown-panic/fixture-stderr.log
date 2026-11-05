@@ -1,0 +1,4 @@
+
+thread 'main' (93796) panicked at C:\Users\you\.rustup\toolchains\nightly-x86_64-pc-windows-msvc\lib/rustlib/src/rust\library/std\src\thread\lifecycle.rs:230:14:
+threads should not terminate unexpectedly
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
