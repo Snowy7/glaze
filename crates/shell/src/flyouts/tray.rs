@@ -107,8 +107,13 @@ impl Panel for Overflow {
         self.click(id, Button::Left, cx)
     }
 
+    /// The app's own menu opens over the overflow, which stays open behind it (as Windows'
+    /// does) until something else comes to the front.
     fn context(&mut self, id: HitId, cx: &mut Cx) -> Effect {
-        self.click(id, Button::Right, cx)
+        match self.click(id, Button::Right, cx) {
+            Effect::None => Effect::HoldForMenu,
+            effect => effect,
+        }
     }
     fn middle(&mut self, id: HitId, cx: &mut Cx) -> Effect {
         self.click(id, Button::Middle, cx)

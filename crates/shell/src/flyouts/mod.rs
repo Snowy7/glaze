@@ -124,6 +124,9 @@ pub enum Effect {
     /// Another flyout replaces it (quick settings' chevrons).
     Switch(Kind),
     Menu,
+    /// An app's own menu opens from it (a tray icon's right click): it stays open while that
+    /// menu is in front, and closes once something else is.
+    HoldForMenu,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -441,6 +444,8 @@ struct Open {
     due: Option<Instant>,
     dirty: bool,
     return_to: isize,
+    /// An app's menu opened from it: deactivation doesn't close it (see `Effect::HoldForMenu`).
+    held: bool,
 }
 
 /// The flyouts: one reused popup window and the panel shown in it.
@@ -460,7 +465,14 @@ pub struct Flyouts {
     menu: Option<mypaper_ui::Menu<PanelCommand>>,
     index_due: Option<Instant>,
     _index_watch: Option<notify::RecommendedWatcher>,
+    /// The flyout a deactivation just closed, and when: a click on its own bar module
+    /// deactivates it before that click's request arrives, and the request must close it (it
+    /// did), not open it again.
+    dismissed: Option<(Kind, Instant)>,
 }
+
+/// How soon after a deactivation a request for the same flyout counts as that click's close.
+const DISMISSED: Duration = Duration::from_millis(400);
 
 impl Flyouts {
     /// Creates the (hidden) popup window now: making a layered window costs ~20 ms, which must
@@ -504,6 +516,7 @@ impl Flyouts {
             menu: Some(mypaper_ui::Menu::new("App commands")?),
             index_due: Some(Instant::now() + Duration::from_secs(8)),
             _index_watch: None,
+            dismissed: None,
         };
         flyouts.follow_win_key(main);
         use notify::Watcher;
@@ -588,6 +601,7 @@ impl Flyouts {
             self.toggle(ui, bars, request);
         }
         self.follow_fullscreen();
+        self.follow_held();
         WinKey::set_enabled(self.winkey.is_some() && bars.can_open_flyouts());
         if !bars.can_open_flyouts() && self.open.is_some() {
             self.close();
@@ -735,6 +749,11 @@ impl Flyouts {
                 }
             }
             Effect::None => {}
+            Effect::HoldForMenu => {
+                if let Some(open) = &mut self.open {
+                    open.held = true;
+                }
+            }
             Effect::Redraw => {
                 if let Some(open) = &mut self.open {
                     open.dirty = true;
@@ -758,6 +777,14 @@ impl Flyouts {
     fn toggle(&mut self, ui: &mut Ui, bars: &mut Bars, request: Request) {
         if self.open.as_ref().is_some_and(|o| o.kind == request.kind) {
             self.close();
+            return;
+        }
+        // The click on its module already closed it (by deactivating it): that was the toggle.
+        if self
+            .dismissed
+            .take()
+            .is_some_and(|(kind, at)| kind == request.kind && at.elapsed() < DISMISSED)
+        {
             return;
         }
         self.show(ui, bars, request);
@@ -803,6 +830,30 @@ impl Flyouts {
                 at: Instant::now(),
             },
         );
+    }
+
+    /// A flyout held for an app's menu (`Effect::HoldForMenu`) stays while that menu, or the
+    /// app's hidden window that owns it, is in front; it closes once a visible window that isn't
+    /// ours is (a click elsewhere, or a window the menu's command opened). Back in front, it
+    /// closes on deactivation again. Runs each loop pass; foreground changes wake the loop.
+    fn follow_held(&mut self) {
+        let Some(open) = self.open.as_mut().filter(|o| o.held) else {
+            return;
+        };
+        // SAFETY: read-only window queries; a stale handle reads as nothing.
+        let (front, menu, visible) = unsafe {
+            use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, IsWindowVisible};
+            let front = GetForegroundWindow();
+            let mut class = [0u16; 16];
+            let len = GetClassNameW(front, &mut class).max(0) as usize;
+            let menu = class[..len].iter().copied().eq("#32768".encode_utf16());
+            (front, menu, IsWindowVisible(front).as_bool())
+        };
+        if front == self.surface.hwnd() {
+            open.held = false;
+        } else if !menu && visible && !front.is_invalid() {
+            self.close();
+        }
     }
 
     /// The Windows key goes to Windows while a fullscreen app (a game) is in front.
@@ -873,6 +924,7 @@ impl Flyouts {
             due: None,
             dirty: true,
             return_to,
+            held: false,
         });
         if let Some(field) = self.open.as_ref().and_then(|o| o.panel.field()) {
             self.surface.set_text_field(Some(field.clone()));
@@ -969,7 +1021,10 @@ impl Flyouts {
         let max_height = (open.monitor.work.height as f32 - 2.0 * GAP * s).max(120.0 * s);
         let glass = mypaper_ui::glass::style();
         let state = (open.hover, open.pressed, open.focus);
-        let (list, size) = build(
+        // On glass, never shrink while open (the glass would be rebuilt: a flash); the next
+        // open takes the new size.
+        let keep = if glass.is_some() { open.size.1 as f32 } else { 0.0 };
+        let (list, size) = build_at_least(
             open.panel.as_ref(),
             &mut ui.text,
             &self.look,
@@ -977,6 +1032,7 @@ impl Flyouts {
             max_height,
             state,
             glass.is_some(),
+            keep,
         );
         let (width, height) = (size.0 as f32, size.1 as f32);
         // The body's radius (`Look::theme`): the glass has exactly the body's shape.
@@ -1230,8 +1286,12 @@ impl Flyouts {
                     self.with_panel(ui, bars, |panel, cx| panel.submit(cx));
                 }
             }
+            // Held for an app's menu: `follow_held` closes it once something else is in front.
+            Event::Deactivated if self.open.as_ref().is_some_and(|o| o.held) => {}
             Event::Deactivated if !self.menu.as_ref().is_some_and(mypaper_ui::Menu::is_open) => {
-                self.close()
+                let kind = self.open.as_ref().map(|o| o.kind);
+                self.close();
+                self.dismissed = kind.map(|kind| (kind, Instant::now()));
             }
             Event::DpiChanged(_) => self.close(),
             _ => {}
@@ -1338,13 +1398,30 @@ pub fn build(
     state: (Option<HitId>, Option<HitId>, Option<HitId>),
     glass: bool,
 ) -> (mypaper_ui::DisplayList, (u32, u32)) {
+    build_at_least(panel, text, look, s, max_height, state, glass, 0.0)
+}
+
+/// [`build`], never shorter than `min_height` (device px): an open flyout keeps its height when
+/// its content shrinks (a notification dismissed), because a smaller window makes the engine
+/// rebuild its glass at the new size, which shows as a flash.
+#[allow(clippy::too_many_arguments)]
+pub fn build_at_least(
+    panel: &dyn Panel,
+    text: &mut mypaper_ui::Text,
+    look: &Look,
+    s: f32,
+    max_height: f32,
+    state: (Option<HitId>, Option<HitId>, Option<HitId>),
+    glass: bool,
+    min_height: f32,
+) -> (mypaper_ui::DisplayList, (u32, u32)) {
     let width = (panel.width() * s).round();
     let mut kit = Kit::new(text, look, s, width);
     let pad = kit.pad();
     kit.limit = max_height - pad;
     (kit.hover, kit.pressed, kit.focus) = state;
     panel.view(&mut kit);
-    let height = (kit.y + pad).round().min(max_height);
+    let height = (kit.y + pad).round().max(min_height).min(max_height);
     let radius = (kit.theme.radius.surface * s).round();
     let Kit {
         mut list,
