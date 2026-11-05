@@ -45,7 +45,7 @@ plugins/<id>/            bundled, built with the workspace
 
 - The shell starts a plugin **lazily**, when a face of it is placed (or a data call arrives), inside a
   kill-on-close Job object, and stops it 30 s after its last face closes. Nothing placed â†’ no process.
-- A crash fails pending calls, shows the last view with a "Restartingâ€¦" footer, and restarts after
+- A crash fails pending calls, shows the last view with a "Restarting…" footer, and restarts after
   2 s, doubling per crash up to a minute. A crash never reaches the shell.
 - While the desktop is held (fullscreen app, locked), the host sends `suspend`; `resume` when it's back.
 - The shell caches each instance's last view tree and redraws from it; a plugin that sends nothing
@@ -60,8 +60,8 @@ Host â†’ plugin:
 | message | kind | params |
 |---|---|---|
 | `initialize` | request | `{ protocol: 2, sdk: "1.0", plugin, dataDir }` â†’ `{ sdk: "1.0" }` |
-| `shutdown` | request | â€” (exit promptly) |
-| `suspend`, `resume` | notification | â€” |
+| `shutdown` | request | — (exit promptly) |
+| `suspend`, `resume` | notification | — |
 | `face.open` | notification | `{ instance, face, size: "small"\|"medium"\|"large", settings }` |
 | `face.resize` | notification | `{ instance, size }` |
 | `face.close` | notification | `{ instance }` |
@@ -92,7 +92,7 @@ scales them. Colors are **roles** (`label`, `secondary`, `tertiary`, `accent`, `
 |---|---|
 | `stack` / `row` | `children`, `gap?` (vertical / horizontal) |
 | `grid` | `children`, `columns`, `gap?` |
-| `text` | `text`, `role` (`TextRole`: `title`, `headline`, `subheadline`, `body`, `callout`, `caption`, â€¦), `color?`, `align?` |
+| `text` | `text`, `role` (`TextRole`: `title`, `headline`, `subheadline`, `body`, `callout`, `caption`, …), `color?`, `align?` |
 | `icon` | `icon` (kit icon name), `size?`, `color?` |
 | `button` | `label`, `action`, `icon?`, `primary?` |
 | `field` | `placeholder`, `action` (sends the text as `value` on submit) |
@@ -105,7 +105,7 @@ scales them. Colors are **roles** (`label`, `secondary`, `tertiary`, `accent`, `
 | `area_chart` | `series: [{ label, values, color? }]`, `x_labels: [first, middle, last]`, `unit?` (takes the free height) |
 | `card` | `title?`, `child`: the kit's grouped surface |
 | `empty` | `icon?`, `title`, `detail?` |
-| `spacer` | â€” (takes the free space) |
+| `spacer` | — (takes the free space) |
 
 A face sends one tree per size class (`small`, `medium`, `large`); the host asks with `face.open`/
 `face.resize`. Every face is wrapped in the standard integration chrome (icon + title header,
@@ -126,12 +126,12 @@ through it:
 
 Plugins are native code. The host enforces the brokered capabilities above (secrets, launch,
 notifications) and refuses undeclared requests; `network:`, `process:` and `pipe:` are declared,
-shown, and checked by the SDK's helpers (`Host::allows`), but a plugin that bypasses the SDK isn't
+shown, and checkable with `mypaper_plugin_sdk::allows`, but a plugin that bypasses the SDK isn't
 sandboxed yet (AppContainer is the follow-up for downloaded plugins).
 
 ## Secrets
 
-`host.secret("key")` / `host.set_secret("key", Some(value))`. The host namespaces keys per plugin, so
+`ctx.secret("key")` / `ctx.set_secret("key", Some(value))` (`None` deletes). The host namespaces keys per plugin, so
 one plugin can't read another's. Values never touch disk in plain text or the log.
 
 ## Timers
@@ -150,15 +150,55 @@ picker.
 ## Writing one
 
 ```rust
-use mypaper_plugin_sdk::{Ctx, Event, Plugin, View, run};
+use mypaper_plugin_sdk::{Ctx, Event, Plugin, Role, View, run};
 
 struct Hello;
 impl Plugin for Hello {
-    fn on_event(&mut self, ctx: &mut Ctx, event: Event) {
+    /// What the plugin's own threads (sockets, watchers) send into the loop.
+    type Msg = ();
+    fn on_event(&mut self, ctx: &mut Ctx<()>, event: Event<()>) {
         if let Event::Open { instance, .. } = event {
-            ctx.view(&instance, View::text("Hello", "headline"));
+            ctx.view(&instance, View::text("Hello", Role::Headline).face());
         }
     }
 }
 fn main() { run(Hello) }
 ```
+
+`run_lines(plugin, &[lines])` drives a plugin without a host (tests). Each `Face` may set
+`footer` (the chrome's caption) and `refresh` (a header refresh button that sends `"refresh"`). The
+icon name `dot` draws a filled status dot.
+
+## Where the code is
+
+- `crates/plugin-sdk`: manifest types, views, protocol, the event loop.
+- `crates/widgets/src/plugins.rs`: the host's process side (spawn in a kill-on-close Job, restart
+  backoff, idle stop, faces with cached views, the secrets/launch broker with permission refusals).
+- `crates/shell/src/widgets/plugin_faces.rs` + `views/plugin.rs`: `Widget::Plugin` instances, and
+  the kit renderer for view trees. A widget id that isn't a built-in and names an installed SDK
+  plugin with faces becomes `Widget::Plugin`; its `variant` setting picks the face.
+
+## Porting a built-in integration (the T3 recipe)
+
+1. `plugins/<id>/` with `plugin.json` (`sdk`, `faces` named after the built-in's `variant`
+   values, `permissions`) and a binary named `<id>-plugin` (not the app's own CLI name).
+2. Copy the provider files from `crates/integrations/src/` unchanged; give the crate root the few
+   items they import (`Availability`, `Data`, `Publish`, `config`, `credentials`). `credentials`
+   is a cache the loop seeds from `ctx.secret()` at start; writes go back to the loop as a `Msg`
+   and out through `ctx.set_secret()` (see `plugins/t3/src/main.rs`).
+3. Run the provider on its own thread (a current-thread tokio runtime); its publish callback sends
+   `Msg::Changed` and the loop redraws the placed faces. Clicks arrive as `Event::Action`.
+4. Faces in `faces.rs` as `View` trees, one per size class. `golden.rs` dumps every face × size from
+   the native fixture to `golden/faces.json`; the shell's `views::plugin_tests` renders that JSON
+   into a size sheet beside the native one. `MYPAPER_BLESS=1` rewrites both.
+5. Use a session/credential label of its own while the built-in still runs, so neither revokes
+   the other.
+6. Cutover, once the sheet matches: drop the id from `Widget::of` (instances keep their ids and
+   `variant`, so layouts survive), ship the binary in the bundled `plugins/<id>/`, and delete the
+   built-in provider and views.
+
+## Status (2026-11-05)
+
+T3 runs on the SDK in `plugins/t3` with all five faces; it isn't cut over yet. Still to do before
+it replaces the built-in: the host's text field for `field` (New thread prompt), project/model
+pickers, opening a thread, and a last visual pass against `t3-sizes.png`.

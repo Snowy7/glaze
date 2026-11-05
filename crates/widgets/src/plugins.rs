@@ -227,7 +227,7 @@ pub struct Plugins {
     changed: Vec<String>,
     /// Where plugins are looked up; `None` is the installed and bundled folders.
     roots: Option<Vec<std::path::PathBuf>>,
-    /// `(instance, sub)` ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ `(plugin, event)`.
+    /// `(instance, sub)` → `(plugin, event)`.
     subs: BTreeMap<(String, String), (String, String)>,
     /// Plugins that died with listeners: when to try again, and the next delay.
     restarts: HashMap<String, (Instant, Duration)>,
