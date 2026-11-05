@@ -43,13 +43,18 @@ pub fn app(dark: bool, ui: &Ui) -> App {
     App::fixture(docs, Theme::fixed(dark, &ui.text), library, (1280, 800))
 }
 
-/// One frame of `app`, as the window would show it.
+/// `app` as the window would show it once settled (design thumbnails take a second frame).
 pub fn shot(app: &mut App, ui: &mut Ui) -> mypaper_ui::Image {
-    if let Some((frame, show)) = crate::pages::stage(app) {
-        crate::stage::prepare(app, ui, (frame.width() as u32, frame.height() as u32), show);
+    loop {
+        if let Some((frame, show)) = crate::pages::stage(app) {
+            crate::stage::prepare(app, ui, (frame.width() as u32, frame.height() as u32), show);
+        }
+        crate::stage::prepare_designs(app, ui);
+        let built = crate::view::build(app, &mut ui.text);
+        if !app.stage.borrow().designs.pending(app.docs.version) {
+            return render(ui, &built.list, app.size.0, app.size.1).unwrap();
+        }
     }
-    let built = crate::view::build(app, &mut ui.text);
-    render(ui, &built.list, app.size.0, app.size.1).unwrap()
 }
 
 fn check(name: &str, dark: bool, setup: impl Fn(&mut App)) {

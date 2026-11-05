@@ -29,7 +29,7 @@ const PRESETS: [(&str, &str); 7] = [
     ("floating", "Floating"),
 ];
 
-const TOP_DESIGNS: [(&str, &str); 8] = [
+pub const TOP_DESIGNS: [(&str, &str); 8] = [
     ("monochrome", "Monochrome"),
     ("macos", "macOS"),
     ("fluent", "Fluent"),
@@ -40,7 +40,7 @@ const TOP_DESIGNS: [(&str, &str); 8] = [
     ("neon", "Neon"),
 ];
 
-const DOCK_DESIGNS: [(&str, &str); 9] = [
+pub const DOCK_DESIGNS: [(&str, &str); 9] = [
     ("monochrome", "Monochrome"),
     ("macos", "macOS"),
     ("windows11", "Windows 11"),
@@ -230,8 +230,8 @@ fn overview(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig) {
     }
 }
 
-/// A preset's silhouette: where its bars sit.
-fn silhouette(app: &App, b: &mut B, preset: &str, pic: Rect) {
+/// A tile's picture: your wallpaper, framed.
+fn wallpaper_tile(app: &App, b: &mut B, pic: Rect) {
     if let Some(still) = app.library.active().and_then(|i| app.library.items[i].preview.clone())
         && let Some(image) = app.images.borrow_mut().get(&still, (pic.width() as u32 * 2, pic.height() as u32 * 2))
     {
@@ -240,6 +240,11 @@ fn silhouette(app: &App, b: &mut B, preset: &str, pic: Rect) {
         b.fill(pic, b.px(8.0), mypaper_ui::Rgba::rgb8([0x2a, 0x30, 0x4a], 1.0));
     }
     b.stroke(pic.inflate(b.px(3.0)), b.px(11.0), b.px(6.0), b.p.chrome);
+}
+
+/// A preset's silhouette: where its bars sit.
+fn silhouette(app: &App, b: &mut B, preset: &str, pic: Rect) {
+    wallpaper_tile(app, b, pic);
     let glass = mypaper_ui::Rgba::new(1.0, 1.0, 1.0, 0.22);
     let rim = mypaper_ui::Rgba::new(1.0, 1.0, 1.0, 0.55);
     let (w, h) = (pic.width(), pic.height());
@@ -288,7 +293,7 @@ fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: 
         let edit = Edit::new(DocId::Bars, format!("/{}/design", bar.key()), "Design");
         let items: Vec<(&str, bool, Action)> = designs.iter().map(|(id, n)| (*n, *id == current, Action::Set(edit.clone(), json!(id)))).collect();
         crate::ui::anchor(app, if bar == Bar::Top { "top_design" } else { "dock_design" }, c.view, c.y);
-        crate::ui::tiles(b, c, key(("designs", name)), 3, false, &items, |b, i, pic| design_tile(app, b, bar, designs[i].0, pic));
+        crate::ui::tiles(b, c, key(("designs", name)), 2, false, &items, |b, i, pic| design_tile(app, b, bar, designs[i].0, pic));
     });
     section(b, col, "Layout", |b, c| {
         let ids: &[&str] = if bar == Bar::Top { &["top_edge", "top_height", "top_shape"] } else { &["dock_style", "dock_edge", "dock_size", "dock_autohide", "dock_magnify"] };
@@ -359,9 +364,22 @@ fn extras(app: &App, b: &mut B, c: &mut Col, config: &BarsConfig) {
     crate::ui::anchor(app, "dock_extras", c.view, c.y);
 }
 
-/// A design's thumbnail: the design's own bar, real view, over the wallpaper.
+/// A design's thumbnail: its bar drawn by the shell's own view over the wallpaper. The tile
+/// asks for its size here and the next frame builds it (`stage::prepare_designs`); until then,
+/// and if the design can't be built, an outline of its shape.
 fn design_tile(app: &App, b: &mut B, bar: Bar, design: &str, pic: Rect) {
-    silhouette(app, b, "none", pic);
+    wallpaper_tile(app, b, pic);
+    let size = (pic.width() as u32, pic.height() as u32);
+    let mut cache = app.stage.borrow_mut();
+    cache.designs.want = Some((bar, size));
+    if let Some(thumb) = cache.designs.get(bar, size, design) {
+        crate::stage::stand_in(b, &thumb.shapes, pic.left, pic.top);
+        b.list.ops.push(mypaper_ui::Op::Clip { rect: pic });
+        b.list.ops.extend(crate::stage::offset(&thumb.ops, pic.left, pic.top));
+        b.list.ops.push(mypaper_ui::Op::Unclip);
+        return;
+    }
+    drop(cache);
     let glass = mypaper_ui::Rgba::new(1.0, 1.0, 1.0, 0.18);
     let rim = mypaper_ui::Rgba::new(1.0, 1.0, 1.0, 0.5);
     let (w, h) = (pic.width(), pic.height());

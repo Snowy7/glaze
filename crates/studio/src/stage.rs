@@ -65,10 +65,43 @@ pub struct Content {
     pub grid: Option<(Grid, f32)>,
 }
 
+/// One design's thumbnail for the Bars inspector: its bar, drawn by the shell's view on a
+/// 400-pixel-wide screen scaled to the tile (room for its modules, large enough to read its
+/// shape), in tile-local pixels.
+pub struct Thumb {
+    pub design: &'static str,
+    pub ops: Vec<Op>,
+    pub shapes: Vec<Shape>,
+}
+
+/// The design thumbnails. A tile asks for its size while the frame is built (`want`); the next
+/// frame builds them ([`prepare_designs`]), so they are always the tile's exact size.
+#[derive(Default)]
+pub struct Designs {
+    pub want: Option<(Bar, (u32, u32))>,
+    /// What `thumbs` were built for: the bar, the size, the documents' version.
+    built: Option<(Bar, (u32, u32), u64)>,
+    pub thumbs: Vec<Thumb>,
+}
+
+impl Designs {
+    /// A tile asked for thumbnails that aren't built yet.
+    pub fn pending(&self, version: u64) -> bool {
+        self.want.is_some_and(|(bar, size)| self.built != Some((bar, size, version)))
+    }
+
+    /// `design`'s thumbnail, if built for this bar and size.
+    pub fn get(&self, bar: Bar, size: (u32, u32), design: &str) -> Option<&Thumb> {
+        let built = self.built.is_some_and(|(b, s, _)| b == bar && s == size);
+        built.then(|| self.thumbs.iter().find(|t| t.design == design)).flatten()
+    }
+}
+
 #[derive(Default)]
 pub struct Cache {
     key: u64,
     pub content: Content,
+    pub designs: Designs,
     images: Option<shell::bars::Images>,
     /// The shell's app-icon service (names and icons of pinned apps), started on first use.
     icons: Option<(mypaper_bars::icons::Icons, std::sync::mpsc::Receiver<mypaper_bars::wake::Msg>)>,
@@ -172,13 +205,7 @@ fn build(
     );
     // Bars.
     if let Ok(config) = bars_config(app, &monitor) {
-        let theme_appearance = loaded
-            .as_ref()
-            .and_then(|t| t.theme.bars.as_ref())
-            .and_then(|s| s.appearance.clone())
-            .unwrap_or_default();
-        let appearance = config.appearance.over(&theme_appearance);
-        let system = if app.fixture { fixed_accent() } else { mypaper_bars::accent::read() };
+        let (appearance, system) = bar_base(app, &config, loaded.as_ref());
         let model = shell::bars::sample_model(clock(app), "File Explorer");
         let mut bar_ops = Vec::new();
         if config.top.enabled && config.top.monitors.includes(&monitor.device, monitor.primary) {
@@ -218,6 +245,85 @@ fn build(
         Show::Desktop | Show::Widgets => widgets(app, ui, &mut out, &monitor, scale, loaded.as_ref()),
     }
     out
+}
+
+/// What every bar view needs besides its config: the base appearance (the file's over the
+/// wallpaper's) and the system accent.
+fn bar_base(
+    app: &App,
+    config: &BarsConfig,
+    loaded: Option<&mypaper_theme::LoadedTheme>,
+) -> (mypaper_theme::Appearance, mypaper_bars::accent::System) {
+    let theme = loaded
+        .and_then(|t| t.theme.bars.as_ref())
+        .and_then(|s| s.appearance.clone())
+        .unwrap_or_default();
+    let system = if app.fixture { fixed_accent() } else { mypaper_bars::accent::read() };
+    (config.appearance.over(&theme), system)
+}
+
+/// Builds the design thumbnails a tile asked for, if they aren't already (see [`Designs`]).
+pub fn prepare_designs(app: &App, ui: &mut Ui) {
+    let mut cache = app.stage.borrow_mut();
+    let Some((bar, size)) = cache.designs.want.take() else { return };
+    let version = app.docs.version;
+    if cache.designs.built == Some((bar, size, version)) {
+        return;
+    }
+    let Some(monitor) = app.display().cloned() else { return };
+    let Ok(base) = bars_config(app, &monitor) else { return };
+    let theme_dir = theme_name(&app.docs).and_then(|t| mypaper_theme::locate(Some(&t)).ok());
+    let loaded = theme_dir.as_deref().and_then(|d| mypaper_theme::LoadedTheme::load(d).ok());
+    let Cache { images, icons, designs, .. } = &mut *cache;
+    let images = images.get_or_insert_with(shell::bars::Images::default);
+    let mut icons = icons.as_mut().map(|(i, _)| i);
+    let scale = size.0 as f32 / 400.0;
+    let model = shell::bars::sample_model(clock(app), "File Explorer");
+    let list: &[(&'static str, &str)] = match bar {
+        Bar::Top => &crate::pages::bars::TOP_DESIGNS,
+        Bar::Dock => &crate::pages::bars::DOCK_DESIGNS,
+    };
+    designs.thumbs.clear();
+    for &(design, _) in list {
+        // The file as it is, with this design: the bars resolve it exactly as on the desktop.
+        let mut raw = app.docs.doc(DocId::Bars).raw.clone();
+        let op = crate::docs::Op { doc: DocId::Bars, path: format!("/{}/design", bar.key()), value: Some(json!(design)) };
+        crate::docs::apply_op(&mut raw, &op);
+        let Ok(mut config) = BarsConfig::parse(&raw.to_string()).and_then(|c| c.for_monitor(&monitor.device, monitor.primary)) else {
+            continue;
+        };
+        config.dock.pinned = base.dock.pinned.clone();
+        config.resolve(shell::bars::default_pins);
+        let (appearance, system) = bar_base(app, &config, loaded.as_ref());
+        let (frame, at, tokens) = match bar {
+            Bar::Top => {
+                let tokens = shell::bars::Tokens::resolve(&config.top.look, &appearance, &system);
+                let frame = shell::bars::top(size.0, &config, &model, &tokens, scale, ui, images, None);
+                let y = if config.top.position == mypaper_bars::config::TopPosition::Bottom { size.1 as f32 - frame.size.1 as f32 } else { 0.0 };
+                (frame, (0.0, y), tokens)
+            }
+            Bar::Dock => {
+                let tokens = shell::bars::Tokens::resolve(&config.dock.look, &appearance, &system);
+                let apps = dock_apps(&config, icons.as_deref_mut());
+                let frame = shell::bars::dock(&config, &model, &apps, &tokens, scale, size, &[], &[], ui, images, None);
+                let (w, h) = (frame.size.0 as f32, frame.size.1 as f32);
+                let margin = config.dock.margin.unwrap_or(6.0) as f32 * scale;
+                let at = match config.dock.position {
+                    mypaper_bars::config::DockPosition::Bottom => ((size.0 as f32 - w) / 2.0, size.1 as f32 - h - margin),
+                    mypaper_bars::config::DockPosition::Top => ((size.0 as f32 - w) / 2.0, margin),
+                    mypaper_bars::config::DockPosition::Left => (margin, (size.1 as f32 - h) / 2.0),
+                    mypaper_bars::config::DockPosition::Right => (size.0 as f32 - w - margin, (size.1 as f32 - h) / 2.0),
+                };
+                (frame, at, tokens)
+            }
+        };
+        designs.thumbs.push(Thumb {
+            design,
+            ops: offset(&frame.list.ops, at.0, at.1).collect(),
+            shapes: frame.shapes.iter().map(|(r, radius)| shape(r.offset(at.0, at.1), *radius, &tokens)).collect(),
+        });
+    }
+    designs.built = Some((bar, size, version));
 }
 
 /// The bars' config as this display sees it (overrides applied, pins resolved).
@@ -609,6 +715,17 @@ pub fn offset(ops: &[Op], dx: f32, dy: f32) -> impl Iterator<Item = Op> + '_ {
     })
 }
 
+/// The flat stand-in for engine glass: the tint, a little stronger than clarity says (there's
+/// no blur under it), and the rim's hairline. `shapes` move by `(dx, dy)`.
+pub fn stand_in(b: &mut B, shapes: &[Shape], dx: f32, dy: f32) {
+    for s in shapes {
+        let alpha = 0.28 + (1.0 - s.clarity).clamp(0.0, 1.0) * 0.55;
+        let rect = s.rect.offset(dx, dy);
+        b.fill(rect, s.radius, s.tint.with_alpha(alpha.min(0.9)));
+        b.stroke(rect, s.radius, 1.0, Rgba::new(1.0, 1.0, 1.0, 0.14));
+    }
+}
+
 /// Draws the stage at `frame` and registers its items; returns them in window pixels. `pick`
 /// says what clicking an item does (and `None` for the bare wallpaper).
 pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<&Item>) -> Action) -> Vec<Item> {
@@ -635,14 +752,7 @@ pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<
         b.list.ops.extend(offset(&c.dim, frame.left, frame.top).map(|op| dim(op, 0.42)));
     }
     if !engine {
-        for s in &c.shapes {
-            // The flat stand-in for engine glass: the tint, a little stronger than clarity
-            // says (there's no blur under it), and the rim's hairline.
-            let alpha = 0.28 + (1.0 - s.clarity).clamp(0.0, 1.0) * 0.55;
-            let rect = s.rect.offset(frame.left, frame.top);
-            b.fill(rect, s.radius, s.tint.with_alpha(alpha.min(0.9)));
-            b.stroke(rect, s.radius, 1.0, Rgba::new(1.0, 1.0, 1.0, 0.14));
-        }
+        stand_in(b, &c.shapes, frame.left, frame.top);
     }
     b.list.ops.extend(offset(&c.ops, frame.left, frame.top));
     // Rounded corners: a ring in the page colour covers the picture's square corners.

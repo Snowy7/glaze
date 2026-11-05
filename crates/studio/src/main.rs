@@ -94,6 +94,7 @@ impl Studio {
         if let Some((frame, show)) = pages::stage(app) {
             stage::prepare(app, ui, (frame.width() as u32, frame.height() as u32), show);
         }
+        stage::prepare_designs(app, ui);
         let built = view::build(app, &mut ui.text);
         surface.set_chrome(&built.chrome);
         surface.set_background(app.theme.palette.chrome);
@@ -109,6 +110,11 @@ impl Studio {
             log::error!("drawing: {e:#}");
         }
         app.dirty = false;
+        // A design tile asked for thumbnails this frame: build them in the next one.
+        if app.stage.borrow().designs.pending(app.docs.version) {
+            app.dirty = true;
+            crate::wake(app.thread);
+        }
         app.settle_reveal();
         // Text cursor over fields, an arrow elsewhere.
         let over_field = app
