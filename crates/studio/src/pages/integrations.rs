@@ -122,18 +122,6 @@ pub static LIST: &[Integration] = &[
         setup: "In OBS: Tools › WebSocket Server Settings. Copy its password, then Paste password.",
         privacy: "Talks to OBS on this PC. Outputs and scenes only: no meters or previews.",
     },
-    Integration {
-        name: "Grok Bot",
-        adds: "Quick prompts, routines and recent requests",
-        glyph: glyph::STAR,
-        section: Some("grok"),
-        builtin: false,
-        module: None,
-        secret: None,
-        fields: &[],
-        setup: "Connect detects Grok Bot on this PC. Sign in once in Grok Bot. Quick prompt opens a draft there for you to send. Grok does not expose its routine list or run results to other desktop apps; optional webhook routines are under Advanced.",
-        privacy: "Uses Grok Bot's existing sign-in. Optional webhook keys stay in Windows Credential Manager; requests run only on your click.",
-    },
 ];
 
 fn enabled(app: &App, i: &Integration) -> bool {
@@ -359,9 +347,6 @@ fn details(app: &App, b: &mut B, area: Rect) {
                 }
             }
         }
-        if item.name == "Grok Bot" && advanced {
-            y = routines(app, b, x, y, w);
-        }
         if item.section.is_none() || item.name == "Weather and RSS" {
             let lw = b.button_width("Their widgets", true, true);
             b.button(key("int-widgets"), Rect::new(x, y, lw, b.px(28.0)), "Their widgets", Some(glyph::CHEVRON_RIGHT), ButtonKind::Secondary, true, Action::Nav(Page::Widgets));
@@ -373,31 +358,6 @@ fn details(app: &App, b: &mut B, area: Rect) {
         y += b.paragraph(x + b.px(26.0), y + b.px(2.0), w - b.px(26.0), item.privacy, &small, b.px(16.0), p.ink3);
         y + b.px(16.0)
     });
-}
-
-/// Grok routines: title and address, each with its own key.
-fn routines(app: &App, b: &mut B, x: f32, mut y: f32, w: f32) -> f32 {
-    let p = *b.p;
-    let list = app.get(DocId::Integrations, "/grok/routines").and_then(Value::as_array).cloned().unwrap_or_default();
-    for (n, r) in list.iter().enumerate() {
-        let title = r.get("title").and_then(Value::as_str).unwrap_or("");
-        let url = r.get("url").and_then(Value::as_str).unwrap_or("");
-        let row = Rect::new(x, y, w, b.px(40.0));
-        label(b, row, title, url, None);
-        let rw = b.button_width("Remove", false, true);
-        let kw = b.button_width("Paste key", false, true);
-        b.button(key(("routine-key", n)), Rect::new(x + w - rw - kw - b.px(6.0), y + b.px(6.0), kw, b.px(28.0)), "Paste key", None, ButtonKind::Secondary, true, Action::Set(Edit::new(DocId::Studio, format!("/routine_key/{n}"), "Key"), Value::Null));
-        let mut rest = list.clone();
-        rest.remove(n);
-        b.button(key(("routine-remove", n)), Rect::new(x + w - rw, y + b.px(6.0), rw, b.px(28.0)), "Remove", None, ButtonKind::Ghost, true, Action::Set(Edit::new(DocId::Integrations, "/grok/routines", "Remove routine"), Value::Array(rest)));
-        y += b.px(46.0);
-    }
-    let half = (w - b.px(82.0)) / 2.0;
-    text_field(app, b, Rect::new(x, y, half, b.px(32.0)), FieldId::Text(DocId::Studio, "/routine_title".into()), None, "A routine's name", "", "Routine name");
-    text_field(app, b, Rect::new(x + half + b.px(6.0), y, half, b.px(32.0)), FieldId::Text(DocId::Studio, "/routine_url".into()), None, "https://", "", "Routine address");
-    b.button(key("routine-add"), Rect::new(x + w - b.px(70.0), y, b.px(70.0), b.px(32.0)), "Add", None, ButtonKind::Secondary, true, Action::Set(Edit::new(DocId::Studio, "/routine_add", "Add routine"), Value::Null));
-    let _ = p;
-    y + b.px(44.0)
 }
 
 /// Integration actions (they arrive as Studio pseudo-paths through `pages::intercept`).
@@ -425,27 +385,6 @@ pub fn intercept(app: &mut App, path: &str) -> bool {
         }
     } else if path == "/integration_access" {
         grant_access(app);
-    } else if let Some(n) = n("/routine_key/") {
-        let id = app.get(DocId::Integrations, &format!("/grok/routines/{n}/id")).and_then(Value::as_str).map(str::to_owned);
-        if let Some(id) = id {
-            paste_secret(app, &format!("grok/{id}"), "Key");
-        }
-    } else if path == "/routine_add" {
-        let title = app.text(&FieldId::Text(DocId::Studio, "/routine_title".into())).trim().to_owned();
-        let url = app.text(&FieldId::Text(DocId::Studio, "/routine_url".into())).trim().to_owned();
-        if title.is_empty() || !url.starts_with("https://") {
-            app.alert("A routine needs a name and an https:// address");
-            return true;
-        }
-        let id: String = crate::library::slug(&title).chars().take(64).collect();
-        let mut list = app.get(DocId::Integrations, "/grok/routines").and_then(Value::as_array).cloned().unwrap_or_default();
-        list.push(json!({ "id": id, "title": title, "url": url }));
-        app.apply("Add routine", vec![Op { doc: DocId::Integrations, path: "/grok/routines".into(), value: Some(Value::Array(list)) }]);
-        app.texts.remove(&FieldId::Text(DocId::Studio, "/routine_title".into()));
-        app.texts.remove(&FieldId::Text(DocId::Studio, "/routine_url".into()));
-    } else if matches!(path, "/routine_title" | "/routine_url") {
-        // Typed text: kept until Add.
-        return false;
     } else {
         return false;
     }
@@ -480,13 +419,6 @@ fn connect(app: &mut App, i: usize, on: bool) {
         let endpoint=app.get(DocId::Integrations,"/t3/endpoint").and_then(Value::as_str).unwrap_or("").to_owned();
         match mypaper_integrations::pairing::connect_t3_blocking(&endpoint) {
             Ok(true)=>{},Ok(false)=>return,Err(error)=>{app.alert(format!("Could not connect T3 Code: {error}"));return;}
-        }
-    }
-    if on && !app.fixture && item.name == "Grok Bot" {
-        let grok=mypaper_integrations::grok::discover();
-        if !grok.installed {app.alert("Grok Bot was not found on this PC. Install it, then Connect again.");return;}
-        if !grok.signed_in {
-            let _=mypaper_integrations::launcher::open(&mypaper_integrations::launcher::Recent{title:String::new(),target:"grokbot://app/v1/open".into(),arguments:String::new()});
         }
     }
     let mut ops = vec![Op { doc: DocId::Integrations, path: format!("/{section}/enabled"), value: Some(json!(on)) }];
