@@ -28,7 +28,6 @@ pub enum Widget {
     Crypto,
     Heatmap,
     Quote,
-    Discord,
     T3,
     Custom,
     /// A face drawn by an SDK plugin of the same id (docs/plugins.md); `data` holds its view.
@@ -53,7 +52,6 @@ impl Widget {
             "crypto" => Self::Crypto,
             "heatmap" => Self::Heatmap,
             "quote" => Self::Quote,
-            "discord" => Self::Discord,
             "t3" => Self::T3,
             custom if custom.starts_with("custom-") => Self::Custom,
             _ => return None,
