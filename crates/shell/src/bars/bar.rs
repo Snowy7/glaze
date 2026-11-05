@@ -16,7 +16,7 @@ use mypaper_bars::{
     events::Reservation,
 };
 use mypaper_desktop::{Monitor, Rect as DesktopRect};
-use mypaper_ui::{Glass, GlassMaterial, Kind, Point, Rect, Role, Surface, SurfaceId, Ui};
+use mypaper_ui::{Glass, Kind, Point, Rect, Role, Surface, SurfaceId, Ui};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -190,14 +190,53 @@ impl Bar {
         let body = body.offset(origin.0 as f32, origin.1 as f32);
         self.windows.iter().any(|w| w.intersects(&body))
     }
+    /// The plates' material in physical px (`tokens.material` is in DIPs; none when transparent).
     fn material(&self) -> Option<crate::glass::Material> {
-        if self.kind == BarKind::Top
-            && self.config.top.design == mypaper_bars::presets::TopDesign::Minimal
-        {
-            None
+        self.tokens.material.map(|m| crate::glass::Material {
+            blur: m.blur * self.scale(),
+            ..m
+        })
+    }
+
+    /// What decides this bar's window and work-area reservation: its monitor, edge, band and
+    /// auto-hide. A config change that keeps it updates the bar in place ([`Bar::restyle`]);
+    /// only a change of it builds a new bar and reserves again.
+    pub fn geometry(kind: BarKind, config: &BarsConfig, monitor: &Monitor) -> impl PartialEq + use<> {
+        let band = if kind == BarKind::Top {
+            config.top.band()
         } else {
-            self.tokens.material
-        }
+            config.dock.band()
+        };
+        (
+            kind,
+            monitor.device.clone(),
+            monitor.rect,
+            monitor.dpi,
+            edge(kind, config),
+            band,
+            kind == BarKind::Dock && config.dock.autohide,
+        )
+    }
+
+    /// Takes a new config and look that keep [`Bar::geometry`]: the same windows and
+    /// reservation, repainted with the new content and material (the engine fades a plate's
+    /// material change, since its id, the window, stays the same).
+    pub fn restyle(&mut self, config: BarsConfig, tokens: Tokens, animate: bool) {
+        let motion = if self.kind == BarKind::Dock {
+            &config.dock.animation
+        } else {
+            &config.top.animation
+        };
+        let dock = self.kind == BarKind::Dock;
+        let slide = motion::settings(motion, dock, false, animate);
+        self.magnify_settings = motion::settings(motion, dock, true, animate);
+        self.magnify_animate = self.magnify_settings.enabled;
+        self.animate = slide.enabled;
+        self.slide.settings = slide;
+        self.config = config;
+        self.tokens = tokens;
+        self.dirty = true;
+        self.presentation_dirty = true;
     }
     pub fn horizontal(&self) -> bool {
         matches!(edge(self.kind, &self.config), Edge::Top | Edge::Bottom)
@@ -501,16 +540,10 @@ impl Bar {
             let glass = self
                 .material()
                 .filter(|_| self.covered(body))
-                .map(|m| Glass {
+                .map(|material| Glass {
                     body: body.offset(-offset.x, -offset.y),
                     radius,
-                    material: GlassMaterial {
-                        clarity: m.clarity,
-                        blur: (m.blur * self.scale()).min(32.0),
-                        refraction: m.refraction,
-                        highlight: m.highlight,
-                        tint: m.tint,
-                    },
+                    material,
                 });
             let surface = if i == 0 {
                 &mut self.surface
@@ -597,10 +630,9 @@ impl Bar {
         if self.hidden || self.slide.value >= 0.999 {
             return vec![];
         }
-        let Some(mut material) = self.material() else {
+        let Some(material) = self.material() else {
             return vec![];
         };
-        material.blur = (material.blur * self.scale()).min(32.0);
         let (x, y) = self.origin();
         self.frame
             .shapes
@@ -627,6 +659,7 @@ impl Bar {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mypaper_ui::GlassMaterial;
     use mypaper_ui::glass::{Backdrop, Shape};
     use windows::Win32::Foundation::HWND;
     struct Available;

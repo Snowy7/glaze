@@ -723,6 +723,12 @@ pub struct Look {
     /// Missing: the appearance's tint at its opacity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<Fill>,
+    /// No plate at all: the items straight on the wallpaper, kept legible by a soft shadow
+    /// (macOS Tahoe's menu bar). `false` keeps the style's glass even where a design is
+    /// transparent; missing: transparent only when `background` is `none`
+    /// ([`Look::is_transparent`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transparent: Option<bool>,
     /// Opacity of the tint laid over an image, gradient or wallpaper background, 0..1.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tint: Option<f32>,
@@ -795,6 +801,12 @@ impl Look {
     pub fn native_style(&self) -> NativeStyle {
         self.style
             .unwrap_or_else(|| NativeStyle::of_family(self.family.unwrap_or_default()))
+    }
+
+    /// Whether the bar draws no plate (`transparent`, else a `none` background).
+    pub fn is_transparent(&self) -> bool {
+        self.transparent
+            .unwrap_or(matches!(self.background, Some(Fill::None)))
     }
 
     /// The wallpaper-glass background, if this look uses it.

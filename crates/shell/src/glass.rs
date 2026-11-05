@@ -6,15 +6,38 @@ use std::collections::BTreeMap;
 
 use mypaper_desktop::Monitor;
 use mypaper_glass_ipc as ipc;
-use mypaper_ui::{Rect, Rgba};
+use mypaper_ui::Rect;
+use mypaper_ui::theme::Knobs;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Material {
-    pub clarity: f32,
-    pub blur: f32,
-    pub refraction: f32,
-    pub highlight: f32,
-    pub tint: Rgba,
+/// A plate's material: the kit's, so a surface's glass (`theme::material` tuned by the user's
+/// [`Knobs`]) is published as it is. Blur here is physical px.
+pub type Material = mypaper_ui::GlassMaterial;
+
+/// Which of the look's families a surface belongs to (`config.json` › `look.bars`, `widgets`,
+/// `menus`: "Different for").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Family {
+    Bars,
+    Widgets,
+    /// Menus and panels: flyouts too.
+    Menus,
+}
+
+/// The user's material controls for `family`: its own over the look's (`config.json` ›
+/// `look`), which Studio's Look sliders edit.
+pub fn knobs(look: &mypaper_config::Look, family: Family) -> Knobs {
+    let own = match family {
+        Family::Bars => look.bars.as_ref(),
+        Family::Widgets => look.widgets.as_ref(),
+        Family::Menus => look.menus.as_ref(),
+    };
+    let m = own.map_or(look.material, |f| f.material.over(&look.material));
+    Knobs {
+        clarity: m.clarity,
+        blur: m.blur,
+        refraction: m.refraction,
+        highlight: m.highlight,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

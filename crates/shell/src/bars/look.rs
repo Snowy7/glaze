@@ -6,10 +6,12 @@
 //! **Styles.** `look.style` is the kit style one to one (`liquid`, `oneui`, `fluent`, `solid`,
 //! `mono`); a look without one takes its family's (Fluent → Fluent, Material → One UI, else
 //! Liquid). The style alone picks the material (`mypaper_ui::theme::material`): Liquid Glass,
-//! frosted One UI, Fluent acrylic, or no glass for Solid and Mono. `look.glass` tunes it.
+//! frosted One UI, Fluent acrylic, or no glass for Solid and Mono. `look.glass` tunes it by the
+//! kit's one rule (`GlassMaterial::tuned`), the same as widgets and flyouts.
 //!
 //! `look.glyphs: fluent` draws the module icons from Segoe Fluent Icons in any style.
 use crate::glass::Material;
+use mypaper_ui::theme::Knobs;
 use mypaper_bars::{
     accent,
     style::{ColorRef, Family, Fill, Glyphs, Look, NativeStyle, Scheme},
@@ -29,9 +31,10 @@ pub struct Tokens {
     pub fill: Option<Rgba>,
     /// Corner radius of the bar, its islands and the dock plate, design px.
     pub radius: f32,
-    /// Engine glass under the body (liquid); `None` draws the theme's surface.
+    /// Engine glass under the body (blur in DIPs); `None` draws the theme's surface.
     pub material: Option<Material>,
-    /// `look.background: none`: no body at all, the items straight on the wallpaper.
+    /// `look.transparent` (or `background: none`): no body at all, the items straight on the
+    /// wallpaper with a soft shadow.
     pub bare: bool,
 }
 
@@ -46,39 +49,35 @@ pub fn style(native: NativeStyle) -> Style {
     }
 }
 
-/// The engine material of `look` in `style`, tinted `tint`: the style's base
-/// (`theme::material`) with the look's knobs over it. Only Liquid takes refraction and a
-/// highlight; One UI and Fluent stay flat and frosted however the knobs are set (a clear
-/// acrylic is just glass), so their clarity is capped.
+/// The engine material of `look` in `style`, tinted `tint` (blur in DIPs): the style's base
+/// (`theme::material`) at the bar's own default, under the look's controls by the kit's one rule
+/// (`GlassMaterial::tuned`, the same as widgets and flyouts). `look.glass` holds the controls
+/// (Studio's Look sliders write it); `glass.tint`, or the older `look.tint`, says how tinted the
+/// glass is (1 - clarity). A bar is small glass: Liquid's default is as clear as macOS's menu bar.
 pub fn material(look: &Look, style: Style, tint: Rgba, opacity: Option<f32>) -> Option<Material> {
-    let tinted = look.glass.tint.or(look.tint);
-    let base = mypaper_ui::theme::material(
-        style,
-        tint.with_alpha(tinted.or(opacity).unwrap_or(0.12)),
-    )?;
-    let lensed = mypaper_ui::theme::lensed(style);
-    // The bar is small glass: as clear as macOS's menu bar unless the look tints it.
-    let clarity = look.glass.clarity.unwrap_or(match tinted {
-        Some(t) => 1.0 - t,
-        None if lensed => 0.88,
-        None => base.clarity,
-    });
-    Some(if lensed {
-        Material {
-            clarity,
-            blur: look.glass.blur.unwrap_or(base.blur),
-            refraction: look.glass.refraction.unwrap_or(base.refraction),
-            highlight: look.glass.highlight.unwrap_or(base.highlight),
-            tint: base.tint,
-        }
+    let base = mypaper_ui::theme::material(style, tint.with_alpha(opacity.unwrap_or(0.12)))?;
+    let base = if mypaper_ui::theme::lensed(style) {
+        Material { clarity: 0.88, ..base }
     } else {
-        Material {
-            clarity: clarity.min(0.6),
-            blur: look.glass.blur.unwrap_or(base.blur).max(base.blur * 0.66),
-            refraction: 0.0,
-            highlight: 0.0,
-            tint: base.tint,
-        }
+        base
+    };
+    let tinted = look.glass.tint.or(look.tint);
+    let m = base.tuned(
+        style,
+        &Knobs {
+            clarity: look.glass.clarity.or(tinted.map(|t| 1.0 - t)),
+            blur: look.glass.blur,
+            refraction: look.glass.refraction,
+            highlight: look.glass.highlight,
+        },
+    );
+    // A tint set beside a clarity is its own strength (the two are independent in bars.json).
+    Some(match tinted {
+        Some(t) => Material {
+            tint: m.tint.with_alpha(t),
+            ..m
+        },
+        None => m,
     })
 }
 
@@ -139,7 +138,7 @@ impl Tokens {
             Style::OneUi => radius * 1.25,
             _ => radius,
         };
-        let bare = matches!(look.background, Some(Fill::None));
+        let bare = look.is_transparent();
         Self {
             family,
             font,
@@ -328,6 +327,34 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(fluent.native_style(), NativeStyle::Fluent);
+    }
+
+    /// The Look sliders reach the bar in every glass style, to both ends: no clamps, blur 0 is
+    /// no frost and clarity 1 no tint.
+    #[test]
+    fn the_looks_controls_reach_the_bar_unclamped() {
+        let system = crate::flyouts::look::fixed_system();
+        for native in [NativeStyle::Liquid, NativeStyle::OneUi, NativeStyle::Fluent] {
+            let at = |clarity: f32, blur: f32| {
+                let look = Look {
+                    style: Some(native),
+                    glass: mypaper_bars::style::GlassStyle {
+                        tint: Some(1.0 - clarity),
+                        blur: Some(blur),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                Tokens::resolve(&look, &Appearance::default(), &system)
+                    .material
+                    .unwrap()
+            };
+            let clear = at(1.0, 0.0);
+            assert_eq!((clear.clarity, clear.blur, clear.tint.a), (1.0, 0.0, 0.0), "{native:?}");
+            let tinted = at(0.0, 32.0);
+            assert_eq!((tinted.clarity, tinted.blur), (0.0, 32.0), "{native:?}");
+            assert!(tinted.tint.a > 0.2, "{native:?}: {tinted:?}");
+        }
     }
 
     #[test]

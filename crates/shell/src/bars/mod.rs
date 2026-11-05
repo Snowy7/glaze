@@ -1414,12 +1414,18 @@ impl Bars {
         });
     }
 
+    /// Builds the bars the config and monitors call for. A bar whose window and reservation stay
+    /// the same ([`Bar::geometry`]: monitor, edge, band, auto-hide) is kept and restyled in
+    /// place, so a style, look or material change only repaints it and fades its plates: no new
+    /// windows and no new work area, which would make maximized windows jump and the screen
+    /// flash. Only bars whose geometry changed are dropped (first, freeing their band) and built
+    /// again, and only then do the bars reserve again.
     fn reconcile(&mut self, ui: &mut Ui) -> Result<()> {
         self.press = None;
         self.preview = None;
         self.preview_due = None;
         self.preview_close = None;
-        self.bars.clear();
+        let mut old = std::mem::take(&mut self.bars);
         if let Some(menu) = &mut self.menu {
             menu.close();
         }
@@ -1432,6 +1438,7 @@ impl Bars {
             }
         }
         self.monitors = monitors.clone();
+        let mut wanted = Vec::new();
         for monitor in monitors {
             let mut config = self.config.for_monitor(&monitor.device, monitor.primary)?;
             config.resolve(services::default_pins);
@@ -1464,17 +1471,36 @@ impl Bars {
                     if performance {
                         tokens.material = None;
                     }
-                    let mut bar = Bar::new(
-                        kind,
-                        config.clone(),
-                        monitor.clone(),
-                        tokens,
-                        self.system.animations && !performance,
-                    )?;
-                    bar.hidden = self.asleep || self.fullscreen.as_deref() == Some(&monitor.device);
+                    let animate = self.system.animations && !performance;
+                    wanted.push((kind, config.clone(), monitor.clone(), tokens, animate));
+                }
+            }
+        }
+        // Keep each bar whose geometry stays; drop the others before any new one reserves.
+        let kept: Vec<Option<Bar>> = wanted
+            .iter()
+            .map(|(kind, config, monitor, ..)| {
+                let geometry = Bar::geometry(*kind, config, monitor);
+                old.iter()
+                    .position(|b| Bar::geometry(b.kind, &b.config, &b.monitor) == geometry)
+                    .map(|i| old.swap_remove(i))
+            })
+            .collect();
+        let rebuilt = !old.is_empty() || kept.iter().any(Option::is_none);
+        drop(old);
+        for ((kind, config, monitor, tokens, animate), kept) in wanted.into_iter().zip(kept) {
+            let mut bar = match kept {
+                Some(mut bar) => {
+                    bar.restyle(config, tokens, animate);
+                    bar
+                }
+                None => {
+                    let mut bar = Bar::new(kind, config, monitor, tokens, animate)?;
+                    bar.hidden =
+                        self.asleep || self.fullscreen.as_deref() == Some(&bar.monitor.device);
                     if kind == BarKind::Dock {
                         bar.items = self.services.dock_items(
-                            &config,
+                            &bar.config,
                             providers::apps::window_monitor(bar.surface.hwnd()),
                         );
                     }
@@ -1483,25 +1509,29 @@ impl Bars {
                     if self.journal.is_some() {
                         bar.reserve();
                     }
-                    // Present immediately: creating the remaining windows is not part of this
-                    // surface's first-frame dependency chain.
-                    bar.paint(
-                        ui,
-                        &self.services.model,
-                        &mut self.images,
-                        Instant::now(),
-                        false,
-                    )?;
-                    self.bars.push(bar);
+                    bar
                 }
-            }
+            };
+            // Present immediately: creating the remaining windows is not part of this
+            // surface's first-frame dependency chain.
+            bar.paint(
+                ui,
+                &self.services.model,
+                &mut self.images,
+                Instant::now(),
+                false,
+            )?;
+            self.bars.push(bar);
         }
-        // Startup defers reservations until core hands over its taskbar journal. Every later
-        // rebuild drops the old appbars, so reserve the new HWNDs before returning to the loop.
+        // Startup defers reservations until core hands over its taskbar journal. A rebuild
+        // dropped old appbars, so every bar settles its band again before returning to the loop;
+        // a restyle keeps every band as it was.
         if self.journal.is_some() {
             self.apply_taskbar();
-            for bar in &mut self.bars {
-                bar.reserve();
+            if rebuilt {
+                for bar in &mut self.bars {
+                    bar.reserve();
+                }
             }
             self.schedule_reservations();
         }

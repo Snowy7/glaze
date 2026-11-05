@@ -470,18 +470,14 @@ impl GlassMaterial {
     /// This surface material (its style's, from [`material`], with the surface's own defaults)
     /// under the user's `knobs`: the one rule bars, widgets, flyouts and menus all follow, so the
     /// same sliders give the same glass everywhere. Nothing is floored or capped: blur 0 is no
-    /// frost, and clarity 1 is clear glass with no tint left (nearly invisible). The tint's
-    /// strength scales with how tinted the glass is, so a surface's own default keeps exactly its
-    /// tint. Refraction and the highlight belong to Liquid; the flat styles keep them at 0.
+    /// frost, and clarity 1 is clear glass with no tint left (nearly invisible). A clarity the
+    /// user set also sets the tint's strength, `1 - clarity`, on every surface alike; unset, each
+    /// surface keeps its own. Refraction and the highlight belong to Liquid; the flat styles keep
+    /// them at 0.
     pub fn tuned(self, style: Style, knobs: &Knobs) -> Self {
         let unit = |v: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 };
         let clarity = knobs.clarity.map_or(self.clarity, unit);
-        let room = 1.0 - unit(self.clarity);
-        let strength = if room > 1e-3 {
-            self.tint.a * (1.0 - clarity) / room
-        } else {
-            1.0 - clarity
-        };
+        let strength = knobs.clarity.map_or(self.tint.a, |_| 1.0 - clarity);
         let lensed = lensed(style);
         let lens = |own: f32, knob: Option<f32>| if lensed { knob.map_or(own, unit) } else { 0.0 };
         Self {
@@ -489,7 +485,7 @@ impl GlassMaterial {
             blur: knobs.blur.map_or(self.blur, |b| if b.is_finite() { b.max(0.0) } else { 0.0 }),
             refraction: lens(self.refraction, knobs.refraction),
             highlight: lens(self.highlight, knobs.highlight),
-            tint: self.tint.with_alpha(unit(strength)),
+            tint: self.tint.with_alpha(strength),
         }
     }
 }

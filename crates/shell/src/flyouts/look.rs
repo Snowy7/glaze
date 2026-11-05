@@ -9,7 +9,7 @@ use mypaper_bars::config::{self, BarsConfig};
 use mypaper_bars::style::{Family, Look as BarLook, NativeStyle, Scheme};
 use mypaper_config::Config;
 use mypaper_theme::{Appearance, LoadedTheme, Paint, TextTone};
-use mypaper_ui::theme::Radii;
+use mypaper_ui::theme::{Knobs, Radii};
 use mypaper_ui::{GlassMaterial, Ink, Rgba, Scheme as UiScheme, Style, Text, Theme, icons};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,10 +50,16 @@ impl Look {
             .inspect_err(|e| log::debug!("flyouts: bars.json: {e:#}"))
             .unwrap_or_default();
         let appearance = theme_appearance();
-        let mut look = Self::resolve(
+        // The user's material controls for menus and panels, read from `config.json` itself
+        // (not their projection into `bars.json`, which may land a moment later).
+        let knobs = Config::load()
+            .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))
+            .unwrap_or_default();
+        let mut look = Self::resolve_with(
             &bars.top.look,
             &bars.appearance.over(&appearance),
             &accent::read(),
+            &knobs,
         );
         look.icons = icons::system_family(text);
         look.win_key = bars.launcher.win_key;
@@ -68,6 +74,17 @@ impl Look {
 
     /// The look of `bar` over `appearance`, as the bars resolve theirs (bars/look.rs).
     pub fn resolve(bar: &BarLook, appearance: &Appearance, system: &System) -> Self {
+        Self::resolve_with(bar, appearance, system, &Knobs::default())
+    }
+
+    /// [`Look::resolve`] under the user's material controls (`config.json` › `look.menus`,
+    /// else `look`), which win over the bar's own `look.glass`.
+    pub fn resolve_with(
+        bar: &BarLook,
+        appearance: &Appearance,
+        system: &System,
+        knobs: &Knobs,
+    ) -> Self {
         let style = bar.native_style();
         let dark = match bar.scheme {
             Some(Scheme::Dark) => true,
@@ -96,33 +113,32 @@ impl Look {
             NativeStyle::Solid => tint,
             _ => tint.with_alpha(bar.tint.or(appearance.opacity).unwrap_or(0.92).max(0.85)),
         };
-        // The style's material (`theme::material`), as the bars'. Flyouts sit over app windows,
-        // so their glass is more tinted and more frosted than the bars': whatever is behind a
-        // flyout (an app, a widget) must not read through its text.
+        // The style's material (`theme::material`) under the user's controls by the kit's one
+        // rule (`GlassMaterial::tuned`), as the bars and widgets. Flyouts sit over app windows,
+        // so their own default (no control set) is more tinted and more frosted than the bars':
+        // whatever is behind a flyout must not read through its text. Blur in DIPs.
         let glass = mypaper_ui::theme::material(kit, tint).map(|base| {
-            let lensed = mypaper_ui::theme::lensed(kit);
-            GlassMaterial {
-                clarity: if lensed {
+            let own = GlassMaterial {
+                clarity: if mypaper_ui::theme::lensed(kit) {
                     1.0 - flyout_tint
                 } else {
                     (1.0 - flyout_tint).min(base.clarity)
                 },
-                blur: if bar.flyouts.blur == Some(false) {
-                    0.0
-                } else {
-                    bar.glass.blur.unwrap_or(base.blur).max(28.0)
-                },
-                refraction: if lensed {
-                    bar.glass.refraction.unwrap_or(base.refraction)
-                } else {
-                    0.0
-                },
-                highlight: if lensed {
-                    bar.glass.highlight.unwrap_or(base.highlight)
-                } else {
-                    0.0
-                },
-                tint,
+                blur: base.blur.max(28.0),
+                ..base
+            };
+            let bar_knobs = Knobs {
+                clarity: None,
+                blur: bar.glass.blur,
+                refraction: bar.glass.refraction,
+                highlight: bar.glass.highlight,
+            };
+            let glass = own.tuned(kit, &knobs.over(bar_knobs));
+            // `flyouts.blur: false` is this bar's own say for its flyouts.
+            if bar.flyouts.blur == Some(false) {
+                GlassMaterial { blur: 0.0, ..glass }
+            } else {
+                glass
             }
         });
         Self {
@@ -300,5 +316,25 @@ mod tests {
                 .a,
             1.0
         );
+    }
+
+    /// The user's controls reach the flyouts as they reach the bars: blur 0 is no frost (no
+    /// 28 px floor) and clarity 1 is clear, untinted glass, in every glass style.
+    #[test]
+    fn the_users_controls_reach_the_flyouts() {
+        for style in [NativeStyle::Liquid, NativeStyle::OneUi, NativeStyle::Fluent] {
+            let bar = BarLook {
+                style: Some(style),
+                ..Default::default()
+            };
+            let knobs = Knobs {
+                clarity: Some(1.0),
+                blur: Some(0.0),
+                ..Default::default()
+            };
+            let look = Look::resolve_with(&bar, &Appearance::default(), &fixed_system(), &knobs);
+            let glass = look.glass.expect("glass");
+            assert_eq!((glass.clarity, glass.blur, glass.tint.a), (1.0, 0.0, 0.0), "{style:?}");
+        }
     }
 }

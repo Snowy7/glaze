@@ -1046,10 +1046,14 @@ impl Flyouts {
             s,
             open.below,
         );
+        // The look's blur is in DIPs; the engine takes physical px, as the bars' and widgets'.
         self.surface.set_glass(glass.map(|material| Glass {
             body: Rect::new(0.0, 0.0, width, height),
             radius,
-            material,
+            material: mypaper_ui::GlassMaterial {
+                blur: material.blur * s,
+                ..material
+            },
         }));
         let at = position(open, Instant::now());
         match self.surface.present(ui, at, size, list) {

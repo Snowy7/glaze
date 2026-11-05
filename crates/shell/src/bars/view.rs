@@ -779,7 +779,7 @@ pub fn top(
     hot: Option<&Interaction>,
 ) -> Frame {
     let t = &config.top;
-    let minimal = t.design == TopDesign::Minimal || tokens.bare;
+    let minimal = tokens.bare;
     let px = |v: f32| (v * scale).round();
     let m = px(t.margin() as f32);
     let h = px(t.height as f32);
@@ -1084,7 +1084,7 @@ pub fn dock(
             };
             for content in zone.iter().flatten() {
                 let rect = convert(a, 0.0, content.width, across);
-                item(&mut f, &mut out, content, rect, config, tokens, false);
+                item(&mut f, &mut out, content, rect, config, tokens, tokens.bare);
                 a += content.width + gap;
             }
         }
