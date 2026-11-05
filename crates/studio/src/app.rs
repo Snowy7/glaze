@@ -628,7 +628,11 @@ impl App {
         use windows::Win32::UI::Input::KeyboardAndMouse::GetKeyState;
         // SAFETY: plain key-state queries for the message being handled.
         let down = |vk: i32| unsafe { GetKeyState(vk) } < 0;
-        let (ctrl, shift, alt) = (down(0x11), down(0x10), down(0x12));
+        self.key_with(vk, (down(0x11), down(0x10), down(0x12)));
+    }
+
+    /// One key press with its modifiers (Ctrl, Shift, Alt).
+    pub fn key_with(&mut self, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) {
         self.dirty = true;
         match (ctrl, vk) {
             (true, 0x4B) => return self.run(Action::Palette), // K

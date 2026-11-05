@@ -57,6 +57,50 @@ pub fn shot(app: &mut App, ui: &mut Ui) -> mypaper_ui::Image {
     }
 }
 
+/// Keyboard only: every place by its shortcut, regions by F6, controls by Tab, the palette by
+/// Ctrl+K and back out by Esc, with a fresh frame after each key (as the window does).
+#[test]
+fn keyboard_reaches_every_place_region_and_the_palette() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(true, &ui);
+    let ctrl = (true, false, false);
+    let none = (false, false, false);
+    let press = |app: &mut App, ui: &mut Ui, vk: u16, mods| {
+        app.key_with(vk, mods);
+        let built = crate::view::build(app, &mut ui.text);
+        app.frame.targets = built.targets;
+        app.frame.regions = built.regions;
+        app.frame.overlay_from = built.overlay_from;
+    };
+    press(&mut app, &mut ui, 0x31, ctrl);
+    for (vk, page) in [(0x32, Page::Wallpapers), (0x33, Page::Look), (0x34, Page::Widgets), (0x35, Page::Bars), (0x36, Page::Integrations), (0xBC, Page::Settings), (0x31, Page::Home)] {
+        press(&mut app, &mut ui, vk, ctrl);
+        assert_eq!(app.nav.page(), page);
+    }
+    // F6 visits each region in turn.
+    let mut regions = Vec::new();
+    for _ in 0..app.frame.regions.len() {
+        press(&mut app, &mut ui, 0x75, none);
+        let focus = app.input.focus.expect("F6 focuses a control");
+        let rect = app.frame.targets.iter().find(|t| t.key == focus).unwrap().rect;
+        let c = mypaper_ui::Point::new((rect.left + rect.right) / 2.0, (rect.top + rect.bottom) / 2.0);
+        regions.push(app.frame.regions.iter().position(|r| r.contains(c)));
+    }
+    regions.dedup();
+    assert_eq!(regions.len(), app.frame.regions.len(), "F6 reaches every region: {regions:?}");
+    // Tab moves on, and Shift+Tab comes back.
+    let start = app.input.focus;
+    press(&mut app, &mut ui, 0x09, none);
+    assert_ne!(app.input.focus, start);
+    press(&mut app, &mut ui, 0x09, (false, true, false));
+    assert_eq!(app.input.focus, start);
+    // The palette opens on Ctrl+K and Esc closes it.
+    press(&mut app, &mut ui, 0x4B, ctrl);
+    assert!(matches!(app.overlay, Some(Overlay::Palette { .. })));
+    press(&mut app, &mut ui, 0x1B, none);
+    assert_eq!(app.overlay, None);
+}
+
 fn check(name: &str, dark: bool, setup: impl Fn(&mut App)) {
     let mut ui = Ui::new().unwrap();
     ui.text.set_capacity(480);
