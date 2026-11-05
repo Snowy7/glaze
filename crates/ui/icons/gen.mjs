@@ -25,7 +25,7 @@ wind droplet umbrella sunrise sunset
 speaker headphones mic house user star heart info triangle-alert download upload external-link
 sliders-horizontal layers folder file clipboard grip-vertical arrow-up arrow-down plane map-pin
 eye cast radio-tower accessibility camera app-window message-square terminal circle-user-round
-palette undo-2 redo-2 mouse-pointer-2 move wrench video sparkles box images activity rocket quote coins
+palette undo-2 redo-2 mouse-pointer-2 move wrench video sparkles box images activity rocket quote
 grid-3x3 toggle-right panel-top
 `.trim().split(/\s+/);
 
