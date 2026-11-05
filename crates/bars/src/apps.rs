@@ -85,9 +85,39 @@ pub struct Group {
 pub fn group_key(window: &AppWindow) -> String {
     match (&window.aumid, &window.exe) {
         (Some(aumid), _) => format!("app:{}", aumid.to_lowercase()),
-        (None, Some(exe)) => format!("exe:{exe}"),
+        (None, Some(exe)) => format!("exe:{}", exe_identity(exe)),
         (None, None) => format!("window:{}", window.hwnd),
     }
+}
+
+/// What identifies an app's executable across its updates: the path, lowercase, with a
+/// Squirrel version folder folded away (`…\Discord\app-1.0.9188\Discord.exe` is
+/// `…\discord\discord.exe`), which is also what its shortcut starts ([`squirrel_target`]).
+pub fn exe_identity(exe: &str) -> String {
+    let exe = exe.to_lowercase().replace('/', "\\");
+    let parts: Vec<&str> = exe.rsplitn(3, '\\').collect();
+    match parts.as_slice() {
+        [file, version, root] if version.starts_with("app-") => format!("{root}\\{file}"),
+        _ => exe,
+    }
+}
+
+/// The app a Squirrel shortcut starts (Discord, Slack, Teams classic): its target is
+/// `…\Update.exe` with `--processStart "Discord.exe"`, which runs `…\app-<version>\Discord.exe`.
+/// Returns that app's [`exe_identity`] (`…\discord.exe`), or `None` for any other shortcut.
+pub fn squirrel_target(target: &str, args: &str) -> Option<String> {
+    let (dir, file) = target.rsplit_once(['\\', '/'])?;
+    if !file.eq_ignore_ascii_case("update.exe") {
+        return None;
+    }
+    let lower = args.to_lowercase();
+    let at = lower.find("--processstart")? + "--processstart".len();
+    let rest = args[at..].trim_start_matches(['=', ' ']);
+    let name = match rest.strip_prefix('"') {
+        Some(quoted) => quoted.split('"').next()?,
+        None => rest.split_whitespace().next()?,
+    };
+    (!name.is_empty()).then(|| format!("{dir}\\{name}").to_lowercase())
 }
 
 /// Groups windows given in z-order (top first); groups come in the order of their top window.
@@ -131,9 +161,11 @@ pub struct Pin {
 }
 
 impl Pin {
+    /// The same AppUserModelID, else the same executable across updates ([`exe_identity`]).
     fn matches(&self, group: &Group) -> bool {
         let same = |a: &Option<String>, b: &Option<String>| matches!((a, b), (Some(a), Some(b)) if a.eq_ignore_ascii_case(b));
-        same(&self.aumid, &group.aumid) || same(&self.exe, &group.exe)
+        let exe = |e: &Option<String>| e.as_deref().map(exe_identity);
+        same(&self.aumid, &group.aumid) || same(&exe(&self.exe), &exe(&group.exe))
     }
 }
 
@@ -640,6 +672,41 @@ mod tests {
         let items = dock_items(&pins, &apps, &order, elsewhere);
         assert_eq!(items.len(), 2, "no running app has a window on monitor 2");
         assert!(items.iter().all(|i| i.windows.is_empty()));
+    }
+
+    /// Discord's pin is `Update.exe --processStart Discord.exe`; its windows run from a version
+    /// folder, some with the shortcut's AUMID and some without. All of them group under the pin.
+    #[test]
+    fn squirrel_apps_group_with_their_pinned_shortcut() {
+        let root = r"c:\users\me\appdata\local\discord";
+        let pin_exe = squirrel_target(&format!(r"{root}\Update.exe"), r#"--processStart "Discord.exe""#);
+        assert_eq!(pin_exe.as_deref(), Some(r"c:\users\me\appdata\local\discord\discord.exe"));
+        assert_eq!(
+            squirrel_target(r"C:\Slack\Update.exe", "--processStart slack.exe --process-start-args x"),
+            Some(r"c:\slack\slack.exe".into())
+        );
+        assert_eq!(squirrel_target(r"C:\Tools\setup.exe", "--processStart a.exe"), None);
+        assert_eq!(squirrel_target(r"C:\X\Update.exe", "--check"), None);
+
+        let running_exe = format!(r"{root}\app-1.0.9188\Discord.exe");
+        let groups = group(vec![
+            window(20, Some("com.squirrel.Discord.Discord"), Some(running_exe.as_str())),
+            window(21, None, Some(running_exe.to_lowercase().as_str())),
+            window(22, None, Some(CHROME)),
+        ]);
+        let mut order = Vec::new();
+        update_order(&mut order, &groups);
+        let apps: Vec<Running> = groups.into_iter().map(|g| running(g, "x")).collect();
+        let pins = [Pin {
+            path: r"C:\Users\me\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Discord Inc\Discord.lnk".into(),
+            name: "Discord".into(),
+            exe: pin_exe,
+            ..Pin::default()
+        }];
+        let items = dock_items(&pins, &apps, &order, View::default());
+        let summary: Vec<(&str, bool, usize)> =
+            items.iter().map(|i| (i.name.as_str(), i.pinned, i.windows.len())).collect();
+        assert_eq!(summary, [("Discord", true, 2), ("x", false, 1)]);
     }
 
     #[test]

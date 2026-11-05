@@ -301,6 +301,16 @@ pub(crate) fn resolve_link(path: &str) -> (Option<String>, Option<String>) {
                 String::from_utf16_lossy(&buffer[..len]).to_lowercase()
             })
             .filter(|t| !t.is_empty());
+        // A Squirrel app's shortcut starts `Update.exe --processStart App.exe`: the app is that.
+        let mut args = [0u16; 1024];
+        let target = match (target, link.GetArguments(&mut args).ok()) {
+            (Some(target), Some(())) => {
+                let len = args.iter().position(|&c| c == 0).unwrap_or(args.len());
+                let args = String::from_utf16_lossy(&args[..len]);
+                Some(crate::apps::squirrel_target(&target, &args).unwrap_or(target))
+            }
+            (target, _) => target,
+        };
         let aumid = link.cast::<IPropertyStore>().ok().and_then(|store| {
             let value = store.GetValue(&PKEY_AppUserModel_ID).ok()?;
             let text: PWSTR = PropVariantToStringAlloc(&value).ok()?;
