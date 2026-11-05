@@ -310,20 +310,32 @@ fn every_flyout_matches_its_golden_image_and_takes_clicks_on_its_whole_body() {
     )
     .unwrap();
     let look = Look::default();
+    // The same bar in the light scheme (the kit's light palette).
+    let light = Look::resolve(
+        &mypaper_bars::style::Look {
+            scheme: Some(mypaper_bars::style::Scheme::Light),
+            ..Default::default()
+        },
+        &mypaper_theme::Appearance::default(),
+        &super::look::fixed_system(),
+    );
     let golden = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/flyouts");
     for (name, panel) in panels(&mut ui, &surface) {
-        // The style's own fill, for the picture.
-        let (list, size) = build(
-            panel.as_ref(),
-            &mut ui.text,
-            &look,
-            1.0,
-            1400.0,
-            (None, None, None),
-            false,
-        );
-        let image = render(&mut ui, &list, size.0, size.1).unwrap();
-        mypaper_ui::golden::check(&image, &golden.join(format!("{name}.png"))).unwrap();
+        // The style's own fill, for the picture, dark and light.
+        for (look, suffix) in [(&look, ""), (&light, "-light")] {
+            let (list, size) = build(
+                panel.as_ref(),
+                &mut ui.text,
+                look,
+                1.0,
+                1400.0,
+                (None, None, None),
+                false,
+            );
+            let image = render(&mut ui, &list, size.0, size.1).unwrap();
+            let path = golden.join(format!("{name}{suffix}.png"));
+            mypaper_ui::golden::check(&image, &path).unwrap();
+        }
         // Glass under it: the body is invisible but every pixel of its rounded shape is hit.
         let (list, size) = build(
             panel.as_ref(),
