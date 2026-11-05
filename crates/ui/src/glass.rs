@@ -18,15 +18,17 @@ use crate::geom::{Rect, Rgba};
 /// The glass's material (plan, "Material controls"); values are 0..=1 unless noted.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GlassMaterial {
-    /// 1 is clear glass, 0 fully tinted (the tint's opacity is `1 - clarity`).
+    /// 1 is clear glass, 0 fully tinted (iOS 27's slider, `docs/glass.md`).
     pub clarity: f32,
-    /// Blur radius in physical px (the engine caps it at 12).
+    /// Frost. Themes and [`crate::theme::Knobs`] give it in design px; what reaches the engine
+    /// (a plate, `Surface::set_glass`) is physical px, the surface's scale times that.
     pub blur: f32,
     /// How far the rim bends what is behind it.
     pub refraction: f32,
     /// The specular rim's strength.
     pub highlight: f32,
-    /// The tint colour; its alpha is ignored (see `clarity`).
+    /// The tint colour; its alpha is the stained tint's strength
+    /// ([`GlassMaterial::tuned`] fades it with clarity).
     pub tint: Rgba,
 }
 

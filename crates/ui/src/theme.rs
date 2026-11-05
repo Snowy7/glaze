@@ -442,6 +442,58 @@ pub const fn lensed(style: Style) -> bool {
     matches!(style, Style::Liquid)
 }
 
+/// The user's material controls (`config.json` › `look.material`, Studio's Look sliders). Each
+/// one that is set replaces a surface's own value ([`GlassMaterial::tuned`]); unset ones keep it.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Knobs {
+    /// Clear (1) to tinted (0).
+    pub clarity: Option<f32>,
+    /// Frost in design px (DIPs): 0 is no frost at all.
+    pub blur: Option<f32>,
+    pub refraction: Option<f32>,
+    pub highlight: Option<f32>,
+}
+
+impl Knobs {
+    /// `self` over `base`: each control set here wins.
+    pub fn over(self, base: Knobs) -> Knobs {
+        Knobs {
+            clarity: self.clarity.or(base.clarity),
+            blur: self.blur.or(base.blur),
+            refraction: self.refraction.or(base.refraction),
+            highlight: self.highlight.or(base.highlight),
+        }
+    }
+}
+
+impl GlassMaterial {
+    /// This surface material (its style's, from [`material`], with the surface's own defaults)
+    /// under the user's `knobs`: the one rule bars, widgets, flyouts and menus all follow, so the
+    /// same sliders give the same glass everywhere. Nothing is floored or capped: blur 0 is no
+    /// frost, and clarity 1 is clear glass with no tint left (nearly invisible). The tint's
+    /// strength scales with how tinted the glass is, so a surface's own default keeps exactly its
+    /// tint. Refraction and the highlight belong to Liquid; the flat styles keep them at 0.
+    pub fn tuned(self, style: Style, knobs: &Knobs) -> Self {
+        let unit = |v: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 };
+        let clarity = knobs.clarity.map_or(self.clarity, unit);
+        let room = 1.0 - unit(self.clarity);
+        let strength = if room > 1e-3 {
+            self.tint.a * (1.0 - clarity) / room
+        } else {
+            1.0 - clarity
+        };
+        let lensed = lensed(style);
+        let lens = |own: f32, knob: Option<f32>| if lensed { knob.map_or(own, unit) } else { 0.0 };
+        Self {
+            clarity,
+            blur: knobs.blur.map_or(self.blur, |b| if b.is_finite() { b.max(0.0) } else { 0.0 }),
+            refraction: lens(self.refraction, knobs.refraction),
+            highlight: lens(self.highlight, knobs.highlight),
+            tint: self.tint.with_alpha(unit(strength)),
+        }
+    }
+}
+
 /// The user's style for surfaces that carry no look of their own (widgets), process-wide.
 static ACTIVE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
@@ -713,6 +765,24 @@ mod tests {
         assert_eq!(t.adaptive(44.0, Some(0.02)), Scheme::Dark);
         assert_eq!(t.adaptive(380.0, Some(0.8)), Scheme::Dark, "a flyout");
         assert_eq!(t.adaptive(44.0, None), Scheme::Dark, "no backdrop known");
+    }
+
+    /// The user's controls reach the glass unclamped in every glass style: blur 0 is no frost,
+    /// clarity 1 has no tint left, and the surface's own default is left exactly as it was.
+    #[test]
+    fn knobs_drive_every_glass_style_to_both_ends() {
+        let tint = hex(0x17171A, 0.46);
+        for style in [Style::Liquid, Style::OneUi, Style::Fluent] {
+            let base = material(style, tint).unwrap();
+            assert_eq!(base.tuned(style, &Knobs::default()), base, "{style:?}: unset keeps it");
+            let clear = base.tuned(style, &Knobs { clarity: Some(1.0), blur: Some(0.0), ..Default::default() });
+            assert_eq!((clear.clarity, clear.blur, clear.tint.a), (1.0, 0.0, 0.0), "{style:?}");
+            let tinted = base.tuned(style, &Knobs { clarity: Some(0.0), blur: Some(32.0), ..Default::default() });
+            assert_eq!((tinted.clarity, tinted.blur), (0.0, 32.0), "{style:?}");
+            assert!(tinted.tint.a > base.tint.a, "{style:?}: more tinted than its default");
+            let lens = base.tuned(style, &Knobs { refraction: Some(1.0), highlight: Some(1.0), ..Default::default() });
+            assert_eq!(lens.refraction > 0.0, lensed(style), "{style:?}: only Liquid bends");
+        }
     }
 
     #[test]
