@@ -148,13 +148,18 @@ impl Gpu {
 
     /// A device with no windows, for tests that render to textures, with timestamp queries
     /// where the adapter has them (the frame lab). `None` on a machine without a DX12 GPU.
+    /// The integrated GPU, or the high-performance one with `MYPAPER_LAB_GPU=high`.
     #[cfg(test)]
     pub fn headless() -> Option<Self> {
         let instance = instance();
-        let adapter = pollster::block_on(
-            instance.request_adapter(&adapter_options(None, GpuPreference::Integrated)),
-        )
-        .ok()?;
+        let preference = match std::env::var("MYPAPER_LAB_GPU").as_deref() {
+            Ok("high") => GpuPreference::HighPerformance,
+            _ => GpuPreference::Integrated,
+        };
+        let adapter =
+            pollster::block_on(instance.request_adapter(&adapter_options(None, preference)))
+                .ok()?;
+        eprintln!("lab GPU: {}", adapter.get_info().name);
         let (device, queue) = open_device(&adapter, true).ok()?;
         let format = wgpu::TextureFormat::Bgra8Unorm;
         let blit = Blitter::new(&device, format);

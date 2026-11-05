@@ -51,24 +51,42 @@ liquid-rust's springs materialize glass in and out and fade material changes.
 
 - **Plates** (bars and widgets over the wallpaper): `glass_pass.rs` keeps one `Scene` per
   screen and one `Renderer` per kept wallpaper frame. Screens sharing a kept frame share its
-  pyramid. It draws over the restored swapchain image through sRGB views. Nothing runs while
-  the wallpaper and plates hold still.
+  pyramid, which holds every screen's part. The pyramid is rebuilt when the kept frame holds a
+  wallpaper it hasn't blurred (`KeptFrame::drawn`), and only over the texels each group reads.
+  It draws over the restored swapchain image through sRGB views. Nothing runs while the
+  wallpaper and plates hold still.
 - **Overlays** (flyouts and menus over app windows): `overlay/glass.rs` copies the WGC crop into
   an sRGB texture, draws the glass over a transparent clear (premultiplied for
   DirectComposition) and copies it out. The window grows by `Material::outset` (shadow or
   sampling reach).
 
-## Cost (5 November 2026, AMD integrated GPU, 2560 x 1440, `src/lab.rs` fixture of 8 plates)
+## Cost (5 November 2026, 2560 x 1440, rain-city, `src/lab.rs` fixture of 8 plates)
 
-| GPU per screen | old glass | liquid-rust |
-|---|---:|---:|
-| Glass-only frame (plates moved) | ~0.14 ms | 2.88 ms |
-| Frame where the wallpaper changed (pyramid rebuilt) | ~0.14 ms | 4.05 ms |
-| liquid-rust without dispersion, shadow and rims (experiment) | | 1.71 ms |
+GPU per screen for the glass pass, median of 150 frames. `MYPAPER_LAB_GPU=high` runs the lab on
+the discrete GPU; the lab prints every pyramid level and glass layer (`liquid_rust::Profiler`).
 
-GPU memory: +29 MiB for two screens on separate kept frames (two half-resolution Rgba16Float
-pyramids); about half that when the kept frame is shared. Still wallpaper and still plates
-cost nothing.
+| | old glass | liquid-rust as vendored | now, AMD iGPU | now, RTX 4070 SUPER |
+|---|---:|---:|---:|---:|
+| Glass-only frame (plates moved) | ~0.14 ms | 2.90 ms | **2.48 ms** | 0.08 ms |
+| Frame where the wallpaper changed | ~0.14 ms | 4.06 ms | **2.92 ms** | 0.12 ms |
+| of which: blur pyramid | | 1.17 ms | 0.42 ms | 0.03 ms |
+| of which: glass layer | | 2.90 ms | 2.49 ms | 0.09 ms |
+
+Every step kept the picture: the lab's frames differ from the vendored render by at most 1/255
+in 0.0017% of pixels (rounding in the shader's closed forms); the pyramid changes are
+bit-identical. The integrated GPU is still over its 2 ms budget, so the glass layer is the open
+item. It is ALU-bound: the second frost level costs 0.39 ms, dispersion 0.63 ms, the inner
+shadows 0.35 ms and the rim light 0.24 ms (ablations, not shippable). The cheapest approximation
+measured, one frost sample where the dispersion's R-B split is under 0.5 px, saves 0.22 ms and
+differs by at most 1/255 in 0.06% of pixels. It isn't shipped.
+
+GPU memory: +28 MiB private for two screens on separate kept frames (two half-resolution
+Rgba16Float pyramids, 9.4 MiB each, of which level 0 is 7 MiB); about half that when the kept
+frame is shared. Still wallpaper and still plates cost nothing.
+
+The GPU (`engine.gpu`: integrated, high-performance or auto) and frame rate (`engine.fps`, 1 to
+360) are engine settings, per wallpaper too; overlays open on the engine's adapter. Integrated
+stays the default.
 
 ## Images
 

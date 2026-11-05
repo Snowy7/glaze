@@ -37,8 +37,9 @@ Each is marked `mypaper:` in the source.
   Snell's law in closed form instead of atan/asin/tan; the lit rim and the rim shade share one
   hole; the touch glow is skipped while it adds exactly zero.
 - Pyramid rebuilds cover only what each group reads (`Reads`, `Layout::rects`): its frost
-  levels over its bounds (frost samples inside its shapes), the statistics texel at its centre (and the top level for
-  glass that flips with the content), each with the exact halo the levels above need. Upstream
-  rebuilt the bounding box of all glass, every level. The cache keeps rects per level, so content
-  that holds still adds only what newly moved glass reads (a second screen sharing the content
-  adds its own part), and is blurred whole once its cache passes 16 rects per level.
+  levels over its bounds (frost samples inside its shapes), the statistics texel at its centre
+  (and the top level for glass that flips with the content), each with the exact halo the
+  levels above need. Upstream rebuilt the bounding box of all glass plus its reach, every level.
+  The cache keeps rects per level, so content that holds still adds only what newly moved glass
+  reads (a second screen sharing the content adds its own part), and is blurred whole once its
+  cache passes 16 rects per level. Same pixels as a full rebuild.
