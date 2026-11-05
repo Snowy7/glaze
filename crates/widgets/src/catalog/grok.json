@@ -1,0 +1,41 @@
+{
+  "id": "grok",
+  "name": "Grok Bot",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "Start saved routines and see their request receipts.",
+  "size": {
+    "default": [
+      4,
+      2
+    ],
+    "min": [
+      2,
+      2
+    ],
+    "max": [
+      4,
+      4
+    ],
+    "allowed": [
+      [
+        2,
+        2
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        4
+      ]
+    ]
+  },
+  "resizable": true,
+  "permissions": [
+    "launch"
+  ],
+  "plugins": [],
+  "settings": []
+}

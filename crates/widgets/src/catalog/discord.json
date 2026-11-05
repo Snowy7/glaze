@@ -1,0 +1,48 @@
+{
+  "id": "discord",
+  "name": "Discord",
+  "version": "1.0.0",
+  "author": "mypaper",
+  "description": "Retained Discord notifications and a direct link to conversations.",
+  "size": {
+    "default": [
+      4,
+      2
+    ],
+    "min": [
+      2,
+      2
+    ],
+    "max": [
+      4,
+      4
+    ],
+    "allowed": [
+      [
+        2,
+        2
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        4
+      ]
+    ]
+  },
+  "resizable": true,
+  "permissions": [
+    "launch"
+  ],
+  "plugins": [],
+  "settings": [
+    {
+      "key": "appId",
+      "type": "string",
+      "label": "Windows notification app ID",
+      "default": "com.squirrel.Discord.Discord"
+    }
+  ]
+}

@@ -123,6 +123,24 @@ pub fn builtins() -> Registry {
     let manifest = WidgetManifest::parse(include_str!("catalog/weather.json"), "weather")
         .expect("built-in schema");
     widgets.insert("weather".into(), Installed { manifest });
+    let manifest = WidgetManifest::parse(include_str!("catalog/discord.json"), "discord")
+        .expect("built-in schema");
+    widgets.insert("discord".into(), Installed { manifest });
+    let manifest =
+        WidgetManifest::parse(include_str!("catalog/t3.json"), "t3").expect("built-in schema");
+    widgets.insert("t3".into(), Installed { manifest });
+    let manifest =
+        WidgetManifest::parse(include_str!("catalog/obs.json"), "obs").expect("built-in schema");
+    widgets.insert("obs".into(), Installed { manifest });
+    let manifest = WidgetManifest::parse(include_str!("catalog/docker.json"), "docker")
+        .expect("built-in schema");
+    widgets.insert("docker".into(), Installed { manifest });
+    let manifest = WidgetManifest::parse(include_str!("catalog/tailscale.json"), "tailscale")
+        .expect("built-in schema");
+    widgets.insert("tailscale".into(), Installed { manifest });
+    let manifest =
+        WidgetManifest::parse(include_str!("catalog/grok.json"), "grok").expect("built-in schema");
+    widgets.insert("grok".into(), Installed { manifest });
     Registry { widgets }
 }
 
@@ -156,7 +174,7 @@ mod tests {
     #[test]
     fn every_builtin_schema_and_replacement_survives_without_html() {
         let registry = builtins();
-        assert_eq!(registry.widgets.len(), 17);
+        assert_eq!(registry.widgets.len(), 23);
         assert_eq!(registry.replacement("analog-clock").unwrap().0, "clock");
         assert_eq!(
             registry

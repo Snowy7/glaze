@@ -1744,6 +1744,6 @@ mod tests {
         for dir in folders("plugins", PLUGIN_MANIFEST) {
             PluginManifest::load(&dir).unwrap();
         }
-        assert_eq!(widgets.widgets.len(), 17);
+        assert_eq!(widgets.widgets.len(), 23);
     }
 }
