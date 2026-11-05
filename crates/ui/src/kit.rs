@@ -214,6 +214,12 @@ impl<'a> Frame<'a> {
     /// the theme's surface fill and, for Solid, its one hairline.
     pub fn surface(&mut self, rect: Rect, glass_available: bool) -> Option<Glass> {
         let radius = self.px(self.theme.radius.surface);
+        self.surface_shaped(rect, radius, glass_available)
+    }
+
+    /// [`Frame::surface`] at `radius` device px instead of the theme's: a bar strip (0), an
+    /// island or a dock plate whose corners come from its own config.
+    pub fn surface_shaped(&mut self, rect: Rect, radius: f32, glass_available: bool) -> Option<Glass> {
         match self.theme.glass.filter(|_| glass_available) {
             Some(material) => {
                 self.fill(rect, radius, Rgba::HIT);
@@ -250,6 +256,16 @@ impl<'a> Frame<'a> {
         let h = 1.0_f32.max(self.s.floor());
         self.fill(
             Rect::new(left, y.round(), right - left, h),
+            0.0,
+            self.theme.color.separator,
+        );
+    }
+
+    /// A vertical hairline from `top` to `bottom` at `x` (a dock's divider before its trash).
+    pub fn separator_v(&mut self, top: f32, bottom: f32, x: f32) {
+        let w = 1.0_f32.max(self.s.floor());
+        self.fill(
+            Rect::new(x.round(), top, w, bottom - top),
             0.0,
             self.theme.color.separator,
         );
