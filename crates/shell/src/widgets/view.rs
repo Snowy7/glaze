@@ -913,19 +913,25 @@ fn clock(c: &mut Draw<'_>, m: &Model, now: Stamp) {
             };
             let show_date = m.flag("showDate", true);
             let weight = if variant == "flip" { 500 } else { 300 };
-            // The largest size whose line fits the width, capped by the height.
+            // The largest size whose line fits the width, capped by the height. Widths scale
+            // with the size, so one measurement at 100 px does; it measures "00:00:00" (the
+            // digits are tabular), a layout that stays cached while the seconds change.
+            let template: String = digits
+                .chars()
+                .map(|ch| if ch.is_ascii_digit() { '0' } else { ch })
+                .collect();
             let width_at = |c: &mut Draw<'_>, size: f32| {
-                let digits_w = c.text.measure(&digits, &c.style(size, weight)).0;
-                let period_w = period.as_ref().map_or(0.0, |p| {
-                    c.text.measure(p, &c.style(size * 0.36, 500)).0 + size * 0.14 * s
-                });
-                digits_w + period_w
+                let digits_w = c.text.measure(&template, &c.style(100.0, weight)).0;
+                let period_w = period
+                    .as_ref()
+                    .map_or(0.0, |p| c.text.measure(p, &c.style(36.0, 500)).0 + 14.0 * s);
+                (digits_w + period_w) * size / 100.0
             };
-            let mut size =
-                (r.height() / s * if show_date { 0.56 } else { 0.78 }).clamp(14.0, 132.0);
-            while size > 14.0 && width_at(c, size) > r.width() {
-                size -= 2.0;
-            }
+            let size = (r.height() / s * if show_date { 0.56 } else { 0.78 })
+                .min(132.0)
+                .min(r.width() * 0.96 / width_at(c, 1.0).max(0.01))
+                .max(14.0)
+                .floor();
             let date_size = (size * 0.2).clamp(12.0, 20.0);
             let line = size * 1.2 * s;
             let date_line = if show_date { date_size * 1.45 * s } else { 0.0 };
