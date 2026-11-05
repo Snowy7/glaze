@@ -717,6 +717,7 @@ pub fn offset(ops: &[Op], dx: f32, dy: f32) -> impl Iterator<Item = Op> + '_ {
             Op::Image { rect, image, opacity, source } => Op::Image { rect: r(rect), image, opacity, source },
             Op::TextField { .. } => return None,
             Op::Fill { rect, radius, color } => Op::Fill { rect: r(rect), radius, color },
+            Op::Icon { rect, icon, weight, color } => Op::Icon { rect: r(rect), icon, weight, color },
             Op::Stroke { rect, radius, width, color } => Op::Stroke { rect: r(rect), radius, width, color },
             Op::Line { from, to, width, color } => Op::Line { from: p(from), to: p(to), width, color },
             Op::Text { rect, text, style, color } => Op::Text { rect: r(rect), text, style, color },
