@@ -1058,6 +1058,15 @@ impl Plugins {
         }
     }
 
+    /// Forwards a system event (window, monitor, notification, media, power, theme) to the WASM
+    /// helper, which delivers it only to plugins subscribed to its topic (docs/plugins.md,
+    /// "Events"). Dropped when no helper runs, so sources can send unconditionally.
+    pub fn system_event(&self, event: wire::SystemEvent) {
+        if let Some(helper) = &self.helper {
+            let _ = helper.frames.send(wire::HostMsg::System(event));
+        }
+    }
+
     /// Stops every plugin before the host exits: `shutdown`, up to the grace
     /// period, then kill.
     pub fn shutdown(&mut self) {
