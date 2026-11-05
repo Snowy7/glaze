@@ -461,6 +461,8 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
         // Required so the menu closes when the user clicks elsewhere. This
         // only runs on the user's own right-click, so it steals nothing.
         let _ = SetForegroundWindow(hwnd);
+        // TrackPopupMenu owns a modal pump: forward the panic hotkey back to core's pump.
+        let _panic = MenuPanic::install();
         let id = TrackPopupMenu(
             menu,
             TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
@@ -704,6 +706,49 @@ fn show_shell_menu(caller: HWND, menu: HMENU, point: (i32, i32), themes: &[Strin
         PENDING_MENU.with_borrow_mut(|p| *p = Some((nonce, themes.to_vec())));
         true
     }
+}
+
+/// Keep the supervisor's panic hotkey live inside the stock fallback's modal menu loop.
+struct MenuPanic(windows::Win32::UI::WindowsAndMessaging::HHOOK);
+impl MenuPanic {
+    fn install() -> Self {
+        use windows::Win32::UI::WindowsAndMessaging::{SetWindowsHookExW, WH_MSGFILTER};
+        // SAFETY: this thread's modal loop only; the static callback is unhooked on scope exit.
+        Self(
+            unsafe {
+                SetWindowsHookExW(WH_MSGFILTER, Some(menu_panic), None, GetCurrentThreadId())
+            }
+            .inspect_err(|e| log::warn!("fallback menu panic hook: {e}"))
+            .unwrap_or_default(),
+        )
+    }
+}
+impl Drop for MenuPanic {
+    fn drop(&mut self) {
+        if !self.0.is_invalid() {
+            // SAFETY: hook installed on this thread, removed once before leaving the menu call.
+            let _ = unsafe { windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx(self.0) };
+        }
+    }
+}
+unsafe extern "system" fn menu_panic(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, EndMenu, MSG, MSGF_MENU, WM_HOTKEY,
+    };
+    if code == MSGF_MENU as i32 {
+        // SAFETY: WH_MSGFILTER supplies a live MSG pointer for a nonnegative menu code.
+        let msg = unsafe { &*(lparam.0 as *const MSG) };
+        if msg.message == WM_HOTKEY && msg.wParam.0 == crate::PANIC_HOTKEY as usize {
+            // SAFETY: end this thread's menu, then let the normal supervisor pump handle panic.
+            unsafe {
+                let _ = EndMenu();
+                let _ = PostThreadMessageW(GetCurrentThreadId(), WM_HOTKEY, msg.wParam, msg.lParam);
+            }
+            return LRESULT(1);
+        }
+    }
+    // SAFETY: preserve every other message and hook code unchanged.
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
 #[cfg(test)]
