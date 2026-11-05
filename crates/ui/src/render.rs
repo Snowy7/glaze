@@ -1,17 +1,32 @@
-//! Software Direct2D on a WIC bitmap: the only renderer, for live surfaces and headless golden
-//! images alike. No hardware device is ever created (plan Rule 1); Direct2D's software path
-//! may use WARP, which is allowed.
+//! Software Direct2D: the only renderer, for live surfaces and headless golden images alike.
+//! Each canvas is a Direct2D device context on one WARP (software) Direct3D 11 device per [`Ui`],
+//! made with `PREVENT_INTERNAL_THREADING_OPTIMIZATIONS` so WARP rasterizes on the calling
+//! thread: its default spreads each small frame over a pool of workers, which cost more CPU than
+//! the drawing (a dock magnification sweep, 2026-11-05). No hardware device is ever created
+//! (plan Rule 1).
 
 use anyhow::{Context, Result};
 use std::{cell::RefCell, collections::HashMap, path::Path, sync::Arc};
+use windows::Win32::Foundation::HMODULE;
 use windows::Win32::Graphics::Direct2D::Common::{
-    D2D_RECT_F, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
+    D2D_POINT_2U, D2D_RECT_F, D2D_RECT_U, D2D_SIZE_U, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F,
+    D2D1_PIXEL_FORMAT,
 };
+use windows::Win32::Graphics::Direct2D::{
+    D2D1_BITMAP_OPTIONS, D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1_BITMAP_OPTIONS_CPU_READ,
+    D2D1_BITMAP_OPTIONS_TARGET, D2D1_BITMAP_PROPERTIES1, D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+    D2D1_MAP_OPTIONS_READ, ID2D1Bitmap1, ID2D1Device, ID2D1Factory1,
+};
+use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_WARP, D3D_FEATURE_LEVEL_11_0};
+use windows::Win32::Graphics::Direct3D11::{
+    D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS,
+    D3D11_SDK_VERSION, D3D11CreateDevice,
+};
+use windows::Win32::Graphics::Dxgi::IDXGIDevice;
 use windows::Win32::Graphics::Direct2D::{
     D2D1_ANTIALIAS_MODE_ALIASED, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, D2D1_BITMAP_PROPERTIES,
     D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT, D2D1_FACTORY_TYPE_SINGLE_THREADED,
-    D2D1_FEATURE_LEVEL_DEFAULT, D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_SOFTWARE,
-    D2D1_RENDER_TARGET_USAGE_NONE, D2D1_ROUNDED_RECT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE,
+    D2D1_ROUNDED_RECT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE,
     D2D1CreateFactory, ID2D1Bitmap, ID2D1Factory, ID2D1PathGeometry, ID2D1RenderTarget,
     ID2D1SolidColorBrush, ID2D1StrokeStyle,
 };
@@ -23,8 +38,7 @@ use windows::Win32::Graphics::DirectWrite::{
 use windows::core::Interface;
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Imaging::{
-    CLSID_WICImagingFactory, GUID_WICPixelFormat32bppPBGRA, IWICBitmap, IWICImagingFactory,
-    WICBitmapCacheOnLoad, WICBitmapLockRead, WICRect,
+    CLSID_WICImagingFactory, GUID_WICPixelFormat32bppPBGRA, IWICImagingFactory,
 };
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
@@ -260,6 +274,8 @@ fn sparse_meter_updates_match_a_complete_render() {
 pub struct Ui {
     pub text: Text,
     d2d: ID2D1Factory,
+    /// Every canvas's Direct2D device (see the module docs).
+    device: ID2D1Device,
     wic: IWICImagingFactory,
     params: IDWriteRenderingParams,
 }
@@ -397,6 +413,25 @@ impl Ui {
             let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             let d2d: ID2D1Factory =
                 D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None).context("Direct2D")?;
+            let mut d3d = None;
+            D3D11CreateDevice(
+                None,
+                D3D_DRIVER_TYPE_WARP,
+                HMODULE::default(),
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT
+                    | D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS,
+                Some(&[D3D_FEATURE_LEVEL_11_0]),
+                D3D11_SDK_VERSION,
+                Some(&mut d3d),
+                None,
+                None,
+            )
+            .context("WARP Direct3D 11 device")?;
+            let dxgi: IDXGIDevice = d3d.context("no WARP device")?.cast()?;
+            let device = d2d
+                .cast::<ID2D1Factory1>()?
+                .CreateDevice(&dxgi)
+                .context("Direct2D device")?;
             let wic: IWICImagingFactory =
                 CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)
                     .context("WIC")?;
@@ -405,6 +440,7 @@ impl Ui {
             Ok(Self {
                 text,
                 d2d,
+                device,
                 wic,
                 params,
             })
@@ -492,9 +528,10 @@ pub fn render(ui: &mut Ui, list: &DisplayList, width: u32, height: u32) -> Resul
     })
 }
 
-/// A WIC bitmap and the software Direct2D target drawing into it.
+/// A software Direct2D device context, the bitmap it draws into and a CPU-readable copy of it.
 pub(crate) struct Canvas {
-    bitmap: IWICBitmap,
+    bitmap: ID2D1Bitmap1,
+    readback: ID2D1Bitmap1,
     target: ID2D1RenderTarget,
     brush: ID2D1SolidColorBrush,
     images: RefCell<HashMap<usize, (Arc<Image>, ID2D1Bitmap)>>,
@@ -507,32 +544,44 @@ pub(crate) struct Canvas {
 
 impl Canvas {
     pub(crate) fn new(ui: &Ui, width: u32, height: u32) -> Result<Self> {
-        let properties = D2D1_RENDER_TARGET_PROPERTIES {
-            r#type: D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+        let properties = |options: D2D1_BITMAP_OPTIONS| D2D1_BITMAP_PROPERTIES1 {
             pixelFormat: D2D1_PIXEL_FORMAT {
                 format: DXGI_FORMAT_B8G8R8A8_UNORM,
                 alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
             },
             dpiX: 96.0,
             dpiY: 96.0,
-            usage: D2D1_RENDER_TARGET_USAGE_NONE,
-            minLevel: D2D1_FEATURE_LEVEL_DEFAULT,
+            bitmapOptions: options,
+            colorContext: std::mem::ManuallyDrop::new(None),
+        };
+        let size = D2D_SIZE_U {
+            width: width.max(1),
+            height: height.max(1),
         };
         // SAFETY: documented calls on objects owned by `ui` and by the canvas.
         unsafe {
-            let bitmap = ui
-                .wic
+            let context = ui
+                .device
+                .CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE)
+                .context("software Direct2D context")?;
+            let bitmap = context
+                .CreateBitmap(size, None, 0, &properties(D2D1_BITMAP_OPTIONS_TARGET))
+                .context("canvas bitmap")?;
+            let readback = context
                 .CreateBitmap(
-                    width.max(1),
-                    height.max(1),
-                    &GUID_WICPixelFormat32bppPBGRA,
-                    WICBitmapCacheOnLoad,
+                    size,
+                    None,
+                    0,
+                    &properties(D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW),
                 )
-                .context("WIC bitmap")?;
-            let target = ui
-                .d2d
-                .CreateWicBitmapRenderTarget(&bitmap, &properties)
-                .context("software Direct2D target")?;
+                .context("canvas readback bitmap")?;
+            context.SetTarget(&bitmap);
+            context.SetDpi(96.0, 96.0);
+            let target: ID2D1RenderTarget = context.cast()?;
+            // New bitmaps are undefined; a WIC bitmap started transparent, and so does this.
+            target.BeginDraw();
+            target.Clear(Some(&color(Rgba::TRANSPARENT)));
+            target.EndDraw(None, None).context("clearing the canvas")?;
             target.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             target.SetTextRenderingParams(&ui.params);
             let brush = target.CreateSolidColorBrush(&color(Rgba::TRANSPARENT), None)?;
@@ -552,6 +601,7 @@ impl Canvas {
             )?;
             Ok(Self {
                 bitmap,
+                readback,
                 target,
                 brush,
                 images: RefCell::new(HashMap::new()),
@@ -596,7 +646,8 @@ impl Canvas {
         self.read_regions(&[area], |_, row, bytes| sink(row, bytes))
     }
 
-    /// One WIC lock for a sparse frame. Each returned row still contains only its dirty area.
+    /// One readback copy and map for a sparse frame. Each returned row still contains only its
+    /// dirty area.
     pub(crate) fn read_regions(
         &self,
         areas: &[PixelRect],
@@ -617,31 +668,37 @@ impl Canvas {
             right = right.max(area.x + area.width);
             bottom = bottom.max(area.y + area.height);
         }
-        let rect = WICRect {
-            X: left as i32,
-            Y: top as i32,
-            Width: (right - left) as i32,
-            Height: (bottom - top) as i32,
-        };
-        // SAFETY: the lock covers every area, which lies inside the bitmap; slices stay within
-        // the locked buffer (`stride` bytes per row, `width * 4` of them pixels) and are dropped
-        // before the lock.
+        // SAFETY: the copied rect covers every area and lies inside both bitmaps (same size);
+        // the readback is mapped whole (`pitch` bytes per row), and the slices are dropped
+        // before it is unmapped.
         unsafe {
-            let lock = self
-                .bitmap
-                .Lock(&rect, WICBitmapLockRead.0 as u32)
-                .context("locking the bitmap")?;
-            let stride = lock.GetStride()? as usize;
-            let (mut size, mut data) = (0u32, std::ptr::null_mut());
-            lock.GetDataPointer(&mut size, &mut data)?;
+            self.readback
+                .CopyFromBitmap(
+                    Some(&D2D_POINT_2U { x: left, y: top }),
+                    &self.bitmap,
+                    Some(&D2D_RECT_U {
+                        left,
+                        top,
+                        right,
+                        bottom,
+                    }),
+                )
+                .context("copying the canvas")?;
+            let mapped = self
+                .readback
+                .Map(D2D1_MAP_OPTIONS_READ)
+                .context("mapping the canvas")?;
+            let stride = mapped.pitch as usize;
             for &area in areas {
                 let row_bytes = area.width as usize * 4;
                 for row in 0..area.height {
-                    let start = data
-                        .add((area.y + row - top) as usize * stride + (area.x - left) as usize * 4);
+                    let start = mapped
+                        .bits
+                        .add((area.y + row) as usize * stride + area.x as usize * 4);
                     sink(area, row, std::slice::from_raw_parts(start, row_bytes));
                 }
             }
+            self.readback.Unmap().context("unmapping the canvas")?;
         }
         Ok(())
     }
