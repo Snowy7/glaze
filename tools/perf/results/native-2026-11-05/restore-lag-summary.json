@@ -1,0 +1,99 @@
+{
+  "frames": 6955,
+  "screens": {
+    "0": {
+      "wallpaper_ms": {
+        "n": 600,
+        "median": 3.75265,
+        "p95": 4.51272,
+        "max": 4.8669
+      },
+      "restore_ms": {
+        "n": 3561,
+        "median": 0.93072,
+        "p95": 1.71476,
+        "max": 2.12257
+      },
+      "glass_ms": {
+        "n": 3561,
+        "median": 0.17748,
+        "p95": 0.2332,
+        "max": 0.49996
+      },
+      "frame_ms": {
+        "n": 3561,
+        "median": 1.2576399999999999,
+        "p95": 5.25284,
+        "max": 6.04318
+      },
+      "glass_only_frames": 2961,
+      "glass_only_publish_to_submit_ms": {
+        "n": 2961,
+        "median": 2.7335,
+        "p95": 3.9935,
+        "max": 4.6065
+      },
+      "glass_only_publish_to_composition_ms": {
+        "n": 2961,
+        "median": 6.8181,
+        "p95": 8.164,
+        "max": 8.9207
+      }
+    },
+    "1": {
+      "wallpaper_ms": null,
+      "restore_ms": {
+        "n": 3394,
+        "median": 1.06688,
+        "p95": 1.13584,
+        "max": 1.49704
+      },
+      "glass_ms": {
+        "n": 3394,
+        "median": 0.14532,
+        "p95": 0.15696,
+        "max": 0.23276
+      },
+      "frame_ms": {
+        "n": 3394,
+        "median": 1.2134,
+        "p95": 1.2848000000000002,
+        "max": 1.67156
+      },
+      "glass_only_frames": 2794,
+      "glass_only_publish_to_submit_ms": {
+        "n": 2794,
+        "median": 2.8365,
+        "p95": 4.0993,
+        "max": 4.6582
+      },
+      "glass_only_publish_to_composition_ms": {
+        "n": 2794,
+        "median": 6.571300000000001,
+        "p95": 7.9527,
+        "max": 8.9207
+      }
+    }
+  },
+  "all_screens_glass_ms": {
+    "n": 3394,
+    "median": 0.32426,
+    "p95": 0.38208,
+    "max": 0.65756
+  },
+  "engine_frame_ms": {
+    "n": 600,
+    "median": 6.090720000000001,
+    "p95": 6.854520000000001,
+    "max": 7.268260000000001
+  },
+  "per_screen_frame_ms": {
+    "n": 600,
+    "median": 3.0453600000000005,
+    "p95": 3.4272600000000004,
+    "max": 3.6341300000000003
+  },
+  "incomplete_frames": 167,
+  "wallpaper_submissions": 1200,
+  "wallpaper_passes": 600
+}

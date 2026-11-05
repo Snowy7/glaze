@@ -5,6 +5,35 @@ Rust hot-patching. Each section ends with README-ready text.
 
 ## Memory
 
+### Private memory on the integrated GPU (5 November 2026)
+
+On the default low-power AMD iGPU, **every D3D12 heap is private memory of the engine**, and a
+heap the engine releases is **not given back**: private bytes stay at their peak (allocating
+the same sizes again reuses part of it, and grows the rest). Upload heaps are returned. So the
+engine's private memory is its peak GPU allocation, and a texture made once at load and freed
+costs as much as one kept forever. Reproduce with the ignored dev tests in `src/lab.rs`:
+`lab::memory` (private bytes after each allocation step of a two-screen engine) and
+`lab::memory_hints` (screen-sized textures allocated, freed and allocated again).
+
+| Allocation | Before | After | Change |
+|---|---:|---:|---|
+| wgpu device | +188 MiB | **+97 MiB** | `max_non_sampler_bindings` 1,000,000 -> 16,384: wgpu's DX12 backend allocates its shader-visible view descriptor heap at that size up front (`gpu.rs`, `DESCRIPTORS`) |
+| four 2560x1440 textures (56 MiB of pixels) | +114 MiB | **+60 MiB** | `MemoryHints::MemoryUsage` grew suballocation blocks from 8 to 64 MiB (124 MiB reserved); fixed 4 MiB blocks give every screen-sized texture a heap of its own size (`MEMORY_HINTS`) |
+| backdrop pyramid, per screen | +32 MiB | **about +5 MiB, once for screens sharing a kept frame** | the 1/8 BMP pyramid copied each swapchain into a full-size texture first; it now shrinks the kept frame directly (`backdrop.rs`) |
+| palette | +16 MiB | **0** | re-rendered the first frame at full screen size to shrink it to 64x36; it now shrinks the kept frame (`palette.rs`) |
+| second screen's kept frame (rain) | +6 MiB | **0** | screens of one render size share one kept frame when the source ignores the screen and cursor (`Source::shared`) |
+| rain's baked still frame | 0 | +6 MiB | one texture for both screens (`ShaderImage::bake`), the price of 0.8 ms of GPU per frame |
+
+What remains, measured live (rain-city, two screens, see Native measurements): the D3D12
+device on the iGPU itself (about 30 MiB with nothing else), what probing the other adapters
+leaves behind (up to about 25 MiB: wgpu creates a D3D12 device on each RTX entry and WARP
+before choosing; skipping them needs the single-adapter wgpu-hal patch planned for N5), wgpu's
+own device state, and **the two swapchains, +63 and +40 MiB** for 2 x 2 x 14 MiB of pixels:
+the extra is DXGI's presentation of an iGPU swapchain on monitors driven by the RTX, which
+wgpu gives no control over. Swapchains already use the minimum two buffers.
+
+### Earlier measurements
+
 Measured with release builds on the dev laptop (AMD iGPU + NVIDIA dGPU, two 1440p monitors),
 one fresh process per theme, read 7-9 s after start with PowerShell `WorkingSet64` and
 `PrivateMemorySize64`. During these runs both monitors were covered by maximized windows, so
@@ -35,9 +64,10 @@ one 1440p swapchain, clears and presents one frame, then idles.
 | bare wgpu, FXC | 177-193 MB | 234-246 MB |
 | engine, `aurora`, before | 290 MB | 297 MB |
 
-So about two thirds of the engine's footprint is the GPU stack, which is not ours to cut: the
-driver user-mode DLLs map 105 MB (`nvgpucomp64`), 86 MB (`nvwgf2umx`) and 77 MB (`amdxc64`),
-and the loader pulls the NVIDIA ones into every D3D process on this machine.
+The driver user-mode DLLs map 105 MB (`nvgpucomp64`), 86 MB (`nvwgf2umx`) and 77 MB
+(`amdxc64`), and the loader pulls the NVIDIA ones into every D3D process on this machine.
+(Correction, November 2026: most of this floor *was* ours to cut. The DLL images are not
+private memory; wgpu's default 1M-entry descriptor heap was 92 MiB of it. See above.)
 
 ### What was cut
 
@@ -62,7 +92,8 @@ and the loader pulls the NVIDIA ones into every D3D process on this machine.
 
 ### What was checked and left alone
 
-- `MemoryHints::MemoryUsage` was already set. Swapchains already use the minimum two buffers
+- `MemoryHints::MemoryUsage` was already set (replaced by fixed 4 MiB blocks in November 2026,
+  above). Swapchains already use the minimum two buffers
   (`desired_maximum_frame_latency = 1`). Image and slideshow uploads leave no staging memory
   behind (photo and aurora have the same private size).
 - Video's extra ~120 MB private over a shader theme is mostly the decoder: Media Foundation's
@@ -221,8 +252,12 @@ a new shell can recover the abandoned writer mutex.
 Each visible screen keeps its **unmodified last wallpaper** as a sampled texture. Shader
 `scale` determines that texture's size: at 2560 x 1440, rain-city keeps 1664 x 936 rather than a
 second full-size texture. A full-scale source keeps 2560 x 1440. The engine restores the acquired
-swapchain image (copy at full scale when supported, upscale blit otherwise), then draws plates
-sampling the kept frame. A geometry/material update only restores and draws glass. A still
+swapchain image (copy at full scale when supported, otherwise an upscale blit that covers every
+pixel: no clear and no blending), then draws plates sampling the kept frame. When the source
+draws the same frame on every screen (`Source::shared`: a shader theme that never names
+`paper.mouse`, or a still image), screens of one render size share **one** kept frame, drawn
+once per engine frame; the backdrop BMP is then read back once for them too. Rain and snow
+share; aurora's cursor glow does not. A geometry/material update only restores and draws glass. A still
 source draws once and then makes no submissions until something changes; removing a plate
 restores the old region too. Theme switches release all old kept textures and plate bindings.
 Web/app kinds continue to own their windows and have no engine plates; their live glass is the
@@ -356,6 +391,16 @@ to `bgra8unorm` (with mipmaps); `rgba32float` is an unfiltered, single-mip data 
 with `textureLoad`. Omit image `source` for a generated texture; its default size is then 1x1.
 Artistic shader code and its licence stay in the theme, outside the MIT engine.
 
+A **baked layer**, `{"binding":5,"bake":"still_frame"}`, names a `@fragment` entry point of
+the theme's own shader. The engine draws it once per render size, in the frame's format, before
+the first frame of that size, and binds it like an image (texture at the binding, sampler
+after it). It sees `paper` with the render resolution and time 0, and every loaded image; it
+must not read a baked layer. Screens of one render size share it. The theme reads it with
+`textureLoad(layer, vec2i(frag), 0)`: a pixel it draws unchanged is then bit-identical to the
+baked one. Rain bakes its frame without drop refraction (blur, grade, vignette): a 2x2 quad in
+which no pixel refracts loads the baked pixel, and the others draw the 18 samples, so the
+blur's implicit derivatives see the same quad either way.
+
 The three rain variants retain Heartfelt's layers, speeds, intensity, grading, vignette,
 1.06 stationary CSS zoom and **all 18 original photo samples**, including the original /16
 gain. Analytic gradients share field evaluation instead of evaluating Heartfelt three times.
@@ -364,6 +409,14 @@ rain field. Fixed-time captures before/after this cache have 99.995% identical p
 1800 x 800 wallpaper crop; the rest differ by at most one RGB level. A static photo-blur
 prefilter was rejected because it changed the stochastic grain; branchy droplet early-outs
 were rejected because they were slower on this iGPU. Neither optimization remains in production.
+Since November 2026 each Heartfelt layer returns its value and the intermediates of its
+gradient; the three layer gradients (most of the shader's divisions) run only where the
+field's smoothstep slopes (0.3 < field < 1), elsewhere the refraction is exactly zero. A
+per-layer "below the drop" early-out was exact but slower again (2.63 against 2.52 ms) and was
+dropped; unrolling the 17-tap loop was bit-identical but no faster. Offline, one 1664 x 936
+rain-city frame: 3.69 ms before, 2.88 with the baked still frame, 2.52 with the gradient split;
+fixed-time frames differ from the original by at most 1/255 in 0.0003% of pixels
+(`tools/perf/diff-frames.py`).
 Explicit disk radii and reduced sine arguments avoid the FXC blur regression caught in the
 web/native comparison. The snow ports keep all 50 original layers and the old CSS-resolution/
 0.65-canvas crop and density. Fluids and vanta-waves remain web themes. Original GLSL, photo
@@ -389,6 +442,10 @@ GPU stamps use `Queue::get_timestamp_period()`. See `docs/performance.md` for th
 merge gates and the limits of the lag check.
 
 ### Native measurements (4-5 November 2026)
+
+These are the N0.3 figures. The engine hillclimb of 5 November 2026 cut rain-city to
+257.11 MiB and aurora to 262.35 MiB, GPU per engine frame to 5.41 ms and all 16 plates to
+0.275 ms: see `docs/performance.md`, Engine hillclimb, and Memory above.
 
 Release build, AMD Radeon(TM) integrated GPU (DX12/FXC), Ryzen 7 7800X3D / 16 logical
 CPUs. Both physical 2560 x 1440 displays were visible throughout every accepted sample:

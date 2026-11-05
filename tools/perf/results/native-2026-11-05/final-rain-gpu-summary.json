@@ -1,0 +1,79 @@
+{
+  "frames": 1200,
+  "screens": {
+    "0": {
+      "wallpaper_ms": {
+        "n": 600,
+        "median": 3.0916449999999998,
+        "p95": 3.32538,
+        "max": 3.36654
+      },
+      "restore_ms": {
+        "n": 600,
+        "median": 0.95294,
+        "p95": 1.04556,
+        "max": 1.60816
+      },
+      "glass_ms": {
+        "n": 600,
+        "median": 0.16536,
+        "p95": 0.18736,
+        "max": 0.20244
+      },
+      "frame_ms": {
+        "n": 600,
+        "median": 4.186349999999999,
+        "p95": 4.4784999999999995,
+        "max": 4.89451
+      },
+      "glass_only_frames": 0,
+      "glass_only_publish_to_submit_ms": null,
+      "glass_only_publish_to_composition_ms": null
+    },
+    "1": {
+      "wallpaper_ms": null,
+      "restore_ms": {
+        "n": 600,
+        "median": 1.10518,
+        "p95": 1.22376,
+        "max": 1.70816
+      },
+      "glass_ms": {
+        "n": 600,
+        "median": 0.11008,
+        "p95": 0.15952,
+        "max": 0.21476
+      },
+      "frame_ms": {
+        "n": 600,
+        "median": 1.21786,
+        "p95": 1.34372,
+        "max": 1.85456
+      },
+      "glass_only_frames": 0,
+      "glass_only_publish_to_submit_ms": null,
+      "glass_only_publish_to_composition_ms": null
+    }
+  },
+  "all_screens_glass_ms": {
+    "n": 600,
+    "median": 0.27526,
+    "p95": 0.32216,
+    "max": 0.38548000000000004
+  },
+  "engine_frame_ms": {
+    "n": 600,
+    "median": 5.410275,
+    "p95": 5.76176,
+    "max": 6.749070000000001
+  },
+  "per_screen_frame_ms": {
+    "n": 600,
+    "median": 2.7051375,
+    "p95": 2.88088,
+    "max": 3.3745350000000003
+  },
+  "incomplete_frames": 0,
+  "wallpaper_submissions": 1200,
+  "wallpaper_passes": 600
+}

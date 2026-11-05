@@ -1,0 +1,179 @@
+{
+  "method": "src/lab.rs captures at 3/12/30 s (final 2560x1440 frame with the fixture's 8 plates, and the kept frame) from the original engine (2e096c9) and the final one, compared by tools/perf/diff-frames.py",
+  "themes": {
+    "rain-city": {
+      "largest_difference_of_255": 1,
+      "frames": {
+        "3s.bgra": {
+          "max": 1,
+          "identical_pct": 99.9999
+        },
+        "3s-kept.bgra": {
+          "max": 1,
+          "identical_pct": 99.9999
+        },
+        "12s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "12s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "30s.bgra": {
+          "max": 1,
+          "identical_pct": 99.9996
+        },
+        "30s-kept.bgra": {
+          "max": 1,
+          "identical_pct": 99.9997
+        }
+      }
+    },
+    "rain-city-amber": {
+      "largest_difference_of_255": 1,
+      "frames": {
+        "3s.bgra": {
+          "max": 1,
+          "identical_pct": 99.9996
+        },
+        "3s-kept.bgra": {
+          "max": 1,
+          "identical_pct": 99.9997
+        },
+        "12s.bgra": {
+          "max": 1,
+          "identical_pct": 99.9996
+        },
+        "12s-kept.bgra": {
+          "max": 1,
+          "identical_pct": 99.9996
+        },
+        "30s.bgra": {
+          "max": 1,
+          "identical_pct": 99.9995
+        },
+        "30s-kept.bgra": {
+          "max": 1,
+          "identical_pct": 99.9996
+        }
+      }
+    },
+    "rain-city-midnight": {
+      "largest_difference_of_255": 1,
+      "frames": {
+        "3s.bgra": {
+          "max": 1,
+          "identical_pct": 99.9999
+        },
+        "3s-kept.bgra": {
+          "max": 1,
+          "identical_pct": 99.9999
+        },
+        "12s.bgra": {
+          "max": 1,
+          "identical_pct": 99.9999
+        },
+        "12s-kept.bgra": {
+          "max": 1,
+          "identical_pct": 99.9999
+        },
+        "30s.bgra": {
+          "max": 1,
+          "identical_pct": 100.0
+        },
+        "30s-kept.bgra": {
+          "max": 1,
+          "identical_pct": 99.9999
+        }
+      }
+    },
+    "snow-city": {
+      "largest_difference_of_255": 0,
+      "frames": {
+        "3s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "3s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "12s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "12s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "30s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "30s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        }
+      }
+    },
+    "snow-forest": {
+      "largest_difference_of_255": 0,
+      "frames": {
+        "3s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "3s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "12s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "12s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "30s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "30s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        }
+      }
+    },
+    "aurora": {
+      "largest_difference_of_255": 0,
+      "frames": {
+        "3s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "3s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "12s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "12s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "30s.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        },
+        "30s-kept.bgra": {
+          "max": 0,
+          "identical_pct": 100.0
+        }
+      }
+    }
+  }
+}
