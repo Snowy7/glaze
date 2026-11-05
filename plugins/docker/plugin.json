@@ -1,0 +1,11 @@
+{
+  "id": "docker",
+  "name": "Docker",
+  "version": "0.1.0",
+  "component": "docker.wasm",
+  "api": "0.1",
+  "faces": [
+    { "id": "containers", "name": "Containers", "icon": "layers", "size": { "default": [8, 4], "min": [4, 4], "max": [8, 8] } }
+  ],
+  "permissions": ["pipe:docker_engine"]
+}

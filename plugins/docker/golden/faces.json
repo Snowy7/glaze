@@ -1,0 +1,625 @@
+{
+  "containers": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "kind": "metric",
+                "label": "running",
+                "value": "2"
+              },
+              {
+                "color": "secondary",
+                "kind": "metric",
+                "label": "CPU · sample",
+                "value": "19%"
+              },
+              {
+                "color": "secondary",
+                "kind": "metric",
+                "label": "MiB · sample",
+                "value": "576"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "detail": "12% · 192 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "mypaper-web"
+                  },
+                  {
+                    "action": "stop:web",
+                    "enabled": true,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "6% · 384 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "development-postgres"
+                  },
+                  {
+                    "action": "stop:db",
+                    "enabled": true,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "Needs attention",
+                    "icon": "warning",
+                    "kind": "list_row",
+                    "title": "background-worker"
+                  },
+                  {
+                    "action": "start:worker",
+                    "enabled": true,
+                    "icon": "play",
+                    "kind": "icon_button",
+                    "label": "Start container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 9.0,
+        "kind": "stack"
+      },
+      "footer": "Refresh samples CPU and memory",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "kind": "metric",
+            "label": "running",
+            "value": "2",
+            "width": 105.0
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "detail": "12% · 192 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "mypaper-web"
+                  },
+                  {
+                    "action": "stop:web",
+                    "enabled": true,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "6% · 384 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "development-postgres"
+                  },
+                  {
+                    "action": "stop:db",
+                    "enabled": true,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "Needs attention",
+                    "icon": "warning",
+                    "kind": "list_row",
+                    "title": "background-worker"
+                  },
+                  {
+                    "action": "start:worker",
+                    "enabled": true,
+                    "icon": "play",
+                    "kind": "icon_button",
+                    "label": "Start container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 8.0,
+        "kind": "row"
+      },
+      "footer": "Refresh samples CPU and memory",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "kind": "metric",
+            "label": "containers running",
+            "value": "2"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "detail": "12% · 192 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "mypaper-web"
+                  },
+                  {
+                    "action": "stop:web",
+                    "enabled": true,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "6% · 384 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "development-postgres"
+                  },
+                  {
+                    "action": "stop:db",
+                    "enabled": true,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "Needs attention",
+                    "icon": "warning",
+                    "kind": "list_row",
+                    "title": "background-worker"
+                  },
+                  {
+                    "action": "start:worker",
+                    "enabled": true,
+                    "icon": "play",
+                    "kind": "icon_button",
+                    "label": "Start container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 5.0,
+        "kind": "stack"
+      },
+      "footer": "Refresh samples CPU and memory",
+      "refresh": true
+    }
+  },
+  "disconnected": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "kind": "metric",
+                "label": "running",
+                "value": "2"
+              },
+              {
+                "color": "secondary",
+                "kind": "metric",
+                "label": "CPU · sample",
+                "value": "19%"
+              },
+              {
+                "color": "secondary",
+                "kind": "metric",
+                "label": "MiB · sample",
+                "value": "576"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "detail": "12% · 192 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "mypaper-web"
+                  },
+                  {
+                    "action": "stop:web",
+                    "enabled": false,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "6% · 384 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "development-postgres"
+                  },
+                  {
+                    "action": "stop:db",
+                    "enabled": false,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "Needs attention",
+                    "icon": "warning",
+                    "kind": "list_row",
+                    "title": "background-worker"
+                  },
+                  {
+                    "action": "start:worker",
+                    "enabled": false,
+                    "icon": "play",
+                    "kind": "icon_button",
+                    "label": "Start container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 9.0,
+        "kind": "stack"
+      },
+      "footer": "Docker isn't running · last snapshot",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "kind": "metric",
+            "label": "running",
+            "value": "2",
+            "width": 105.0
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "detail": "12% · 192 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "mypaper-web"
+                  },
+                  {
+                    "action": "stop:web",
+                    "enabled": false,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "6% · 384 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "development-postgres"
+                  },
+                  {
+                    "action": "stop:db",
+                    "enabled": false,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "Needs attention",
+                    "icon": "warning",
+                    "kind": "list_row",
+                    "title": "background-worker"
+                  },
+                  {
+                    "action": "start:worker",
+                    "enabled": false,
+                    "icon": "play",
+                    "kind": "icon_button",
+                    "label": "Start container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 8.0,
+        "kind": "row"
+      },
+      "footer": "Docker isn't running · last snapshot",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "kind": "metric",
+            "label": "containers running",
+            "value": "2"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "detail": "12% · 192 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "mypaper-web"
+                  },
+                  {
+                    "action": "stop:web",
+                    "enabled": false,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "6% · 384 MiB",
+                    "icon": "layers",
+                    "kind": "list_row",
+                    "title": "development-postgres"
+                  },
+                  {
+                    "action": "stop:db",
+                    "enabled": false,
+                    "icon": "pause",
+                    "kind": "icon_button",
+                    "label": "Stop container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              },
+              {
+                "children": [
+                  {
+                    "detail": "Needs attention",
+                    "icon": "warning",
+                    "kind": "list_row",
+                    "title": "background-worker"
+                  },
+                  {
+                    "action": "start:worker",
+                    "enabled": false,
+                    "icon": "play",
+                    "kind": "icon_button",
+                    "label": "Start container"
+                  }
+                ],
+                "gap": 3.0,
+                "kind": "row"
+              }
+            ],
+            "gap": 0.0,
+            "kind": "list"
+          }
+        ],
+        "gap": 5.0,
+        "kind": "stack"
+      },
+      "footer": "Docker isn't running · last snapshot",
+      "refresh": true
+    }
+  },
+  "empty": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "kind": "metric",
+                "label": "running",
+                "value": "0"
+              },
+              {
+                "color": "secondary",
+                "kind": "metric",
+                "label": "CPU · sample",
+                "value": "—"
+              },
+              {
+                "color": "secondary",
+                "kind": "metric",
+                "label": "MiB · sample",
+                "value": "—"
+              }
+            ],
+            "kind": "row"
+          },
+          {
+            "detail": "Containers from your local engine appear here.",
+            "icon": "layers",
+            "kind": "empty",
+            "title": "No containers yet"
+          }
+        ],
+        "gap": 9.0,
+        "kind": "stack"
+      },
+      "footer": "Refresh samples CPU and memory",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "kind": "metric",
+            "label": "running",
+            "value": "0",
+            "width": 105.0
+          },
+          {
+            "detail": "Containers from your local engine appear here.",
+            "icon": "layers",
+            "kind": "empty",
+            "title": "No containers yet"
+          }
+        ],
+        "gap": 8.0,
+        "kind": "row"
+      },
+      "footer": "Refresh samples CPU and memory",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "kind": "metric",
+            "label": "containers running",
+            "value": "0"
+          },
+          {
+            "detail": "Containers from your local engine appear here.",
+            "icon": "layers",
+            "kind": "empty",
+            "title": "No containers yet"
+          }
+        ],
+        "gap": 5.0,
+        "kind": "stack"
+      },
+      "footer": "Refresh samples CPU and memory",
+      "refresh": true
+    }
+  },
+  "setup": {
+    "large": {
+      "body": {
+        "detail": "Start Docker, then refresh.",
+        "icon": "layers",
+        "kind": "empty",
+        "title": "Docker isn't running"
+      },
+      "footer": "Docker isn't running",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "detail": "Start Docker, then refresh.",
+        "icon": "layers",
+        "kind": "empty",
+        "title": "Docker isn't running"
+      },
+      "footer": "Docker isn't running",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "detail": "Start Docker, then refresh.",
+        "icon": "layers",
+        "kind": "empty",
+        "title": "Docker isn't running"
+      },
+      "footer": "Docker isn't running",
+      "refresh": true
+    }
+  }
+}

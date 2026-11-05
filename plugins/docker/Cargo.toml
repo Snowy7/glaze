@@ -1,0 +1,24 @@
+﻿[package]
+name = "docker-component"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+name = "docker"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
+serde_json = "1"
+anyhow = "1"
+
+[workspace]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
