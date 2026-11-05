@@ -120,7 +120,6 @@ impl Integration {
             Provider::T3 => "T3 Code",
             Provider::Obs => "OBS Studio",
             Provider::Docker => "Docker Desktop",
-            Provider::Tailscale => "Tailscale",
             Provider::Calendar => "Calendar",
             Provider::Discord => "Discord",
         }
@@ -337,34 +336,6 @@ impl Panel for Integration {
                         .collect();
                     list(f, &mut column, &self.scroll, &rows);
                 }
-                Some(Data::Tailscale(state)) => {
-                    let c = f.theme.color;
-                    let head = column.next(f.line(TextRole::Title3));
-                    f.text_in(head, &state.state, TextRole::Title3, c.label, Align::Start);
-                    for address in &state.addresses {
-                        line(f, &mut column, address);
-                    }
-                    line(
-                        f,
-                        &mut column,
-                        &format!(
-                            "Exit node: {}",
-                            state.exit_node.as_deref().unwrap_or("None")
-                        ),
-                    );
-                    // Cached mode performs one local API action/read per click, with no watch
-                    // left open.
-                    let mut row = Vec::new();
-                    if connected {
-                        row.push(if state.state == "Running" {
-                            (PRIMARY, "Disconnect", ButtonKind::Gray)
-                        } else {
-                            (PRIMARY, "Connect", ButtonKind::Filled)
-                        });
-                    }
-                    row.push((SECONDARY, "Open Tailscale", ButtonKind::Gray));
-                    buttons(f, &mut column, &row);
-                }
                 Some(Data::Media(state)) => {
                     let c = f.theme.color;
                     let mut rest =
@@ -452,17 +423,6 @@ impl Panel for Integration {
                     id: container.id.clone(),
                     start: container.state != "running",
                 })
-            }
-            Data::Tailscale(s) if id == PRIMARY => self.action(Action::Tailscale {
-                connected: s.state != "Running",
-            }),
-            Data::Tailscale(_) if id == SECONDARY => {
-                let path = PathBuf::from(
-                    std::env::var_os("ProgramFiles").unwrap_or_else(|| "C:/Program Files".into()),
-                )
-                .join("Tailscale/tailscale-ipn.exe");
-                mypaper_bars::system::open(path.to_string_lossy().into_owned());
-                Effect::Close
             }
             Data::Media(_) if id == PRIMARY => {
                 self.action(Action::Media(mypaper_integrations::media::Action::Toggle))
