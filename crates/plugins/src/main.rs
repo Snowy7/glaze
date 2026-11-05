@@ -18,6 +18,10 @@ mod images;
 mod io;
 mod native;
 mod runtime;
+mod settings_permissions;
+#[cfg(test)]
+#[path = "../../../plugins/obs/src/runtime_tests.rs"]
+mod obs_component_tests;
 #[cfg(test)]
 mod caps_tests;
 #[cfg(test)]

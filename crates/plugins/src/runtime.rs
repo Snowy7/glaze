@@ -66,6 +66,8 @@ pub struct Manifest {
     #[serde(default)]
     pub permissions: Vec<String>,
     #[serde(default)]
+    pub settings: Vec<serde_json::Value>,
+    #[serde(default)]
     pub limits: Limits,
     /// Native module DLLs in the plugin folder (`native-code`), run by `mypaper-native-host`.
     #[serde(default)]
@@ -85,7 +87,9 @@ impl Manifest {
         ensure!(manifest.id == folder, "id {:?} isn't its folder's name {folder:?}", manifest.id);
         let (major, minor) = manifest.api.split_once('.').and_then(|(a, b)| Some((a.parse::<u32>().ok()?, b.parse::<u32>().ok()?))).context("api must be \"<major>.<minor>\"")?;
         ensure!(major == mypaper_plugin_api::API_MAJOR && minor <= mypaper_plugin_api::API_MINOR, "built for plugin api {}; this mypaper has {}.{} (needs a newer mypaper)", manifest.api, mypaper_plugin_api::API_MAJOR, mypaper_plugin_api::API_MINOR);
-        for permission in &manifest.permissions {
+        let defaults = crate::settings_permissions::settings(&manifest.settings, "{}")?;
+        for declared in &manifest.permissions {
+            let permission = crate::settings_permissions::resolve(declared, &defaults)?;
             let known = WORDS.contains(&permission.as_str())
                 || permission.strip_prefix("network:").is_some_and(|o| caps::origin_allowed(&[permission.clone()], o))
                 || permission.strip_prefix("pipe:").is_some_and(io::pipe_name_ok)
@@ -793,13 +797,15 @@ impl Runtime {
 
     /// Initializes with the plugin settings reviewed and saved in Studio.
     pub fn instantiate_with_settings(&self, manifest: &Manifest, component: &Component, state: Option<Vec<u8>>, settings: &str) -> Result<Instance> {
+        let settings = crate::settings_permissions::settings(&manifest.settings, settings)?;
+        let permissions = manifest.permissions.iter().map(|p| crate::settings_permissions::resolve(p, &settings)).collect::<Result<Vec<_>>>()?;
         let wasi = WasiCtxBuilder::new().inherit_stderr().build();
         let data = State {
             wasi,
             table: ResourceTable::new(),
             limiter: Limiter { cap: manifest.memory_cap(), used: 0 },
             id: manifest.id.clone(),
-            permissions: manifest.permissions.clone(),
+            permissions,
             styles: manifest.styles.clone(),
             native: manifest.native.clone(),
             data_dir: self.data_dir(&manifest.id),
@@ -815,7 +821,7 @@ impl Runtime {
         store.limiter(|state| &mut state.limiter);
         store.set_epoch_deadline(EVENT_TICKS * 4);
         let bindings = Plugin::instantiate(&mut store, component, &self.linker)?;
-        let info = InitInfo { plugin: manifest.id.clone(), settings: settings.into(), state };
+        let info = InitInfo { plugin: manifest.id.clone(), settings: serde_json::to_string(&settings)?, state };
         self.ticker.set(true);
         let result = bindings.mypaper_plugin_lifecycle().call_init(&mut store, &info);
         self.ticker.set(false);
