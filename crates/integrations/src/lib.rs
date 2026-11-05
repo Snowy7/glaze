@@ -17,7 +17,6 @@ pub mod t3;
 pub mod t3_auth;
 pub mod t3_client;
 pub mod grok;
-pub mod tailscale;
 mod transport;
 
 use std::{
@@ -37,18 +36,16 @@ pub enum Provider {
     T3,
     Obs,
     Docker,
-    Tailscale,
     Calendar,
     Discord,
 }
 impl Provider {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 7] = [
         Self::Notifications,
         Self::Media,
         Self::T3,
         Self::Obs,
         Self::Docker,
-        Self::Tailscale,
         Self::Calendar,
         Self::Discord,
     ];
@@ -59,7 +56,6 @@ impl Provider {
             Self::T3 => c.t3.enabled,
             Self::Obs => c.obs.enabled,
             Self::Docker => c.docker.enabled,
-            Self::Tailscale => c.tailscale.enabled,
             Self::Calendar => c.calendar.enabled,
             Self::Discord => c.discord.enabled,
         }
@@ -81,7 +77,6 @@ pub enum Data {
     T3(t3::Snapshot),
     Obs(obs::Snapshot),
     Docker(docker::Snapshot),
-    Tailscale(tailscale::Snapshot),
     Calendar(calendar::Snapshot),
     Discord(discord::Snapshot),
 }
@@ -117,9 +112,6 @@ pub enum Action {
     },
     /// One bounded stats sample after an explicit widget refresh; never a stats stream.
     DockerMetrics,
-    Tailscale {
-        connected: bool,
-    },
 }
 
 #[derive(Default)]
@@ -263,7 +255,6 @@ impl Hub {
                             Provider::T3 => t3::run(&config.t3, &publish).await,
                             Provider::Obs => obs::run(&config.obs, &publish, &mut commands).await,
                             Provider::Docker => docker::run(&config.docker, &publish, &mut commands).await,
-                            Provider::Tailscale => tailscale::run(&config.tailscale, &publish, &mut commands).await,
                             Provider::Calendar => calendar::run(&config.calendar, &publish, &mut commands).await,
                             Provider::Discord => discord::run(&config.discord, &publish, &mut commands).await,
                         }
@@ -327,7 +318,6 @@ impl Lease {
                     | (Provider::Obs, Action::Obs(_))
                     | (Provider::Docker, Action::Docker { .. })
                     | (Provider::Docker, Action::DockerMetrics)
-                    | (Provider::Tailscale, Action::Tailscale { .. })
                     | (Provider::Discord, Action::DiscordVoice { .. })
             ),
             "action does not belong to this provider"
