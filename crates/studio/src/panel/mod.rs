@@ -5,6 +5,9 @@ mod controls;
 mod pages;
 mod tokens;
 
+#[cfg(test)]
+mod tests;
+
 use mypaper_ui::controls::{Builder, key};
 use mypaper_ui::{Chrome, Rect, Text};
 
