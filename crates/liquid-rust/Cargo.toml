@@ -1,0 +1,22 @@
+# Vendored from https://github.com/al1h3n/liquid-rust (see VENDORED.md). MIT OR Apache-2.0.
+[package]
+name = "liquid-rust"
+version = "0.2.5"
+edition = "2024"
+description = "Apple-style Liquid Glass for wgpu (vendored copy of al1h3n/liquid-rust)."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/al1h3n/liquid-rust"
+publish = false
+
+[dependencies]
+bytemuck.workspace = true
+glam.workspace = true
+slotmap = "1.1.1"
+wgpu.workspace = true
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
