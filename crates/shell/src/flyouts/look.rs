@@ -9,7 +9,6 @@ use mypaper_bars::config::{self, BarsConfig};
 use mypaper_bars::style::{Family, Look as BarLook, NativeStyle, Scheme};
 use mypaper_config::Config;
 use mypaper_theme::{Appearance, LoadedTheme, Paint, TextTone};
-use mypaper_ui::interact::State;
 use mypaper_ui::theme::Radii;
 use mypaper_ui::{GlassMaterial, Ink, Rgba, Scheme as UiScheme, Style, Text, Theme, icons};
 
@@ -177,9 +176,9 @@ impl Look {
             material: mypaper_ui::Material { tint: self.fill },
             colors: mypaper_ui::Colors {
                 text: self.ink,
-                text_dim: self.faint(),
+                text_dim: Ink::of(self.ink).disabled,
                 hover: self.ink.with_alpha(0.12),
-                line: self.line(),
+                line: self.ink.with_alpha(0.12),
                 ..base.colors
             },
             glass: self.glass,
@@ -187,34 +186,6 @@ impl Look {
         }
     }
 
-    /// Secondary text (the shared contrast steps, `mypaper_ui::Ink`).
-    pub fn dim(&self) -> Rgba {
-        Ink::of(self.ink).secondary
-    }
-
-    /// Hints and disabled text, hairlines' stronger cousin.
-    pub fn faint(&self) -> Rgba {
-        Ink::of(self.ink).disabled
-    }
-
-    /// The highlight under a hovered row or button (the shared hover wash).
-    pub fn hover(&self) -> Rgba {
-        State::Hover.wash(self.ink)
-    }
-
-    /// The wash under a pressed row or button.
-    pub fn pressed(&self) -> Rgba {
-        State::Pressed.wash(self.ink)
-    }
-
-    /// A control's resting fill (an off tile, a slider's track, a button).
-    pub fn control(&self) -> Rgba {
-        self.ink.with_alpha(0.10)
-    }
-
-    pub fn line(&self) -> Rgba {
-        self.ink.with_alpha(0.12)
-    }
 }
 
 impl Default for Look {

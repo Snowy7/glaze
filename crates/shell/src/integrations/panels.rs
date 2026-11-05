@@ -1,12 +1,19 @@
-//! Native panels: cached lists, explicit controls, and no tick/deadline override.
+//! Native panels for the integrations, on the kit: a header with its buttons, the state as a
+//! line or a notice, lists in a scroll view (only the list scrolls), explicit controls. Cached
+//! lists; nothing ticks except a scroll's glide.
 use crate::flyouts::{
     Cx, Effect, Panel,
-    kit::{Icon, Kit, Row, glyph},
+    kit::{Kit, link},
 };
 use mypaper_integrations::{
     Action, Availability, Data, Lease, Provider, Snapshot, launcher::Recent,
 };
-use mypaper_ui::HitId;
+use mypaper_ui::icons::Icon;
+use mypaper_ui::layout::{Align, Stack};
+use mypaper_ui::{
+    Accessory, ButtonKind, Frame, HitId, Lead, ListRow, Rect, Scroll, TextRole,
+};
+use std::time::Instant;
 use std::{cell::RefCell, path::PathBuf};
 
 const RETRY: HitId = 10;
@@ -18,8 +25,63 @@ pub struct Integration {
     lease: Option<Lease>,
     state: Snapshot,
     error: Option<String>,
-    top: usize,
+    /// The list's scroll position (only the list scrolls).
+    scroll: Scroll,
     generation: u64,
+}
+
+/// A panel's header: its title, and icon buttons at the right.
+fn header(f: &mut Frame, column: &mut Stack, title: &str, buttons: &[(HitId, Icon, &str)]) {
+    let c = f.theme.color;
+    let mut rest = column.next(f.px(32.0));
+    for &(id, icon, label) in buttons.iter().rev() {
+        let (button, left) = rest.take_right(f.px(30.0), f.px(2.0));
+        f.icon_button(id, button, icon, 30.0, label, false);
+        rest = left;
+    }
+    f.text_in(rest, title, TextRole::Title2, c.label, Align::Start);
+}
+
+/// Wrapped secondary text (a status, a hint), at most three lines.
+fn line(f: &mut Frame, column: &mut Stack, text: &str) {
+    let c = f.theme.color;
+    let width = column.rect.width();
+    let lines = f.line_count(text, TextRole::Callout, width, 3);
+    let at = column.next(lines as f32 * f.line(TextRole::Callout));
+    f.paragraph(at.left, at.top, width, text, TextRole::Callout, c.secondary, 3);
+}
+
+/// A centred notice where a list would be.
+fn notice(f: &mut Frame, column: &mut Stack, icon: Icon, title: &str, detail: Option<&str>) {
+    let h = f.empty(column.rest(), Some(icon), title, detail);
+    column.next(h);
+}
+
+/// Buttons side by side across the column, `(id, label, kind)`.
+fn buttons(f: &mut Frame, column: &mut Stack, buttons: &[(HitId, &str, ButtonKind)]) {
+    let row = column.next(f.px(f.theme.metrics.control));
+    let gap = f.px(8.0);
+    let n = buttons.len().max(1) as f32;
+    let w = (row.width() - gap * (n - 1.0)) / n;
+    for (i, &(id, label, kind)) in buttons.iter().enumerate() {
+        let r = Rect::new((row.left + i as f32 * (w + gap)).round(), row.top, w.round(), row.height());
+        f.button(id, r, label, None, kind, true);
+    }
+}
+
+/// `rows` in a scroll view from `column`, as tall as they are up to the room left.
+fn list(f: &mut Frame, column: &mut Stack, scroll: &Scroll, rows: &[ListRow]) {
+    let heights: Vec<f32> = rows.iter().map(|r| f.row_height(r)).collect();
+    let content: f32 = heights.iter().sum();
+    let viewport = column.next(content.min(column.rest().height().max(f.px(46.0))));
+    let width = viewport.width();
+    f.scroll(viewport, scroll, Instant::now(), |f, at| {
+        let mut stack = Stack::column(Rect::new(at.x, at.y, width, content), 0.0);
+        for (row, h) in rows.iter().zip(&heights) {
+            f.row(row, stack.next(*h));
+        }
+        content
+    });
 }
 impl Integration {
     pub fn new(provider: Provider) -> Self {
@@ -32,7 +94,7 @@ impl Integration {
             lease,
             state,
             error,
-            top: 0,
+            scroll: Scroll::default(),
             generation: super::generation(),
         }
     }
@@ -47,7 +109,7 @@ impl Integration {
                 ..Default::default()
             },
             error: None,
-            top: 0,
+            scroll: Scroll::default(),
             generation: super::generation(),
         }
     }
@@ -72,212 +134,257 @@ impl Integration {
         Effect::Redraw
     }
 }
-fn row(kit: &mut Kit, id: HitId, title: &str, detail: &str, enabled: bool) {
-    kit.row(Row {
-        id,
-        icon: Icon::Glyph(glyph::APP),
-        title,
-        detail: Some(detail),
-        trailing: None,
-        selected: false,
-        enabled,
-    });
-}
 impl Panel for Integration {
     fn width(&self) -> f32 {
         420.0
     }
     fn view(&self, kit: &mut Kit) {
-        let mut buttons = vec![(RETRY, glyph::REFRESH, "Refresh / reconnect")];
-        if matches!(&self.state.data,Some(Data::Notifications(s)) if !s.cards.is_empty()) {
-            buttons.push((PRIMARY, glyph::CLEAR, "Dismiss all retained notifications"));
-        }
-        kit.header(self.title(), &buttons);
-        if let Some(error) = self.error.as_ref().or(self.state.action_error.as_ref()) {
-            kit.notice(error);
-        }
-        match &self.state.availability {
-            Availability::Connecting if self.lease.is_some() => kit.notice("Connecting…"),
-            Availability::Cached => kit.notice("Snapshot · refresh to update"),
-            Availability::Stale(error) => kit.notice(&format!("Stale · {error}")),
-            Availability::Unavailable(error) => kit.notice(error),
-            _ => {}
-        }
-        let connected = matches!(
-            self.state.availability,
-            Availability::Live | Availability::Cached
-        );
-        match &self.state.data {
-            Some(Data::Notifications(state)) => {
-                kit.caption("Retained Windows notifications · not unread messages");
-                if state.cards.is_empty() {
-                    kit.notice("No retained notifications");
-                }
-                for (i, card) in state.cards.iter().enumerate().skip(self.top).take(6) {
-                    if kit.y + kit.px(110.0) > kit.limit {
-                        break;
-                    }
-                    let count = state.counts.get(&card.app_id).copied().unwrap_or(0);
-                    kit.caption(&format!(
-                        "{} · {count} notification{}",
-                        card.app,
-                        if count == 1 { "" } else { "s" }
-                    ));
-                    let background = kit.list.ops.len();
-                    kit.fill(
-                        mypaper_ui::Rect::new(kit.left, kit.y, kit.width(), 0.0),
-                        kit.px(12.0),
-                        kit.look.control(),
-                    );
-                    row(
-                        kit,
-                        LIST + i as u32 * 2,
-                        &card.title,
-                        &card.body,
-                        connected && !card.app_id.is_empty(),
-                    );
-                    kit.buttons(&[(LIST + i as u32 * 2 + 1, "Dismiss", false)]);
-                    if let mypaper_ui::Op::Fill { rect, .. } = &mut kit.list.ops[background] {
-                        rect.bottom = kit.y;
-                    }
-                    kit.y += kit.px(10.0);
-                }
+        kit.frame(|f, area| {
+            let mut column = Stack::column(area, f.px(8.0));
+            let mut top = vec![(RETRY, Icon::Refresh, "Refresh / reconnect")];
+            if matches!(&self.state.data, Some(Data::Notifications(s)) if !s.cards.is_empty()) {
+                top.push((PRIMARY, Icon::Close, "Dismiss all retained notifications"));
             }
-            Some(Data::T3(state)) => {
-                let running = state.threads.iter().filter(|t| t.running()).count();
-                let attention = state.threads.iter().filter(|t| t.attention()).count();
-                kit.caption(&format!("{running} running · {attention} need input"));
-                let config = super::config();
-                for (i, thread) in state.threads.iter().enumerate().skip(self.top).take(8) {
-                    if kit.y + kit.px(64.0) > kit.limit {
-                        break;
-                    }
-                    let detail = format!(
-                        "{} · {} · {}",
-                        state
-                            .projects
-                            .get(&thread.project_id)
-                            .unwrap_or(&thread.project_id),
-                        thread.provider_instance_id,
-                        if thread.attention() {
-                            "Needs input".into()
-                        } else {
-                            format!("{:?}", thread.status)
-                        }
-                    );
-                    row(
-                        kit,
-                        LIST + i as u32,
-                        &thread.title,
-                        &detail,
-                        config.t3.thread_links.contains_key(&thread.id),
-                    );
-                }
-                if state.threads.is_empty() {
-                    kit.notice("No active or recent threads");
-                }
-                if !state.threads.is_empty() && config.t3.thread_links.is_empty() {
-                    kit.notice(
-                        "Copy thread links from T3 into Integration settings to enable Open.",
-                    );
-                }
+            header(f, &mut column, self.title(), &top);
+            if let Some(error) = self.error.as_ref().or(self.state.action_error.as_ref()) {
+                line(f, &mut column, error);
             }
-            Some(Data::Obs(state)) => {
-                kit.caption(&state.scene);
-                kit.notice(&format!(
-                    "Recording: {} · Streaming: {}",
-                    if state.recording {
-                        if state.paused { "Paused" } else { "Active" }
-                    } else {
-                        "Stopped"
-                    },
-                    if state.streaming { "Live" } else { "Stopped" }
-                ));
-                if connected {
-                    kit.buttons(&[
-                        (
-                            PRIMARY,
-                            if state.recording {
-                                "Stop recording"
-                            } else {
-                                "Start recording"
-                            },
-                            state.recording,
-                        ),
-                        (
-                            SECONDARY,
-                            if state.streaming {
-                                "Stop streaming"
-                            } else {
-                                "Start streaming"
-                            },
-                            state.streaming,
-                        ),
-                    ]);
+            match &self.state.availability {
+                Availability::Connecting if self.lease.is_some() => {
+                    line(f, &mut column, "Connecting…")
                 }
+                Availability::Cached => line(f, &mut column, "Snapshot · refresh to update"),
+                Availability::Stale(error) => line(f, &mut column, &format!("Stale · {error}")),
+                Availability::Unavailable(error) => line(f, &mut column, error),
+                _ => {}
             }
-            Some(Data::Docker(state)) => {
-                if state.containers.is_empty() {
-                    kit.notice("No selected containers");
-                }
-                for (i, container) in state.containers.iter().enumerate().skip(self.top).take(8) {
-                    if kit.y + kit.px(64.0) > kit.limit {
-                        break;
+            let connected = matches!(
+                self.state.availability,
+                Availability::Live | Availability::Cached
+            );
+            let section = |f: &mut Frame, column: &mut Stack, title: &str| {
+                f.section_header(column.next(f.px(24.0)), title, None);
+            };
+            match &self.state.data {
+                Some(Data::Notifications(state)) => {
+                    section(
+                        f,
+                        &mut column,
+                        "Retained Windows notifications · not unread messages",
+                    );
+                    if state.cards.is_empty() {
+                        notice(f, &mut column, Icon::Bell, "No retained notifications", None);
                     }
-                    row(
-                        kit,
-                        LIST + i as u32,
-                        &container.name,
+                    let subtitles: Vec<String> = state
+                        .cards
+                        .iter()
+                        .map(|card| {
+                            let count = state.counts.get(&card.app_id).copied().unwrap_or(0);
+                            let plural = if count == 1 { "" } else { "s" };
+                            format!("{} · {count} notification{plural} · {}", card.app, card.body)
+                        })
+                        .collect();
+                    let rows: Vec<ListRow> = state
+                        .cards
+                        .iter()
+                        .zip(&subtitles)
+                        .enumerate()
+                        .map(|(i, (card, subtitle))| ListRow {
+                            id: LIST + i as u32 * 2,
+                            lead: Lead::Icon(Icon::Bell),
+                            title: &card.title,
+                            subtitle: Some(subtitle),
+                            accessory: Accessory::Button(
+                                LIST + i as u32 * 2 + 1,
+                                Icon::Close,
+                                "Dismiss",
+                            ),
+                            selected: false,
+                            enabled: connected && !card.app_id.is_empty(),
+                        })
+                        .collect();
+                    list(f, &mut column, &self.scroll, &rows);
+                }
+                Some(Data::T3(state)) => {
+                    let running = state.threads.iter().filter(|t| t.running()).count();
+                    let attention = state.threads.iter().filter(|t| t.attention()).count();
+                    section(
+                        f,
+                        &mut column,
+                        &format!("{running} running · {attention} need input"),
+                    );
+                    let config = super::config();
+                    let details: Vec<String> = state
+                        .threads
+                        .iter()
+                        .map(|thread| {
+                            format!(
+                                "{} · {} · {}",
+                                state
+                                    .projects
+                                    .get(&thread.project_id)
+                                    .unwrap_or(&thread.project_id),
+                                thread.provider_instance_id,
+                                if thread.attention() {
+                                    "Needs input".into()
+                                } else {
+                                    format!("{:?}", thread.status)
+                                }
+                            )
+                        })
+                        .collect();
+                    let rows: Vec<ListRow> = state
+                        .threads
+                        .iter()
+                        .zip(&details)
+                        .enumerate()
+                        .map(|(i, (thread, detail))| ListRow {
+                            id: LIST + i as u32,
+                            lead: Lead::Badge(Icon::Message, thread.attention()),
+                            title: &thread.title,
+                            subtitle: Some(detail),
+                            accessory: Accessory::None,
+                            selected: false,
+                            enabled: config.t3.thread_links.contains_key(&thread.id),
+                        })
+                        .collect();
+                    if state.threads.is_empty() {
+                        notice(f, &mut column, Icon::Message, "No active or recent threads", None);
+                    }
+                    if !state.threads.is_empty() && config.t3.thread_links.is_empty() {
+                        // The hint stays above the list, which takes the rest.
+                        line(
+                            f,
+                            &mut column,
+                            "Copy thread links from T3 into Integration settings to enable Open.",
+                        );
+                    }
+                    list(f, &mut column, &self.scroll, &rows);
+                }
+                Some(Data::Obs(state)) => {
+                    section(f, &mut column, &state.scene);
+                    line(
+                        f,
+                        &mut column,
                         &format!(
-                            "{}{} · click to {}",
-                            container.state,
-                            if container.failed {
-                                " · needs attention"
+                            "Recording: {} · Streaming: {}",
+                            if state.recording {
+                                if state.paused { "Paused" } else { "Active" }
                             } else {
-                                ""
+                                "Stopped"
                             },
-                            if container.state == "running" {
-                                "stop"
-                            } else {
-                                "start"
-                            }
+                            if state.streaming { "Live" } else { "Stopped" }
                         ),
-                        connected,
                     );
-                }
-            }
-            Some(Data::Tailscale(state)) => {
-                kit.notice(&state.state);
-                for address in &state.addresses {
-                    kit.caption(address);
-                }
-                kit.caption(&format!(
-                    "Exit node: {}",
-                    state.exit_node.as_deref().unwrap_or("None")
-                ));
-                // Cached mode performs one local API action/read per click, with no watch left open.
-                if connected {
-                    kit.buttons(&[(
-                        PRIMARY,
-                        if state.state == "Running" {
-                            "Disconnect"
+                    if connected {
+                        let record = if state.recording {
+                            ("Stop recording", ButtonKind::Destructive)
                         } else {
-                            "Connect"
-                        },
-                        false,
-                    )]);
+                            ("Start recording", ButtonKind::Gray)
+                        };
+                        let stream = if state.streaming {
+                            ("Stop streaming", ButtonKind::Destructive)
+                        } else {
+                            ("Start streaming", ButtonKind::Gray)
+                        };
+                        buttons(
+                            f,
+                            &mut column,
+                            &[(PRIMARY, record.0, record.1), (SECONDARY, stream.0, stream.1)],
+                        );
+                    }
                 }
-                kit.buttons(&[(SECONDARY, "Open Tailscale", false)]);
-            }
-            Some(Data::Media(state)) => {
-                kit.notice(&state.title);
-                kit.caption(&state.artist);
-                if state.toggle {
-                    kit.buttons(&[(PRIMARY, if state.playing { "Pause" } else { "Play" }, false)]);
+                Some(Data::Docker(state)) => {
+                    if state.containers.is_empty() {
+                        notice(f, &mut column, Icon::Layers, "No selected containers", None);
+                    }
+                    let details: Vec<String> = state
+                        .containers
+                        .iter()
+                        .map(|container| {
+                            format!(
+                                "{}{} · click to {}",
+                                container.state,
+                                if container.failed {
+                                    " · needs attention"
+                                } else {
+                                    ""
+                                },
+                                if container.state == "running" {
+                                    "stop"
+                                } else {
+                                    "start"
+                                }
+                            )
+                        })
+                        .collect();
+                    let rows: Vec<ListRow> = state
+                        .containers
+                        .iter()
+                        .zip(&details)
+                        .enumerate()
+                        .map(|(i, (container, detail))| ListRow {
+                            id: LIST + i as u32,
+                            lead: Lead::Badge(Icon::Layers, container.state == "running"),
+                            title: &container.name,
+                            subtitle: Some(detail),
+                            accessory: Accessory::None,
+                            selected: false,
+                            enabled: connected,
+                        })
+                        .collect();
+                    list(f, &mut column, &self.scroll, &rows);
                 }
+                Some(Data::Tailscale(state)) => {
+                    let c = f.theme.color;
+                    let head = column.next(f.line(TextRole::Title3));
+                    f.text_in(head, &state.state, TextRole::Title3, c.label, Align::Start);
+                    for address in &state.addresses {
+                        line(f, &mut column, address);
+                    }
+                    line(
+                        f,
+                        &mut column,
+                        &format!(
+                            "Exit node: {}",
+                            state.exit_node.as_deref().unwrap_or("None")
+                        ),
+                    );
+                    // Cached mode performs one local API action/read per click, with no watch
+                    // left open.
+                    let mut row = Vec::new();
+                    if connected {
+                        row.push(if state.state == "Running" {
+                            (PRIMARY, "Disconnect", ButtonKind::Gray)
+                        } else {
+                            (PRIMARY, "Connect", ButtonKind::Filled)
+                        });
+                    }
+                    row.push((SECONDARY, "Open Tailscale", ButtonKind::Gray));
+                    buttons(f, &mut column, &row);
+                }
+                Some(Data::Media(state)) => {
+                    let c = f.theme.color;
+                    let mut rest =
+                        column.next(f.line(TextRole::Headline) + f.line(TextRole::Callout));
+                    if state.toggle {
+                        let (button, left) = rest.take_right(f.px(40.0), f.px(10.0));
+                        let (icon, label) = if state.playing {
+                            (Icon::Pause, "Pause")
+                        } else {
+                            (Icon::Play, "Play")
+                        };
+                        f.icon_button(PRIMARY, button, icon, 40.0, label, true);
+                        rest = left;
+                    }
+                    let (title, artist) = rest.take_top(f.line(TextRole::Headline), 0.0);
+                    f.text_in(title, &state.title, TextRole::Headline, c.label, Align::Start);
+                    f.text_in(artist, &state.artist, TextRole::Callout, c.secondary, Align::Start);
+                }
+                None => {}
             }
-            None => {}
-        }
+            area.top + column.used()
+        });
     }
     fn activate(&mut self, id: HitId, _: &mut Cx) -> Effect {
         if id == RETRY {
@@ -376,22 +483,16 @@ impl Panel for Integration {
         self.state = next;
         true
     }
-    fn wheel(&mut self, _: Option<HitId>, delta: i16, _: &mut Cx) -> Effect {
-        let count = match &self.state.data {
-            Some(Data::Notifications(s)) => s.cards.len().saturating_sub(1),
-            Some(Data::T3(s)) => s.threads.len().saturating_sub(1),
-            Some(Data::Docker(s)) => s.containers.len().saturating_sub(1),
-            _ => 0,
-        };
-        let next = self
-            .top
-            .saturating_add_signed(if delta < 0 { 1 } else { -1 })
-            .min(count);
-        if next == self.top {
-            return Effect::None;
+    fn wheel(&mut self, _: Option<HitId>, delta: i16, cx: &mut Cx) -> Effect {
+        if self.scroll.wheel(delta, cx.scale, Instant::now()) {
+            Effect::Redraw
+        } else {
+            Effect::None
         }
-        self.top = next;
-        Effect::Redraw
+    }
+    fn tick(&mut self, now: Instant, _: &mut Cx) -> (bool, Option<Instant>) {
+        // Only a scroll's glide and fade; `None` at rest.
+        self.scroll.tick(now)
     }
 }
 
@@ -404,6 +505,7 @@ pub struct AppActions {
     recent: Vec<Recent>,
     task: Option<super::Task<Vec<Recent>>>,
     error: Option<String>,
+    scroll: Scroll,
 }
 impl AppActions {
     #[cfg(test)]
@@ -418,6 +520,7 @@ impl AppActions {
             }],
             task: None,
             error: None,
+            scroll: Scroll::default(),
         }
     }
     pub fn new(app_id: String, name: String) -> Self {
@@ -435,6 +538,7 @@ impl AppActions {
             recent: Vec::new(),
             task,
             error: None,
+            scroll: Scroll::default(),
         }
     }
 }
@@ -443,23 +547,67 @@ impl Panel for AppActions {
         420.0
     }
     fn view(&self, kit: &mut Kit) {
-        kit.header(&self.name, &[]);
-        kit.caption("Automatic Recent destinations");
-        if let Some(error) = &self.error {
-            kit.notice(error);
+        kit.frame(|f, area| {
+            let mut column = Stack::column(area, f.px(8.0));
+            header(f, &mut column, &self.name, &[]);
+            f.section_header(column.next(f.px(24.0)), "Automatic Recent destinations", None);
+            if let Some(error) = &self.error {
+                line(f, &mut column, error);
+            }
+            if self.task.is_some() {
+                notice(f, &mut column, Icon::Clock, "Reading recent items…", None);
+            }
+            if self.recent.is_empty() && self.task.is_none() {
+                notice(
+                    f,
+                    &mut column,
+                    Icon::File,
+                    "No automatic Recent items",
+                    Some("Pinned and custom Jump List categories are not exposed by Windows."),
+                );
+            }
+            let rows: Vec<ListRow> = self
+                .recent
+                .iter()
+                .enumerate()
+                .map(|(i, item)| ListRow {
+                    id: LIST + i as u32,
+                    lead: Lead::Icon(Icon::File),
+                    title: &item.title,
+                    subtitle: Some(&item.target),
+                    accessory: Accessory::None,
+                    selected: false,
+                    enabled: true,
+                })
+                .collect();
+            // The open-app row keeps its room under the list.
+            let foot = if self.app_id.is_empty() {
+                0.0
+            } else {
+                f.px(f.theme.metrics.row_single) + f.px(8.0)
+            };
+            let room = Rect {
+                bottom: column.rest().bottom - foot,
+                ..column.rest()
+            };
+            let mut inner = Stack::column(room, 0.0);
+            list(f, &mut inner, &self.scroll, &rows);
+            column.next(inner.used());
+            if !self.app_id.is_empty() {
+                link(f, &mut column, PRIMARY, "Open app");
+            }
+            area.top + column.used()
+        });
+    }
+    fn wheel(&mut self, _: Option<HitId>, delta: i16, cx: &mut Cx) -> Effect {
+        if self.scroll.wheel(delta, cx.scale, Instant::now()) {
+            Effect::Redraw
+        } else {
+            Effect::None
         }
-        if self.task.is_some() {
-            kit.notice("Reading recent items…");
-        }
-        if self.recent.is_empty() && self.task.is_none() {
-            kit.notice("No automatic Recent items. Pinned and custom Jump List categories are not exposed by Windows.");
-        }
-        for (i, item) in self.recent.iter().enumerate() {
-            row(kit, LIST + i as u32, &item.title, &item.target, true);
-        }
-        if !self.app_id.is_empty() {
-            kit.buttons(&[(PRIMARY, "Open app", false)]);
-        }
+    }
+    fn tick(&mut self, now: Instant, _: &mut Cx) -> (bool, Option<Instant>) {
+        self.scroll.tick(now)
     }
     fn activate(&mut self, id: HitId, _: &mut Cx) -> Effect {
         if id == PRIMARY && !self.app_id.is_empty() {
@@ -536,14 +684,24 @@ impl Panel for RoutineResult {
         380.0
     }
     fn view(&self, kit: &mut Kit) {
-        kit.header("Grok Bot", &[]);
-        kit.caption(&self.title);
-        kit.notice(match &self.result {
+        kit.frame(|f, area| {
+            let mut column = Stack::column(area, f.px(8.0));
+            header(f, &mut column, "Grok Bot", &[]);
+            f.section_header(column.next(f.px(24.0)), &self.title, None);
+            let icon = match &self.result {
+                None => Icon::Clock,
+                Some(Ok(())) => Icon::Check,
+                Some(Err(_)) => Icon::Warning,
+            };
+            let text = match &self.result {
             None => "Starting routine…",
             Some(Ok(())) => {
                 "Accepted by Grok Bot. Completion will arrive through Windows notifications."
             }
             Some(Err(error)) => error,
+            };
+            notice(f, &mut column, icon, text, None);
+            area.top + column.used()
         });
     }
     fn activate(&mut self, _: HitId, _: &mut Cx) -> Effect {
