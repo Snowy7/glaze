@@ -54,6 +54,9 @@ try {
     if ($Profile) {$env:MYPAPER_N4_PROFILE='1'}
     $fixtureProfile=if ($Debug) {'debug'} else {'release'}
     $widgetLiveFixture=Start-Process -FilePath (Join-Path $widgetLiveRoot "target\$fixtureProfile\examples\mypaper-widget-fixture.exe") -ArgumentList '300' -WorkingDirectory $widgetLiveRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $widgetLiveEvidence 'fixture.log') -RedirectStandardError (Join-Path $widgetLiveEvidence 'fixture-stderr.log')
+    # Windows PowerShell can lose ExitCode when a PassThru process exits before its handle
+    # is retained; open it while alive so the final success check reads the native exit code.
+    $null=$widgetLiveFixture.Handle
     Remove-Item Env:MYPAPER_N4_FIXTURE,Env:MYPAPER_N4_DESKTOP_VISIBLE,Env:MYPAPER_N4_BARS,Env:MYPAPER_WIDGETS_IGNORE_COVERED,Env:MYPAPER_N4_INTERACTIONS,Env:MYPAPER_N4_PROFILE -ErrorAction SilentlyContinue
     $readyDeadline=(Get-Date).AddSeconds(65)
     $engineRestarts=0
@@ -100,6 +103,7 @@ try {
             $checkpoint=(Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log')) -match 'N4_CHECKPOINT'
         } until ($checkpoint -or (Get-Date) -gt $snapshotDeadline)
         if (-not $checkpoint) {throw 'Fixture did not acknowledge the measurement checkpoint'}
+        if (@($checkpoint -notmatch 'visible=6/6(?: |$)').Count -ne 0) {throw 'The idle fixture must show all six widgets'}
     }
     Remove-Item -LiteralPath $widgetLiveLock
     $widgetLiveLockOwned=$false
@@ -117,6 +121,11 @@ try {
     $widgetLiveFixture.WaitForExit(20000) | Out-Null
     Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log')
     if (-not $widgetLiveFixture.HasExited) {throw 'Fixture did not stop before startup measurements'}
+    if ($widgetLiveFixture.ExitCode -ne 0) {throw 'Fixture failed; these measurements are not a passing gate'}
+    if (-not $Profile -and -not $Interactions) {
+        $checkpoints=@(Get-Content -LiteralPath (Join-Path $widgetLiveEvidence 'fixture.log') | Where-Object {$_ -match 'N4_CHECKPOINT'})
+        if ($checkpoints.Count -ne 2 -or @($checkpoints -notmatch 'visible=6/6(?: |$)').Count -ne 0) {throw 'Missing visible-widget checkpoints around the measurement windows'}
+    }
     # Actual production shell, with the same six configured instances. Timestamp the spawn
     # call itself and compare the native first-present and widget-initialization markers.
     Add-Type -TypeDefinition @'
