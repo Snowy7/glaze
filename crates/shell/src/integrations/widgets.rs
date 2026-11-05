@@ -78,7 +78,6 @@ pub fn provider(kind: Widget) -> Option<Provider> {
         Widget::T3 => Some(Provider::T3),
         Widget::Obs => Some(Provider::Obs),
         Widget::Docker => Some(Provider::Docker),
-        Widget::Tailscale => Some(Provider::Tailscale),
         _ => None,
     }
 }
@@ -283,19 +282,6 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
             } else {
                 Ok(())
             }
-        }
-        (Some(Data::Tailscale(snapshot)), Widget::Tailscale)
-            if hit == PRIMARY && state.actionable() =>
-        {
-            state
-                .lease
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Tailscale is disconnected"))
-                .and_then(|lease| {
-                    lease.action(Action::Tailscale {
-                        connected: snapshot.state != "Running",
-                    })
-                })
         }
         _ => Ok(()),
     };
