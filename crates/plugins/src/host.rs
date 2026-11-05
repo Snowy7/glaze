@@ -80,6 +80,7 @@ pub struct Host<W: Write> {
     /// The latest move per window, flushed at `moves_due`.
     moves: BTreeMap<u64, SystemEvent>,
     moves_due: Option<Instant>,
+    notification_plugins: Vec<String>,
 }
 
 fn size(size: SizeClass) -> WitSize {
@@ -92,7 +93,7 @@ fn size(size: SizeClass) -> WitSize {
 
 impl<W: Write> Host<W> {
     pub fn new(rt: Runtime, out: W, tx: Sender<Input>) -> Self {
-        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx, native: None, moves: BTreeMap::new(), moves_due: None }
+        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx, native: None, moves: BTreeMap::new(), moves_due: None, notification_plugins: Vec::new() }
     }
 
     pub fn out(&mut self) -> &mut W {
@@ -209,7 +210,20 @@ impl<W: Write> Host<W> {
             }
             HostMsg::System(event) => self.on_system(event, now),
         }
+        self.sync_notification_demand();
         true
+    }
+
+    fn sync_notification_demand(&mut self) {
+        use crate::runtime::mypaper::plugin::events::Topic;
+        let mut plugins: Vec<_> = self.plugins.iter().filter(|(_, p)| !self.held && !p.faces.is_empty()
+            && p.instance.as_ref().is_some_and(|i| i.store.data().subscribed(Topic::Notifications)))
+            .map(|(id, _)| id.clone()).collect();
+        plugins.sort();
+        if plugins != self.notification_plugins {
+            self.notification_plugins = plugins.clone();
+            self.send(HelperMsg::Notifications { plugins });
+        }
     }
 
     /// Routes a system event to the plugins subscribed to its topic. Moves are coalesced: the
@@ -245,7 +259,9 @@ impl<W: Write> Host<W> {
             SystemEvent::Power => (Topic::Power, Event::Power),
             SystemEvent::Theme => (Topic::Theme, Event::Theme),
         };
-        let ids: Vec<String> = self.plugins.iter().filter(|(_, p)| p.instance.as_ref().is_some_and(|i| i.store.data().subscribed(topic))).map(|(id, _)| id.clone()).collect();
+        let ids: Vec<String> = self.plugins.iter().filter(|(_, p)|
+            (topic != Topic::Notifications || !self.held && !p.faces.is_empty())
+            && p.instance.as_ref().is_some_and(|i| i.store.data().subscribed(topic))).map(|(id, _)| id.clone()).collect();
         for id in ids {
             self.deliver(&id, wit.clone(), now);
         }
@@ -588,6 +604,7 @@ impl<W: Write> Host<W> {
                 self.unload(&id);
             }
         }
+        self.sync_notification_demand();
     }
 
     /// When the loop must wake next (`None`: only for input).
