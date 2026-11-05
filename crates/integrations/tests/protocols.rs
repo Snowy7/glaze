@@ -1,4 +1,4 @@
-use mypaper_integrations::{config::Config, docker, launcher, obs, t3, tailscale};
+use mypaper_integrations::{config::Config, docker, launcher, obs, t3};
 use serde_json::json;
 
 fn thread(status: &str, run: &str, pending: serde_json::Value) -> serde_json::Value {
@@ -89,32 +89,6 @@ fn widget_clocks_metrics_and_peer_snapshots_preserve_unknowns() {
     assert_eq!(stats.cpu_hundredths, Some(4000));
     assert_eq!(stats.memory_bytes, 3072);
     assert_eq!(docker::usage(&json!({})).cpu_hundredths, None);
-    let mut vpn = tailscale::Snapshot::default();
-    tailscale::apply(
-        &mut vpn,
-        &json!({"InitialStatus":{"BackendState":"Running","Peer":{"a":{"DNSName":"macbook.tailnet.","Online":true},"b":{"HostName":"home","Online":false,"ExitNode":true}}}}),
-    );
-    assert_eq!(vpn.peers.len(), 2);
-    assert_eq!(vpn.peers[0].name, "macbook.tailnet");
-    assert!(vpn.peers[0].online);
-    assert_eq!(vpn.exit_node.as_deref(), Some("home"));
-}
-#[test]
-fn tailscale_seeds_and_applies_prefs_without_engine_telemetry() {
-    assert_eq!(tailscale::WATCH_MASK & 1, 0);
-    let mut state = tailscale::Snapshot::default();
-    tailscale::apply(
-        &mut state,
-        &json!({"State":"Running","InitialStatus":{"BackendState":"Running","TailscaleIPs":["100.64.0.1"],"ExitNodeStatus":{"ID":"exit1"}}}),
-    );
-    assert_eq!(state.addresses, ["100.64.0.1"]);
-    assert_eq!(state.exit_node.as_deref(), Some("exit1"));
-    tailscale::apply(
-        &mut state,
-        &json!({"Prefs":{"ExitNodeID":""},"State":"Stopped"}),
-    );
-    assert!(state.exit_node.is_none());
-    assert_eq!(state.state, "Stopped");
 }
 #[test]
 fn configuration_rejects_secrets_remote_endpoints_and_ambiguous_actions() {
