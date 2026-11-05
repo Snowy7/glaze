@@ -441,6 +441,44 @@ fn images_go_to_named_shared_memory() {
     assert!(rig.lines["probe"].last().unwrap().contains("Invalid"));
 }
 
+#[test]
+fn notification_permission_demand_and_visibility() {
+    let mut rig = Rig::new("notification-demand");
+    rig.install("probe", &["notifications"], &[]).install("bare", &[], &[]).install("quiet", &["notifications"], &[]);
+    rig.act("bare", "subscribe", "notifications");
+    assert!(rig.wait("bare", "subscribe").contains("Denied"));
+    rig.host.on_host(HostMsg::Action {instance:"probe".into(),action:"subscribe".into(),value:Some("notifications".into())},Instant::now());
+    let bytes = std::mem::take(rig.host.out());
+    let mut input = bytes.as_slice();
+    let mut demand = Vec::new();
+    while let Some(frame) = wire::read::<HelperMsg>(&mut input).unwrap() {
+        if let HelperMsg::Notifications {plugins} = frame {demand=plugins;}
+    }
+    assert_eq!(demand,vec!["probe"]);
+    rig.host.on_host(HostMsg::System(SystemEvent::Notification(r#"{"kind":"added","id":7}"#.into())),Instant::now());
+    rig.read();
+    assert!(rig.has("probe","notification"));
+    assert!(!rig.has("bare","notification") && !rig.has("quiet","notification"));
+    rig.host.on_host(HostMsg::Held(true),Instant::now());
+    let bytes = std::mem::take(rig.host.out());
+    let mut input = bytes.as_slice();
+    let mut released=false;
+    while let Some(frame) = wire::read::<HelperMsg>(&mut input).unwrap() {
+        if let HelperMsg::Notifications {plugins} = frame {released=plugins.is_empty();}
+    }
+    assert!(released,"held plugins release notification demand");
+    rig.host.on_host(HostMsg::Held(false),Instant::now());
+    rig.read();
+    rig.host.on_host(HostMsg::Close {instance:"probe".into()},Instant::now());
+    let bytes = std::mem::take(rig.host.out());
+    let mut input = bytes.as_slice();
+    let mut released=false;
+    while let Some(frame) = wire::read::<HelperMsg>(&mut input).unwrap() {
+        if let HelperMsg::Notifications {plugins} = frame {released=plugins.is_empty();}
+    }
+    assert!(released,"last closed face releases demand immediately");
+}
+
 /// The native-echo example as a DLL (compiled directly with rustc, like the native-host suite).
 fn native_echo() -> &'static PathBuf {
     static DLL: OnceLock<PathBuf> = OnceLock::new();
