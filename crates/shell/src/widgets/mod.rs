@@ -8,6 +8,7 @@ mod markdown;
 mod metrics;
 pub(crate) mod model;
 mod plugin_faces;
+mod plugin_notifications;
 #[cfg(test)]
 mod tests;
 pub(crate) mod time;
@@ -186,6 +187,7 @@ pub struct Widgets {
     stats: Stats,
     icons: Icons,
     plugins: Plugins,
+    plugin_notifications: plugin_notifications::Notifications,
     plugin_menu: Option<mypaper_ui::menu::Menu<(String, String, String)>>,
     worker: data::Worker,
     holds: Holds,
@@ -309,6 +311,7 @@ impl Widgets {
             stats: Stats::default(),
             icons: Icons::new(wake.clone()),
             plugins: Plugins::new(wake),
+            plugin_notifications: Default::default(),
             plugin_menu: None,
             worker: data::Worker::new(window),
             holds,
@@ -793,6 +796,9 @@ impl Widgets {
             self.plugins.face_action(&instance, &action, None);
         }
         self.sync_plugin_faces();
+        self.plugin_notifications.sync(&self.plugins, |instance| {
+            !self.held && self.entries.get(instance).is_none_or(|entry| entry.model.visible)
+        });
         let ids: Vec<_> = self.entries.keys().cloned().collect();
         for id in ids {
             let (save, fetch, photo, timer) = if let Some(entry) = self.entries.get_mut(&id) {
