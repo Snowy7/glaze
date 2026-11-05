@@ -88,8 +88,7 @@ impl Manifest {
         let (major, minor) = manifest.api.split_once('.').and_then(|(a, b)| Some((a.parse::<u32>().ok()?, b.parse::<u32>().ok()?))).context("api must be \"<major>.<minor>\"")?;
         ensure!(major == mypaper_plugin_api::API_MAJOR && minor <= mypaper_plugin_api::API_MINOR, "built for plugin api {}; this mypaper has {}.{} (needs a newer mypaper)", manifest.api, mypaper_plugin_api::API_MAJOR, mypaper_plugin_api::API_MINOR);
         let defaults = crate::settings_permissions::settings(&manifest.settings, "{}")?;
-        for declared in &manifest.permissions {
-            let permission = crate::settings_permissions::resolve(declared, &defaults)?;
+        for permission in crate::settings_permissions::resolve_all(&manifest.permissions, &defaults)? {
             let known = WORDS.contains(&permission.as_str())
                 || permission.strip_prefix("network:").is_some_and(|o| caps::origin_allowed(&[permission.clone()], o))
                 || permission.strip_prefix("pipe:").is_some_and(io::pipe_name_ok)
@@ -798,7 +797,7 @@ impl Runtime {
     /// Initializes with the plugin settings reviewed and saved in Studio.
     pub fn instantiate_with_settings(&self, manifest: &Manifest, component: &Component, state: Option<Vec<u8>>, settings: &str) -> Result<Instance> {
         let settings = crate::settings_permissions::settings(&manifest.settings, settings)?;
-        let permissions = manifest.permissions.iter().map(|p| crate::settings_permissions::resolve(p, &settings)).collect::<Result<Vec<_>>>()?;
+        let permissions = crate::settings_permissions::resolve_all(&manifest.permissions, &settings)?;
         let wasi = WasiCtxBuilder::new().inherit_stderr().build();
         let data = State {
             wasi,

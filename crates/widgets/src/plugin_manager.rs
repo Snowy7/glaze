@@ -384,6 +384,10 @@ pub fn resolve_settings(manifest: &PluginManifest, saved: &Value) -> Result<Valu
     Ok(Value::Object(resolved))
 }
 pub fn permission_text(permission: &str) -> Result<String> {
+    if let Some(key) = permission.strip_prefix("network:https://{settings.").and_then(|p| p.strip_suffix("[].url}")) {
+        ensure!(!key.is_empty() && key.bytes().all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c)), "Invalid network URL-list setting");
+        return Ok(format!("Can send HTTPS requests to hosts configured in {key}"));
+    }
     if let Some(key) = permission.strip_prefix("network:ws://127.0.0.1:{settings.").and_then(|p| p.strip_suffix('}')) {
         ensure!(!key.is_empty() && key.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-'), "Invalid network port setting");
         return Ok(format!("Can connect to OBS on this PC using the configured {key}"));
@@ -394,6 +398,14 @@ pub fn permission_text(permission: &str) -> Result<String> {
             "Invalid network permission: {permission}"
         );
         return Ok(format!("Can connect to {origin}"));
+    }
+    if let Some(name) = permission.strip_prefix("process:") {
+        ensure!(!name.is_empty() && name.bytes().all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c)), "Invalid process permission");
+        return Ok(format!("Can run {name} on this PC and read its output"));
+    }
+    if let Some(path) = permission.strip_prefix("file:") {
+        ensure!(path.starts_with("~/") && !path.contains(".."), "Invalid file permission");
+        return Ok(format!("Can read {path}"));
     }
     if let Some(pipe) = permission.strip_prefix("pipe:") {
         ensure!(

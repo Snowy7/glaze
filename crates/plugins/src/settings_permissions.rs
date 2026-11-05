@@ -23,10 +23,42 @@ pub fn resolve(permission: &str, settings: &Map<String, Value>) -> Result<String
     Ok(format!("network:ws://127.0.0.1:{}", port.unwrap()))
 }
 
+/// Expand HTTPS hosts from a reviewed list setting (an array, or its JSON text form).
+/// All other declarations use the same resolver as fixed origins and loopback ports.
+pub fn resolve_all(permissions: &[String], settings: &Map<String, Value>) -> Result<Vec<String>> {
+    let mut resolved = Vec::new();
+    for permission in permissions {
+        let list = permission.strip_prefix("network:https://{settings.").and_then(|s| s.strip_suffix("[].url}"));
+        let Some(key) = list else { resolved.push(resolve(permission, settings)?); continue; };
+        ensure!(!key.is_empty() && key.bytes().all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c)), "invalid network URL-list setting");
+        let value = settings.get(key).ok_or_else(|| anyhow::anyhow!("missing URL-list setting {key:?}"))?;
+        let value = match value { Value::String(text) => serde_json::from_str(text)?, value => value.clone() };
+        let list = value.as_array().ok_or_else(|| anyhow::anyhow!("network URL-list setting must be an array"))?;
+        ensure!(list.len() <= 32, "at most 32 network URLs");
+        for item in list {
+            let url = url::Url::parse(item["url"].as_str().ok_or_else(|| anyhow::anyhow!("network URL-list item needs a URL"))?)?;
+            ensure!(url.scheme() == "https" && url.host_str().is_some_and(|h| !h.contains('*')) && url.username().is_empty() && url.password().is_none() && url.query().is_none() && url.fragment().is_none(), "network URLs must be HTTPS without credentials, query or fragment");
+            let origin = format!("network:{}", url.origin().ascii_serialization());
+            if !resolved.contains(&origin) { resolved.push(origin); }
+        }
+    }
+    Ok(resolved)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn reviewed_webhook_urls_grant_only_their_exact_https_origins() {
+        let permission = ["network:https://{settings.routines[].url}".into()];
+        let settings = json!({"routines":"[{\"url\":\"https://example.test/run\"},{\"url\":\"https://other.test:9443/run\"},{\"url\":\"https://example.test/again\"}]"});
+        assert_eq!(resolve_all(&permission, settings.as_object().unwrap()).unwrap(), ["network:https://example.test", "network:https://other.test:9443"]);
+        assert!(resolve_all(&permission,json!({"routines":[]}).as_object().unwrap()).unwrap().is_empty());
+        for url in ["http://example.test/run", "https://user@example.test/run", "https://example.test/run?key=x", "https://*.test/run"] {
+            assert!(resolve_all(&permission,json!({"routines":[{"url":url}]}).as_object().unwrap()).is_err());
+        }
+    }
     #[test]
     fn numeric_port_is_scoped_to_the_declared_loopback_host() {
         let schema = [json!({"key":"port","default":4455})];

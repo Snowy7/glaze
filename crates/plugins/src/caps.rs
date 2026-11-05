@@ -83,6 +83,8 @@ pub fn fetch(method: &str, url: &str, headers: &[(String, String)], body: Option
         let connection = Handle::new(WinHttpConnect(session.0, &HSTRING::from(host), port, 0))?;
         let flags = if secure { WINHTTP_FLAG_SECURE } else { WINHTTP_OPEN_REQUEST_FLAGS(0) };
         let request = Handle::new(WinHttpOpenRequest(connection.0, &HSTRING::from(method), &HSTRING::from(path), PCWSTR::null(), PCWSTR::null(), std::ptr::null(), flags))?;
+        // Redirects must not carry an authorized request or its secret to an undeclared host.
+        WinHttpSetOption(request.0, WINHTTP_OPTION_DISABLE_FEATURE, Some(&WINHTTP_DISABLE_REDIRECTS.to_ne_bytes())).map_err(|e| e.to_string())?;
         let headers = (!header_text.is_empty()).then_some(header_text.as_slice());
         let (data, len) = body.map_or((None, 0), |b| (Some(b.as_ptr().cast::<c_void>()), b.len() as u32));
         WinHttpSendRequest(request.0, headers, data, len, len, 0).map_err(|e| e.to_string())?;
