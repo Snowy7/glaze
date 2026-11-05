@@ -276,6 +276,7 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
             f.line(TextRole::Caption) + f.line(TextRole::Title2) + detail.as_ref().map_or(0.0, |_| f.line(TextRole::Caption))
         }
         View::Metric { .. } => f.px(36.0) + f.line(TextRole::Caption),
+        View::Tag { .. } => f.line(TextRole::Caption) + f.px(4.0),
         View::IconButton { .. } => f.px(28.0),
         View::Ring { .. } => f.px(48.0),
         View::LimitBar { .. } => f.px(30.0),
@@ -319,6 +320,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
                 View::Button { label, icon: i, .. } => Some(f.button_size(label, i.is_some()).0),
                 View::IconButton { .. } => Some(f.px(28.0)),
                 View::Metric { width: Some(width), .. } => Some(f.px(*width)),
+                View::Tag { label, dot, .. } => Some(tag_width(f, label, *dot)),
                 View::Spacer => None,
                 _ => None,
             };
@@ -504,8 +506,32 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
         }
         View::Canvas { commands, .. } => canvas::draw(f, rect, commands, |f, t| tone(f, Some(t), f.theme.color.label)),
         View::Animated { stiffness, damping, child } => animated::draw(f, rect, child, (*stiffness, *damping), next),
+        View::Tag { label, color, dot } => {
+            let ink = tone(f, Some(color), f.theme.color.secondary);
+            let w = tag_width(f, label, *dot).min(rect.width());
+            if *dot {
+                let d = f.px(7.0);
+                f.fill(rect.place(d, d, Align::Center, Align::Center), d / 2.0, ink);
+            } else {
+                let pill = rect.place(w, f.line(TextRole::Caption) + f.px(4.0), Align::End, Align::Center);
+                f.fill(pill, pill.height() / 2.0, ink.with_alpha(0.16));
+                let pad = f.px(7.0);
+                let inner = Rect::new(pill.left + pad, pill.top, (pill.width() - pad * 2.0).max(0.0), pill.height());
+                f.text_in(inner, label, TextRole::Caption, ink, Align::Center);
+            }
+        }
         View::Spacer | View::Unknown => {}
     }
+}
+
+/// A tag's natural width: a dot, or its caption text plus the pill's padding.
+fn tag_width(f: &mut Frame<'_>, label: &str, dot: bool) -> f32 {
+    if dot {
+        return f.px(10.0);
+    }
+    let style = f.font(TextRole::Caption);
+    // 7 pt each side, plus slack so fitting never cuts the label it was measured for.
+    f.text.measure(label, &style).0.ceil() + f.px(18.0)
 }
 
 /// `1.2k`, `3.4M`: chart ticks.

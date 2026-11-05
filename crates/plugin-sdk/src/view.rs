@@ -226,6 +226,14 @@ pub enum View {
         detail: Option<String>,
     },
     Spacer,
+    /// A status pill: `label` in `color` on a faint wash of it. `dot` draws only a coloured dot
+    /// (small tiles), with `label` as its accessible name. Keeps its natural width in a `row`.
+    Tag {
+        label: String,
+        color: Tone,
+        #[serde(default)]
+        dot: bool,
+    },
     /// The escape hatch: drawing commands in kit points from the canvas's top left, `height`
     /// points tall and as wide as its slot. The shell draws them natively, clipped to the canvas.
     Canvas {
