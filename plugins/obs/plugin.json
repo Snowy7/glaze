@@ -2,13 +2,14 @@
   "id": "obs",
   "name": "OBS Studio",
   "version": "0.1.0",
-  "sdk": "1.0",
-  "command": "obs-plugin.exe",
+  "api": "0.1",
+  "component": "obs.wasm",
   "faces": [
     { "id": "controls", "name": "Controls", "icon": "video", "size": { "default": [8, 4], "min": [4, 4], "max": [12, 8] } }
   ],
-  "permissions": ["secrets", "network:ws://127.0.0.1"],
+  "permissions": ["secrets", "network:ws://127.0.0.1:{settings.port}"],
+  "limits": { "memory_mb": 8 },
   "settings": [
-    { "key": "endpoint", "label": "WebSocket endpoint", "type": "string", "default": "ws://127.0.0.1:4455" }
+    { "key": "port", "label": "WebSocket port", "type": "number", "default": 4455, "min": 1, "max": 65535 }
   ]
 }

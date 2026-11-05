@@ -33,7 +33,9 @@ pub fn face(size: SizeClass, snapshot: &Snapshot, now: i64) -> Face {
             Availability::Unavailable(why) | Availability::Stale(why) => why.as_str(),
             _ => "Enable OBS WebSocket; save its password in Settings.",
         };
-        let mut face = View::empty("video", "Connect OBS", detail).face();
+        let title = if detail == "OBS isn't running" { "OBS isn't running" } else if snapshot.availability == Availability::Connecting { "Connecting to OBS…" } else { "Connect OBS" };
+        let detail = if detail == "OBS isn't running" { "Open OBS and enable its WebSocket server." } else { detail };
+        let mut face = View::empty("video", title, detail).face();
         face.refresh = true;
         return face;
     };
@@ -55,10 +57,8 @@ pub fn face(size: SizeClass, snapshot: &Snapshot, now: i64) -> Face {
     // Keep controls first so they remain available even in the smallest supported tile.
     if live { children.push(controls(state)); }
     if size != SizeClass::Small {
-        let summary = stats(&state.stats);
-        if !summary.is_empty() { children.push(View::tinted(summary, Role::Caption, Tone::Secondary)); }
         if let Some(input) = state.microphones.first() && live {
-            let mut buttons = vec![View::button(format!("{} · {}", input.name, if input.muted { "muted" } else { "on" }), "mic:0")];
+            let mut buttons = vec![View::button(if input.muted { "Mic muted" } else { "Mic on" }, "mic:0")];
             if state.recording {
                 buttons.push(View::button(if state.paused { "Resume" } else { "Pause" }, if state.paused { "record.resume" } else { "record.pause" }));
             }
@@ -78,7 +78,7 @@ pub fn face(size: SizeClass, snapshot: &Snapshot, now: i64) -> Face {
     face.refresh = true;
     face.footer = Some(match &snapshot.availability {
         Availability::Stale(why) | Availability::Unavailable(why) => format!("Disconnected · {why}"),
-        _ => state.scene.clone(),
+        _ => { let summary = stats(&state.stats); if summary.is_empty() { state.scene.clone() } else { summary } },
     });
     face
 }

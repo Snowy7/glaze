@@ -1,24 +1,25 @@
 [package]
-name = "mypaper-plugin-obs"
-description = "OBS Studio scenes, recording, streaming and stats on the mypaper plugin SDK."
-version.workspace = true
-edition.workspace = true
-license.workspace = true
+name = "obs-component"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
 
-[[bin]]
-name = "obs-plugin"
-path = "src/main.rs"
+[lib]
+name = "obs"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
-anyhow.workspace = true
-serde_json.workspace = true
+serde_json = "1"
 base64 = "0.22"
 sha2 = "0.10"
-hyper = { version = "1", features = ["client", "http1"] }
-tokio = { version = "1", features = ["rt", "net", "sync", "time", "io-util", "macros"] }
-tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "handshake"] }
-futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 
-[lints]
-workspace = true
+[workspace]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

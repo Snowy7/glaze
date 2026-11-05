@@ -64,18 +64,11 @@
             "kind": "row"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "2.4% CPU · 6000 kbps · 0 dropped"
-          },
-          {
             "children": [
               {
                 "action": "mic:0",
                 "kind": "button",
-                "label": "Desk microphone · on",
+                "label": "Mic on",
                 "primary": false
               },
               {
@@ -110,7 +103,7 @@
         "gap": 6.0,
         "kind": "stack"
       },
-      "footer": "Desktop + camera",
+      "footer": "2.4% CPU · 6000 kbps · 0 dropped",
       "refresh": true
     },
     "medium": {
@@ -177,18 +170,11 @@
             "kind": "row"
           },
           {
-            "align": "start",
-            "color": "secondary",
-            "kind": "text",
-            "role": "caption",
-            "text": "2.4% CPU · 6000 kbps · 0 dropped"
-          },
-          {
             "children": [
               {
                 "action": "mic:0",
                 "kind": "button",
-                "label": "Desk microphone · on",
+                "label": "Mic on",
                 "primary": false
               },
               {
@@ -204,7 +190,7 @@
         "gap": 6.0,
         "kind": "stack"
       },
-      "footer": "Desktop + camera",
+      "footer": "2.4% CPU · 6000 kbps · 0 dropped",
       "refresh": true
     },
     "small": {
@@ -250,7 +236,7 @@
         "gap": 2.0,
         "kind": "stack"
       },
-      "footer": "Desktop + camera",
+      "footer": "2.4% CPU · 6000 kbps · 0 dropped",
       "refresh": true
     }
   }
