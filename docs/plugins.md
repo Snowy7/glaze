@@ -59,7 +59,7 @@ and `obs` before they're ported) keep working through the same host bridge. See
   transitional plugin may have both (the weather plugin keeps its exe for the built-in widget's
   data calls while its faces run as a component).
 - `api` is the WIT package major.minor it was built against. The host refuses another major.
-- The contributions are `faces` (desktop widgets in the "+" picker, as `<plugin>.<face>`),
+- The contributions are `faces` (desktop widgets in the "+" picker, as `<plugin>--<face>`),
   `bars` (top-bar modules), `panels` (flyouts), `menu` (desktop context-menu items) and
   `commands` (palette and shortcuts). They are static, so the shell lists them without
   starting the plugin.
@@ -228,9 +228,10 @@ it stops when the last plugin unloads. Frames are `[u32 len][postcard(HostMsg|He
 
 The shell reads frames on a thread, queues them, and wakes its loop once per batch through the
 existing plugin message (`Msg::Plugin` with the reserved id `HELPER`), so the shell's event loop
-didn't change. In the widget layout a component face is the widget `<plugin>.<face>` (the
+didn't change. In the widget layout a component face is the widget `<plugin>--<face>` (the
 registry lists one per face, category "Plugins"), so it never collides with a built-in of the
-same name: `weather.now` is the component, `weather` the built-in widget.
+same name: `weather--now` is the component, `weather` the built-in widget (layout widget ids are
+`[a-z0-9-]`, so a component plugin id may not contain `--`).
 
 ## Packaging
 

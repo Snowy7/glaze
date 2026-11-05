@@ -564,10 +564,10 @@ pub struct PluginFace {
     pub icon: String,
 }
 
-/// A widget id `<plugin>.<face>` (what the "+" picker places for component plugins) names the face
+/// A widget id `<plugin>--<face>` (what the "+" picker places for component plugins) names the face
 /// directly, so it never collides with a built-in of the plugin's name.
 pub fn plugin_face(placed: &Placed) -> Option<PluginFace> {
-    let (plugin, named) = match placed.widget.split_once('.') {
+    let (plugin, named) = match placed.widget.split_once("--") {
         Some((plugin, face)) => (plugin, Some(face)),
         None => (placed.widget.as_str(), None),
     };

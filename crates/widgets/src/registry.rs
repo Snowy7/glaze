@@ -153,7 +153,7 @@ pub fn builtins() -> Registry {
     Registry { widgets }
 }
 
-/// Every WebAssembly component plugin's faces as widgets `<plugin>.<face>` (docs/plugins.md), so
+/// Every WebAssembly component plugin's faces as widgets `<plugin>--<face>` (docs/plugins.md), so
 /// the "+" picker, sizing and Studio treat them like any widget; the shell draws them as
 /// `Widget::Plugin`. User installs shadow bundled ones.
 fn component_faces() -> Vec<(String, WidgetManifest)> {
@@ -165,7 +165,7 @@ fn component_faces() -> Vec<(String, WidgetManifest)> {
             continue;
         }
         for face in &plugin.faces {
-            let id = format!("{}.{}", plugin.id, face.id);
+            let id = format!("{}--{}", plugin.id, face.id);
             if out.iter().any(|(known, _)| *known == id) {
                 continue;
             }

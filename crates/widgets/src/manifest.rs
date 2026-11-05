@@ -1117,6 +1117,8 @@ impl PluginManifest {
                 component.ends_with(".wasm") && !component.contains(['/', '\\']),
                 "component {component:?} must be a .wasm file in the plugin folder"
             );
+            // Its faces are the widgets `<plugin>--<face>`.
+            ensure!(!manifest.id.contains("--"), "a component plugin's id can't contain \"--\"");
         }
         if let Some(reserved) = manifest
             .methods
