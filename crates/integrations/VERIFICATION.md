@@ -358,10 +358,11 @@ Discord `possible_missing_else` and existing quick/toggles `unnecessary_cast` wa
 outside-owned paths were not changed. No live writes were performed to qualify thread creation,
 approval responses, usage with an upgraded grant, native prompt handoff or paid Grok routines.
 
-`scripts/deploy-local.ps1` deployed the release under the desktop lock and restored the running
-core/shell/engine. It intentionally **skipped Studio because the user's Studio window was open**;
-the new Studio executable is built in `C:\mypaper-targets\main\release`, and needs copying after
-that window closes. Existing Studio was left untouched.
+`scripts/deploy-local.ps1` deployed the final release under the desktop lock and restored the running
+core/shell/engine. During this work the deployment owner added replacement of the open Studio's
+executable by renaming the running file aside. The final deployment copied the new Studio exe too,
+while **leaving the user's existing Studio window open on its old build**. Reopening Studio loads
+the new setup UI; no further file copy is needed.
 
 The shared provider owner committed the registry/model hooks in **`b29f074`**, including the T3/Grok
 module declarations, default endpoint, demand hookup and shared model fields. The only necessary
