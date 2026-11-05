@@ -15,6 +15,7 @@
 //!   dropped a few seconds after the flyout closes; nothing polls while closed.
 
 pub(crate) mod calendar;
+mod controls;
 pub(crate) mod kit;
 mod language;
 mod launcher;
@@ -134,6 +135,7 @@ pub enum PanelCommand {
 /// A provider's answer, from a lane.
 pub enum Reply {
     Quick(mypaper_bars::flyouts::quick::Quick),
+    QuickControl(controls::State, Option<String>),
     Mixer(mypaper_bars::flyouts::mixer::MixerState),
     Wifi(mypaper_bars::flyouts::wifi::WifiState),
     NotificationIcons(Vec<(String, Option<String>)>),

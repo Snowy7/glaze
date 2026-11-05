@@ -31,6 +31,9 @@ log.workspace = true
 workspace = true
 features = [
   "Globalization",
+  "Devices_Radios",
+  "Networking_Connectivity",
+  "Networking_NetworkOperators",
   "Foundation",
   "Win32_Foundation",
   "Win32_Globalization",

@@ -9,9 +9,10 @@ use mypaper_bars::flyouts::{Done, Watched};
 use mypaper_bars::system;
 use mypaper_bars::wake::Msg;
 use mypaper_ui::{HitId, Point};
+use std::time::{Duration, Instant};
 
 use super::kit::{Icon, Kit, Row, glyph};
-use super::{Cx, Effect, LIST, Panel, Reply};
+use super::{Cx, Effect, LIST, Panel, Reply, controls};
 
 const RADIO: HitId = 1;
 const SCAN: HitId = 2;
@@ -63,6 +64,7 @@ pub struct Wifi {
     expanded: Option<String>,
     status: Option<String>,
     scroll: usize,
+    radio_pending: bool,
 }
 
 impl Wifi {
@@ -71,13 +73,15 @@ impl Wifi {
             lane.scan();
             Reply::Wifi(lane.read())
         });
-        cx.lanes.quick(|lane| Reply::Quick(lane.read()));
+        cx.lanes
+            .quick(|_| Reply::QuickControl(controls::read(), None));
         Self {
             state: None,
             radio: None,
             expanded: None,
             status: None,
             scroll: 0,
+            radio_pending: true,
         }
     }
 
@@ -89,6 +93,7 @@ impl Wifi {
             expanded: expanded.map(Into::into),
             status: None,
             scroll: 0,
+            radio_pending: false,
         }
     }
 
@@ -226,19 +231,15 @@ impl Panel for Wifi {
         }
         match id {
             RADIO => {
+                if self.radio_pending {
+                    return Effect::None;
+                }
                 let Some(on) = self.radio else {
                     return Effect::None;
                 };
-                self.radio = Some(!on);
-                cx.lanes
-                    .quick(move |lane| match lane.set_radio(RadioKind::Wifi, !on) {
-                        Ok(()) => Reply::Quick(lane.read()),
-                        Err(e) => Reply::Failed(e),
-                    });
-                cx.lanes.wifi(|lane| {
-                    lane.scan();
-                    Reply::Wifi(lane.read())
-                });
+                self.radio_pending = true;
+                self.status = None;
+                super::quick::change_radio(cx, RadioKind::Wifi, !on);
                 Effect::Redraw
             }
             SCAN => {
@@ -321,6 +322,27 @@ impl Panel for Wifi {
                 self.radio = radio;
                 changed
             }
+            Reply::QuickControl(live, error) => {
+                self.radio_pending = false;
+                let radio = live
+                    .radios
+                    .iter()
+                    .filter(|r| r.kind == RadioKind::Wifi)
+                    .map(|r| r.on)
+                    .reduce(|a, b| a || b);
+                let changed = radio != self.radio || error.is_some();
+                if radio != self.radio {
+                    cx.lanes.wifi(|lane| {
+                        lane.scan();
+                        Reply::Wifi(lane.read())
+                    });
+                }
+                self.radio = radio;
+                if error.is_some() {
+                    self.status = error.clone();
+                }
+                changed
+            }
             Reply::Done => {
                 cx.lanes.wifi(|lane| Reply::Wifi(lane.read()));
                 false
@@ -338,6 +360,15 @@ impl Panel for Wifi {
             cx.lanes.wifi(|lane| Reply::Wifi(lane.read()));
         }
         false
+    }
+
+    fn tick(&mut self, now: Instant, cx: &mut Cx) -> (bool, Option<Instant>) {
+        if !self.radio_pending {
+            self.radio_pending = true;
+            cx.lanes
+                .quick(|_| Reply::QuickControl(controls::read(), None));
+        }
+        (false, Some(now + Duration::from_secs(1)))
     }
 }
 

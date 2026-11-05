@@ -1,14 +1,16 @@
-//! Quick settings: Wi-Fi and Bluetooth (on the `quick` lane), power mode, battery saver, do not
-//! disturb and focus (shown; their settings pages change them, there is no API), night light,
-//! brightness and volume. Wi-Fi's and volume's chevrons open the Wi-Fi list and the mixer.
+//! Quick settings with real system controls. DND, Focus, Night light and Energy saver have
+//! no unrestricted setter, so they are not switches here. Secondary clicks open Settings.
+
+use std::time::{Duration, Instant};
 
 use mypaper_bars::audio::Volume;
-use mypaper_bars::flyouts::quick::{self as provider, Dnd, PowerMode, QuickLane, RadioKind};
+use mypaper_bars::flyouts::quick::{self as provider, PowerMode, RadioKind};
 use mypaper_bars::network::{self, Kind as Link, NetworkInfo};
 use mypaper_bars::system::{self, Battery};
 use mypaper_bars::wake::Msg;
 use mypaper_ui::{HitId, Point};
 
+use super::controls;
 use super::kit::{DECORATION, Kit, Tile, glyph};
 use super::{Cx, Effect, Kind, Panel, Reply};
 
@@ -16,15 +18,15 @@ const WIFI: HitId = 1;
 const WIFI_MORE: HitId = 2;
 const BLUETOOTH: HitId = 3;
 const POWER: HitId = 4;
-const SAVER: HitId = 5;
-const DND: HitId = 6;
-const FOCUS: HitId = 7;
-const NIGHT: HitId = 8;
+const HOTSPOT: HitId = 5;
 const BRIGHTNESS: HitId = 9;
 const VOLUME: HitId = 10;
 const MUTE: HitId = 11;
 const MIXER: HitId = 12;
 const SETTINGS: HitId = 13;
+const BLUETOOTH_MORE: HitId = 14;
+const POWER_MORE: HitId = 15;
+const HOTSPOT_MORE: HitId = 16;
 
 pub struct Quick {
     state: Option<provider::Quick>,
@@ -34,11 +36,17 @@ pub struct Quick {
     /// The brightness being dragged (applied when the drag ends: DDC/CI is slow).
     brightness: Option<u32>,
     error: Option<String>,
+    pending: bool,
+    refreshing: bool,
+    hotspot: Option<bool>,
+    display_due: Instant,
 }
 
 impl Quick {
     pub fn new(cx: &mut Cx) -> Self {
         cx.lanes.quick(|lane| Reply::Quick(lane.read()));
+        cx.lanes
+            .quick(|_| Reply::QuickControl(controls::read(), None));
         Self {
             state: None,
             // The endpoint (COM activation, tens of ms cold) is opened once on screen.
@@ -47,6 +55,10 @@ impl Quick {
             battery: system::battery(),
             brightness: None,
             error: None,
+            pending: true,
+            refreshing: false,
+            hotspot: None,
+            display_due: Instant::now() + Duration::from_secs(5),
         }
     }
 
@@ -64,6 +76,10 @@ impl Quick {
             battery,
             brightness: None,
             error: None,
+            pending: false,
+            refreshing: false,
+            hotspot: None,
+            display_due: Instant::now() + Duration::from_secs(5),
         }
     }
 
@@ -72,32 +88,35 @@ impl Quick {
             .as_ref()?
             .radios
             .iter()
-            .find(|r| r.kind == kind)
+            .filter(|r| r.kind == kind)
             .map(|r| r.on)
+            .reduce(|a, b| a || b)
     }
 
     fn set_radio(&mut self, kind: RadioKind, cx: &mut Cx) -> Effect {
-        let Some(on) = self.radio(kind) else {
-            return settings(match kind {
-                RadioKind::Wifi => "ms-settings:network-wifi",
-                _ => "ms-settings:bluetooth",
-            });
-        };
-        if let Some(radio) = self
-            .state
-            .as_mut()
-            .and_then(|s| s.radios.iter_mut().find(|r| r.kind == kind))
-        {
-            radio.on = !on;
+        if self.pending || self.refreshing {
+            return Effect::None;
         }
-        cx.lanes.quick(
-            move |lane: &mut QuickLane| match lane.set_radio(kind, !on) {
-                Ok(()) => Reply::Quick(lane.read()),
-                Err(e) => Reply::Failed(e),
-            },
-        );
+        let Some(on) = self.radio(kind) else {
+            return Effect::None;
+        };
+        self.pending = true;
+        change_radio(cx, kind, !on);
         Effect::Redraw
     }
+}
+
+/// Request consent in a UI context, wait and write off-thread, and always read back the OS
+/// state, even on failure. Never leave an optimistic switch showing a refused operation.
+pub(super) fn change_radio(cx: &mut Cx, kind: RadioKind, on: bool) {
+    let access = windows::Devices::Radios::Radio::RequestAccessAsync();
+    cx.lanes.quick(move |_| {
+        let result = access
+            .and_then(|op| op.join())
+            .map_err(|e| e.to_string())
+            .and_then(|access| controls::set_radio(kind, on, access));
+        Reply::QuickControl(controls::read(), result.err())
+    });
 }
 
 fn settings(uri: &str) -> Effect {
@@ -151,11 +170,11 @@ impl Panel for Quick {
                 label: "Wi-Fi",
                 detail: &wifi_detail,
                 on: wifi == Some(true),
-                enabled: wifi.is_some() || state.is_none(),
+                enabled: wifi.is_some() && !self.pending,
             },
             Tile {
                 id: BLUETOOTH,
-                more: None,
+                more: Some(BLUETOOTH_MORE),
                 glyph: glyph::BLUETOOTH,
                 label: "Bluetooth",
                 detail: match bluetooth {
@@ -164,64 +183,29 @@ impl Panel for Quick {
                     Some(on) => on_off(on),
                 },
                 on: bluetooth == Some(true),
-                enabled: bluetooth.is_some() || state.is_none(),
+                enabled: bluetooth.is_some() && !self.pending,
             },
             Tile {
                 id: POWER,
-                more: None,
+                more: Some(POWER_MORE),
                 glyph: glyph::GAUGE,
                 label: "Power mode",
-                detail: power.map_or("Settings", power_label),
+                detail: power.map_or("Unavailable", power_label),
                 on: power.is_some_and(|p| p != PowerMode::Balanced),
-                enabled: true,
+                enabled: power.is_some() && !self.pending,
             },
         ];
-        if let Some(saver) = state.and_then(|s| s.saver) {
+        if let Some(on) = self.hotspot {
             tiles.push(Tile {
-                id: SAVER,
-                more: None,
-                glyph: glyph::SAVER,
-                label: "Battery saver",
-                detail: on_off(saver),
-                on: saver,
-                enabled: true,
+                id: HOTSPOT,
+                more: Some(HOTSPOT_MORE),
+                glyph: glyph::WIFI[3],
+                label: "Mobile hotspot",
+                detail: on_off(on),
+                on,
+                enabled: !self.pending,
             });
         }
-        if let Some(dnd) = state.and_then(|s| s.dnd) {
-            tiles.push(Tile {
-                id: DND,
-                more: None,
-                glyph: glyph::MOON,
-                label: "Do not disturb",
-                detail: match dnd {
-                    Dnd::Off => "Off",
-                    Dnd::Priority => "Priority only",
-                    Dnd::Alarms => "Alarms only",
-                },
-                on: dnd != Dnd::Off,
-                enabled: true,
-            });
-        }
-        if let Some(focus) = state.and_then(|s| s.focus) {
-            tiles.push(Tile {
-                id: FOCUS,
-                more: None,
-                glyph: glyph::FOCUS,
-                label: "Focus",
-                detail: if focus { "In a session" } else { "Off" },
-                on: focus,
-                enabled: true,
-            });
-        }
-        tiles.push(Tile {
-            id: NIGHT,
-            more: None,
-            glyph: glyph::BRIGHTNESS,
-            label: "Night light",
-            detail: "Settings",
-            on: false,
-            enabled: true,
-        });
         kit.tiles(&tiles);
         if let Some(level) = self.brightness.or(state.and_then(|s| s.brightness)) {
             kit.slider(
@@ -280,25 +264,38 @@ impl Panel for Quick {
             WIFI => self.set_radio(RadioKind::Wifi, cx),
             WIFI_MORE => Effect::Switch(Kind::Wifi),
             BLUETOOTH => self.set_radio(RadioKind::Bluetooth, cx),
+            BLUETOOTH_MORE => settings("ms-settings:bluetooth"),
+            POWER_MORE => settings("ms-settings:powersleep"),
+            HOTSPOT_MORE => settings("ms-settings:network-mobilehotspot"),
             POWER => {
+                if self.pending || self.refreshing {
+                    return Effect::None;
+                }
                 let Some(mode) = self.state.as_ref().and_then(|s| s.power) else {
-                    return settings("ms-settings:powersleep");
+                    return Effect::None;
                 };
                 let next = next_power(mode);
-                if let Some(s) = &mut self.state {
-                    s.power = Some(next);
-                }
-                cx.lanes
-                    .quick(move |lane| match provider::set_power_mode(next) {
-                        Ok(()) => Reply::Quick(lane.read()),
-                        Err(e) => Reply::Failed(e),
-                    });
+                self.pending = true;
+                cx.lanes.quick(move |_| {
+                    let error = controls::set_power_mode(next).err();
+                    Reply::QuickControl(controls::read(), error)
+                });
                 Effect::Redraw
             }
-            SAVER => settings("ms-settings:batterysaver"),
-            DND => settings("ms-settings:notifications"),
-            FOCUS => settings("ms-settings:quiethours"),
-            NIGHT => settings("ms-settings:nightlight"),
+            HOTSPOT => {
+                if self.pending || self.refreshing {
+                    return Effect::None;
+                }
+                let Some(on) = self.hotspot else {
+                    return Effect::None;
+                };
+                self.pending = true;
+                cx.lanes.quick(move |_| {
+                    let error = controls::set_hotspot(!on).err();
+                    Reply::QuickControl(controls::read(), error)
+                });
+                Effect::Redraw
+            }
             MUTE => {
                 let muted = self.volume.is_some_and(|v| v.muted);
                 self.volume = cx
@@ -339,16 +336,51 @@ impl Panel for Quick {
         }
     }
 
-    fn reply(&mut self, reply: &Reply, _: &mut Cx) -> bool {
+    fn reply(&mut self, reply: &Reply, cx: &mut Cx) -> bool {
         match reply {
             Reply::Quick(state) => {
-                self.state = Some(state.clone());
+                let mut state = state.clone();
+                // The slow brightness response must not overwrite more recent radio/power state.
+                if let Some(current) = &self.state {
+                    state.radios = current.radios.clone();
+                    state.power = current.power;
+                }
+                let changed = self.brightness.is_some() || self.state.as_ref() != Some(&state);
+                self.state = Some(state);
                 self.brightness = None;
-                true
+                changed
+            }
+            Reply::QuickControl(live, error) => {
+                let changed = self.pending
+                    || self.hotspot != live.hotspot
+                    || error.is_some()
+                    || self
+                        .state
+                        .as_ref()
+                        .is_none_or(|s| s.radios != live.radios || s.power != live.power);
+                self.pending = false;
+                self.refreshing = false;
+                self.hotspot = live.hotspot;
+                if error.is_some() {
+                    self.error = error.clone();
+                }
+                let state = self.state.get_or_insert_with(|| provider::Quick {
+                    radios: vec![],
+                    brightness: None,
+                    power: None,
+                    saver: None,
+                    dnd: None,
+                    focus: None,
+                });
+                state.radios = live.radios.clone();
+                state.power = live.power;
+                changed
             }
             Reply::Failed(e) => {
                 log::warn!("quick settings: {e}");
                 self.error = Some(e.clone());
+                self.brightness = None;
+                cx.lanes.quick(|lane| Reply::Quick(lane.read()));
                 true
             }
             _ => false,
@@ -360,6 +392,29 @@ impl Panel for Quick {
         self.volume.is_some()
     }
 
+    fn context(&mut self, id: HitId, _: &mut Cx) -> Effect {
+        match id {
+            WIFI => settings("ms-settings:network-wifi"),
+            BLUETOOTH => settings("ms-settings:bluetooth"),
+            POWER => settings("ms-settings:powersleep"),
+            HOTSPOT => settings("ms-settings:network-mobilehotspot"),
+            _ => Effect::None,
+        }
+    }
+
+    fn tick(&mut self, now: Instant, cx: &mut Cx) -> (bool, Option<Instant>) {
+        if !self.pending && !self.refreshing {
+            self.refreshing = true;
+            cx.lanes
+                .quick(|_| Reply::QuickControl(controls::read(), None));
+        }
+        if now >= self.display_due && self.brightness.is_none() {
+            self.display_due = now + Duration::from_secs(5);
+            cx.lanes.quick(|lane| Reply::Quick(lane.read()));
+        }
+        (false, Some(now + Duration::from_secs(1)))
+    }
+
     fn changed(&mut self, msg: &Msg, cx: &mut Cx) -> bool {
         if matches!(msg, Msg::Volume) {
             let audio = cx.lanes.audio.as_mut();
@@ -368,6 +423,12 @@ impl Panel for Quick {
                 self.volume = a.read();
             }
             return true;
+        }
+        if matches!(msg, Msg::Network) {
+            let network = network::read(None);
+            let changed = self.network != network;
+            self.network = network;
+            return changed;
         }
         false
     }
