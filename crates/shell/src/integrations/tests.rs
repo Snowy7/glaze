@@ -1,7 +1,7 @@
 //! Goldens and hit tests use exactly the panels registered in the native flyout controller.
 use super::*;
 use crate::flyouts::{build, look::Look};
-use mypaper_integrations::{media, notifications, obs, t3};
+use mypaper_integrations::{media, notifications, t3};
 use mypaper_ui::{Point, render};
 
 fn fixtures() -> Vec<(&'static str, Provider, Data)> {
@@ -73,17 +73,6 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
                         updated_at: "2026-11-05".into(),
                     },
                 ],
-                ..Default::default()
-            }),
-        ),
-        (
-            "obs",
-            Provider::Obs,
-            Data::Obs(obs::Snapshot {
-                recording: true,
-                streaming: false,
-                scene: "Desktop + camera".into(),
-                paused: false,
                 ..Default::default()
             }),
         ),
@@ -202,7 +191,6 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
     STATE.with_borrow_mut(|s| {
         s.config.notifications.enabled = true;
         s.config.t3.enabled = true;
-        s.config.obs.enabled = true;
         for (_, provider, data) in fixtures() {
             s.fixtures.insert(
                 provider,
@@ -215,7 +203,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         }
     });
     let mut ui = Ui::new().unwrap();
-    let mut config=BarsConfig::parse(r#"{"top":{"left":[],"center":[],"right":["notifications","t3","obs"]}}"#).unwrap();
+    let mut config=BarsConfig::parse(r#"{"top":{"left":[],"center":[],"right":["notifications","t3"]}}"#).unwrap();
     config.resolve(Vec::new);
     let tokens = look::Tokens::resolve(
         &config.top.look,
