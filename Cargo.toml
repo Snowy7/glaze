@@ -2,8 +2,7 @@
 resolver = "3"
 members = ["crates/*", "plugins/*", "tools/*"]
 # WebAssembly guests build for wasm32-wasip2 in their own workspaces (docs/plugins.md).
-# TypeScript guests (plugins/hello-ts) are pnpm projects, not crates. plugins/discord is an
-# unfinished leftover of the per-process plugin attempt, kept for the WASM port.
+# TypeScript guests (plugins/hello-ts) are pnpm projects, not crates.
 exclude = ["plugins/obs", "plugins/grok", "plugins/hello", "plugins/docker", "plugins/weather/component", "plugins/hello-ts", "plugins/discord", "plugins/tailscale"]
 
 [workspace.package]
