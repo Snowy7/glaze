@@ -2,7 +2,6 @@
 pub(crate) mod discord;
 pub(crate) mod calendar;
 pub(crate) mod custom;
-pub(crate) mod obs;
 pub(crate) mod t3;
 mod t3_limits;
 mod t3_usage;
@@ -172,3 +171,6 @@ pub(super) fn icon_action(
     f.focus_ring(id, rect, radius);
     f.hit(id, rect, Role::Button, label, enabled, None);
 }
+
+#[cfg(test)]
+mod obs_plugin_tests;
