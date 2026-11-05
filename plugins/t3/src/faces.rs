@@ -11,12 +11,18 @@ pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, pick: &Pick, now_m
     let footer = footer(face, snapshot);
     let body = match &snapshot.data {
         Some(Data::T3(state)) => match face {
+            // The top-bar module: the bar draws its text.
+            "status" => View::text(
+                format!("{} running · {} need input", state.threads.iter().filter(|t| t.running()).count(), state.threads.iter().filter(|t| t.attention()).count()),
+                Role::Caption,
+            ),
             "limits" => limits(state, size, now_ms),
             "usage" => usage(state, size),
             "new" => composer(state, size, pick),
             "attention" => threads(state, size, true),
             _ => threads(state, size, false),
         },
+        None if face == "status" => View::text("T3", Role::Caption),
         None => match &snapshot.availability {
             Availability::Unavailable(why) => View::Stack {
                 children: vec![

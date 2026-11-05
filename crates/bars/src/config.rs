@@ -752,6 +752,7 @@ impl<'de> Deserialize<'de> for ModuleRef {
         let text = String::deserialize(deserializer)?;
         if text == "obs" { return Ok(Self::Custom("obs--status".into())); }
         if text == "tailscale" { return Ok(Self::Custom("tailscale--status".into())); }
+        if text == "t3" { return Ok(Self::Custom("t3--status".into())); }
         if text == "|" {
             return Ok(Self::Break);
         }
