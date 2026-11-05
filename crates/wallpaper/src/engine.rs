@@ -384,6 +384,10 @@ impl Engine {
     fn deadline(&self, frame: Option<Instant>) -> Option<Instant> {
         [
             frame,
+            // A glass spring (materialize, a material fade) runs: present pacing sets the rate.
+            self.glass
+                .animating()
+                .then(|| Instant::now() + Duration::from_millis(4)),
             self.reload_at,
             self.recheck_at,
             self.timing
@@ -500,9 +504,9 @@ impl Engine {
             let glass_drawn = self.glass.encode(
                 &self.gpu,
                 index,
-                screen.size(),
                 &kept.texture,
-                &view,
+                &texture.texture,
+                wallpaper_due,
                 &mut encoder,
             );
             if let (Some(timing), Some(slot)) = (&self.timing, timing_slot) {

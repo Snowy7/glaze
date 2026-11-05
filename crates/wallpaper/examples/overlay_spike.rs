@@ -39,6 +39,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SetCursorPos, TranslateMessage, WM_APP, WindowFromPoint,
 };
 
+#[path = "../src/material.rs"]
+mod material;
 #[path = "../src/overlay/mod.rs"]
 #[allow(dead_code)]
 mod overlay;

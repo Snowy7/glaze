@@ -3,7 +3,7 @@
 //! widgets over web and app wallpapers.
 //!
 //! For each open surface the engine owns a click-through window directly under the shell's
-//! window (`window.rs`) and draws glass.wgsl into it (`glass.rs`) over a crop of what is behind
+//! window (`window.rs`) and draws Liquid Glass into it (`glass.rs`) over a crop of what is behind
 //! it, captured by one Windows.Graphics.Capture session per monitor (`capture.rs`) that keeps
 //! our windows and the shell's out of the picture (`abi.rs`).
 //!
@@ -136,6 +136,8 @@ struct Placement {
     frame: Rect,
     bounds: Rect,
     material: Material,
+    /// The monitor's px per point.
+    scale: f32,
 }
 
 pub struct Overlays {
@@ -178,6 +180,8 @@ struct Overlay {
     material: Material,
     monitor: HMONITOR,
     bounds: Rect,
+    /// The monitor's px per point.
+    scale: f32,
     /// The window: `rect` grown by the glass's reach, on its monitor.
     frame: Rect,
     window: OverlayWindow,
@@ -387,7 +391,8 @@ impl Overlays {
             started?;
         }
         let live = self.live.as_ref().context("no overlays")?;
-        let frame = geometry::frame(rect, geometry::reach(rect, radius, &material), bounds);
+        let scale = scale_of(bounds);
+        let frame = geometry::frame(rect, geometry::reach(rect, &material, scale), bounds);
         let mut window = OverlayWindow::new(&live.dcomp, layer, frame)?;
         window.place(
             &live.dcomp,
@@ -411,6 +416,7 @@ impl Overlays {
             material,
             monitor,
             bounds,
+            scale,
             frame,
             window,
             targets,
@@ -451,8 +457,14 @@ impl Overlays {
     /// Moves, resizes or re-materials overlay `o`.
     fn place(&mut self, o: usize, rect: Rect, radius: f32, material: Material) -> Result<()> {
         let (monitor, bounds) = monitor_of(rect);
-        let frame = geometry::frame(rect, geometry::reach(rect, radius, &material), bounds);
+        let scale = if monitor == self.open[o].monitor {
+            self.open[o].scale
+        } else {
+            scale_of(bounds)
+        };
+        let frame = geometry::frame(rect, geometry::reach(rect, &material, scale), bounds);
         let overlay = &mut self.open[o];
+        overlay.scale = scale;
         let moved = frame != overlay.frame || monitor != overlay.monitor;
         let reshaped = moved || rect != overlay.rect || radius != overlay.radius;
         (overlay.rect, overlay.radius, overlay.material) = (rect, radius, material);
@@ -570,6 +582,7 @@ impl Overlays {
                 frame: o.frame,
                 bounds: o.bounds,
                 material: o.material,
+                scale: o.scale,
             })
             .collect();
     }
@@ -649,10 +662,10 @@ impl Overlays {
             }
         }
         render(
-            &self.open,
+            &mut self.open,
             &early,
             true,
-            &self.gpu.queue,
+            &self.gpu,
             &mut encoder,
             live,
         );
@@ -698,10 +711,10 @@ impl Overlays {
         if !late.is_empty() {
             let mut encoder = device.create_command_encoder(&Default::default());
             render(
-                &self.open,
+                &mut self.open,
                 &late,
                 false,
-                &self.gpu.queue,
+                &self.gpu,
                 &mut encoder,
                 live,
             );
@@ -725,10 +738,10 @@ impl Overlays {
         let live = self.live.as_mut().context("no overlays")?;
         let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
         render(
-            &self.open,
+            &mut self.open,
             which,
             false,
-            &self.gpu.queue,
+            &self.gpu,
             &mut encoder,
             live,
         );
@@ -857,28 +870,37 @@ impl Drop for Hook {
 /// Records the glass of overlays `which` (from their fresh crops with `fresh`, else from their
 /// shown ones) into each one's glass texture.
 fn render(
-    open: &[Overlay],
+    open: &mut [Overlay],
     which: &[usize],
     fresh: bool,
-    queue: &wgpu::Queue,
+    gpu: &Gpu,
     encoder: &mut wgpu::CommandEncoder,
     live: &mut Live,
 ) {
     for &o in which {
-        let overlay = &open[o];
-        let plate = glass::instance(
+        let overlay = &mut open[o];
+        overlay.targets.set_plate(
             geometry::local(overlay.rect, overlay.frame),
             overlay.radius,
             &overlay.material,
+            overlay.scale,
         );
-        overlay.targets.set_plate(queue, &plate);
         overlay.targets.draw(
+            &gpu.device,
+            &gpu.queue,
             encoder,
-            &live.pipes,
             fresh,
             live.timer.as_mut().and_then(Timer::render_pass),
         );
     }
+}
+
+/// The px per point of the monitor at `bounds` (its DPI / 96).
+fn scale_of(bounds: Rect) -> f32 {
+    mypaper_desktop::monitor_infos()
+        .iter()
+        .find(|m| m.rect == bounds)
+        .map_or(1.0, |m| m.dpi as f32 / 96.0)
 }
 
 fn size(frame: Rect) -> (u32, u32) {
@@ -974,7 +996,7 @@ fn move_now(inbox: &Inbox, request: &Request) {
     let Request::Place {
         client,
         rect,
-        radius,
+        radius: _,
     } = *request
     else {
         return;
@@ -983,7 +1005,7 @@ fn move_now(inbox: &Inbox, request: &Request) {
     let Some(p) = placements.iter_mut().find(|p| p.client == client) else {
         return;
     };
-    let frame = geometry::frame(rect, geometry::reach(rect, radius, &p.material), p.bounds);
+    let frame = geometry::frame(rect, geometry::reach(rect, &p.material, p.scale), p.bounds);
     let same_size = (frame.width, frame.height) == (p.frame.width, p.frame.height);
     if same_size && frame != p.frame && window::move_under(p.overlay, client, frame, true).is_ok() {
         p.frame = frame;

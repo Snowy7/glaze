@@ -180,7 +180,8 @@ impl Gpu {
         Ok(value)
     }
 
-    /// A sampled texture in `format`, optionally filled with tightly packed pixels.
+    /// A sampled texture in `format`, optionally filled with tightly packed pixels. It can also
+    /// be viewed as sRGB: Liquid Glass reads and draws linear colour (`glass_pass`).
     pub fn texture(
         &self,
         label: &str,
@@ -201,7 +202,7 @@ impl Gpu {
             dimension: wgpu::TextureDimension::D2,
             format,
             usage: usage | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
+            view_formats: &[format.add_srgb_suffix()],
         });
         if let Some(pixels) = pixels {
             self.write_texture(&texture, pixels);
@@ -319,7 +320,8 @@ impl Screen {
             .get_default_config(&gpu.adapter, width.max(1), height.max(1))
             .ok_or_else(|| anyhow!("surface not supported by adapter"))?;
         config.format = gpu.format;
-        config.view_formats = vec![];
+        // Liquid Glass draws through an sRGB view (`glass_pass`).
+        config.view_formats = vec![gpu.format.add_srgb_suffix()];
         // Mailbox never blocks on vsync; our own timer paces frames.
         if caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
             config.present_mode = wgpu::PresentMode::Mailbox;

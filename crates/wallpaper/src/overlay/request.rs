@@ -40,7 +40,7 @@ pub enum Layer {
 pub struct Material {
     /// 1 is clear glass, 0 fully tinted: the tint colour's opacity.
     pub clarity: f32,
-    /// Blur radius in px (0 for none; glass.wgsl's light blur caps it at 12).
+    /// Blur radius in px: liquid-rust's frost, in points once divided by the screen's scale.
     pub blur: f32,
     /// How far the rim bends what is behind it.
     pub refraction: f32,

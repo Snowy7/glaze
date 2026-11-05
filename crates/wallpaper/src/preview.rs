@@ -1,7 +1,7 @@
 //! Glass for Studio's previews (plans/native/studio-redesign.md, D3). Studio has no GPU device,
 //! so it asks the engine: "draw the wallpaper with these glass plates at W×H into shared
 //! memory". The engine answers once per request, from the wallpaper frame it already keeps for
-//! the desktop's own glass, with the same glass shader.
+//! the desktop's own glass, with the same Liquid Glass (liquid-rust, see `glass_pass`).
 //!
 //! The protocol, shared with `crates/studio/src/glass.rs` (keep the two in step):
 //! - Studio creates the section `Local\mypaper.preview` ([`Header`] then `width * height` BGRA
@@ -16,6 +16,8 @@
 
 use anyhow::{Context, Result, bail};
 use bytemuck::{Pod, Zeroable};
+use liquid_rust as lr;
+use mypaper_glass_ipc::Material;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Memory::{
     FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
@@ -161,16 +163,6 @@ fn answer(gpu: &Gpu, kept: Option<&wgpu::Texture>) -> Result<()> {
     }
 }
 
-/// One glass plate as `glass.wgsl` reads it (the desktop pass's instance layout).
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct Instance {
-    rect: [f32; 4],
-    shape: [f32; 4],
-    tint: [f32; 4],
-    extra: [f32; 4],
-}
-
 /// The wallpaper stretched to `size`, the plates over it, read back into `out` (BGRA).
 fn draw(
     gpu: &Gpu,
@@ -204,7 +196,7 @@ fn draw(
         quad.draw(&gpu.blit, &mut pass);
     }
     if !plates.is_empty() {
-        glass(gpu, &kept_view, size, plates, &view, &mut encoder);
+        glass(gpu, kept, size, plates, &target, &mut encoder);
     }
     let row = (size.0 * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
     let readback = device.create_buffer(&wgpu::BufferDescriptor {
@@ -254,145 +246,56 @@ fn draw(
     Ok(())
 }
 
-/// The desktop's glass shader, drawn over the preview target.
+/// The desktop's glass (liquid-rust, as `glass_pass` draws it) over the preview target, at one
+/// pixel per point: Studio sends the plates in preview pixels.
 fn glass(
     gpu: &Gpu,
-    behind: &wgpu::TextureView,
+    kept: &wgpu::Texture,
     size: (u32, u32),
     plates: &[Plate],
-    view: &wgpu::TextureView,
+    target: &wgpu::Texture,
     encoder: &mut wgpu::CommandEncoder,
 ) {
-    let device = &gpu.device;
-    let module = device.create_shader_module(wgpu::include_wgsl!("glass.wgsl"));
-    let entry = |binding: u32, ty: wgpu::BindingType| wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-        ty,
-        count: None,
-    };
-    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("preview glass"),
-        entries: &[
-            entry(
-                0,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-            ),
-            entry(
-                1,
-                wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-            ),
-            entry(
-                2,
-                wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-            ),
-        ],
-    });
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("preview glass"),
-        bind_group_layouts: &[Some(&layout)],
-        immediate_size: 0,
-    });
-    let attributes =
-        wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4];
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("preview glass"),
-        layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &module,
-            entry_point: Some("vs"),
-            compilation_options: Default::default(),
-            buffers: &[Some(wgpu::VertexBufferLayout {
-                array_stride: size_of::<Instance>() as u64,
-                step_mode: wgpu::VertexStepMode::Instance,
-                attributes: &attributes,
-            })],
-        },
-        primitive: Default::default(),
-        depth_stencil: None,
-        multisample: Default::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &module,
-            entry_point: Some("fs"),
-            compilation_options: Default::default(),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: gpu.format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-        }),
-        multiview_mask: None,
-        cache: None,
-    });
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("preview glass"),
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        ..Default::default()
-    });
-    let instances: Vec<Instance> = plates
-        .iter()
-        .map(|p| Instance {
-            rect: p.rect,
-            shape: [p.radius, p.clarity, p.refraction, p.highlight],
+    let mut scene = lr::Scene::new();
+    scene.physics = false;
+    for p in plates {
+        let material = Material {
+            clarity: p.clarity,
+            blur: p.blur,
+            refraction: p.refraction,
+            highlight: p.highlight,
             tint: p.tint,
-            extra: [p.blur, 0.0, 0.0, 0.0],
+        };
+        let (material, appearance) = crate::material::liquid(&material, 1.0);
+        let [x, y, w, h] = p.rect;
+        let glass = lr::Glass::new(lr::Rect::new(x, y, w, h))
+            .shape(lr::Shape::Circular(p.radius.max(0.0)))
+            .material(material)
+            .appearance(appearance);
+        scene.add(glass);
+    }
+    scene.update(0.0);
+    let srgb = gpu.format.add_srgb_suffix();
+    let view = |t: &wgpu::Texture| {
+        t.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(srgb),
+            ..Default::default()
         })
-        .collect();
-    let buffer = |label: &str, bytes: &[u8], usage: wgpu::BufferUsages| {
-        let b = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(label),
-            size: bytes.len() as u64,
-            usage: usage | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        gpu.queue.write_buffer(&b, 0, bytes);
-        b
     };
-    let uniforms = buffer(
-        "preview glass",
-        bytemuck::cast_slice(&[size.0 as f32, size.1 as f32, 0.0, 0.0]),
-        wgpu::BufferUsages::UNIFORM,
+    lr::Renderer::new(&gpu.device, srgb).render(
+        &gpu.device,
+        &gpu.queue,
+        encoder,
+        &lr::Frame {
+            content: &view(kept),
+            target: &view(target),
+            size,
+            scale: 1.0,
+            content_changed: true,
+            copy_content: false,
+        },
+        &scene,
     );
-    let vertices = buffer(
-        "preview plates",
-        bytemuck::cast_slice(&instances),
-        wgpu::BufferUsages::VERTEX,
-    );
-    let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("preview glass"),
-        layout: &layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniforms.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(behind),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::Sampler(&sampler),
-            },
-        ],
-    });
-    let mut pass = crate::sources::begin(encoder, view, wgpu::LoadOp::Load);
-    pass.set_pipeline(&pipeline);
-    pass.set_bind_group(0, &bind, &[]);
-    pass.set_vertex_buffer(0, vertices.slice(..));
-    // 30 vertices per plate: the rim's four bands and the face (glass_pass's VERTICES).
-    pass.draw(0..30, 0..instances.len() as u32);
 }
 
 #[cfg(test)]

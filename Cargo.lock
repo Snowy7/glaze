@@ -1483,6 +1483,7 @@ dependencies = [
  "dioxus-devtools",
  "glam",
  "gltf",
+ "liquid-rust",
  "log",
  "mypaper-config",
  "mypaper-desktop",

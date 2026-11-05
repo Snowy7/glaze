@@ -1,159 +1,58 @@
-//! An overlay's GPU work: the plate pass's own shader (`../glass.wgsl`, used unchanged) drawn
-//! over a crop of the backdrop into the overlay's glass texture (which the window shows), and
-//! the compare pass
-//! (`compare.wgsl`) that says whether a fresh crop differs from the one on screen.
+//! An overlay's GPU work: Liquid Glass (liquid-rust, the plates' renderer, see
+//! `crate::glass_pass`) drawn over a crop of the backdrop into the overlay's glass texture (which
+//! the window shows), and the compare pass (`compare.wgsl`) that says whether a fresh crop
+//! differs from the one on screen.
 //!
-//! The crops, the glass and the shader's coordinates are one space: the overlay's frame (the
-//! surface grown by the glass's reach). The glass is cleared to transparent, so the clear
-//! centre glass.wgsl never rasterizes shows the live window behind; only the rim (and a tint or
-//! blur) is drawn, premultiplied, as DirectComposition wants.
+//! The crops, the glass and liquid-rust's coordinates are one space: the overlay's frame (the
+//! surface grown by the glass's outset). The glass is drawn over a transparent clear, so the
+//! window shows only the glass, its rim light and its drop shadow, premultiplied, as
+//! DirectComposition wants.
+//!
+//! liquid-rust reads and writes linear colour through sRGB views. The crops can't have one (they
+//! are D3D12 resources shared with the capture and DirectComposition), so each draw copies the
+//! crop into an sRGB texture and the glass back out of one: two copies of a small texture.
 
 use anyhow::Result;
-use bytemuck::{Pod, Zeroable};
+use liquid_rust as lr;
 use mypaper_desktop::Rect;
 
 use super::capture::{CaptureDevice, Crop};
-use super::geometry::MAX_BLUR;
 use super::request::Material;
 
 /// The crop and glass format (the capture's own).
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
-/// Vertices per plate: glass.wgsl's four rim quads and its centre's.
-const VERTICES: u32 = 30;
-/// The tint's opacity at clarity 0.
-const MAX_TINT: f32 = 0.8;
+/// What liquid-rust reads and draws: the crops' format, as sRGB.
+const SRGB: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
 
-/// Mirrors `Plate` in glass.wgsl.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
-pub struct Instance {
-    rect: [f32; 4],
-    shape: [f32; 4],
-    tint: [f32; 4],
-    extra: [f32; 4],
-}
-
-/// Mirrors `Uniforms` in glass.wgsl.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-struct Uniforms {
-    size: [f32; 2],
-    _pad: [f32; 2],
-}
-
-/// The plate glass.wgsl draws for a surface at `plate` (frame-local px).
-pub fn instance(plate: Rect, radius: f32, material: &Material) -> Instance {
-    let unit = |v: f32| v.clamp(0.0, 1.0);
+/// The overlay material as the plates' controls (`glass_pass::liquid`). The tint's colour sets
+/// the colour scheme; clarity alone tints the glass, through the transparency slider.
+pub fn controls(material: &Material) -> mypaper_glass_ipc::Material {
     let [r, g, b, _] = material.tint.map(|c| f32::from(c) / 255.0);
-    Instance {
-        rect: [
-            plate.x as f32,
-            plate.y as f32,
-            plate.width as f32,
-            plate.height as f32,
-        ],
-        shape: [
-            radius.max(0.0),
-            1.0,
-            unit(material.refraction),
-            unit(material.highlight),
-        ],
-        tint: [r, g, b, (1.0 - unit(material.clarity)) * MAX_TINT],
-        // Full presence: the window's opacity does the fade (DirectComposition animates it).
-        extra: [material.blur.clamp(0.0, MAX_BLUR), 1.0, 0.0, 0.0],
+    mypaper_glass_ipc::Material {
+        clarity: material.clarity,
+        blur: material.blur,
+        refraction: material.refraction,
+        highlight: material.highlight,
+        tint: [r, g, b, 0.0],
     }
 }
 
 /// The pipelines, shared by every overlay.
 pub struct Pipelines {
-    glass: wgpu::RenderPipeline,
-    glass_layout: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
+    /// Compiled once; each overlay forks it.
+    glass: lr::Renderer,
     compare: wgpu::ComputePipeline,
     compare_layout: wgpu::BindGroupLayout,
 }
 
 impl Pipelines {
     pub fn new(device: &wgpu::Device) -> Self {
-        let module = device.create_shader_module(wgpu::include_wgsl!("../glass.wgsl"));
         let entry = |binding: u32, visibility, ty| wgpu::BindGroupLayoutEntry {
             binding,
             visibility,
             ty,
             count: None,
         };
-        let texture = wgpu::BindingType::Texture {
-            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-            view_dimension: wgpu::TextureViewDimension::D2,
-            multisampled: false,
-        };
-        let both = wgpu::ShaderStages::VERTEX_FRAGMENT;
-        let glass_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("glass overlay"),
-            entries: &[
-                entry(
-                    0,
-                    both,
-                    wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                ),
-                entry(1, both, texture),
-                entry(
-                    2,
-                    both,
-                    wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                ),
-            ],
-        });
-        let attributes = wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4];
-        let glass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("glass overlay"),
-            layout: Some(
-                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("glass overlay"),
-                    bind_group_layouts: &[Some(&glass_layout)],
-                    immediate_size: 0,
-                }),
-            ),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs"),
-                compilation_options: Default::default(),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: size_of::<Instance>() as u64,
-                    step_mode: wgpu::VertexStepMode::Instance,
-                    attributes: &attributes,
-                })],
-            },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: FORMAT,
-                    // Over a transparent clear this leaves premultiplied colour.
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("glass overlay"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            ..Default::default()
-        });
-
         let unfiltered = wgpu::BindingType::Texture {
             sample_type: wgpu::TextureSampleType::Float { filterable: false },
             view_dimension: wgpu::TextureViewDimension::D2,
@@ -191,26 +90,28 @@ impl Pipelines {
             cache: None,
         });
         Self {
-            glass,
-            glass_layout,
-            sampler,
+            glass: lr::Renderer::new(device, SRGB),
             compare,
             compare_layout,
         }
     }
 }
 
-/// One overlay's crops and buffers. The two crops take turns: the glass samples the `shown`
-/// one while the next frame is copied into the other and compared with it.
+/// One overlay's crops, glass and buffers. The two crops take turns: the glass samples the
+/// `shown` one while the next frame is copied into the other and compared with it.
 pub struct Targets {
     crops: [Crop; 2],
     shown: usize,
-    /// What the glass pass draws into, and the window shows.
+    /// What the window shows: the glass, copied out of `drawn`.
     target: Crop,
-    uniforms: wgpu::Buffer,
-    instance: wgpu::Buffer,
-    /// Per crop: the glass sampling it.
-    glass: [wgpu::BindGroup; 2],
+    /// The crop being refracted, and the glass drawn over a clear (both sRGB).
+    content: wgpu::TextureView,
+    drawn: wgpu::Texture,
+    renderer: lr::Renderer,
+    /// One glass, physics off: the window's opacity does the fade.
+    scene: lr::Scene,
+    glass: lr::GlassId,
+    scale: f32,
     /// Per crop: that crop compared against the other.
     compare: [wgpu::BindGroup; 2],
     differ: wgpu::Buffer,
@@ -229,7 +130,32 @@ impl Targets {
             capture.crop(device, size, sampled)?,
             capture.crop(device, size, sampled)?,
         ];
-        let glass_target = capture.crop(device, size, wgpu::TextureUsages::RENDER_ATTACHMENT)?;
+        let glass_target = capture.crop(device, size, wgpu::TextureUsages::COPY_DST)?;
+        let texture = |label: &str, usage: wgpu::TextureUsages| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: SRGB,
+                usage,
+                view_formats: &[],
+            })
+        };
+        let content = texture(
+            "glass overlay content",
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        )
+        .create_view(&Default::default());
+        let drawn = texture(
+            "glass overlay drawn",
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        );
         let buffer = |label: &str, size: u64, usage: wgpu::BufferUsages| {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
@@ -239,16 +165,6 @@ impl Targets {
             })
         };
         let copy_dst = wgpu::BufferUsages::COPY_DST;
-        let uniforms = buffer(
-            "glass overlay",
-            size_of::<Uniforms>() as u64,
-            wgpu::BufferUsages::UNIFORM | copy_dst,
-        );
-        let instance = buffer(
-            "glass overlay plate",
-            size_of::<Instance>() as u64,
-            wgpu::BufferUsages::VERTEX | copy_dst,
-        );
         let differ = buffer(
             "glass overlay differ",
             4,
@@ -262,26 +178,6 @@ impl Targets {
         let views = crops
             .each_ref()
             .map(|c| c.texture.create_view(&Default::default()));
-        let glass = std::array::from_fn(|i| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("glass overlay"),
-                layout: &pipes.glass_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: uniforms.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&views[i]),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&pipes.sampler),
-                    },
-                ],
-            })
-        });
         let compare = std::array::from_fn(|i| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("glass overlay compare"),
@@ -302,13 +198,19 @@ impl Targets {
                 ],
             })
         });
+        let mut scene = lr::Scene::new();
+        scene.physics = false;
+        let glass = scene.add(lr::Glass::new(lr::Rect::new(0.0, 0.0, 1.0, 1.0)));
         Ok(Self {
             crops,
             shown: 0,
             target: glass_target,
-            uniforms,
-            instance,
+            content,
+            drawn,
+            renderer: pipes.glass.fork(device),
+            scene,
             glass,
+            scale: 1.0,
             compare,
             differ,
             readback,
@@ -402,15 +304,25 @@ impl Targets {
             .collect()
     }
 
-    /// Writes this overlay's plate before a draw.
-    pub fn set_plate(&self, queue: &wgpu::Queue, plate: &Instance) {
-        let (w, h) = self.size();
-        let uniforms = Uniforms {
-            size: [w as f32, h as f32],
-            _pad: [0.0; 2],
-        };
-        queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&uniforms));
-        queue.write_buffer(&self.instance, 0, bytemuck::bytes_of(plate));
+    /// Sets this overlay's glass before a draw: the surface at `plate` (frame-local px), its
+    /// corner radius (px), its material, on a screen of `scale` px per point.
+    pub fn set_plate(&mut self, plate: Rect, radius: f32, material: &Material, scale: f32) {
+        let s = scale.max(0.5);
+        let frame = lr::Rect::new(
+            plate.x as f32 / s,
+            plate.y as f32 / s,
+            plate.width as f32 / s,
+            plate.height as f32 / s,
+        );
+        let (material, appearance) = crate::material::liquid(&controls(material), s);
+        self.scene.place(self.glass, frame);
+        // Quarter circles: exactly the surface's own rounded rectangle.
+        self.scene
+            .set_shape(self.glass, lr::Shape::Circular(radius.max(0.0) / s));
+        self.scene.set_material(self.glass, material);
+        self.scene.set_appearance(self.glass, Some(appearance));
+        self.scene.update(0.0);
+        self.scale = s;
     }
 
     /// The glass texture, for the window to show.
@@ -418,35 +330,81 @@ impl Targets {
         &self.target
     }
 
-    /// Records the glass over the shown crop (the fresh one with `fresh`) into the glass texture,
-    /// cleared first.
+    /// Records the glass over the shown crop (the fresh one with `fresh`) into the glass
+    /// texture. `timestamps` time everything from the clear to the last glass pass.
     pub fn draw(
-        &self,
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        pipes: &Pipelines,
         fresh: bool,
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
-        let target = self.target.texture.create_view(&Default::default());
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("glass overlay"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            timestamp_writes: timestamps,
-            ..Default::default()
-        });
-        pass.set_pipeline(&pipes.glass);
         let crop = if fresh { 1 - self.shown } else { self.shown };
-        pass.set_bind_group(0, &self.glass[crop], &[]);
-        pass.set_vertex_buffer(0, self.instance.slice(..));
-        pass.draw(0..VERTICES, 0..1);
+        let size = self.size();
+        let extent = wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        };
+        encoder.copy_texture_to_texture(
+            self.crops[crop].texture.as_image_copy(),
+            self.content.texture().as_image_copy(),
+            extent,
+        );
+        let drawn = self.drawn.create_view(&Default::default());
+        let (begin, end) = match &timestamps {
+            Some(t) => (
+                Some(wgpu::RenderPassTimestampWrites {
+                    end_of_pass_write_index: None,
+                    ..t.clone()
+                }),
+                Some(wgpu::RenderPassTimestampWrites {
+                    beginning_of_pass_write_index: None,
+                    ..t.clone()
+                }),
+            ),
+            None => (None, None),
+        };
+        let pass = |encoder: &mut wgpu::CommandEncoder, load, timestamps| {
+            drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("glass overlay"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &drawn,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                timestamp_writes: timestamps,
+                ..Default::default()
+            }));
+        };
+        pass(encoder, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), begin);
+        self.renderer.render(
+            device,
+            queue,
+            encoder,
+            &lr::Frame {
+                content: &self.content,
+                target: &drawn,
+                size,
+                scale: self.scale,
+                content_changed: true,
+                copy_content: false,
+            },
+            &self.scene,
+        );
+        if end.is_some() {
+            pass(encoder, wgpu::LoadOp::Load, end);
+        }
+        encoder.copy_texture_to_texture(
+            self.drawn.as_image_copy(),
+            self.target.texture.as_image_copy(),
+            extent,
+        );
     }
 }
 
@@ -455,55 +413,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn clarity_sets_the_tints_opacity_and_the_rest_pass_through() {
-        let plate = Rect {
-            x: 9,
-            y: 9,
-            width: 280,
-            height: 400,
+    fn overlays_take_the_plates_controls_and_clarity_alone_tints() {
+        let m = Material {
+            clarity: 0.4,
+            blur: 30.0,
+            refraction: 0.6,
+            highlight: 0.75,
+            tint: [255, 255, 255, 0],
         };
-        let clear = instance(plate, 12.0, &Material::CLEAR);
-        assert_eq!(clear.rect, [9.0, 9.0, 280.0, 400.0]);
-        assert_eq!(clear.shape, [12.0, 1.0, 0.6, 0.55]);
-        assert_eq!(clear.tint[3], 0.0, "clear glass has no wash");
-        let tinted = instance(
-            plate,
-            12.0,
-            &Material {
-                clarity: 0.5,
-                blur: 40.0,
-                tint: [255, 0, 0, 0],
-                ..Material::CLEAR
-            },
-        );
-        assert_eq!(tinted.tint, [1.0, 0.0, 0.0, 0.4]);
-        assert_eq!(tinted.extra[0], MAX_BLUR);
-    }
-
-    /// The plate pass's shader is used unchanged: it must still fit this module's layout (its
-    /// bindings, its instance attributes and its entry points), checked without a GPU.
-    #[test]
-    fn glass_wgsl_still_fits_the_overlay_layout() {
-        let source = include_str!("../glass.wgsl");
-        let module = wgpu::naga::front::wgsl::parse_str(source).expect("glass.wgsl parses");
-        let entries: Vec<&str> = module
-            .entry_points
-            .iter()
-            .map(|e| e.name.as_str())
-            .collect();
-        assert!(
-            entries.contains(&"vs") && entries.contains(&"fs"),
-            "{entries:?}"
-        );
-        let vs = module.entry_points.iter().find(|e| e.name == "vs").unwrap();
-        // The vertex index plus one vec4 per Instance field.
-        assert_eq!(vs.function.arguments.len(), 2);
-        let bound: Vec<u32> = module
-            .global_variables
-            .iter()
-            .filter_map(|(_, g)| g.binding.as_ref().map(|b| b.binding))
-            .collect();
-        assert_eq!(bound.len(), 3, "uniforms, the backdrop and its sampler");
-        assert_eq!(size_of::<Instance>(), 64);
+        let c = controls(&m);
+        assert_eq!((c.clarity, c.blur, c.refraction, c.highlight), (0.4, 30.0, 0.6, 0.75));
+        assert_eq!(c.tint, [1.0, 1.0, 1.0, 0.0], "a scheme, no stained tint");
+        let (_, appearance) = crate::material::liquid(&c, 1.5);
+        assert!(!appearance.dark && (appearance.transparency - 0.6).abs() < 1e-6);
     }
 }

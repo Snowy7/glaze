@@ -5,23 +5,14 @@ use mypaper_desktop::Rect;
 
 use super::request::Material;
 
-/// glass.wgsl's blur cap, in px.
-pub const MAX_BLUR: f32 = 12.0;
-
-/// The rim band's width (`band_of` in glass.wgsl).
-fn band_of(width: f32, height: f32, radius: f32) -> f32 {
-    let r = radius.min(width.min(height) / 2.0);
-    (r * 0.5 + 5.0).min(width.min(height) / 2.0 * 0.45)
-}
-
-/// How far outside the surface the glass samples what is behind it: the rim's reach out, its
-/// chromatic split, the blur and a filter pixel (as `glass_pass::regions`), rounded up.
-pub fn reach(rect: Rect, radius: f32, material: &Material) -> i32 {
-    let band = band_of(rect.width as f32, rect.height as f32, radius);
-    let reach = band * material.refraction.clamp(0.0, 1.0) * 1.06
-        + material.blur.clamp(0.0, MAX_BLUR)
-        + 2.0;
-    reach.ceil() as i32
+/// How far outside the surface the glass draws (its drop shadow) or samples what is behind it
+/// (the bevel's refraction and the frost), in px on a screen of `scale` px per point:
+/// liquid-rust's `Material::outset`, rounded up.
+pub fn reach(rect: Rect, material: &Material, scale: f32) -> i32 {
+    let s = scale.max(0.5);
+    let (glass, appearance) = crate::material::liquid(&super::glass::controls(material), s);
+    let min_side = rect.width.min(rect.height).max(1) as f32 / s;
+    (glass.outset(min_side, &appearance) * s).ceil() as i32
 }
 
 /// The overlay window: the surface grown by `reach` on every side, kept on its monitor (the
@@ -74,20 +65,20 @@ mod tests {
     }
 
     #[test]
-    fn reach_covers_the_rims_pull_and_the_blur() {
-        let menu = rect(0, 0, 280, 400);
-        // Band min(12 * 0.5 + 5, 140 * 0.45) = 11; 11 * 0.6 * 1.06 + 2 = 9.0 -> 9.
-        assert_eq!(reach(menu, 12.0, &Material::CLEAR), 9);
+    fn reach_covers_the_shadow_and_scales_with_dpi() {
+        let menu = rect(0, 0, 420, 600);
+        let at = |scale| reach(menu, &Material::CLEAR, scale);
+        // A full-thickness regular panel: its shadow (8 pt down, blur 15 + 33 pt) reaches
+        // furthest: 8 + 1.5 * 48 + 1 = 81 pt.
+        assert_eq!(at(1.0), 81);
+        assert!(at(1.5) as f32 > at(1.0) as f32 * 1.3, "points, not pixels");
+        // Tinted (the slider thins frost on clear glass), with the most frost there is.
         let frosted = Material {
-            blur: 30.0,
+            clarity: 0.0,
+            blur: 300.0,
             ..Material::CLEAR
         };
-        assert_eq!(reach(menu, 12.0, &frosted), 9 + 12, "blur caps at 12 px");
-        let flat = Material {
-            refraction: 0.0,
-            ..Material::CLEAR
-        };
-        assert_eq!(reach(menu, 12.0, &flat), 2);
+        assert!(reach(menu, &frosted, 1.0) > at(1.0), "heavy frost samples further");
     }
 
     #[test]

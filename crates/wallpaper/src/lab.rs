@@ -140,7 +140,7 @@ impl Lab {
             .restore(gpu, &self.target, &self.view, &mut encoder);
         encoder.write_timestamp(&self.queries, 2);
         self.glass
-            .encode(gpu, 0, SIZE, &self.kept.texture, &self.view, &mut encoder);
+            .encode(gpu, 0, &self.kept.texture, &self.target, wallpaper, &mut encoder);
         encoder.write_timestamp(&self.queries, 3);
         encoder
     }
@@ -380,7 +380,7 @@ fn memory() {
             },
         );
         kept.restore(&gpu, target, &view, &mut encoder);
-        glass.encode(&gpu, i, SIZE, &kept.texture, &view, &mut encoder);
+        glass.encode(&gpu, i, &kept.texture, target, true, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
     }
     step("first frames + glass", Some(&gpu));

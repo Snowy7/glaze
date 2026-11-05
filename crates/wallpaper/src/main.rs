@@ -20,6 +20,7 @@ mod backdrop;
 mod control;
 mod engine;
 mod glass_pass;
+mod material;
 mod gpu;
 #[cfg(test)]
 mod lab;
