@@ -14,14 +14,14 @@ use windows::{
     UI::Notifications::{KnownNotificationBindings, NotificationKinds},
 };
 
-/// Identity queries must not retain a WinRT factory from an apartment that can be torn down
-/// (Studio creates previews on successive test threads). This Win32 query needs no apartment.
 /// Stable, PTB, Canary and Store identities used by the Windows notification preview filter.
 pub fn is_discord_app_id(app_id: &str) -> bool {
     let id = app_id.to_ascii_lowercase();
     matches!(id.as_str(), "com.squirrel.discord.discord" | "com.squirrel.discordptb.discordptb" | "com.squirrel.discordcanary.discordcanary")
         || (id.starts_with("discordinc.") && id.contains("!discord"))
 }
+/// Identity queries must not retain a WinRT factory from an apartment that can be torn down
+/// (Studio creates previews on successive test threads). This Win32 query needs no apartment.
 fn package_family() -> Option<String> {
     use windows::Win32::{
         Foundation::ERROR_INSUFFICIENT_BUFFER,
