@@ -5,329 +5,316 @@
 <h1 align="center">mypaper</h1>
 
 <p align="center">
-  <b>Make Windows yours, at almost no cost.</b><br>
-  Live wallpapers of every kind, desktop widgets, a top bar and dock that can replace the taskbar,
-  and native Windows styling. All of it sleeps the moment a game is in front.
+  <b>A native Windows desktop, rebuilt in Rust: live wallpapers, Liquid Glass, a top bar and dock, and widgets, in a few MB.</b>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a> ·
   <a href="#whats-inside">What's inside</a> ·
   <a href="#performance">Performance</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#quick-start">Quick start</a> ·
   <a href="#make-your-own">Make your own</a> ·
-  <a href="#documentation">Docs</a>
+  <a href="docs/README.md">Docs</a>
 </p>
 
 <p align="center">
-  <img src="docs/media/desktop-aurora.png" alt="The Aurora wallpaper with the mypaper top bar and a now-playing widget" width="100%">
+  <img src="docs/media/readme/hero-desktop.jpg" alt="The rain-city wallpaper with mypaper's top bar, dock and widgets (calendar, system, now playing, T3 limits, clock, weather)" width="100%">
 </p>
 
----
+- **Every wallpaper kind** on one wgpu engine: shaders, images, slideshows, hardware-decoded video,
+  glTF scenes, web pages and external renderers.
+- **Liquid Glass** on every surface, drawn by the engine with the vendored
+  [liquid-rust](https://github.com/al1h3n/liquid-rust), always live to what's behind it.
+- **Native shell** on software Direct2D: no WebView, no hardware GPU device, no code injected into
+  other processes. Every change to Windows is journaled and undone on quit, on the panic hotkey and
+  after a crash.
 
-## Why mypaper
-
-- **Every wallpaper kind.** Shaders, photos, slideshows, hardware-decoded video (including 10-bit HDR),
-  3D glTF scenes, web pages, and external renderers such as a Unity build. One engine runs them all,
-  behind your desktop icons.
-- **Light, and kept light.** Hidden means zero: covered monitors, fullscreen games, a locked PC and
-  battery all put mypaper to sleep at 0% CPU and GPU. While a game is in front, all of mypaper uses
-  about 35 MB. [Performance](#performance) explains how this is measured and enforced.
-- **Your desktop, your layout.** Interactive widgets snap to a grid that matches Windows' own icon
-  grid. There's a macOS-style top bar and a dock that can stand in for the taskbar. All of it can be
-  restyled, from no background at all to glass.
-- **Safe by design.** No code is injected into other processes. Every change mypaper makes to Windows
-  is journaled and undone on quit, on the panic hotkey, and after a crash.
+> Looking for the old WebView2 prototype? It's tagged [`v0.0.1`](https://github.com/Snowy7/mypaper/releases/tag/v0.0.1).
 
 ## What's inside
 
 ### Wallpapers
 
+One engine process (`mypaper-wallpaper`) draws every screen behind the desktop icons.
+
+| Kind | What it is |
+|---|---|
+| `shader` | A WGSL fragment shader, with an fps cap and render scale |
+| `image` · `slideshow` | Any format WIC decodes, decoded once at screen size; folders cross-fade |
+| `video` | Hardware decode, zero-copy into the GPU, paused when hidden |
+| `scene` | A glTF / GLB scene with orbit and parallax |
+| `web` · `app` | A page in WebView2, or any renderer that takes a window handle (e.g. Unity's `-parentHWND`) |
+
+The bundled themes are curated, openly licensed works: rainy city windows, snow, a fireplace,
+forests, the Milky Way, seascapes. Each keeps its own licence and credit in
+[themes/CREDITS.md](themes/CREDITS.md). Hidden means zero: covered screens, fullscreen games and a
+locked PC pause the engine. The GPU (`auto`, integrated or high-performance) and frame rate are
+settings, per wallpaper too; `auto` renders on the card that drives your screens.
+
+### Liquid Glass
+
 <table>
   <tr>
-    <td align="center"><img src="themes/rain-city/preview.jpg" width="250"><br><b>Rainy Hong Kong</b> · Rocksdanister / BigWings</td>
-    <td align="center"><img src="themes/rain-city-amber/preview.jpg" width="250"><br><b>Amber Downpour</b> · Rain / Heartfelt variant</td>
-    <td align="center"><img src="themes/snow-forest/preview.jpg" width="250"><br><b>Snow in the Misty Forest</b> · Baldwin / Blender</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="themes/cozy-fireplace/preview.jpg" width="250"><br><b>Cozy Fireplace</b> · Blender Studio</td>
-    <td align="center"><img src="themes/milky-way/preview.jpg" width="250"><br><b>Milky Way over Paranal</b> · ESO/C. Malin</td>
-    <td align="center"><img src="themes/star-nest/preview.jpg" width="250"><br><b>Star Nest</b> · Pablo Román Andrioli</td>
+    <td align="center"><img src="docs/media/readme/glass-before.png" width="420"><br>Before: CSS-style plates with outlines</td>
+    <td align="center"><img src="docs/media/readme/glass-after.png" width="420"><br>After: engine-drawn glass (content hidden)</td>
   </tr>
 </table>
 
-**15 live selections:** rainy city windows, snow, a cozy fireplace, misty forest, night sky,
-ocean waves and established abstract effects. Every card has a real preview. See
-[credits and licenses](themes/CREDITS.md) and the [source audit](docs/research/wallpaper-sources.md).
-Eight selections are clearly marked **non-commercial** and must be excluded from a commercial bundle.
+The bars, dock, widgets, flyouts and menus all sit on glass that the engine draws with
+**liquid-rust**: a squircle lens refracts the backdrop (Snell's law, η 1.5), with light frost, a
+directional rim light and a soft shadow. Thin glass such as the 24 pt bar gets a shallow lens with a
+flat face. Clarity (clear to tinted), blur, refraction, highlight and tint are adjustable per family
+(bars, widgets, menus). Over app windows, flyouts get the same glass from a Windows Graphics Capture
+crop. See [docs/glass.md](docs/glass.md).
 
-| Kind | What it is | How it stays light |
-|---|---|---|
-| `shader` | A WGSL fragment shader | fps cap; render scale (0.5 is a quarter of the pixels) |
-| `image` | Any format WIC decodes, with EXIF rotation | decoded once at screen size, drawn once |
-| `slideshow` | A folder, cross-faded | idle between slides; the next image is decoded ahead |
-| `video` | H.264, HEVC, VP9 or AV1, in 8-bit or 10-bit HDR | hardware decode, zero-copy into the GPU, paused when hidden |
-| `scene` | A glTF / GLB scene with orbit and parallax; optionally interactive (drag to orbit) | few draw calls; static scenes draw once |
-| `web` | A local page or URL (WebView2); optionally interactive (mouse input over the bare desktop) | suspended while hidden; a still is shown on paused screens |
-| `app` | Any renderer that takes a window handle (e.g. Unity's `-parentHWND`) | the process is suspended while hidden |
+### Top bar and dock
 
-The curated media and source-backed effects retain their individual licenses and credits. Existing demo themes remain available by their old IDs under `themes/examples/`.
+<p align="center">
+  <img src="docs/media/readme/dock.jpg" alt="The dock over rain-city, with a live window preview of mypaper Studio" width="70%">
+</p>
+
+A native top bar and dock replace the taskbar (keep it, auto-hide it, or hide it; it's always
+restored). Presets include macOS, Windows 11, Windows 10, ChromeOS, islands, floating, pill, edge
+and neon glass. The dock groups windows by app, magnifies, and shows live window previews. A real
+tray host shows your tray icons without injection. Bar modules include T3 Code, OBS, Docker and
+Tailscale. See [docs/bars.md](docs/bars.md).
+
+### Five styles
+
+<p align="center">
+  <img src="docs/media/readme/styles-grid.jpg" alt="Every bar preset (rows) in every style (columns: liquid, oneui, fluent, solid, mono)" width="100%">
+</p>
+
+**liquid** (Liquid Glass, the default), **oneui** (frosted), **fluent** (acrylic, 8 px corners),
+**solid** and **mono**. The style applies to the bars, dock, flyouts, menus and widgets alike, in
+light and dark. The grid above is the `preset_style_grid` golden test: every preset in every style.
+
+### Panels and menus
+
+<table>
+  <tr>
+    <td align="center" valign="top"><img src="docs/media/readme/control-center.png" width="300"><br><b>Control Center</b><br>Do not disturb, night light, power mode, display and sound</td>
+    <td align="center" valign="top"><img src="docs/media/readme/notifications.png" width="300"><br><b>Notifications</b><br>Grouped per app, with the month below</td>
+    <td align="center" valign="top"><img src="docs/media/readme/desktop-menu.png" width="230"><br><b>Desktop menu</b><br>The full right-click menu, with each item's real icon</td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/media/readme/launcher.png" alt="The launcher: a search field and pinned apps" width="55%"><br>
+  <b>Launcher</b>: press Win, type to search apps, files and settings; pinned and recent apps, clipboard
+</p>
+
+Flyouts also cover Wi-Fi, a per-app volume mixer, the keyboard layout, power and the tray. Our
+desktop menu replaces Windows' on the bare desktop, including Explorer's own verbs and the **New**
+submenu; Shift or right-clicking an icon still gets the native one. See
+[docs/desktop-extras.md](docs/desktop-extras.md).
 
 ### Widgets
 
-17 widgets, each in its own sandbox, each with faces and sizes instead of near-duplicates:
+<p align="center">
+  <img src="docs/media/readme/sizes-clock.jpg" alt="The clock widget at every size" width="100%">
+  <img src="docs/media/readme/sizes-system.jpg" alt="The system widget, as rings, at every size" width="100%">
+</p>
 
-- **Time**: clock (digital, flip, analog, greeting, or your cities around the world), calendar
-  (month, agenda or week), countdown, timer.
-- **Media**: now playing (card, artwork backdrop, strip, or the sound's spectrum), media pill.
-- **Web**: weather (where you are, or any town; animated sky, hourly and the week), RSS, crypto.
-- **System**: system (CPU, memory, GPU, network, drives and battery, as rings, bars or graphs),
-  quick toggles.
-- **Tools and personal**: launcher (your apps under a web search bar), photos, notes, todo, activity
-  heatmap, quote.
-
-Layouts that named a widget merged into another (analog clock, world clock, greeting, system info,
-disk, network, battery, app shortcuts, search, visualizer, photo frame) keep working: they open as
-the right face of the widget that replaced them.
-
-**Five design styles** apply to every widget:
-- **minimal**;
-- **depth**: raised 3D cards;
-- **neon**: glowing outlines;
-- **paper**: matte;
-- **aero**: glossy glass.
-
-Each combines with a surface (none, glass or solid), a tint, blur, radius, text tone, accent, font
-and scale.
-
-**Edit mode** (**Ctrl+Alt+Shift+W**):
-- drag to move and resize within each widget's own limits, snapping to the grid;
-- add, duplicate and restyle any widget.
-
-**Overlay widgets** (**Ctrl+Alt+Shift+O**) float above your apps.
-
-Widgets keep running on any monitor you can see, and pause only where they're covered.
-
-### Top bar, dock and menus
+17 built-in native widgets, each with a designed layout per size: clock, calendar, countdown, timer,
+now playing, media pill, weather, RSS, crypto, system monitor, quick toggles, launcher, photos,
+notes, to-do, activity heatmap and quote. They snap to a per-monitor grid on the desktop layer, or
+float above apps as overlays.
 
 <table>
   <tr>
-    <td align="center"><img src="docs/media/bars-macos.jpg" width="380"><br><b>macOS</b> · top bar + centered dock</td>
-    <td align="center"><img src="docs/media/bars-windows11.jpg" width="380"><br><b>Windows 11</b> · full taskbar replacement</td>
+    <td align="center"><img src="docs/media/readme/edit-mode.jpg" width="560"><br><b>Edit mode</b> (Ctrl+Alt+Shift+W): drag and resize on the grid, then <b>+</b> or Done</td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/media/bars-islands.jpg" width="380"><br><b>Islands</b> · one pill per group</td>
-    <td align="center"><img src="docs/media/bars-neon-glass.jpg" width="380"><br><b>Neon glass</b> · floating, glowing edge</td>
+    <td align="center"><img src="docs/media/readme/add-widgets.png" width="560"><br><b>+</b> opens the widget picker</td>
   </tr>
 </table>
 
-Each bar has its own design, look and motion, so any top bar goes with any dock. Top bars: macOS
-(Tahoe), Windows 11, a floating capsule, minimal, monochrome, islands, neon and floating. Docks: the
-macOS dock, the Windows 11 and Windows 10 taskbars, the ChromeOS shelf, a floating Fluent dock,
-monochrome, islands, neon and floating. Presets pair them.
+**Integration widgets** talk to local apps directly, with no helper process, and run only while
+visible:
 
-**Everything about the bars is configurable:**
-- **Layout:** floating, islands, full-width or strip; any screen edge; per-monitor overrides.
-- **Glass:** **Liquid Glass** (what's behind, bent by a lens along the rim, with one thin specular
-  edge), Windows' own **live blur** of whatever is behind (windows too), or **wallpaper glass**, a
-  blurred copy of your *live* wallpaper; or solid, gradient, image.
-- **Edges:** tint, grain, squircle corners, and border, glow and shadow for each state.
-- **Motion:** named curves, custom cubic-béziers and springs.
-- **Dock:** magnify with falloff, launch bounce, attention pulse, five indicator styles, and live
-  window previews.
-- **Modules:** click, middle-click, wheel and right-click actions, custom modules (any command, on
-  an interval), and icon packs.
+<img src="docs/media/readme/t3-usage-limits.png" alt="T3 Usage and T3 Limits widgets (test fixture data)" width="300" align="right">
 
-**Our own menus replace Windows':**
-- menus and panels drawn after the bar's family: Windows 11, macOS, ChromeOS or mypaper's own;
-- a Start menu with four layouts (Windows 11, launchpad grid, a compact search bar, or a dashboard),
-  optionally opened with the Win key;
-- quick settings (brightness, radios, power mode);
-- a Wi-Fi list, a per-app volume mixer, a language switcher and a calendar;
-- a notification center: stacks per app with their icons, swipe to dismiss, the month under it;
-- a real **tray host** that shows your tray icons with no injection, the same approach ManagedShell
-  uses.
+- **T3 Code:** running threads, threads that need you (approve or deny), a new-thread prompt,
+  **Usage** (30-day cost and tokens per provider) and **Limits** (each provider's windows and
+  accounts, with pace and reset countdowns).
+- **Discord**, **Docker**, **OBS**, **Tailscale** and **Grok Bot**.
+- **Calendars:** read-only calendar sources shown in the calendar widget.
+- **Custom widgets:** your own, from a JSON file ([below](#make-your-own)).
 
-The native taskbar can be kept, auto-hidden or hidden completely. It's always restored exactly.
+Settings for each live in Studio. See [docs/widgets.md](docs/widgets.md) and
+[docs/integrations.md](docs/integrations.md).
 
-### Windows styling
-
-A theme can set:
-- the accent color (or pick it from the wallpaper);
-- window borders and title-bar colors;
-- corners, Mica, acrylic and dark mode.
-
-These apply only to Windows' own windows, never to games or other apps. See
-[docs/windows-styling.md](docs/windows-styling.md).
-
-### Desktop extras
-
-- **Desktop right-click menu (on by default):** our own themed menu on the bare desktop, opening in
-  under 10 ms (Windows' own takes 0.2 to 0.3 s). Right-clicking an icon, or pressing Shift, still gives the native menu.
-- **Cursor themes:** two built-in sets, dark and light.
-- **Desktop tray menu:** desktop icon size and visibility.
-- **Classic Windows 11 context menu (opt-in):** a reversible toggle.
-
-Every change is journaled and restored. See [docs/desktop-extras.md](docs/desktop-extras.md).
+<br clear="right">
 
 ### Studio
 
 <p align="center">
-  <img src="docs/media/studio/home-dark.png" alt="mypaper Studio: Home" width="85%">
+  <img src="docs/media/readme/studio-home.jpg" alt="mypaper Studio: Home" width="85%">
 </p>
 
-Studio is a native app on the same software Direct2D layer as the shell: about 25 MB while open,
-nothing at all once closed. It edits the same settings files, so every change shows on the desktop
-at once, and it follows edits made anywhere else.
-- **Home:** your desktop as it is, and quick switches.
-- **Wallpapers:** your library, and new wallpapers from any image, video, folder, shader, 3D model,
-  page or app.
-- **Look:** one look for everything, from the bars and widgets to Windows' own windows.
-- **Widgets** and **Bars:** arranged on a live preview drawn by the shell's own code.
-- **Integrations** and **Settings.**
+<table>
+  <tr>
+    <td align="center"><img src="docs/media/readme/studio-look.jpg" width="420"><br><b>Look</b>: style, glass material, colours</td>
+    <td align="center"><img src="docs/media/readme/studio-widgets.jpg" width="420"><br><b>Widgets</b>: arrange on a live preview</td>
+  </tr>
+</table>
 
-**Ctrl+K** finds any setting, wallpaper, widget or action. See [docs/studio-ux.md](docs/studio-ux.md).
+Studio is the native settings app, on the same UI kit as the shell. It opens in about 250 ms, uses
+13–25 MB while open and nothing once closed. Home, Wallpapers, Look, Widgets, Bars and Integrations
+each edit the same settings files the shell watches, so changes show on the desktop at once, with
+undo and redo. **Ctrl+K** finds any setting, wallpaper, widget or action. See
+[docs/studio-ux.md](docs/studio-ux.md).
 
 ## Performance
 
-mypaper's promise: **if you can't see it, it costs nothing, and what you can see costs very little.**
+Measured on the development machine: 16 logical CPUs, an AMD iGPU and an RTX 4070 SUPER, two
+2560×1440 screens, release builds, 5 November 2026. CPU is percent of **one core**; memory is
+private bytes.
 
-Measured on a Ryzen laptop (AMD iGPU and NVIDIA dGPU, two 1440p monitors), release builds:
+| What | Measured | Gate |
+|---|---:|---:|
+| Shell (bars, dock, 6 widgets), idle, both screens visible | **32 MB**, median of 3 | ≤40 MB |
+| Shell CPU over maximized apps | **0.05%** median | ≤0.05% |
+| Shell CPU with six widgets visible | 0.18% median | ≤0.1% (open) |
+| Core (supervisor, tray, journal) | **2 MB**, 0.00% | ≤8 MB |
+| Engine, rain-city at 30 fps, two screens, 16 glass plates, iGPU | **257 MiB** (was 448) | ≤272.4 MiB |
+| Engine on the RTX that drives the screens (one screen visible) | **180–198 MiB** | |
+| GPU for all 16 glass plates together, iGPU | **0.275 ms** per frame, median | ≤0.3 ms |
+| Liquid Glass per screen, 8-plate lab fixture | **0.08 ms** RTX 4070 SUPER · 2.48 ms AMD iGPU | ≤2 ms (iGPU open) |
+| Steady processes · WebView2 processes | **3 · 0** | 3 · 0 |
+| Studio, open · closed | 13–25 MB · no process | |
 
-| What is on screen | CPU (whole machine) |
+**How it's measured.** `tools/perf` (`mypaper-perf --native`) takes the desktop lock, launches the
+engine with a fixed plate fixture in isolated settings, and samples private bytes and process CPU
+time: median of 3×60 s runs. `--timestamps` adds wgpu GPU timestamp queries per pass. The shell gates
+use `measure.ps1 -Seconds 60` on the live desktop. Budgets live in
+[perf/budget.toml](perf/budget.toml); the method, every before/after, and the gates still open are in
+[docs/performance.md](docs/performance.md), [docs/bars.md](docs/bars.md) and
+[docs/glass.md](docs/glass.md).
+
+**Why it stays small:**
+- **One hardware GPU device for the whole product.** A process with one pays about 240 MB for the
+  driver stack, so only the engine has one. The shell and Studio draw with software Direct2D and
+  DirectWrite into layered windows. A test checks that no vendor driver DLL loads into the shell.
+- **If nothing changes, nothing is drawn.** Surfaces redraw only changed regions; timers run only
+  while something moves; glass redraws only when the pixels behind it change.
+- **Event-driven.** Every process sleeps on its message queue. Integrations subscribe only while a
+  widget or panel shows them, and cancel when it closes.
+
+## Architecture
+
+```text
+mypaper-core         supervisor · tray · panic hotkey · Windows styling + undo journal
+ ├─ mypaper-wallpaper  the engine (wgpu): wallpapers, glass plates, glass overlays. The only GPU device.
+ ├─ mypaper-shell      software Direct2D: top bar, dock, flyouts, menus, launcher, widgets, tray host
+ │    └─ plugins       on demand: separate processes, JSON-RPC over stdio
+mypaper-studio       the settings app (software Direct2D); runs only while open
+```
+
+| Rule | What it means |
 |---|---|
-| Shader wallpaper at 60 fps | 0.17% |
-| Image, or slideshow between slides | 0.01–0.02% |
-| 1080p30 video | 0.23% |
-| 3D scene at 30 fps | 0.12% |
-| 7 widgets | 0.07% |
-| Everything covered, or a game fullscreen | **0.00%**; all of mypaper in ~35 MB |
+| One GPU device | The engine draws the wallpaper **and all glass**. The shell publishes plate geometry; it never captures the desktop. |
+| Nothing changes, nothing drawn | Display lists diff; only changed bounds redraw; still wallpaper and still plates cost 0 GPU. |
+| No injection | mypaper never loads code into Explorer or other apps. Styling uses public APIs only. |
+| Journaled undo | Every change to Windows (taskbar, styling, menus) is journaled and replayed on quit, panic (**Ctrl+Alt+Shift+Backspace**) and crash. If the shell dies, core restores the taskbar and restarts it. |
 
-**At sign-in, your look comes first.**
-
-| Step | Time |
+| Crate | Owns |
 |---|---|
-| Your look on screen | at once: Windows itself shows a still of your theme before mypaper starts |
-| Native taskbar hidden | ~23–60 ms after mypaper starts |
-| Native stand-in for the bars | ~224 ms |
-| Live wallpaper, first frame | ~1.1 s (a shader alone: ~0.75 s) |
+| `crates/core` | Supervisor, tray, panic hotkey, styling lifecycle |
+| `crates/wallpaper` | The engine: sources, frame pacing, glass passes, overlays |
+| `crates/liquid-rust` | Vendored Liquid Glass renderer |
+| `crates/ui` | The UI kit: surfaces, display lists, text, icons, components, themes |
+| `crates/shell` | Bars, dock, flyouts, desktop menu, widget views, integrations views |
+| `crates/widgets` · `crates/bars` · `crates/integrations` | Services: catalog, layout, storage, plugins; app bars and tray; integration providers |
+| `crates/studio` | mypaper Studio |
+| `crates/desktop` · `crates/config` · `crates/theme` · `crates/tweaks` · `crates/inject` | Win32 plumbing, settings, theme format, Windows styling with undo, which windows may be styled |
+| `crates/glass-ipc` | Plate and overlay protocol between the shell and the engine |
 
-**How it stays this way:**
-- **Event-driven everywhere.** Nothing polls; every process sleeps on its message queue.
-- **Wallpaper GPU work:** the low-power GPU, our own frame pacing, render scale, and zero-copy video.
-- **Widgets and bars** share one WebView2 browser process. After 30 s paused, widget WebViews are
-  released entirely.
-- **Budgets enforced by a harness.** `mypaper-perf` runs 10 fixed scenarios against **102
-  budgets** (startup, CPU, memory, cost while paused) in [`perf/budget.toml`](perf/budget.toml), and
-  fails on any regression. See [docs/performance.md](docs/performance.md) and the
-  [latest results](perf/latest.md).
+More in [docs/ui.md](docs/ui.md) and the [native plan](plans/council/native-plan.md).
 
 ## Quick start
 
-You need Windows 10/11 and [rustup](https://rustup.rs). The pinned nightly toolchain installs
+You need Windows 10 or 11 and [rustup](https://rustup.rs); the pinned nightly toolchain installs
 itself.
 
-```sh
-cargo build --release --workspace          # every program, Studio and the plugins included
-target/release/mypaper-core                # wallpaper + shell + tray icon
-target/release/mypaper-studio              # mypaper Studio (also: tray > Open Studio)
+```powershell
+cargo build --release --workspace
+target\release\mypaper-core.exe      # engine + shell + tray icon
+target\release\mypaper-studio.exe    # Studio (also: tray › Open Studio, or the desktop menu)
+```
+
+To swap a fresh build into a running desktop (build elsewhere, then deploy; mypaper is down only
+for the copy):
+
+```powershell
+$env:CARGO_TARGET_DIR = "C:\mypaper-targets\main"; cargo build --release --workspace
+powershell -NoProfile -File scripts/deploy-local.ps1
 ```
 
 | Shortcut | Does |
 |---|---|
 | **Ctrl+Alt+Shift+Backspace** | Panic: stop everything and restore the stock desktop and taskbar |
-| **Ctrl+Alt+Shift+W** | Widget edit mode (also in the tray) |
+| **Ctrl+Alt+Shift+W** | Widget edit mode |
+| **Win** | The launcher (optional) |
 
-Settings live in `%APPDATA%\mypaper\` (`config.json`, `widgets.json`, `bars.json`). Every process
-watches them and applies changes live, and Studio and the tray just edit them. Logs go to
+Settings live in `%APPDATA%\mypaper\` (`config.json`, `widgets.json`, `bars.json`,
+`integrations.json`). Every process watches them and applies changes live. Logs go to
 `%LOCALAPPDATA%\mypaper\mypaper.log`.
 
 ## Make your own
 
-- **A theme** is a folder with a `theme.json`. It sets the wallpaper, plus optional Windows styling and
-  looks for the widgets and bars (with your own CSS). See [Themes](#themes) below.
-- **A widget** is a folder with `widget.json` and HTML/CSS/JS, using a small typed API. A mock host
-  lets you build it in a browser: [docs/writing-widgets.md](docs/writing-widgets.md).
+- **A custom widget** is one JSON file in `%APPDATA%\mypaper\widgets\`. It shows up in the **+**
+  picker and in Studio as a native widget, with a `stat`, `list`, `text`, `image` or `gauge`
+  layout, fed by a static value, an HTTPS URL (with a JSON path), a file or a command. Its work runs
+  only while it's visible:
+
+  ```json
+  {
+    "title": "Rust release",
+    "layout": "stat",
+    "source": { "type": "url", "url": "https://api.github.com/repos/rust-lang/rust/releases/latest", "path": "$.tag_name" },
+    "refreshSeconds": 3600,
+    "size": [3, 2]
+  }
+  ```
+
+  More examples: [crates/widgets/src/custom_examples](crates/widgets/src/custom_examples).
 - **A plugin** is any executable, in any language, that speaks JSON-RPC over stdio and feeds data to
-  widgets: [docs/writing-plugins.md](docs/writing-plugins.md).
-
-### Themes
-
-```json
-{
-  "name": "Midnight",
-  "wallpaper": { "kind": "shader", "source": "midnight.wgsl", "fps": 30, "scale": 0.6 },
-  "windows": { "accent": "auto", "corners": "round", "backdrop": "mica", "dark_mode": true },
-  "widgets": { "appearance": { "surface": "glass", "tint": "#0c1830" }, "css": "widgets.css" },
-  "bars":    { "appearance": { "surface": "glass", "tint": "#0c1830" }, "css": "bars.css" }
-}
-```
-
-A shader wallpaper is one function. Everything else lives in
-[`prelude.wgsl`](crates/wallpaper/src/prelude.wgsl):
-
-```wgsl
-fn wallpaper(frag: vec2f) -> vec4f {
-    let uv = frag / paper.resolution;   // also paper.mouse, paper.time (stops while hidden), paper.frame
-    return vec4f(uv, 0.5 + 0.5 * sin(paper.time), 1.0);
-}
-```
-
-Saving a theme file reloads it live, in 25–70 ms. Errors print with line numbers, and the last good
-version keeps running.
-
-## Architecture
-
-```text
-mypaper-studio        the settings app (software Direct2D), started from the tray, closed = gone
-mypaper-core          supervisor · tray · panic hotkey · Windows styling + undo journal
-  ├─ mypaper-wallpaper   wgpu: one GPU device, one surface per monitor, behind the icons
-  ├─ mypaper-widgets     a transparent WebView2 layer per monitor, above the icons
-  │     └─ plugins       separate processes, JSON-RPC over stdio
-  ├─ mypaper-bars        top bar and dock (app bars), native-taskbar control + journal
-  └─ mypaper-shell       the native shell (software Direct2D): the desktop right-click menu
-```
-
-| Folder | What it owns |
-|---|---|
-| `crates/core` | Supervisor (the wallpaper is essential; widgets and bars are optional), tray, styling lifecycle |
-| `crates/wallpaper` | The engine: sources, frame pacing, palette, live config |
-| `crates/widgets`, `widgets/shell` | The widget host and its page ([docs/widgets.md](docs/widgets.md)) |
-| `crates/bars`, `bars/shell` | The top bar and dock ([docs/bars.md](docs/bars.md)) |
-| `crates/ui`, `crates/shell` | The native UI layer and the shell built on it ([docs/ui.md](docs/ui.md)) |
-| `crates/tweaks`, `crates/inject` | Windows styling with an undo journal; which windows may be styled |
-| `crates/desktop`, `crates/config`, `crates/theme` | Win32 plumbing, settings, theme format |
-| `packages/widget-sdk`, `widgets/`, `plugins/` | Widget SDK, the bundled widgets and plugins |
-| `crates/studio` | mypaper Studio, on `crates/ui` ([docs/studio-ux.md](docs/studio-ux.md)) |
-
-Builds are fast: incremental Rust rebuilds take 1–3 s, thanks to nightly Cranelift, the parallel
-frontend, rust-lld and a DX12-only wgpu ([engine notes](docs/engine-notes.md)).
-
-## Documentation
-
-| Doc | About |
-|---|---|
-| [widgets.md](docs/widgets.md) | The widget system: host, grid, edit mode, appearance, API, plugins |
-| [writing-widgets.md](docs/writing-widgets.md) · [writing-plugins.md](docs/writing-plugins.md) | Tutorials |
-| [bars.md](docs/bars.md) | Top bar, dock, menus, presets and taskbar |
-| [ui.md](docs/ui.md) | The native UI layer (`crates/ui`) and `mypaper-shell` |
-| [studio-ux.md](docs/studio-ux.md) | Studio: pages, previews, search, keyboard, how it edits your files |
-| [performance.md](docs/performance.md) | The harness, the budgets, and before/after startup numbers |
-| [windows-styling.md](docs/windows-styling.md) | Accent, borders, Mica, dark mode, and what is restored |
-| [web-and-app-wallpapers.md](docs/web-and-app-wallpapers.md) | Web and external-renderer wallpapers |
-| [desktop-extras.md](docs/desktop-extras.md) | Desktop right-click menu, cursor themes, classic menu, interactive wallpapers |
-| [engine-notes.md](docs/engine-notes.md) | Memory findings, hot-patching status |
-| [research/customization-landscape.md](docs/research/customization-landscape.md) | How Seelen UI, YASB, ManagedShell, Rainmeter and others do it, with sources |
+  widgets. It starts on first use, gets suspend/resume, and stops 30 s after its last user.
+  [plugins/rss](plugins/rss) is an example; the contract is in
+  [docs/writing-widgets.md](docs/writing-widgets.md).
+- **A theme** is a folder with a `theme.json` (wallpaper, plus optional Windows styling). A shader
+  wallpaper is one WGSL function; the rest is in
+  [prelude.wgsl](crates/wallpaper/src/prelude.wgsl). Saving reloads it live.
+- **A built-in view** is Rust in `crates/shell/src/widgets/` on the kit ([docs/ui.md](docs/ui.md)).
 
 ## Roadmap
 
-Done recently: bar presets and rich backgrounds, wallpaper glass, our own menus and tray host,
-widgets v2, the performance harness and instant first paint at sign-in, and the logo.
+- **Plugin SDK.** A proper SDK for plugins, and the integrations (T3 Code, Discord, Docker, OBS,
+  Tailscale, Grok Bot, calendars) move out of the core build into separate, downloadable plugins.
+- **Studio redesign.** A refined canvas, search and focus, on the directions in
+  [docs/studio-ux.md](docs/studio-ux.md).
+- **Open performance gates:** shell CPU with widgets visible, Liquid Glass on integrated GPUs (2 ms
+  per screen), and crash-to-bars recovery under 300 ms.
+- **Later:** restyling the inside of Explorer and Settings, as a separate opt-in project.
 
-Next:
-- **Live notifications:** instant updates instead of a 15 s recount. This needs package identity
-  (a sparse package).
-- **Theme sharing:** import and export a whole look (wallpaper, bars, widgets, cursors) as one file.
-- **Startup:** cut the wgpu adapter probe, about 350 ms of the wallpaper's start.
+## Credits and licences
 
-Not planned: restyling Explorer's own UI or other apps from the inside. That needs code injection,
-which mypaper doesn't do.
+- **[liquid-rust](https://github.com/al1h3n/liquid-rust)** by al1h3n, MIT OR Apache-2.0, vendored in
+  [crates/liquid-rust](crates/liquid-rust) with both licence texts and the few marked changes
+  ([VENDORED.md](crates/liquid-rust/VENDORED.md)). Its look is calibrated against Apple's Liquid
+  Glass kit.
+- **Wallpapers:** each bundled theme's author, source and licence is in
+  [themes/CREDITS.md](themes/CREDITS.md), with the source audit in
+  [docs/research/wallpaper-sources.md](docs/research/wallpaper-sources.md). Some are
+  **non-commercial** and marked so there.
+- **Icons:** [Lucide](https://lucide.dev) outlines, ISC
+  ([licence](crates/ui/icons/LICENSE-lucide)), and Windows' Segoe Fluent Icons for the Fluent style.
+- Rust crates are listed in [Cargo.lock](Cargo.lock), each under its own licence.
+
+mypaper itself has no public licence yet.
+
+## Documentation
+
+Every doc, with a line on each: [docs/README.md](docs/README.md).

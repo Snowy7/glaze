@@ -10,3 +10,5 @@ packages/*/node_modules
 packages/*/dist
 # A built plugin binary dropped next to its plugin.json for local use.
 plugins/*/*.exe
+# Build output left by the deleted Tauri Studio (dist, node_modules, src-tauri/target); see v0.0.1.
+/apps/
