@@ -20,7 +20,9 @@ pub enum Availability {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Data { Docker(docker::Snapshot) }
+pub enum Data {
+    Docker(docker::Snapshot),
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Snapshot {
@@ -31,18 +33,32 @@ pub struct Snapshot {
 
 /// Encode Engine-provided ids as path segments.
 fn encode(value: &str) -> String {
-    value.bytes().map(|b| {
-        if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() }
-        else { format!("%{b:02X}") }
-    }).collect()
+    value
+        .bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
 }
 
 /// Only ids in the current live snapshot can be acted on, once at a time.
 fn action_path(snapshot: &Snapshot, busy: bool, action: &str) -> Option<String> {
-    if busy || snapshot.availability != Availability::Live { return None; }
-    let (verb @ ("start" | "stop"), id) = action.split_once(':')? else { return None; };
-    let Some(Data::Docker(state)) = &snapshot.data else { return None; };
+    if busy || snapshot.availability != Availability::Live {
+        return None;
+    }
+    let (verb @ ("start" | "stop"), id) = action.split_once(':')? else {
+        return None;
+    };
+    let Some(Data::Docker(state)) = &snapshot.data else {
+        return None;
+    };
     let container = state.containers.iter().find(|c| c.id == id)?;
-    if (verb == "stop") != (container.state == "running") { return None; }
+    if (verb == "stop") != (container.state == "running") {
+        return None;
+    }
     Some(format!("/containers/{}/{verb}", encode(id)))
 }
