@@ -143,11 +143,17 @@ system colors). Nothing animates, and state is never shown by color alone.
 
 ## 8. Cost
 
-Measured on the development laptop, release build: open (window shown and drawn, counted from
-process creation, `READY component=studio open_ms`) 235–265 ms warm; about 25 MB private and 49 MB
-working set while open; 0% CPU idle (it sleeps on its message queue; a toast or a live status line
-is the only timer); 0 once closed. Text layouts are cached for the few hundred labels on screen
-(`Text::set_capacity`).
+Measured on the development laptop, release build, 2026-11-05:
+
+| | |
+|---|---|
+| Open (window shown and drawn, from process creation: `READY component=studio open_ms`) | 238–320 ms over five runs, median 247 ms; about 70 ms of it is Windows creating the first window |
+| Memory, each place opened with its pictures loaded | 13–25 MB private, 33–49 MB working set, peak 52.6 MB (Home) |
+| CPU while open and idle | 0% (it sleeps on its message queue; a toast or a live status line is the only timer) |
+| Closed | no process; the engine serves previews only while Studio asks |
+
+UI Automation loads on the first screen-reader request, not before the first paint. Text layouts
+are cached for the few hundred labels on screen (`Text::set_capacity`).
 
 ## 9. Code map
 
