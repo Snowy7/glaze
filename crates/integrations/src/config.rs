@@ -104,6 +104,7 @@ impl Default for T3 {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+// Retained to read existing integrations.json files. OBS runs only in its component plugin.
 pub struct Obs {
     pub enabled: bool,
     pub endpoint: String,
