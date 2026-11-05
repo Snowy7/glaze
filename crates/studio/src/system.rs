@@ -57,6 +57,8 @@ pub struct System {
     pub autostart: Option<Autostart>,
     /// Graphics cards: (name, integrated?), read on first use.
     pub gpus: Option<Vec<(String, bool)>>,
+    /// The card that drives the screens (where `auto` renders), read with `gpus`.
+    pub display_gpu: Option<String>,
     pub core_path: Option<PathBuf>,
 }
 
@@ -95,6 +97,7 @@ impl System {
                 ("Intel Iris Xe Graphics".into(), true),
                 ("NVIDIA GeForce RTX 4060 Laptop GPU".into(), false),
             ]),
+            display_gpu: Some("Intel Iris Xe Graphics".into()),
             core_path: Some(PathBuf::from("C:\\Program Files\\mypaper\\mypaper-core.exe")),
         }
     }
@@ -154,6 +157,9 @@ impl System {
 
     /// The graphics cards, read once (adapter enumeration creates no device).
     pub fn gpus(&mut self) -> &[(String, bool)] {
+        if self.gpus.is_none() {
+            self.display_gpu = mypaper_desktop::display_gpu::display_adapter().map(|a| a.name);
+        }
         self.gpus.get_or_insert_with(adapters)
     }
 }

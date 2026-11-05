@@ -115,7 +115,7 @@ fn performance(app: &App, b: &mut B, col: &mut Col) {
     let gpus = app.system.gpus.clone().unwrap_or_default();
     let integrated = gpus.iter().find(|(_, i)| *i).map(|(n, _)| n.clone());
     let discrete = gpus.iter().find(|(_, i)| !*i).map(|(n, _)| n.clone());
-    let current = app.get(DocId::Config, "/engine/gpu").and_then(Value::as_str).unwrap_or("integrated").to_owned();
+    let current = app.get(DocId::Config, "/engine/gpu").and_then(Value::as_str).unwrap_or("auto").to_owned();
     let gap = b.px(10.0);
     let tw = (col.w - gap * 2.0) / 3.0;
     let th = b.px(96.0);
@@ -124,7 +124,7 @@ fn performance(app: &App, b: &mut B, col: &mut Col) {
         for (i, (id, title, detail, g)) in [
             ("integrated", "Integrated", format!("{} · uses the least power", integrated.as_deref().unwrap_or("Built in")), glyph::CHIP),
             ("high-performance", "High performance", discrete.clone().unwrap_or_else(|| "None found".into()), glyph::GAUGE),
-            ("auto", "Let Windows choose", "Windows decides for mypaper".into(), glyph::MONITOR),
+            ("auto", "Your screens' card", format!("{} · draws where your screens are", app.system.display_gpu.as_deref().unwrap_or("The one they use")), glyph::MONITOR),
         ]
         .into_iter()
         .enumerate()
@@ -153,6 +153,7 @@ fn performance(app: &App, b: &mut B, col: &mut Col) {
     let fps = app.get(DocId::Config, "/engine/fps").and_then(Value::as_u64).map_or("its own frame rate".into(), |f| format!("{f} fps"));
     let gpu_now = match current.as_str() {
         "high-performance" => discrete.clone().or(integrated.clone()),
+        "auto" => app.system.display_gpu.clone().or(integrated.clone()),
         _ => integrated.clone().or(discrete.clone()),
     }
     .unwrap_or_else(|| "The graphics card".into());

@@ -183,9 +183,9 @@ fn status_card(app: &App, b: &mut B, rect: Rect) -> f32 {
     }
     b.hline(x, r.right - b.px(16.0), r.top + b.px(76.0), p.line);
     let (cpu, mem) = app.system.total();
-    let gpu = match app.get(DocId::Config, "/engine/gpu").and_then(Value::as_str).unwrap_or("integrated") {
+    let gpu = match app.get(DocId::Config, "/engine/gpu").and_then(Value::as_str).unwrap_or("auto") {
         "high-performance" => "High performance",
-        "auto" => "Windows decides",
+        "auto" => "Your screens' card",
         _ => "Integrated",
     };
     let fps = app.get(DocId::Config, "/engine/fps").and_then(Value::as_u64).map_or("its own fps".into(), |f| format!("{f} fps"));

@@ -328,7 +328,7 @@ pub static SETTINGS: &[Setting] = &[
     )
     .words("theme dark light mode"),
     // --- Settings › Performance and power ----------------------------------------------------
-    custom("gpu", "Graphics card", "Integrated uses the least power", PERF)
+    custom("gpu", "Graphics card", "Draws on the card your screens use", PERF)
         .words("gpu integrated discrete nvidia amd intel high performance"),
     sel(
         "fps",

@@ -244,10 +244,10 @@ fn details(app: &App, b: &mut B, col: &mut Col, i: usize) {
     // Performance: this wallpaper's own GPU and frame rate, or the Settings ones.
     section(b, col, "Performance", |b, c| {
         let base = format!("/engine/wallpapers/{}", token(&w.id));
-        let global_gpu = app.get(DocId::Config, "/engine/gpu").and_then(Value::as_str).unwrap_or("integrated");
+        let global_gpu = app.get(DocId::Config, "/engine/gpu").and_then(Value::as_str).unwrap_or("auto");
         let gpu_name = |v: &str| match v {
             "high-performance" => "High performance",
-            "auto" => "Let Windows choose",
+            "auto" => "Your screens' card",
             _ => "Integrated",
         };
         let gpu = app.get(DocId::Config, &format!("{base}/gpu")).and_then(Value::as_str).map(str::to_owned);
@@ -259,7 +259,7 @@ fn details(app: &App, b: &mut B, col: &mut Col, i: usize) {
                     (Value::Null, "Same as Settings".into()),
                     (json!("integrated"), "Integrated".into()),
                     (json!("high-performance"), "High performance".into()),
-                    (json!("auto"), "Let Windows choose".into()),
+                    (json!("auto"), "Your screens' card".into()),
                 ],
                 current: Some(gpu.map_or(Value::Null, Value::String)),
             });
