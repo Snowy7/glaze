@@ -242,3 +242,130 @@ completion events remain unmeasured/unavailable; the table does not claim those 
 Implementation commits include `c222aa7`, `daf03e2`, `e6ae486`, `c6d6280`, `e8b84d2` and `47552cf`.
 The shared view owner's `619734a` / `a5fbe77` also include the integration dispatch and some
 concurrent integration view/artifact updates from the shared checkout. No push was made.
+
+## T3 Code and Grok Bot usability update — 2026-11-05
+
+This section supersedes the T3/Grok limitations of the earlier widget handoff where specified.
+The installed T3 is **0.1.7-nightly.20261102.4066**, commit **30654b3e91a5**; the installed Grok
+Bot is **0.78.5**. Protocol behavior was checked against their installed application bundles and
+read-only local requests. No vendor application received synthetic input, no approval was answered,
+no thread or paid routine was started, and no pairing prompt was triggered.
+
+### Error and retained data
+
+The original read-only probe reproduced exactly:
+`Space limit exceeded: Message too long: 2409412 > 524288`. The shared WebSocket transport had
+512 KiB message **and frame** bounds. T3's ordinary shell baseline had 996 threads and 45 projects;
+its previews and metadata exceeded that limit. The independent 256-thread decoder bound would
+also have rejected this installation after fixing the transport.
+
+T3 now has a separate **32 MiB** message/frame bound and a **16,384-thread** retained bound. Other
+providers retain their 512 KiB limit. The client negotiates `omitOlderSettled` and
+`omitIdleSubagents` only when the server advertises their capabilities; running agents remain in
+the stream. Typed decoding skips preview bodies, skill descriptions, settings, repository
+identities and scripts instead of building/cloning those JSON trees. Only thread status/model/
+lineage/task counts, project titles, model choices and usage aggregates survive. Errors are logged
+for diagnosis and become a clean disconnected state with an explicit Retry in widgets.
+
+### Setup, step by step
+
+1. **T3 Connect** uses the known local `ws://127.0.0.1:3773/ws` endpoint. An existing valid mypaper
+   pairing is reused. There is no scan, app launch, or URL/key form on the default setup path.
+2. A first connection uses **one pairing code** from T3 Settings > Connections. T3's native
+   `/oauth/token` exchange narrows it to `orchestration:read orchestration:operate diagnostics:read`.
+   Only the returned bearer is stored in Windows Credential Manager; the bootstrap code is erased.
+3. A read-only grant still works for Running now and Needs you. **Allow usage / Allow controls**
+   explicitly requests a replacement pairing when those features need a wider grant. This user's
+   existing grant is read-only; it was not changed during verification.
+4. New connections enable the event subscription. Closing the last visible consumer cancels it;
+   reconnect is explicit. Usage is read on connection/Refresh and completion events, with its UTC
+   day displayed. T3 has no usage delta subscription in the inspected contract.
+5. **Grok Connect** detects the installed executable and validates its public desktop-status
+   marker against the named process. A signed-in account is reused without importing cookies or
+   private tokens. If sign-in is needed, Open Grok hands it to the app's existing sign-in flow.
+6. **Grok Quick prompt** opens a native `grokbot://app/v1/prompt` draft for review and sending.
+   It does not pretend to have a direct prompt-execution API. Optional webhook routines and keys
+   are available only under **Advanced**; keys still use Credential Manager.
+
+The installed T3 browser OAuth client is deliberately MCP-only: its server rejects MCP sessions
+outside `/mcp`. A one-click browser approval cannot mint the native stream credential with that
+contract. No existing T3 credential files or injected agent token were used to bypass it. The
+native first-time setup therefore uses the supported one-time code, rather than falsely claiming
+an approval-only flow.
+
+Grok Bot's documented external run contract remains a routine URL and bearer key. Its 200 response
+means acceptance, with results in Bot chat ([vendor routine documentation](https://prod.cursor.com/help/grok-bot/routines)).
+No supported local routine-list, cloud run-history/result stream or third-party account OAuth
+contract was found in this installation. Recent shows accurately labeled session receipts and
+Grok's Windows notification cards, respecting the existing notification-text preference. These
+limits are explicit in setup instead of being hidden behind empty live counters.
+
+### Widgets and visual evidence
+
+T3 has independent **Running now**, **Usage**, **Needs you** and **New thread** faces. Running and
+attention lists scroll to every matching thread, including subagents; native thread links use the
+server's environment identity and the installed `t3code` handler. Usage groups tokens and cost by
+provider/model, avoids counting reasoning twice, and flags partial pricing. The new-thread field
+has project/model pickers and starts with approval-required runtime mode. Approval buttons are
+enabled only for supported pending request kinds and a connected operate grant; questions open
+their thread. Snapshot mode and stale data retain their freshness labels.
+
+Grok has **Routines**, **Recent requests and notifications** and **Quick prompt** faces. Every face
+supports multiple independent instances. Both catalog entries use a dense min/max range of
+**4×3 through 12×10 cells**. Views use kit SizeClass/layout/palette/components. Compact faces show
+one number, state or action; they do not squeeze in a truncated list.
+
+- Reviewed synthetic golden size sheets: [`T3`](../shell/src/widgets/views/integrations/t3-sizes.png)
+  and [`Grok`](../shell/src/widgets/views/integrations/grok-sizes.png).
+- Inspected four actual live glass widgets after deployment: Running now, Needs you, Usage's
+  permission state, and Grok Prompt. All **4/4** were exposed by WindowFromPoint at their centers.
+  Read-only T3 updates and Grok's signed-in marker were present.
+- Local captures: `%TEMP%\mypaper-widget-t3-live-running.png`,
+  `%TEMP%\mypaper-widget-t3-live-attention.png`, `%TEMP%\mypaper-widget-t3-live-usage.png`, and
+  `%TEMP%\mypaper-widget-grok-live-prompt.png`. They contain personal metadata and are not committed.
+  The full local capture is `%TEMP%\mypaper-t3-grok-live.png`.
+- Temporary verification instances were removed in `finally`, retaining any concurrent layout
+  edits. No user window was minimized, moved, typed into or closed.
+
+### Measurements and checks
+
+Three read-only **60-second adapter samples**, with one-second disabled baselines and finite
+two-second activation grace, produced the following. This is provider evidence, not a full-shell
+performance qualification. Real T3 events arrived during the observation; these are not three
+unchanged-state idle samples. There were no reconnect attempts during any sample and no heartbeat
+or maintenance-frame disconnects. [Raw metadata-only JSONL](evidence/t3-live-2026-11-05.jsonl).
+
+| Sample | CPU, % of one core | Added private MiB | Deliveries / state changes |
+|---|---:|---:|---:|
+| 1 | 0.0260 | 1.5313 | 14 / 13 |
+| 2 | 0.0000 | 0.9648 | 3 / 2 |
+| 3 | 0.0000 | 1.0859 | 6 / 0 |
+| Median | 0.0000 | 1.0859 | — |
+
+The provider's ≤5 MiB memory gate passes these samples. A full-shell performance claim is not made.
+The >2 MiB / 996-thread regression fixture exercises the real authenticated Effect RPC baseline,
+acknowledgement, cancellation and reconnect path. Usage arithmetic has a focused aggregation test.
+The shell's three focused T3/Grok tests cover all 1,008 combinations of face/dense size/DPI, identical
+frame damage, bounded hits, last-agent scrolling, disabled stale approvals, and exact request
+identity across updates before repaint. Rendered approval and routine controls retain exact IDs,
+so list removal/reordering cannot make a click act on a different request or routine. The widget
+suite passes **131 tests with 3 intentionally ignored**, including all 22 manifest tests.
+Integration tests and shell/Studio checks pass; a workspace release build was deployed.
+
+The broad shell test run aborted in the pre-existing flyout golden test with native exception
+`0xe06d7363`, before the integration widget tests. Strict Clippy also encounters other agents'
+Discord `possible_missing_else` and existing quick/toggles `unnecessary_cast` warnings. These
+outside-owned paths were not changed. No live writes were performed to qualify thread creation,
+approval responses, usage with an upgraded grant, native prompt handoff or paid Grok routines.
+
+`scripts/deploy-local.ps1` deployed the release under the desktop lock and restored the running
+core/shell/engine. It intentionally **skipped Studio because the user's Studio window was open**;
+the new Studio executable is built in `C:\mypaper-targets\main\release`, and needs copying after
+that window closes. Existing Studio was left untouched.
+
+Shared registry/model hooks coexist with the other integration agent's uncommitted edits in
+`crates/integrations/src/{lib,config}.rs` and `crates/shell/src/integrations/{mod,widgets}.rs`.
+The only necessary edit outside the owned directories is the small T3/Grok field-open, submit and
+draft-retention hooks in `crates/shell/src/widgets/mod.rs`. Do not discard these hooks when
+committing the shared files. Main implementation commits are `bde6e72`, `263af70`, `ea8ddeb` and
+`2a8c0da`; the final verification/cleanup commit follows. No push was made.
