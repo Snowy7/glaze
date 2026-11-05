@@ -228,9 +228,15 @@ completion events remain unmeasured/unavailable; the table does not claim those 
   no peer polling or extra watch traffic was enabled.
 - `launcher::routine_runs()` returns at most 16 session-local receipts shared by launcher and
   widget submissions. `RoutineState` is `Sending | Accepted | Failed`; completion is not inferred.
-- `credentials::prompt_t3_pairing()` is invoked only by an explicit Connect click. The bootstrap
-  code is not persisted. `pairing::t3_blocking(endpoint, code)` makes one bounded loopback
-  `/oauth/token` exchange and stores the resulting narrow bearer in Credential Manager.
+- `t3_auth::ensure()` gets T3 access in the background: when `server-runtime.json` names a live
+  port, T3's own CLI (`t3 auth session issue --scope orchestration:read --scope
+  orchestration:operate --scope diagnostics:read --label mypaper --ttl 30d --json`, hidden, 20 s
+  timeout) issues a bearer as the same Windows user. Only Credential Manager holds it (`t3`); its
+  session id and expiry sit in `t3-session`. It renews 3 days before expiry, re-issues once on a
+  401/403, and revokes the session it replaces plus any other `mypaper`-labelled session. There is
+  no Windows credential prompt. Fallback, only when the CLI cannot run: the tile shows one
+  "Paste pairing code" field and `pairing::t3_blocking(endpoint, code)` makes one bounded loopback
+  `/oauth/token` exchange for the same three scopes.
   Protocol source: [T3 environment HTTP contract](https://github.com/pingdotgg/t3code/blob/a21d788752695764028e6d26ba924f3963e05806/packages/contracts/src/environmentHttp.ts).
 - The host changes outside the provider/view directories are the new widget kinds and model
   field/deadline in `widgets/model.rs`, one sync hook and one action hook in `widgets/mod.rs`,
@@ -269,29 +275,27 @@ for diagnosis and become a clean disconnected state with an explicit Retry in wi
 
 ### Setup, step by step
 
-1. **T3 Connect** uses the known local `ws://127.0.0.1:3773/ws` endpoint. An existing valid mypaper
-   pairing is reused. There is no scan, app launch, or URL/key form on the default setup path.
-2. A first connection uses **one pairing code** from T3 Settings > Connections. T3's native
-   `/oauth/token` exchange narrows it to `orchestration:read orchestration:operate diagnostics:read`.
-   Only the returned bearer is stored in Windows Credential Manager; the bootstrap code is erased.
-3. A read-only grant still works for Running now and Needs you. **Allow usage / Allow controls**
-   explicitly requests a replacement pairing when those features need a wider grant. This user's
-   existing grant is read-only; it was not changed during verification.
-4. New connections enable the event subscription. Closing the last visible consumer cancels it;
-   reconnect is explicit. Usage is read on connection/Refresh and completion events, with its UTC
-   day displayed. T3 has no usage delta subscription in the inspected contract.
-5. **Grok Connect** detects the installed executable and validates its public desktop-status
+1. **T3 connects itself.** A T3 widget with T3 Code running needs no setup: the provider issues
+   mypaper's own session through T3's CLI (see `t3_auth`) and switches the integration on.
+   T3 Settings > Connections lists it as `mypaper` with exactly `orchestration:read
+   orchestration:operate diagnostics:read`.
+2. Only if T3 Code is closed or its CLI is missing does the tile offer a "Paste pairing code"
+   field; the code is exchanged once for the same scopes and never stored.
+3. Closing the last visible consumer cancels the subscription. Usage and limits are read on
+   connection, Refresh and completion events: 30 UTC days of `server.getUsageSummary` (buckets
+   keyed by `day`, with `sessions`) and per-window limits from `server.getConfig`.
+4. **Grok Connect** detects the installed executable and validates its public desktop-status
    marker against the named process. A signed-in account is reused without importing cookies or
    private tokens. If sign-in is needed, Open Grok hands it to the app's existing sign-in flow.
-6. **Grok Quick prompt** opens a native `grokbot://app/v1/prompt` draft for review and sending.
+5. **Grok Quick prompt** opens a native `grokbot://app/v1/prompt` draft for review and sending.
    It does not pretend to have a direct prompt-execution API. Optional webhook routines and keys
    are available only under **Advanced**; keys still use Credential Manager.
 
 The installed T3 browser OAuth client is deliberately MCP-only: its server rejects MCP sessions
 outside `/mcp`. A one-click browser approval cannot mint the native stream credential with that
-contract. No existing T3 credential files or injected agent token were used to bypass it. The
-native first-time setup therefore uses the supported one-time code, rather than falsely claiming
-an approval-only flow.
+contract. No existing T3 credential files or injected agent token were used to bypass it. T3's own CLI
+(`t3 auth session issue`), run as the same Windows user, is the supported headless path, so
+setup needs no code or approval; the one-time code is only the fallback when the CLI cannot run.
 
 Grok Bot's documented external run contract remains a routine URL and bearer key. Its 200 response
 means acceptance, with results in Bot chat ([vendor routine documentation](https://prod.cursor.com/help/grok-bot/routines)).
