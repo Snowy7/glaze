@@ -32,7 +32,8 @@ Surface::present(ui, origin, size, list)
 ```
 
 - **Ops** (`Op`): `Fill`, `Stroke` (rounded or not), `Line`, `Text` (a string or an icon glyph,
-  placed by its measured size), `Shadow` (stepped rings), `Arc`, `Image` and `TextField`.
+  placed by its measured size), `Icon` (a vector icon), `Shadow` (stepped rings), `Arc`, `Image`,
+  `TextField`, `Clip`/`Unclip` and `Clipped` (a retained clipped group: scroll views).
 - **Hits** (`Hit`): rectangle, id, AccessKit role, label, enabled, checked. Input hit-tests them,
   keyboard focus steps over them (`focus::step`), and assistive technology sees them.
 - **Damage** is computed op by op in list order: a changed clock redraws the clock; a moved fill
@@ -40,24 +41,244 @@ Surface::present(ui, origin, size, list)
 - **Text** goes through a cache of `IDWriteTextFormat` and `IDWriteTextLayout`: a label is shaped
   once and redrawn from its layout. Text is grayscale-antialiased with fixed rendering parameters
   (layered windows have alpha, so no ClearType; and golden images must not depend on the machine's
-  ClearType tuning).
-- **Icons** are glyphs of an icon font drawn as text: Segoe Fluent Icons (Segoe MDL2 Assets on
-  Windows 10). Views name an `icons::Icon` (`Play`, `Pause`, `Previous`, `Next`, chevrons,
-  `Add`, `Close`, `Settings`, `Volume(level)`, `Wifi(level)`, `Battery(level)`, …; code points
-  checked against a rendered sheet of the installed font) and place it with
-  `icons::centered(text, family, icon, size, rect, color) -> Op`. `Icon::glyph_in(family)`
-  gives MDL2 the outlined media glyphs it has instead of Fluent's solid ones. The styles (N6) add
-  Lucide and Fluent UI System Icons as bundled TTFs.
-- **Tokens** (`Tokens`): type, colours, material and metrics in design pixels; a view multiplies
-  by its scale (DPI times the theme's `scale`). Today they cover menus; N6 adds the styles.
-  `Colors::neutral(dark)` highlights with a wash of the text colour (the menus');
-  `Colors::new(dark, accent)` keeps the accent tint.
+  ClearType tuning). See [The kit › Text](#text) for the parameters and the variable font.
+- **Icons**: views name an `icons::Icon`; the theme draws it as a vector or a font glyph. See
+  [The kit › Icons](#icons). `icons::centered(text, family, icon, size, rect, color) -> Op` (a
+  font glyph) is the older API, kept while surfaces move to `Frame::icon`.
+- **Tokens**: [`Theme`](#theme) is the source of truth. `Tokens` (menus) comes from
+  `theme.tokens()`; `Colors`, `Ink`, `Step` and `Typeface` below are the older API, kept until
+  their users are ported.
 - **Type and contrast** shared by the bar, flyouts and widgets: `Typeface` (`system(text)` picks
   Segoe UI Variable Text for small sizes and Display above 20 px; `single(family)` for a theme's
   font) with `style(Step, scale)` or `sized(size, weight, scale)`, where `Step` is the ramp
   (`Micro` 11/500, `Caption` 12/400, `Body` 13/400, `Label` 13/600, `Headline` 15/600, `Title`
   20/600, `Large` 28/500). `Ink::of(text)` gives the contrast steps: `primary`, `secondary`
   (74%), `tertiary` (56%) and `disabled` (34%), the old `--t0..--t3` with the lower two raised.
+
+## The kit
+
+Every surface (bars, flyouts, menus, widgets, Studio) is being rebuilt on one kit:
+`mypaper_ui::{theme, kit, layout, scroll, icons}`. A view makes a [`Theme`](#theme), builds its
+list with a [`Frame`](#frame-and-components), places things with [layout](#layout), and scrolls
+lists with a [`Scroll`](#scroll-view). The gallery renders every component in every style:
+
+```text
+cargo run --release -p mypaper-ui --example gallery     # writes docs/media/native/kit-*.png
+```
+
+`kit-<style>-<scheme>.png` (liquid, oneui, solid, fluent, mono × dark, light) shows Control
+Center, a scrolled notification list, buttons, a segmented control, a field, a slider, list rows,
+rings, badges, a tooltip and a menu over a wallpaper with a stand-in for the engine's glass;
+`kit-text.png` is the text lab and `kit-icons.png` the icon comparison. All are drawn at 1x and
+saved at 2x without smoothing, to show real pixels.
+
+![liquid, dark](media/native/kit-liquid-dark.png)
+
+### Theme
+
+`Theme::new(style, scheme, accent)`, with `Style::{Liquid (default), OneUi, Solid, Fluent, Mono}`,
+`Scheme::{Dark, Light}`, and the Windows accent (`theme::SYSTEM_BLUE`, iOS 26's `#0088FF`, when
+there is none). Values are design px; `Frame` scales them.
+
+| Field | What |
+|---|---|
+| `color: Palette` | `label`, `secondary`, `tertiary`, `quaternary` (disabled); `fill` (a control's rest: an off switch, a track, a gray button), `card` (cards, tiles), `well` (fields, a segmented track); `separator`; `accent`, `on_accent`, `accent_wash`; `destructive`, `success`, `warning`; `surface` (a glassless body, and the glass tint), `elevated` (tooltips); `hover`, `pressed` (washes); `knob`, `scrollbar`, `shadow` |
+| `font: TypeRamp` | `style(TextRole, s) -> TextStyle`, `line(role, s)` |
+| `metrics` | `pad` (panel inset), `gap` (between blocks), `item`, `row` (two lines), `row_single`, `control`, `control_small`, `icon`, `icon_small`, `icon_large`, `hit`, `scrollbar`, `scrollbar_inset` |
+| `radius` | `surface`; `card` = surface − pad (concentric, `Radii::concentric(outer, inset, min)`); `control: Option<f32>` (`None`: capsules); `small` |
+| `motion` | Apple springs (`Spring::apple(duration, bounce)`): `interactive` (0.15, 0.14), `open` (0.3, 0.12), `layout` (`.snappy`), `scroll` (0.22, 0); `scrollbar_idle` 0.9 s, `scrollbar_fade` 0.35 s |
+| `icons`, `icon_weight` | `IconSet::Vector` (Fluent: `IconSet::Font`), stroke per 24 units |
+| `glass`, `border` | engine glass material (`None` for Solid and Mono); Solid's one hairline |
+
+- **Contrast on glass.** The label steps sit above Apple's (whose vibrancy blend a layered window
+  can't do): dark 100/72/50/30 %, light 88/78/60/34 % (Fluent uses Windows 11's text steps). A test
+  holds every style and scheme to label 7:1 (the AAA target liquid-rust uses on large light
+  glass), secondary 4.5:1 (also on cards), tertiary 3:1 and accent 3:1 over its own surface; the
+  accent is lightened or darkened until it reaches 3:1.
+- **Adaptive light/dark** (liquid-rust's rule from Apple's kit): `theme.adaptive(min_side,
+  backdrop_luminance) -> Scheme`. Glass smaller than about 180 pt (buttons, a bar, a small widget)
+  takes the face that reads over what is behind it (flip at WCAG luminance 0.179); panels and
+  menus follow the scheme. `theme.with_scheme(scheme)` gives the flipped theme. The engine has to
+  report the backdrop's luminance for this to switch live; until then the scheme rules.
+- `theme.tokens()` gives menus their `Tokens`; `theme.ink()` the older `Ink`;
+  `theme::{luminance, contrast, over}` are the WCAG helpers the tests use.
+
+| `TextRole` | liquid, solid, mono | oneui | fluent |
+|---|---|---|---|
+| `LargeTitle` | 28 / 700, −0.6 | 30 / 700 | 28 / 600 |
+| `Title1` | 22 / 700, −0.4 | 23 / 700 | 20 / 600 |
+| `Title2` (panel titles) | 17 / 600, −0.2 | 18 / 700 | 16 / 600 |
+| `Title3` | 15 / 600 | 16 / 700 | 14 / 600 |
+| `Headline` (row titles) | 14 / 600 | 15 / 600 | 14 / 600 |
+| `Body` | 14 / 400 | 15 / 400 | 14 / 400 |
+| `Callout` (subtitles) | 13 / 400 | 13 / 400 | 13 / 400 |
+| `Subheadline` (section headers) | 12 / 600 | 12 / 600 | 12 / 600 |
+| `Footnote` (timestamps) | 12 / 400 | 12 / 400 | 12 / 400 |
+| `Caption` (badges) | 11 / 500 | 11 / 600 | 11 / 400 |
+
+Size / weight, tracking in px. Body is 14, not macOS's 13: grayscale text at 96 DPI needs the
+extra pixel.
+
+### Text
+
+- **Segoe UI Variable through its axes.** The ramp's family is `VARIABLE` ("Segoe UI Variable"):
+  `IDWriteFactory6::CreateTextFormat` with `wght` = the weight (500 is a real medium, not 400 or
+  600) and `opsz` = the design size in points, as Windows 11 draws it. `TextStyle` gained
+  `tracking` (device px, applied with `SetCharacterSpacing`) and `optical` (points; 0 takes it from
+  the size). Other families keep their named faces.
+- **Rasterization** (`TextQuality`, `Ui::set_text_quality`): grayscale, gamma 1.8, grayscale
+  enhanced contrast 1.0, natural symmetric, vertical grid fit. The old parameters put contrast 0.5
+  in the ClearType-only field of a v1 `IDWriteRenderingParams`, so grayscale text got DirectWrite's
+  weakest coverage: light text on glass read thin and grey. `kit-text.png` shows before, after,
+  contrast 1.5, gamma 2.2 and GDI classic on dark and light glass; 1.0 is Windows' own grayscale
+  default and was the clearest without bloating. Colour fonts are on
+  (`D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT`): emoji in notifications draw in colour.
+- **Pixels.** Components put text on whole pixels and centre it in the role's line height.
+
+### Icons
+
+`Icon` names (media, chevrons, commands, shell, status with levels, weather): `Play`, `Pause`,
+`Previous`, `Next`, `Shuffle`, `Repeat`, `ChevronLeft/Right/Up/Down`, `Add`, `Remove`, `Close`,
+`Check`, `More`, `Settings`, `Search`, `Edit`, `Delete`, `Copy`, `Refresh`, `Pin`, `Grip`,
+`External`, `Download`, `Upload`, `Apps`, `Window`, `Power`, `Restart`, `SignOut`, `Lock`, `Bell`,
+`BellOff`, `Calendar`, `Clock`, `Timer`, `Globe`, `Keyboard`, `Desktop`, `Home`, `User`, `Folder`,
+`File`, `Clipboard`, `Terminal`, `Message`, `Controls`, `Layers`, `Volume(0..=3)`, `Mute`,
+`Speaker`, `Headphones`, `Mic`, `Wifi(0..=3)`, `Ethernet`, `Offline`, `Hotspot`, `Cast`,
+`Airplane`, `Location`, `Bluetooth`, `Brightness`, `Moon`, `NightLight`, `Focus`, `Saver`, `Gauge`,
+`Thermometer`, `Cpu`, `Battery(0..=10)`, `Charging`, `BatteryWarning`, `Plug`, `Accessibility`,
+`Eye`, `Camera`, `Info`, `Warning`, `Star`, `Heart`, `Notes`, `Tasks`, `Photo`, `Feed`, `Sun`,
+`Cloud`, `CloudSun`, `CloudMoon`, `Rain`, `Drizzle`, `Snow`, `Snowflake`, `Thunder`, `Fog`,
+`Wind`, `Droplet`, `Umbrella`, `Sunrise`, `Sunset`.
+
+- **Vectors** (every style but Fluent): Lucide's outlines (ISC licence,
+  `crates/ui/icons/LICENSE-lucide`), compiled in as SVG path data (`src/icon_paths.rs`), parsed
+  once into Direct2D geometry per canvas and drawn as `Op::Icon { rect, icon, weight, color }`:
+  round caps and joins, 1.75 units per 24 (SF Symbols' calm weight), never under 1.35 px. Media
+  glyphs are filled as well, like SF's `.fill`. Chosen over the font after rendering both
+  (`kit-icons.png`): Lucide reads like SF Symbols and covers weather; at 13 px the hinted font is
+  a little crisper, so the kit draws row and button glyphs at 14 px and up.
+- **Font** (Fluent): Segoe Fluent Icons glyphs (`Icon::font_glyph`); icons the font lacks are
+  vectors there too.
+- **Adding an icon:** add its Lucide name to `crates/ui/icons/gen.mjs`, run
+  `bun crates/ui/icons/gen.mjs <lucide-static>/icons`, then add the variant and its `lucide()` arm.
+
+### Frame and components
+
+`Frame::new(&mut ui.text, &theme, s, &interaction)` builds one `DisplayList` (`f.list`). Lengths
+in calls are **device px** (`f.px(design)` converts); `f.font(role)`, `f.line(role)`.
+
+| Call | Draws |
+|---|---|
+| `surface(rect, glass_available) -> Option<Glass>` | the body, first: with glass only an invisible hit fill, and the `Glass` to hand to `Surface::set_glass`; without, the surface fill (and Solid's hairline) |
+| `card(rect) -> inner` | the card fill at the concentric radius; returns the rect inset by `pad` |
+| `separator(left, right, y)` | a hairline |
+| `label(x, y, text, role, color, max)`, `text_in(rect, text, role, color, Align)`, `paragraph(x, y, w, text, role, color, lines) -> h`, `line_count(..)` | text, cut with an ellipsis, wrapped on the role's line height |
+| `icon(rect, Icon, size, color)` | the theme's icon, centred |
+| `button(id, rect, label, Option<Icon>, ButtonKind, enabled)`, `button_size(label, icon)` | `Filled` (the one primary), `Tinted`, `Gray`, `Plain`, `Destructive` |
+| `icon_button(id, rect, Icon, size, label, filled)` | a round button; `filled` keeps the control fill at rest (media) |
+| `switch(id, right, center_y, on, label, enabled) -> Rect` | an on/off switch, knob with a soft shadow |
+| `slider(id, rect, value, label, Option<Icon>)` | with an icon, Control Center's thick bar; without, a thin track and knob. The hit's label ends in the percent |
+| `segmented(base, rect, labels, selected)` | segment `i` is hit `base + i` |
+| `row(&Row, rect)`, `row_height(&Row)` | `Row { id, lead: Lead::{None, Icon, Badge(icon, on), Image, Monogram}, title, subtitle, accessory: Accessory::{None, Chevron, Check, Text, Switch(on), Button(id, icon, label)}, selected, enabled }` |
+| `section_header(rect, title, Option<(id, action)>)` | a small title and a plain action |
+| `tile(&Tile, rect)` | `Tile { id, icon, title, subtitle, on, enabled, more: Option<id> }`: Control Center's toggle tile |
+| `progress(rect, value, color)`, `ring(center, radius, width, value, color)`, `badge(x, center_y, text, color) -> w` | meters and counts |
+| `tooltip(anchor, text, bounds) -> Rect` | on the elevated fill, below or above its anchor |
+| `field_frame(rect, placeholder, empty, focused, icon) -> inner` | a field's well, placeholder and focus ring; the `Op::TextField` goes in `inner` |
+| `empty(rect, icon, title, detail) -> h` | a centred message where a list would be |
+| `scroll(viewport, &scroll, now, \|f, origin\| -> content_height)` | see [Scroll view](#scroll-view) |
+| `wash(id, rect, radius, enabled)`, `focus_ring(id, rect, radius)`, `hit(..)`, `fill(..)`, `push(op)` | the parts, for custom controls |
+
+- **States** come from `interact::Interaction` (`hover`, `pressed`, `focus`, `focus_visible`).
+  Each control's wash and focus ring are always in the list, transparent at rest: a hover changes
+  one op and never shifts the rest of the list (a test checks it), so damage stays one control.
+- **No outlines.** Nothing draws a border except Solid's surface hairline. Focus rings appear
+  only after the keyboard moved focus (`focus_visible`), never on a click (tested).
+- Hit id `kit::NONE` (0) draws without a hit (decoration).
+
+### Layout
+
+- `Rect::take_top/take_bottom/take_left/take_right(size, gap) -> (piece, rest)`,
+  `inset(Insets::all(v) | Insets::xy(x, y))`, `place(w, h, Align, Align)` (whole pixels),
+  `intersect`, `center`.
+- `Stack::column(rect, gap)` / `Stack::row`: `next(size) -> Rect`, `space(extra)`, `rest()`,
+  `used()` (the content's extent).
+- `layout::split(rect, Axis, gap, &[Length::Fixed(px) | Length::Fill(weight)], &mut out)`,
+  `layout::grid(rect, columns, gap, row_height, index) -> Rect`.
+- `SizeClass::of(width, height)`: `Compact` (< 150 design px on the smaller side), `Regular`
+  (< 300), `Large`, so widgets switch layouts by size.
+
+### Scroll view
+
+`Scroll` is the state, kept by the panel: `Scroll::new(&theme.motion)`.
+
+- `f.scroll(viewport, &scroll, now, |f, origin| { ...draw from origin...; content_height })`
+  draws the content as one `Op::Clipped` group in the viewport, cuts its hits to the viewport and
+  drops those outside, and draws the overlay scrollbar inside the viewport's right edge (always
+  in the list; transparent when hidden). Headers and footers are drawn outside the viewport and
+  never move.
+- **Give the viewport a height from the content, never from the offset**: `min(content, room)`.
+  That is what keeps a flyout's size while it scrolls.
+- `scroll.wheel(delta, s, now) -> changed`: a delta that is not a multiple of 120 (a precision
+  touchpad) moves exactly that much at once; a notch glides 48 design px along `motion.scroll`.
+  `page(down, now)` (Page Up/Down), `reveal(top, bottom, now)` (keyboard focus), `reset()`.
+- `scroll.tick(now) -> (changed, next)`: call it from the panel's tick; it asks for frames only
+  while gliding or fading and `None` at rest (Rule 2).
+
+### Glass contract
+
+- A surface on glass draws **no outline** and no tint over the glass: `f.surface` fills it with
+  `Rgba::HIT` (clicks) and returns `Glass { body, radius, material }`. Pass exactly that to
+  `Surface::set_glass`: the engine's plate or overlay uses the same rect and radius
+  (`px(theme.radius.surface)`), and draws the one border there is (its rim).
+- Cards and controls on glass are fills (`card`, `fill`, `well`), never strokes.
+- Corners are circular today (Direct2D's rounded rectangle). If the engine moves to continuous
+  (squircle) corners, the kit's surface and cards must follow, or the HIT fill and glass will
+  disagree at the corners.
+
+### Porting a surface
+
+1. **Theme.** Make one from the surface's look. The flyouts have
+   `flyouts::notifications::theme(&Look)` (move it to `Look::theme()` when you own `look.rs`):
+   the bar's family picks the style (Fluent → Fluent, Material → OneUi, Mono → Mono, macOS →
+   Liquid, or Solid with no glass and an opaque fill), the ink picks the scheme, and the accent
+   carries over. Widgets and bars do the same from their look.
+2. **Input.** Build an `Interaction` from the surface's hover, pressed and focus ids (or keep
+   one and feed it `Event`s with `Interaction::handle`).
+3. **Body.** `f.surface(rect, glass::available())` first, and `set_glass` with what it returns.
+   (The flyout controller still draws the body via `flyouts::kit::Kit::body`, which already
+   follows the same contract.)
+4. **Lay out** with `take_*`, `Stack`, `grid` and `place`: no `y += magic` and no hand-placed
+   rects. Ask components for their intrinsic sizes (`button_size`, `row_height`, `line`).
+5. **Draw** with components, `TextRole`s and `Palette` roles only: no `TextStyle::new`, no
+   `Rgba` constants, no `Op::Stroke` around anything, no raw glyph code points.
+6. **Lists** that can outgrow their room go in a `Scroll` (see above); route `wheel`, Page
+   Up/Down and `tick` to it.
+7. **Goldens:** re-bless your surface's images (`MYPAPER_BLESS=1`) and look at them.
+
+The notification center (`crates/shell/src/flyouts/notifications.rs`) is the reference port: a
+fixed header, the cards in a scroll view, the month below; its test
+`only_the_list_scrolls_and_the_flyout_keeps_its_size` holds the scroll contract.
+
+| Old | New |
+|---|---|
+| `flyouts::kit::Kit::{header, row, tiles, slider, switch, buttons, notice, separator}` | `Frame::{text_in + icon_button, row, tile, slider, switch, button, empty, separator}` |
+| `Look::{ink, dim(), faint(), control(), line(), hover()}` | `theme.color.{label, secondary, quaternary, fill, separator, hover}` |
+| `kit::glyph::*`, `icons::centered` | `f.icon(rect, Icon::X, size, color)` |
+| `Step`, `Typeface`, `kit.font(size, weight)` | `TextRole`, `f.font(role)` |
+| `Ink::of(ink)` | `theme.color.{label, secondary, tertiary, quaternary}` |
+| `controls::{Palette, Type}` (Studio) | `Theme` (Studio ports last) |
+| `Tokens` for menus | `theme.tokens()` |
+| a stepped `scroll: usize` | `Scroll` + `Frame::scroll` |
+
+### Measured
+
+- The notification center live (release, 1440p, the user's 5 app groups, warm, 8 opens):
+  drawn in **1.6–2.0 ms** (median 1.9) after the port, against **1.9–2.8 ms** (median about
+  2.5) before; on screen in 2.6–3.6 ms against 3.3–5.7. Idle: nothing ticks once the scrollbar
+  has faded (`Scroll::tick` returns `None`).
+- The gallery (release, headless, 1180×780, three panels and a menu): built in 2–5 ms and drawn
+  in 4–6 ms per style; the first style also pays WARP's start-up (about 30–40 ms).
 
 ## Surfaces
 
