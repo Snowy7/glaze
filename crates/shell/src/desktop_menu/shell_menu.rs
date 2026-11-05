@@ -1071,10 +1071,13 @@ mod live {
             ..theme.tokens()
         };
         let built = std::time::Instant::now();
+        // The installed plugins' items (`desktop-menu`), as the shell adds them.
+        let plugins = crate::widgets::plugin_events::menu_items();
         let root = items::build_with(
             &mypaper_config::DesktopMenu::default(),
             state,
-            Sources { plugins: &[],
+            Sources {
+                plugins: &plugins,
                 shell: Some(&snapshot),
                 mypaper: None,
             },
@@ -1088,13 +1091,19 @@ mod live {
                 })
                 .unwrap()
         };
-        let panels = [
+        let mut panels = vec![
             ("root", root.clone(), Some(2)),
             ("view", sub("View"), None),
             ("sort", sub("Sort by"), None),
             ("new", sub("New"), None),
             ("open", sub("Open in"), None),
         ];
+        // Each plugin's submenu, with the root hovering the first of them.
+        for plugin in plugins.iter().map(|c| c.name.clone()).collect::<std::collections::BTreeSet<_>>() {
+            let at = root.iter().position(|i| i.label() == plugin);
+            panels[0].2 = panels[0].2.max(at);
+            panels.push(("plugin", sub(&plugin), None));
+        }
         for (name, items, hover) in panels {
             let layout = menu::layout(&items, &tokens, scale, &mut ui.text);
             let list = menu::view(&items, &layout, hover, &tokens);

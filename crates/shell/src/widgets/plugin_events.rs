@@ -108,8 +108,12 @@ pub(super) struct Events {
     registered: bool,
 }
 
+/// Top-level windows already reported (id → title and process), so a hide or destroy is reported
+/// as `closed` only for one of them, with the title and process it had.
+type Known = std::collections::HashMap<u64, (String, String)>;
+
 /// A WinEvent as a plugin window event: top-level, visible, titled windows only.
-fn window_event(event: Event) -> Option<SystemEvent> {
+fn window_event(event: Event, known: &mut Known) -> Option<SystemEvent> {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::*;
     let change = match event.event {
@@ -119,19 +123,35 @@ fn window_event(event: Event) -> Option<SystemEvent> {
         EVENT_OBJECT_LOCATIONCHANGE => WindowChange::Moved,
         _ => return None,
     };
+    let id = event.window as u64;
+    if change == WindowChange::Closed {
+        // The window may be gone already: it was reported, or it isn't one of ours to report.
+        let (title, process) = known.remove(&id)?;
+        return Some(SystemEvent::Window { change, id, title, process });
+    }
     let hwnd = HWND(event.window as *mut _);
-    // SAFETY: plain queries of a window handle; a stale one just fails.
-    unsafe {
-        if change != WindowChange::Closed && (GetAncestor(hwnd, GA_ROOT) != hwnd || !IsWindowVisible(hwnd).as_bool()) {
+    // SAFETY: plain queries of a window handle; a stale one just fails. Another process's
+    // caption is read without sending it a message, so a hung app can't block the shell.
+    let title = unsafe {
+        if GetAncestor(hwnd, GA_ROOT) != hwnd || !IsWindowVisible(hwnd).as_bool() {
             return None;
         }
         let mut title = [0u16; 256];
         let len = GetWindowTextW(hwnd, &mut title).max(0) as usize;
-        if change != WindowChange::Closed && len == 0 {
-            return None;
-        }
-        Some(SystemEvent::Window { change, id: event.window as u64, title: String::from_utf16_lossy(&title[..len]), process: process_name(hwnd) })
+        String::from_utf16_lossy(&title[..len])
+    };
+    if title.is_empty() {
+        return None;
     }
+    let process = match known.get(&id) {
+        Some((_, process)) => process.clone(),
+        None => process_name(hwnd),
+    };
+    if known.len() >= 4096 {
+        known.clear(); // windows that vanished without a hide; forget them rather than grow
+    }
+    known.insert(id, (title.clone(), process.clone()));
+    Some(SystemEvent::Window { change, id, title, process })
 }
 
 /// The image name (`code.exe`) of the process that owns `hwnd`.
@@ -209,8 +229,10 @@ impl Events {
         match (plugins.wants("windows"), self.windows.is_some()) {
             (true, false) => {
                 let queue = Arc::clone(&self.queue);
+                let known = Mutex::new(Known::new());
                 self.windows = Some(Subscription::new(move |event| {
-                    if let Some(event) = window_event(event) {
+                    let event = window_event(event, &mut known.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
+                    if let Some(event) = event {
                         queue.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(event);
                     }
                 }));
@@ -289,6 +311,18 @@ mod tests {
         let item = &contributions_of(&both, true)[0];
         assert_eq!((item.plugin.as_str(), item.name.as_str(), item.icon.as_deref(), item.id.as_str(), item.label.as_str()), ("hello", "Hello", Some("sparkles"), "say-hi", "Say hi"));
         assert_eq!(contributions_of(&both, false)[0].shortcut.as_deref(), Some("Ctrl+Alt+H"));
+    }
+
+    #[test]
+    fn only_reported_windows_close_with_what_they_were() {
+        use windows::Win32::UI::WindowsAndMessaging::EVENT_OBJECT_DESTROY;
+        let mut known = Known::new();
+        let closed = Event { event: EVENT_OBJECT_DESTROY, window: 42 };
+        assert_eq!(window_event(closed, &mut known), None, "a child control or an unseen window");
+        known.insert(42, ("Notes".into(), "notepad.exe".into()));
+        let event = SystemEvent::Window { change: WindowChange::Closed, id: 42, title: "Notes".into(), process: "notepad.exe".into() };
+        assert_eq!(window_event(closed, &mut known), Some(event));
+        assert!(known.is_empty());
     }
 
     #[test]
