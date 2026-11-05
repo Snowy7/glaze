@@ -10,6 +10,7 @@ mod a11y;
 pub mod app_window;
 pub mod calendar;
 pub mod chart;
+pub mod compose;
 pub mod controls;
 pub mod focus;
 pub mod geom;
