@@ -1,30 +1,7 @@
 //! Live N4 harness. Run under the desktop lock with isolated APPDATA/LOCALAPPDATA. It uses the
 //! production widget host and services, six instances across the real monitors, plus a warmed
 //! native menu. It never stops the user's mypaper or changes taskbar state.
-#[path = "../bars/mod.rs"]
-mod bars;
-#[allow(
-    dead_code,
-    reason = "this idle fixture links panel types through bars but opens no flyout"
-)]
-#[path = "../flyouts/mod.rs"]
-mod flyouts;
-#[path = "../glass.rs"]
-mod glass;
-#[allow(
-    dead_code,
-    reason = "the harness reuses the production inbox, whose wparam is used by menus and bars"
-)]
-#[path = "../inbox.rs"]
-mod inbox;
-#[allow(dead_code)]
-#[path = "../integrations/mod.rs"]
-mod integrations;
-#[allow(dead_code)]
-#[path = "../overlay_client.rs"]
-mod overlay_client;
-#[path = "mod.rs"]
-mod widgets;
+use mypaper_shell::{bars, inbox, integrations, widgets};
 // Use the product's performance harness math, including wall time normalization.
 #[allow(dead_code)]
 #[path = "../../../../tools/perf/src/cpu.rs"]
@@ -306,6 +283,7 @@ fn main() -> Result<()> {
             }
             if sample.is_none() {
                 println!("N4_BASELINE counters={:?}", host.counters());
+                println!("N4_COST_BASELINE {:?}", host.costs());
             }
             sample = Some((at, busy, ui_busy));
             sample_at = at + Duration::from_secs(60);

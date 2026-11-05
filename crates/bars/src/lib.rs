@@ -14,6 +14,7 @@ pub mod files;
 #[path = "flyouts/config.rs"]
 pub mod flyout_config;
 pub mod flyouts;
+pub mod glyphs;
 pub mod hooks;
 pub mod icon_pack;
 pub mod icons;
@@ -28,6 +29,7 @@ pub mod trash;
 pub mod tray;
 pub mod tray_data;
 pub mod tray_host;
+pub mod tray_menu;
 pub mod vars;
 pub mod wake;
 pub use config::{BarsConfig, Module, ModuleRef, TaskbarMode};

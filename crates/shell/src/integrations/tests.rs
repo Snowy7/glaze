@@ -17,7 +17,7 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
                         app: "Discord".into(),
                         title: "Ada Lovelace".into(),
                         body: "The engine notes are ready for review.".into(),
-                        at: 3,
+                        at: 134_383_428_600_000_000,
                     },
                     notifications::Card {
                         id: 2,
@@ -25,7 +25,7 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
                         app: "Grok Bot".into(),
                         title: "Daily brief is ready".into(),
                         body: "Your routine finished. Open Grok Bot to read it.".into(),
-                        at: 2,
+                        at: 134_383_428_000_000_000,
                     },
                 ],
                 counts: BTreeMap::from([("discord".into(), 1), ("grok".into(), 1)]),

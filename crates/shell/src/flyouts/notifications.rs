@@ -1,5 +1,5 @@
-//! The notification center: Windows' toasts (`UserNotificationListener`, on the
-//! `notifications` lane), grouped by app with the newest group first. A group of several is a
+//! The notification center: Windows' toasts from the shared integration lease,
+//! grouped by app with the newest group first. A group of several is a
 //! stack (its newest card, and how many are under it) until clicked open. Each card dismisses
 //! with its ×, a group with its own, everything with "Clear all". Do not disturb shows its
 //! state and opens its setting (there is no API to change it). The month sits under the list,
@@ -8,7 +8,7 @@
 //! The list is read when it opens and every few seconds while open; nothing runs while closed
 //! (the bar's badge has its own slower count).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -16,6 +16,7 @@ use mypaper_bars::flyouts::index::epoch_ms;
 use mypaper_bars::flyouts::notifications::{Notification, NotificationList};
 use mypaper_bars::flyouts::quick::Dnd;
 use mypaper_bars::system;
+use mypaper_integrations::{Action, Availability, Data, Lease, Provider};
 use mypaper_ui::{HitId, Image, Point, Rect, Role};
 
 use super::calendar::Calendar;
@@ -25,13 +26,18 @@ use super::{Cx, Effect, LIST, Panel, Reply};
 const CLEAR_ALL: HitId = 10;
 const DND: HitId = 11;
 const SETTINGS: HitId = 12;
+const REFRESH: HitId = 13;
+const GRANT: HitId = 14;
+const STUDIO: HitId = 15;
 /// A group's clear button: `GROUP + index`.
 const GROUP: HitId = 500;
-/// A card: `LIST + 2 * index` (the card) and `+ 1` (its dismiss button), in flat list order.
-const CARD: HitId = LIST;
+/// A card: `CARD + 2 * index` (the card) and `+ 1` (its dismiss button), in flat list order.
+// The shared provider permits 512 app groups; reserve their full clear-button range.
+const CARD: HitId = LIST + 1_000;
+const TOGGLE_GROUP: HitId = 20_000;
 
 /// How often the open center reads the list again.
-const POLL: Duration = Duration::from_secs(3);
+const POLL: Duration = Duration::from_secs(4);
 
 /// Toasts of one app, newest first.
 #[derive(Debug, Clone, PartialEq)]
@@ -93,13 +99,20 @@ pub struct Center {
     calendar: Calendar,
     /// The current time for "ago" labels (refreshed with each read).
     now: u64,
+    scroll: usize,
+    lease: Option<Lease>,
+    revision: u64,
+    generation: u64,
+    logos: HashMap<String, Option<String>>,
+    error: Option<String>,
+    availability: Availability,
 }
 
 impl Center {
     pub fn new(cx: &mut Cx) -> Self {
-        cx.lanes
-            .notifications(|lane| Reply::Notifications(lane.list()));
         cx.lanes.quick(|lane| Reply::Quick(lane.read()));
+        let lease = crate::integrations::acquire(Provider::Notifications);
+        let error = lease.as_ref().err().map(ToString::to_string);
         Self {
             list: None,
             groups: Vec::new(),
@@ -108,6 +121,13 @@ impl Center {
             icons: Vec::new(),
             calendar: Calendar::new(cx),
             now: epoch_ms(),
+            scroll: 0,
+            lease: lease.ok(),
+            revision: u64::MAX,
+            generation: crate::integrations::generation(),
+            logos: HashMap::new(),
+            error,
+            availability: Availability::Connecting,
         }
     }
 
@@ -122,7 +142,63 @@ impl Center {
             dnd: Some(Dnd::Off),
             calendar,
             now,
+            scroll: 0,
+            lease: None,
+            revision: 0,
+            generation: crate::integrations::generation(),
+            logos: HashMap::new(),
+            error: None,
+            availability: Availability::Live,
         }
+    }
+
+    #[cfg(test)]
+    pub fn fixture(data: Data) -> Self {
+        let list = match data {
+            Data::Notifications(state) => NotificationList {
+                notifications: state.cards.into_iter().map(card).collect(),
+                error: None,
+            },
+            _ => unreachable!("notification center fixture requires notifications"),
+        };
+        Self::with(
+            list,
+            Calendar::at(
+                windows::Win32::Foundation::SYSTEMTIME {
+                    wYear: 2026,
+                    wMonth: 11,
+                    wDay: 5,
+                    wDayOfWeek: 4,
+                    wHour: 9,
+                    wMinute: 41,
+                    ..Default::default()
+                },
+                Some(0),
+            ),
+            1_793_869_260_000,
+        )
+    }
+
+    fn accept(&mut self, list: NotificationList, cx: &mut Cx) -> bool {
+        let now = epoch_ms();
+        let ages_changed = self.list.as_ref().is_some_and(|old| {
+            old.notifications
+                .iter()
+                .any(|n| ago(n.at, now) != ago(n.at, self.now))
+        });
+        self.now = now;
+        if self.list.as_ref() == Some(&list) {
+            return ages_changed;
+        }
+        self.groups = by_app(&list.notifications);
+        self.icons = self
+            .groups
+            .iter()
+            .map(|g| cx.image(g.icon.as_deref()))
+            .collect();
+        self.list = Some(list);
+        self.scroll = self.scroll.min(self.cards().len().saturating_sub(1));
+        true
     }
 
     /// The cards shown, in order: (group, item) indices.
@@ -142,18 +218,31 @@ impl Center {
     }
 
     fn dismiss(&mut self, ids: Vec<u32>, cx: &mut Cx) {
+        let Some(lease) = &self.lease else { return };
+        if let Err(e) = lease.action(Action::Dismiss(ids.clone())) {
+            self.error = Some(e.to_string());
+            return;
+        }
         if let Some(list) = &mut self.list {
             list.notifications.retain(|n| !ids.contains(&n.id));
-            self.groups = by_app(&list.notifications);
+            let list = list.clone();
+            // Keep images aligned when removing the first app group.
+            self.list = None;
+            self.accept(list, cx);
         }
-        cx.lanes.notifications(move |lane| {
-            for id in ids {
-                if let Err(e) = lane.dismiss(id) {
-                    log::warn!("notifications: dismissing {id}: {e}");
-                }
-            }
-            Reply::Notifications(lane.list())
-        });
+    }
+}
+
+fn card(card: mypaper_integrations::notifications::Card) -> Notification {
+    Notification {
+        id: card.id,
+        app: card.app,
+        aumid: Some(card.app_id),
+        package_family_name: None,
+        icon: None,
+        title: card.title,
+        body: card.body,
+        at: mypaper_bars::flyouts::notifications::epoch_ms(card.at),
     }
 }
 
@@ -173,15 +262,38 @@ impl Panel for Center {
             },
             "Do not disturb",
         )];
+        buttons.push((REFRESH, glyph::REFRESH, "Refresh notifications"));
         if has_any {
             buttons.push((CLEAR_ALL, glyph::CLEAR, "Clear all"));
         }
         kit.header("Notifications", &buttons);
+        if self.lease.is_none() && self.error.is_some() {
+            kit.notice("Enable Windows notifications in Studio to show retained toasts here.");
+            kit.buttons(&[(STUDIO, "Open Studio", false)]);
+        } else if let Some(error) = &self.error {
+            kit.notice(error);
+            kit.buttons(&[
+                (GRANT, "Grant notification access", false),
+                (SETTINGS, "Notification settings", false),
+            ]);
+        } else if let Availability::Stale(error) | Availability::Unavailable(error) =
+            &self.availability
+        {
+            kit.notice(error);
+            kit.buttons(&[
+                (GRANT, "Grant notification access", false),
+                (SETTINGS, "Notification settings", false),
+            ]);
+        }
         // The month takes a fixed band at the bottom; the list gets what is left.
         let month = kit.px(276.0);
         let list_bottom = kit.limit - month;
+        let list_top = kit.y;
         match &self.list {
-            None => kit.notice("…"),
+            None if self.error.is_none() && self.availability == Availability::Connecting => {
+                kit.notice("Loading notifications…")
+            }
+            None => {}
             Some(NotificationList { error: Some(_), .. }) => {
                 kit.notice("Notifications can't be read. Turn on notification access in Settings.");
                 kit.buttons(&[(SETTINGS, "Notification settings", false)]);
@@ -189,7 +301,12 @@ impl Panel for Center {
             Some(_) if !has_any => kit.notice("No new notifications"),
             Some(_) => {
                 let mut group_shown = None;
-                for (n, (g, i)) in self.cards().into_iter().enumerate() {
+                for (n, (g, i)) in self
+                    .cards()
+                    .into_iter()
+                    .enumerate()
+                    .skip(self.scroll.min(self.cards().len().saturating_sub(1)))
+                {
                     if kit.y + kit.px(84.0) > list_bottom {
                         let style = kit.font(12.0, 400);
                         let center = Point::new(kit.left + kit.width() / 2.0, kit.y + kit.px(8.0));
@@ -212,6 +329,18 @@ impl Panel for Center {
                 }
             }
         }
+        let count = self.cards().len();
+        if count > 3 && (self.scroll > 0 || kit.y >= list_bottom - kit.px(90.0)) {
+            let track = (list_bottom - list_top).max(kit.px(30.0));
+            let height = (track * (3.0 / count as f32)).max(kit.px(18.0));
+            let y = list_top
+                + (track - height) * self.scroll.min(count - 1) as f32 / (count - 1) as f32;
+            kit.fill(
+                Rect::new(kit.right + kit.px(6.0), y, kit.px(2.0), height),
+                kit.px(1.0),
+                kit.look.faint(),
+            );
+        }
         kit.separator();
         self.calendar.month(kit, true);
     }
@@ -221,21 +350,60 @@ impl Panel for Center {
             return Effect::Redraw;
         }
         match id {
+            STUDIO => {
+                crate::apps::open_studio();
+                Effect::Close
+            }
+            REFRESH => {
+                if let Some(lease) = &self.lease {
+                    if matches!(self.availability, Availability::Live | Availability::Cached) {
+                        self.error = lease
+                            .action(Action::RefreshNotifications)
+                            .err()
+                            .map(|e| e.to_string());
+                    } else {
+                        lease.retry();
+                    }
+                } else {
+                    let lease = crate::integrations::acquire(Provider::Notifications);
+                    self.error = lease.as_ref().err().map(ToString::to_string);
+                    self.lease = lease.ok();
+                }
+                Effect::Redraw
+            }
+            GRANT => {
+                // WinRT requires the permission request itself on this UI thread and explicit click.
+                match mypaper_integrations::notifications::request_access() {
+                    Ok(operation) => cx.lanes.apps(move |_| Reply::NotificationAccess(
+                        operation.join().map_err(|e| e.to_string()).and_then(|status| {
+                            if status == windows::UI::Notifications::Management::UserNotificationListenerAccessStatus::Allowed {
+                                Ok(())
+                            } else { Err("Windows notification access was not granted".into()) }
+                        })
+                    )),
+                    Err(e) => self.error = Some(e.to_string()),
+                }
+                Effect::Redraw
+            }
+            id if id >= TOGGLE_GROUP => {
+                if let Some(group) = self.groups.get((id - TOGGLE_GROUP) as usize)
+                    && !self.open.remove(&group.key)
+                {
+                    self.open.insert(group.key.clone());
+                }
+                Effect::Redraw
+            }
             DND | SETTINGS => {
                 system::open("ms-settings:notifications".into());
                 Effect::Close
             }
             CLEAR_ALL => {
-                if let Some(list) = &mut self.list {
-                    list.notifications.clear();
-                }
-                self.groups.clear();
-                cx.lanes.notifications(|lane| {
-                    if let Err(e) = lane.clear() {
-                        log::warn!("notifications: clearing: {e}");
-                    }
-                    Reply::Notifications(lane.list())
-                });
+                let ids = self
+                    .groups
+                    .iter()
+                    .flat_map(|g| g.items.iter().map(|n| n.id))
+                    .collect();
+                self.dismiss(ids, cx);
                 Effect::Redraw
             }
             id if (GROUP..CARD).contains(&id) => {
@@ -273,28 +441,73 @@ impl Panel for Center {
     }
 
     fn wheel(&mut self, id: Option<HitId>, delta: i16, _: &mut Cx) -> Effect {
-        // Over the month it pages; the list is short enough to need no scrolling.
+        // The list scrolls independently; paging the month keeps the selected card.
         if id.is_some_and(|id| (100..140).contains(&id)) {
             self.calendar.wheel_page(delta);
+            return Effect::Redraw;
+        }
+        let old = self.scroll;
+        self.scroll = if delta > 0 {
+            self.scroll.saturating_sub(1)
+        } else {
+            (self.scroll + 1).min(self.cards().len().saturating_sub(1))
+        };
+        if old != self.scroll {
+            Effect::Redraw
+        } else {
+            Effect::None
+        }
+    }
+
+    fn swipe(&mut self, id: HitId, _: f32, cx: &mut Cx) -> Effect {
+        if let Some(index) = id.checked_sub(CARD)
+            && let Some(&(g, i)) = self.cards().get((index / 2) as usize)
+        {
+            self.dismiss(vec![self.groups[g].items[i].id], cx);
             return Effect::Redraw;
         }
         Effect::None
     }
 
+    fn key(&mut self, key: u16, _: &mut Cx) -> Option<Effect> {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{VK_NEXT, VK_PRIOR};
+        if key == VK_NEXT.0 || key == VK_PRIOR.0 {
+            self.scroll = if key == VK_PRIOR.0 {
+                self.scroll.saturating_sub(1)
+            } else {
+                (self.scroll + 1).min(self.cards().len().saturating_sub(1))
+            };
+            return Some(Effect::Redraw);
+        }
+        None
+    }
+
     fn reply(&mut self, reply: &Reply, cx: &mut Cx) -> bool {
         match reply {
-            Reply::Notifications(list) => {
-                self.now = epoch_ms();
-                if self.list.as_ref() == Some(list) {
-                    return false;
+            Reply::NotificationIcons(icons) => {
+                for (id, path) in icons {
+                    self.logos.insert(id.clone(), path.clone());
                 }
-                self.groups = by_app(&list.notifications);
-                self.icons = self
-                    .groups
-                    .iter()
-                    .map(|g| cx.image(g.icon.as_deref()))
-                    .collect();
-                self.list = Some(list.clone());
+                if let Some(mut list) = self.list.clone() {
+                    for n in &mut list.notifications {
+                        n.icon = n
+                            .aumid
+                            .as_ref()
+                            .and_then(|id| self.logos.get(id))
+                            .cloned()
+                            .flatten();
+                    }
+                    return self.accept(list, cx);
+                }
+                false
+            }
+            Reply::NotificationAccess(result) => {
+                self.error = result.as_ref().err().cloned();
+                if result.is_ok()
+                    && let Some(lease) = &self.lease
+                {
+                    lease.retry();
+                }
                 true
             }
             Reply::Quick(quick) => {
@@ -306,14 +519,75 @@ impl Panel for Center {
         }
     }
 
+    fn refresh(&mut self, cx: &mut Cx) -> bool {
+        let generation = crate::integrations::generation();
+        if generation != self.generation {
+            self.generation = generation;
+            let lease = crate::integrations::acquire(Provider::Notifications);
+            self.error = lease.as_ref().err().map(ToString::to_string);
+            self.lease = lease.ok();
+            self.revision = u64::MAX;
+            self.list = None;
+            self.groups.clear();
+            self.icons.clear();
+            if self.lease.is_none() {
+                return true;
+            }
+        }
+        let Some(state) = self.lease.as_ref().map(Lease::snapshot) else {
+            return false;
+        };
+        if state.revision == self.revision {
+            return false;
+        }
+        self.revision = state.revision;
+        self.availability = state.availability;
+        self.error = state.action_error;
+        if let Some(Data::Notifications(state)) = state.data {
+            let mut pending = BTreeSet::new();
+            let notifications = state
+                .cards
+                .into_iter()
+                .map(|c| {
+                    let mut n = card(c);
+                    if let Some(id) = &n.aumid {
+                        if let Some(path) = self.logos.get(id) {
+                            n.icon = path.clone();
+                        } else {
+                            pending.insert(id.clone());
+                        }
+                    }
+                    n
+                })
+                .collect();
+            if !pending.is_empty() {
+                let ids: Vec<_> = pending.into_iter().collect();
+                for id in &ids {
+                    self.logos.insert(id.clone(), None);
+                }
+                cx.lanes.notification_icons(ids);
+            }
+            self.accept(
+                NotificationList {
+                    notifications,
+                    error: None,
+                },
+                cx,
+            );
+        }
+        true
+    }
+
     fn tick(&mut self, now: Instant, cx: &mut Cx) -> (bool, Option<Instant>) {
         let (minute, next_minute) = self.calendar.follow_clock(now);
-        if self.list.is_some() {
-            cx.lanes
-                .notifications(|lane| Reply::Notifications(lane.list()));
+        if matches!(self.availability, Availability::Live | Availability::Cached)
+            && let Some(lease) = &self.lease
+        {
+            let _ = lease.action(Action::RefreshNotifications);
         }
+        let ages = self.list.clone().is_some_and(|list| self.accept(list, cx));
         let next = [Some(now + POLL), next_minute].into_iter().flatten().min();
-        (minute, next)
+        (minute || ages, next)
     }
 }
 
@@ -322,17 +596,34 @@ impl Center {
         let height = kit.px(28.0);
         let icon = kit.px(16.0);
         let y = kit.y;
+        kit.hit(
+            TOGGLE_GROUP + g as HitId,
+            Rect::new(kit.left, y, kit.width() - kit.px(35.0), height),
+            Role::Button,
+            &format!("Expand or collapse {}", group.app),
+            true,
+        );
         match self.icons.get(g).cloned().flatten() {
             Some(image) => kit.image(
                 Rect::new(kit.left, y + (height - icon) / 2.0, icon, icon),
                 image,
             ),
-            None => kit.glyph(
-                Point::new(kit.left + icon / 2.0, y + height / 2.0),
-                glyph::BELL,
-                12.0,
-                kit.look.dim(),
-            ),
+            None => {
+                let style = kit.font(12.0, 600);
+                let letter = group
+                    .app
+                    .chars()
+                    .next()
+                    .unwrap_or('?')
+                    .to_uppercase()
+                    .to_string();
+                kit.text_centered(
+                    Point::new(kit.left + icon / 2.0, y + height / 2.0),
+                    &letter,
+                    &style,
+                    kit.look.dim(),
+                );
+            }
         }
         let style = kit.font(12.0, 600);
         let (_, h) = kit.text.measure("Ag", &style);

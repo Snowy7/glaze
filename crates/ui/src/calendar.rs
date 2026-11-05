@@ -146,6 +146,22 @@ impl MonthGrid {
         base: u32,
         font: &TextStyle,
     ) {
+        self.view_with_weekdays(list, rect, today, text, accent, base, font, &WEEKDAYS);
+    }
+
+    /// Same calendar with Sunday-first localized weekday names supplied by the host.
+    #[allow(clippy::too_many_arguments)]
+    pub fn view_with_weekdays(
+        &self,
+        list: &mut DisplayList,
+        rect: Rect,
+        today: Date,
+        text: Rgba,
+        accent: Rgba,
+        base: u32,
+        font: &TextStyle,
+        weekdays: &[&str; 7],
+    ) {
         let width = rect.width() / 7.0;
         let rows = self.cells.len() / 7;
         let height = rect.height() / (rows + 1) as f32;
@@ -153,7 +169,7 @@ impl MonthGrid {
             label(
                 list,
                 Rect::new(rect.left + col as f32 * width, rect.top, width, height),
-                WEEKDAYS[(col + self.week_start as usize) % 7],
+                weekdays[(col + self.week_start as usize) % 7],
                 font,
                 text.with_alpha(0.55),
             );

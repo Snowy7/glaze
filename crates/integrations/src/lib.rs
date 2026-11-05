@@ -89,10 +89,17 @@ impl Default for Snapshot {
 #[derive(Clone, Debug)]
 pub enum Action {
     Dismiss(Vec<u32>),
+    /// Refresh a cached toast snapshot while its center is visible.
+    RefreshNotifications,
     Media(media::Action),
     Obs(obs::Action),
-    Docker { id: String, start: bool },
-    Tailscale { connected: bool },
+    Docker {
+        id: String,
+        start: bool,
+    },
+    Tailscale {
+        connected: bool,
+    },
 }
 
 #[derive(Default)]
@@ -291,8 +298,10 @@ impl Lease {
         anyhow::ensure!(
             matches!(
                 (self.provider, &action),
-                (Provider::Notifications, Action::Dismiss(_))
-                    | (Provider::Media, Action::Media(_))
+                (
+                    Provider::Notifications,
+                    Action::Dismiss(_) | Action::RefreshNotifications
+                ) | (Provider::Media, Action::Media(_))
                     | (Provider::Obs, Action::Obs(_))
                     | (Provider::Docker, Action::Docker { .. })
                     | (Provider::Tailscale, Action::Tailscale { .. })

@@ -20,14 +20,10 @@ mod language;
 mod launcher;
 pub mod look;
 mod mixer;
-#[cfg(test)]
-#[allow(
-    dead_code,
-    reason = "legacy notification grouping/calendar fixtures only; production uses integration leases"
-)]
-mod notifications;
+pub(crate) mod notifications;
 mod power;
 mod quick;
+mod settings_pages;
 #[cfg(test)]
 mod tests;
 mod tray;
@@ -45,7 +41,6 @@ use mypaper_bars::actions::Topic;
 use mypaper_bars::audio::Audio;
 use mypaper_bars::flyouts::index::Builder;
 use mypaper_bars::flyouts::mixer::MixerLane;
-use mypaper_bars::flyouts::notifications::NotificationsLane;
 use mypaper_bars::flyouts::quick::QuickLane;
 use mypaper_bars::flyouts::wifi::WifiLane;
 use mypaper_bars::flyouts::winkey::{self, WinKey};
@@ -126,6 +121,14 @@ pub enum Effect {
     Close,
     /// Another flyout replaces it (quick settings' chevrons).
     Switch(Kind),
+    Menu,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PanelCommand {
+    PinLauncher(mypaper_bars::config::Pinned),
+    UnpinLauncher(String),
+    PinDock(mypaper_bars::config::Pinned),
 }
 
 /// A provider's answer, from a lane.
@@ -133,9 +136,11 @@ pub enum Reply {
     Quick(mypaper_bars::flyouts::quick::Quick),
     Mixer(mypaper_bars::flyouts::mixer::MixerState),
     Wifi(mypaper_bars::flyouts::wifi::WifiState),
-    #[cfg(test)]
-    Notifications(mypaper_bars::flyouts::notifications::NotificationList),
+    NotificationIcons(Vec<(String, Option<String>)>),
+    NotificationAccess(Result<(), String>),
     Apps(Vec<mypaper_bars::flyouts::index::App>),
+    Files(Vec<mypaper_bars::flyouts::index::RecentFile>),
+    Clipboard(mypaper_bars::flyouts::clipboard::History),
     /// An action failed; the panel shows why.
     Failed(String),
     /// An action finished; the panel reads its state again.
@@ -144,6 +149,21 @@ pub enum Reply {
 
 /// One panel's behaviour; the controller owns the window, motion and input routing.
 pub trait Panel {
+    fn swipe(&mut self, _id: HitId, _dx: f32, _cx: &mut Cx) -> Effect {
+        Effect::None
+    }
+    fn menu(&mut self) -> Vec<mypaper_ui::Entry<PanelCommand>> {
+        vec![]
+    }
+    fn command(&mut self, _command: PanelCommand, _cx: &mut Cx) -> Effect {
+        Effect::None
+    }
+    fn middle(&mut self, _id: HitId, _cx: &mut Cx) -> Effect {
+        Effect::None
+    }
+    fn double(&mut self, _id: HitId, _cx: &mut Cx) -> Effect {
+        Effect::None
+    }
     /// Width in design pixels.
     fn width(&self) -> f32;
     /// Lays out the content into `kit` (its body is added by the controller).
@@ -249,8 +269,8 @@ pub struct Lanes {
     quick: Option<Lane<QuickLane>>,
     mixer: Option<Lane<MixerLane>>,
     wifi: Option<Lane<WifiLane>>,
-    notifications: Option<Lane<NotificationsLane>>,
     apps: Option<Lane<Builder>>,
+    clipboard: Option<Lane<mypaper_bars::flyouts::clipboard::ClipboardLane>>,
     /// The default output's volume (quick settings and the mixer), with change notifications.
     pub audio: Option<Audio>,
 }
@@ -312,23 +332,6 @@ impl Lanes {
         );
     }
 
-    #[cfg(test)]
-    pub fn notifications(
-        &mut self,
-        job: impl FnOnce(&mut NotificationsLane) -> Reply + Send + 'static,
-    ) {
-        let icons = self.icons.clone();
-        let init = move || NotificationsLane::new(icons);
-        Self::run(
-            &mut self.notifications,
-            "notifications",
-            init,
-            &self.replies,
-            &self.waker,
-            job,
-        );
-    }
-
     pub fn apps(&mut self, job: impl FnOnce(&mut Builder) -> Reply + Send + 'static) {
         let icons = self.icons.clone();
         let init = move || Builder::new(icons);
@@ -342,7 +345,37 @@ impl Lanes {
         );
     }
 
+    /// Resolve toast logos on the existing STA icon lane, without another toast subscription.
+    pub fn notification_icons(&mut self, ids: Vec<String>) {
+        let dir = self.icons.clone();
+        self.apps(move |_| {
+            let resolver = mypaper_bars::icons::AppIconResolver::new();
+            Reply::NotificationIcons(
+                ids.into_iter()
+                    .map(|id| {
+                        let path = resolver.icon(&id, &dir);
+                        (id, path)
+                    })
+                    .collect(),
+            )
+        });
+    }
+
     /// The default output's volume, watched while a flyout shows it.
+    pub fn clipboard(
+        &mut self,
+        job: impl FnOnce(&mut mypaper_bars::flyouts::clipboard::ClipboardLane) -> Reply + Send + 'static,
+    ) {
+        Self::run(
+            &mut self.clipboard,
+            "clipboard",
+            mypaper_bars::flyouts::clipboard::ClipboardLane::new,
+            &self.replies,
+            &self.waker,
+            job,
+        );
+    }
+
     pub fn audio(&mut self) -> Option<&Audio> {
         if self.audio.is_none() {
             self.audio = Audio::new(self.waker.clone());
@@ -355,8 +388,8 @@ impl Lanes {
         self.quick = None;
         self.mixer = None;
         self.wifi = None;
-        self.notifications = None;
         self.apps = None;
+        self.clipboard = None;
         self.audio = None;
     }
 }
@@ -386,6 +419,7 @@ struct Open {
     focus: Option<HitId>,
     /// The slider being dragged.
     drag: Option<HitId>,
+    swipe: Option<(HitId, mypaper_ui::Point)>,
     /// The hit being activated, in screen px (for `Cx::hit`).
     hit: Rect,
     /// Shown yet, and how often it was drawn: in all, and once its motion had settled.
@@ -395,6 +429,7 @@ struct Open {
     /// When the panel asked to be ticked.
     due: Option<Instant>,
     dirty: bool,
+    return_to: isize,
 }
 
 /// The flyouts: one reused popup window and the panel shown in it.
@@ -411,6 +446,9 @@ pub struct Flyouts {
     winkey: Option<WinKey>,
     /// The foreground window last seen, to follow fullscreen apps for the Windows key.
     foreground: HWND,
+    menu: Option<mypaper_ui::Menu<PanelCommand>>,
+    index_due: Option<Instant>,
+    _index_watch: Option<notify::RecommendedWatcher>,
 }
 
 impl Flyouts {
@@ -425,8 +463,9 @@ impl Flyouts {
         let (replies_tx, replies) = mpsc::channel();
         let look = Look::load(&ui.text);
         mypaper_ui::glass::set_style(look.glass);
+        mypaper_ui::menu::set_style(Some(look.menu_tokens()));
         let mut flyouts = Self {
-            surface: Surface::new(
+            surface: Surface::new_deferred_accessibility(
                 SurfaceKind::Popup { activate: true },
                 "Flyout",
                 Role::Dialog,
@@ -439,8 +478,8 @@ impl Flyouts {
                 quick: None,
                 mixer: None,
                 wifi: None,
-                notifications: None,
                 apps: None,
+                clipboard: None,
                 audio: None,
             },
             look,
@@ -451,8 +490,25 @@ impl Flyouts {
             release_due: None,
             winkey: None,
             foreground: HWND::default(),
+            menu: Some(mypaper_ui::Menu::new("App commands")?),
+            index_due: Some(Instant::now() + Duration::from_secs(8)),
+            _index_watch: None,
         };
         flyouts.follow_win_key(main);
+        use notify::Watcher;
+        let waker = flyouts.lanes.waker.clone();
+        if let Ok(mut watcher) =
+            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+                if event.is_ok_and(|e| !matches!(e.kind, notify::EventKind::Access(_))) {
+                    waker.send(Msg::Flyout(Done::Changed(Watched::Apps)));
+                }
+            })
+        {
+            for dir in providers::index::start_menu_dirs() {
+                let _ = watcher.watch(&dir, notify::RecursiveMode::Recursive);
+            }
+            flyouts._index_watch = Some(watcher);
+        }
         Ok(flyouts)
     }
 
@@ -463,17 +519,22 @@ impl Flyouts {
 
     /// The next deadline (a panel's tick, the lanes' release), for the loop's wait.
     pub fn deadline(&self) -> Option<Instant> {
-        [self.open.as_ref().and_then(|o| o.due), self.release_due]
-            .into_iter()
-            .flatten()
-            .min()
+        [
+            self.open.as_ref().and_then(|o| o.due),
+            self.release_due,
+            self.index_due,
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     /// [`deadline`](Self::deadline) as the loop's wait timeout in ms.
     pub fn timeout_ms(&self) -> u32 {
         self.deadline().map_or(u32::MAX, |at| {
             at.saturating_duration_since(Instant::now())
-                .as_millis()
+                .as_nanos()
+                .div_ceil(1_000_000)
                 .min(u128::from(u32::MAX - 1)) as u32
         })
     }
@@ -482,6 +543,7 @@ impl Flyouts {
     pub fn config_changed(&mut self, ui: &Ui, main: HWND) {
         self.look = Look::load(&ui.text);
         mypaper_ui::glass::set_style(self.look.glass);
+        mypaper_ui::menu::set_style(Some(self.look.menu_tokens()));
         self.follow_win_key(main);
         if let Some(open) = &mut self.open {
             open.dirty = true;
@@ -504,7 +566,7 @@ impl Flyouts {
 
     /// Whether `id` is the flyout's window.
     pub fn owns(&self, id: SurfaceId) -> bool {
-        self.surface.id() == id
+        self.surface.id() == id || self.menu.as_ref().is_some_and(|m| m.owns(id))
     }
 
     /// Opens queued requests, takes provider results and worker news, ticks the panel and
@@ -515,9 +577,30 @@ impl Flyouts {
             self.toggle(ui, bars, request);
         }
         self.follow_fullscreen();
+        WinKey::set_enabled(self.winkey.is_some() && bars.can_open_flyouts());
+        if !bars.can_open_flyouts() && self.open.is_some() {
+            self.close();
+        }
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
-                Msg::Flyout(Done::WinKey(_, target)) => self.win_key(ui, bars, target),
+                Msg::Flyout(Done::Changed(Watched::Apps)) => {
+                    self.index_due = Some(Instant::now() + Duration::from_secs(3))
+                }
+                Msg::Flyout(Done::WinKey(at, target)) => {
+                    if at.elapsed() <= Duration::from_millis(500) && bars.can_open_flyouts() {
+                        self.win_key(ui, bars, target);
+                    } else {
+                        match target {
+                            winkey::Target::Launcher => mypaper_bars::system::start_menu(),
+                            winkey::Target::Quick => mypaper_bars::system::action_center(
+                                mypaper_bars::actions::Panel::Quick,
+                            ),
+                            winkey::Target::Notifications => mypaper_bars::system::action_center(
+                                mypaper_bars::actions::Panel::Notifications,
+                            ),
+                        }
+                    }
+                }
                 Msg::Flyout(Done::Changed(Watched::Core(Topic::Apps))) => {}
                 msg => self.with_panel(ui, bars, |panel, cx| {
                     if panel.changed(&msg, cx) {
@@ -529,6 +612,17 @@ impl Flyouts {
             }
         }
         while let Ok(reply) = self.replies.try_recv() {
+            if let Reply::Apps(apps) = &reply {
+                if let Ok(path) = mypaper_bars::files::local("apps.json") {
+                    let _ = mypaper_bars::files::write_atomic(
+                        &path,
+                        providers::index::cache_json(apps).as_bytes(),
+                    );
+                }
+                if self.open.is_none() {
+                    self.release_due = Some(Instant::now() + LINGER);
+                }
+            }
             self.with_panel(ui, bars, |panel, cx| {
                 if panel.reply(&reply, cx) {
                     Effect::Redraw
@@ -545,6 +639,10 @@ impl Flyouts {
             }
         });
         let now = Instant::now();
+        if self.index_due.is_some_and(|at| at <= now) {
+            self.index_due = None;
+            self.lanes.apps(|builder| Reply::Apps(builder.build()));
+        }
         if self
             .open
             .as_ref()
@@ -607,6 +705,24 @@ impl Flyouts {
 
     fn apply(&mut self, ui: &mut Ui, bars: &mut Bars, effect: Effect) {
         match effect {
+            Effect::Menu => {
+                if let Some(open) = &mut self.open {
+                    let entries = open.panel.menu();
+                    let point = (open.hit.left as i32, open.hit.bottom as i32);
+                    if self.menu.is_none() {
+                        self.menu = mypaper_ui::Menu::new("App commands").ok();
+                    }
+                    if let Some(menu) = &mut self.menu {
+                        let _ = menu.open(
+                            ui,
+                            entries,
+                            point,
+                            mypaper_ui::screen_at(point.0, point.1),
+                            &mypaper_ui::Tokens::default(),
+                        );
+                    }
+                }
+            }
             Effect::None => {}
             Effect::Redraw => {
                 if let Some(open) = &mut self.open {
@@ -694,6 +810,7 @@ impl Flyouts {
     /// Opens `request`'s panel: drawn, placed and shown at once; its data follows.
     fn show(&mut self, ui: &mut Ui, bars: &mut Bars, request: Request) {
         let started = Instant::now();
+        let return_to = bars.external_foreground();
         self.hide();
         self.release_due = None;
         let scale = request.monitor.dpi.max(96) as f32 / 96.0;
@@ -718,14 +835,7 @@ impl Flyouts {
             Kind::Power => Box::new(power::Power::new(&mut cx)),
             Kind::TrayOverflow => Box::new(tray::Overflow::new(&mut cx)),
             Kind::Language => Box::new(language::Language::new(&mut cx)),
-            Kind::Launcher => match launcher::Launcher::new(&mut cx, self.surface.hwnd()) {
-                Ok(launcher) => Box::new(launcher),
-                Err(e) => {
-                    log::warn!("launcher: {e:#}; opening Start");
-                    mypaper_bars::system::start_menu();
-                    return;
-                }
-            },
+            Kind::Launcher => Box::new(launcher::Launcher::new(&mut cx, self.surface.hwnd())),
         };
         let center_y = request.anchor.top + request.anchor.height() / 2.0;
         let monitor_mid = request.monitor.rect.y as f32 + request.monitor.rect.height as f32 / 2.0;
@@ -743,12 +853,14 @@ impl Flyouts {
             pressed: None,
             focus: None,
             drag: None,
+            swipe: None,
             hit: request.anchor,
             shown: false,
             draws: 0,
             settled_draws: 0,
             due: None,
             dirty: true,
+            return_to,
         });
         if let Some(field) = self.open.as_ref().and_then(|o| o.panel.field()) {
             self.surface.set_text_field(Some(field.clone()));
@@ -788,18 +900,33 @@ impl Flyouts {
                 Effect::None
             }
         });
+        if let Some(field) = self.open.as_ref().and_then(|o| o.panel.field()) {
+            self.surface.set_text_field(Some(field.clone()));
+            field.focus();
+        }
         self.schedule_tick(ui, bars, Instant::now());
     }
 
     /// Closes the open flyout; its providers linger a few seconds for a quick reopen.
     pub fn close(&mut self) {
         if self.open.is_some() {
+            // Hand focus back only when we still own it; outside clicks keep their own target.
+            // SAFETY: read-only foreground query.
+            let restore = (unsafe { GetForegroundWindow() } == self.surface.hwnd())
+                .then(|| self.open.as_ref().unwrap().return_to)
+                .filter(|w| *w != 0);
             self.hide();
+            if let Some(window) = restore {
+                mypaper_bars::system::activate(mypaper_bars::system::hwnd(window));
+            }
             self.release_due = Some(Instant::now() + LINGER);
         }
     }
 
     fn hide(&mut self) {
+        if let Some(menu) = &mut self.menu {
+            menu.close();
+        }
         let Some(open) = self.open.take() else { return };
         log::info!(
             "flyout {:?} closed: drawn {} times, {} after its motion settled",
@@ -888,6 +1015,17 @@ impl Flyouts {
 
     /// Input for the flyout's window.
     pub fn event(&mut self, ui: &mut Ui, bars: &mut Bars, id: SurfaceId, event: &Event) {
+        if let Some(menu) = &mut self.menu
+            && menu.owns(id)
+        {
+            if let Some(outcome) = menu.handle(ui, id, event) {
+                if let mypaper_ui::Outcome::Chosen(command) = outcome {
+                    self.with_panel(ui, bars, |panel, cx| panel.command(command, cx));
+                }
+                self.surface.take_focus();
+            }
+            return;
+        }
         if !self.owns(id) || self.open.is_none() {
             return;
         }
@@ -927,6 +1065,7 @@ impl Flyouts {
                 let Some(hit) = hit else { return };
                 if let Some(open) = &mut self.open {
                     open.pressed = Some(hit.id);
+                    open.swipe = Some((hit.id, p.at));
                     open.focus = None;
                     open.dirty = true;
                 }
@@ -941,11 +1080,17 @@ impl Flyouts {
                             panel.slide(hit.id, value, false, cx)
                         });
                     }
+                } else if hit.role == Role::Button {
+                    // SAFETY: keeps a horizontal swipe's release even beyond the card/window.
+                    unsafe { SetCapture(self.surface.hwnd()) };
                 }
             }
             Event::Release(p, Button::Left) => {
                 let Some(open) = &mut self.open else { return };
                 let pressed = open.pressed.take();
+                let swipe = open.swipe.take();
+                // SAFETY: this thread owns any capture started by a card or slider.
+                let _ = unsafe { ReleaseCapture() };
                 open.dirty = true;
                 if let Some(drag) = open.drag.take() {
                     // SAFETY: releasing our own capture.
@@ -953,6 +1098,14 @@ impl Flyouts {
                     if let Some(value) = self.slider_value(drag, p.at.x) {
                         self.with_panel(ui, bars, |panel, cx| panel.slide(drag, value, true, cx));
                     }
+                    return;
+                }
+                if let Some((id, start)) = swipe.filter(|(_, start)| {
+                    (p.at.x - start.x).abs() > 70.0 * open.scale
+                        && (p.at.y - start.y).abs() < 50.0 * open.scale
+                }) {
+                    let dx = p.at.x - start.x;
+                    self.with_panel(ui, bars, |panel, cx| panel.swipe(id, dx, cx));
                     return;
                 }
                 let hit = self
@@ -976,6 +1129,29 @@ impl Flyouts {
                 if let Some(id) = hit {
                     self.target(id);
                     self.with_panel(ui, bars, |panel, cx| panel.context(id, cx));
+                }
+            }
+            Event::Release(p, Button::Middle) | Event::DoubleClick(p, Button::Left) => {
+                if matches!(event, Event::DoubleClick(..))
+                    && let Some(open) = &mut self.open
+                {
+                    open.pressed = None;
+                }
+                if let Some(hit) = self
+                    .surface
+                    .shown()
+                    .hit_at(p.at)
+                    .filter(|h| h.enabled)
+                    .map(|h| h.id)
+                {
+                    self.target(hit);
+                    self.with_panel(ui, bars, |panel, cx| {
+                        if matches!(event, Event::DoubleClick(..)) {
+                            panel.double(hit, cx)
+                        } else {
+                            panel.middle(hit, cx)
+                        }
+                    });
                 }
             }
             Event::CaptureLost => {
@@ -1016,9 +1192,23 @@ impl Flyouts {
                     open.dirty = true;
                 }
             }
-            Event::TextChanged => self.with_panel(ui, bars, |panel, cx| panel.text_changed(cx)),
-            Event::TextSubmit => self.with_panel(ui, bars, |panel, cx| panel.submit(cx)),
-            Event::Deactivated => self.close(),
+            Event::TextChanged => {
+                if let Some(open) = &mut self.open {
+                    open.focus = None;
+                }
+                self.with_panel(ui, bars, |panel, cx| panel.text_changed(cx));
+            }
+            Event::TextSubmit => {
+                if let Some(hit) = self.open.as_ref().and_then(|o| o.focus) {
+                    self.target(hit);
+                    self.with_panel(ui, bars, |panel, cx| panel.activate(hit, cx));
+                } else {
+                    self.with_panel(ui, bars, |panel, cx| panel.submit(cx));
+                }
+            }
+            Event::Deactivated if !self.menu.as_ref().is_some_and(mypaper_ui::Menu::is_open) => {
+                self.close()
+            }
             Event::DpiChanged(_) => self.close(),
             _ => {}
         }
@@ -1031,6 +1221,9 @@ impl Flyouts {
             handled.unwrap_or(Effect::None)
         });
         if handled.is_some() {
+            if let Some(open) = &mut self.open {
+                open.focus = None;
+            }
             return;
         }
         let Some(open) = &mut self.open else { return };

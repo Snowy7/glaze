@@ -28,6 +28,8 @@ pub struct Mixer {
     /// Session icons, decoded.
     icons: Vec<Option<std::sync::Arc<mypaper_ui::Image>>>,
     error: Option<String>,
+    dragging: bool,
+    pending: Option<MixerState>,
 }
 
 impl Mixer {
@@ -42,6 +44,8 @@ impl Mixer {
             switchable,
             icons: Vec::new(),
             error: None,
+            dragging: false,
+            pending: None,
         }
     }
 
@@ -53,6 +57,8 @@ impl Mixer {
             state: Some(state),
             volume,
             error: None,
+            dragging: false,
+            pending: None,
         }
     }
 
@@ -212,7 +218,11 @@ impl Panel for Mixer {
         }
     }
 
-    fn slide(&mut self, id: HitId, value: f32, _: bool, cx: &mut Cx) -> Effect {
+    fn slide(&mut self, id: HitId, value: f32, done: bool, cx: &mut Cx) -> Effect {
+        self.dragging = !done;
+        if done && self.pending.take().is_some() {
+            self.reread(cx);
+        }
         if id == MASTER {
             let unmute = self.volume.is_some_and(|v| v.muted).then_some(false);
             self.volume = cx
@@ -240,6 +250,10 @@ impl Panel for Mixer {
     fn reply(&mut self, reply: &Reply, cx: &mut Cx) -> bool {
         match reply {
             Reply::Mixer(state) => {
+                if self.dragging {
+                    self.pending = Some(state.clone());
+                    return false;
+                }
                 self.icons = state
                     .sessions
                     .iter()

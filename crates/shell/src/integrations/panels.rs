@@ -395,71 +395,8 @@ impl Panel for Integration {
     }
 }
 
-/// The existing calendar stays underneath the event-driven notification list.
-pub struct NotificationCenter {
-    notifications: Integration,
-    calendar: crate::flyouts::calendar::Calendar,
-}
-impl NotificationCenter {
-    pub fn new(cx: &mut Cx) -> Self {
-        Self {
-            notifications: Integration::new(Provider::Notifications),
-            calendar: crate::flyouts::calendar::Calendar::new(cx),
-        }
-    }
-    #[cfg(test)]
-    pub fn fixture(data: Data) -> Self {
-        Self {
-            notifications: Integration::fixture(Provider::Notifications, data),
-            calendar: crate::flyouts::calendar::Calendar::at(
-                windows::Win32::Foundation::SYSTEMTIME {
-                    wYear: 2026,
-                    wMonth: 11,
-                    wDay: 5,
-                    wDayOfWeek: 4,
-                    wHour: 9,
-                    wMinute: 41,
-                    ..Default::default()
-                },
-                Some(0),
-            ),
-        }
-    }
-}
-impl Panel for NotificationCenter {
-    fn width(&self) -> f32 {
-        self.notifications.width()
-    }
-    fn view(&self, kit: &mut Kit) {
-        let limit = kit.limit;
-        kit.limit = (limit - kit.px(276.0)).max(kit.px(160.0));
-        self.notifications.view(kit);
-        kit.limit = limit;
-        kit.separator();
-        self.calendar.month(kit, true);
-    }
-    fn activate(&mut self, id: HitId, cx: &mut Cx) -> Effect {
-        if self.calendar.page(id) {
-            Effect::Redraw
-        } else {
-            self.notifications.activate(id, cx)
-        }
-    }
-    fn refresh(&mut self, cx: &mut Cx) -> bool {
-        self.notifications.refresh(cx)
-    }
-    fn wheel(&mut self, id: Option<HitId>, delta: i16, cx: &mut Cx) -> Effect {
-        if id.is_some_and(|id| (100..140).contains(&id)) {
-            self.calendar.wheel_page(delta);
-            Effect::Redraw
-        } else {
-            self.notifications.wheel(id, delta, cx)
-        }
-    }
-    fn tick(&mut self, now: std::time::Instant, _: &mut Cx) -> (bool, Option<std::time::Instant>) {
-        self.calendar.follow_clock(now)
-    }
-}
+/// The grouped center shares its notification lease with badges and app actions.
+pub type NotificationCenter = crate::flyouts::notifications::Center;
 
 pub struct AppActions {
     app_id: String,

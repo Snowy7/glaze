@@ -199,7 +199,7 @@ impl Services {
             self.clock_due = self.topics.contains(&Topic::Clock).then_some(now);
         }
         let tray = self.topics.contains(&Topic::Tray);
-        self.tray_host.set_active(tray && host);
+        self.tray_host.set_active(host);
         self.tray.set_active(tray && !host);
         let mut custom = BTreeMap::new();
         if self.topics.contains(&Topic::Custom) {
