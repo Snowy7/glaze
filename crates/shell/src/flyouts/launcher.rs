@@ -450,9 +450,6 @@ impl Launcher {
         let Some(app) = self.shown().get(index).map(|a| (*a).clone()) else {
             return Effect::None;
         };
-        if crate::integrations::launcher_action(&app.path) {
-            return Effect::Switch(super::Kind::RoutineResult);
-        }
         system::open(app.path.clone());
         self.history.record(&app.id, &app.path, index::epoch_ms());
         if let Some(path) = &self.history_path {
