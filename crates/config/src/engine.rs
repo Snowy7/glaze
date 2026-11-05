@@ -3,12 +3,16 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+/// Which GPU the engine renders on.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum GpuPreference {
-    #[default]
+    /// The low-power GPU.
     Integrated,
+    /// The discrete GPU.
     HighPerformance,
+    /// The GPU that drives the screens (docs/glass.md, GPU default).
+    #[default]
     Auto,
 }
 
@@ -73,11 +77,11 @@ impl EngineConfig {
 mod tests {
     use super::*;
     #[test]
-    fn integrated_defaults_and_per_wallpaper_precedence_are_explicit() {
+    fn auto_defaults_and_per_wallpaper_precedence_are_explicit() {
         let mut global = EngineConfig::default();
         assert_eq!(
             global.resolve("rain-city", RenderOptions::default()).gpu,
-            GpuPreference::Integrated
+            GpuPreference::Auto
         );
         global.fps = Some(60);
         let theme = RenderOptions {

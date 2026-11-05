@@ -49,8 +49,7 @@ impl Opening {
     pub fn start(preference: GpuPreference) -> Self {
         Self(std::thread::spawn(move || {
             let instance = instance();
-            let adapter =
-                pollster::block_on(instance.request_adapter(&adapter_options(None, preference)))?;
+            let adapter = pick_adapter(&instance, preference)?;
             let (device, queue) = open_device(&adapter, crate::timing::requested())?;
             Ok(Opened {
                 instance,
@@ -69,7 +68,39 @@ impl Opening {
     }
 }
 
-/// Integrated is the default on every machine; high-performance/auto require user settings.
+/// The adapter for `preference`. `Auto`, the default, renders on the adapter that drives the
+/// screens (`display_gpu`): the RTX on a desktop with monitors on it, the iGPU on a laptop whose
+/// panel hangs off the iGPU. A frame drawn elsewhere is copied across to be shown, and liquid
+/// glass costs 2.5-2.9 ms per screen on the AMD iGPU against 0.1 ms on the RTX
+/// (docs/glass.md). Integrated and high-performance pick by power class, as Windows does.
+fn pick_adapter(instance: &wgpu::Instance, preference: GpuPreference) -> Result<wgpu::Adapter> {
+    if preference == GpuPreference::Auto
+        && let Some(display) = mypaper_desktop::display_gpu::display_adapter()
+    {
+        let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::DX12));
+        if let Some(adapter) = adapters.into_iter().find(|a| luid(a) == Some(display.luid)) {
+            return Ok(adapter);
+        }
+        log::warn!("GPU: {} drives the screens but wgpu can't use it", display.name);
+    }
+    Ok(pollster::block_on(
+        instance.request_adapter(&adapter_options(None, preference)),
+    )?)
+}
+
+/// The DXGI adapter LUID behind a wgpu adapter.
+fn luid(adapter: &wgpu::Adapter) -> Option<windows::Win32::Foundation::LUID> {
+    use windows::Win32::Graphics::Dxgi::IDXGIAdapter1;
+    use windows::core::Interface;
+    // SAFETY: reads the description of the live DXGI adapter behind wgpu's.
+    unsafe {
+        let hal = adapter.as_hal::<wgpu::hal::api::Dx12>()?;
+        let desc = hal.as_raw().cast::<IDXGIAdapter1>().ok()?.GetDesc1().ok()?;
+        Some(desc.AdapterLuid)
+    }
+}
+
+/// Windows' own choice by power class; `Auto` falls back to wgpu's first adapter.
 fn adapter_options<'a, 'w>(
     surface: Option<&'a wgpu::Surface<'w>>,
     preference: GpuPreference,

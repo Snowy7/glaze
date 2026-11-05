@@ -7,6 +7,7 @@ mod cover;
 pub mod desktop_hit;
 pub mod desktop_view;
 pub mod desktop_wallpaper;
+pub mod display_gpu;
 mod explorer;
 mod fullscreen;
 pub mod hold;
