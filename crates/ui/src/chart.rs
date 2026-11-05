@@ -180,6 +180,9 @@ fn draw_limit_bar(f: &mut Frame<'_>, rect: Rect, bar: &LimitBar<'_>, compact: bo
             bar.fill,
         );
     }
+    if compact {
+        pace_marker(f, rect, bar.pace, quiet);
+    }
     let pad = f.px(if compact { 6.0 } else { 8.0 });
     let mut cursor = rect.left + pad;
     if let Some(badge) = bar.badge {
@@ -230,7 +233,13 @@ fn draw_limit_bar(f: &mut Frame<'_>, rect: Rect, bar: &LimitBar<'_>, compact: bo
             Align::Start,
         );
     }
-    if let Some(pace) = bar.pace {
+    if !compact {
+        pace_marker(f, rect, bar.pace, quiet);
+    }
+}
+
+fn pace_marker(f: &mut Frame<'_>, rect: Rect, pace: Option<f32>, quiet: Rgba) {
+    if let Some(pace) = pace {
         let x = (rect.left + rect.width() * pace.clamp(0.0, 1.0)).round();
         f.fill(
             Rect::new(x - f.px(1.5), rect.top - f.px(2.0), f.px(3.0), rect.height() + f.px(4.0)),
@@ -255,13 +264,16 @@ mod tests {
                 let mut f = Frame::new(&mut ui.text, &theme, scale, &input);
                 let rect = Rect::new(0.0, 0.0, width * scale, 30.0 * scale);
                 compact_limit_bar(&mut f, rect, &LimitBar {
-                    left: 0.57, pace: None, fill: theme.color.accent,
+                    left: 0.57, pace: Some(0.3), fill: theme.color.accent,
                     badge: Some("ON"), label: Some("57%"), reset: Some("4d 1h"),
                 });
                 let text: Vec<_> = f.list.ops.iter().filter_map(|op| match op {
                     Op::Text { text, rect, .. } => Some((text.as_ref(), *rect)),
                     _ => None,
                 }).collect();
+                let marker = f.list.ops.iter().position(|op| matches!(op, Op::Fill { rect: r, .. } if r.top < rect.top && r.bottom > rect.bottom)).unwrap();
+                let first_text = f.list.ops.iter().position(|op| matches!(op, Op::Text { .. })).unwrap();
+                assert!(marker < first_text, "pace markers must stay behind account text");
                 for expected in ["ON", "57%"] {
                     assert!(text.iter().any(|(text, _)| *text == expected), "{expected}: width {width}, scale {scale}: {text:?}");
                 }
