@@ -181,6 +181,13 @@ pub fn intercept(app: &mut App, path: &str, value: Option<serde_json::Value>) ->
         "/add_args_preset" => {
             app.texts.insert(FieldId::AddArgs, text);
         }
+        p if p.starts_with("/module_args/") => {
+            // A custom module's arguments, typed as one line.
+            let module = p.trim_start_matches("/module_args/");
+            let args = crate::library::split_args(&text).unwrap_or_default();
+            let value = (!args.is_empty()).then(|| serde_json::json!(args));
+            app.apply("Arguments", vec![crate::docs::Op { doc: DocId::Bars, path: format!("/modules/{module}/args"), value }]);
+        }
         p if p.starts_with("/app_args/") => {
             let id = p.trim_start_matches("/app_args/").replace("~1", "/").replace("~0", "~");
             if let Some(w) = app.library.items.iter().find(|w| w.id == id).cloned() {

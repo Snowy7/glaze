@@ -476,7 +476,7 @@ fn module(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, slot: &Slot)
     }
     if crate::ui::more(app, b, col, Place::Bars(Some(slot.bar)), "Icon and look", "") {
         section(b, col, "", |b, c| {
-            for (path, name, range) in [("style/padding", "Padding", (0.0, 24.0)), ("style/radius", "Corners", (0.0, 16.0)), ("style/size", "Text size", (9.0, 24.0))] {
+            for (path, name, range) in [("style/padding", "Padding", (0.0, 24.0)), ("style/radius", "Corners", (0.0, 16.0)), ("style/size", "Text size", (9.0, 24.0)), ("style/border/width", "Edge", (0.0, 8.0))] {
                 let full = format!("{base}/{path}");
                 let v = app.get(DocId::Bars, &full).and_then(Value::as_f64).unwrap_or(range.0);
                 let lw = b.px(100.0);
@@ -484,27 +484,64 @@ fn module(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, slot: &Slot)
                 b.slider(key(("module-style", path)), Rect::new(c.x + lw, c.y, c.w - lw, b.px(40.0)), v, (range.0, range.1, 1.0), &format!("{v:.0} px"), b.px(44.0), name, Action::Slider(Edit::new(DocId::Bars, full, name)));
                 c.y += b.px(40.0);
             }
+            weight(app, b, c, &base);
             let body = b.font(Font::Body);
-            b.text_at(c.x, c.y, "Icon", &body, b.p.ink1);
-            let icon = app.get(DocId::Bars, &format!("{base}/icon")).and_then(Value::as_str).unwrap_or("");
-            crate::ui::text_field(app, b, Rect::new(c.x, c.y + b.px(24.0), c.w, b.px(32.0)), FieldId::Text(DocId::Bars, format!("{base}/icon").into()), None, "An icon-pack name or a picture", icon, "Icon");
-            c.y += b.px(64.0);
+            // Colours as the bars write them: "#rrggbb", "accent", "text" or "transparent".
+            for (path, name, placeholder) in [
+                ("icon", "Icon", "An icon-pack name or a picture"),
+                ("style/color", "Text color", "Follows the bar, or #rrggbb, accent, text"),
+                ("style/background", "Background", "None, or #rrggbb, accent"),
+                ("style/border/color", "Edge color", "Follows the bar, or #rrggbb"),
+            ] {
+                let full = format!("{base}/{path}");
+                b.text_at(c.x, c.y, name, &body, b.p.ink1);
+                let v = app.get(DocId::Bars, &full).and_then(Value::as_str).unwrap_or("");
+                crate::ui::text_field(app, b, Rect::new(c.x, c.y + b.px(24.0), c.w, b.px(32.0)), FieldId::Text(DocId::Bars, full.into()), None, placeholder, v, name);
+                c.y += b.px(64.0);
+            }
         });
     }
     if let Some(id) = k.strip_prefix("custom:") {
         section(b, col, "What it shows", |b, c| {
+            let body = b.font(Font::Body);
             for (field, name, placeholder) in [("command", "Program", "C:\\path\\to\\program.exe"), ("interval", "Run every (seconds)", "60")] {
-                let body = b.font(Font::Body);
                 b.text_at(c.x, c.y, name, &body, b.p.ink1);
                 let v = app.get(DocId::Bars, &format!("{base}/{field}")).map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_owned)).unwrap_or_default();
                 crate::ui::text_field(app, b, Rect::new(c.x, c.y + b.px(24.0), c.w, b.px(32.0)), FieldId::Text(DocId::Bars, format!("{base}/{field}").into()), None, placeholder, &v, name);
                 c.y += b.px(64.0);
             }
+            // Arguments as one line, split like a command line (`intercept` stores the list).
+            b.text_at(c.x, c.y, "Arguments", &body, b.p.ink1);
+            let args: Vec<String> = app.get(DocId::Bars, &format!("{base}/args")).and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
+            let shown = args.iter().map(|a| if a.contains(' ') { format!("\"{a}\"") } else { a.clone() }).collect::<Vec<_>>().join(" ");
+            let field = FieldId::Text(DocId::Studio, format!("/module_args/{}", token(&k)).into());
+            crate::ui::text_field(app, b, Rect::new(c.x, c.y + b.px(24.0), c.w, b.px(32.0)), field, None, "No arguments", &shown, "Arguments");
+            c.y += b.px(64.0);
             let w = b.button_width("Delete everywhere", true, true);
             b.button(key("delete-custom"), Rect::new(c.x, c.y, w, b.px(28.0)), "Delete everywhere", Some(glyph::DELETE), ButtonKind::Secondary, true, Action::DeleteCustom(id.to_owned()));
             c.y += b.px(32.0);
         });
     }
+}
+
+/// The module's text weight: the bar's, or one of the usual few.
+fn weight(app: &App, b: &mut B, c: &mut Col, base: &str) {
+    let path = format!("{base}/style/weight");
+    let options: Vec<(Value, String)> = [(Value::Null, "Follows the bar"), (json!(300), "Light"), (json!(400), "Regular"), (json!(500), "Medium"), (json!(600), "Semibold"), (json!(700), "Bold")]
+        .into_iter()
+        .map(|(v, n)| (v, n.to_owned()))
+        .collect();
+    let current = app.get(DocId::Bars, &path).cloned().unwrap_or(Value::Null);
+    let shown = options.iter().find(|(v, _)| *v == current).map_or_else(|| current.to_string(), |(_, n)| n.clone());
+    let h = b.px(40.0);
+    let w = b.select_width(&shown).max(b.px(130.0));
+    label(b, Rect::new(c.x, c.y, c.w - w, h), "Weight", "", None);
+    b.select(key("module-weight"), Rect::new(c.x + c.w - w, c.y + (h - b.px(30.0)) / 2.0, w, b.px(30.0)), &shown, "Weight", Action::Choose(Choices {
+        edit: Edit::new(DocId::Bars, path, "Weight"),
+        options,
+        current: Some(current),
+    }));
+    c.y += h + b.px(4.0);
 }
 
 /// A click trigger's action: the module's own, nothing, a built-in action or a program.
