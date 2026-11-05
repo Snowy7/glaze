@@ -1570,6 +1570,7 @@ dependencies = [
  "log",
  "mypaper-config",
  "mypaper-integrations",
+ "mypaper-plugin-sdk",
  "mypaper-theme",
  "png 0.18.1",
  "quick-xml",

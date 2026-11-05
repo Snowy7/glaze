@@ -12,6 +12,7 @@ path = "src/lib.rs"
 mypaper-config.workspace = true
 mypaper-theme.workspace = true
 mypaper-integrations = { path = "../integrations" }
+mypaper-plugin-sdk = { path = "../plugin-sdk" }
 
 anyhow.workspace = true
 log.workspace = true

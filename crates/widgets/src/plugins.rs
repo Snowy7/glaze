@@ -31,6 +31,8 @@ use crate::bridge::{ErrorCode, Out, Target, WidgetError};
 use crate::manifest::PluginManifest;
 use crate::rpc::{self, Incoming, Pending, RpcError};
 use crate::wake::{Msg, Waker};
+use mypaper_plugin_sdk::protocol::{self as sdk, FromPlugin, HostMessage, HostRequest};
+use mypaper_plugin_sdk::{Face, SizeClass};
 
 const INIT_TIMEOUT: Duration = Duration::from_secs(10);
 const CALL_TIMEOUT: Duration = Duration::from_secs(30);
@@ -155,9 +157,77 @@ impl Drop for Job {
     }
 }
 
+/// A placed face of an SDK plugin (docs/plugins.md): who draws it and what it last drew.
+struct Slot {
+    plugin: String,
+    face: String,
+    size: SizeClass,
+    settings: Value,
+    view: Option<Face>,
+}
+
+/// How a placed face is doing, for the chrome's footer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FaceStatus {
+    Starting,
+    Live,
+    /// It crashed; the last view stays up until it's back.
+    Restarting,
+    Failed(String),
+}
+
+/// Whether `permissions` let a plugin make `request` (docs/plugins.md, "Permissions").
+pub fn authorize(permissions: &[String], request: &HostRequest) -> Result<(), String> {
+    let wanted = request.permission();
+    if mypaper_plugin_sdk::allows(permissions, &wanted) {
+        Ok(())
+    } else {
+        Err(format!("the plugin didn't declare {wanted:?}"))
+    }
+}
+
+/// Answers a plugin's host request after checking its manifest: secrets live in Credential
+/// Manager under `mypaper/integrations/plugin/<id>/<key>`.
+fn serve(manifest: &PluginManifest, id: &Value, request: HostRequest) -> String {
+    use mypaper_integrations::credentials;
+    if let Err(why) = authorize(&manifest.permissions, &request) {
+        log::warn!("plugin {}: refused {request:?}: {why}", manifest.id);
+        return sdk::error(id, sdk::PERMISSION_DENIED, &why, "PermissionDenied");
+    }
+    let key = |key: &str| format!("plugin/{}/{key}", manifest.id);
+    let outcome = match request {
+        HostRequest::GetSecret { key: name } => match credentials::read(&key(&name)) {
+            Ok(secret) => Ok(json!({ "value": secret.text().ok() })),
+            Err(_) => Ok(json!({ "value": null })),
+        },
+        HostRequest::SetSecret { key: name, value: Some(value) } => {
+            credentials::write(&key(&name), &value).map(|()| Value::Null)
+        }
+        HostRequest::SetSecret { key: name, value: None } => {
+            let _ = credentials::remove(&key(&name));
+            Ok(Value::Null)
+        }
+        HostRequest::Launch { target } => {
+            let item = mypaper_integrations::launcher::Recent { title: String::new(), target, arguments: String::new() };
+            mypaper_integrations::launcher::open(&item).map(|()| Value::Null)
+        }
+        HostRequest::Notify { .. } => Err(anyhow::anyhow!("notifications aren't wired in this host yet")),
+    };
+    match outcome {
+        Ok(value) => sdk::result(id, value),
+        Err(e) => sdk::error(id, -32603, &format!("{e:#}"), "Internal"),
+    }
+}
+
 pub struct Plugins {
     procs: HashMap<String, Process>,
-    /// `(instance, sub)` → `(plugin, event)`.
+    /// Placed faces of SDK plugins, by instance.
+    faces: BTreeMap<String, Slot>,
+    /// Instances whose view or status changed since [`Plugins::take_changed`].
+    changed: Vec<String>,
+    /// Where plugins are looked up; `None` is the installed and bundled folders.
+    roots: Option<Vec<std::path::PathBuf>>,
+    /// `(instance, sub)` ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ `(plugin, event)`.
     subs: BTreeMap<(String, String), (String, String)>,
     /// Plugins that died with listeners: when to try again, and the next delay.
     restarts: HashMap<String, (Instant, Duration)>,
@@ -173,6 +243,9 @@ impl Plugins {
     pub fn new(waker: Waker) -> Self {
         Self {
             procs: HashMap::new(),
+            faces: BTreeMap::new(),
+            changed: Vec::new(),
+            roots: None,
             subs: BTreeMap::new(),
             restarts: HashMap::new(),
             dying: Vec::new(),
@@ -241,7 +314,124 @@ impl Plugins {
     }
 
     fn listened(&self, plugin: &str) -> bool {
-        self.subs.values().any(|(p, _)| p == plugin)
+        self.subs.values().any(|(p, _)| p == plugin) || self.faces.values().any(|s| s.plugin == plugin)
+    }
+
+    /// Looks plugins up in `roots` only (tests and harnesses).
+    pub fn with_roots(waker: Waker, roots: Vec<std::path::PathBuf>) -> Self {
+        Self {
+            roots: Some(roots),
+            ..Self::new(waker)
+        }
+    }
+
+    /// Places (or re-sizes) `instance` as `plugin`'s `face`, starting the plugin if needed. The
+    /// plugin answers with a `view`; until then [`Plugins::face_view`] is the cached one.
+    pub fn open_face(
+        &mut self,
+        instance: &str,
+        plugin: &str,
+        face: &str,
+        size: SizeClass,
+        settings: Value,
+        now: Instant,
+    ) -> Result<(), WidgetError> {
+        if let Some(slot) = self.faces.get_mut(instance)
+            && slot.plugin == plugin
+            && slot.face == face
+        {
+            if slot.size != size || slot.settings != settings {
+                slot.size = size;
+                slot.settings = settings;
+                let message = HostMessage::Open {
+                    instance: instance.into(),
+                    face: face.into(),
+                    size,
+                    settings: slot.settings.clone(),
+                };
+                if let Some(process) = self.procs.get(plugin).filter(|p| matches!(p.state, State::Ready)) {
+                    process.write(sdk::host_message(&message));
+                }
+            }
+            return Ok(());
+        }
+        let message = HostMessage::Open {
+            instance: instance.into(),
+            face: face.into(),
+            size,
+            settings: settings.clone(),
+        };
+        let slot = Slot {
+            plugin: plugin.into(),
+            face: face.into(),
+            size,
+            settings,
+            view: None,
+        };
+        self.faces.insert(instance.into(), slot);
+        let process = match self.running(plugin, now) {
+            Ok(process) => process,
+            Err(e) => {
+                self.faces.remove(instance);
+                return Err(e);
+            }
+        };
+        if !process.manifest.faces.iter().any(|f| f.id == face) {
+            self.faces.remove(instance);
+            let message = format!("plugin {plugin:?} has no face {face:?}");
+            return Err(WidgetError::new(ErrorCode::NotFound, message));
+        }
+        process.idle_since = None;
+        if matches!(process.state, State::Ready) {
+            process.write(sdk::host_message(&message));
+        }
+        Ok(())
+    }
+
+    /// The instance went away; the plugin stops 30 s after its last face closes.
+    pub fn close_face(&mut self, instance: &str) {
+        let Some(slot) = self.faces.remove(instance) else { return };
+        if let Some(process) = self.procs.get(&slot.plugin).filter(|p| matches!(p.state, State::Ready)) {
+            process.write(sdk::host_message(&HostMessage::Close { instance: instance.into() }));
+        }
+    }
+
+    /// A click on a view's `action` (or a submitted field's `value`).
+    pub fn face_action(&mut self, instance: &str, action: &str, value: Option<String>) {
+        let Some(slot) = self.faces.get(instance) else { return };
+        if let Some(process) = self.procs.get(&slot.plugin).filter(|p| matches!(p.state, State::Ready)) {
+            let message = HostMessage::Action {
+                instance: instance.into(),
+                action: action.into(),
+                value,
+            };
+            process.write(sdk::host_message(&message));
+        }
+    }
+
+    /// What `instance` last drew (kept across plugin restarts).
+    pub fn face_view(&self, instance: &str) -> Option<&Face> {
+        self.faces.get(instance)?.view.as_ref()
+    }
+
+    pub fn face_status(&self, instance: &str) -> Option<FaceStatus> {
+        let slot = self.faces.get(instance)?;
+        Some(match self.procs.get(&slot.plugin).map(|p| &p.state) {
+            Some(State::Ready) => FaceStatus::Live,
+            Some(_) => FaceStatus::Starting,
+            None if self.restarts.contains_key(&slot.plugin) => FaceStatus::Restarting,
+            None => FaceStatus::Failed("the plugin isn't running".into()),
+        })
+    }
+
+    /// Instances to repaint: their view or status changed.
+    pub fn take_changed(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.changed)
+    }
+
+    fn mark(&mut self, plugin: &str) {
+        let instances = self.faces.iter().filter(|(_, s)| s.plugin == plugin).map(|(i, _)| i.clone());
+        self.changed.extend(instances);
     }
 
     /// The process for `id`, started if it isn't running.
@@ -253,8 +443,13 @@ impl Plugins {
                 return Ok(self.procs.entry(id.to_owned()).or_insert(process));
             }
         }
-        let (manifest, dir) = crate::registry::find_plugin(id)
-            .ok_or_else(|| unavailable(format!("plugin {id:?} isn't installed")))?;
+        let found = match &self.roots {
+            Some(roots) => roots.iter().map(|root| root.join(id)).find_map(|dir| {
+                PluginManifest::load(&dir).ok().map(|manifest| (manifest, dir))
+            }),
+            None => crate::registry::find_plugin(id),
+        };
+        let (manifest, dir) = found.ok_or_else(|| unavailable(format!("plugin {id:?} isn't installed")))?;
         let process = self
             .spawn(manifest, &dir, now)
             .map_err(|e| unavailable(format!("plugin {id:?} didn't start: {e:#}")))?;
@@ -334,8 +529,10 @@ impl Plugins {
                 }
             })?;
 
-        let params =
-            json!({ "protocol": 1, "plugin": id, "dataDir": crate::files::plain(&data_dir) });
+        // Data plugins (no `sdk`) keep the protocol they were written for.
+        let protocol = if manifest.sdk.is_some() { sdk::PROTOCOL } else { 1 };
+        let params = json!({ "protocol": protocol, "sdk": format!("{}.{}", mypaper_plugin_sdk::SDK_MAJOR, mypaper_plugin_sdk::SDK_MINOR),
+                             "plugin": id, "dataDir": crate::files::plain(&data_dir) });
         let _ = tx.send(rpc::request(rpc::INIT_ID, "initialize", Some(&params)));
         Ok(Process {
             manifest,
@@ -382,14 +579,40 @@ impl Plugins {
             } else {
                 log::info!("plugin {id} stopped");
             }
+            self.mark(id);
             return process.fail_all("the plugin exited");
         };
+        if process.manifest.sdk.is_some() {
+            match sdk::parse_from_plugin(&line) {
+                FromPlugin::View(update) => {
+                    if let Some(slot) = self.faces.get_mut(&update.instance).filter(|s| s.plugin == id)
+                        && slot.view.as_ref() != Some(&update.tree)
+                    {
+                        slot.view = Some(update.tree);
+                        self.changed.push(update.instance);
+                    }
+                    return Vec::new();
+                }
+                FromPlugin::Request { id: request, request: what } => {
+                    process.write(serve(&process.manifest, &request, what));
+                    return Vec::new();
+                }
+                FromPlugin::Unknown { id: request } => {
+                    process.write(rpc::method_not_found(&request));
+                    return Vec::new();
+                }
+                FromPlugin::Other => {}
+            }
+        }
         match rpc::parse(&line) {
             Incoming::Response {
                 id: rpc::INIT_ID,
                 outcome,
             } if matches!(process.state, State::Starting { .. }) => match outcome {
-                Ok(result) if result.get("protocol").and_then(Value::as_u64) == Some(1) => {
+                Ok(result)
+                    if result.get("protocol").and_then(Value::as_u64)
+                        == Some(if process.manifest.sdk.is_some() { sdk::PROTOCOL as u64 } else { 1 }) =>
+                {
                     process.state = State::Ready;
                     self.restarts.remove(id);
                     if self.held {
@@ -398,6 +621,17 @@ impl Plugins {
                     for (target, method, params) in std::mem::take(&mut process.queued) {
                         process.send(target, &method, params.as_ref(), now);
                     }
+                    // Faces placed while it started (or before it crashed) open now.
+                    for (instance, slot) in self.faces.iter().filter(|(_, s)| s.plugin == id) {
+                        let message = HostMessage::Open {
+                            instance: instance.clone(),
+                            face: slot.face.clone(),
+                            size: slot.size,
+                            settings: slot.settings.clone(),
+                        };
+                        process.write(sdk::host_message(&message));
+                    }
+                    self.mark(id);
                     Vec::new()
                 }
                 other => {
@@ -439,6 +673,7 @@ impl Plugins {
         process.pending.len()
             + process.queued.len()
             + self.subs.values().filter(|(p, _)| p == id).count()
+            + self.faces.values().filter(|s| s.plugin == id).count()
     }
 
     /// Timeouts, idle stops, kills after the grace period, and restarts.
@@ -593,6 +828,63 @@ mod tests {
         // error.data.code wins when it's one of ours.
         assert_eq!(error(-32000, Some("NotFound")), ErrorCode::NotFound);
         assert_eq!(error(-32601, Some("Bogus")), ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn undeclared_host_requests_are_refused() {
+        let secrets = ["secrets".to_owned()];
+        assert!(authorize(&secrets, &HostRequest::GetSecret { key: "token".into() }).is_ok());
+        assert!(authorize(&secrets, &HostRequest::Launch { target: "calc".into() }).is_err());
+        let set = HostRequest::SetSecret { key: "token".into(), value: None };
+        assert!(authorize(&[], &set).is_err());
+        let manifest = PluginManifest::parse(r#"{ "id": "x", "name": "X", "sdk": "1.0", "command": "x.exe" }"#, "x").unwrap();
+        let line = serve(&manifest, &json!(5), HostRequest::Launch { target: "calc".into() });
+        let reply: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(reply["id"], 5);
+        assert_eq!(reply["error"]["code"], sdk::PERMISSION_DENIED);
+        assert_eq!(reply["error"]["data"]["code"], "PermissionDenied");
+    }
+
+    /// A real process that dies at once: the host keeps the face, says it's restarting, and
+    /// starts it again after the backoff, never panicking.
+    #[test]
+    fn a_crashing_plugin_is_restarted_with_its_faces() {
+        let root = std::env::temp_dir().join(format!("mypaper-crashy-{}", std::process::id()));
+        let folder = root.join("crashy");
+        std::fs::create_dir_all(&folder).unwrap();
+        let manifest = r#"{ "id": "crashy", "name": "Crashy", "sdk": "1.0", "command": "cmd", "args": ["/c", "exit", "3"],
+                            "faces": [{ "id": "now", "name": "Now", "size": { "default": [2, 2] } }] }"#;
+        std::fs::write(folder.join(crate::manifest::PLUGIN_MANIFEST), manifest).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let mut plugins = Plugins::with_roots(Waker::new(tx, 0), vec![root.clone()]);
+        let mut now = Instant::now();
+        plugins.open_face("t3-1", "crashy", "now", SizeClass::Medium, Value::Null, now).unwrap();
+        assert_eq!(plugins.face_status("t3-1"), Some(FaceStatus::Starting));
+        let mut generations = std::collections::BTreeSet::new();
+        for _ in 0..2 {
+            loop {
+                let Ok(Msg::Plugin { id, generation, line }) = rx.recv_timeout(Duration::from_secs(20)) else {
+                    continue;
+                };
+                generations.insert(generation);
+                let exited = line.is_none();
+                plugins.on_line(&id, generation, line, now);
+                if exited {
+                    break;
+                }
+            }
+            assert_eq!(plugins.face_status("t3-1"), Some(FaceStatus::Restarting));
+            assert!(plugins.take_changed().contains(&"t3-1".to_owned()));
+            now += Duration::from_secs(120); // past any backoff
+            plugins.tick(now);
+        }
+        assert_eq!(generations.len(), 2, "started twice");
+        plugins.close_face("t3-1");
+        plugins.shutdown();
+        let _ = std::fs::remove_dir_all(&root);
+        if let Ok(data) = crate::files::user("plugin-data") {
+            let _ = std::fs::remove_dir_all(data.join("crashy"));
+        }
     }
 
     #[test]

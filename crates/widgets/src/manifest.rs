@@ -1044,9 +1044,21 @@ pub struct PluginManifest {
     pub methods: Vec<String>,
     #[serde(default)]
     pub events: Vec<String>,
-    /// Documentation for users; plugins are trusted native code.
+    /// Shown before install; the host enforces what it brokers (docs/plugins.md, "Permissions").
     #[serde(default)]
     pub permissions: Vec<String>,
+    /// The SDK `"<major>.<minor>"` it was built with; absent for protocol-1 data plugins.
+    #[serde(default)]
+    pub sdk: Option<String>,
+    /// Widgets it draws with declarative views (SDK plugins only).
+    #[serde(default)]
+    pub faces: Vec<mypaper_plugin_sdk::FaceSpec>,
+    #[serde(default)]
+    pub panels: Vec<mypaper_plugin_sdk::FaceSpec>,
+    #[serde(default)]
+    pub bars: Vec<mypaper_plugin_sdk::FaceSpec>,
+    #[serde(default)]
+    pub settings: Vec<Value>,
 }
 
 impl PluginManifest {
@@ -1082,6 +1094,20 @@ impl PluginManifest {
             .find(|m| RESERVED_METHODS.contains(&m.as_str()))
         {
             bail!("{reserved:?} is reserved and can't be a plugin method");
+        }
+        if let Some(sdk) = &manifest.sdk {
+            ensure!(
+                mypaper_plugin_sdk::compatible(sdk, mypaper_plugin_sdk::SDK_MAJOR),
+                "built for plugin SDK {sdk}; this mypaper needs SDK {}.x",
+                mypaper_plugin_sdk::SDK_MAJOR
+            );
+        }
+        ensure!(
+            manifest.sdk.is_some() || manifest.faces.is_empty(),
+            "faces need an \"sdk\" version"
+        );
+        for face in &manifest.faces {
+            ensure!(valid_id(&face.id), "face id {:?} must be lowercase [a-z0-9-]", face.id);
         }
         Ok(manifest)
     }
@@ -1697,6 +1723,12 @@ mod tests {
         let plugin = PluginManifest::parse(json, "weather").unwrap();
         assert_eq!(plugin.methods, ["current"]);
         assert!(PluginManifest::parse(&json.replace("weather.exe", "python"), "weather").is_ok());
+        let sdk = |version: &str| {
+            json.replacen("{", &format!(r#"{{ "sdk": "{version}", "faces": [{{ "id": "now", "name": "Now", "size": {{ "default": [2, 2] }} }}],"#), 1)
+        };
+        assert!(PluginManifest::parse(&sdk("1.3"), "weather").is_ok());
+        let refused = PluginManifest::parse(&sdk("2.0"), "weather").unwrap_err();
+        assert!(format!("{refused:#}").contains("SDK 2.0"), "{refused:#}");
         for bad in [
             json.replace("weather.exe", "..\\x.exe"),
             json.replace("weather.exe", "C:\\x.exe"),
