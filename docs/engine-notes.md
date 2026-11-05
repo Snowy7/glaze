@@ -332,9 +332,9 @@ is created. Run this only under the desktop lock described in `plans/native/IMPL
 
 ### Renderer settings (GPU and frame cap)
 
-The default on desktops and laptops is `integrated`: wgpu's low-power preference. There is
-no battery-dependent switch to discrete graphics. `high-performance` requests that adapter;
-`auto` leaves selection to wgpu. These are preferences when the requested class is unavailable.
+The default is `auto`: the adapter that drives the most desktop screens (the primary screen's on
+a tie; docs/glass.md, GPU default). There is no battery-dependent switch. `integrated` and
+`high-performance` request wgpu's low-power and high-performance adapters. These are preferences when the requested class is unavailable.
 The selected adapter and requested preference are logged. Only the engine opens a device.
 
 Global and per-wallpaper user keys in `%APPDATA%\mypaper\config.json`:
@@ -523,7 +523,8 @@ Telemetry overhead is measured separately: GPU-query rain uses 4.607% one-core C
 rain motion + DwmFlush uses 12.023% / 456.97 MiB; still motion + DwmFlush uses 13.534% /
 380.80 MiB. These opt-in runs are not substituted for the telemetry-off idle fixture.
 
-**Default stays integrated** on both desktops and laptops. The earlier RTX candidate's roughly
+**Default stays integrated** on both desktops and laptops. (Superseded 5 November 2026: the
+default is now the adapter that drives the screens; see docs/glass.md, GPU default.) The earlier RTX candidate's roughly
 0.62 ms rain / 0.067 ms all-plate figures used the rejected photo prefilter, so they are not
 final-quality measurements and do not justify a policy change. Users can explicitly select
 `high-performance` or `auto`; there is no automatic RTX promotion. Studio controls remain N7.

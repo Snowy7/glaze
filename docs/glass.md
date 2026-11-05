@@ -75,7 +75,7 @@ the discrete GPU; the lab prints every pyramid level and glass layer (`liquid_ru
 Every step kept the picture: the lab's frames differ from the vendored render by at most 1/255
 in 0.0017% of pixels (rounding in the shader's closed forms); the pyramid changes are
 bit-identical. The integrated GPU is still over its 2 ms budget, so the glass layer is the open
-item. It is ALU-bound: the second frost level costs 0.39 ms, dispersion 0.63 ms, the inner
+item there; the engine now defaults to the GPU that drives the screens (below). It is ALU-bound: the second frost level costs 0.39 ms, dispersion 0.63 ms, the inner
 shadows 0.35 ms and the rim light 0.24 ms (ablations, not shippable). The cheapest approximation
 measured, one frost sample where the dispersion's R-B split is under 0.5 px, saves 0.22 ms and
 differs by at most 1/255 in 0.06% of pixels. It isn't shipped.
@@ -84,9 +84,46 @@ GPU memory: +28 MiB private for two screens on separate kept frames (two half-re
 Rgba16Float pyramids, 9.4 MiB each, of which level 0 is 7 MiB); about half that when the kept
 frame is shared. Still wallpaper and still plates cost nothing.
 
-The GPU (`engine.gpu`: integrated, high-performance or auto) and frame rate (`engine.fps`, 1 to
-360) are engine settings, per wallpaper too; overlays open on the engine's adapter. Integrated
-stays the default.
+The GPU (`engine.gpu`: auto, integrated or high-performance) and frame rate (`engine.fps`, 1 to
+360) are engine settings, per wallpaper too; overlays open on the engine's adapter.
+
+## GPU default: the card that drives the screens (5 November 2026)
+
+**`auto` is the default, and it renders on the adapter that drives the most desktop screens**
+(the primary screen's on a tie), read from DXGI outputs without creating a device
+(`mypaper_desktop::display_gpu`, used by the engine's `gpu.rs` and by Studio). Here that is the
+RTX 4070 SUPER, which drives both monitors; on a laptop whose panel hangs off the iGPU it is the
+iGPU, so a laptop keeps rendering where it presents and the dGPU stays asleep. `integrated` and
+`high-performance` still pick by power class, and an explicit choice in `config.json` is kept.
+
+Why: a frame drawn on one GPU and shown by another is copied across every frame, and the glass
+does not fit the iGPU's budget. Live on this desktop (rain-city at 30 fps, one screen visible,
+the other covered by a maximized window and paused; 60 s each, `GPU Engine` running time per
+process, private bytes):
+
+| Engine on | Engine GPU busy | Cross-adapter cost | Engine private | Engine CPU (one core) |
+|---|---:|---:|---:|---:|
+| AMD iGPU (`integrated`) | iGPU 3D 294 ms/s + copy 17 ms/s | **+43 ms/s of the RTX's 3D engine**, billed to the engine, to put iGPU frames on RTX-driven monitors | **262.0 MiB** | 2.25% |
+| RTX 4070 SUPER (`auto`) | RTX 3D 9.5-44.8 ms/s (two runs) | none | **179.9, 197.6 MiB** | 3.15, 4.32% |
+
+Glass per screen (the lab fixture above): **2.48 ms** glass-only and 2.92 ms with a new
+wallpaper frame on the iGPU, against a 2 ms budget; **0.08 / 0.12 ms** on the RTX. So the
+default fits the budget with room to spare. Memory is 64-82 MiB lower on the RTX: its textures
+live in dedicated VRAM, and there is no cross-adapter swapchain overhead (docs/engine-notes.md,
+Memory: +63 and +40 MiB for two swapchains presented across adapters); both screens visible on
+the RTX was not measured today. Engine CPU read higher on the RTX (3.15 and 4.32% against
+2.25%); these runs could not separate that from the desktop's activity (other agents restarted
+mypaper and built during them, and the user's GPU load changed), so it is not a finding yet.
+
+Power: no clean whole-system number. The RTX board read 56 W during the iGPU run and 182 W
+during the second RTX run, because the user's own GPU work changed (video decode 159 ms/s, other
+3D work); RAPL package power (CPU plus iGPU) read 50-62 W with builds running. The engine's own
+share is the GPU busy time above: about 3% of the RTX against 31% of the iGPU plus 4% of the
+RTX. An RTX that already drives the monitors is awake whatever the engine does; the extra cost of
+rendering there is that busy time at its idle clocks.
+
+Studio shows the choice as "Your screens' card" with the adapter's name, beside Integrated and
+High performance, and the frame rate as before.
 
 ## Images
 
