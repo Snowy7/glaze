@@ -162,6 +162,13 @@ media, weather, monitor and notes. An intentionally empty or invalid existing fi
 Version 1 files (cells of the icon grid) are upgraded once by the shell (`Layout::upgrade`: cells
 and sizes double, which keeps every rectangle exactly, since the fine grid subdivides the icon
 grid) and saved; parsing alone never upgrades, so Studio's raw edits stay in the file's own units.
+The version-1 file is kept byte for byte as `widgets.json.v1` before the first version-2 write.
+A layout from a newer mypaper is never "unreadable": Studio says "This layout was saved by a newer
+mypaper. Restart Studio to update." with only Restart (no Start over, no edits), and the write
+guard refuses to write over a newer file or to write an older version over a newer one. If an
+older mypaper still writes a version-1 layout over the upgraded one, the shell keeps that file
+beside it and puts its own layout back. Start over always asks first and keeps
+`<file>.<YYYYMMDD-HHMMSS>.bak`. Deploys swap an open Studio's exe so a restart updates it.
 Invalid live reloads retain the last valid layout. Every layout save also parses the current file
 at the write boundary, including edits arriving before a watcher notification. Unreadable or invalid
 files refuse the write; invalid bytes are preserved in a non-overwritten `widgets.json.bak` (then
