@@ -92,7 +92,7 @@
         "gap": 9.0,
         "kind": "stack"
       },
-      "footer": "Refresh samples CPU and memory",
+      "footer": "Refresh for metrics",
       "refresh": true
     },
     "medium": {
@@ -171,16 +171,29 @@
         "gap": 8.0,
         "kind": "row"
       },
-      "footer": "Refresh samples CPU and memory",
+      "footer": "Refresh for metrics",
       "refresh": true
     },
     "small": {
       "body": {
         "children": [
           {
-            "kind": "metric",
-            "label": "containers running",
-            "value": "2"
+            "children": [
+              {
+                "align": "start",
+                "kind": "text",
+                "role": "title1",
+                "text": "2"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "running"
+              }
+            ],
+            "kind": "row"
           },
           {
             "children": [
@@ -249,7 +262,7 @@
         "gap": 5.0,
         "kind": "stack"
       },
-      "footer": "Refresh samples CPU and memory",
+      "footer": "Refresh for metrics",
       "refresh": true
     }
   },
@@ -432,9 +445,22 @@
       "body": {
         "children": [
           {
-            "kind": "metric",
-            "label": "containers running",
-            "value": "2"
+            "children": [
+              {
+                "align": "start",
+                "kind": "text",
+                "role": "title1",
+                "text": "2"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "running"
+              }
+            ],
+            "kind": "row"
           },
           {
             "children": [
@@ -543,7 +569,7 @@
         "gap": 9.0,
         "kind": "stack"
       },
-      "footer": "Refresh samples CPU and memory",
+      "footer": "Refresh for metrics",
       "refresh": true
     },
     "medium": {
@@ -565,16 +591,29 @@
         "gap": 8.0,
         "kind": "row"
       },
-      "footer": "Refresh samples CPU and memory",
+      "footer": "Refresh for metrics",
       "refresh": true
     },
     "small": {
       "body": {
         "children": [
           {
-            "kind": "metric",
-            "label": "containers running",
-            "value": "0"
+            "children": [
+              {
+                "align": "start",
+                "kind": "text",
+                "role": "title1",
+                "text": "0"
+              },
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "running"
+              }
+            ],
+            "kind": "row"
           },
           {
             "detail": "Containers from your local engine appear here.",
@@ -586,7 +625,7 @@
         "gap": 5.0,
         "kind": "stack"
       },
-      "footer": "Refresh samples CPU and memory",
+      "footer": "Refresh for metrics",
       "refresh": true
     }
   },

@@ -1,6 +1,6 @@
 //! One Docker face, responsive to the host's three size classes.
 use crate::{Availability, Data, Snapshot, docker};
-use mypaper_plugin_sdk::{Face, Tone, View};
+use mypaper_plugin_sdk::{Face, Role, Tone, View};
 use mypaper_plugin_sdk::SizeClass;
 
 fn metric(value: String, label: &str, color: Option<Tone>, width: Option<f32>) -> View {
@@ -40,7 +40,7 @@ fn rows(state: &docker::Snapshot, enabled: bool) -> View {
 
 pub fn face(size: SizeClass, snapshot: &Snapshot) -> Face {
     let footer = snapshot.action_error.clone().unwrap_or_else(|| match &snapshot.availability {
-        Availability::Live => "Refresh samples CPU and memory".into(),
+        Availability::Live => "Refresh for metrics".into(),
         Availability::Connecting => "Connecting…".into(),
         Availability::Stale(_) => "Docker isn't running · last snapshot".into(),
         Availability::Unavailable(error) => error.clone(),
@@ -64,7 +64,10 @@ pub fn face(size: SizeClass, snapshot: &Snapshot) -> Face {
     let body = match size {
         SizeClass::Small => View::Stack {
             gap: Some(5.0),
-            children: vec![metric(running.to_string(), "containers running", None, None), containers],
+            children: vec![View::row([
+                View::text(running.to_string(), Role::Title1),
+                View::tinted("running", Role::Caption, Tone::Secondary),
+            ]), containers],
         },
         SizeClass::Medium => View::Row {
             gap: Some(8.0),
