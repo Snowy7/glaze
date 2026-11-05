@@ -16,6 +16,12 @@ use windows::{
 
 /// Identity queries must not retain a WinRT factory from an apartment that can be torn down
 /// (Studio creates previews on successive test threads). This Win32 query needs no apartment.
+/// Stable, PTB, Canary and Store identities used by the Windows notification preview filter.
+pub fn is_discord_app_id(app_id: &str) -> bool {
+    let id = app_id.to_ascii_lowercase();
+    matches!(id.as_str(), "com.squirrel.discord.discord" | "com.squirrel.discordptb.discordptb" | "com.squirrel.discordcanary.discordcanary")
+        || (id.starts_with("discordinc.") && id.contains("!discord"))
+}
 fn package_family() -> Option<String> {
     use windows::Win32::{
         Foundation::ERROR_INSUFFICIENT_BUFFER,
@@ -139,7 +145,7 @@ fn read_scoped(listener:&UserNotificationListener,show_text:bool,discord_preview
         let app_id = info.AppUserModelId()?.to_string();
         *state.counts.entry(app_id.clone()).or_default() += 1;
         let mut texts = Vec::new();
-        if (show_text || discord_previews && crate::discord::is_discord_app_id(&app_id))
+        if (show_text || discord_previews && is_discord_app_id(&app_id))
             && let Ok(binding) = notification
                 .Notification()?
                 .Visual()?
