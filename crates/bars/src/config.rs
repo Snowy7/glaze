@@ -717,7 +717,6 @@ pub enum Module {
     T3,
     Obs,
     Docker,
-    Tailscale,
 }
 
 /// An entry of a module list: a built-in module, `custom:<id>`, or `|` (a break between islands,
@@ -753,6 +752,7 @@ impl<'de> Deserialize<'de> for ModuleRef {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use serde::de::{Error, IntoDeserializer};
         let text = String::deserialize(deserializer)?;
+        if text == "tailscale" { return Ok(Self::Custom("tailscale--status".into())); }
         if text == "|" {
             return Ok(Self::Break);
         }
