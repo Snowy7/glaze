@@ -115,8 +115,7 @@ pub fn module_topic(module: &ModuleRef) -> Option<Topic> {
         | Module::Search
         | Module::Quick
         | Module::Power
-        | Module::T3
-        | Module::Obs => None,
+        | Module::T3 => None,
     }
 }
 
