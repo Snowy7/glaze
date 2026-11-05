@@ -914,7 +914,7 @@ impl Flyouts {
             // SAFETY: read-only foreground query.
             let restore = (unsafe { GetForegroundWindow() } == self.surface.hwnd())
                 .then(|| self.open.as_ref().unwrap().return_to)
-                .filter(|w| *w != 0);
+                .filter(|w| *w != 0 && on_screen(*w));
             self.hide();
             if let Some(window) = restore {
                 mypaper_bars::system::activate(mypaper_bars::system::hwnd(window));
@@ -1368,6 +1368,25 @@ pub fn place(
 }
 
 /// The flyout's position now: sliding from its bar into place while it opens.
+/// Whether `window` is still shown: a closing flyout hands the focus back only to such a
+/// window, never to a shell panel that was dismissed meanwhile (Search, Start: cloaked).
+fn on_screen(window: isize) -> bool {
+    use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
+    use windows::Win32::UI::WindowsAndMessaging::IsWindowVisible;
+    let hwnd = HWND(window as *mut _);
+    let mut cloaked = 0u32;
+    // SAFETY: read-only queries; a stale handle just fails them.
+    unsafe {
+        let _ = DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAKED,
+            (&raw mut cloaked).cast(),
+            size_of::<u32>() as u32,
+        );
+        IsWindowVisible(hwnd).as_bool() && cloaked == 0
+    }
+}
+
 fn position(open: &Open, now: Instant) -> (i32, i32) {
     let p = open.motion.map_or(1.0, |m| m.value(now));
     let offset = ((1.0 - p) * 10.0 * open.scale).round() as i32;

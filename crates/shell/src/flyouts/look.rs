@@ -9,7 +9,8 @@ use mypaper_bars::config::{self, BarsConfig};
 use mypaper_bars::style::{Family, Look as BarLook, NativeStyle, Scheme};
 use mypaper_config::Config;
 use mypaper_theme::{Appearance, LoadedTheme, Paint, TextTone};
-use mypaper_ui::{GlassMaterial, Rgba, Text, icons};
+use mypaper_ui::interact::State;
+use mypaper_ui::{GlassMaterial, Ink, Rgba, Text, icons};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Look {
@@ -87,7 +88,7 @@ impl Look {
         } else {
             Rgba::rgb8([255, 255, 255], 1.0)
         };
-        let flyout_tint = bar.flyouts.tint.unwrap_or(0.5).clamp(0.0, 1.0);
+        let flyout_tint = bar.flyouts.tint.unwrap_or(0.62).clamp(0.0, 1.0);
         let fill = match style {
             NativeStyle::Solid => tint,
             NativeStyle::Mono | NativeStyle::Liquid => {
@@ -98,10 +99,12 @@ impl Look {
         // glass: text stays readable over anything.
         let glass = (style == NativeStyle::Liquid).then(|| GlassMaterial {
             clarity: 1.0 - flyout_tint,
+            // Heavier than the bars' blur: whatever is behind a flyout (an app, a widget)
+            // must not read through its text.
             blur: if bar.flyouts.blur == Some(false) {
                 0.0
             } else {
-                bar.glass.blur.unwrap_or(12.0)
+                bar.glass.blur.unwrap_or(12.0).max(28.0)
             },
             refraction: bar.glass.refraction.unwrap_or(0.6),
             highlight: bar.glass.highlight.unwrap_or(0.75),
@@ -159,19 +162,24 @@ impl Look {
         }
     }
 
-    /// Secondary text.
+    /// Secondary text (the shared contrast steps, `mypaper_ui::Ink`).
     pub fn dim(&self) -> Rgba {
-        self.ink.with_alpha(0.62)
+        Ink::of(self.ink).secondary
     }
 
-    /// Disabled text, hairlines' stronger cousin.
+    /// Hints and disabled text, hairlines' stronger cousin.
     pub fn faint(&self) -> Rgba {
-        self.ink.with_alpha(0.38)
+        Ink::of(self.ink).disabled
     }
 
-    /// The highlight under a hovered row or button.
+    /// The highlight under a hovered row or button (the shared hover wash).
     pub fn hover(&self) -> Rgba {
-        self.ink.with_alpha(0.08)
+        State::Hover.wash(self.ink)
+    }
+
+    /// The wash under a pressed row or button.
+    pub fn pressed(&self) -> Rgba {
+        State::Pressed.wash(self.ink)
     }
 
     /// A control's resting fill (an off tile, a slider's track, a button).

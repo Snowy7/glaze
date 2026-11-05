@@ -1,42 +1,30 @@
 //! The menu's tokens from the active theme: the built-in look under the theme's `bars`
-//! appearance (the variables the bars use), with `accent: "auto"` taken from the wallpaper
-//! palette. `blur` has no counterpart yet (the menu is a nearly opaque tint until N3's glass),
-//! and `surface: none` still draws a panel.
+//! appearance (the variables the bars use). Highlights are a neutral wash of the text colour
+//! (the monochrome look), so the theme's accent plays no part. `blur` has no counterpart (the
+//! menu is a nearly opaque tint unless the engine draws glass), and `surface: none` still
+//! draws a panel.
 
-use mypaper_theme::{Appearance, Color, LoadedTheme, Paint, TextTone};
-use mypaper_tweaks::palette;
+use mypaper_theme::{Appearance, LoadedTheme, TextTone};
 use mypaper_ui::{Colors, Material, Rgba, Text, TextStyle, Tokens, icons};
 
 /// The tokens for theme `theme_name` (a name or a folder), with the installed icon font.
 pub fn tokens(theme_name: &str, text: &Text) -> Tokens {
-    let loaded = mypaper_theme::locate(Some(theme_name))
+    let appearance = mypaper_theme::locate(Some(theme_name))
         .and_then(LoadedTheme::load)
         .inspect_err(|e| log::debug!("desktop menu look: {e:#}"))
-        .ok();
-    let appearance = loaded
-        .as_ref()
-        .and_then(|t| t.theme.bars.as_ref())
-        .and_then(|skin| skin.appearance.clone())
+        .ok()
+        .and_then(|t| t.theme.bars.and_then(|skin| skin.appearance))
         .unwrap_or_default();
-    let auto_accent = loaded.as_ref().and_then(|t| {
-        palette::read()
-            .filter(|snapshot| snapshot.is_for(&t.dir))
-            .map(|snapshot| snapshot.palette.accent)
-    });
     Tokens {
         icons: icons::system_family(text),
-        ..resolve(&appearance, auto_accent)
+        ..resolve(&appearance)
     }
 }
 
 /// The built-in tokens with what `theme` sets.
-fn resolve(theme: &Appearance, auto_accent: Option<Color>) -> Tokens {
+fn resolve(theme: &Appearance) -> Tokens {
     let base = Tokens::default();
     let dark = theme.text.is_none_or(|tone| tone == TextTone::Light);
-    let accent = match theme.accent {
-        Some(Paint::Color(color)) => color.0,
-        Some(Paint::Auto) | None => auto_accent.map_or([0xff; 3], |c| c.0),
-    };
     let tint = theme
         .tint
         .map_or(base.material.tint, |c| Rgba::rgb8(c.0, 1.0))
@@ -46,7 +34,7 @@ fn resolve(theme: &Appearance, auto_accent: Option<Color>) -> Tokens {
     });
     Tokens {
         font,
-        colors: Colors::new(dark, accent),
+        colors: Colors::neutral(dark),
         material: Material { tint },
         radius: theme.radius.unwrap_or(base.radius),
         border: theme.border.unwrap_or(base.border),
@@ -76,14 +64,15 @@ fn font_family(css: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mypaper_theme::{Color, Paint};
 
     #[test]
     fn without_a_theme_look_the_defaults_apply() {
-        assert_eq!(resolve(&Appearance::default(), None), Tokens::default());
+        assert_eq!(resolve(&Appearance::default()), Tokens::default());
     }
 
     #[test]
-    fn the_themes_bars_appearance_wins_and_auto_accent_follows_the_palette() {
+    fn the_themes_bars_appearance_wins_and_highlights_stay_neutral() {
         let theme = Appearance {
             tint: Some(Color([0xf0, 0xf0, 0xf2])),
             text: Some(TextTone::Dark),
@@ -93,12 +82,13 @@ mod tests {
             shadow: Some(false),
             ..Default::default()
         };
-        let tokens = resolve(&theme, Some(Color([0x19, 0xcd, 0x86])));
+        let tokens = resolve(&theme);
         assert_eq!(
             tokens.colors,
-            Colors::new(false, [0x19, 0xcd, 0x86]),
+            Colors::neutral(false),
             "dark text, a light menu"
         );
+        assert_eq!(tokens.colors.hover, tokens.colors.text.with_alpha(0.10));
         assert_eq!(
             tokens.material.tint,
             Rgba::rgb8([0xf0, 0xf0, 0xf2], 0.94),
@@ -107,8 +97,6 @@ mod tests {
         assert_eq!(tokens.radius, 4.0);
         assert_eq!(&*tokens.font.family, "Inter");
         assert!(!tokens.shadow);
-        // `auto` without a palette falls back to the default accent.
-        assert_eq!(resolve(&theme, None).colors, Colors::new(false, [0xff; 3]));
     }
 
     #[test]

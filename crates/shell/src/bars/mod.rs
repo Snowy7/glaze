@@ -809,6 +809,15 @@ impl Bars {
             }
             Event::DpiChanged(_) => self.display_due = Some(now),
             Event::Leave => {
+                // Only dock drags hold capture; any other press dragged off the bar ends here
+                // (its release goes to another window).
+                if self
+                    .press
+                    .as_ref()
+                    .is_some_and(|p| !matches!(p.target, Target::Dock(_)))
+                {
+                    self.press = None;
+                }
                 if self.press.is_none() {
                     self.bars[index].leave(now);
                     self.preview_due = None;
@@ -883,9 +892,13 @@ impl Bars {
             }
             Event::Press(p, Button::Left) => {
                 if let Some((hit, target)) = self.bars[index].frame.target(p.at) {
-                    self.bars[index].focus = Some(hit);
+                    // Shown pressed in this same pass. The bar never takes the foreground on
+                    // a click (the app in front keeps it, as with the macOS menu bar); a
+                    // flyout it opens takes it itself.
+                    self.bars[index].pressed = Some(hit);
+                    self.bars[index].hover = Some(hit);
+                    self.bars[index].focus = None;
                     self.bars[index].dirty = true;
-                    self.bars[index].surface.take_focus();
                     if matches!(target, Target::Dock(_)) {
                         // SAFETY: capture belongs to this UI thread and is released on up/loss.
                         unsafe {
@@ -901,6 +914,11 @@ impl Bars {
                 }
             }
             Event::Release(p, button) => {
+                for b in &mut self.bars {
+                    if b.pressed.take().is_some() {
+                        b.dirty = true;
+                    }
+                }
                 let target = if *button == Button::Left {
                     let press = self.press.take();
                     // SAFETY: releasing capture on the same UI thread.
@@ -924,7 +942,12 @@ impl Bars {
                     self.activate(ui, index, target, trigger(*button), p.screen);
                 }
             }
-            Event::CaptureLost => self.press = None,
+            Event::CaptureLost => {
+                self.press = None;
+                if self.bars[index].pressed.take().is_some() {
+                    self.bars[index].dirty = true;
+                }
+            }
             Event::Wheel(p, delta) => {
                 if *delta != 0
                     && self

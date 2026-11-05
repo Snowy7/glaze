@@ -29,13 +29,14 @@ use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_DBLCLKS, CreateWindowExW, DefWindowProcW, DestroyWindow, GWL_EXSTYLE, GWLP_USERDATA,
     GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, HICON, IDC_ARROW,
-    IsWindowVisible, LoadCursorW, MA_NOACTIVATE, RegisterClassExW, SW_HIDE, SW_SHOWNOACTIVATE,
-    SetForegroundWindow, SetWindowLongPtrW, ShowWindow, ULW_ALPHA, UPDATELAYEREDWINDOWINFO,
-    UpdateLayeredWindowIndirect, WA_INACTIVE, WINDOW_EX_STYLE, WM_ACTIVATE, WM_CAPTURECHANGED,
-    WM_GETOBJECT, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP,
-    WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_NCDESTROY, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETFOCUS, WNDCLASSEXW,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    IsWindowVisible, LoadCursorW, MA_ACTIVATE, MA_NOACTIVATE, RegisterClassExW, SW_HIDE,
+    SW_SHOWNOACTIVATE, SetForegroundWindow, SetWindowLongPtrW, ShowWindow, ULW_ALPHA,
+    UPDATELAYEREDWINDOWINFO, UpdateLayeredWindowIndirect, WA_INACTIVE, WINDOW_EX_STYLE,
+    WM_ACTIVATE, WM_CAPTURECHANGED, WM_GETOBJECT, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDBLCLK,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE,
+    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCDESTROY, WM_RBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP,
+    WM_SETFOCUS, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -154,6 +155,8 @@ pub(crate) struct Shared {
     activate: bool,
     desktop: Option<HWND>,
     restacking: Cell<bool>,
+    /// Where a left click activates a never-activated window ([`Surface::set_click_activates`]).
+    activates: RefCell<Vec<crate::geom::Rect>>,
     field: RefCell<Option<crate::TextField>>,
     /// The window's top-left on screen, for pointer events.
     origin: Cell<(i32, i32)>,
@@ -306,9 +309,10 @@ impl Surface {
                     None,
                 )
             }
+            // No WS_EX_NOACTIVATE: `WM_MOUSEACTIVATE` decides per click (`set_click_activates`).
             Kind::Bar => (
                 WS_POPUP,
-                WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 None,
             ),
             Kind::DesktopChild { .. } => (
@@ -366,6 +370,7 @@ impl Surface {
                 _ => None,
             },
             restacking: Cell::new(false),
+            activates: RefCell::new(Vec::new()),
             field: RefCell::new(None),
             origin: Cell::new((0, 0)),
             a11y: RefCell::new(Some(if deferred {
@@ -737,12 +742,22 @@ impl Surface {
         EVENTS.with(|queue| queue.borrow_mut().retain(|(of, _)| *of != id));
     }
 
+    /// Where a left click activates this window (surface pixels), for a window that is
+    /// otherwise never activated (a bar). Windows never refuses an activation by click, so a
+    /// bar item that opens a flyout or brings an app forward claims the foreground this way,
+    /// even from a shell window that holds the foreground lock (Search, Start, a toast).
+    /// Clicks anywhere else leave the app in front alone.
+    pub fn set_click_activates(&self, rects: Vec<crate::geom::Rect>) {
+        *self.shared.activates.borrow_mut() = rects;
+    }
+
     /// Makes this window the foreground window, and says how that went (for logs).
     ///
     /// A click our hook swallowed never reached any window, so Windows may not count us as the
     /// receiver of the last input and refuse a plain `SetForegroundWindow`. Then this attaches
     /// our input queue to the foreground window's thread for the call (a documented way to
-    /// share its foreground right).
+    /// share its foreground right). Neither helps against a shell window holding the
+    /// foreground lock: there the click itself must activate us ([`Self::set_click_activates`]).
     pub fn take_focus(&self) -> &'static str {
         let hwnd = self.hwnd;
         // SAFETY: plain window and thread queries; the queue attachment is undone at once.
@@ -815,7 +830,10 @@ impl Surface {
             } else {
                 std::ptr::null()
             },
-            psize: if source.is_some_and(|(_, _, resized)| resized) {
+            // Always with new pixels, resized or not: without a size, Windows accepts the call
+            // and keeps showing the old pixels (measured live: every hover and press on the
+            // bars and widgets stayed invisible).
+            psize: if source.is_some() {
                 &size
             } else {
                 std::ptr::null()
@@ -1054,7 +1072,21 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     let button = |button| (pointer(shared, lparam), button);
     match msg {
         WM_FRAME => push(id, Event::Frame),
-        WM_MOUSEACTIVATE if !shared.activate => return LRESULT(MA_NOACTIVATE as isize),
+        WM_MOUSEACTIVATE if !shared.activate => {
+            // SAFETY: reads the position of the message being handled.
+            let at = unsafe { windows::Win32::UI::WindowsAndMessaging::GetMessagePos() };
+            let (origin_x, origin_y) = shared.origin.get();
+            let at = Point::new(
+                (i32::from(at as i16) - origin_x) as f32,
+                (i32::from((at >> 16) as i16) - origin_y) as f32,
+            );
+            let activates = shared.activates.borrow().iter().any(|r| r.contains(at));
+            return LRESULT(if activates {
+                MA_ACTIVATE
+            } else {
+                MA_NOACTIVATE
+            } as isize);
+        }
         WM_MOUSEMOVE => {
             use windows::Win32::UI::Input::KeyboardAndMouse::{
                 TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent,

@@ -31,6 +31,8 @@ pub struct Bar {
     pub frame: Frame,
     pub items: Vec<Item>,
     pub hover: Option<u32>,
+    /// The item under a held left button (drawn pressed while the pointer stays on it).
+    pub pressed: Option<u32>,
     pub focus: Option<u32>,
     /// Extra islands, each a separate rounded overlay client.
     islands: Vec<Surface>,
@@ -117,6 +119,7 @@ impl Bar {
             },
             items: vec![],
             hover: None,
+            pressed: None,
             focus: None,
             islands: vec![],
             offsets: vec![],
@@ -231,6 +234,7 @@ impl Bar {
     pub fn leave(&mut self, now: Instant) {
         self.pointer = None;
         self.hover = None;
+        self.pressed = None;
         self.dirty = true;
         if self.config.dock.autohide && self.kind == BarKind::Dock {
             self.hide_at = Some(now + Duration::from_secs(1));
@@ -375,6 +379,12 @@ impl Bar {
         let rebuilt = self.dirty || zoom_changed || had_animation;
         if rebuilt {
             let scale = self.scale();
+            let hot = mypaper_ui::Interaction {
+                hover: self.hover,
+                pressed: self.pressed,
+                focus: self.focus,
+                focus_visible: self.focus.is_some(),
+            };
             self.frame = if self.kind == BarKind::Top {
                 view::top(
                     self.band.width as u32,
@@ -384,7 +394,7 @@ impl Bar {
                     scale,
                     ui,
                     images,
-                    self.hover,
+                    Some(&hot),
                 )
             } else {
                 let zoom: Vec<_> = self.zoom.iter().map(|(s, x)| (s.value, x.value)).collect();
@@ -399,7 +409,7 @@ impl Bar {
                     &hops,
                     ui,
                     images,
-                    self.hover,
+                    Some(&hot),
                 )
             };
             self.focus = self
@@ -512,6 +522,20 @@ impl Bar {
                 &mut self.islands[i - 1]
             };
             surface.set_glass(glass.filter(|_| visible));
+            surface.set_click_activates(
+                self.frame
+                    .list
+                    .hits
+                    .iter()
+                    .filter(|h| {
+                        self.frame
+                            .targets
+                            .get(h.id as usize - 1)
+                            .is_some_and(view::claims_foreground)
+                    })
+                    .map(|h| h.rect.offset(-offset.x, -offset.y))
+                    .collect(),
+            );
             if surface.present(
                 ui,
                 (origin.0 + offset.x as i32, origin.1 + offset.y as i32),

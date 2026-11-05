@@ -18,6 +18,9 @@ pub struct Tokens {
     pub hover: Rgba,
     pub radius: f32,
     pub material: Option<Material>,
+    /// A soft copy under light text drawn on clear glass or straight on the wallpaper, so it
+    /// holds over bright patches (the old bar's `text-shadow`). `None` over opaque fills.
+    pub shadow: Option<Rgba>,
 }
 
 impl Tokens {
@@ -80,6 +83,7 @@ impl Tokens {
             }),
             hover: ink.with_alpha(0.12),
             radius: look.radius.or(appearance.radius).unwrap_or(12.0),
+            shadow: (dark && fill.a < 0.5).then_some(Rgba::new(0.0, 0.0, 0.0, 0.32)),
             material,
         }
     }

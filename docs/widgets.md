@@ -48,6 +48,32 @@ remain accepted by the native host. Per-widget settings forms live in Studio's e
 validated date/time, six color swatches, Save/Enter and Cancel/Escape. Edit mode is refused during
 a hold and exits when a hold begins.
 
+The palette is a header (Add widgets, Done) over icon tiles with hover and press washes; it takes
+the keyboard when it opens, so Escape leaves edit mode
+([screenshot](media/native/polish-edit-palette.png)).
+
+## Look and layouts by size
+
+Views lay themselves out by the card's own box, as the old container queries did, at any DPI
+(sheets at 100%: [media](media/native/polish-sizes-media.jpg),
+[calendar](media/native/polish-sizes-calendar.jpg), [weather](media/native/polish-sizes-weather.jpg),
+[system rings](media/native/polish-sizes-system-rings.jpg) and
+[bars](media/native/polish-sizes-system-bars.jpg), [clock](media/native/polish-sizes-clock.jpg);
+[media at 150%](media/native/polish-sizes-media-150.jpg)):
+
+| Widget | Layouts |
+|---|---|
+| now playing | tile under 150 px wide (play on the cover); compact under ~130 px tall; row from 1.3:1 (cover left, source, title, artist, scrubber with times, transport); column otherwise |
+| calendar | today tile under 150 px wide; week strip in short cards; month with + ‹ › in the header, today on a filled disc, the selected day ringed |
+| weather | tile; one line in short cards; regular (place, temperature, condition, H/L); plus hours and a daily list with range bars when tall |
+| system | rings on the grid that makes them largest; bars and sparklines as rows, side by side in short cards |
+| clock | numerals fitted to the card, a smaller AM/PM, a date that shortens to fit |
+
+Shared drawing: the `Ink` contrast steps (secondary text at 74%), the Segoe UI Variable ramp with
+a 10.5 px floor, Segoe Fluent icons, round icon buttons with hover and press washes, a primary disc
+tinted by the cover, and one hover/press wash for other clickable rows and cells (never the card
+body). A click gives no focus ring; the keyboard does.
+
 ## Views and scheduling
 
 | Widget ids | Native behavior |

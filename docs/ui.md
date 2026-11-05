@@ -42,10 +42,22 @@ Surface::present(ui, origin, size, list)
   (layered windows have alpha, so no ClearType; and golden images must not depend on the machine's
   ClearType tuning).
 - **Icons** are glyphs of an icon font drawn as text: Segoe Fluent Icons (Segoe MDL2 Assets on
-  Windows 10). The styles (N6) add Lucide and Fluent UI System Icons as bundled TTFs, registered in
-  a private font collection; views keep naming a family.
+  Windows 10). Views name an `icons::Icon` (`Play`, `Pause`, `Previous`, `Next`, chevrons,
+  `Add`, `Close`, `Settings`, `Volume(level)`, `Wifi(level)`, `Battery(level)`, …; code points
+  checked against a rendered sheet of the installed font) and place it with
+  `icons::centered(text, family, icon, size, rect, color) -> Op`. `Icon::glyph_in(family)`
+  gives MDL2 the outlined media glyphs it has instead of Fluent's solid ones. The styles (N6) add
+  Lucide and Fluent UI System Icons as bundled TTFs.
 - **Tokens** (`Tokens`): type, colours, material and metrics in design pixels; a view multiplies
   by its scale (DPI times the theme's `scale`). Today they cover menus; N6 adds the styles.
+  `Colors::neutral(dark)` highlights with a wash of the text colour (the menus');
+  `Colors::new(dark, accent)` keeps the accent tint.
+- **Type and contrast** shared by the bar, flyouts and widgets: `Typeface` (`system(text)` picks
+  Segoe UI Variable Text for small sizes and Display above 20 px; `single(family)` for a theme's
+  font) with `style(Step, scale)` or `sized(size, weight, scale)`, where `Step` is the ramp
+  (`Micro` 11/500, `Caption` 12/400, `Body` 13/400, `Label` 13/600, `Headline` 15/600, `Title`
+  20/600, `Large` 28/500). `Ink::of(text)` gives the contrast steps: `primary`, `secondary`
+  (74%), `tertiary` (56%) and `disabled` (34%), the old `--t0..--t3` with the lower two raised.
 
 ## Surfaces
 
@@ -55,7 +67,7 @@ A `Surface` is one per-pixel-alpha layered window (`WS_EX_LAYERED`, updated only
 | `Kind` | Window | For |
 |---|---|---|
 | `Popup { activate }` | topmost popup; `activate: false` adds `WS_EX_NOACTIVATE` and answers `MA_NOACTIVATE` | menus, flyouts |
-| `Bar` | topmost, never activated (the app-bar reservation is the bar's, N2) | top bar, dock |
+| `Bar` | topmost, never activated except by the clicks it asks for (`set_click_activates`); the app-bar reservation is the bar's (N2) | top bar, dock |
 | `DesktopChild { parent }` | **top-level** layered tool window in the bottom band immediately above `parent` (Progman); the historic name describes its layer, not its Win32 parentage | widgets and edit chrome |
 
 - **Hit-testing follows alpha.** A layered window lets clicks through where alpha is 0 and keeps
@@ -65,6 +77,10 @@ A `Surface` is one per-pixel-alpha layered window (`WS_EX_LAYERED`, updated only
 - **Slides and fades** change only position and alpha (`move_to`, `set_alpha`): no redraw.
 - **Memory follows visibility.** `release` drops a hidden surface's bitmaps; the next `present`
   draws everything again. Bitmaps are cropped to each surface.
+- **Partial updates still pass the size.** `UpdateLayeredWindowIndirect` gets `psize` with every
+  new bitmap, resized or not, plus `prcDirty`. Without the size Windows accepts the call and keeps
+  showing the old pixels: every hover and press redraw was lost that way (bisected to e338153,
+  fixed in c2ad184).
 
 
 ### Desktop windows (N4)
@@ -173,6 +189,31 @@ Window procedures never run app callbacks. They turn messages into `Event`s (`Mo
 them with `next_event()` after dispatching. So app state is never borrowed twice, even when Windows
 sends a message from inside our own call (showing, focusing, a COM call to Explorer whose wait loop
 dispatches). `Surface::discard_events` drops what a hidden or reused surface said.
+
+### Hover, press and focus
+
+`interact::Interaction { hover, pressed, focus, focus_visible }` is one surface's pointer and key
+state. `handle(&shown_list, &event) -> Response` returns `Unchanged`, `Redraw` (a state the view
+draws changed) or `Activate(id)`:
+
+- a press shows at once (the redraw happens in the same loop pass as the `WM_LBUTTONDOWN`);
+- a control fires on release over the item that was pressed (moving off cancels), on Enter or
+  Space for the focused item, or on a UI Automation invoke;
+- focus rings show only after the keyboard moved focus (`focus_visible`), never on a click.
+
+`state(id, enabled) -> interact::State` (`Rest`, `Hover`, `Pressed`, `Disabled`) and
+`State::wash(ink)` (10% hover, 20% pressed) are what views draw; `press_scale()` sinks pressed
+content by 3%. The widget palette runs on it; the bars and widgets keep their own event handling
+(dock drags, text fields) and draw from it; the flyout kit draws the same washes from its ids.
+
+**Foreground.** A bar never takes the foreground on a press (the app in front keeps it, as with
+the macOS menu bar). Items that open a flyout, start something or are tray icons need it,
+because Windows refuses `SetForegroundWindow` (even after a synthetic input or the Alt unlock)
+while a shell window holds the foreground lock: Search, Start, a toast. So
+`Surface::set_click_activates(rects)` lets those clicks activate the bar through
+`WM_MOUSEACTIVATE`, which Windows never refuses; everything else answers `MA_NOACTIVATE`.
+Measured with SendInput: the launcher over Windows Search opened with the keyboard 0/4 times
+before, 4/4 after.
 
 ## Motion
 

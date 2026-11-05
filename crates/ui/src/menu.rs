@@ -304,18 +304,22 @@ pub fn view<C>(
             continue;
         }
         let selectable = item.selectable();
-        if hover == Some(index) && selectable {
-            ops.push(Op::Fill {
-                rect: Rect {
-                    left: body.left + m.pad,
-                    top: top + 1.0,
-                    right: body.right - m.pad,
-                    bottom: top + row.height - 1.0,
-                },
-                radius: (radius * 0.6).max(2.0),
-                color: c.hover,
-            });
-        }
+        // Every row keeps its highlight op (transparent at rest), so moving the hover only
+        // redraws the two rows it left and entered.
+        ops.push(Op::Fill {
+            rect: Rect {
+                left: body.left + m.pad,
+                top: top + 1.0,
+                right: body.right - m.pad,
+                bottom: top + row.height - 1.0,
+            },
+            radius: (radius * 0.6).max(2.0),
+            color: if hover == Some(index) && selectable {
+                c.hover
+            } else {
+                Rgba::TRANSPARENT
+            },
+        });
         let ink = if selectable { c.text } else { c.text_dim };
         let center_y = top + row.height / 2.0;
         let glyph = |at_x: f32, glyph: char, size: (f32, f32)| Op::Text {
