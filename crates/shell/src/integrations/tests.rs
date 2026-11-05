@@ -1,7 +1,7 @@
 //! Goldens and hit tests use exactly the panels registered in the native flyout controller.
 use super::*;
 use crate::flyouts::{build, look::Look};
-use mypaper_integrations::{docker, media, notifications, obs, t3, tailscale};
+use mypaper_integrations::{docker, media, notifications, obs, t3};
 use mypaper_ui::{Point, render};
 
 fn fixtures() -> Vec<(&'static str, Provider, Data)> {
@@ -105,16 +105,6 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
                         failed: true,
                     },
                 ],
-                ..Default::default()
-            }),
-        ),
-        (
-            "tailscale",
-            Provider::Tailscale,
-            Data::Tailscale(tailscale::Snapshot {
-                state: "Running".into(),
-                addresses: vec!["100.64.0.1".into()],
-                exit_node: None,
                 ..Default::default()
             }),
         ),
@@ -235,7 +225,6 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         s.config.t3.enabled = true;
         s.config.obs.enabled = true;
         s.config.docker.enabled = true;
-        s.config.tailscale.enabled = true;
         for (_, provider, data) in fixtures() {
             s.fixtures.insert(
                 provider,
@@ -248,7 +237,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         }
     });
     let mut ui = Ui::new().unwrap();
-    let mut config=BarsConfig::parse(r#"{"top":{"left":[],"center":[],"right":["notifications","t3","obs","docker","tailscale"]}}"#).unwrap();
+    let mut config=BarsConfig::parse(r#"{"top":{"left":[],"center":[],"right":["notifications","t3","obs","docker"]}}"#).unwrap();
     config.resolve(Vec::new);
     let tokens = look::Tokens::resolve(
         &config.top.look,
@@ -291,7 +280,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/integrations/golden/modules.png");
     mypaper_ui::golden::check(&image, &path).unwrap();
-    assert_eq!(frame.list.hits.len(), 5);
+    assert_eq!(frame.list.hits.len(), fixtures().len() - 1);
     for hit in &frame.list.hits {
         let center = Point::new(
             (hit.rect.left + hit.rect.right) / 2.0,
