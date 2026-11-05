@@ -294,47 +294,6 @@ impl Panel for Integration {
                         );
                     }
                 }
-                Some(Data::Docker(state)) => {
-                    if state.containers.is_empty() {
-                        notice(f, &mut column, Icon::Layers, "No selected containers", None);
-                    }
-                    let details: Vec<String> = state
-                        .containers
-                        .iter()
-                        .map(|container| {
-                            format!(
-                                "{}{} · click to {}",
-                                container.state,
-                                if container.failed {
-                                    " · needs attention"
-                                } else {
-                                    ""
-                                },
-                                if container.state == "running" {
-                                    "stop"
-                                } else {
-                                    "start"
-                                }
-                            )
-                        })
-                        .collect();
-                    let rows: Vec<ListRow> = state
-                        .containers
-                        .iter()
-                        .zip(&details)
-                        .enumerate()
-                        .map(|(i, (container, detail))| ListRow {
-                            id: LIST + i as u32,
-                            lead: Lead::Badge(Icon::Layers, container.state == "running"),
-                            title: &container.name,
-                            subtitle: Some(detail),
-                            accessory: Accessory::None,
-                            selected: false,
-                            enabled: connected,
-                        })
-                        .collect();
-                    list(f, &mut column, &self.scroll, &rows);
-                }
                 Some(Data::Media(state)) => {
                     let c = f.theme.color;
                     let mut rest =
@@ -413,15 +372,6 @@ impl Panel for Integration {
                     _ => return Effect::None,
                 };
                 self.action(Action::Obs(action))
-            }
-            Data::Docker(s) if id >= LIST => {
-                let Some(container) = s.containers.get((id - LIST) as usize) else {
-                    return Effect::None;
-                };
-                self.action(Action::Docker {
-                    id: container.id.clone(),
-                    start: container.state != "running",
-                })
             }
             Data::Media(_) if id == PRIMARY => {
                 self.action(Action::Media(mypaper_integrations::media::Action::Toggle))
