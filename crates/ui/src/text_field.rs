@@ -234,7 +234,8 @@ impl TextField {
     pub(crate) fn invalidated(&self) {
         self.inner.state.posted.set(false);
     }
-    pub(crate) fn multiline(&self) -> bool {
+    /// Does it take several lines (notes) rather than one (search, titles)?
+    pub fn multiline(&self) -> bool {
         self.inner.state.multiline
     }
     pub(crate) fn contains(&self, x: i32, y: i32) -> bool {

@@ -527,8 +527,17 @@ impl Ctx<'_> {
 /// the placeholder. Hit [`FIELD`].
 pub fn field(c: &mut Ctx, rect: Rect, hint: &str, icon: Option<Icon>) {
     let open = c.m.field.as_ref();
-    let inner = c.f.field_frame(rect, hint, open.is_none(), open.is_some(), icon);
+    let mut inner = c.f.field_frame(rect, hint, open.is_none(), open.is_some(), icon);
     if let Some(field) = open {
+        // RichEdit draws its line at the top of its rect: a one-line field gets a rect one line
+        // tall, centred like the icon and the placeholder (as the launcher's search field).
+        if !field.multiline() {
+            let style = c.f.font(TextRole::Body);
+            let (_, h) = c.f.text.measure("Ag", &style);
+            let line = h.ceil().min(inner.height());
+            let top = (inner.top + (inner.height() - line) / 2.0).round();
+            inner = Rect { top, bottom: top + line, ..inner };
+        }
         field.set_rect(inner);
         c.f.push(Op::TextField {
             rect: inner,
