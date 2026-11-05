@@ -27,7 +27,7 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
         gap: Some(4.0),
         children: vec![
             View::Button {
-                label: if small { "Chat" } else { "Messages" }.into(),
+                label: "Chat".into(),
                 action: "messages".into(),
                 icon: None,
                 primary: !choice.voice && !choice.setup,
@@ -112,7 +112,7 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
                             },
                             View::tinted(
                                 &p.name,
-                                if small { Role::Caption } else { Role::Callout },
+                                Role::Caption,
                                 if p.speaking {
                                     Tone::Positive
                                 } else {
@@ -142,19 +142,15 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
                 "Read only · rpc.voice.write required"
             };
         } else {
-            nodes.push(View::empty(
-                "user",
+            nodes.push(View::text(
                 if c.connected {
                     "No active call"
                 } else {
                     "Connect your current call"
                 },
-                if small {
-                    ""
-                } else {
-                    "Registered Discord app and tester access required"
-                },
+                Role::Callout,
             ));
+            nodes.push(View::Spacer);
             nodes.push(View::button("Connect voice", "authorize"));
             footer = c.voice_status;
         }
@@ -171,7 +167,7 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
                 })
                 .take(30)
                 .map(|m| {
-                    if small && !c.bot {
+                    if !c.bot {
                         View::Stack {
                             gap: Some(0.0),
                             children: vec![
@@ -233,20 +229,20 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
                 .into(),
                 action: "send".into(),
             });
-            if small {
-                nodes.push(View::Grid {
-                    columns: composer.len() as u8,
-                    gap: Some(4.0),
-                    children: composer,
-                });
-            } else {
-                nodes.extend(composer);
-            }
+            nodes.push(View::Grid {
+                columns: composer.len() as u8,
+                gap: Some(4.0),
+                children: composer,
+            });
             nodes.push(list);
             footer = "Sends as bot · mentions disabled";
         } else {
             if c.messages.is_empty() {
-                nodes.push(if small {View::tinted("No recent messages",Role::Caption,Tone::Secondary)} else {View::empty("message","No recent messages","Windows notifications appear here. Add a bot token and channel IDs for history and sending.")});
+                nodes.push(View::tinted(
+                    "No recent messages",
+                    Role::Caption,
+                    Tone::Secondary,
+                ));
             } else {
                 nodes.push(list);
             }
@@ -256,7 +252,7 @@ pub fn face(c: Context<'_>, small: bool) -> Face {
     }
     let mut result = View::Stack {
         children: nodes,
-        gap: Some(if small { 2.0 } else { 6.0 }),
+        gap: Some(2.0),
     }
     .face();
     result.footer = Some(c.notice.unwrap_or(footer).into());

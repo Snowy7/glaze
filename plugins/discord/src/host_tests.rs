@@ -22,6 +22,7 @@ fn discord_plugin_size_sheet_and_native_action_hits() {
         ("empty","small",(180,180),20.0,830.0),
         ("bot","small",(180,180),220.0,830.0),
         ("readonly","large",(360,240),450.0,830.0),
+        ("bot","medium",(180,180),850.0,830.0),
     ] {
         sheet.ops.push(Op::Text {rect:Rect::new(x,y-30.0,size.0 as f32,24.0),text:format!("{id} / {class}").into(),style:TextStyle::new("Segoe UI Variable",13.0),color:Rgba::rgb8([210,222,238],1.0)});
         let mut m = model(&faces[id][class],"Discord");
