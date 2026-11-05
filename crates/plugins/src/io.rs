@@ -550,10 +550,13 @@ pub fn pipe_http(name: &str, method: &str, url: &str, headers: &[(String, String
 
 /// Opens a pipe for blocking I/O, waiting up to 2 s while every instance is busy.
 fn open_pipe_blocking(name: &str) -> Result<std::fs::File, String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
     use windows::Win32::System::Pipes::WaitNamedPipeW;
     let path = format!(r"\\.\pipe\{name}");
     for _ in 0..2 {
-        match std::fs::OpenOptions::new().read(true).write(true).open(&path) {
+        // LocalAPI authenticates the caller's identity; it never needs to act as that caller.
+        match std::fs::OpenOptions::new().read(true).write(true).security_qos_flags(SECURITY_IDENTIFICATION.0).open(&path) {
             Ok(file) => return Ok(file),
             Err(e) if e.raw_os_error() == Some(231) => {
                 // ERROR_PIPE_BUSY
