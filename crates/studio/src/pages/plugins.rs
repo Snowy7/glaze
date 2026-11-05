@@ -618,6 +618,7 @@ pub fn intercept(app: &mut App, path: &str, value: Option<Value>) -> bool {
                     .find(|m| m.id == id)
                     .and_then(|m| m.settings.iter().find(|s| s["key"].as_str() == Some(&k)));
                 let value = match schema.and_then(|s| s["type"].as_str()) {
+                    Some("string" | "file" | "image") if value.is_null() => json!(""),
                     Some("list" | "place") => {
                         match value.as_str().map(serde_json::from_str::<Value>) {
                             Some(Ok(v)) => v,
@@ -700,6 +701,16 @@ pub fn consent_fixture(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn clearing_a_text_setting_keeps_a_valid_empty_string() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        fixture(&mut app.plugins);
+        intercept(&mut app, "/plugins/setting/t3/endpoint", None);
+        let settings = &app.plugins.preferences.settings["t3"];
+        assert_eq!(settings["endpoint"], json!(""));
+        manager::resolve_settings(&app.plugins.installed[0], settings).unwrap();
+    }
     #[test]
     fn consent_can_be_cancelled_and_cannot_be_bypassed_without_a_package() {
         let ui=mypaper_ui::Ui::new().unwrap();
