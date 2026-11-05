@@ -113,6 +113,8 @@ interface ui {
     /// Registers an image (BGRA8 premultiplied, `width * 4` stride) for canvas `image` draws;
     /// the host moves it to the shell through shared memory. Returns its id.
     put-image: func(width: u32, height: u32, pixels: list<u8>) -> result<u32, error>;
+    /// Releases an image from `put-image`; canvases still naming it draw nothing there.
+    drop-image: func(id: u32);
 }
 
 /// Restyling surfaces through theme tokens (manifest `styles`).
@@ -162,6 +164,11 @@ interface websocket {
     connect: func(url: string) -> result<u64, error>;
     send: func(socket: u64, message: message) -> result<_, error>;
     close: func(socket: u64);
+    use http.{header};
+    /// `connect` with request headers (`Authorization`, a ticket) and subprotocols
+    /// (`Sec-WebSocket-Protocol`, e.g. obs-websocket's `obswebsocket.json`).
+    record connect-request { url: string, headers: list<header>, protocols: list<string> }
+    connect-with: func(request: connect-request) -> result<u64, error>;
 }
 
 /// Local named pipes (`pipe:<name>`); data arrives as `event::pipe`.
@@ -171,6 +178,11 @@ interface pipes {
     open: func(name: string) -> result<u64, error>;
     write: func(pipe: u64, bytes: list<u8>) -> result<_, error>;
     close: func(pipe: u64);
+    use http.{request};
+    /// One HTTP/1.1 request over the pipe `name` (the Docker engine, Tailscale's LocalAPI). The
+    /// URL's path and query are sent and its host goes in `Host`; the reply arrives as
+    /// `event::http` with the returned id.
+    http-request: func(name: string, request: request) -> result<u64, error>;
 }
 
 interface launch {
