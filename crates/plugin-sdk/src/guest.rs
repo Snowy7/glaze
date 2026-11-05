@@ -4,7 +4,7 @@
 //!
 //! Capabilities are the WIT imports, re-exported typed: [`ui`], [`style`], [`timers`],
 //! [`events`], [`http`], [`websocket`], [`pipes`], [`launch`], [`notify`], [`secrets`], [`storage`], [`system`],
-//! [`native`], [`log`]. I/O replies come back as [`Event`]s.
+//! [`native`], [`process`], [`files`], [`log`]. I/O replies come back as [`Event`]s.
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -24,7 +24,7 @@ pub mod bindings {
 
 pub use bindings::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen, InitInfo};
 pub use bindings::mypaper::plugin::types::{Error, SizeClass};
-pub use bindings::mypaper::plugin::{events, http, launch, native, notify, pipes, secrets, storage, style, system, timers, websocket};
+pub use bindings::mypaper::plugin::{events, files, http, launch, native, notify, pipes, process, secrets, storage, style, system, timers, websocket};
 
 /// A plugin. One value lives for the instance's lifetime; `save` is what survives an unload.
 pub trait Plugin: Default + 'static {
