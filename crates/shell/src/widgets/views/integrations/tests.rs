@@ -2,7 +2,7 @@
 use super::*;
 use crate::widgets::{time::Stamp, views};
 use mypaper_integrations::{
-    Data, Snapshot, config, docker, launcher, notifications, obs, t3, tailscale,
+    Data, Snapshot, config, docker, launcher, notifications, obs, t3,
 };
 use mypaper_ui::{DisplayList, Image, Op, TextStyle, Tokens, Ui, golden, render};
 use mypaper_widgets::{layout::Placed, storage::Storage};
@@ -10,7 +10,7 @@ use serde_json::{Map, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
 const NOW: i64 = 1_793_875_200_000;
-const IDS: [&str; 6] = ["discord", "t3", "obs", "docker", "tailscale", "grok"];
+const IDS: [&str; 5] = ["discord", "t3", "obs", "docker", "grok"];
 
 fn model(id: &str, size: [u32; 2]) -> Model {
     let placed = Placed {
@@ -118,30 +118,6 @@ fn model(id: &str, size: [u32; 2]) -> Model {
                         },
                     ),
                 ]),
-            })),
-            "tailscale" => Some(Data::Tailscale(tailscale::Snapshot {
-                state: "Running".into(),
-                addresses: vec!["100.64.0.24".into()],
-                exit_node: Some("home-server".into()),
-                peers_known: true,
-                peers: vec![
-                    tailscale::Peer {
-                        name: "macbook".into(),
-                        online: true,
-                    },
-                    tailscale::Peer {
-                        name: "home-server".into(),
-                        online: true,
-                    },
-                    tailscale::Peer {
-                        name: "phone".into(),
-                        online: true,
-                    },
-                    tailscale::Peer {
-                        name: "workstation".into(),
-                        online: false,
-                    },
-                ],
             })),
             "discord" => Some(Data::Notifications(notifications::Snapshot {
                 cards: vec![
@@ -343,10 +319,6 @@ fn sheet(ui: &mut Ui, id: &str) -> Image {
                     "t3" => Some(Data::T3(Default::default())),
                     "docker" => Some(Data::Docker(Default::default())),
                     "discord" => Some(Data::Notifications(Default::default())),
-                    "tailscale" => Some(Data::Tailscale(tailscale::Snapshot {
-                        state: "Stopped".into(),
-                        ..Default::default()
-                    })),
                     "obs" => Some(Data::Obs(Default::default())),
                     _ => None,
                 };
