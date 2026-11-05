@@ -452,3 +452,72 @@ fn docks_on_all_edges_and_taskbar_module_clicks_have_alpha() {
         }
     }
 }
+
+/// The docs' headless renders (`docs/media/native/bar-*.png`): the macOS preset's top bar and
+/// dock at 100 % and 150 %, dark and light, over `MYPAPER_BAR_BACKDROP` (a wallpaper PNG) with a
+/// flat stand-in for the engine's glass. Run with `MYPAPER_BAR_SHOTS=<dir>`.
+#[test]
+#[ignore = "writes images: MYPAPER_BAR_SHOTS=<dir> [MYPAPER_BAR_BACKDROP=<png>]"]
+fn headless_bar_renders() {
+    let Ok(dir) = std::env::var("MYPAPER_BAR_SHOTS") else {
+        return;
+    };
+    let dir = std::path::PathBuf::from(dir);
+    let mut ui = Ui::new().unwrap();
+    let backdrop = std::env::var("MYPAPER_BAR_BACKDROP")
+        .ok()
+        .and_then(|p| Image::load(&ui, std::path::Path::new(&p)).ok())
+        .map(std::sync::Arc::new);
+    let mut model = model();
+    model.notifications = None;
+    for scheme in ["dark", "light"] {
+        let mut config = BarsConfig::parse(&format!(
+            r#"{{"preset":"macos","look":{{"style":"liquid","scheme":"{scheme}"}},
+                "top":{{"left":["start","search","workspaces","app"],"center":[],
+                        "right":["media","network","volume","quick","clock","power"]}},
+                "dock":{{"enabled":true,"extras":["desktop","trash"],"magnify":false}}}}"#
+        ))
+        .unwrap();
+        config.resolve(Vec::new);
+        for scale in [1.0_f32, 1.5] {
+            let width = (1280.0 * scale) as u32;
+            let mut images = view::Images::default();
+            let top_tokens = look::Tokens::resolve(
+                &config.top.look,
+                &Appearance::default(),
+                &providers::accent::read(),
+            );
+            let dock_tokens = look::Tokens::resolve(
+                &config.dock.look,
+                &Appearance::default(),
+                &providers::accent::read(),
+            );
+            let top = view::top(width, &config, &model, &top_tokens, scale, &mut ui, &mut images, None);
+            let dock = view::dock(
+                &config, &model, &apps(), &dock_tokens, scale, (width, 400), &[], &[], &mut ui,
+                &mut images, None,
+            );
+            for (name, frame, tokens) in [("top", top, &top_tokens), ("dock", dock, &dock_tokens)] {
+                let (w, h) = frame.size;
+                let mut list = mypaper_ui::DisplayList::default();
+                if let Some(image) = &backdrop {
+                    list.ops.push(Op::Image {
+                        rect: mypaper_ui::Rect::new(0.0, 0.0, w as f32, h as f32),
+                        image: image.clone(),
+                        opacity: 1.0,
+                        source: Some(mypaper_ui::Rect::new(0.0, 720.0, w as f32 / scale, h as f32 / scale)),
+                    });
+                }
+                for &(rect, radius) in &frame.shapes {
+                    let tint = tokens.theme.color.surface;
+                    list.ops.push(Op::Fill { rect, radius, color: tint.with_alpha(0.55) });
+                }
+                list.ops.extend(frame.list.ops.iter().cloned());
+                let image = render(&mut ui, &list, w, h).unwrap();
+                let pct = (scale * 100.0) as u32;
+                mypaper_ui::golden::write(&image, &dir.join(format!("bar-{name}-{scheme}-{pct}.png")))
+                    .unwrap();
+            }
+        }
+    }
+}
