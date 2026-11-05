@@ -264,6 +264,8 @@ fn serve(manifest: &PluginManifest, id: &Value, request: HostRequest) -> String 
 pub struct Plugins {
     studio: crate::plugin_manager::Snapshot,
     preferences: crate::plugin_manager::Preferences,
+    /// Legacy integration settings are inherited once, before schema defaults or saved settings.
+    legacy_settings: HashMap<String, Value>,
     uninstalling: std::collections::BTreeSet<String>,
     procs: HashMap<String, Process>,
     /// Placed faces of SDK plugins, by instance.
@@ -379,6 +381,7 @@ impl Plugins {
         Self {
             studio: Default::default(),
             preferences: crate::plugin_manager::Preferences::load(),
+            legacy_settings: HashMap::new(),
             uninstalling: Default::default(),
             procs: HashMap::new(),
             faces: BTreeMap::new(),
@@ -667,6 +670,14 @@ impl Plugins {
         if self.preferences.disabled.contains(plugin) { return Err(unavailable(format!("plugin {plugin} is disabled"))); }
         let mut settings = settings;
         if let Some((manifest, _)) = self.find(plugin) {
+            let legacy = self.legacy_settings.entry(plugin.into()).or_insert_with(|| plugin_settings(plugin));
+            if let Some(values) = settings.as_object_mut() {
+                for schema in &manifest.settings {
+                    if let Some(key) = schema["key"].as_str() && let Some(value) = legacy.get(key) {
+                        values.entry(key.to_owned()).or_insert_with(|| value.clone());
+                    }
+                }
+            }
             let saved = self.preferences.settings.get(plugin).cloned().unwrap_or_else(|| json!({}));
             if let Ok(Value::Object(defaults)) = crate::plugin_manager::resolve_settings(&manifest, &json!({}))
                 && let Some(values) = settings.as_object_mut() {
