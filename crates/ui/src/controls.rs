@@ -485,7 +485,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         let y = rect.top + (rect.height() - h) / 2.0;
         self.list.ops.push(Op::Text {
             rect: Rect::new(x.round(), y.round(), w, h),
-            text: shown.into(),
+            text: shown,
             style: style.clone(),
             color,
         });
@@ -515,6 +515,7 @@ impl<'a, A: Clone> Builder<'a, A> {
 
     /// Word-wrapped text from `(x, y)` within `width`, `line` pixels per line; returns the
     /// height used.
+    #[allow(clippy::too_many_arguments)]
     pub fn paragraph(
         &mut self,
         x: f32,

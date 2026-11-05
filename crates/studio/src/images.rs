@@ -24,11 +24,14 @@ enum Slot {
     Failed,
 }
 
+/// A decode for the worker: the cache key, the file, the size wanted.
+type Job = (String, PathBuf, (u32, u32));
+
 #[derive(Default)]
 pub struct Images {
     slots: HashMap<String, Slot>,
     clock: u64,
-    worker: Option<Sender<(String, PathBuf, (u32, u32))>>,
+    worker: Option<Sender<Job>>,
     /// Goldens decode synchronously, with their own WIC factory.
     sync: Option<mypaper_ui::Ui>,
 }
@@ -36,7 +39,7 @@ pub struct Images {
 impl Images {
     /// Decodes on a worker thread from now on, waking the UI thread when one is ready.
     pub fn connect(&mut self, inbox: Sender<crate::app::Msg>, thread: u32) {
-        let (tx, rx) = channel::<(String, PathBuf, (u32, u32))>();
+        let (tx, rx) = channel::<Job>();
         std::thread::spawn(move || {
             let Ok(ui) = mypaper_ui::Ui::new() else { return };
             for (key, path, max) in rx {
@@ -184,7 +187,7 @@ fn shell_thumbnail(path: &Path, max: (u32, u32)) -> anyhow::Result<Image> {
         let _ = DeleteObject(bitmap.into());
         anyhow::ensure!(rows > 0, "no thumbnail pixels");
         // Video thumbnails are opaque; some providers leave alpha at 0.
-        for px in pixels.chunks_exact_mut(4) {
+        for px in pixels.as_chunks_mut::<4>().0 {
             px[3] = 255;
         }
         Ok(Image {

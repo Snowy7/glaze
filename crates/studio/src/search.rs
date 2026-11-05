@@ -236,7 +236,8 @@ pub fn run(app: &mut App, i: usize) {
     app.run(entry.action);
 }
 
-/// Space on a switch result: flip it, keep the palette open.
+/// Space on a focused switch result: flip it, keep the palette open. `false` when the result
+/// isn't a switch.
 pub fn toggle(app: &mut App, i: usize) -> bool {
     let Some(s) = results(app).get(i).and_then(|e| e.toggle) else {
         return false;

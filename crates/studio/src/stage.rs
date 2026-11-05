@@ -9,7 +9,6 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use mypaper_bars::BarsConfig;
-use mypaper_bars::actions::BarKind;
 use mypaper_shell::preview as shell;
 use mypaper_ui::controls::{Align, Font, key};
 use mypaper_ui::{DisplayList, Image, Op, Point, Rect, Rgba, Role, Ui};
@@ -62,8 +61,6 @@ pub struct Content {
     pub shapes: Vec<Shape>,
     pub items: Vec<Item>,
     pub still: Option<PathBuf>,
-    /// The display's pixels per stage pixel (for drags).
-    pub per_pixel: f32,
     /// The grid of the display, for widget drags: origin and cell in stage pixels.
     pub grid: Option<(Grid, f32)>,
 }
@@ -143,7 +140,7 @@ fn build(
     app: &App,
     ui: &mut Ui,
     images: &mut shell::bars::Images,
-    mut icons: Option<&mut mypaper_bars::icons::Icons>,
+    icons: Option<&mut mypaper_bars::icons::Icons>,
     size: (u32, u32),
     show: Show,
 ) -> Content {
@@ -165,7 +162,6 @@ fn build(
             let w = &app.library.items[i];
             w.preview.clone().or_else(|| w.video.clone())
         }),
-        per_pixel: 1.0 / scale,
         ..Content::default()
     };
     let theme_dir = theme_name(&app.docs).and_then(|t| mypaper_theme::locate(Some(&t)).ok());
@@ -197,7 +193,7 @@ fn build(
         }
         if config.dock.enabled && config.dock.monitors.includes(&monitor.device, monitor.primary) {
             let tokens = shell::bars::Tokens::resolve(&config.dock.look, &appearance, &system);
-            let apps = dock_apps(&config, icons.as_deref_mut());
+            let apps = dock_apps(&config, icons);
             let frame = shell::bars::dock(&config, &model, &apps, &tokens, scale, size, &[], &[], ui, images, None);
             let (w, h) = (frame.size.0 as f32, frame.size.1 as f32);
             let margin = config.dock.margin.unwrap_or(6.0) as f32 * scale;
@@ -365,7 +361,7 @@ fn widgets(
         mypaper_widgets::files::user("widget-data").unwrap_or_default()
     });
     
-    out.grid = Some((grid.clone(), scale));
+    out.grid = Some((grid, scale));
     for instance in &layout.instances {
         if layout::show_on(&instance.monitor, &devices, primary) != Some(monitor.device.as_str()) {
             continue;
@@ -734,10 +730,3 @@ pub fn home_pick(item: Option<&Item>) -> Action {
     }
 }
 
-/// The top bar's kind for `bar`.
-pub fn kind(bar: Bar) -> BarKind {
-    match bar {
-        Bar::Top => BarKind::Top,
-        Bar::Dock => BarKind::Dock,
-    }
-}

@@ -145,7 +145,7 @@ pub struct Step {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Saved {
     Idle,
-    Saved(Instant),
+    Done(Instant),
     Failed(String),
 }
 
@@ -183,6 +183,7 @@ impl Docs {
     }
 
     /// Documents from text, never written (goldens and tests).
+    #[cfg(test)]
     pub fn fixture(texts: [&str; 4]) -> Self {
         let docs = DocId::ALL
             .iter()
@@ -425,11 +426,11 @@ impl Docs {
         }
         let mut changes = Vec::new();
         for (id, before, raw, effective, text) in staged {
-            if let Some(path) = &self.doc(id).path {
-                if let Err(e) = write_atomic(path, text.as_bytes()) {
-                    self.saved = Saved::Failed(format!("{e:#}"));
-                    return Err(e);
-                }
+            if let Some(path) = &self.doc(id).path
+                && let Err(e) = write_atomic(path, text.as_bytes())
+            {
+                self.saved = Saved::Failed(format!("{e:#}"));
+                return Err(e);
             }
             let doc = &mut self.docs[id.index()];
             doc.raw = raw.clone();
@@ -438,7 +439,7 @@ impl Docs {
             changes.push((id, before, raw));
         }
         if !changes.is_empty() {
-            self.saved = Saved::Saved(Instant::now());
+            self.saved = Saved::Done(Instant::now());
             self.version += 1;
         }
         Ok(changes)
@@ -462,7 +463,7 @@ impl Docs {
             write_atomic(path, text.as_bytes()).inspect_err(|e| {
                 self.saved = Saved::Failed(format!("{e:#}"));
             })?;
-            self.saved = Saved::Saved(Instant::now());
+            self.saved = Saved::Done(Instant::now());
         }
         self.docs[id.index()].seen = Some(text);
         Ok(())

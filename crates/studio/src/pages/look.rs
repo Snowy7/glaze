@@ -353,7 +353,7 @@ fn windows(app: &App, b: &mut B, col: &mut Col) {
             ("Other", at == 3, Action::PickFile("cursors".into(), "/look/windows/cursors".into())),
         ];
         crate::ui::anchor(app, "pointer", c.view, c.y);
-        crate::ui::tiles(b, c, key("pointer-tiles"), 4, true, &items, |b, i, pic| pointer_tile(b, i, pic));
+        crate::ui::tiles(b, c, key("pointer-tiles"), 4, true, &items, pointer_tile);
     });
     let place = Place::Look { windows: true };
     let edge_detail = match layer.get("border").and_then(Value::as_str) {
@@ -566,7 +566,3 @@ pub fn intercept_null(app: &mut App, path: &str) -> bool {
     true
 }
 
-/// The palette's settings that live on this page but draw custom rows.
-pub fn custom_ids() -> &'static [&'static str] {
-    &["style", "tint", "accent", "icon_pack", "different", "windows_look", "windows_accent", "pointer", "window_edge", "title_bar", "title_text"]
-}

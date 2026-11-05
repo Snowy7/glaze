@@ -4,11 +4,10 @@
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use mypaper_ui::controls::{Behavior, Input, Key, ScrollArea, Target, key};
-use mypaper_ui::{Button, Chrome, Event, Point, Rect, Role};
+use mypaper_ui::{Button, Event, Point, Rect};
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Bar, Choices, Edit, FieldId, Page, Panel, Section, Slot, Source};
@@ -61,11 +60,8 @@ impl Nav {
 pub struct Frame {
     pub targets: Vec<Target<Action>>,
     pub scrolls: Vec<ScrollArea>,
-    pub chrome: Vec<(Rect, Chrome)>,
     pub regions: Vec<Rect>,
     pub anchors: HashMap<&'static str, (Key, f32)>,
-    /// Where the focused text field sits, if it's on screen.
-    pub field_rect: Option<Rect>,
     /// Targets from here on belong to the open overlay (modal for the keyboard).
     pub overlay_from: usize,
 }
@@ -74,7 +70,6 @@ pub struct Frame {
 #[derive(Debug, Clone)]
 pub enum Drag {
     Slider {
-        key: Key,
         edit: Edit,
         track: Rect,
         min: f64,
@@ -160,7 +155,6 @@ pub struct App {
     pub pending_value: Option<(Edit, Value)>,
     /// Where setting rows were drawn this frame (moved into `frame` after it).
     pub anchors: RefCell<HashMap<&'static str, (Key, f32)>>,
-    pub field_rect: RefCell<Option<Rect>>,
     pub field: Option<Field>,
     /// Search texts by field (palette, wallpapers, widgets, places…).
     pub texts: HashMap<FieldId, String>,
@@ -204,6 +198,7 @@ impl App {
     }
 
     /// Studio with fixed files, wallpapers and monitors, for golden images.
+    #[cfg(test)]
     pub fn fixture(docs: Docs, theme: Theme, library: Library, size: (u32, u32)) -> Self {
         let mut app = Self::with(docs, theme, library, 1.0, size, true);
         app.monitors = vec![
@@ -269,7 +264,6 @@ impl App {
             pending_reveal: None,
             pending_value: None,
             anchors: RefCell::new(HashMap::new()),
-            field_rect: RefCell::new(None),
             field: None,
             texts: HashMap::new(),
             places: Vec::new(),
@@ -436,7 +430,6 @@ impl App {
             } => {
                 if let Action::Slider(edit) = action {
                     let drag = Drag::Slider {
-                        key,
                         edit,
                         track,
                         min,
@@ -678,9 +671,6 @@ impl App {
                 }
             }
             0x24 | 0x23 => self.slider_key(if vk == 0x24 { f64::MIN } else { f64::MAX }),
-            0x2E => {
-                crate::pages::key(self, vk, shift);
-            }
             _ => {
                 crate::pages::key(self, vk, shift);
             }
@@ -797,10 +787,11 @@ impl App {
             return;
         }
         let action = t.action.clone();
-        if let Action::Field(id) = action {
-            self.focus_field(id);
-        } else {
-            self.run(action);
+        match action {
+            Action::Field(id) => self.focus_field(id),
+            // A switch among the palette's results flips in place; Enter still goes there.
+            Action::PaletteRun(i) if space && crate::search::toggle(self, i) => {}
+            action => self.run(action),
         }
     }
 
@@ -1229,7 +1220,7 @@ impl App {
         let flash = self.flash.map(|(_, at)| at + Duration::from_millis(900));
         let toast = self.toast.as_ref().map(|t| t.until);
         let saved = match self.docs.saved {
-            Saved::Saved(at) => Some(at + Duration::from_secs(2)),
+            Saved::Done(at) => Some(at + Duration::from_secs(2)),
             _ => None,
         };
         let status = self.system.next_poll(self.watching_status());
@@ -1258,7 +1249,7 @@ impl App {
             self.flash = None;
             self.dirty = true;
         }
-        if let Saved::Saved(at) = self.docs.saved
+        if let Saved::Done(at) = self.docs.saved
             && at + Duration::from_secs(2) <= now
         {
             self.docs.saved = Saved::Idle;
@@ -1397,7 +1388,7 @@ impl App {
                 self.input.focus = None;
             }
             Action::PaletteRun(i) => crate::search::run(self, i),
-            Action::ToastAction => {
+            Action::ToastButton => {
                 if let Some((_, action)) = self.toast.take().and_then(|t| t.action) {
                     self.run(action);
                 }
@@ -1522,10 +1513,3 @@ impl Setting {
     }
 }
 
-/// A shared, cheaply cloned label.
-pub fn label(s: &str) -> Arc<str> {
-    s.into()
-}
-
-/// The role a stage item announces.
-pub const STAGE_ROLE: Role = Role::Button;

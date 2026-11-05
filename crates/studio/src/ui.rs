@@ -288,7 +288,6 @@ pub fn text_field(
     match live {
         Some(f) => {
             f.field.set_rect(inner);
-            *app.field_rect.borrow_mut() = Some(inner);
             b.list.ops.push(mypaper_ui::Op::TextField {
                 rect: inner,
                 field: f.field.clone(),

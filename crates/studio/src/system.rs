@@ -74,6 +74,7 @@ impl System {
     }
 
     /// Fixed state for goldens: everything running.
+    #[cfg(test)]
     pub fn fixture() -> Self {
         let part = |memory| Part {
             running: true,
@@ -96,10 +97,6 @@ impl System {
             ]),
             core_path: Some(PathBuf::from("C:\\Program Files\\mypaper\\mypaper-core.exe")),
         }
-    }
-
-    pub fn core(&self) -> Part {
-        self.parts[0]
     }
 
     pub fn running(&self) -> bool {

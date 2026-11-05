@@ -94,8 +94,7 @@ pub fn run(app: &mut App, action: Action) {
         | Action::ListRemove(..)
         | Action::PlacePick(_)
         | Action::PlaceAuto
-        | Action::PickFile(..)
-        | Action::StageDrag => widgets::run(app, action),
+        | Action::PickFile(..) => widgets::run(app, action),
         Action::SelectBar(_)
         | Action::SelectModule(_)
         | Action::SelectPanel(_)
@@ -141,7 +140,7 @@ pub fn intercept(app: &mut App, path: &str, value: Option<serde_json::Value>) ->
         match crate::library::edit_theme(&dir, &pointer, value) {
             Ok(()) => {
                 app.library = crate::library::Library::scan(crate::app::theme_name(&app.docs).as_deref());
-                app.docs.saved = crate::docs::Saved::Saved(std::time::Instant::now());
+                app.docs.saved = crate::docs::Saved::Done(std::time::Instant::now());
             }
             Err(e) => app.alert(format!("{e:#}")),
         }

@@ -61,10 +61,9 @@ pub fn wake(thread: u32) {
 }
 
 fn main() -> ExitCode {
-    let started = Instant::now();
     mypaper_desktop::init_logging();
     mypaper_desktop::enable_dpi_awareness();
-    match run(started) {
+    match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             log::error!("{e:#}");
@@ -102,10 +101,8 @@ impl Studio {
         app.frame = app::Frame {
             targets: built.targets,
             scrolls: built.scrolls,
-            chrome: built.chrome,
             regions: built.regions,
             anchors,
-            field_rect: app.field_rect.borrow_mut().take(),
             overlay_from: built.overlay_from,
         };
         if let Err(e) = surface.present(ui, (0, 0), size, built.list) {
@@ -146,7 +143,7 @@ impl Studio {
     }
 }
 
-fn run(started: Instant) -> Result<()> {
+fn run() -> Result<()> {
     // SAFETY: a named mutex held (never closed) for the life of the process.
     unsafe {
         let _mutex = CreateMutexW(None, true, w!("Local\\mypaper-studio")).context("mutex")?;
@@ -162,7 +159,8 @@ fn run(started: Instant) -> Result<()> {
     let mut ui = Ui::new()?;
     // Studio shows a few hundred labels at once: keep them all laid out.
     ui.text.set_capacity(480);
-    let surface = Surface::new(Kind::App { min: (960, 640) }, TITLE, Role::Window)?;
+    // UI Automation loads on its first request rather than before the first paint.
+    let surface = Surface::new_deferred_accessibility(Kind::App { min: (960, 640) }, TITLE, Role::Window)?;
     let scale = surface.scale();
     // SAFETY: the calling thread's id.
     let thread = unsafe { GetCurrentThreadId() };
@@ -182,10 +180,9 @@ fn run(started: Instant) -> Result<()> {
         s.app.size = s.surface.client_size();
         s.render();
         s.surface.show_active(maximized);
-        s.app.dirty = true;
-        s.render();
     }
-    log::info!("Studio open in {} ms", started.elapsed().as_millis());
+    // `READY component=studio open_ms=…`, counted from process creation (the ≤300 ms gate).
+    mypaper_desktop::startup::ready("studio", "open_ms");
     let _watch = watch::start(tx, thread).inspect_err(|e| log::warn!("not following outside edits: {e:#}"));
     // While Windows' size/move loop runs, the app's stops: render from inside it.
     let hook = Rc::downgrade(&studio);

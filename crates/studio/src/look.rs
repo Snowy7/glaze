@@ -260,24 +260,6 @@ fn round(v: f32) -> f64 {
     (f64::from(v) * 1000.0).round() / 1000.0
 }
 
-/// The defaults each style starts from, for the Material sliders' readouts.
-pub fn style_defaults(style: Style) -> Material {
-    let (clarity, blur, refraction, highlight) = match style {
-        Style::Liquid => (0.88, 12.0, 0.6, 0.55),
-        Style::Oneui => (0.45, 16.0, 0.0, 0.0),
-        Style::Fluent => (0.35, 20.0, 0.0, 0.0),
-        Style::Mono => (0.25, 0.0, 0.0, 0.0),
-        Style::Solid => (0.0, 0.0, 0.0, 0.0),
-    };
-    Material {
-        clarity: Some(clarity),
-        blur: Some(blur),
-        refraction: Some(refraction),
-        highlight: Some(highlight),
-        tint: None,
-    }
-}
-
 /// Which material controls a style uses (spec 4.3): clarity, blur, refraction, highlight.
 pub fn uses(style: Style) -> [bool; 4] {
     match style {

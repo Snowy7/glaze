@@ -87,6 +87,7 @@ impl Theme {
     }
 
     /// A fixed look for golden images: no machine settings.
+    #[cfg(test)]
     pub fn fixed(dark: bool, text: &Text) -> Self {
         Self {
             palette: if dark {
@@ -221,7 +222,6 @@ pub mod glyph {
     pub const TERMINAL: char = '\u{E756}';
     pub const PULSE: char = '\u{E9D9}';
     pub const LAYERS: char = '\u{E81E}';
-    pub const BRANCH: char = '\u{E8AD}';
     pub const SOUND: char = '\u{E767}';
     pub const START: char = '\u{E71D}';
     pub const POWER: char = '\u{E7E8}';
@@ -239,7 +239,6 @@ pub mod glyph {
     pub const PHOTO: char = '\u{E91B}';
     pub const TOGGLES: char = '\u{E9F5}';
     pub const LAUNCH: char = '\u{E8A7}';
-    pub const MOON: char = '\u{E708}';
     pub const PALETTE: char = '\u{E790}';
     pub const STAR: char = '\u{E734}';
 }

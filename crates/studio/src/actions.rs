@@ -278,8 +278,6 @@ pub enum Action {
     PlacePick(usize),
     PlaceAuto,
     PickFile(String, String),
-    /// Pointer down on a stage item (drag in the app).
-    StageDrag,
     // Bars
     SelectBar(Option<Bar>),
     SelectModule(Option<Slot>),
@@ -309,7 +307,7 @@ pub enum Action {
     // Overlays
     Dismiss,
     PaletteRun(usize),
-    ToastAction,
+    ToastButton,
     FirstRunPick(usize),
     FirstRunTaskbar(usize),
     FirstRunNext,

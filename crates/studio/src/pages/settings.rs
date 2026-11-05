@@ -244,7 +244,7 @@ fn menu_items(app: &App, b: &mut B, c: &mut Col) {
     b.list.ops.push(mypaper_ui::Op::Unclip);
     c.y = rect.bottom.max(preview.bottom) + b.px(10.0);
     // Add a built-in, a separator, your own; reset.
-    let hidden: Vec<Builtin> = ALL_BUILTINS.iter().copied().filter(|b| !items.iter().any(|e| *e == Entry::Builtin(*b))).collect();
+    let hidden: Vec<Builtin> = ALL_BUILTINS.iter().copied().filter(|b| !items.contains(&Entry::Builtin(*b))).collect();
     let mut x = c.x;
     for builtin in hidden {
         let label = format!("+ {}", builtin_label(builtin));
@@ -253,7 +253,7 @@ fn menu_items(app: &App, b: &mut B, c: &mut Col) {
             x = c.x;
             c.y += b.px(34.0);
         }
-        b.button(key(("menu-add", builtin_label(builtin))), Rect::new(x, c.y, w, b.px(28.0)), &label, None, ButtonKind::Secondary, true, Action::MenuAdd(builtin_id(builtin).into()));
+        b.button(key(("menu-add", builtin_label(builtin))), Rect::new(x, c.y, w, b.px(28.0)), &label, None, ButtonKind::Secondary, true, Action::MenuAdd(builtin_id(builtin)));
         x += w + b.px(6.0);
     }
     for (label, action) in [("+ Separator", Action::MenuAdd("separator".into())), ("Reset", Action::MenuReset)] {

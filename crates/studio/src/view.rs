@@ -3,7 +3,7 @@
 //! follows plans/native/studio-redesign.md 8.2 and the mockups.
 
 use mypaper_ui::controls::{Align, Builder, ButtonKind, Font, ScrollArea, Target, key};
-use mypaper_ui::{Chrome, DisplayList, Point, Rect, Rgba, Role, Text};
+use mypaper_ui::{Chrome, DisplayList, Point, Rect, Role, Text};
 use serde_json::Value;
 
 use crate::actions::{Action, Page};
@@ -266,7 +266,7 @@ pub fn edit_tools(app: &App, b: &mut B, bar: Rect, mut right: f32) -> f32 {
     b.icon_button(key("undo"), Rect::new(right, y, b.px(32.0), b.px(32.0)), glyph::UNDO, "Undo (Ctrl+Z)", false, app.docs.can_undo(), Action::Undo);
     let caption = b.font(Font::Caption);
     let (label, glyph) = match &app.docs.saved {
-        Saved::Saved(_) => ("Saved", Some(glyph::CHECK)),
+        Saved::Done(_) => ("Saved", Some(glyph::CHECK)),
         Saved::Failed(_) => ("Not saved", Some(glyph::ALERT)),
         Saved::Idle => ("", None),
     };
@@ -336,7 +336,7 @@ fn toast(app: &App, b: &mut B) {
     if let Some((label, _)) = &t.action {
         let bw = b.button_width(label, false, true);
         x -= bw + b.px(4.0);
-        b.button(key("toast-action"), Rect::new(x, rect.top + b.px(7.0), bw, b.px(28.0)), label, None, ButtonKind::Secondary, true, Action::ToastAction);
+        b.button(key("toast-action"), Rect::new(x, rect.top + b.px(7.0), bw, b.px(28.0)), label, None, ButtonKind::Secondary, true, Action::ToastButton);
     }
     b.list.hits.push(mypaper_ui::Hit {
         id: 0,
@@ -380,5 +380,3 @@ pub fn split(app: &App, body: Rect) -> (Rect, Rect) {
     )
 }
 
-/// The palette and sheets' input fill.
-pub const SCRIM: Rgba = Rgba::new(0.0, 0.0, 0.0, 0.5);

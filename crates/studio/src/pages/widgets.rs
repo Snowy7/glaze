@@ -130,7 +130,7 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
 
 fn dots(app: &App, b: &mut B, frame: Rect) {
     let cache = app.stage.borrow();
-    let Some((grid, scale)) = cache.content.grid.clone() else { return };
+    let Some((grid, scale)) = cache.content.grid else { return };
     let d = mypaper_ui::Rgba::new(1.0, 1.0, 1.0, 0.35);
     for row in 0..=grid.rows {
         for c in 0..=grid.cols {
@@ -470,7 +470,7 @@ fn index_of(app: &App, instance: &str) -> Option<usize> {
 
 /// Whether `cell`+`size` is free on this display, apart from `except`.
 fn free(app: &App, layout: &Layout, cell: [u32; 2], size: [u32; 2], except: &str) -> bool {
-    let grid = app.stage.borrow().content.grid.clone().map(|g| g.0);
+    let grid = app.stage.borrow().content.grid.map(|g| g.0);
     if let Some(g) = grid
         && (cell[0] + size[0] > g.cols || cell[1] + size[1] > g.rows)
     {
@@ -483,7 +483,7 @@ fn free(app: &App, layout: &Layout, cell: [u32; 2], size: [u32; 2], except: &str
 
 /// The first free cell for `size` on this display, row by row.
 fn first_free(app: &App, layout: &Layout, size: [u32; 2]) -> Option<[u32; 2]> {
-    let (cols, rows) = app.stage.borrow().content.grid.clone().map_or((24, 12), |(g, _)| (g.cols, g.rows));
+    let (cols, rows) = app.stage.borrow().content.grid.map_or((24, 12), |(g, _)| (g.cols, g.rows));
     (0..rows.saturating_sub(size[1] - 1))
         .flat_map(|r| (0..cols.saturating_sub(size[0] - 1)).map(move |c| [c, r]))
         .find(|&cell| free(app, layout, cell, size, ""))
@@ -692,7 +692,7 @@ pub fn on_key(app: &mut App, vk: u16, shift: bool) -> bool {
 
 pub fn drag_to(app: &mut App, drag: Drag, p: Point) {
     let Drag::Widget { instance, from, resize, .. } = drag else { return };
-    let Some((grid, scale)) = app.stage.borrow().content.grid.clone() else { return };
+    let Some((grid, scale)) = app.stage.borrow().content.grid else { return };
     let (cw, ch) = ((grid.cell[0] + grid.gap) as f32 * scale, (grid.cell[1] + grid.gap) as f32 * scale);
     let (dx, dy) = (((p.x - from.x) / cw).round() as i32, ((p.y - from.y) / ch).round() as i32);
     if dx == 0 && dy == 0 {
