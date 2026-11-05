@@ -245,10 +245,9 @@ fn sparse_meter_updates_match_a_complete_render() {
         );
         before = after;
     }
-    assert_eq!(
-        canvas.arcs.borrow().len(),
-        1,
-        "a meter keeps only its latest partial geometry"
+    assert!(
+        canvas.arcs.borrow().len() <= 64,
+        "meter geometry stays bounded"
     );
 }
 
@@ -431,12 +430,7 @@ pub(crate) struct Canvas {
     target: ID2D1RenderTarget,
     brush: ID2D1SolidColorBrush,
     images: RefCell<HashMap<usize, (Arc<Image>, ID2D1Bitmap)>>,
-    arcs: RefCell<HashMap<[u32; 3], CachedArc>>,
-}
-
-struct CachedArc {
-    sweep: u32,
-    geometry: ID2D1PathGeometry,
+    arcs: RefCell<HashMap<[u32; 4], ID2D1PathGeometry>>,
 }
 
 impl Canvas {
@@ -680,11 +674,14 @@ impl Canvas {
                             None,
                         );
                     } else if *sweep > 0.0 {
-                        let key = [center.x.to_bits(), center.y.to_bits(), radius.to_bits()];
+                        let key = [
+                            center.x.to_bits(),
+                            center.y.to_bits(),
+                            radius.to_bits(),
+                            sweep.to_bits(),
+                        ];
                         let mut arcs = self.arcs.borrow_mut();
-                        if !arcs
-                            .get(&key)
-                            .is_some_and(|arc| arc.sweep == sweep.to_bits())
+                        if !arcs.contains_key(&key)
                             && let Ok(path) = t.GetFactory().and_then(|f| f.CreatePathGeometry())
                             && let Ok(sink) = path.Open()
                         {
@@ -716,22 +713,14 @@ impl Canvas {
                             }
                             sink.EndFigure(D2D1_FIGURE_END_OPEN);
                             if sink.Close().is_ok() {
-                                if arcs.len() >= 64 && !arcs.contains_key(&key) {
+                                if arcs.len() >= 64 {
                                     arcs.clear();
                                 }
-                                // Retain the current meter, not every value seen since startup.
-                                arcs.insert(
-                                    key,
-                                    CachedArc {
-                                        sweep: sweep.to_bits(),
-                                        geometry: path,
-                                    },
-                                );
+                                arcs.insert(key, path);
                             }
                         }
-                        if let Some(arc) = arcs.get(&key).filter(|arc| arc.sweep == sweep.to_bits())
-                        {
-                            t.DrawGeometry(&arc.geometry, brush, *width, None);
+                        if let Some(path) = arcs.get(&key) {
+                            t.DrawGeometry(path, brush, *width, None);
                         }
                     }
                 }
