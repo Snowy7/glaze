@@ -296,7 +296,6 @@ fn content(c: &mut Ctx, body: Rect) {
         Widget::T3 => integrations::t3::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Obs => integrations::obs::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Docker => integrations::docker::view(&mut c.f, c.m, c.rect, c.now.ms),
-        Widget::Tailscale => integrations::tailscale::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Grok => integrations::grok::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Custom => integrations::custom::view(&mut c.f, c.m, c.rect),
         Widget::Plugin => plugin_face(c),
