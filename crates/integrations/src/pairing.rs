@@ -45,7 +45,7 @@ async fn exchange(endpoint: &str, code: &str) -> Result<Vec<u8>> {
         let (mut sender, connection) =
             hyper::client::conn::http1::handshake(TokioIo::new(stream)).await?;
         let _driver = Driver(tokio::spawn(connection));
-        let result = async {
+        async {
             let request = Request::builder()
                 .method("POST")
                 .uri("/oauth/token")
@@ -85,8 +85,7 @@ async fn exchange(endpoint: &str, code: &str) -> Result<Vec<u8>> {
             };
             Ok(token.into_bytes())
         }
-        .await;
-        result
+        .await
     })
     .await;
     body.fill(0);
