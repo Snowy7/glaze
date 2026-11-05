@@ -321,8 +321,8 @@ clear message.
 |---|---|---|
 | idle CPU | 0% | no polling. The helper blocks on its channel. The epoch ticker thread runs only while a plugin call is executing, and timers are coalesced |
 | runtime memory | ~5–10 MB, only while any plugin is active | one `Engine`. The helper exists only while a plugin is loaded |
-| per plugin | ~0.5–2 MB typical, **hard cap 32 MiB** of linear memory | pooling allocator slots plus a `ResourceLimiter` (memories, tables, instances) |
-| per-event CPU | **50 ms** of plugin code per event | epoch interruption (5 ms ticks). Exceeding it traps the call, which counts as a strike, and the plugin is restarted. After 3 strikes it's stopped |
+| per plugin | ~0.5–2 MB typical, **hard cap 32 MiB** of linear memory | on-demand instances (nothing committed up front, everything returned on unload) plus a `ResourceLimiter` (memories, tables, instances) |
+| per-event CPU | soft: **50 ms** for an input event (action, command), **250 ms** for anything else (I/O replies, timers, a big first snapshot); hard: **1 s** | the plugin's own time, blocking host imports excluded. Over the soft budget: the first is a warning in the log, 3 in a minute throttle the plugin for 5 s (its timers wait, system events skip it; input and I/O still arrive), 20 in a minute stop it with the reason in Studio. Over the hard ceiling (epoch interruption, 5 ms ticks) the call traps as a runaway: a strike, and the plugin restarts from its saved state; 3 strikes in 5 minutes stop it. A single slow event never stops a plugin |
 | startup | no JIT | AOT `.cwasm` cache, deserialized with `Component::deserialize_file` |
 | IPC | binary frames | `u32` LE length + `postcard` message on the helper's stdio. Images go through named shared memory (`image-id`) |
 | action → repaint | ≪ one frame (16 ms) | measured by `mypaper-plugins --bench` |
@@ -339,10 +339,40 @@ live helper with the weather face placed):
 | cold load (AOT compile + instantiate + init) | hello 130 ms, weather 213 ms (once, at install) |
 | warm load (cached `.cwasm` + instantiate + init) | 0.62 ms |
 | action → view frame decoded, the shell's side included except the draw | p50 0.008 ms, p99 0.017 ms |
-| infinite loop stopped (50 ms budget) | 49.5 ms |
+| infinite loop stopped (then a 50 ms budget; the hard ceiling is 1 s since 2026-11-06) | 49.5 ms |
 | weather: IP lookup + forecast, two HTTP round trips | < 1 s; each reply handled in 0.3–0.5 ms |
 | component sizes | hello.wasm 107 KB, weather.wasm 196 KB; `.cwasm` 430 / 740 KB |
 | per open websocket / pipe, client side (its threads, buffers and WinHTTP state) | ~230–360 KiB / ~45–85 KiB private, 8 of each, noisy across runs (`cargo test --release -p mypaper-plugins measure -- --ignored --nocapture`) |
+
+### Memory: peaks are permanent
+
+A plugin's linear memory only grows: WebAssembly can't shrink it, and every page the guest
+allocator touched stays committed until the instance is dropped (an idle unload, a restart). A
+plugin's cost is therefore its **peak**, not its working set. Decode large payloads once, in
+place: route frames with borrowed `&RawValue`s, decode straight into typed structs that keep only
+what the faces draw, and never build a `serde_json::Value` tree of a big message (`json!` around
+a `Value` serializes a second copy). Measured 2026-11-06:
+
+| measure | before | after |
+|---|---|---|
+| T3, live linear memory (its biggest frames are `server.getConfig` and the config stream, ~2.6 MiB each; the shell baseline is ~0.2 MiB) | 17.75 MiB | 6.31 MiB |
+| T3, slowest live event / a click (`live_t3_event_costs`) | 24 ms / seconds (a redraw scanned every thread per thread) | 6.2 ms / 0.31 ms |
+| T3, a synthetic 2.7 MiB shell baseline (3000 threads), heap peak above the frame | +23.8 MiB | +2.4 MiB (1.5 MiB kept) |
+| engine + linker + ticker, private (`--bench`) | +3.2 MiB (pooling: 48 table slots committed up front) | +0.2 MiB (on-demand) |
+| per plugin on activation, private (`--bench`: weather / tailscale / obs / t3) | +1.18 / +1.15 / +1.13 / +1.30 MiB | +0.07–1.14 / +1.14–1.16 / +1.13–1.14 / +0.55–1.30 MiB |
+| live helper, weather + T3 placed, private / working set | 26.1 / 35.8 MiB | 12.4 / 24.2 MiB |
+| live helper idle CPU, 30 s | 0 | 0.0 ms |
+| warm load (cached `.cwasm` + instantiate + init) | 0.62–0.84 ms | 0.59–1.2 ms |
+
+T3's remaining ~5 MiB above its working set is the free space the two ~2.6 MiB config frames
+left behind. Asking the server for the config once (the stream's snapshot instead of a separate
+`server.getConfig`) would save about half of it, if that snapshot carries the environment id
+the thread links need. Re-instantiating a plugin from `save()` to drop a past peak doesn't pay
+off for the current plugins: T3 keeps a websocket whose fresh subscription re-sends the same
+frames (the same peak again), and the others peak at ~1.1–1.3 MiB. Pooling's `linear_memory_keep_resident` and
+memory protection keys only affect slots after an instance is dropped (and MPK isn't on Windows).
+`vmmap.ps1` in `C:\mypaper-targets\memprof` breaks a live helper's private commit down by
+allocation (each linear memory is one committed run).
 
 ## Shell ↔ helper protocol
 
