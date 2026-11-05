@@ -1329,7 +1329,9 @@ impl Widgets {
         if matches!(event, Event::DpiChanged(_)) {
             self.monitors = monitor_infos();
             self.edit_geometry_dirty = true;
-            if self.drag.is_none() {
+            if self.drag.as_ref().is_none_or(|drag| drag.resize) {
+                self.cancel_drag();
+                self.settling.clear();
                 self.finish_fields();
                 self.reconcile_needed = true;
             } else {

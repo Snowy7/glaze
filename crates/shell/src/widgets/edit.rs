@@ -70,7 +70,7 @@ pub fn resize_target(
         if edges[i] {
             cell[i] + size[i]
         } else {
-            [grid.cols, grid.rows][i] - cell[i]
+            [grid.cols, grid.rows][i].saturating_sub(cell[i])
         }
     });
     let fits = |s: &[u32; 2]| (0..2).all(|i| s[i] <= limits[i] && (moving[i] || s[i] == size[i]));
