@@ -923,12 +923,14 @@ impl Panel for Launcher {
                     packaged: false,
                 })
                 .collect();
+            // The last two apps run that are still installed (a run file or a removed app
+            // isn't one), then the recent documents.
             self.recommended = self
                 .history
                 .recent
                 .iter()
-                .take(2)
                 .filter_map(|r| self.apps.iter().find(|a| a.id == r.id).cloned())
+                .take(2)
                 .collect();
             self.recommended.extend(files.clone());
             self.extras.retain(|a| !a.id.starts_with("file:"));

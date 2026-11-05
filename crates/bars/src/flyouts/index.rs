@@ -254,14 +254,17 @@ impl Builder {
         apps
     }
 
-    /// The recent files, newest first, with icons.
+    /// The recent documents, newest first, with icons: the shortcuts in `Recent` whose target
+    /// is a document that still exists ([`recent_document`]). Protocol activations
+    /// (`ms-screenclip:…`), folders, programs and system files are left out; each file shows
+    /// once, by its own name, with its own icon.
     pub fn recent_files(&self, limit: usize) -> Vec<RecentFile> {
         let Some(dir) =
             std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join(r"Microsoft\Windows\Recent"))
         else {
             return Vec::new();
         };
-        let mut files: Vec<(SystemTime, PathBuf)> = std::fs::read_dir(dir)
+        let mut links: Vec<(SystemTime, PathBuf)> = std::fs::read_dir(dir)
             .into_iter()
             .flatten()
             .flatten()
@@ -272,26 +275,79 @@ impl Builder {
             })
             .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
             .collect();
-        files.sort_by_key(|f| std::cmp::Reverse(f.0));
-        files
+        links.sort_by_key(|f| std::cmp::Reverse(f.0));
+        let noise = [std::env::var_os("WINDIR"), std::env::var_os("TEMP")]
             .into_iter()
+            .flatten()
+            .map(|d| d.to_string_lossy().to_lowercase())
+            .collect::<Vec<_>>();
+        let mut seen = std::collections::HashSet::new();
+        links
+            .into_iter()
+            .filter_map(|(modified, link)| {
+                let target = link_target(&link)?;
+                let lower = target.to_string_lossy().to_lowercase();
+                let keep = recent_document(&target)
+                    && !noise.iter().any(|dir| lower.starts_with(dir.as_str()))
+                    && seen.insert(lower.clone());
+                keep.then_some((modified, link, target, lower))
+            })
             .take(limit)
-            .map(|(modified, path)| {
-                let path = path.display().to_string();
+            .map(|(modified, link, target, lower)| {
+                let shown = target.display().to_string();
                 let icon = self.wic.as_ref().and_then(|wic| {
-                    let item = crate::icons::shell_item(&path)?;
-                    crate::icons::icon(&item, &path.to_lowercase(), wic, &self.icons)
+                    let item = crate::icons::shell_item(&shown)?;
+                    crate::icons::icon(&item, &lower, wic, &self.icons)
                 });
                 RecentFile {
-                    name: crate::apps::file_stem(&path),
+                    name: target
+                        .file_name()
+                        .map_or_else(|| shown.clone(), |n| n.to_string_lossy().into_owned()),
                     at: modified
                         .duration_since(UNIX_EPOCH)
                         .map_or(0, |d| d.as_millis() as u64),
                     icon,
-                    path,
+                    path: link.display().to_string(),
                 }
             })
             .collect()
+    }
+}
+
+/// Whether a recent shortcut's target is a document worth recommending: an existing file
+/// with an extension that isn't a program, a shortcut or a system/temporary file.
+pub fn recent_document(target: &Path) -> bool {
+    const NOT_DOCUMENTS: &[&str] = &[
+        "exe", "com", "bat", "cmd", "msi", "msix", "appx", "dll", "sys", "lnk", "url", "tmp",
+        "temp", "log", "etl", "ini", "dat", "bin", "cab", "cat", "inf", "reg", "db", "lock",
+    ];
+    let Some(ext) = target.extension().and_then(|e| e.to_str()) else {
+        return false;
+    };
+    !NOT_DOCUMENTS.iter().any(|n| ext.eq_ignore_ascii_case(n))
+        && target.is_absolute()
+        && std::fs::metadata(target).is_ok_and(|m| m.is_file())
+}
+
+/// A shortcut's file target, as written (case kept); `None` for a protocol or a virtual item
+/// (an `ms-screenclip:` activation has no file path).
+fn link_target(link: &Path) -> Option<PathBuf> {
+    use windows::Win32::System::Com::{IPersistFile, STGM_READ};
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+    use windows::core::{HSTRING, Interface};
+    // SAFETY: COM calls on an object we create; the buffer outlives the call.
+    unsafe {
+        let shell: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).ok()?;
+        shell
+            .cast::<IPersistFile>()
+            .ok()?
+            .Load(&HSTRING::from(link.as_os_str()), STGM_READ)
+            .ok()?;
+        let mut buffer = [0u16; 1024];
+        shell.GetPath(&mut buffer, std::ptr::null_mut(), 0).ok()?;
+        let len = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+        let target = String::from_utf16_lossy(&buffer[..len]);
+        (!target.is_empty()).then(|| PathBuf::from(target))
     }
 }
 
@@ -499,5 +555,22 @@ mod tests {
         }
         assert_eq!(history.recent.len(), HISTORY);
         assert_eq!(history.recent[0].id, "x99");
+    }
+
+    #[test]
+    fn only_existing_documents_are_recommended() {
+        let dir = std::env::temp_dir().join(format!("mypaper-recent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["Budget.xlsx", "setup.exe", "LICENSE", "trace.etl"] {
+            std::fs::write(dir.join(name), b"x").unwrap();
+        }
+        let kept: Vec<_> = ["Budget.xlsx", "setup.exe", "LICENSE", "trace.etl", "gone.docx"]
+            .into_iter()
+            .filter(|n| recent_document(&dir.join(n)))
+            .collect();
+        assert_eq!(kept, ["Budget.xlsx"]);
+        assert!(!recent_document(&dir), "a folder isn't a document");
+        assert!(!recent_document(Path::new("ms-screenclip:?source=HotKey")));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
