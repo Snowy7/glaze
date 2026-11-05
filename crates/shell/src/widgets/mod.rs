@@ -73,6 +73,9 @@ struct Entry {
     tokens: Tokens,
     dpi_scale: f32,
     presents: u64,
+    /// The surface holds this widget's content at its current size. A hold (pause, battery,
+    /// fullscreen) freezes content but never leaves a visible widget unpainted under its glass.
+    painted: bool,
 }
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WorkCosts {
@@ -720,7 +723,7 @@ impl Widgets {
             if let Some(entry) = self.entries.get_mut(&id)
                 && entry.model.visible
                 && entry.model.dirty
-                && !self.held
+                && (!self.held || !entry.painted)
             {
                 let measured = Instant::now();
                 match paint(entry, ui, now, instant, self.editing, self.host) {
@@ -733,6 +736,7 @@ impl Widgets {
                             }
                         }
                         entry.model.dirty = false;
+                        entry.painted = true;
                     }
                 }
                 self.costs.paint_us += measured.elapsed().as_micros() as u64;
@@ -846,6 +850,7 @@ impl Widgets {
                                 tokens,
                                 dpi_scale: screen.dpi as f32 / 96.0,
                                 presents: 0,
+                                painted: false,
                             },
                         );
                     }
@@ -862,15 +867,18 @@ impl Widgets {
                 entry.surface = surface;
                 entry.topmost = topmost;
                 entry.model.dirty = true;
+                entry.painted = false;
             }
             let was_visible = entry.model.visible;
             // Cell/size changes do not invalidate content, decoded art, or service subscriptions.
             let changed = entry.model.placed.widget != placed.widget
                 || entry.model.placed.settings != placed.settings;
-            entry.model.dirty |= entry.model.placed.appearance != placed.appearance
+            let restyled = entry.model.placed.appearance != placed.appearance
                 || entry.rect.width().round() != rect.width().round()
                 || entry.rect.height().round() != rect.height().round()
                 || entry.dpi_scale != screen.dpi as f32 / 96.0;
+            entry.model.dirty |= restyled;
+            entry.painted &= !restyled;
             if changed {
                 entry.model.generation += 1;
                 entry.model.fetching = false;
@@ -905,6 +913,7 @@ impl Widgets {
                     finish_field(entry, &mut self.storage);
                     entry.surface.hide();
                     entry.surface.release();
+                    entry.painted = false;
                     entry.surface.discard_events();
                     entry.model.artwork = None;
                     entry.model.artwork_backdrop = None;
