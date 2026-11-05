@@ -716,7 +716,6 @@ pub enum Module {
     /// Optional native integrations configured in integrations.json.
     T3,
     Obs,
-    Docker,
 }
 
 /// An entry of a module list: a built-in module, `custom:<id>`, or `|` (a break between islands,
@@ -765,6 +764,8 @@ impl<'de> Deserialize<'de> for ModuleRef {
                 )))
             };
         }
+        // Ignore the retired native Docker bar entry when reading an older configuration.
+        if text == "docker" { return Ok(Self::Break); }
         let module: Result<Module, D::Error> =
             Module::deserialize(text.as_str().into_deserializer());
         module.map(Self::Builtin)
