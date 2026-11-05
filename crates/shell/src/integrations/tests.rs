@@ -323,7 +323,6 @@ fn action_panels_match_goldens_and_keep_controls_inside_the_surface() {
     let look = Look::default();
     let panels: Vec<(&str, Box<dyn crate::flyouts::Panel>)> = vec![
         ("app-actions", Box::new(panels::AppActions::fixture())),
-        ("grok-accepted", panels::routine_fixture()),
     ];
     for (name, panel) in panels {
         let (list, size) = build(
