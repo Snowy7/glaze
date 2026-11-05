@@ -12,7 +12,7 @@ pub mod guest;
 
 pub use manifest::{FaceSpec, Manifest, Permission, allows, compatible};
 pub use protocol::HostMessage;
-pub use view::{Align, Face, Role, Segment, Series, SizeClass, Tone, View};
+pub use view::{Align, Draw, Face, Paint, Role, Segment, Series, SizeClass, Tone, View};
 
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{BufRead, Write};

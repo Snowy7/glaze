@@ -512,6 +512,10 @@ impl Model {
                         Some(instant + time::boundary(now.ms - published * 1000, quantum))
                     })
                     .min(),
+                // A plugin face's `animated` spring is still moving: one more frame.
+                Widget::Plugin if super::views::plugin::animated::moving() => {
+                    Some(instant + mypaper_ui::display_frame())
+                }
                 _ => None,
             }
         };

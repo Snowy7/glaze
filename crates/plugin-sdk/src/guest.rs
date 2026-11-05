@@ -134,6 +134,23 @@ fn tones(color: &Option<Tone>) -> Option<t::Tone> {
     color.as_ref().map(tone)
 }
 
+/// A canvas command as WIT `view.draw`.
+fn draw(command: &crate::view::Draw) -> v::Draw {
+    use crate::view::{Draw as D, Paint as P};
+    let paint = |p: &P| match p {
+        P::Fill(c) => v::Paint::Fill(tone(c)),
+        P::Stroke(c, w) => v::Paint::Stroke((tone(c), *w)),
+    };
+    match command {
+        D::Rect { x, y, w, h, radius, paint: p } => v::Draw::Rect((v::Rect { x: *x, y: *y, w: *w, h: *h }, *radius, paint(p))),
+        D::Circle { x, y, r, paint: p } => v::Draw::Circle((v::Point { x: *x, y: *y }, *r, paint(p))),
+        D::Line { x1, y1, x2, y2, color, width } => v::Draw::Line((v::Point { x: *x1, y: *y1 }, v::Point { x: *x2, y: *y2 }, tone(color), *width)),
+        D::Path { d, paint: p } => v::Draw::Path((d.clone(), paint(p))),
+        D::Text { x, y, text, role: r, color } => v::Draw::Text((v::Point { x: *x, y: *y }, text.clone(), role(*r), tone(color))),
+        D::Image { x, y, w, h, id } => v::Draw::Image((v::Rect { x: *x, y: *y, w: *w, h: *h }, *id)),
+    }
+}
+
 fn role(role: Role) -> t::TextRole {
     match role {
         Role::LargeTitle => t::TextRole::LargeTitle,
@@ -159,6 +176,11 @@ fn flatten(view: &View, out: &mut Vec<v::Node>) {
         View::List { children, gap } => (K::List(*gap), children),
         View::Grid { children, columns, gap } => (K::Grid(v::Grid { columns: *columns, gap: *gap }), children),
         View::Card { title, child } => (K::Card(v::Card { title: title.clone() }), std::slice::from_ref(&**child)),
+        View::Animated { stiffness, damping, child } => (K::Animated(v::Spring { stiffness: *stiffness, damping: *damping }), std::slice::from_ref(&**child)),
+        View::Canvas { height, commands } => {
+            out.push(leaf(K::Canvas(v::Canvas { height: *height, commands: commands.iter().map(draw).collect() })));
+            return;
+        }
         other => {
             let kind = match other {
                 View::Text { text, role: r, color, align } => K::Text(v::Text {

@@ -564,8 +564,7 @@ fn node(nodes: &[Node], at: &mut usize, depth: u32) -> Result<sdk::View, String>
         NodeKind::List(gap) => V::List { children, gap: *gap },
         NodeKind::Grid(g) => V::Grid { children, columns: g.columns.max(1), gap: g.gap },
         NodeKind::Card(c) => V::Card { title: c.title.clone(), child: Box::new(only(children)?) },
-        // The kit's springs animate the child's changes; drawn as the child until the renderer does.
-        NodeKind::Animated(_) => only(children)?,
+        NodeKind::Animated(s) => V::Animated { stiffness: s.stiffness, damping: s.damping, child: Box::new(only(children)?) },
         NodeKind::Text(t) => V::Text {
             text: t.text.clone(),
             role: role(t.role),
@@ -603,9 +602,25 @@ fn node(nodes: &[Node], at: &mut usize, depth: u32) -> Result<sdk::View, String>
         }
         NodeKind::Empty(e) => V::Empty { icon: e.icon.clone(), title: e.title.clone(), detail: e.detail.clone() },
         NodeKind::Spacer => V::Spacer,
-        // The shell's canvas renderer is the next step; until then a canvas draws as nothing.
-        NodeKind::Canvas(_) => V::Unknown,
+        NodeKind::Canvas(c) => V::Canvas { height: c.height, commands: c.commands.iter().map(draw).collect() },
     })
+}
+
+/// A WIT canvas command as the shell renderer's (`sdk::Draw`).
+fn draw(command: &mypaper::plugin::view::Draw) -> sdk::Draw {
+    use mypaper::plugin::view::{Draw as D, Paint as P};
+    let paint = |p: &P| match p {
+        P::Fill(c) => sdk::Paint::Fill(tone(c)),
+        P::Stroke((c, w)) => sdk::Paint::Stroke(tone(c), *w),
+    };
+    match command {
+        D::Rect((r, radius, p)) => sdk::Draw::Rect { x: r.x, y: r.y, w: r.w, h: r.h, radius: *radius, paint: paint(p) },
+        D::Circle((c, r, p)) => sdk::Draw::Circle { x: c.x, y: c.y, r: *r, paint: paint(p) },
+        D::Line((a, b, c, w)) => sdk::Draw::Line { x1: a.x, y1: a.y, x2: b.x, y2: b.y, color: tone(c), width: *w },
+        D::Path((d, p)) => sdk::Draw::Path { d: d.clone(), paint: paint(p) },
+        D::Text((at, text, r, c)) => sdk::Draw::Text { x: at.x, y: at.y, text: text.clone(), role: role(*r), color: tone(c) },
+        D::Image((r, id)) => sdk::Draw::Image { x: r.x, y: r.y, w: r.w, h: r.h, id: *id },
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

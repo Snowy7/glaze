@@ -7,6 +7,9 @@ use mypaper_ui::kit::{Accessory, ButtonKind, Frame, Lead, Row};
 use mypaper_ui::layout::{Align, Insets, SizeClass};
 use mypaper_ui::{HitId, Point, Rect, Rgba, icons::Icon, theme::TextRole};
 
+pub mod animated;
+pub mod canvas;
+
 /// Hit ids of a face's actions: `ACTION + n` for the nth action in tree order.
 pub const ACTION: HitId = 800_000;
 const MAX_ACTIONS: HitId = 10_000;
@@ -45,7 +48,7 @@ fn collect(view: &View, out: &mut Vec<Hit>) {
         View::Stack { children, .. } | View::List { children, .. } | View::Row { children, .. } | View::Grid { children, .. } => {
             children.iter().for_each(|c| collect(c, out))
         }
-        View::Card { child, .. } => collect(child, out),
+        View::Card { child, .. } | View::Animated { child, .. } => collect(child, out),
         View::Button { action, .. } | View::IconButton { action, .. } => out.push(Hit::Action(action.clone())),
         View::Field { action, .. } => out.push(Hit::Field(action.clone())),
         View::Select { action, options, selected, .. } => out.push(Hit::Select { action: action.clone(), options: options.clone(), selected: selected.clone() }),
@@ -103,7 +106,7 @@ pub fn icon(name: &str) -> Icon {
     }
 }
 
-fn role(role: VRole) -> TextRole {
+pub(crate) fn role(role: VRole) -> TextRole {
     match role {
         VRole::LargeTitle => TextRole::LargeTitle,
         VRole::Title1 => TextRole::Title1,
@@ -118,7 +121,7 @@ fn role(role: VRole) -> TextRole {
     }
 }
 
-fn tone(f: &Frame<'_>, tone: Option<&Tone>, default: Rgba) -> Rgba {
+pub(crate) fn tone(f: &Frame<'_>, tone: Option<&Tone>, default: Rgba) -> Rgba {
     let c = f.theme.color;
     match tone {
         None => default,
@@ -185,7 +188,10 @@ pub fn draw(f: &mut Frame<'_>, rect: Rect, title: &str, header: Icon, face: Opti
 
 /// Whether a node takes the free space of its stack (charts, empties, spacers).
 fn flexible(view: &View) -> bool {
-    matches!(view, View::Spacer | View::AreaChart { .. } | View::Empty { .. } | View::List { .. })
+    match view {
+        View::Animated { child, .. } => flexible(child),
+        _ => matches!(view, View::Spacer | View::AreaChart { .. } | View::Empty { .. } | View::List { .. }),
+    }
 }
 
 /// A node's natural height at `width`.
@@ -237,6 +243,8 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
         View::SegmentedBar { .. } => f.px(8.0),
         View::Sparkline { .. } => f.px(28.0),
         View::AreaChart { .. } | View::Empty { .. } | View::List { .. } => f.px(80.0),
+        View::Canvas { height, .. } => f.px(height.clamp(0.0, 2048.0)),
+        View::Animated { child, .. } => self::height(f, child, width),
         View::Spacer | View::Unknown => 0.0,
     }
 }
@@ -447,6 +455,8 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
         View::Empty { icon: i, title, detail } => {
             f.empty(rect, i.as_deref().map(icon), title, detail.as_deref());
         }
+        View::Canvas { commands, .. } => canvas::draw(f, rect, commands, |f, t| tone(f, Some(t), f.theme.color.label)),
+        View::Animated { stiffness, damping, child } => animated::draw(f, rect, child, (*stiffness, *damping), next),
         View::Spacer | View::Unknown => {}
     }
 }

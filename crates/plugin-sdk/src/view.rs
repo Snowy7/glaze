@@ -226,8 +226,42 @@ pub enum View {
         detail: Option<String>,
     },
     Spacer,
+    /// The escape hatch: drawing commands in kit points from the canvas's top left, `height`
+    /// points tall and as wide as its slot. The shell draws them natively, clipped to the canvas.
+    Canvas {
+        height: f32,
+        commands: Vec<Draw>,
+    },
+    /// `child`, whose changes animate with the kit spring (`stiffness`, `damping`).
+    Animated {
+        stiffness: f32,
+        damping: f32,
+        child: Box<View>,
+    },
     #[serde(other)]
     Unknown,
+}
+
+/// How a canvas shape is painted: filled, or stroked `width` points wide.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Paint {
+    Fill(Tone),
+    Stroke(Tone, f32),
+}
+
+/// One canvas drawing command (WIT `view.draw`), in kit points.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum Draw {
+    Rect { x: f32, y: f32, w: f32, h: f32, radius: f32, paint: Paint },
+    Circle { x: f32, y: f32, r: f32, paint: Paint },
+    Line { x1: f32, y1: f32, x2: f32, y2: f32, color: Tone, width: f32 },
+    /// SVG path data (`M L H V C Q Z`, absolute or relative).
+    Path { d: String, paint: Paint },
+    Text { x: f32, y: f32, text: String, role: Role, color: Tone },
+    /// An image the plugin registered with `ui.put-image`, scaled into the rect.
+    Image { x: f32, y: f32, w: f32, h: f32, id: u32 },
 }
 
 fn enabled_by_default() -> bool { true }
