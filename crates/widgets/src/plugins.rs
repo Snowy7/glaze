@@ -193,6 +193,7 @@ struct Helper {
     frames: Sender<wire::HostMsg>,
     inbox: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wire::HelperMsg>>>,
     idle_since: Option<Instant>,
+    notification_plugins: Vec<String>,
 }
 
 /// The helper frame that opens (or re-sizes) a component face.
@@ -545,7 +546,7 @@ impl Plugins {
             let _ = frames.send(component_open(instance, slot));
         }
         log::info!("plugin runtime started");
-        self.helper = Some(Helper { child, generation, frames, inbox, idle_since: None });
+        self.helper = Some(Helper { child, generation, frames, inbox, idle_since: None, notification_plugins: Vec::new() });
         Ok(())
     }
 
@@ -600,6 +601,9 @@ impl Plugins {
                     };
                 }
                 wire::HelperMsg::Stats { .. } => {}
+                wire::HelperMsg::Notifications { plugins } => {
+                    if let Some(helper) = &mut self.helper { helper.notification_plugins = plugins; }
+                }
                 wire::HelperMsg::Removed { plugin } => {
                     if self.uninstalling.remove(&plugin) { self.finish_uninstall(&plugin); }
                 }
@@ -1180,6 +1184,15 @@ impl Plugins {
         if let Some(helper) = &self.helper {
             let _ = helper.frames.send(wire::HostMsg::System(event));
         }
+    }
+
+    /// Instances of permitted notification subscribers. The shell checks actual visibility
+    /// before acquiring its shared Windows notification lease.
+    pub fn notification_instances(&self) -> Vec<&str> {
+        if self.held { return Vec::new(); }
+        let Some(helper) = &self.helper else { return Vec::new() };
+        self.faces.iter().filter(|(_, slot)| helper.notification_plugins.contains(&slot.plugin))
+            .map(|(instance, _)| instance.as_str()).collect()
     }
 
     /// Stops every plugin before the host exits: `shutdown`, up to the grace
