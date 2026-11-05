@@ -646,6 +646,7 @@ impl Widgets {
         for id in ids {
             let (save, fetch, photo, timer) = if let Some(entry) = self.entries.get_mut(&id) {
                 let m = &mut entry.model;
+                crate::integrations::widgets::sync(m, m.visible && !self.held);
                 let save = m.save_at.is_some_and(|at| at <= instant);
                 if save {
                     m.save_at = None;
@@ -1666,6 +1667,9 @@ impl Widgets {
         let entry = self.entries.get_mut(id).unwrap();
         let m = &mut entry.model;
         m.dirty = true;
+        if crate::integrations::widgets::action(m, hit) {
+            return;
+        }
         match m.kind {
             Widget::Media => {
                 let action = match hit {

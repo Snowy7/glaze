@@ -84,6 +84,7 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
                 streaming: false,
                 scene: "Desktop + camera".into(),
                 paused: false,
+                ..Default::default()
             }),
         ),
         (
@@ -104,6 +105,7 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
                         failed: true,
                     },
                 ],
+                ..Default::default()
             }),
         ),
         (
@@ -113,6 +115,7 @@ fn fixtures() -> Vec<(&'static str, Provider, Data)> {
                 state: "Running".into(),
                 addresses: vec!["100.64.0.1".into()],
                 exit_node: None,
+                ..Default::default()
             }),
         ),
         (

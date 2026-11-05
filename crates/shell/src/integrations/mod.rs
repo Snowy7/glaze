@@ -1,5 +1,6 @@
 //! Integration UI/registration. Shared providers live in `mypaper-integrations`; all drawing stays here.
 pub mod media;
+pub mod widgets;
 mod panels;
 #[cfg(test)]
 mod tests;

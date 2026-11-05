@@ -28,6 +28,12 @@ pub enum Widget {
     Crypto,
     Heatmap,
     Quote,
+    Discord,
+    T3,
+    Obs,
+    Docker,
+    Tailscale,
+    Grok,
 }
 impl Widget {
     pub fn of(id: &str) -> Option<Self> {
@@ -48,6 +54,12 @@ impl Widget {
             "crypto" => Self::Crypto,
             "heatmap" => Self::Heatmap,
             "quote" => Self::Quote,
+            "discord" => Self::Discord,
+            "t3" => Self::T3,
+            "obs" => Self::Obs,
+            "docker" => Self::Docker,
+            "tailscale" => Self::Tailscale,
+            "grok" => Self::Grok,
             _ => return None,
         })
     }
@@ -186,6 +198,7 @@ impl EventDraft {
 }
 
 pub struct Model {
+    pub integration: crate::integrations::widgets::Model,
     pub scroll: f32,
     pub scroll_max: Cell<f32>,
     pub scroll_page: Cell<f32>,
@@ -300,6 +313,7 @@ impl Model {
             data["coins"] = json!(coins);
         }
         Ok(Self {
+            integration: Default::default(),
             scroll: 0.0,
             scroll_max: Cell::new(0.0),
             scroll_page: Cell::new(100.0),
@@ -411,6 +425,9 @@ impl Model {
             None
         } else {
             match self.kind {
+                Widget::Obs if self.integration.clock_running() => {
+                    Some(instant + time::boundary(now.ms, 1000))
+                }
                 Widget::Clock => Some(
                     instant
                         + time::boundary(
