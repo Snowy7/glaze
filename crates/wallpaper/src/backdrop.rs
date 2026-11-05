@@ -2,13 +2,17 @@
 //! wallpaper for the bars and widget shell to use as a frosted-glass backdrop.
 //!
 //! Only this process owns the wallpaper pixels. For a screen that is due, the
-//! engine copies the finished swapchain image, shrinks it on the GPU through a
-//! bilinear pyramid (1/2 .. 1/64) and back up to 1/8, reads that back (without
+//! engine shrinks its kept frame (the wallpaper as drawn, never with glass) on the
+//! GPU through a bilinear pyramid (1/2 .. 1/64) and back up to 1/8, reads that back (without
 //! waiting, for an animated source: a later frame collects it), and
 //! writes it to `%LOCALAPPDATA%\mypaper\backdrop\<NAME>.bmp` (`NAME` is the
 //! device name without `\\.\`, e.g. `DISPLAY1`; `dev` in `--windowed` mode).
 //! The file is an uncompressed top-down 24-bit BMP of `round(w/8) x round(h/8)`
-//! pixels with the swapchain's bytes as-is, written via `.bmp.tmp` + rename.
+//! pixels with the swapchain format's bytes as-is, written via `.bmp.tmp` + rename.
+//! Sampling the kept frame needs no full-screen copy: a full-scale source's kept frame
+//! is what the swapchain shows, and a scaled one is the render the swapchain upscales.
+//! Screens that share one kept frame (`Source::shared`) share one pyramid and readback per
+//! publish: the first screen reads it, the others get the same image.
 //!
 //! A screen is published once on its first drawn frame after each theme load,
 //! and then, while the source is animated, every N seconds, but only while
@@ -28,28 +32,27 @@ use anyhow::{Context, Result, bail};
 use mypaper_desktop::{Rect, monitor_infos};
 use mypaper_theme::Fit;
 
-use crate::gpu::Gpu;
-use crate::sources;
+use crate::gpu::{Gpu, KeptFrame};
+use crate::sources::{self, blit::BlitQuad};
 
 /// The published image is the screen shrunk by this much.
 const OUTPUT_DIVISOR: u32 = 8;
-/// Pyramid texture `k` is the screen shrunk by `DIVISORS[k]`; 0 is the copy of the screen.
-const DIVISORS: [u32; 7] = [1, 2, 4, 8, 16, 32, 64];
+/// Pyramid texture `k` is the screen shrunk by `DIVISORS[k]`. The kept frame is drawn into 0.
+const DIVISORS: [u32; 6] = [2, 4, 8, 16, 32, 64];
 /// Which pyramid texture is published (`DIVISORS[RESULT] == OUTPUT_DIVISOR`).
-const RESULT: usize = 3;
+const RESULT: usize = 2;
 const _: () = assert!(DIVISORS[RESULT] == OUTPUT_DIVISOR);
-/// Blit passes as (sampled texture, target texture): halve down to 1/64, then
+/// Blit passes after the first as (sampled texture, target texture): halve down to 1/64, then
 /// bilinearly double back up to 1/8.
-const PASSES: [(usize, usize); 9] = [
+const PASSES: [(usize, usize); 8] = [
     (0, 1),
     (1, 2),
     (2, 3),
     (3, 4),
     (4, 5),
-    (5, 6),
-    (6, 5),
     (5, 4),
     (4, 3),
+    (3, 2),
 ];
 
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(10);
@@ -67,6 +70,8 @@ pub struct Backdrop {
     dir: Option<PathBuf>,
     /// Indexed like the engine's screens.
     screens: Vec<ScreenState>,
+    /// The last kept frame read back: (its texture, the engine frame, the screen that read it).
+    latest: Option<(wgpu::Texture, u32, usize)>,
 }
 
 struct ScreenState {
@@ -87,11 +92,11 @@ struct ScreenState {
 /// What [`Backdrop::encode`] needs to know about a screen's frame.
 pub struct Draw<'a> {
     pub screen: usize,
+    /// The engine frame, so screens sharing one kept frame read it back once.
+    pub frame: u32,
     pub size: (u32, u32),
-    /// The swapchain image the source just drew.
-    pub texture: &'a wgpu::Texture,
-    /// Whether the swapchain can be copied from (`Screen::copy_src`).
-    pub copy_src: bool,
+    /// The wallpaper the source just drew, at its render scale.
+    pub kept: &'a KeptFrame,
     /// The engine is held: publish nothing.
     pub held: bool,
     /// The source redraws on its own (`Redraw::Every` / `Redraw::At`).
@@ -147,7 +152,11 @@ impl Backdrop {
                 failed: false,
             })
             .collect();
-        let mut backdrop = Self { dir, screens };
+        let mut backdrop = Self {
+            dir,
+            screens,
+            latest: None,
+        };
         backdrop.reset(native);
         backdrop
     }
@@ -177,7 +186,10 @@ impl Backdrop {
         let Some(state) = self.screens.get_mut(draw.screen) else {
             return false;
         };
-        if draw.held || !draw.copy_src || state.failed || state.name.is_none() {
+        let Some(name) = state.name.clone() else {
+            return false;
+        };
+        if draw.held || state.failed {
             return false;
         }
         // An animated screen's last readback may still be in flight: pick it up first, and don't
@@ -192,6 +204,20 @@ impl Backdrop {
         if !due {
             return false;
         }
+        // Another screen read this very kept frame back in this engine frame: same image.
+        if let Some((_, _, reader)) = self.latest.as_ref().filter(|(texture, frame, reader)| {
+            *texture == draw.kept.texture && *frame == draw.frame && *reader != draw.screen
+        }) {
+            let reader = &mut self.screens[*reader];
+            match (&mut reader.reading, &reader.name) {
+                (Some(reading), _) => reading.also.push(name),
+                (None, Some(from)) => copy_image(dir, from, &name),
+                (None, None) => {}
+            }
+            return false;
+        }
+        self.latest = Some((draw.kept.texture.clone(), draw.frame, draw.screen));
+        let state = &mut self.screens[draw.screen];
         if state.pyramid.as_ref().is_none_or(|p| p.size != draw.size) {
             match Pyramid::new(gpu, draw.size) {
                 Ok(pyramid) => state.pyramid = Some(pyramid),
@@ -205,7 +231,11 @@ impl Backdrop {
         let Some(pyramid) = &state.pyramid else {
             return false;
         };
-        pyramid.encode(gpu, draw.texture, encoder);
+        let kept = draw.kept;
+        let source = (kept.texture.width(), kept.texture.height());
+        kept.quad
+            .set(&gpu.queue, source, pyramid.size, Fit::Stretch, 1.0);
+        pyramid.blur(gpu, &kept.quad, encoder);
         state.animated = draw.animated;
         true
     }
@@ -229,7 +259,11 @@ impl Backdrop {
                 .map_async(wgpu::MapMode::Read, move |result| {
                     let _ = sender.send(result);
                 });
-            state.reading = Some((receiver, Instant::now()));
+            state.reading = Some(Reading {
+                receiver,
+                asked: Instant::now(),
+                also: Vec::new(),
+            });
             return;
         }
         match publish(gpu, pyramid, &image_path(dir, name)) {
@@ -251,26 +285,43 @@ impl Backdrop {
     }
 }
 
-/// A readback in flight: the map's result arrives on the channel; when it was asked for.
-type Reading = (mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>, Instant);
+/// A readback in flight: the map's result arrives on the channel.
+struct Reading {
+    receiver: mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>,
+    /// When it was asked for.
+    asked: Instant,
+    /// Screens sharing the kept frame it reads, written with the same image.
+    also: Vec<String>,
+}
+
+/// Gives screen `to` the image screen `from` just published.
+fn copy_image(dir: &Path, from: &str, to: &str) {
+    let copied = std::fs::read(image_path(dir, from))
+        .map_err(anyhow::Error::from)
+        .and_then(|bmp| write_atomic(&image_path(dir, to), &bmp));
+    match copied {
+        Ok(()) => log::info!("backdrop {to}: the same image as {from}"),
+        Err(e) => log::warn!("backdrop {to}: {e:#}"),
+    }
+}
 
 impl ScreenState {
     /// Picks up an animated screen's readback if it's done: copies the pixels out, unmaps, and
     /// encodes and writes the image on a short-lived thread. Returns whether the readback buffer
     /// is free again.
     fn collect(&mut self, gpu: &Gpu, dir: &Path) -> bool {
-        let Some((receiver, asked)) = &self.reading else {
+        let Some(reading) = &self.reading else {
             return true;
         };
         // Runs finished map callbacks; never waits.
         let _ = gpu.device.poll(wgpu::PollType::Poll);
-        let mapped = match receiver.try_recv() {
+        let mapped = match reading.receiver.try_recv() {
             Ok(result) => result,
             Err(mpsc::TryRecvError::Empty) => return false,
             Err(mpsc::TryRecvError::Disconnected) => Err(wgpu::BufferAsyncError),
         };
-        let waited = asked.elapsed();
-        self.reading = None;
+        let waited = reading.asked.elapsed();
+        let also = self.reading.take().map(|r| r.also).unwrap_or_default();
         let (Some(name), Some(pyramid)) = (&self.name, &self.pyramid) else {
             return true;
         };
@@ -290,7 +341,10 @@ impl ScreenState {
         };
         pyramid.readback.unmap();
         let copy = copied.elapsed();
-        let path = image_path(dir, name);
+        let paths: Vec<PathBuf> = std::iter::once(name)
+            .chain(&also)
+            .map(|name| image_path(dir, name))
+            .collect();
         let (name, (w, h), stride, bgra) = (
             name.clone(),
             pyramid.output,
@@ -302,16 +356,19 @@ impl ScreenState {
             .spawn(move || {
                 let started = Instant::now();
                 let bmp = encode_bmp(w, h, stride, &bytes, bgra);
-                match write_atomic(&path, &bmp) {
-                    Ok(()) => log::info!(
-                        "backdrop {name} {w}x{h}: ready after {:.1} ms (not waited on), \
-                         copy {:.2} ms on the frame, write {:.2} ms off it",
-                        waited.as_secs_f64() * 1e3,
-                        copy.as_secs_f64() * 1e3,
-                        started.elapsed().as_secs_f64() * 1e3,
-                    ),
-                    Err(e) => log::warn!("backdrop {name}: {e:#}"),
+                for path in &paths {
+                    if let Err(e) = write_atomic(path, &bmp) {
+                        log::warn!("backdrop {}: {e:#}", path.display());
+                    }
                 }
+                log::info!(
+                    "backdrop {name} {w}x{h} ({} screens): ready after {:.1} ms (not waited on), \
+                     copy {:.2} ms on the frame, write {:.2} ms off it",
+                    paths.len(),
+                    waited.as_secs_f64() * 1e3,
+                    copy.as_secs_f64() * 1e3,
+                    started.elapsed().as_secs_f64() * 1e3,
+                );
             });
         if let Err(e) = spawned {
             log::warn!("backdrop: {e}");
@@ -402,12 +459,10 @@ impl Pyramid {
             .iter()
             .enumerate()
             .map(|(k, &size)| {
-                let usage = match k {
-                    0 => wgpu::TextureUsages::empty(),
-                    RESULT => {
-                        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
-                    }
-                    _ => wgpu::TextureUsages::RENDER_ATTACHMENT,
+                let usage = if k == RESULT {
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
+                } else {
+                    wgpu::TextureUsages::RENDER_ATTACHMENT
                 };
                 gpu.texture("backdrop", size, gpu.format, usage, None)
             })
@@ -448,26 +503,17 @@ impl Pyramid {
         })
     }
 
-    /// Records: swapchain image -> copy -> pyramid -> readback buffer.
-    fn encode(&self, gpu: &Gpu, swapchain: &wgpu::Texture, encoder: &mut wgpu::CommandEncoder) {
-        encoder.copy_texture_to_texture(
-            swapchain.as_image_copy(),
-            self.textures[0].as_image_copy(),
-            extent(self.size),
-        );
-        self.blur(gpu, encoder);
-    }
-
-    /// Records the pyramid passes on the copy in `textures[0]` and the copy of
-    /// the result into the readback buffer.
-    fn blur(&self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
-        for (from, to) in PASSES {
+    /// Records the pyramid passes from `source` (a stretch quad of the kept frame) and the
+    /// copy of the result into the readback buffer.
+    fn blur(&self, gpu: &Gpu, source: &BlitQuad, encoder: &mut wgpu::CommandEncoder) {
+        let rest = PASSES.map(|(from, to)| (&self.quads[from], to));
+        for (quad, to) in std::iter::once((source, 0)).chain(rest) {
             let mut pass = sources::begin(
                 encoder,
                 &self.views[to],
                 wgpu::LoadOp::Clear(wgpu::Color::BLACK),
             );
-            self.quads[from].draw(&gpu.blit, &mut pass);
+            quad.draw(&gpu.blit, &mut pass);
         }
         encoder.copy_texture_to_buffer(
             self.textures[RESULT].as_image_copy(),
@@ -789,6 +835,39 @@ mod tests {
         assert_eq!(device_name(r"\\.\DISPLAY2"), "DISPLAY2");
     }
 
+    /// Screens sharing one kept frame read it back once and publish the same image.
+    #[test]
+    fn screens_sharing_a_kept_frame_share_one_readback() {
+        let Some(gpu) = Gpu::headless() else {
+            eprintln!("no GPU: skipping");
+            return;
+        };
+        let dir =
+            std::env::temp_dir().join(format!("mypaper-backdrop-share-{}", std::process::id()));
+        let names = vec![Some("DISPLAY1".to_owned()), Some("DISPLAY2".to_owned())];
+        let mut backdrop = Backdrop::with(Some(dir.clone()), names, |_| false);
+        let kept = KeptFrame::new(&gpu, (1664, 936));
+        gpu.write_texture(&kept.texture, &[50, 100, 200, 255].repeat(1664 * 936));
+        let draw = |screen| Draw {
+            screen,
+            frame: 1,
+            size: (2560, 1440),
+            kept: &kept,
+            held: false,
+            animated: false,
+        };
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        assert!(backdrop.encode(&gpu, draw(0), &mut encoder));
+        gpu.queue.submit([encoder.finish()]);
+        backdrop.finish(&gpu, 0);
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        assert!(!backdrop.encode(&gpu, draw(1), &mut encoder), "no second readback");
+        assert!(backdrop.screens[1].pyramid.is_none());
+        let image = |name| std::fs::read(image_path(&dir, name)).unwrap();
+        assert_eq!(image("DISPLAY1"), image("DISPLAY2"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// A solid-colored screen must come out solid after the whole pyramid.
     #[test]
     fn pyramid_keeps_a_solid_color() {
@@ -798,18 +877,18 @@ mod tests {
         };
         let size = (2560, 1440);
         let pyramid = Pyramid::new(&gpu, size).unwrap();
-        // Bgra8Unorm in the headless device: blue, green, red, alpha.
+        // A 0.65-scale kept frame, as rain-city keeps. Bgra8Unorm: blue, green, red, alpha.
+        let kept = KeptFrame::new(&gpu, (1664, 936));
         let (b, g, r) = (50u8, 100u8, 200u8);
-        gpu.write_texture(
-            &pyramid.textures[0],
-            &[b, g, r, 255].repeat((size.0 * size.1) as usize),
-        );
+        gpu.write_texture(&kept.texture, &[b, g, r, 255].repeat(1664 * 936));
+        kept.quad
+            .set(&gpu.queue, (1664, 936), size, Fit::Stretch, 1.0);
 
         // The first run pays for the texture upload and cold pipelines; time the second.
         let run = || {
             let started = Instant::now();
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            pyramid.blur(&gpu, &mut encoder);
+            pyramid.blur(&gpu, &kept.quad, &mut encoder);
             gpu.queue.submit([encoder.finish()]);
             let (bmp, waited) = pyramid
                 .with_pixels(&gpu, |bytes| {

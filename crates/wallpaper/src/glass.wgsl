@@ -16,6 +16,9 @@ struct Out {
     @location(2) @interpolate(flat) shape: vec4f,
     @location(3) @interpolate(flat) tint: vec4f,
     @location(4) @interpolate(flat) extra: vec4f,
+    // Per plate, once per vertex rather than per pixel: radius, band, 1/band, 1/sheen width.
+    @location(5) @interpolate(flat) bevel: vec4f,
+    @location(6) @interpolate(flat) texel: vec2f, // 1/size: sampling the frame without a divide
 };
 @vertex fn vs(@builtin(vertex_index) vi: u32, p: Plate) -> Out {
     let corners = array<vec2f,6>(vec2f(0,0),vec2f(1,0),vec2f(0,1),vec2f(0,1),vec2f(1,0),vec2f(1,1));
@@ -34,15 +37,17 @@ struct Out {
     else { lo=-inner;hi=inner; }
     let px=p.rect.xy+half+mix(lo,hi,corners[vi%6u]);
     let extra=vec4f(p.extra.xyz,select(0.0,1.0,quad<4u));
-    return Out(vec4f(px.x/u.size.x*2.0-1.0,1.0-px.y/u.size.y*2.0,0,1),px,p.rect,p.shape,p.tint,extra);
+    let bevel=vec4f(r,band,1.0/band,1.0/max(band*0.25,1.0));
+    let position=vec4f(px.x/u.size.x*2.0-1.0,1.0-px.y/u.size.y*2.0,0,1);
+    return Out(position,px,p.rect,p.shape,p.tint,extra,bevel,1.0/u.size);
 }
-fn tap(px: vec2f) -> vec3f { return textureSampleLevel(behind,samp,px/u.size,0).rgb; }
+fn tap(px: vec2f,texel: vec2f) -> vec3f { return textureSampleLevel(behind,samp,px*texel,0).rgb; }
 fn luma(c: vec3f) -> f32 { return dot(c,vec3f(0.2126,0.7152,0.0722)); }
 @fragment fn fs(v: Out) -> @location(0) vec4f {
     if v.extra.w<0.5 && v.shape.y>=0.999 && v.extra.x<=0.75 { return vec4f(v.tint.rgb,v.tint.a*0.25); }
     let half = v.rect.zw*0.5;
     let p = v.px-v.rect.xy-half;
-    let r = min(v.shape.x,min(half.x,half.y));
+    let r = v.bevel.x;
     let q = abs(p)-half+r;
     let z = max(q,vec2f(0));
     // Fourth-power corner profile joins the straight sides continuously.
@@ -50,7 +55,7 @@ fn luma(c: vec3f) -> f32 { return dot(c,vec3f(0.2126,0.7152,0.0722)); }
     let cover = clamp(0.5-d,0,1);
     if cover <= 0 { discard; }
     let depth = max(-d,0);
-    let band = max(min(min(half.x,half.y)*0.28,r*0.65+5.0),1.0);
+    let band = v.bevel.y;
     // Clear centres retain the restored wallpaper. Its bilinear footprint supplies the
     // subpixel blur; no backdrop fetch or adaptive recipe is needed in this region.
     if depth >= band && v.shape.y >= 0.999 && v.extra.x <= 0.75 {
@@ -59,34 +64,43 @@ fn luma(c: vec3f) -> f32 { return dot(c,vec3f(0.2126,0.7152,0.0722)); }
     var g = select(vec2f(0,1),vec2f(1,0),q.x>q.y);
     if q.x>0 && q.y>0 { g = normalize(q*q*q); }
     let n = g*select(vec2f(-1),vec2f(1),p>=vec2f(0));
-    let t = clamp(1.0-depth/band,0,1);
+    let t = clamp(1.0-depth*v.bevel.z,0,1);
     let cap = 1.0-sqrt(max(1.0-t*t,0));
     let shift = cap*band*v.shape.z;
     let at = v.px-n*shift;
-    var c = tap(at);
-    if shift > 0.5 { c = vec3f(tap(at+n*shift*0.025).r,c.g,tap(at-n*shift*0.025).b); }
+    let texel = v.texel;
+    var c = tap(at,texel);
+    if shift > 0.5 { c = vec3f(tap(at+n*shift*0.025,texel).r,c.g,tap(at-n*shift*0.025,texel).b); }
     let k = v.extra.x*0.7;
     if k > 0.6 && k < 1.5 {
-        c = (2.0*c+tap(at+vec2f(k,k))+tap(at-vec2f(k,k)))/4.0;
+        c = (2.0*c+tap(at+vec2f(k,k),texel)+tap(at-vec2f(k,k),texel))/4.0;
     } else if k >= 1.5 {
-        c = (2.0*c+tap(at+vec2f(k,k))+tap(at+vec2f(-k,k))+tap(at+vec2f(k,-k))+tap(at-vec2f(k,k)))/6.0;
+        c = (2.0*c+tap(at+vec2f(k,k),texel)+tap(at+vec2f(-k,k),texel)+tap(at+vec2f(k,-k),texel)+tap(at-vec2f(k,k),texel))/6.0;
     }
     let clarity = v.shape.y;
     let adaptive = 1.0-clarity;
     let y = luma(c);
     // Clear lightly dims bright media; tinted compresses luminance and preserves detail.
-    let dark_tint = luma(v.tint.rgb)<0.5;
-    let face = select(vec3f(0.45)+c*0.55,c*0.60+0.06,dark_tint);
-    c = mix(c*(1.0-0.18*smoothstep(0.45,0.95,y)*clarity),face,adaptive*0.65);
-    let tint = v.tint.rgb*(0.65+0.35*y);
-    c = mix(c,tint,v.tint.a*(0.25+0.75*adaptive));
+    let dimmed = c*(1.0-0.18*smoothstep(0.45,0.95,y)*clarity);
+    // Both mixes weigh 0 for clear, untinted glass (the default): skip them per plate.
+    if adaptive > 0.0 || v.tint.a > 0.0 {
+        let dark_tint = luma(v.tint.rgb)<0.5;
+        let face = select(vec3f(0.45)+c*0.55,c*0.60+0.06,dark_tint);
+        c = mix(dimmed,face,adaptive*0.65);
+        let tint = v.tint.rgb*(0.65+0.35*y);
+        c = mix(c,tint,v.tint.a*(0.25+0.75*adaptive));
+    } else {
+        c = dimmed;
+    }
     if depth >= band { return vec4f(c,cover); }
     let light = normalize(vec2f(-0.707,-0.707));
-    let key = pow(max(dot(n,light),0),3.0);
-    let fill = pow(max(dot(n,-light),0),3.0)*0.58;
+    // The key and fill cones face opposite ways: at most one is lit.
+    let lit = dot(n,light);
+    let cone = abs(lit);
+    let cones = cone*cone*cone*select(0.58,1.0,lit>0.0);
     let line = exp(-depth*depth/0.65);
-    let sheen = exp(-depth/max(band*0.25,1.0));
-    let glint = (line*(key+fill)+sheen*(key+fill)*0.07)*v.shape.w;
+    let sheen = exp(-depth*v.bevel.w);
+    let glint = (line*cones+sheen*cones*0.07)*v.shape.w;
     let colour = mix(vec3f(1),c,0.25);
     c += colour*glint*0.72;
     return vec4f(c,cover);

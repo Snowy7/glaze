@@ -1,0 +1,14 @@
+[
+  {
+    "scenario": "still-plates",
+    "run": 0,
+    "seconds": 60.0335241,
+    "private_mb": 233.6484375,
+    "cpu_core_pct": 0.2082169952105144,
+    "cpu_machine_pct": 0.01301356220065715,
+    "visible_screens": 2,
+    "timing_file": null,
+    "sample_started_qpc": 3683767893917,
+    "sample_ended_qpc": 3684368229161
+  }
+]

@@ -6,6 +6,7 @@
 //! drives animation stops while everything is hidden.
 
 use std::path::Path;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -116,9 +117,7 @@ impl Engine {
         startup::ready("wallpaper", "source_ms");
         let mut snapshot = Snapshot::new();
         snapshot.theme_loaded(loaded);
-        let backdrop = Backdrop::new(monitors.as_deref(), |i| {
-            source.native(i) || !screens[i].copy_src
-        });
+        let backdrop = Backdrop::new(monitors.as_deref(), |i| source.native(i));
         let glass = GlassPass::new(monitors.as_deref())?;
         let timing = crate::timing::Timing::new(&gpu)?;
         let id = theme
@@ -154,6 +153,17 @@ impl Engine {
             render_settings,
             restart_due: false,
         })
+    }
+
+    /// The device the glass overlays draw with: the engine's own (plan Rule 1).
+    pub fn overlay_gpu(&self) -> crate::overlay::Gpu {
+        let gpu = &self.gpu;
+        let (adapter, device, queue) = (gpu.adapter.clone(), gpu.device.clone(), gpu.queue.clone());
+        crate::overlay::Gpu {
+            adapter,
+            device,
+            queue,
+        }
     }
 
     /// Named plate event plus the current writer's exit handle, both owned by GlassPass.
@@ -396,6 +406,7 @@ impl Engine {
         let mut drew = false;
         let animated = !matches!(self.redraw(), Redraw::OnChange);
         let mut native = false;
+        self.assign_kept_frames();
         for (index, screen) in self.screens.iter_mut().enumerate() {
             if screen.paused || !(due || screen.dirty || screen.glass_dirty) {
                 continue;
@@ -419,7 +430,10 @@ impl Engine {
             // snapshot after that wait, so a display-rate plate does not inherit its delay.
             self.glass.reload();
             self.glass.take_dirty(index);
-            let wallpaper_due = due || screen.dirty || screen.kept.is_none();
+            let kept = screen.kept.clone().expect("kept frame assigned");
+            let wallpaper_due = due || screen.dirty || kept.drawn.get().is_none();
+            // A kept frame shared with a screen drawn earlier in this frame already holds it.
+            let draw_wallpaper = wallpaper_due && kept.drawn.get() != Some(self.frame);
             screen.dirty = false;
             screen.glass_dirty = false;
             let mut mouse = cursor;
@@ -428,15 +442,7 @@ impl Engine {
 
             let view = texture.texture.create_view(&Default::default());
             let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
-            let size = self.source.render_size(screen.size());
-            if screen
-                .kept
-                .as_ref()
-                .is_none_or(|k| (k.texture.width(), k.texture.height()) != size)
-            {
-                screen.kept = Some(KeptFrame::new(&self.gpu, size));
-            }
-            let kept = screen.kept.as_ref().expect("kept frame allocated");
+            let size = kept.size();
             let timing_slot = self.timing.as_mut().and_then(|timing| {
                 timing.begin(
                     &self.gpu,
@@ -445,13 +451,15 @@ impl Engine {
                         screen: index,
                         frame: self.frame,
                         wallpaper: wallpaper_due,
+                        pass: draw_wallpaper,
                         sequence: self.glass.sequence,
                         published_qpc: self.glass.published_qpc,
                         ..Default::default()
                     },
                 )
             });
-            if wallpaper_due {
+            if draw_wallpaper {
+                kept.drawn.set(Some(self.frame));
                 self.source.render(
                     &self.gpu,
                     Frame {
@@ -477,9 +485,9 @@ impl Engine {
                     &self.gpu,
                     Draw {
                         screen: index,
+                        frame: self.frame,
                         size: screen.size(),
-                        texture: &texture.texture,
-                        copy_src: screen.copy_src,
+                        kept: &kept,
                         held: self.held,
                         animated,
                     },
@@ -522,15 +530,9 @@ impl Engine {
         // First frame of a newly loaded theme: publish its palette, once.
         if drew && std::mem::take(&mut self.palette_due) {
             startup::ready("wallpaper", "first_frame_ms");
-            let size = self.screens.first().map_or((1, 1), Screen::size);
-            palette::publish(
-                &self.gpu,
-                self.source.as_mut(),
-                &self.theme.dir,
-                size,
-                self.clock,
-                self.frame,
-            );
+            if let Some(kept) = self.screens.iter().find_map(|s| s.kept.as_ref()) {
+                palette::publish(&self.gpu, kept, &self.theme.dir);
+            }
         }
 
         // Once per theme load, too: the same frame, full size, for the Windows wallpaper (a
@@ -553,6 +555,31 @@ impl Engine {
                 self.clock,
                 self.frame,
             );
+        }
+    }
+
+    /// Gives every visible swapchain screen a kept frame at the source's render size. When the
+    /// source draws one frame for every screen, screens of one size share a single kept frame:
+    /// one wallpaper pass and one texture instead of one per screen.
+    fn assign_kept_frames(&mut self) {
+        let shared = self.source.shared();
+        for index in 0..self.screens.len() {
+            let screen = &self.screens[index];
+            let size = self.source.render_size(screen.size());
+            if screen.paused
+                || self.source.native(index)
+                || screen.kept.as_ref().is_some_and(|k| k.size() == size)
+            {
+                continue;
+            }
+            let sibling = self
+                .screens
+                .iter()
+                .filter_map(|s| s.kept.as_ref())
+                .find(|k| shared && k.size() == size)
+                .cloned();
+            self.screens[index].kept =
+                Some(sibling.unwrap_or_else(|| Rc::new(KeptFrame::new(&self.gpu, size))));
         }
     }
 
@@ -590,8 +617,7 @@ impl Engine {
         self.theme = theme;
         self.refresh_renderer();
         self.palette_due = true;
-        self.backdrop
-            .reset(|i| self.source.native(i) || !self.screens[i].copy_src);
+        self.backdrop.reset(|i| self.source.native(i));
         self.snapshot.theme_loaded(true);
         self.next_frame = Instant::now();
         // A new source starts with every screen visible.

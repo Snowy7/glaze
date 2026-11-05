@@ -11,6 +11,7 @@ pub(crate) mod view;
 
 use crate::glass::{self, Material, Plate};
 use crate::inbox;
+use crate::integrations::media::WidgetMedia as Media;
 use anyhow::Result;
 use base64::Engine;
 use model::{Model, Task, Timer, Widget};
@@ -33,7 +34,6 @@ use mypaper_widgets::{
     files,
     layout::{self, Grid, Layout, RectF},
     look,
-    media::Media,
     plugins::Plugins,
     registry::{self, Registry},
     stats::{Delivery, Stats},

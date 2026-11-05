@@ -354,7 +354,7 @@ fn details(app: &App, b: &mut B, col: &mut Col, i: usize) {
             ] {
                 let Some(v) = v else { continue };
                 b.text_in(Rect::new(c.x, c.y, b.px(64.0), b.px(24.0)), k, &caption, b.p.ink3, Align::Start);
-                let lines = b.text.wrap(&v, if mono_text { &mono } else { &caption }, c.w - b.px(64.0));
+                let lines = b.text.lines(&v, if mono_text { &mono } else { &caption }, c.w - b.px(64.0), 3);
                 for (n, line) in lines.iter().enumerate() {
                     b.text_in(Rect::new(c.x + b.px(64.0), c.y + n as f32 * b.px(18.0), c.w - b.px(64.0), b.px(24.0)), line, if mono_text { &mono } else { &caption }, b.p.ink2, Align::Start);
                 }
@@ -603,7 +603,7 @@ pub fn add_sheet(app: &App, b: &mut B) {
             let strong = b.font(Font::Heading).scaled(14.0 / 13.0);
             let small = b.font(Font::Caption);
             b.text_at(icon.right + b.px(16.0), r.top + b.px(24.0), title, &strong, p.ink1);
-            let lines = b.text.wrap(line, &small, r.right - icon.right - b.px(32.0));
+            let lines = b.text.lines(line, &small, r.right - icon.right - b.px(32.0), 2);
             for (i, l) in lines.iter().take(2).enumerate() {
                 b.text_at(icon.right + b.px(16.0), r.top + b.px(46.0) + i as f32 * b.px(16.0), l, &small, p.ink3);
             }

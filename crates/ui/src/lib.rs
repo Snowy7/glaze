@@ -12,6 +12,7 @@ pub mod calendar;
 pub mod controls;
 pub mod focus;
 pub mod geom;
+pub mod glass;
 #[cfg(any(test, feature = "golden"))]
 pub mod golden;
 pub mod icons;
@@ -27,6 +28,7 @@ mod tokens;
 
 pub use app_window::{Chrome, Cursor, set_modal_hook};
 pub use geom::{PixelRect, Point, Rect, Rgba};
+pub use glass::{Glass, GlassMaterial};
 pub use menu::{Entry, Menu, Outcome, Screen, screen_at};
 pub use motion::{Spring, Ticker, Tween};
 pub use render::{Image, Ui, render};

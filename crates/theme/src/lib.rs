@@ -352,7 +352,7 @@ pub struct ShaderWallpaper {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ShaderImage {
-    /// Omit for a generated static texture (prefilter is then required).
+    /// Omit for a generated static texture (prefilter or bake is then required).
     #[serde(default)]
     pub source: Option<PathBuf>,
     /// Odd bindings 1..=29 reserve one texture/sampler pair each.
@@ -360,6 +360,12 @@ pub struct ShaderImage {
     /// Optional theme-owned static image pass (compiled and drawn only at load).
     #[serde(default)]
     pub prefilter: Option<ShaderPrefilter>,
+    /// A baked layer: the name of a `@fragment` entry point in the theme's own shader that the
+    /// engine draws once per render size, in the frame's format, before the first frame of
+    /// that size. It reads `paper` (time 0) and the other images, never a baked layer.
+    /// Excludes `source` and `prefilter`.
+    #[serde(default)]
+    pub bake: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -497,8 +503,15 @@ impl LoadedTheme {
                     if let Some(source) = &image.source {
                         check_path(source)?;
                     }
-                    if image.source.is_none() && image.prefilter.is_none() {
-                        bail!("shader image needs a source or prefilter");
+                    match &image.bake {
+                        Some(_) if image.source.is_some() || image.prefilter.is_some() => {
+                            bail!("a baked shader image has no source or prefilter")
+                        }
+                        Some(entry) if entry.is_empty() => bail!("bake needs an entry point"),
+                        None if image.source.is_none() && image.prefilter.is_none() => {
+                            bail!("shader image needs a source, prefilter or bake")
+                        }
+                        _ => {}
                     }
                     if let Some(effect) = &image.prefilter {
                         check_path(&effect.source)?;
@@ -741,6 +754,18 @@ mod tests {
             wallpaper(r#"{"kind":"shader","source":"rain.wgsl","images":[{"binding":1}]}"#)
                 .is_err()
         );
+        let baked =
+            r#"{"kind":"shader","source":"rain.wgsl","images":[{"binding":5,"bake":"still"}]}"#;
+        let Wallpaper::Shader(shader) = wallpaper(baked).unwrap() else {
+            panic!("shader");
+        };
+        assert_eq!(shader.images[0].bake.as_deref(), Some("still"));
+        for invalid in [
+            baked.replace("\"bake\"", "\"source\":\"a.jpg\",\"bake\""),
+            baked.replace("\"still\"", "\"\""),
+        ] {
+            assert!(wallpaper(&invalid).is_err(), "{invalid}");
+        }
     }
 
     #[test]

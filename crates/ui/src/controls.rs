@@ -525,7 +525,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         line: f32,
         color: Rgba,
     ) -> f32 {
-        let lines = self.text.wrap(text, style, width);
+        let lines = self.text.lines(text, style, width, usize::MAX);
         for (i, l) in lines.iter().enumerate() {
             let (_, h) = self.text.measure(l, style);
             let top = y + i as f32 * line + (line - h) / 2.0;

@@ -73,7 +73,7 @@ impl Bar {
         tokens: Tokens,
         animate: bool,
     ) -> Result<Self> {
-        let surface = Surface::new(
+        let surface = Surface::new_deferred_accessibility(
             Kind::Bar,
             if kind == BarKind::Top {
                 "mypaper top bar"
@@ -85,7 +85,7 @@ impl Bar {
         let autohide = kind == BarKind::Dock && config.dock.autohide;
         let reservation = None;
         let edge_surface = autohide
-            .then(|| Surface::new(Kind::Bar, "Reveal dock", Role::Toolbar))
+            .then(|| Surface::new_deferred_accessibility(Kind::Bar, "Reveal dock", Role::Toolbar))
             .transpose()?;
         let band = monitor.rect;
         let motion = if kind == BarKind::Dock {
@@ -272,6 +272,7 @@ impl Bar {
             }
             return Ok(false);
         }
+        let first_paint = self.redraws == 0;
         if self.hide_at.is_some_and(|t| t <= now) {
             self.hide_at = if keep_open {
                 Some(now + Duration::from_secs(1))
@@ -370,6 +371,9 @@ impl Bar {
         } else if !self.surface.is_visible() {
             self.surface.show();
         }
+        if first_paint && self.surface.is_visible() {
+            mypaper_desktop::startup::ready("shell", "first_paint_ms");
+        }
         if let Some(edge) = &mut self.edge_surface {
             let e = appbar::settle(
                 self.monitor.work,
@@ -432,9 +436,10 @@ impl Bar {
         if self.hidden || self.slide.value >= 0.999 {
             return vec![];
         }
-        let Some(material) = self.tokens.material else {
+        let Some(mut material) = self.tokens.material else {
             return vec![];
         };
+        material.blur = (material.blur * self.scale()).min(32.0);
         let (x, y) = self.origin();
         self.frame
             .shapes

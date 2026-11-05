@@ -25,6 +25,9 @@ pub struct Tokens {
     /// The theme's content scale, applied on top of the monitor's DPI (0.5..=2).
     pub scale: f32,
     pub menu: MenuMetrics,
+    /// Engine glass under the body instead of the tint (`crate::glass`); `None` draws the tint.
+    /// Popups fall back to the thread's style ([`crate::glass::style`]) when this is `None`.
+    pub glass: Option<crate::glass::GlassMaterial>,
 }
 
 impl Default for Tokens {
@@ -42,6 +45,7 @@ impl Default for Tokens {
             shadow: true,
             scale: 1.0,
             menu: MenuMetrics::default(),
+            glass: None,
         }
     }
 }

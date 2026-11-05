@@ -45,4 +45,8 @@ impl Source for ImageSource {
     fn redraw(&self, _clock: Duration) -> Redraw {
         Redraw::OnChange
     }
+
+    fn shared(&self) -> bool {
+        true
+    }
 }

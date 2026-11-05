@@ -9,6 +9,9 @@ mod glass;
 )]
 #[path = "../inbox.rs"]
 mod inbox;
+#[allow(dead_code)]
+#[path = "../integrations/fixture.rs"]
+mod integrations;
 #[path = "mod.rs"]
 mod widgets;
 // Use the product's performance harness math, including wall time normalization.
@@ -181,6 +184,7 @@ fn main() -> Result<()> {
         while let Some((surface, event)) = next_event() {
             host.on_event(&mut ui, surface, &event);
         }
+        integrations::process();
         host.poll(&mut ui);
         if Instant::now() >= sample_at {
             let at = Instant::now();
@@ -334,6 +338,7 @@ fn pump_for(ui: &mut Ui, host: &mut widgets::Widgets, duration: Duration) {
         while let Some((surface, event)) = next_event() {
             host.on_event(ui, surface, &event);
         }
+        integrations::process();
         host.poll(ui);
         // SAFETY: bounded fixture-only wait; the production loop uses its real deadline queue.
         unsafe {

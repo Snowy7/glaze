@@ -782,7 +782,7 @@ pub fn add_sheet(app: &App, b: &mut B) {
                     let strong = b.font(Font::Strong);
                     let caption = b.font(Font::Caption);
                     b.text_in(Rect::new(tile.right + b.px(12.0), r.top + b.px(12.0), r.width() - b.px(72.0), b.px(18.0)), &m.name, &strong, p.ink1, Align::Start);
-                    let lines = b.text.wrap(m.description.as_deref().unwrap_or(""), &caption, r.width() - b.px(72.0));
+                    let lines = b.text.lines(m.description.as_deref().unwrap_or(""), &caption, r.width() - b.px(72.0), 2);
                     for (i, l) in lines.iter().take(2).enumerate() {
                         b.text_in(Rect::new(tile.right + b.px(12.0), r.top + b.px(32.0) + i as f32 * b.px(16.0), r.width() - b.px(72.0), b.px(16.0)), l, &caption, p.ink3, Align::Start);
                     }

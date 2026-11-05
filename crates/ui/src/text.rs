@@ -11,8 +11,9 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-    DWRITE_FONT_WEIGHT, DWRITE_TEXT_METRICS, DWRITE_WORD_WRAPPING_NO_WRAP, DWriteCreateFactory,
-    IDWriteFactory, IDWriteTextFormat, IDWriteTextLayout,
+    DWRITE_FONT_WEIGHT, DWRITE_HIT_TEST_METRICS, DWRITE_LINE_METRICS, DWRITE_TEXT_METRICS,
+    DWRITE_WORD_WRAPPING_NO_WRAP, DWRITE_WORD_WRAPPING_WRAP, DWriteCreateFactory, IDWriteFactory,
+    IDWriteTextFormat, IDWriteTextLayout,
 };
 use windows::core::{BOOL, HSTRING, w};
 
@@ -106,68 +107,27 @@ impl Text {
         self.capacity = layouts.max(8);
     }
 
-    /// `text` broken into lines no wider than `width` (word wrap; explicit newlines kept).
-    /// Each line is then drawn and cached like any label.
-    pub fn wrap(&mut self, text: &str, style: &TextStyle, width: f32) -> Vec<String> {
-        use windows::Win32::Graphics::DirectWrite::{
-            DWRITE_LINE_METRICS, DWRITE_WORD_WRAPPING_WRAP,
-        };
-        let Some(format) = self.format(style) else {
-            return vec![text.to_owned()];
-        };
-        let wide: Vec<u16> = text.encode_utf16().collect();
-        // SAFETY: documented calls; DirectWrite copies the string; out pointers are locals.
-        let metrics = unsafe {
-            let Ok(layout) = self
-                .factory
-                .CreateTextLayout(&wide, &format, width.max(1.0), 1.0e6)
-            else {
-                return vec![text.to_owned()];
-            };
-            let _ = layout.SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
-            let mut count = 0u32;
-            let _ = layout.GetLineMetrics(None, &mut count);
-            let mut metrics = vec![DWRITE_LINE_METRICS::default(); count as usize];
-            if layout
-                .GetLineMetrics(Some(&mut metrics), &mut count)
-                .is_err()
-            {
-                return vec![text.to_owned()];
-            }
-            metrics
-        };
-        let mut at = 0usize;
-        metrics
-            .iter()
-            .map(|m| {
-                let end = (at + m.length as usize).min(wide.len());
-                let keep = (m.length - m.newlineLength - m.trailingWhitespaceLength) as usize;
-                let line = String::from_utf16_lossy(&wide[at..(at + keep).min(end)]);
-                at = end;
-                line
-            })
-            .collect()
+    /// The width and height of `text` in `style`, in device pixels.
+    pub fn measure(&mut self, text: &str, style: &TextStyle) -> (f32, f32) {
+        self.laid(text, style)
+            .map_or((0.0, 0.0), |l| (l.width, l.height))
     }
 
-    /// `text` shortened with an ellipsis to fit `width`, or as is when it fits.
-    pub fn fit(&mut self, text: &str, style: &TextStyle, width: f32) -> String {
-        use windows::Win32::Graphics::DirectWrite::DWRITE_HIT_TEST_METRICS;
+    /// `text` as it fits in `width` device pixels: whole, or cut with an ellipsis at the last
+    /// character that fits (one hit test on its cached layout).
+    pub fn fit(&mut self, text: &str, style: &TextStyle, width: f32) -> Arc<str> {
         if self.measure(text, style).0 <= width {
-            return text.to_owned();
+            return text.into();
         }
         let ellipsis = self.measure("…", style).0;
-        let Some(format) = self.format(style) else {
-            return text.to_owned();
+        let Some(layout) = self.layout(text, style) else {
+            return text.into();
         };
-        let wide: Vec<u16> = text.encode_utf16().collect();
-        // SAFETY: documented calls on a temporary layout; out pointers are locals.
-        let cut = unsafe {
-            let Ok(layout) = self.factory.CreateTextLayout(&wide, &format, 1.0e6, 1.0e6) else {
-                return text.to_owned();
-            };
-            let (mut trailing, mut inside) = (BOOL(0), BOOL(0));
-            let mut hit = DWRITE_HIT_TEST_METRICS::default();
-            if layout
+        let (mut trailing, mut inside) = (BOOL(0), BOOL(0));
+        let mut hit = DWRITE_HIT_TEST_METRICS::default();
+        // SAFETY: a documented query on a live layout; the out pointers are locals.
+        let position = unsafe {
+            layout
                 .HitTestPoint(
                     (width - ellipsis).max(0.0),
                     0.0,
@@ -175,20 +135,65 @@ impl Text {
                     &mut inside,
                     &mut hit,
                 )
-                .is_err()
-            {
-                return text.to_owned();
-            }
-            hit.textPosition as usize
+                .map_or(0, |()| hit.textPosition as usize)
         };
-        let kept = String::from_utf16_lossy(&wide[..cut.min(wide.len())]);
-        format!("{}…", kept.trim_end())
+        let kept: String = char::decode_utf16(text.encode_utf16().take(position))
+            .map(|c| c.unwrap_or('\u{FFFD}'))
+            .collect();
+        format!("{}…", kept.trim_end()).into()
     }
 
-    /// The width and height of `text` in `style`, in device pixels.
-    pub fn measure(&mut self, text: &str, style: &TextStyle) -> (f32, f32) {
-        self.laid(text, style)
-            .map_or((0.0, 0.0), |l| (l.width, l.height))
+    /// `text` wrapped at word boundaries into lines `width` device pixels wide, at most `max`
+    /// of them (the last cut with an ellipsis when more would follow). Line breaks are kept.
+    pub fn lines(
+        &mut self,
+        text: &str,
+        style: &TextStyle,
+        width: f32,
+        max: usize,
+    ) -> Vec<Arc<str>> {
+        let wide: Vec<u16> = text.encode_utf16().collect();
+        let Some(format) = self.format(style) else {
+            return vec![text.into()];
+        };
+        // SAFETY: documented calls on a layout made and dropped here; the out pointers and the
+        // metrics buffer are locals that outlive them.
+        let lengths: Vec<usize> = unsafe {
+            let Ok(layout) = self
+                .factory
+                .CreateTextLayout(&wide, &format, width.max(1.0), 4096.0)
+            else {
+                return vec![text.into()];
+            };
+            let _ = layout.SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+            let mut count = 0;
+            let _ = layout.GetLineMetrics(None, &mut count);
+            let mut metrics = vec![DWRITE_LINE_METRICS::default(); count as usize];
+            if layout
+                .GetLineMetrics(Some(&mut metrics), &mut count)
+                .is_err()
+            {
+                return vec![text.into()];
+            }
+            metrics.iter().map(|m| m.length as usize).collect()
+        };
+        let mut lines = Vec::new();
+        let mut start = 0;
+        for (i, length) in lengths.iter().enumerate() {
+            let end = (start + length).min(wide.len());
+            let line = String::from_utf16_lossy(&wide[start..end]);
+            let line = line.trim_end_matches(['\r', '\n']).trim_end();
+            if lines.len() + 1 == max && i + 1 < lengths.len() {
+                // The rest of the text in the last line, cut to fit.
+                let rest = String::from_utf16_lossy(&wide[start..]).replace(['\r', '\n'], " ");
+                let cut = self.fit(&format!("{} …", rest.trim_end()), style, width);
+                lines.push(cut);
+                break;
+            }
+            lines.push(line.into());
+            start = end;
+        }
+        lines
     }
 
     /// The cached layout of `text` (made on first use).
@@ -291,6 +296,28 @@ impl Text {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn long_text_is_cut_with_an_ellipsis_and_wraps_into_bounded_lines() {
+        let mut text = Text::new().unwrap();
+        let style = TextStyle::new("Segoe UI", 13.0);
+        assert_eq!(&*text.fit("Wi-Fi", &style, 500.0), "Wi-Fi", "fits whole");
+        let long = "A notification title far too long for the row it is shown in";
+        let cut = text.fit(long, &style, 120.0);
+        assert!(cut.ends_with('…') && cut.len() < long.len(), "{cut}");
+        assert!(text.measure(&cut, &style).0 <= 120.0 + 1.0);
+        let lines = text.lines(&format!("{long}. {long}."), &style, 160.0, 2);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].ends_with('…'), "{lines:?}");
+        for line in &lines {
+            assert!(text.measure(line, &style).0 <= 161.0, "{line}");
+        }
+        assert_eq!(
+            text.lines("one\ntwo", &style, 400.0, 3).len(),
+            2,
+            "breaks kept"
+        );
+    }
 
     #[test]
     fn the_layout_cache_stays_bounded_and_keeps_what_is_in_use() {

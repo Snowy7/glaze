@@ -545,6 +545,9 @@ pub struct GlassStyle {
     pub style: Option<GlassKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub intensity: Option<f32>,
+    /// Clear-to-tinted luminance adaptation, 0..1; independent of the coloured tint's opacity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clarity: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refraction: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -567,6 +570,7 @@ impl<'de> Deserialize<'de> for GlassStyle {
         struct Full {
             style: Option<GlassKind>,
             intensity: Option<f32>,
+            clarity: Option<f32>,
             refraction: Option<f32>,
             highlight: Option<f32>,
             tint: Option<f32>,
@@ -585,6 +589,7 @@ impl<'de> Deserialize<'de> for GlassStyle {
         let Full {
             style,
             intensity,
+            clarity,
             refraction,
             highlight,
             tint,
@@ -595,6 +600,7 @@ impl<'de> Deserialize<'de> for GlassStyle {
         Ok(Self {
             style,
             intensity,
+            clarity,
             refraction,
             highlight,
             tint,
@@ -609,6 +615,7 @@ impl GlassStyle {
     fn validate(&self, name: &str) -> Result<()> {
         for (field, value) in [
             ("intensity", self.intensity),
+            ("clarity", self.clarity),
             ("refraction", self.refraction),
             ("highlight", self.highlight),
             ("tint", self.tint),
@@ -974,6 +981,15 @@ mod tests {
         let look: Look = serde_json::from_str(json)?;
         look.validate()?;
         Ok(look)
+    }
+
+    #[test]
+    fn clarity_is_a_bounded_material_control_independent_of_tint() {
+        let value = look(r#"{"glass":{"clarity":0.9,"tint":0.2}}"#).unwrap();
+        assert_eq!(value.glass.clarity, Some(0.9));
+        assert_eq!(value.glass.tint, Some(0.2));
+        assert!(look(r#"{"glass":{"clarity":1.1}}"#).is_err());
+        assert!(look(r#"{"glass":{"clarity":-0.1}}"#).is_err());
     }
 
     #[test]

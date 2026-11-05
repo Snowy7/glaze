@@ -9,6 +9,8 @@ pub mod desktop_menu;
 pub mod flyouts;
 pub mod glass;
 pub mod inbox;
+pub mod integrations;
 pub mod look;
+pub mod overlay_client;
 pub mod preview;
 pub mod widgets;
