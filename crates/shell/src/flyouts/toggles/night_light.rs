@@ -36,7 +36,7 @@ pub fn set(on: bool) -> Result<(), String> {
         RegSetKeyValueW(
             HKEY_CURRENT_USER,
             KEY,
-            None,
+            w!("Data"),
             REG_BINARY.0,
             Some(data.as_ptr().cast()),
             data.len() as u32,

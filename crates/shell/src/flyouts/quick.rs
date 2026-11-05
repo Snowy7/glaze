@@ -1,12 +1,13 @@
 //! Quick settings, laid out as macOS's Control Center on the kit: toggle tiles two to a row,
 //! the display and sound sliders in their own cards, the battery and Settings at the foot.
 //!
-//! Every tile is a real switch with live system readback (`controls`, read every second while
-//! open): radios, power mode and the hotspot through documented APIs; do not disturb, night
+//! Every tile is a real switch with live system readback (`controls`, read every five seconds
+//! while open and right after each change): radios, power mode and the hotspot through documented APIs; do not disturb, night
 //! light and airplane mode through `toggles` (undocumented, read back after each change). A
 //! tile shows the state Windows reports, never the one asked for. Secondary clicks open the
 //! matching Settings page.
 
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use mypaper_bars::audio::Volume;
@@ -53,11 +54,17 @@ pub struct Quick {
     /// The brightness being dragged (applied when the drag ends: DDC/CI is slow).
     brightness: Option<u32>,
     error: Option<String>,
-    /// A change is on its way; tiles wait for its readback.
-    pending: bool,
-    refreshing: bool,
-    display_due: Instant,
+    /// Quick-lane jobs answering with `QuickControl`, oldest first: `true` for a change. The
+    /// lane runs them in order, so each reply pops the front. Tiles wait only while a change is
+    /// on its way; a click never waits behind a plain read.
+    jobs: VecDeque<bool>,
+    /// When the switches and the display are read again.
+    poll_due: Instant,
 }
+
+/// How often the open panel reads the system again. Changes are read back at once; this only
+/// follows changes made elsewhere (Windows' own quick settings, a hardware key).
+const POLL: Duration = Duration::from_secs(5);
 
 impl Quick {
     pub fn new(cx: &mut Cx) -> Self {
@@ -73,9 +80,8 @@ impl Quick {
             battery: system::battery(),
             brightness: None,
             error: None,
-            pending: true,
-            refreshing: false,
-            display_due: Instant::now() + Duration::from_secs(5),
+            jobs: VecDeque::from([false]),
+            poll_due: Instant::now() + POLL,
         }
     }
 
@@ -99,10 +105,28 @@ impl Quick {
             battery,
             brightness: None,
             error: None,
-            pending: false,
-            refreshing: false,
-            display_due: Instant::now() + Duration::from_secs(5),
+            jobs: VecDeque::new(),
+            poll_due: Instant::now() + POLL,
         }
+    }
+
+    /// Whether a change is on its way (its readback hasn't come yet).
+    fn changing(&self) -> bool {
+        self.jobs.contains(&true)
+    }
+
+    /// Runs `job` (a change; its error, if any) on the quick lane, then reads everything back.
+    fn change(
+        &mut self,
+        cx: &mut Cx,
+        job: impl FnOnce() -> Option<String> + Send + 'static,
+    ) -> Effect {
+        self.jobs.push_back(true);
+        cx.lanes.quick(move |_| {
+            let error = job();
+            Reply::QuickControl(controls::read(), error)
+        });
+        Effect::Redraw
     }
 
     fn radio(&self, kind: RadioKind) -> Option<bool> {
@@ -116,35 +140,27 @@ impl Quick {
     }
 
     fn set_radio(&mut self, kind: RadioKind, cx: &mut Cx) -> Effect {
-        if self.pending || self.refreshing {
-            return Effect::None;
-        }
-        let Some(on) = self.radio(kind) else {
+        let Some(on) = self.radio(kind).filter(|_| !self.changing()) else {
             return Effect::None;
         };
-        self.pending = true;
+        self.jobs.push_back(true);
         change_radio(cx, kind, !on);
         Effect::Redraw
     }
 
     /// Flips `toggle` from the state Windows last reported, then reads everything back.
     fn flip(&mut self, toggle: Toggle, on: Option<bool>, cx: &mut Cx) -> Effect {
-        let Some(on) = on.filter(|_| !self.pending && !self.refreshing) else {
+        let Some(on) = on.filter(|_| !self.changing()) else {
             return Effect::None;
         };
-        self.pending = true;
-        cx.lanes.quick(move |_| {
-            let error = toggle.set(!on).err();
-            Reply::QuickControl(controls::read(), error)
-        });
-        Effect::Redraw
+        self.change(cx, move || toggle.set(!on).err())
     }
 
     /// The tiles, in Control Center's order: connectivity, then focus and display, then power.
     fn tiles(&self) -> Vec<(Tile<'static>, String)> {
         let live = self.live.as_ref();
         let loading = live.is_none();
-        let enabled = !self.pending;
+        let enabled = !self.changing();
         let on_off = |on: bool| if on { "On" } else { "Off" };
         let mut tiles = Vec::new();
         let wifi = self.radio(RadioKind::Wifi);
@@ -378,30 +394,17 @@ impl Panel for Quick {
             NIGHT_LIGHT => self.flip(Toggle::NightLight, night, cx),
             AIRPLANE => self.flip(Toggle::Airplane, airplane, cx),
             POWER => {
-                if self.pending || self.refreshing {
-                    return Effect::None;
-                }
-                let Some(mode) = live.and_then(|l| l.power) else {
+                let Some(mode) = live.and_then(|l| l.power).filter(|_| !self.changing()) else {
                     return Effect::None;
                 };
                 let next = next_power(mode);
-                self.pending = true;
-                cx.lanes.quick(move |_| {
-                    let error = controls::set_power_mode(next).err();
-                    Reply::QuickControl(controls::read(), error)
-                });
-                Effect::Redraw
+                self.change(cx, move || controls::set_power_mode(next).err())
             }
             HOTSPOT => {
-                let Some(on) = hotspot.filter(|_| !self.pending && !self.refreshing) else {
+                let Some(on) = hotspot.filter(|_| !self.changing()) else {
                     return Effect::None;
                 };
-                self.pending = true;
-                cx.lanes.quick(move |_| {
-                    let error = controls::set_hotspot(!on).err();
-                    Reply::QuickControl(controls::read(), error)
-                });
-                Effect::Redraw
+                self.change(cx, move || controls::set_hotspot(!on).err())
             }
             MUTE => {
                 let muted = self.volume.is_some_and(|v| v.muted);
@@ -453,10 +456,8 @@ impl Panel for Quick {
                 changed
             }
             Reply::QuickControl(live, error) => {
-                let changed =
-                    self.pending || error.is_some() || self.live.as_ref() != Some(live);
-                self.pending = false;
-                self.refreshing = false;
+                let change = self.jobs.pop_front().unwrap_or(false);
+                let changed = change || error.is_some() || self.live.as_ref() != Some(live);
                 if error.is_some() {
                     self.error = error.clone();
                 }
@@ -493,16 +494,19 @@ impl Panel for Quick {
     }
 
     fn tick(&mut self, now: Instant, cx: &mut Cx) -> (bool, Option<Instant>) {
-        if !self.pending && !self.refreshing {
-            self.refreshing = true;
-            cx.lanes
-                .quick(|_| Reply::QuickControl(controls::read(), None));
+        // One read of everything every few seconds; nothing in between (Rule 2).
+        if now >= self.poll_due {
+            self.poll_due = now + POLL;
+            if self.jobs.is_empty() {
+                self.jobs.push_back(false);
+                cx.lanes
+                    .quick(|_| Reply::QuickControl(controls::read(), None));
+            }
+            if self.brightness.is_none() {
+                cx.lanes.quick(|lane| Reply::Quick(lane.read()));
+            }
         }
-        if now >= self.display_due && self.brightness.is_none() {
-            self.display_due = now + Duration::from_secs(5);
-            cx.lanes.quick(|lane| Reply::Quick(lane.read()));
-        }
-        (false, Some(now + Duration::from_secs(1)))
+        (false, Some(self.poll_due))
     }
 
     fn changed(&mut self, msg: &Msg, cx: &mut Cx) -> bool {

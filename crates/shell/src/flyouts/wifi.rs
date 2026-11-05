@@ -11,7 +11,11 @@ use mypaper_bars::wake::Msg;
 use mypaper_ui::icons::Icon;
 use mypaper_ui::layout::{Align, Stack};
 use mypaper_ui::{Accessory, ButtonKind, Frame, HitId, Lead, ListRow, Rect, Scroll, TextRole};
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
+
+/// How often the open panel reads the radio again (a change is read back at once).
+const POLL: Duration = Duration::from_secs(5);
 
 use super::kit::{Kit, footer};
 use super::{Cx, Effect, LIST, Panel, Reply, controls};
@@ -67,7 +71,10 @@ pub struct Wifi {
     status: Option<String>,
     /// The list's scroll position (only the networks scroll).
     scroll: Scroll,
-    radio_pending: bool,
+    /// Quick-lane reads of the radio in flight, oldest first: `true` for a change (see `quick`).
+    jobs: VecDeque<bool>,
+    /// When the radio is read again.
+    poll_due: Instant,
 }
 
 impl Wifi {
@@ -84,7 +91,8 @@ impl Wifi {
             expanded: None,
             status: None,
             scroll: Scroll::new(&cx.look.theme().motion),
-            radio_pending: true,
+            jobs: VecDeque::from([false]),
+            poll_due: Instant::now() + POLL,
         }
     }
 
@@ -96,7 +104,8 @@ impl Wifi {
             expanded: expanded.map(Into::into),
             status: None,
             scroll: Scroll::default(),
-            radio_pending: false,
+            jobs: VecDeque::new(),
+            poll_due: Instant::now() + POLL,
         }
     }
 
@@ -161,7 +170,7 @@ impl Panel for Wifi {
             let title = match self.radio {
                 Some(on) => {
                     let mid = title.top + title.height() / 2.0;
-                    let switch = f.switch(RADIO, title.right, mid, on, "Wi-Fi", !self.radio_pending);
+                    let switch = f.switch(RADIO, title.right, mid, on, "Wi-Fi", !self.jobs.contains(&true));
                     Rect { right: switch.left - f.px(8.0), ..title }
                 }
                 None => title,
@@ -283,13 +292,13 @@ impl Panel for Wifi {
         }
         match id {
             RADIO => {
-                if self.radio_pending {
+                if self.jobs.contains(&true) {
                     return Effect::None;
                 }
                 let Some(on) = self.radio else {
                     return Effect::None;
                 };
-                self.radio_pending = true;
+                self.jobs.push_back(true);
                 self.status = None;
                 super::quick::change_radio(cx, RadioKind::Wifi, !on);
                 Effect::Redraw
@@ -377,7 +386,7 @@ impl Panel for Wifi {
                 changed
             }
             Reply::QuickControl(live, error) => {
-                self.radio_pending = false;
+                self.jobs.pop_front();
                 let radio = live
                     .radios
                     .iter()
@@ -417,15 +426,17 @@ impl Panel for Wifi {
     }
 
     fn tick(&mut self, now: Instant, cx: &mut Cx) -> (bool, Option<Instant>) {
-        if !self.radio_pending {
-            self.radio_pending = true;
-            cx.lanes
-                .quick(|_| Reply::QuickControl(controls::read(), None));
+        // The radio every few seconds; the scroll's glide and fade at frame rate while they run.
+        if now >= self.poll_due {
+            self.poll_due = now + POLL;
+            if self.jobs.is_empty() {
+                self.jobs.push_back(false);
+                cx.lanes
+                    .quick(|_| Reply::QuickControl(controls::read(), None));
+            }
         }
-        // The radio every second; the scroll's glide and fade at frame rate while they run.
         let (scrolled, next) = self.scroll.tick(now);
-        let second = now + Duration::from_secs(1);
-        (scrolled, Some(next.map_or(second, |n| n.min(second))))
+        (scrolled, Some(next.map_or(self.poll_due, |n| n.min(self.poll_due))))
     }
 }
 
