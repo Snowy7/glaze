@@ -49,7 +49,8 @@
     },
     "glass": {
       "style": "liquid"
-    }
+    },
+    "transparent": true
   },
   "animation": {
     "duration": 240,

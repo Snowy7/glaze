@@ -294,6 +294,7 @@ fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: 
         label(b, row, &format!("Show the {}", name.to_lowercase()), "", None);
         b.switch(key(("show-bar", name)), Point::new(c.x + c.w - b.px(36.0), c.y + b.px(8.0)), on, name, Action::Toggle(Edit::new(DocId::Bars, format!("/{}/enabled", bar.key()), name), on));
         c.y += b.px(40.0);
+        background(b, c, config, bar);
     });
     section(b, col, "Design", |b, c| {
         let designs: &[(&str, &str)] = if bar == Bar::Top { &TOP_DESIGNS } else { &DOCK_DESIGNS };
@@ -352,6 +353,23 @@ fn bar_inspector(app: &App, b: &mut B, col: &mut Col, config: &BarsConfig, bar: 
             });
         }
     }
+}
+
+/// Background: the style's glass, or Transparent (`look.transparent`: no plate, the items
+/// straight on the wallpaper). Shows what the bar draws now, its design's default included
+/// (macOS's top bar is transparent), and writes the bar's own choice.
+fn background(b: &mut B, c: &mut Col, config: &BarsConfig, bar: Bar) {
+    let look = if bar == Bar::Top { &config.top.look } else { &config.dock.look };
+    let labels = ["Glass", "Transparent"];
+    let h = b.px(38.0);
+    let row = Rect::new(c.x, c.y, c.w, h);
+    label(b, row, "Background", "", None);
+    let w = b.segmented_width(&labels);
+    let seg = Rect::new(c.x + c.w - w, c.y + (h - b.px(30.0)) / 2.0, w, b.px(30.0));
+    let edit = Edit::new(DocId::Bars, format!("/{}/look/transparent", bar.key()), "Background");
+    let selected = Some(usize::from(look.is_transparent()));
+    b.segmented(key(("background", bar.key())), seg, &labels, selected, "Background", false, |i| Action::Set(edit.clone(), json!(i == 1)));
+    c.y += h + b.px(4.0);
 }
 
 /// The dock's extras after the apps: Show desktop, Recycle Bin.

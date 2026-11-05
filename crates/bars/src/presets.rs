@@ -358,6 +358,30 @@ mod tests {
         }
     }
 
+    /// macOS's top bar is transparent, as Tahoe's menu bar; every design of either bar can be
+    /// made transparent or given its glass back by the user's own `look.transparent`.
+    #[test]
+    fn transparency_is_the_macos_top_bars_default_and_every_designs_option() {
+        let parse = |raw: Value| BarsConfig::parse(&raw.to_string()).unwrap();
+        let macos = parse(json!({ "preset": "macos" }));
+        assert!(macos.top.look.is_transparent());
+        assert!(!macos.dock.look.is_transparent());
+        let glass = parse(json!({ "preset": "macos", "top": { "look": { "transparent": false } } }));
+        assert!(!glass.top.look.is_transparent());
+        for design in TopDesign::ALL {
+            let name = serde_json::to_value(design).unwrap();
+            for on in [true, false] {
+                let bar = json!({ "design": name, "look": { "transparent": on } });
+                assert_eq!(parse(json!({ "top": bar })).top.look.is_transparent(), on, "{design:?}");
+            }
+        }
+        for design in DockDesign::ALL {
+            let name = serde_json::to_value(design).unwrap();
+            let bar = json!({ "design": name, "look": { "transparent": true } });
+            assert!(parse(json!({ "dock": bar })).dock.look.is_transparent(), "{design:?}");
+        }
+    }
+
     /// Designs are looks: which bars show, where and with which pins stays the user's (or the
     /// preset's) choice.
     #[test]
