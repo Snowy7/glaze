@@ -453,6 +453,88 @@ fn docks_on_all_edges_and_taskbar_module_clicks_have_alpha() {
     }
 }
 
+/// Every preset in every style, top bar and dock, over a wallpaper, one PNG per preset and
+/// style. Glass is a stand-in (the style's tint at its strength, a rim line where it has a
+/// highlight); layout, sizes and which material each style picks are exact.
+#[test]
+#[ignore = "writes images: MYPAPER_BAR_GRID=<dir> [MYPAPER_BAR_BACKDROP=<image>]"]
+fn preset_style_grid() {
+    let Ok(dir) = std::env::var("MYPAPER_BAR_GRID") else {
+        return;
+    };
+    let dir = std::path::PathBuf::from(dir);
+    let mut ui = Ui::new().unwrap();
+    let backdrop = std::env::var("MYPAPER_BAR_BACKDROP")
+        .ok()
+        .and_then(|p| Image::load(&ui, std::path::Path::new(&p)).ok())
+        .map(std::sync::Arc::new);
+    let mut model = model();
+    model.notifications = None;
+    let (width, height) = (1280_u32, 300_u32);
+    for preset in mypaper_bars::presets::Preset::ALL {
+        let preset_name = serde_json::to_value(preset).unwrap();
+        for style in NativeStyle::ALL {
+            let style_name = serde_json::to_value(style).unwrap();
+            let mut config = BarsConfig::parse(&format!(
+                r#"{{"preset":{preset_name},"look":{{"style":{style_name},"scheme":"dark"}},
+                    "top":{{"enabled":true}},"dock":{{"enabled":true,"extras":["trash"]}}}}"#
+            ))
+            .unwrap();
+            config.resolve(Vec::new);
+            let mut images = view::Images::default();
+            let system = providers::accent::read();
+            let top_tokens = look::Tokens::resolve(&config.top.look, &Appearance::default(), &system);
+            let dock_tokens = look::Tokens::resolve(&config.dock.look, &Appearance::default(), &system);
+            let top = view::top(width, &config, &model, &top_tokens, 1.0, &mut ui, &mut images, None);
+            let dock = view::dock(
+                &config, &model, &apps(), &dock_tokens, 1.0, (width, 120), &[], &[], &mut ui,
+                &mut images, None,
+            );
+            let mut list = mypaper_ui::DisplayList::default();
+            if let Some(image) = &backdrop {
+                let k = (image.width as f32 / width as f32).min(image.height as f32 / height as f32);
+                list.ops.push(Op::Image {
+                    rect: mypaper_ui::Rect::new(0.0, 0.0, width as f32, height as f32),
+                    image: image.clone(),
+                    opacity: 1.0,
+                    source: Some(mypaper_ui::Rect::new(0.0, 0.0, width as f32 * k, height as f32 * k)),
+                });
+            }
+            let dock_y = height as f32 - dock.size.1 as f32;
+            for (frame, tokens, dy) in [(&top, &top_tokens, 0.0), (&dock, &dock_tokens, dock_y)] {
+                let dx = ((width - frame.size.0) / 2) as f32;
+                if let Some(m) = tokens.material {
+                    for &(rect, radius) in &frame.shapes {
+                        // Stand-in glass: the tint at its strength, a frosted veil when clear.
+                        let veil = (1.0 - m.clarity).max(m.tint.a).clamp(0.25, 0.92);
+                        list.ops.push(Op::Fill {
+                            rect: rect.offset(dx, dy),
+                            radius,
+                            color: m.tint.with_alpha(veil),
+                        });
+                        if m.highlight > 0.0 {
+                            list.ops.push(Op::Stroke {
+                                rect: rect.offset(dx, dy).inflate(-0.5),
+                                radius,
+                                width: 1.0,
+                                color: Rgba::rgb8([255; 3], 0.35 * m.highlight),
+                            });
+                        }
+                    }
+                }
+                list.ops.extend(frame.list.translated(dx, dy).ops);
+            }
+            let image = render(&mut ui, &list, width, height).unwrap();
+            let name = format!(
+                "{}-{}.png",
+                preset_name.as_str().unwrap(),
+                style_name.as_str().unwrap()
+            );
+            mypaper_ui::golden::write(&image, &dir.join(name)).unwrap();
+        }
+    }
+}
+
 /// The docs' headless renders (`docs/media/native/bar-*.png`): the macOS preset's top bar and
 /// dock at 100 % and 150 %, dark and light, over `MYPAPER_BAR_BACKDROP` (a wallpaper PNG) with a
 /// flat stand-in for the engine's glass. Run with `MYPAPER_BAR_SHOTS=<dir>`.
