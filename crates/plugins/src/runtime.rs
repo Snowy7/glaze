@@ -586,10 +586,15 @@ pub fn default_dirs() -> (PathBuf, PathBuf) {
 impl Runtime {
     pub fn new(cache: PathBuf, data: PathBuf) -> Result<Self> {
         let mut pool = PoolingAllocationConfig::default();
-        pool.total_component_instances(32)
-            .total_core_instances(128)
-            .total_memories(64)
-            .total_tables(128)
+        // Sized for ~16 live plugins: on Windows the pool commits its table and instance slots up
+        // front, so these counts are the runtime's base memory (docs/plugins.md, "Budgets").
+        pool.total_component_instances(16)
+            .total_core_instances(48)
+            .total_memories(24)
+            .total_tables(48)
+            .table_elements(8192)
+            .max_core_instance_size(128 << 10)
+            .max_component_instance_size(128 << 10)
             .max_memory_size(MEMORY_CAP)
             .max_memories_per_module(2)
             .max_tables_per_module(4);
