@@ -422,13 +422,13 @@ subprotocols), pipes and HTTP over pipes; toasts; system-event routing with move
 
 Shell side (2026-11-05, late): style patches restyle the top bar, dock and menus in place
 (tokens above); top-bar modules from plugins (`custom:<plugin>--<bar>`, below); the `canvas`
-renderer and `animated` springs.
+renderer with `ui.put-image` images (the shell opens the helper's mappings itself) and
+`animated` springs; plugin modules in Studio's Bars "Add a module" sheet.
 
 Not yet: plugin panels and flyouts opened from a module; dock modules; the `panel` and `widget`
-style surfaces; plugin `menu` items in the desktop menu and `commands` as global shortcuts;
-plugin modules in Studio's Bars module list (type `custom:<plugin>--<bar>` in `bars.json` for
-now); the shell opening `ui.put-image` mappings for canvases (the renderer side,
-`views::plugin::canvas::put_image`, is in place; the bridge has to pass the helper's pid). The
+style surfaces; plugin `menu` items in the desktop menu and `commands` as global shortcuts (the
+helper drops `HostMsg::Command` for a plugin it hasn't opened yet, so the shell side waits on
+the helper loading a plugin by id for a command, and on a `Plugins::command` sender). The
 shell's system-event sources: `Plugins::system_event` exists, but the window hooks, monitor
 changes, notification listener, media provider, power and theme don't call it yet. A toast's
 `action` coming back as an event.
