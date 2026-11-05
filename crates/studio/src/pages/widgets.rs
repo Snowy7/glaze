@@ -121,10 +121,18 @@ pub fn view(app: &App, b: &mut B, body: Rect) {
     let x = crate::pages::display_chips(app, b, frame.left + b.px(80.0), y);
     let caption = b.font(Font::Caption);
     b.text_in(Rect::new(x + b.px(4.0), y, b.px(300.0), b.px(28.0)), "Drag to move, or by a corner to resize", &caption, p.ink3, Align::Start);
-    let manifest = selected.as_ref().and_then(|id| layout.get(id)).and_then(|i| app.registry.get(&i.widget).map(|m| (i.clone(), m.manifest.clone())));
-    inspector(app, b, side, key(("widget-inspector", selected.clone())), |b, col| match manifest {
-        Some((instance, manifest)) => widget_inspector(app, b, col, &layout, &instance, &manifest),
-        None => overview(app, b, col, &here),
+    let instance = selected.as_ref().and_then(|id| layout.get(id)).cloned();
+    let manifest = instance.as_ref().and_then(|i| app.registry.get(&i.widget)).map(|m| m.manifest.clone());
+    inspector(app, b, side, key(("widget-inspector", selected.clone())), |b, col| match (instance, manifest) {
+        (Some(instance), Some(manifest)) => widget_inspector(app, b, col, &layout, &instance, &manifest),
+        (Some(instance), None) => {
+            crate::ui::header(b, col, Some(("All widgets", Action::SelectWidget(None))), glyph::ALERT, &instance.widget, "Not installed", &[(glyph::DELETE, "Remove", Action::RemoveWidget)]);
+            section(b, col, "", |b, c| {
+                let caption = b.font(Font::Caption);
+                c.y += b.paragraph(c.x, c.y, c.w, "mypaper doesn't have this widget any more. Remove it, or bring its folder back.", &caption, b.px(16.0), b.p.ink3);
+            });
+        }
+        _ => overview(app, b, col, &here),
     });
 }
 

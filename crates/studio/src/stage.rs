@@ -473,6 +473,18 @@ fn widgets(
             continue;
         }
         let Some(manifest) = app.registry.get(&instance.widget).map(|i| &i.manifest) else {
+            // Not installed: a placeholder at its cells, still selectable (and removable).
+            let r = grid.rect(instance.cell, instance.size);
+            let rect = Rect::new(r.x as f32 * scale, r.y as f32 * scale, r.width as f32 * scale, r.height as f32 * scale);
+            let radius = 22.0 * scale;
+            out.ops.push(Op::Fill { rect, radius, color: Rgba::new(0.0, 0.0, 0.0, 0.35) });
+            out.ops.push(Op::Stroke { rect, radius, width: 1.0, color: Rgba::new(1.0, 1.0, 1.0, 0.35) });
+            out.items.push(Item {
+                what: What::Widget(instance.instance.clone()),
+                rect,
+                radius,
+                label: format!("{} (not installed)", instance.widget),
+            });
             continue;
         };
         let appearance = mypaper_widgets::look::resolve(&instance.appearance, &layout.appearance, &base, mypaper_widgets::look::accent(None));
