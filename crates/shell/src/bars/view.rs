@@ -1027,17 +1027,7 @@ pub fn dock(
             } else {
                 size
             } as u32;
-            let packed = images.app(app);
-            packed
-                .as_ref()
-                .and_then(|(source, mono)| {
-                    images.sized(ui, source, mono.then_some(c.label), at)
-                })
-                .or_else(|| {
-                    app.icon
-                        .as_deref()
-                        .and_then(|s| images.sized(ui, s, None, at))
-                })
+            app_icon(ui, images, app, c.label, at)
         })
         .collect();
     let extra_glyphs: Vec<Glyph> = d
@@ -1311,6 +1301,25 @@ pub fn dock(
     let mut frame = out.finish(list, dimensions);
     frame.rest = rest;
     frame
+}
+
+/// `app`'s icon at `px` device pixels (its packaged logo, tinted `ink` when monochrome, else its
+/// exe's icon); shared by the dock and its window previews.
+pub fn app_icon(
+    ui: &Ui,
+    images: &mut Images,
+    app: &Item,
+    ink: Rgba,
+    px: u32,
+) -> Option<Arc<Image>> {
+    images
+        .app(app)
+        .and_then(|(source, mono)| images.sized(ui, &source, mono.then_some(ink), px))
+        .or_else(|| {
+            app.icon
+                .as_deref()
+                .and_then(|s| images.sized(ui, s, None, px))
+        })
 }
 
 /// Where `image` draws in `slot`: its longer side the slot's, centred on whole pixels. Images

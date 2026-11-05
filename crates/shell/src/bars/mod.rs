@@ -98,6 +98,8 @@ pub struct Bars {
     preview_close: Option<Instant>,
     tooltip: Option<mypaper_ui::Surface>,
     tooltip_due: Option<(Instant, usize, u32)>,
+    /// When the shown tooltip started fading in.
+    tooltip_fade: Option<Instant>,
     warm_due: Option<(Instant, usize, u32)>,
 }
 
@@ -165,6 +167,7 @@ impl Bars {
             preview_close: None,
             tooltip: None,
             tooltip_due: None,
+            tooltip_fade: None,
             warm_due: None,
         };
         bars.read_theme();
@@ -530,32 +533,52 @@ impl Bars {
         }
         if self.preview_due.as_ref().is_some_and(|p| p.0 <= now) {
             let (_, index, key) = self.preview_due.take().unwrap();
-            if let Some(b) = self.bars.get(index)
-                && !b.hidden
-                && let Some((i, app)) =
-                    b.frame
-                        .targets
-                        .iter()
-                        .enumerate()
-                        .find_map(|(i, t)| match t {
-                            Target::Dock(app) if app.key == key => Some((i, app.clone())),
-                            _ => None,
-                        })
-                && let Some(hit) = b.frame.list.hits.iter().find(|h| h.id == i as u32 + 1)
-            {
-                let origin = b.origin();
-                let anchor = hit.rect.offset(origin.0 as f32, origin.1 as f32);
-                self.preview =
-                    preview::Preview::open(ui, app, anchor, &b.tokens, b.scale(), !b.horizontal())
-                        .inspect_err(|e| log::warn!("dock previews: {e:#}"))
-                        .ok();
-            }
+            self.show_preview(ui, index, &key);
         }
         at = tick_spent("preview", at);
         if let Err(e) = self.paint(ui, now) {
             log::error!("painting bars: {e:#}");
         }
         tick_spent("paint", at);
+    }
+
+    /// Shows app `key`'s window previews over its icon on bar `index`: swapped into the open
+    /// popup at once, else in a new one. Cancels the pending open/close and hides the tooltip.
+    fn show_preview(&mut self, ui: &mut Ui, index: usize, key: &str) {
+        self.preview_due = None;
+        self.preview_close = None;
+        self.tooltip_due = None;
+        if let Some(tip) = &mut self.tooltip {
+            tip.hide();
+            tip.release();
+        }
+        let Some(b) = self.bars.get(index).filter(|b| !b.hidden) else {
+            return;
+        };
+        let Some((i, app)) = b.frame.targets.iter().enumerate().find_map(|(i, t)| match t {
+            Target::Dock(app) if app.key == key => Some((i, app.clone())),
+            _ => None,
+        }) else {
+            return;
+        };
+        let Some(hit) = b.frame.list.hits.iter().find(|h| h.id == i as u32 + 1) else {
+            return;
+        };
+        let origin = b.origin();
+        let anchor = hit.rect.offset(origin.0 as f32, origin.1 as f32);
+        let (tokens, scale, vertical) = (b.tokens.clone(), b.scale(), !b.horizontal());
+        let ink = tokens.theme.color.label;
+        let icon = view::app_icon(ui, &mut self.images, &app, ink, (16.0 * scale).round() as u32);
+        let shown = if let Some(preview) = &mut self.preview {
+            preview.switch(ui, app, anchor, icon)
+        } else {
+            preview::Preview::open(ui, app, anchor, &tokens, scale, vertical, icon)
+                .map(|p| self.preview = Some(p))
+        };
+        if let Err(e) = shown {
+            log::warn!("dock previews: {e:#}");
+            self.preview = None;
+        }
     }
 
     /// Delayed hover work has no recurring timer and never runs on pointer-down.
@@ -597,7 +620,7 @@ impl Bars {
             if let Some(b) = self
                 .bars
                 .get(index)
-                .filter(|b| b.hover == Some(hit) && !b.hidden)
+                .filter(|b| b.hover == Some(hit) && !b.hidden && self.preview.is_none())
                 && let Some(item) = b.frame.list.hits.iter().find(|h| h.id == hit)
             {
                 let label: String = item.label.chars().take(160).collect();
@@ -637,8 +660,11 @@ impl Bars {
                 }
                 if let Some(tip) = &mut self.tooltip {
                     tip.set_click_through(true);
+                    // Fades in (see `paint`), as the Dock's names do.
+                    let _ = tip.set_alpha(0);
                     if tip.present(ui, (x as i32, y as i32), size, list).is_ok() {
                         tip.show();
+                        self.tooltip_fade = Some(now);
                     }
                 }
             }
@@ -662,6 +688,17 @@ impl Bars {
                 now,
                 menu || self.press.is_some(),
             )?;
+        }
+        if let Some(at) = self.tooltip_fade
+            && let Some(tip) = &mut self.tooltip
+        {
+            let t = (now.saturating_duration_since(at).as_secs_f32() / 0.12).min(1.0);
+            let _ = tip.set_alpha((t * (2.0 - t) * 255.0).round() as u8);
+            if t >= 1.0 {
+                self.tooltip_fade = None;
+            } else {
+                moving = true;
+            }
         }
         self.ticker.schedule(moving);
         let after: std::collections::HashSet<_> = self
@@ -745,8 +782,16 @@ impl Bars {
                         preview.scroll(ui, *delta);
                     }
                 }
-                Event::Move(_) => self.preview_close = None,
+                Event::Move(p) => {
+                    self.preview_close = None;
+                    if let Some(preview) = &mut self.preview {
+                        preview.hover(ui, Some(p.at));
+                    }
+                }
                 Event::Leave => {
+                    if let Some(preview) = &mut self.preview {
+                        preview.hover(ui, None);
+                    }
                     self.preview_close = Some(Instant::now() + Duration::from_millis(280))
                 }
                 Event::Release(p, Button::Left) => {
@@ -887,7 +932,18 @@ impl Bars {
                         tip.hide();
                         tip.release();
                     }
-                    self.tooltip_due = hit.map(|h| (now + Duration::from_millis(450), index, h));
+                    // A running app's previews name its windows: no tooltip for it, and none
+                    // while previews are open (it would cover them).
+                    let previewed = self.preview.is_some()
+                        || hit
+                            .and_then(|h| b.frame.targets.get(h as usize - 1))
+                            .is_some_and(|t| {
+                                b.config.dock.preview.enabled
+                                    && matches!(t, Target::Dock(app) if !app.windows.is_empty())
+                            });
+                    self.tooltip_due = hit
+                        .filter(|_| !previewed)
+                        .map(|h| (now + Duration::from_millis(450), index, h));
                     self.warm_due = hit
                         .filter(|h| {
                             b.frame
@@ -898,26 +954,23 @@ impl Bars {
                         .map(|h| (now + Duration::from_millis(60), index, h));
                 }
                 b.zoom_to(Some(p.at), now);
+                let delay = Duration::from_millis(b.config.dock.preview.delay as u64);
                 if b.config.dock.preview.enabled
                     && self.press.is_none()
                     && !self.menu.as_ref().is_some_and(Menu::is_open)
                 {
                     if let Some((_, Target::Dock(app))) = b.frame.target(p.at) {
-                        if !app.windows.is_empty()
-                            && self.preview.as_ref().is_none_or(|v| v.key != app.key)
+                        self.preview_close = None;
+                        if app.windows.is_empty() {
+                        } else if self.preview.as_ref().is_some_and(|v| v.key != app.key) {
+                            // Open previews follow the pointer to the next app at once, in the
+                            // same popup.
+                            self.show_preview(ui, index, &app.key);
+                        } else if self.preview.is_none()
                             && self.preview_due.as_ref().is_none_or(|v| v.2 != app.key)
                         {
-                            self.preview_due = Some((
-                                now + Duration::from_millis(if self.preview.is_some() {
-                                    0
-                                } else {
-                                    b.config.dock.preview.delay as u64
-                                }),
-                                index,
-                                app.key,
-                            ));
+                            self.preview_due = Some((now + delay, index, app.key));
                         }
-                        self.preview_close = None;
                     } else {
                         self.preview_due = None;
                         self.preview_close = Some(now + Duration::from_millis(280));
