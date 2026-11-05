@@ -217,12 +217,7 @@ fn extensions(shell: Option<&Snapshot>) -> Vec<Item> {
         .filter(|item| !is_new(item) && !covered(item))
         .map(|item| from_shell(item, shell.generation, glyph::APP))
         .collect();
-    // Windows sets the extensions off from what follows.
-    let mut items = tidy(items);
-    if !items.is_empty() {
-        items.insert(0, Entry::Separator);
-    }
-    items
+    tidy(items)
 }
 
 fn from_shell(item: &ShellItem, generation: u64, fallback: char) -> Item {
@@ -447,7 +442,6 @@ mod tests {
                 "Paste",
                 "",
                 "Open in Terminal",
-                "",
                 "Open Git Bash here",
                 "",
                 "NVIDIA App",
