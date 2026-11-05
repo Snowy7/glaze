@@ -20,9 +20,8 @@ enum Key {
 
 pub struct Sprites {
     compositor: Compositor,
+    /// Each sprite made, how, and whether this frame uses it.
     cache: Vec<(Key, Sprite, bool)>,
-    /// What is on screen: cache indices back to front, each with its rect and opacity.
-    shown: Vec<(usize, Rect, f32)>,
 }
 
 /// Plate tiles' length along the dock: fixed window positions, so a growing plate redraws only
@@ -34,7 +33,6 @@ impl Sprites {
         Ok(Self {
             compositor: Compositor::new(hwnd)?,
             cache: vec![],
-            shown: vec![],
         })
     }
 
@@ -124,23 +122,14 @@ impl Sprites {
             }
             placed.push((index, rect, opacity));
         }
-        if placed != self.shown {
-            let order: Vec<usize> = placed.iter().map(|p| p.0).collect();
-            if order != self.shown.iter().map(|p| p.0).collect::<Vec<_>>() {
-                let sprites: Vec<&Sprite> = order.iter().map(|&i| &self.cache[i].1).collect();
-                self.compositor.show(&sprites)?;
-            }
-            for &(index, rect, opacity) in &placed {
-                self.compositor.place(&self.cache[index].1, rect, opacity)?;
-            }
-            self.compositor.commit()?;
-            self.shown = placed;
-        }
-        // Long-lived sprites only: drop the unused when the cache grows (indices are rebuilt
-        // next frame, so the shown order is forgotten too).
+        let shown: Vec<(&Sprite, Rect, f32)> = placed
+            .iter()
+            .map(|&(index, rect, opacity)| (&self.cache[index].1, rect, opacity))
+            .collect();
+        self.compositor.show(&shown)?;
+        // Long-lived sprites only: drop the unused when the cache grows.
         if self.cache.len() > 160 {
             self.cache.retain(|(_, _, used)| *used);
-            self.shown.clear();
         }
         Ok(Some(DisplayList {
             ops: mask,
@@ -151,12 +140,7 @@ impl Sprites {
 
     /// Takes every sprite off screen (the window draws its full list again).
     pub fn hide(&mut self) -> Result<()> {
-        if !self.shown.is_empty() {
-            self.compositor.show(&[])?;
-            self.compositor.commit()?;
-            self.shown.clear();
-        }
-        Ok(())
+        self.compositor.show(&[])
     }
 
     fn image(&mut self, image: &Arc<Image>) -> Result<usize> {
