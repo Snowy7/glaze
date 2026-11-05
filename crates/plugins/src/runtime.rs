@@ -88,7 +88,9 @@ impl Manifest {
         for permission in &manifest.permissions {
             let known = WORDS.contains(&permission.as_str())
                 || permission.strip_prefix("network:").is_some_and(|o| caps::origin_allowed(&[permission.clone()], o))
-                || permission.strip_prefix("pipe:").is_some_and(io::pipe_name_ok);
+                || permission.strip_prefix("pipe:").is_some_and(io::pipe_name_ok)
+                || permission.strip_prefix("process:").is_some_and(caps::process_name_ok)
+                || permission.strip_prefix("file:").is_some_and(caps::file_path_ok);
             ensure!(known, "unknown or malformed permission {permission:?}");
         }
         for surface in &manifest.styles {
@@ -128,6 +130,8 @@ pub enum Effect {
     Pipe { id: u64, name: String },
     PipeHttp { id: u64, name: String, method: &'static str, url: String, headers: Vec<(String, String)>, body: Option<Vec<u8>> },
     Notify { title: String, body: String, plugin_name: String },
+    /// Run a resolved `process:<name>` executable; the result arrives as `event::http`.
+    Process { id: u64, exe: PathBuf, args: Vec<String>, timeout_ms: u32 },
 }
 
 /// Tracks linear memory against the plugin's cap (and reports it in stats).
@@ -477,6 +481,29 @@ impl mypaper::plugin::native::Host for State {
         let id = self.request_id();
         self.effects.push(Effect::Native { id, module, method, bytes });
         Ok(id)
+    }
+}
+
+impl mypaper::plugin::process::Host for State {
+    fn run(&mut self, request: mypaper::plugin::process::RunRequest) -> Result<u64, WitError> {
+        let exe = caps::resolve_exe(&self.permissions, &request.exe).map_err(|e| {
+            log::warn!("plugin {}: refused process.run: {e}", self.id);
+            WitError::Denied(e)
+        })?;
+        if request.args.len() > 64 || request.args.iter().map(String::len).sum::<usize>() > 8192 {
+            return Err(WitError::Invalid("at most 64 arguments and 8 KiB of them".into()));
+        }
+        let id = self.request_id();
+        let timeout_ms = request.timeout_ms.unwrap_or(15_000).clamp(100, 60_000);
+        self.effects.push(Effect::Process { id, exe, args: request.args, timeout_ms });
+        Ok(id)
+    }
+}
+
+impl mypaper::plugin::files::Host for State {
+    fn read(&mut self, path: String) -> Result<Option<Vec<u8>>, WitError> {
+        self.allowed(&format!("file:{path}"))?;
+        caps::read_file(&path).map_err(failed)
     }
 }
 

@@ -240,6 +240,32 @@ interface native {
     call: func(module: string, method: string, bytes: list<u8>) -> result<u64, error>;
 }
 
+/// Runs an executable the manifest names (`process:<name>`): no window, empty stdin, killed at
+/// the timeout. The result arrives as `event::http` with the returned id: `status` is the exit
+/// code (`65535` when it doesn't fit), `body` is stdout, and the headers `exit-code` (the full
+/// code) and `stderr` (lossy UTF-8) carry the rest. Each stream is capped at 1 MiB; a timeout or
+/// a failed start is an error.
+interface process {
+    use types.{error};
+    record run-request {
+        /// A bare name found on `PATH` (with `PATHEXT`), or an absolute path whose file name
+        /// without its extension (`.exe`, `.cmd`, `.bat`, `.com`) is the declared name.
+        exe: string,
+        args: list<string>,
+        /// Default 15000, at most 60000.
+        timeout-ms: option<u32>,
+    }
+    run: func(request: run-request) -> result<u64, error>;
+}
+
+/// Reads a file the manifest names exactly (`file:~/<path>`, under the user's profile), at most
+/// 1 MiB; `none` when it doesn't exist.
+interface files {
+    use types.{error};
+    /// `path` exactly as declared, e.g. `~/.t3/userdata/server-runtime.json`.
+    read: func(path: string) -> result<option<list<u8>>, error>;
+}
+
 interface log {
     enum level { debug, info, warn, error }
     write: func(level: level, message: string);
@@ -308,6 +334,8 @@ world plugin {
     import storage;
     import system;
     import native;
+    import process;
+    import files;
     import log;
     export lifecycle;
 }

@@ -240,6 +240,101 @@ pub fn desktop_status(app: &str) -> Result<crate::runtime::mypaper::plugin::laun
     Ok(crate::runtime::mypaper::plugin::launch::DesktopStatus { installed, running, marker })
 }
 
+/// Whether `process:<name>` names a plain executable name (no path, no extension tricks).
+pub fn process_name_ok(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 64 && name.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)) && !name.starts_with('.')
+}
+
+const RUNNABLE: [&str; 4] = ["exe", "cmd", "bat", "com"];
+
+/// The executable `exe` names, if a declared `process:<name>` covers it: a bare name searched on
+/// `PATH` with the runnable extensions, or an absolute path whose stem is the declared name.
+pub fn resolve_exe(permissions: &[String], exe: &str) -> Result<std::path::PathBuf, String> {
+    let declared = |stem: &str| permissions.iter().filter_map(|p| p.strip_prefix("process:")).any(|n| n.eq_ignore_ascii_case(stem));
+    let path = Path::new(exe);
+    if path.is_absolute() {
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or_default().to_ascii_lowercase();
+        if !declared(stem) || !RUNNABLE.contains(&ext.as_str()) {
+            return Err(format!("the manifest doesn't declare process:{stem}"));
+        }
+        return if path.is_file() { Ok(path.to_owned()) } else { Err(format!("{exe} doesn't exist")) };
+    }
+    if !process_name_ok(exe) || !declared(exe) {
+        return Err(format!("the manifest doesn't declare process:{exe}"));
+    }
+    let dirs = std::env::var_os("PATH").unwrap_or_default();
+    std::env::split_paths(&dirs)
+        .flat_map(|dir| RUNNABLE.map(|ext| dir.join(format!("{exe}.{ext}"))))
+        .find(|p| p.is_file())
+        .ok_or_else(|| format!("{exe} isn't on PATH"))
+}
+
+pub struct Ran {
+    pub code: i32,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
+
+/// Runs `exe` hidden with empty stdin, reading at most 1 MiB of each stream; killed at `timeout`.
+pub fn run_process(exe: &Path, args: &[String], timeout: std::time::Duration) -> Result<Ran, String> {
+    use std::io::Read;
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let mut child = std::process::Command::new(exe)
+        .args(args)
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("starting {}: {e}", exe.display()))?;
+    let drain = |stream: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut out = Vec::new();
+            if let Some(stream) = stream {
+                let _ = stream.take(MAX_VALUE as u64).read_to_end(&mut out);
+            }
+            out
+        })
+    };
+    let stdout = drain(child.stdout.take().map(|s| Box::new(s) as Box<dyn Read + Send>));
+    let stderr = drain(child.stderr.take().map(|s| Box::new(s) as Box<dyn Read + Send>));
+    let started = std::time::Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            break status;
+        }
+        if started.elapsed() > timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("{} timed out", exe.display()));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    };
+    Ok(Ran { code: status.code().unwrap_or(-1), stdout: stdout.join().unwrap_or_default(), stderr: stderr.join().unwrap_or_default() })
+}
+
+/// Whether `file:<path>` is a profile path (`~/...`) with no `..`, drive or stream parts.
+pub fn file_path_ok(path: &str) -> bool {
+    path.strip_prefix("~/").is_some_and(|rest| !rest.is_empty() && !rest.contains(':') && !rest.contains('\\') && rest.split('/').all(|part| !part.is_empty() && part != "." && part != ".."))
+}
+
+/// Reads a declared profile file (`~/...`), at most 1 MiB; `None` when it doesn't exist.
+pub fn read_file(path: &str) -> Result<Option<Vec<u8>>, String> {
+    if !file_path_ok(path) {
+        return Err("expected ~/<path>".into());
+    }
+    let home = std::env::var_os("USERPROFILE").ok_or("no USERPROFILE")?;
+    let full = path[2..].split('/').fold(std::path::PathBuf::from(home), |p, part| p.join(part));
+    match std::fs::metadata(&full) {
+        Ok(meta) if meta.len() > MAX_VALUE as u64 => Err("files are at most 1 MiB".into()),
+        Ok(_) => std::fs::read(&full).map(Some).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 pub struct Monitor {
     pub id: String,
     pub rect: (i32, i32, u32, u32),
@@ -406,6 +501,29 @@ mod tests {
         assert!(origin_allowed(&perms, "wss://live.example.com/socket"));
         assert!(!origin_allowed(&perms, "wss://example.com/"));
         assert!(!origin_allowed(&[], "https://api.open-meteo.com/"));
+    }
+
+    #[test]
+    fn processes_need_their_declared_name_and_report_code_and_streams() {
+        let perms = ["process:cmd".to_owned()];
+        assert!(resolve_exe(&perms, "powershell").is_err(), "undeclared");
+        assert!(resolve_exe(&perms, r"C:\Windows\System32\cmd.exe").is_ok());
+        assert!(resolve_exe(&perms, r"C:\Windows\System32\cmd.txt").is_err(), "not runnable");
+        assert!(resolve_exe(&perms, r"..\cmd").is_err() && resolve_exe(&perms, "cmd.exe").is_err(), "bare names only");
+        let exe = resolve_exe(&perms, "cmd").unwrap();
+        let ran = run_process(&exe, &["/c".into(), "echo out& echo err 1>&2& exit 3".into()], std::time::Duration::from_secs(10)).unwrap();
+        assert_eq!((ran.code, String::from_utf8_lossy(&ran.stdout).trim()), (3, "out"));
+        assert_eq!(String::from_utf8_lossy(&ran.stderr).trim(), "err");
+        assert!(run_process(&exe, &["/c".into(), "ping -n 5 127.0.0.1 >nul".into()], std::time::Duration::from_millis(300)).is_err(), "timed out");
+    }
+
+    #[test]
+    fn declared_files_are_profile_paths_only() {
+        assert!(file_path_ok("~/.t3/userdata/server-runtime.json"));
+        for bad in ["/etc/x", "~/", "~/../x", "~/a/./b", r"~/a\b", "~/C:/x", "~/a//b", "C:/x"] {
+            assert!(!file_path_ok(bad), "{bad}");
+        }
+        assert_eq!(read_file("~/no-such-mypaper-file").unwrap(), None);
     }
 
     #[test]

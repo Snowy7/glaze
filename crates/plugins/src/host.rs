@@ -497,6 +497,21 @@ impl<W: Write> Host<W> {
                         log::warn!("no toast thread: {e}");
                     }
                 }
+                Effect::Process { id, exe, args, timeout_ms } => {
+                    let (tx, plugin) = (self.tx.clone(), plugin.to_owned());
+                    let spawned = std::thread::Builder::new().name("process".into()).stack_size(256 << 10).spawn(move || {
+                        let result = crate::caps::run_process(&exe, &args, Duration::from_millis(timeout_ms.into())).map(|ran| crate::io::PipeReply {
+                            status: u16::try_from(ran.code).unwrap_or(u16::MAX),
+                            headers: vec![("exit-code".into(), ran.code.to_string()), ("stderr".into(), String::from_utf8_lossy(&ran.stderr).into_owned())],
+                            body: ran.stdout,
+                        });
+                        // Same delivery as an HTTP reply over a pipe: `event::http` with the id.
+                        let _ = tx.send(Input::PipeHttp { plugin, id, result });
+                    });
+                    if let Err(e) = spawned {
+                        log::warn!("no process thread: {e}");
+                    }
+                }
                 Effect::Fetch { id, method, url, headers, body, timeout_ms } => {
                     let (tx, plugin) = (self.tx.clone(), plugin.to_owned());
                     let spawned = std::thread::Builder::new().name("fetch".into()).stack_size(256 << 10).spawn(move || {
