@@ -25,6 +25,7 @@ pub mod layout;
 pub mod menu;
 pub mod modules;
 pub mod motion;
+pub mod transition;
 mod render;
 mod scene;
 pub mod scroll;
