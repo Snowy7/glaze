@@ -80,7 +80,7 @@ pub static LIST: &[Integration] = &[
         module: None,
         secret: None,
         fields: &[],
-        setup: "A dock app's Recent items, Discord's direct messages and your Grok routines in Start.",
+        setup: "A dock app's Recent items and integration shortcuts in Start.",
         privacy: "Reads Windows' Recent lists. Nothing leaves this PC.",
     },
     Integration {
@@ -219,7 +219,7 @@ fn row(app: &App, b: &mut B, r: Rect, i: usize, item: &Integration) {
     let state = status(app, item);
     if state == "Connect" {
         let bw = b.button_width("Connect", false, true);
-        let action=if matches!(item.name,"T3 Code"|"Grok Bot") {Action::Set(Edit::new(DocId::Studio,format!("/integration_on/{i}"),"Connect"),Value::Null)}else{Action::SelectIntegration(i)};
+        let action=if item.name == "T3 Code" {Action::Set(Edit::new(DocId::Studio,format!("/integration_on/{i}"),"Connect"),Value::Null)}else{Action::SelectIntegration(i)};
         b.button(key(("connect-row", i)), Rect::new(r.right - bw - b.px(10.0), r.top + b.px(12.0), bw, b.px(28.0)), "Connect", None, ButtonKind::Secondary, true, action);
     } else {
         let (sw, _) = b.measure(state, &small);
@@ -287,10 +287,10 @@ fn details(app: &App, b: &mut B, area: Rect) {
             y += b.px(14.0);
         }
         // Setup and options.
-        b.text_at(x, y, if matches!(item.name, "T3 Code" | "Grok Bot") {"Connection"} else {"Options"}, &heading, p.ink1);
+        b.text_at(x, y, if item.name == "T3 Code" {"Connection"} else {"Options"}, &heading, p.ink1);
         y += b.px(28.0);
         y += b.paragraph(x, y, w, item.setup, &small, b.px(16.0), p.ink2) + b.px(10.0);
-        let local = matches!(item.name, "T3 Code" | "Grok Bot");
+        let local = item.name == "T3 Code";
         let advanced = !local || ADVANCED.with_borrow(|set| set.contains(&i));
         if local {
             let aw = b.button_width(if advanced {"Hide advanced"}else{"Advanced"}, false, true);
