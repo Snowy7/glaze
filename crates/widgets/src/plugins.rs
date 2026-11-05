@@ -788,6 +788,15 @@ impl Plugins {
         let Some(slot) = self.faces.get(instance) else { return };
         if slot.component.is_some() {
             if let Some(helper) = &self.helper {
+                // The click is the user's: let the app the plugin opens for it ("open this T3
+                // thread") come to the front, instead of only flashing in the taskbar. The right
+                // lasts until the next input, so it only covers this click.
+                // SAFETY: plain Win32 call; failure only means the opened app may not come forward.
+                let _ = unsafe {
+                    windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(
+                        windows::Win32::UI::WindowsAndMessaging::ASFW_ANY,
+                    )
+                };
                 let _ = helper.frames.send(wire::HostMsg::Action { instance: instance.into(), action: action.into(), value });
             }
             return;
