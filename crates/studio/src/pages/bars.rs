@@ -84,8 +84,39 @@ fn module_key(m: &ModuleRef) -> String {
     serde_json::to_value(m).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default()
 }
 
+/// Installed component plugins' bar modules (docs/plugins.md, "Bar modules"), as
+/// `(custom:<plugin>--<bar>, "Name · Plugin")`; read again each time the Add sheet opens.
+static PLUGIN_MODULES: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+
+fn refresh_plugin_modules() {
+    use mypaper_widgets::manifest::PluginManifest;
+    let mut found: Vec<(String, String)> = mypaper_widgets::registry::plugin_roots()
+        .iter()
+        .filter_map(|root| std::fs::read_dir(root).ok())
+        .flatten()
+        .flatten()
+        .filter_map(|entry| PluginManifest::load(&entry.path()).ok())
+        .filter(|m| m.component.is_some() && !m.id.contains("--"))
+        .flat_map(|m| m.bars.iter().map(|b| (format!("custom:{}--{}", m.id, b.id), format!("{} · {}", b.name, m.name))).collect::<Vec<_>>())
+        .collect();
+    // A user install (listed first) shadows the bundled copy of the same plugin.
+    let mut seen = std::collections::BTreeSet::new();
+    found.retain(|(key, _)| seen.insert(key.clone()));
+    *PLUGIN_MODULES.lock().expect("plugin modules") = found;
+}
+
+fn plugin_module_name(key: &str) -> Option<String> {
+    if key.starts_with("custom:") && key.contains("--") && PLUGIN_MODULES.lock().expect("plugin modules").is_empty() {
+        refresh_plugin_modules();
+    }
+    PLUGIN_MODULES.lock().expect("plugin modules").iter().find(|(k, _)| k == key).map(|(_, n)| n.clone())
+}
+
 pub fn module_name(m: &ModuleRef) -> String {
     let k = module_key(m);
+    if let Some(name) = plugin_module_name(&k) {
+        return name;
+    }
     if let Some(id) = k.strip_prefix("custom:") {
         return format!("{id} (yours)");
     }
@@ -96,6 +127,9 @@ pub fn module_name(m: &ModuleRef) -> String {
 }
 
 fn module_glyph(k: &str) -> Glyph {
+    if plugin_module_name(k).is_some() {
+        return glyph::INTEGRATIONS;
+    }
     if k.starts_with("custom:") {
         return glyph::TERMINAL;
     }
@@ -720,7 +754,10 @@ pub fn run(app: &mut App, action: Action) {
             app.apply(&format!("{name} preset"), ops);
             app.toast_undo(format!("Bars: {name}"));
         }
-        Action::AddModule(bar) => app.overlay = Some(Overlay::AddModule { bar }),
+        Action::AddModule(bar) => {
+            refresh_plugin_modules();
+            app.overlay = Some(Overlay::AddModule { bar });
+        }
         Action::InsertModule(bar, list, module) => {
             let Some(config) = config(app) else { return };
             let mut items = list_of(&config, bar, list);
@@ -916,6 +953,16 @@ pub fn add_sheet(app: &App, b: &mut B, bar: Bar) {
         .iter()
         .filter(|(id, ..)| !shown.iter().any(|s| s == id))
         .map(|(id, name, g)| ((*id).to_owned(), (*name).to_owned(), *g))
+        // Plugin bar modules sit beside the built-ins (only on the top bar for now).
+        .chain(
+            PLUGIN_MODULES
+                .lock()
+                .expect("plugin modules")
+                .iter()
+                .filter(|(id, _)| bar == Bar::Top && !shown.iter().any(|s| s == id))
+                .map(|(id, name)| (id.clone(), name.clone(), glyph::INTEGRATIONS))
+                .collect::<Vec<_>>(),
+        )
         .chain(std::iter::once(("|".to_owned(), "A gap".to_owned(), glyph::GRIP)))
         .collect();
     b.group(key("add-module-list"), |b| {
