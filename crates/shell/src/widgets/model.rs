@@ -31,7 +31,6 @@ pub enum Widget {
     Discord,
     T3,
     Obs,
-    Grok,
     Custom,
     /// A face drawn by an SDK plugin of the same id (docs/plugins.md); `data` holds its view.
     Plugin,
@@ -58,7 +57,6 @@ impl Widget {
             "discord" => Self::Discord,
             "t3" => Self::T3,
             "obs" => Self::Obs,
-            "grok" => Self::Grok,
             custom if custom.starts_with("custom-") => Self::Custom,
             _ => return None,
         })
