@@ -136,7 +136,13 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             WM_SETTINGCHANGE => SETTINGS,
             crate::trash::WM_TRASH_NOTIFY => TRASH,
             _ if msg == RegisterWindowMessageW(w!("TaskbarCreated")) => EXPLORER,
-            _ if msg == RegisterWindowMessageW(w!("SHELLHOOK")) => SHELL,
+            // Only what the bars act on: a window flashing (HSHELL_FLASH) and the input language
+            // (HSHELL_LANGUAGE). The rest arrives for every window any app creates, moves or
+            // retitles; re-posting it would wake the loop a second time for nothing.
+            _ if msg == RegisterWindowMessageW(w!("SHELLHOOK")) => match wp.0 {
+                0x8006 | 8 => SHELL,
+                _ => return LRESULT(0),
+            },
             _ => 0,
         };
         if notification != 0 {

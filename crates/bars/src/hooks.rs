@@ -17,8 +17,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_SHOW,
     EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
     EVENT_SYSTEM_MINIMIZESTART, GA_PARENT, GetAncestor, GetDesktopWindow, GetForegroundWindow,
-    GetShellWindow, GetWindowThreadProcessId, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT,
-    WINEVENT_SKIPOWNPROCESS,
+    GetShellWindow, GetWindowThreadProcessId, IsWindowVisible, OBJID_WINDOW,
+    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
 };
 
 /// The window list may have changed (created, destroyed, shown, hidden, cloaked, renamed,
@@ -206,10 +206,19 @@ unsafe extern "system" fn on_event(
     if object != OBJID_WINDOW.0 || child != CHILDID_SELF as i32 {
         return;
     }
-    let top = if event == EVENT_OBJECT_DESTROY {
-        WINDOWS_SEEN.with(|seen| seen.borrow_mut().remove(&(hwnd.0 as isize)))
-    } else {
-        event != EVENT_SYSTEM_FOREGROUND && top_level(hwnd)
+    let top = match event {
+        EVENT_OBJECT_DESTROY => {
+            WINDOWS_SEEN.with(|seen| seen.borrow_mut().remove(&(hwnd.0 as isize)))
+        }
+        EVENT_SYSTEM_FOREGROUND => false,
+        // An invisible window's birth or title can't change the bars: every short-lived
+        // console process makes hidden console and IME windows and retitles them, many times a
+        // second during builds. A window counts once it is shown (EVENT_OBJECT_SHOW).
+        // SAFETY: a read-only query; a stale handle is just not visible.
+        EVENT_OBJECT_CREATE | EVENT_OBJECT_NAMECHANGE => {
+            top_level(hwnd) && unsafe { IsWindowVisible(hwnd) }.as_bool()
+        }
+        _ => top_level(hwnd),
     };
     let taskbar = || crate::taskbar::is_taskbar_class(&crate::apps::class_name(hwnd));
     let watching = WATCH_TASKBAR.load(Ordering::Relaxed);
