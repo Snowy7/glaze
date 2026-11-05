@@ -265,6 +265,11 @@ impl Bars {
         let (samples, changed, micros) = self.services.stats_costs;
         (samples, changed, micros, bar::total_repaints())
     }
+    /// Whether `hwnd` is one of the bars' own windows (a bar, an island or the edge strip). The
+    /// shell loop uses it to tell pointer moves over the bars and dock from everything else.
+    pub fn owns_hwnd(&self, hwnd: windows::Win32::Foundation::HWND) -> bool {
+        self.bars.iter().any(|b| b.owns_hwnd(hwnd))
+    }
     /// Which deadline [`timeout`](Self::timeout) waits for, for the shell loop's wake counts.
     pub fn timeout_source(&self) -> &'static str {
         [

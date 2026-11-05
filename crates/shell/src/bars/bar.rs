@@ -214,6 +214,12 @@ impl Bar {
     pub fn owns(&self, id: SurfaceId) -> bool {
         self.surface.id() == id || self.islands.iter().any(|s| s.id() == id)
     }
+    /// Whether `hwnd` is this bar's surface, one of its islands or its edge strip.
+    pub fn owns_hwnd(&self, hwnd: windows::Win32::Foundation::HWND) -> bool {
+        self.surface.hwnd() == hwnd
+            || self.islands.iter().any(|s| s.hwnd() == hwnd)
+            || self.edge_surface.as_ref().is_some_and(|s| s.hwnd() == hwnd)
+    }
     pub fn input_offset(&self, id: SurfaceId) -> Point {
         let index = if self.surface.id() == id {
             0

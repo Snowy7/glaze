@@ -33,7 +33,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
-    PeekMessageW, QS_ALLINPUT, TranslateMessage, WM_QUIT,
+    PeekMessageW, QS_ALLINPUT, TranslateMessage, WM_MOUSEMOVE, WM_NCMOUSELEAVE,
+    WM_NCMOUSEMOVE, WM_QUIT,
 };
 use windows::core::w;
 
@@ -93,6 +94,8 @@ fn run() -> Result<()> {
     // The work after wakes that only ran sent messages and WinEvent callbacks, until the next
     // other wake or this deadline (see COALESCE).
     let mut coalesced: Option<Instant> = None;
+    // When the widgets last polled (see POINTER_POLL).
+    let mut widgets_polled = Instant::now();
     'run: loop {
         let start = Instant::now();
         // Order matters: the parent, then the widgets' frame timer, then the bars' handles.
@@ -157,10 +160,16 @@ fn run() -> Result<()> {
         } else {
             handles.get(signalled).map(|h| Cause::Handle(h.1))
         };
+        // Every posted message so far was the pointer moving over (or leaving) a bar or the dock.
+        let mut bar_pointer = true;
         // SAFETY: standard message pump on the thread that owns every window of the shell.
         unsafe {
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
                 wakes.message(&msg);
+                bar_pointer &= matches!(
+                    msg.message,
+                    WM_MOUSEMOVE | WM_NCMOUSEMOVE | WM_MOUSELEAVE | WM_NCMOUSELEAVE
+                ) && shell.bars.owns_hwnd(msg.hwnd);
                 if cause.is_none() && signalled == handles.len() {
                     // Woken by this posted message, not by a sent one.
                     cause = Some(Cause::Message);
@@ -208,7 +217,14 @@ fn run() -> Result<()> {
         }
         coalesced = None;
         wakes.worked();
-        at = shell.drain(&mut ui, &mut wakes, at);
+        // A sweep over the dock posts ~250 moves a second; the widgets don't see them, so they
+        // poll at most every POINTER_POLL then (their own deadlines and handles still wake them).
+        let poll_widgets = !(bar_pointer && cause == Some(Cause::Message))
+            || widgets_polled.elapsed() >= POINTER_POLL;
+        if poll_widgets {
+            widgets_polled = at;
+        }
+        at = shell.drain(&mut ui, &mut wakes, at, poll_widgets);
         shell.bars.tick(&mut ui);
         wakes.spent("bars.tick", at);
         if widgets_pending {
@@ -238,6 +254,11 @@ fn run() -> Result<()> {
 /// the work at once.
 const COALESCE: std::time::Duration = std::time::Duration::from_millis(25);
 
+/// How often the widgets poll while the only input is the pointer over the bars or the dock.
+const POINTER_POLL: std::time::Duration = std::time::Duration::from_millis(100);
+/// `WM_MOUSELEAVE` (its binding sits behind a `windows` feature the shell does not enable).
+const WM_MOUSELEAVE: u32 = 0x02A3;
+
 /// A wait in whole milliseconds, rounded up so a deadline has passed when it returns.
 fn wait_ms(duration: std::time::Duration) -> u32 {
     duration.as_nanos().div_ceil(1_000_000).min(u128::from(INFINITE - 1)) as u32
@@ -259,7 +280,7 @@ impl Shell {
     /// Handles everything queued: inbox messages and input, in order, until both are empty.
     /// Handling one may call into Explorer and so let more arrive; they are handled here too.
     /// Adds the time each part took to `wakes`, from `at`; returns when it finished.
-    fn drain(&mut self, ui: &mut Ui, wakes: &mut Wakes, mut at: Instant) -> Instant {
+    fn drain(&mut self, ui: &mut Ui, wakes: &mut Wakes, mut at: Instant, poll_widgets: bool) -> Instant {
         if integrations::process() {
             self.bars.integration_changed();
         }
@@ -298,7 +319,7 @@ impl Shell {
             }
         }
         at = wakes.spent("events", at);
-        if let Some(widgets) = &mut self.widgets {
+        if poll_widgets && let Some(widgets) = &mut self.widgets {
             widgets.poll(ui);
         }
         at = wakes.spent("widgets.poll", at);
