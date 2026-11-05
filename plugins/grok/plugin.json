@@ -1,0 +1,75 @@
+{
+  "id": "grok",
+  "name": "Grok",
+  "version": "0.1.0",
+  "api": "0.1",
+  "component": "grok.wasm",
+  "faces": [
+    {
+      "id": "routines",
+      "name": "Routines",
+      "icon": "sparkles",
+      "size": {
+        "default": [
+          8,
+          5
+        ],
+        "min": [
+          4,
+          3
+        ],
+        "max": [
+          12,
+          10
+        ]
+      }
+    },
+    {
+      "id": "recent",
+      "name": "Recent",
+      "icon": "sparkles",
+      "size": {
+        "default": [
+          8,
+          5
+        ],
+        "min": [
+          4,
+          3
+        ],
+        "max": [
+          12,
+          10
+        ]
+      }
+    },
+    {
+      "id": "prompt",
+      "name": "Prompt",
+      "icon": "sparkles",
+      "size": {
+        "default": [
+          8,
+          5
+        ],
+        "min": [
+          4,
+          3
+        ],
+        "max": [
+          12,
+          10
+        ]
+      }
+    }
+  ],
+  "permissions": [
+    "launch",
+    "secrets",
+    "network:{settings.webhookOrigin}"
+  ],
+  "settings": [
+    { "type": "string", "key": "routines", "label": "Routine webhooks (JSON)", "group": "Advanced", "default": "[]" },
+    { "type": "string", "key": "webhookOrigin", "label": "Allowed webhook origin (https://host)", "group": "Advanced", "default": "" }
+  ]
+}

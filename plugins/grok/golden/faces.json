@@ -1,0 +1,346 @@
+{
+  "prompt": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "action": "prompt",
+            "kind": "field",
+            "placeholder": "Ask your Bot…"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Opens a draft in Grok Bot"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "for you to review and send."
+          }
+        ],
+        "kind": "stack"
+      },
+      "footer": "Signed in · detected on this PC",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "action": "prompt",
+            "kind": "field",
+            "placeholder": "Ask your Bot…"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "Opens a draft in Grok Bot"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "caption",
+            "text": "for you to review and send."
+          }
+        ],
+        "kind": "stack"
+      },
+      "footer": "Signed in · detected on this PC",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "action": "prompt",
+            "kind": "field",
+            "placeholder": "Ask your Bot…"
+          }
+        ],
+        "kind": "stack"
+      },
+      "footer": "Signed in · detected on this PC",
+      "refresh": true
+    }
+  },
+  "recent": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "action": "open",
+            "detail": "Accepted · open Grok for results",
+            "icon": "check",
+            "kind": "list_row",
+            "title": "Morning brief"
+          },
+          {
+            "action": "open",
+            "detail": "Sending…",
+            "icon": "upload",
+            "kind": "list_row",
+            "title": "Review my calendar"
+          },
+          {
+            "action": "open",
+            "detail": "Request failed · retry routine",
+            "icon": "warning",
+            "kind": "list_row",
+            "title": "Research watchlist"
+          }
+        ],
+        "gap": 1.0,
+        "kind": "list"
+      },
+      "footer": "Acceptance is a receipt, not completion",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "action": "open",
+            "detail": "Accepted · open Grok for results",
+            "icon": "check",
+            "kind": "list_row",
+            "title": "Morning brief"
+          },
+          {
+            "action": "open",
+            "detail": "Sending…",
+            "icon": "upload",
+            "kind": "list_row",
+            "title": "Review my calendar"
+          },
+          {
+            "action": "open",
+            "detail": "Request failed · retry routine",
+            "icon": "warning",
+            "kind": "list_row",
+            "title": "Research watchlist"
+          }
+        ],
+        "gap": 1.0,
+        "kind": "list"
+      },
+      "footer": "Acceptance is a receipt, not completion",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "kind": "metric",
+        "label": "requests this session",
+        "value": "3"
+      },
+      "footer": "Acceptance is a receipt, not completion",
+      "refresh": true
+    }
+  },
+  "routines": {
+    "large": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "Saved routines"
+              },
+              {
+                "action": "advanced",
+                "enabled": true,
+                "icon": "more",
+                "kind": "icon_button",
+                "label": "Advanced"
+              }
+            ],
+            "gap": 4.0,
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "action": "run:routine-0",
+                "detail": "Run now",
+                "icon": "play",
+                "kind": "list_row",
+                "title": "Morning brief"
+              },
+              {
+                "detail": "Sending request…",
+                "icon": "play",
+                "kind": "list_row",
+                "title": "Review my calendar"
+              },
+              {
+                "action": "run:routine-2",
+                "detail": "Run now",
+                "icon": "play",
+                "kind": "list_row",
+                "title": "Research watchlist"
+              }
+            ],
+            "gap": 1.0,
+            "kind": "list"
+          }
+        ],
+        "kind": "stack"
+      },
+      "footer": "Signed in · detected on this PC",
+      "refresh": true
+    },
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "children": [
+              {
+                "align": "start",
+                "color": "secondary",
+                "kind": "text",
+                "role": "caption",
+                "text": "Saved routines"
+              },
+              {
+                "action": "advanced",
+                "enabled": true,
+                "icon": "more",
+                "kind": "icon_button",
+                "label": "Advanced"
+              }
+            ],
+            "gap": 4.0,
+            "kind": "row"
+          },
+          {
+            "children": [
+              {
+                "action": "run:routine-0",
+                "detail": "Run now",
+                "icon": "play",
+                "kind": "list_row",
+                "title": "Morning brief"
+              },
+              {
+                "detail": "Sending request…",
+                "icon": "play",
+                "kind": "list_row",
+                "title": "Review my calendar"
+              },
+              {
+                "action": "run:routine-2",
+                "detail": "Run now",
+                "icon": "play",
+                "kind": "list_row",
+                "title": "Research watchlist"
+              }
+            ],
+            "gap": 1.0,
+            "kind": "list"
+          }
+        ],
+        "kind": "stack"
+      },
+      "footer": "Signed in · detected on this PC",
+      "refresh": true
+    },
+    "small": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "kind": "text",
+            "role": "headline",
+            "text": "Morning brief"
+          },
+          {
+            "action": "run:routine-0",
+            "icon": "play",
+            "kind": "button",
+            "label": "Run routine",
+            "primary": true
+          }
+        ],
+        "kind": "stack"
+      },
+      "footer": "Signed in · detected on this PC",
+      "refresh": true
+    }
+  },
+  "setup": {
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "detail": "Detects Grok Bot on this PC. Sign in once in Grok; your account stays there.",
+            "icon": "sparkles",
+            "kind": "empty",
+            "title": "Connect Grok Bot"
+          },
+          {
+            "action": "connect",
+            "icon": "sparkles",
+            "kind": "button",
+            "label": "Connect",
+            "primary": true
+          }
+        ],
+        "kind": "stack"
+      },
+      "footer": "Open Grok Bot to connect",
+      "refresh": true
+    }
+  },
+  "signed-in": {
+    "medium": {
+      "body": {
+        "children": [
+          {
+            "align": "start",
+            "kind": "text",
+            "role": "headline",
+            "text": "Grok Bot found"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "callout",
+            "text": "Add a routine webhook under Advanced"
+          },
+          {
+            "align": "start",
+            "color": "secondary",
+            "kind": "text",
+            "role": "callout",
+            "text": "to run it here."
+          },
+          {
+            "kind": "spacer"
+          },
+          {
+            "action": "open",
+            "icon": "external",
+            "kind": "button",
+            "label": "Open Grok Bot",
+            "primary": true
+          }
+        ],
+        "kind": "stack"
+      },
+      "footer": "Signed in · detected on this PC",
+      "refresh": true
+    }
+  }
+}
