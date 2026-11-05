@@ -1,4 +1,4 @@
-//! One Wasmtime engine for every plugin (docs/plugins.md, "Budgets"): pooling allocator, a
+//! One Wasmtime engine for every plugin (docs/plugins.md, "Budgets"): on-demand allocation, a
 //! per-plugin `ResourceLimiter`, epoch interruption for the per-event CPU budget, and the AOT
 //! cache. Host imports only record [`Effect`]s; the loop in `host.rs` applies them after the
 //! call returns, so a plugin call never blocks on I/O.
@@ -14,7 +14,7 @@ use mypaper_plugin_api::wire::{StylePatch, TokenValue};
 use mypaper_plugin_sdk::view as sdk;
 use serde::Deserialize;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
-use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, ResourceLimiter, Store};
+use wasmtime::{Config, Engine, InstanceAllocationStrategy, ResourceLimiter, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use crate::{caps, images, io};
@@ -733,19 +733,11 @@ pub fn default_dirs() -> (PathBuf, PathBuf) {
 
 impl Runtime {
     pub fn new(cache: PathBuf, data: PathBuf) -> Result<Self> {
-        let mut pool = PoolingAllocationConfig::default();
-        // Sized for ~16 live plugins: on Windows the pool commits its table and instance slots up
-        // front, so these counts are the runtime's base memory (docs/plugins.md, "Budgets").
-        pool.total_component_instances(16)
-            .total_core_instances(48)
-            .total_memories(24)
-            .total_tables(48)
-            .table_elements(8192)
-            .max_core_instance_size(128 << 10)
-            .max_component_instance_size(128 << 10)
-            .max_memory_size(MEMORY_CAP)
-            .max_memories_per_module(2)
-            .max_tables_per_module(4);
+        // On-demand allocation, not the pooling allocator: on Windows the pool commits its table
+        // slots up front (+3 MiB private for 48 tables, +20 MiB at the defaults), while on-demand
+        // instances cost only what they use and give it all back when dropped. Instantiation is
+        // rare here (load, restart, reload after an idle unload), so the pool's speed buys
+        // nothing. Per-plugin caps are the `Limiter`'s (docs/plugins.md, "Budgets").
         let mut config = Config::new();
         config
             .wasm_component_model(true)
@@ -753,7 +745,7 @@ impl Runtime {
             .memory_reservation(MEMORY_CAP as u64)
             .memory_guard_size(64 << 10)
             .memory_reservation_for_growth(0)
-            .allocation_strategy(InstanceAllocationStrategy::Pooling(pool));
+            .allocation_strategy(InstanceAllocationStrategy::OnDemand);
         let engine = Engine::new(&config)?;
         let mut linker = Linker::new(&engine);
         wasmtime_wasi::p2::add_to_linker_sync(&mut linker)?;
