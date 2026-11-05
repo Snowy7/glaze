@@ -34,7 +34,8 @@ const STALE: Duration = Duration::from_secs(10 * 60);
 
 /// How well `query` (lowercase) matches an app: higher is better, `None` for no match. A
 /// prefix of the name beats a word start, which beats a substring, a keyword (the exe's name)
-/// and finally the letters in order.
+/// and finally typos or letters in order. The edit-distance work is bounded to short names
+/// and a length-scaled threshold; arbitrary input cannot turn a keystroke into quadratic work.
 pub fn score(query: &str, name: &str, keywords: &[String]) -> Option<u32> {
     if query.is_empty() {
         return Some(0);
@@ -67,47 +68,116 @@ pub fn score(query: &str, name: &str, keywords: &[String]) -> Option<u32> {
     }
     let mut letters = name.chars();
     let mut gaps = 0u32;
-    for q in query.chars() {
-        loop {
-            match letters.next() {
-                Some(c) if c == q => break,
-                Some(_) => gaps += 1,
-                None => return None,
+    let subsequence = query
+        .chars()
+        .all(|q| {
+            for c in letters.by_ref() {
+                if c == q {
+                    return true;
+                }
+                gaps += 1;
             }
-        }
+            false
+        })
+        .then(|| 300u32.saturating_sub(gaps.min(250)));
+    let limit = match query.chars().count() {
+        0..=3 => 0,
+        4..=7 => 1,
+        8..=12 => 2,
+        _ => 3,
+    };
+    if limit == 0 {
+        return subsequence;
     }
-    Some(300u32.saturating_sub(gaps.min(250)))
+    let typo = std::iter::once(name.as_str())
+        .chain(name.split(|c: char| !c.is_alphanumeric()))
+        .chain(keywords.iter().map(String::as_str))
+        .filter_map(|candidate| {
+            let candidate = candidate.to_lowercase();
+            if query.is_ascii() && candidate.is_ascii() {
+                edit_distance(query.as_bytes(), candidate.as_bytes(), limit)
+            } else {
+                edit_distance(
+                    &query.chars().collect::<Vec<_>>(),
+                    &candidate.chars().collect::<Vec<_>>(),
+                    limit,
+                )
+            }
+        })
+        .min()
+        .map(|distance| 460 - distance as u32 * 60);
+    typo.max(subsequence)
+}
+
+/// Banded optimal-string-alignment Damerau-Levenshtein: includes adjacent transpositions.
+/// Three stack rows avoid per-candidate matrices; length checks bound work before scanning.
+fn edit_distance<T: Eq>(a: &[T], b: &[T], limit: usize) -> Option<usize> {
+    const MAX: usize = 64;
+    if a.len().max(b.len()) > MAX || a.len().abs_diff(b.len()) > limit {
+        return None;
+    }
+    let far = limit + 1;
+    let mut previous_previous = [far; MAX + 1];
+    let mut previous = [far; MAX + 1];
+    for (j, value) in previous.iter_mut().enumerate().take(b.len() + 1) {
+        *value = j;
+    }
+    for i in 1..=a.len() {
+        let mut current = [far; MAX + 1];
+        current[0] = i;
+        let start = i.saturating_sub(limit).max(1);
+        let end = (i + limit).min(b.len());
+        let mut best = current[0];
+        for j in start..=end {
+            current[j] = (previous[j] + 1)
+                .min(current[j - 1] + 1)
+                .min(previous[j - 1] + usize::from(a[i - 1] != b[j - 1]));
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                current[j] = current[j].min(previous_previous[j - 2] + 1);
+            }
+            best = best.min(current[j]);
+        }
+        if best > limit {
+            return None;
+        }
+        previous_previous = previous;
+        previous = current;
+    }
+    (previous[b.len()] <= limit).then_some(previous[b.len()])
 }
 
 /// The apps for `query`, best first; with no query, the most recently run first.
 pub fn results<'a>(apps: &'a [App], history: &History, query: &str) -> Vec<&'a App> {
     let query = query.trim().to_lowercase();
-    let recent = |app: &App| {
-        history
-            .recent
-            .iter()
-            .position(|r| r.id == app.id)
-            .unwrap_or(usize::MAX)
-    };
+    let now = index::epoch_ms();
+    let usage: std::collections::HashMap<_, _> = history
+        .recent
+        .iter()
+        .enumerate()
+        .map(|(rank, recent)| (recent.id.as_str(), (rank, recent)))
+        .collect();
     let mut scored: Vec<(u32, usize, &App)> = apps
         .iter()
         .filter_map(|app| {
-            Some((
-                score(&query, &app.name, &app.keywords)?
-                    + history
-                        .recent
-                        .iter()
-                        .find(|r| r.id == app.id)
-                        .map_or(0, |r| r.count.min(50)),
-                recent(app),
-                app,
-            ))
+            let (rank, boost) = usage
+                .get(app.id.as_str())
+                .map_or((usize::MAX, 0), |(rank, r)| {
+                    let days = now.saturating_sub(r.last) / 86_400_000;
+                    let recency = match days {
+                        0 => 40,
+                        1..=6 => 20,
+                        7..=29 => 10,
+                        _ => 0,
+                    };
+                    (*rank, r.count.min(50) + recency)
+                });
+            Some((score(&query, &app.name, &app.keywords)? + boost, rank, app))
         })
         .collect();
     scored.sort_by(|a, b| {
         b.0.cmp(&a.0)
             .then(a.1.cmp(&b.1))
-            .then_with(|| a.2.name.to_lowercase().cmp(&b.2.name.to_lowercase()))
+            .then_with(|| a.2.name.cmp(&b.2.name))
     });
     scored.into_iter().map(|(_, _, app)| app).collect()
 }
@@ -274,26 +344,25 @@ impl Launcher {
         self.pinned_apps = self
             .pins
             .iter()
-            .map(|p| {
-                self.apps
-                    .iter()
-                    .find(|a| {
-                        a.path.eq_ignore_ascii_case(&p.path) || a.id.eq_ignore_ascii_case(&p.path)
-                    })
-                    .cloned()
-                    .unwrap_or_else(|| App {
-                        id: p.path.clone(),
-                        name: p
-                            .name
-                            .clone()
-                            .unwrap_or_else(|| mypaper_bars::apps::file_stem(&p.path)),
-                        path: p.path.clone(),
-                        icon: None,
-                        keywords: vec![],
-                        packaged: false,
-                    })
+            .map(|pin| resolve_pin(pin, &self.apps, None))
+            .collect();
+    }
+
+    fn refresh_pins(&mut self, cx: &mut Cx) -> bool {
+        let pins: Vec<_> = self
+            .pins
+            .iter()
+            .map(|pin| {
+                let described = cx.bars.describe_pin(&pin.path);
+                resolve_pin(pin, &self.apps, described.as_ref())
             })
             .collect();
+        if pins == self.pinned_apps {
+            return false;
+        }
+        self.pinned_apps = pins;
+        self.load_icons(cx);
+        true
     }
 
     fn shown(&self) -> Vec<&App> {
@@ -487,10 +556,12 @@ impl Panel for Launcher {
                     );
                 }
                 let style = kit.font(11.0, 400);
+                let label = kit.text.fit(&app.name, &style, cell - kit.px(8.0));
+                let (width, _) = kit.text.measure(&label, &style);
                 kit.text_at(
-                    r.left + kit.px(4.0),
+                    r.left + (cell - width) / 2.0,
                     r.top + kit.px(43.0),
-                    &app.name,
+                    &label,
                     &style,
                     kit.look.ink,
                     cell - kit.px(8.0),
@@ -663,7 +734,7 @@ impl Panel for Launcher {
     fn menu(&mut self) -> Vec<Entry<PanelCommand>> {
         std::mem::take(&mut self.menu_entries)
     }
-    fn command(&mut self, command: PanelCommand, _: &mut Cx) -> Effect {
+    fn command(&mut self, command: PanelCommand, cx: &mut Cx) -> Effect {
         let previous = self.pins.clone();
         let result = mypaper_bars::config::path().and_then(|path| match command {
             PanelCommand::PinLauncher(pin) => {
@@ -695,6 +766,8 @@ impl Panel for Launcher {
             log::warn!("launcher pins: {e:#}");
         }
         self.resolve_pins();
+        self.refresh_pins(cx);
+        self.load_icons(cx);
         Effect::Redraw
     }
 
@@ -775,8 +848,8 @@ impl Panel for Launcher {
             return loading;
         }
         self.apps = apps.clone();
-        self.resolve_pins();
         crate::integrations::launcher_entries(&mut self.apps);
+        self.resolve_pins();
         self.load_icons(cx);
         true
     }
@@ -794,12 +867,17 @@ impl Panel for Launcher {
             }
         }
         self.user = index::user_name();
+        self.refresh_pins(cx);
         if self.files {
             cx.lanes
                 .apps(|builder| Reply::Files(builder.recent_files(60)));
         }
         self.load_icons(cx);
         true
+    }
+
+    fn refresh(&mut self, cx: &mut Cx) -> bool {
+        self.grid() && self.refresh_pins(cx)
     }
 
     fn field(&self) -> Option<&TextField> {
@@ -834,6 +912,46 @@ impl Panel for Launcher {
     }
 }
 
+/// A shortcut path and an AppsFolder id are different launch representations of one app.
+/// Reuse the indexed icon by identity; unindexed/custom pins use the same shell icon cache.
+fn resolve_pin(
+    pin: &Pinned,
+    apps: &[App],
+    described: Option<&mypaper_bars::icons::Described>,
+) -> App {
+    let matched = apps.iter().find(|app| {
+        app.path.eq_ignore_ascii_case(&pin.path)
+            || app.id.eq_ignore_ascii_case(&pin.path)
+            || described
+                .and_then(|d| d.aumid.as_ref())
+                .is_some_and(|id| app.id.eq_ignore_ascii_case(id))
+    });
+    let name = pin
+        .name
+        .clone()
+        .or_else(|| described.and_then(|d| d.name.clone()))
+        .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path));
+    let mut names = apps
+        .iter()
+        .filter(|app| app.name.eq_ignore_ascii_case(&name));
+    let by_name = names.next().filter(|_| names.next().is_none());
+    if let Some(app) = matched.or(by_name) {
+        let mut app = app.clone();
+        app.path = pin.path.clone();
+        app.name = pin.name.clone().unwrap_or(app.name);
+        app.icon = app.icon.or_else(|| described.and_then(|d| d.icon.clone()));
+        return app;
+    }
+    App {
+        id: pin.path.clone(),
+        path: pin.path.clone(),
+        name,
+        icon: described.and_then(|d| d.icon.clone()),
+        keywords: vec![],
+        packaged: false,
+    }
+}
+
 fn settings() -> Vec<App> {
     super::settings_pages::PAGES
         .iter()
@@ -846,4 +964,128 @@ fn settings() -> Vec<App> {
             packaged: false,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    fn app(name: &str) -> App {
+        App {
+            id: name.into(),
+            name: name.into(),
+            path: name.into(),
+            icon: None,
+            keywords: vec![],
+            packaged: false,
+        }
+    }
+
+    #[test]
+    fn typos_and_initials_find_the_intended_app() {
+        let apps = [
+            "Discord",
+            "Visual Studio Code",
+            "Chrome",
+            "Calculator",
+            "Disk Cleanup",
+        ]
+        .map(app);
+        for (query, expected) in [
+            ("dipcord", "Discord"),
+            ("vsc", "Visual Studio Code"),
+            ("chrme", "Chrome"),
+            ("dicsord", "Discord"),
+        ] {
+            let found = results(&apps, &History::default(), query);
+            assert_eq!(
+                found.first().map(|a| a.name.as_str()),
+                Some(expected),
+                "{query}"
+            );
+        }
+        assert!(results(&apps, &History::default(), "xyz").is_empty());
+    }
+
+    #[test]
+    fn exact_prefix_and_word_starts_beat_fuzzy_matches() {
+        assert!(score("chrome", "Chrome", &[]) > score("chrome", "Chromium", &[]));
+        assert!(score("cal", "Calculator", &[]) > score("cal", "Google Calendar", &[]));
+        assert!(score("code", "Visual Studio Code", &[]) > score("code", "Encoder", &[]));
+    }
+
+    #[test]
+    fn shortcut_pins_share_indexed_icons_and_keep_their_launch_path() {
+        let mut discord = app("Discord");
+        discord.id = "com.squirrel.Discord.Discord".into();
+        discord.path = format!(r"shell:AppsFolder\{}", discord.id);
+        discord.icon = Some("discord.png".into());
+        let pin = Pinned {
+            path: r"C:\TaskBar\Discord.lnk".into(),
+            name: None,
+        };
+        let described = mypaper_bars::icons::Described {
+            aumid: Some(discord.id.clone()),
+            ..Default::default()
+        };
+        let resolved = resolve_pin(&pin, &[discord.clone()], Some(&described));
+        assert_eq!(resolved.id, discord.id);
+        assert_eq!(resolved.icon, discord.icon);
+        assert_eq!(resolved.name, discord.name);
+        assert_eq!(resolved.path, pin.path);
+        let custom = resolve_pin(
+            &pin,
+            &[],
+            Some(&mypaper_bars::icons::Described {
+                icon: Some("shortcut.png".into()),
+                ..Default::default()
+            }),
+        );
+        assert_eq!(custom.icon.as_deref(), Some("shortcut.png"));
+    }
+
+    #[test]
+    fn recent_and_frequent_usage_boost_only_matching_apps() {
+        let apps = ["Mail", "Maps", "Discord"].map(app);
+        let mut history = History::default();
+        history.record("Maps", "Maps", index::epoch_ms());
+        assert_eq!(results(&apps, &history, "ma")[0].name, "Maps");
+        for _ in 0..30 {
+            history.record("Mail", "Mail", 1);
+        }
+        assert_eq!(results(&apps, &history, "ma")[0].name, "Maps");
+        for _ in 0..30 {
+            history.record("Mail", "Mail", 1);
+        }
+        assert_eq!(results(&apps, &history, "ma")[0].name, "Mail");
+        assert_eq!(results(&apps, &history, "dipcord")[0].name, "Discord");
+        assert!(results(&apps, &history, "xyz").is_empty());
+    }
+
+    /// Run in release mode to measure the actual installed app list without a timing assertion
+    /// whose outcome depends on unrelated desktop load.
+    #[test]
+    #[ignore]
+    fn installed_app_list_search_timing() {
+        let apps = index::parse_cache(
+            &std::fs::read_to_string(files::local("apps.json").unwrap()).unwrap(),
+        )
+        .unwrap();
+        let history = History::default();
+        for query in ["dipcord", "vsc", "chrme"] {
+            let mut samples = Vec::new();
+            for _ in 0..101 {
+                let start = std::time::Instant::now();
+                std::hint::black_box(results(std::hint::black_box(&apps), &history, query));
+                samples.push(start.elapsed());
+            }
+            samples.sort();
+            eprintln!(
+                "{} apps, {query}: median {:?}, p95 {:?}",
+                apps.len(),
+                samples[50],
+                samples[95]
+            );
+        }
+    }
 }

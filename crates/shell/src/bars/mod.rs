@@ -216,6 +216,13 @@ impl Bars {
     pub fn config(&self) -> &BarsConfig {
         &self.config
     }
+    /// Resolve launcher shortcut pins on the existing STA icon worker, just like dock pins.
+    pub fn describe_pin(&mut self, path: &str) -> Option<providers::icons::Described> {
+        self.services
+            .icons
+            .get(&providers::icons::Source::Path(path.to_owned()))
+            .cloned()
+    }
     pub fn can_open_flyouts(&self) -> bool {
         !self.asleep && self.bars.iter().any(Bar::shows_content)
     }
@@ -349,7 +356,6 @@ impl Bars {
                     if let Err(e) = self.reconcile(ui) {
                         log::error!("bars: {e:#}");
                     }
-                    self.apply_taskbar();
                     self.subscribe();
                     self.update_items();
                 }
@@ -1440,6 +1446,14 @@ impl Bars {
                     )?;
                     self.bars.push(bar);
                 }
+            }
+        }
+        // Startup defers reservations until core hands over its taskbar journal. Every later
+        // rebuild drops the old appbars, so reserve the new HWNDs before returning to the loop.
+        if self.journal.is_some() {
+            self.apply_taskbar();
+            for bar in &mut self.bars {
+                bar.reserve();
             }
         }
         self.update_items();
