@@ -138,6 +138,7 @@ struct Motion {
     pending: bool,
     next: Instant,
     interval: Duration,
+    bounds: Rect,
 }
 
 impl Inbox {
@@ -157,6 +158,7 @@ impl Inbox {
                         pending: false,
                         next: Instant::now(),
                         interval: display_interval(rect),
+                        bounds: monitor_of(rect).1,
                     });
                 }
             }
@@ -173,11 +175,19 @@ impl Inbox {
                 continue;
             }
             motion.pending = false;
-            let Some(latest @ Request::Open { client, .. }) = motion.channel.take() else {
+            let Some(latest @ Request::Open { client, rect, .. }) = motion.channel.take() else {
                 continue;
             };
             if client != motion.client {
                 continue;
+            }
+            let (x, y) = rect.center();
+            if !motion.bounds.contains_point(x, y) {
+                let bounds = monitor_of(rect).1;
+                if bounds != motion.bounds {
+                    motion.bounds = bounds;
+                    motion.interval = display_interval(rect);
+                }
             }
             if latest != motion.last {
                 // Open is also the full-state update of an existing overlay: geometry and
@@ -199,7 +209,7 @@ impl Inbox {
     }
 }
 
-/// Read the destination display's refresh rate once at Open, outside the animation path.
+/// Read refresh rate at Open or a display crossing, outside normal frame updates.
 fn display_interval(rect: Rect) -> Duration {
     let (monitor, _) = monitor_of(rect);
     let mut info = MONITORINFOEXW::default();
@@ -320,7 +330,7 @@ impl Overlays {
         })
     }
 
-    /// When the warm capture goes cold: the loop must call [`tick`](Self::tick) by then.
+    /// Next coalesced placement or capture going cold: call [`tick`](Self::tick) by then.
     pub fn deadline(&self) -> Option<Instant> {
         self.warm_until
             .into_iter()

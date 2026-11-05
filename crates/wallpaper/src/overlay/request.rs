@@ -1,6 +1,7 @@
 //! What the shell asks of the engine's glass overlays, and how it travels: plain Rust types, sent
-//! as one fixed-size `WM_COPYDATA` to the engine's message-only window (`OVERLAY_CLASS`). This
-//! file has no GPU or engine dependencies: the shell compiles this same file into its overlay
+//! as fixed-size `WM_COPYDATA` for lifecycle requests and a shared latest-state mailbox plus
+//! posted wake for animation (`Channel`). Both target the engine's message-only window
+//! (`OVERLAY_CLASS`). This file has no GPU or engine dependencies: the shell compiles it into its overlay
 //! client (`crates/shell/src/overlay_client.rs`, by `#[path]`), so both ends share one wire.
 //!
 //! Every overlay belongs to one client window (a shell popup or widget surface), which the shell
