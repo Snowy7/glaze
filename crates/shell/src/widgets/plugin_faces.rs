@@ -10,37 +10,48 @@ use super::Widgets;
 use super::model::{Model, Widget, plugin_face};
 use super::views::plugin::{Hit, action_at};
 
-/// The size class the plugin designs for, from the tile's cells.
-fn size_class(cells: [u32; 2]) -> mypaper_plugin_sdk::SizeClass {
+/// Use the same design-pixel thresholds as the built-in views, independent of grid cells.
+fn size_class(width: f32, height: f32, scale: f32) -> mypaper_plugin_sdk::SizeClass {
     use mypaper_plugin_sdk::SizeClass;
-    match cells[0] * cells[1] {
-        0..=12 => SizeClass::Small,
-        13..=48 => SizeClass::Medium,
-        _ => SizeClass::Large,
+    match mypaper_ui::layout::SizeClass::of(width / scale, height / scale) {
+        mypaper_ui::layout::SizeClass::Compact => SizeClass::Small,
+        mypaper_ui::layout::SizeClass::Regular => SizeClass::Medium,
+        mypaper_ui::layout::SizeClass::Large => SizeClass::Large,
     }
 }
 
-/// Starts (or reuses) the plugin behind a new plugin instance.
-pub(super) fn open_plugin_face(plugins: &mut Plugins, m: &mut Model) {
+/// Seeds a new face; synchronization opens it once its rendered dimensions are available.
+pub(super) fn open_plugin_face(_plugins: &mut Plugins, m: &mut Model) {
     if m.kind != Widget::Plugin {
         return;
     }
     let Some(face) = plugin_face(&m.placed) else { return };
     m.data = json!({ "title": face.title, "icon": face.icon, "status": "starting" });
-    let settings = serde_json::Value::Object(m.placed.settings.clone());
-    let size = size_class(m.placed.size);
-    let opened = plugins.open_face(&m.placed.instance, &face.plugin, &face.face, size, settings, Instant::now());
-    if let Err(e) = opened {
-        log::warn!("{}: {}", m.placed.instance, e.message);
-        m.data["status"] = "failed".into();
-        m.data["why"] = e.message.into();
-    }
+    // The entry's monitor, pixel rectangle and resolved scale exist after placement. Open it
+    // in sync_plugin_faces, which also updates the variant after a resize or scale change.
 }
 
 impl Widgets {
 
     /// Copies changed views and statuses from the plugin host into their models.
     pub(super) fn sync_plugin_faces(&mut self) {
+        for entry in self.entries.values_mut() {
+            let m = &mut entry.model;
+            if m.kind != Widget::Plugin { continue; }
+            let Some(face) = plugin_face(&m.placed) else { continue };
+            let size = size_class(entry.rect.width(), entry.rect.height(), entry.dpi_scale * entry.tokens.scale);
+            let size_key = serde_json::to_value(size).unwrap_or_default();
+            let settings = serde_json::Value::Object(m.placed.settings.clone());
+            if m.data["opened_size"] == size_key && m.data["opened_settings"] == settings { continue; }
+            m.data["opened_size"] = size_key;
+            m.data["opened_settings"] = settings.clone();
+            if let Err(e) = self.plugins.open_face(&m.placed.instance, &face.plugin, &face.face, size, settings, Instant::now()) {
+                log::warn!("{}: {}", m.placed.instance, e.message);
+                m.data["status"] = "failed".into();
+                m.data["why"] = e.message.into();
+                m.dirty = true;
+            }
+        }
         for instance in self.plugins.take_changed() {
             let Some(entry) = self.entries.get_mut(&instance) else { continue };
             let m = &mut entry.model;
@@ -99,6 +110,29 @@ impl Widgets {
         entry.model.dirty = true;
         if let Some(action) = action {
             self.plugins.face_action(id, &action, Some(text));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::size_class;
+    use mypaper_plugin_sdk::SizeClass;
+
+    #[test]
+    fn face_variants_follow_rendered_size_and_scale() {
+        for scale in [1.0, 1.5, 2.0] {
+            for (width, height, expected) in [
+                (180.0, 132.0, SizeClass::Small),
+                (180.0, 180.0, SizeClass::Medium),
+                (360.0, 220.0, SizeClass::Medium),
+                (540.0, 330.0, SizeClass::Large),
+                (540.0, 149.0, SizeClass::Small),
+                (150.0, 300.0, SizeClass::Medium),
+                (300.0, 300.0, SizeClass::Large),
+            ] {
+                assert_eq!(size_class(width * scale, height * scale, scale), expected);
+            }
         }
     }
 }
