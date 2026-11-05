@@ -6,11 +6,11 @@ use std::sync::Arc;
 
 use mypaper_bars::accent::{self, System};
 use mypaper_bars::config::{self, BarsConfig};
-use mypaper_bars::style::{Family, Look as BarLook, NativeStyle, Scheme};
+use mypaper_bars::style::{Family, Look as BarLook, NativeStyle};
 use mypaper_config::Config;
-use mypaper_theme::{Appearance, LoadedTheme, Paint, TextTone};
+use mypaper_theme::{Appearance, LoadedTheme};
 use mypaper_ui::theme::{Knobs, Radii};
-use mypaper_ui::{GlassMaterial, Ink, Rgba, Scheme as UiScheme, Style, Text, Theme, icons};
+use mypaper_ui::{GlassMaterial, Rgba, Style, Text, Theme, icons};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Look {
@@ -36,6 +36,9 @@ pub struct Look {
     pub first_day: Option<u32>,
     /// `audio.switchOutput`: the mixer may change the default output.
     pub switch_output: bool,
+    pub scale: f32,
+    pub shadow: bool,
+    resolved: Theme,
 }
 
 impl Look {
@@ -49,15 +52,33 @@ impl Look {
             })
             .inspect_err(|e| log::debug!("flyouts: bars.json: {e:#}"))
             .unwrap_or_default();
-        let appearance = theme_appearance();
+        let loaded = Config::load()
+            .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
+            .and_then(LoadedTheme::load)
+            .ok();
+        let appearance = crate::bars::look::theme_appearance(loaded.as_ref());
         // The user's material controls for menus and panels, read from `config.json` itself
         // (not their projection into `bars.json`, which may land a moment later).
         let knobs = Config::load()
             .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))
             .unwrap_or_default();
         // Plugin `panel` style patches (docs/plugins.md, "Styling"), under the user's own fields.
-        let (mut bar_look, mut appearance) = (bars.top.look.clone(), bars.appearance.over(&appearance));
-        let colors = crate::bars::plugin_style::patch_look("panel", "top", bars.raw(), &mut bar_look, &mut appearance);
+        let (mut bar_look, mut appearance) =
+            (bars.top.look.clone(), bars.appearance.over(&appearance));
+        crate::bars::look::theme_glass(
+            &mut bar_look,
+            loaded
+                .as_ref()
+                .and_then(|t| t.theme.bars.as_ref())
+                .and_then(|s| s.glass),
+        );
+        let colors = crate::bars::plugin_style::patch_look(
+            "panel",
+            "top",
+            bars.raw(),
+            &mut bar_look,
+            &mut appearance,
+        );
         let mut look = Self::resolve_with(&bar_look, &appearance, &accent::read(), &knobs);
         look.patch_colors(&colors);
         look.icons = icons::system_family(text);
@@ -76,12 +97,23 @@ impl Look {
     pub fn patch_colors(&mut self, colors: &[(String, crate::bars::plugin_style::TokenValue)]) {
         use crate::bars::plugin_style::{TokenValue, hex};
         for (name, value) in colors {
-            let TokenValue::Color(text) = value else { continue };
+            let TokenValue::Color(text) = value else {
+                continue;
+            };
             let Some(color) = hex(text) else { continue };
             match name.as_str() {
-                "label" => self.ink = color,
-                "accent" => self.accent = color,
-                "surface" | "background" => self.fill = color,
+                "label" => {
+                    self.ink = color;
+                    self.resolved.color.label = color;
+                }
+                "accent" => {
+                    self.accent = color;
+                    self.resolved.color.accent = color;
+                }
+                "surface" | "background" => {
+                    self.fill = color;
+                    self.resolved.color.surface = color;
+                }
                 _ => {}
             }
         }
@@ -100,62 +132,101 @@ impl Look {
         system: &System,
         knobs: &Knobs,
     ) -> Self {
+        let tokens = crate::bars::look::Tokens::resolve(bar, appearance, system);
         let style = bar.native_style();
-        let dark = match bar.scheme {
-            Some(Scheme::Dark) => true,
-            Some(Scheme::Light) => false,
-            Some(Scheme::Auto) => system.scheme == accent::Scheme::Dark,
-            None => appearance.text.is_none_or(|t| t == TextTone::Light),
-        };
-        let ink = Rgba::rgb8(if dark { [245, 245, 247] } else { [25, 25, 28] }, 1.0);
-        let tint = appearance.tint.map_or(
-            Rgba::rgb8(if dark { [28, 29, 34] } else { [246, 246, 249] }, 1.0),
-            |c| Rgba::rgb8(c.0, 1.0),
-        );
-        let accent = match appearance.accent {
-            Some(Paint::Color(c)) => Rgba::rgb8(c.0, 1.0),
-            _ => hex(&system.accent[0]).unwrap_or(Rgba::rgb8([0x3b, 0x82, 0xf6], 1.0)),
-        };
-        let luminance = 0.2126 * accent.r + 0.7152 * accent.g + 0.0722 * accent.b;
-        let on_accent = if luminance > 0.6 {
-            Rgba::rgb8([20, 20, 22], 1.0)
-        } else {
-            Rgba::rgb8([255, 255, 255], 1.0)
-        };
+        let ink = tokens.theme.color.label;
+        let tint = tokens.theme.color.surface.with_alpha(1.0);
+        let accent = tokens.theme.color.accent;
+        let on_accent = tokens.theme.color.on_accent;
         let flyout_tint = bar.flyouts.tint.unwrap_or(0.62).clamp(0.0, 1.0);
         let kit = crate::bars::look::style(style);
-        let fill = match style {
-            NativeStyle::Solid => tint,
-            _ => tint.with_alpha(bar.tint.or(appearance.opacity).unwrap_or(0.92).max(0.85)),
-        };
+        let fill = tokens.fill.unwrap_or_else(|| {
+            tint.with_alpha(bar.tint.or(appearance.opacity).unwrap_or(
+                if style == NativeStyle::Solid {
+                    1.0
+                } else {
+                    0.92
+                },
+            ))
+        });
         // The style's material (`theme::material`) under the user's controls by the kit's one
         // rule (`GlassMaterial::tuned`), as the bars and widgets. Flyouts sit over app windows,
         // so their own default (no control set) is more tinted and more frosted than the bars':
         // whatever is behind a flyout must not read through its text. Blur in DIPs.
-        let glass = mypaper_ui::theme::material(kit, tint).map(|base| {
-            let own = GlassMaterial {
-                clarity: if mypaper_ui::theme::lensed(kit) {
-                    1.0 - flyout_tint
+        let glass = mypaper_ui::theme::material(kit, tint)
+            .filter(|_| {
+                bar.glass.style != Some(mypaper_bars::style::GlassKind::None)
+                    && appearance.surface != Some(mypaper_theme::Surface::Solid)
+            })
+            .map(|base| {
+                let own = GlassMaterial {
+                    clarity: if mypaper_ui::theme::lensed(kit) {
+                        1.0 - flyout_tint
+                    } else {
+                        (1.0 - flyout_tint).min(base.clarity)
+                    },
+                    blur: base.blur.max(28.0),
+                    ..base
+                };
+                let bar_knobs = Knobs {
+                    clarity: bar.glass.clarity,
+                    blur: bar.glass.blur.or(appearance.blur),
+                    refraction: bar.glass.refraction,
+                    highlight: bar.glass.highlight,
+                };
+                let mut glass = own.tuned(kit, &knobs.over(bar_knobs));
+                glass.tint.a = knobs
+                    .clarity
+                    .map(|c| 1.0 - c)
+                    .or(bar.flyouts.tint)
+                    .or(bar.glass.tint)
+                    .unwrap_or(glass.tint.a);
+                let intensity = bar.glass.intensity.unwrap_or(1.0);
+                glass.refraction *= intensity;
+                glass.highlight *= intensity;
+                glass.blur *= intensity;
+                if bar.glass.style == Some(mypaper_bars::style::GlassKind::Frosted) {
+                    glass.refraction = 0.0;
+                    glass.highlight = 0.0;
+                }
+                // `flyouts.blur: false` is this bar's own say for its flyouts.
+                if bar.flyouts.blur == Some(false) {
+                    GlassMaterial { blur: 0.0, ..glass }
                 } else {
-                    (1.0 - flyout_tint).min(base.clarity)
-                },
-                blur: base.blur.max(28.0),
-                ..base
-            };
-            let bar_knobs = Knobs {
-                clarity: None,
-                blur: bar.glass.blur,
-                refraction: bar.glass.refraction,
-                highlight: bar.glass.highlight,
-            };
-            let glass = own.tuned(kit, &knobs.over(bar_knobs));
-            // `flyouts.blur: false` is this bar's own say for its flyouts.
-            if bar.flyouts.blur == Some(false) {
-                GlassMaterial { blur: 0.0, ..glass }
-            } else {
-                glass
+                    glass
+                }
+            });
+        let radius = bar
+            .radius
+            .or(appearance.radius)
+            .unwrap_or(tokens.theme.radius.surface);
+        let radius = if kit == Style::Fluent {
+            radius.min(8.0)
+        } else {
+            radius
+        };
+        let mut resolved = tokens.theme.clone();
+        resolved.glass = glass;
+        resolved.color.surface = fill;
+        resolved.radius.surface = radius;
+        resolved.radius.card = Radii::concentric(radius, resolved.metrics.pad, 6.0);
+        resolved.font.family = tokens.font.family.clone();
+        if let Some(weight) = bar.font.weight {
+            for role in &mut resolved.font.roles {
+                role.weight = weight;
             }
-        });
+        }
+        if let Some(size) = bar.font.size {
+            let factor = size / resolved.font.font(mypaper_ui::TextRole::Body).size;
+            for role in &mut resolved.font.roles {
+                role.size *= factor;
+                role.line *= factor;
+            }
+        }
+        resolved.border = (tokens.border && glass.is_none()).then_some(resolved.color.separator);
+        if !tokens.shadow {
+            resolved.elevation.color = Rgba::TRANSPARENT;
+        }
         Self {
             ink,
             accent,
@@ -163,29 +234,16 @@ impl Look {
             fill,
             glass,
             style: kit,
-            radius: bar
-                .radius
-                .or(appearance.radius)
-                // The kit's surface radii (`Theme::new`).
-                .map(|r| match kit {
-                    Style::Fluent => r.min(8.0),
-                    _ => r,
-                })
-                .unwrap_or_else(|| Theme::new(kit, UiScheme::Dark, accent).radius.surface)
-                .max(4.0),
-            font: font_family(
-                bar.font
-                    .family
-                    .as_deref()
-                    .or(appearance.font.as_deref())
-                    .unwrap_or("Segoe UI Variable Text"),
-            )
-            .into(),
+            radius,
+            font: tokens.font.family,
             icons: icons::SYSTEM_FAMILY.into(),
             family: bar.family.unwrap_or_default(),
             win_key: true,
             first_day: None,
             switch_output: false,
+            scale: tokens.scale,
+            shadow: tokens.shadow,
+            resolved,
         }
     }
 
@@ -193,39 +251,19 @@ impl Look {
     /// bar's own, see bars/look.rs), the ink the scheme, and the accent carries over. The body's
     /// radius is the look's (the user's `radius`, else the kit's), cards concentric inside it.
     pub fn theme(&self) -> Theme {
-        let dark = mypaper_ui::theme::luminance(self.ink) > 0.5;
-        let scheme = if dark { UiScheme::Dark } else { UiScheme::Light };
-        let mut theme = Theme::new(self.style, scheme, self.accent);
-        // The style's own glass, as resolved here (more tinted than the bars').
-        theme.glass = self.glass;
-        if theme.radius.surface != self.radius {
-            theme.radius.card = Radii::concentric(self.radius, theme.metrics.pad, 6.0);
-            theme.radius.surface = self.radius;
-        }
-        theme
+        self.resolved.clone()
     }
 
     /// Menus share the active family, font, colors and material with the panels.
     pub fn menu_tokens(&self) -> mypaper_ui::Tokens {
-        let base = mypaper_ui::Tokens::default();
         mypaper_ui::Tokens {
-            // Concentric with a flyout of the same look across a menu's 6 px inset.
             radius: Radii::concentric(self.radius, 6.0, 8.0),
-            font: mypaper_ui::TextStyle::new(&self.font, 13.0),
             icons: self.icons.clone(),
-            material: mypaper_ui::Material { tint: self.fill },
-            colors: mypaper_ui::Colors {
-                text: self.ink,
-                text_dim: Ink::of(self.ink).disabled,
-                hover: self.ink.with_alpha(0.12),
-                line: self.ink.with_alpha(0.12),
-                ..base.colors
-            },
-            glass: self.glass,
-            ..base
+            scale: self.scale,
+            shadow: self.shadow,
+            ..self.resolved.tokens()
         }
     }
-
 }
 
 impl Default for Look {
@@ -242,52 +280,6 @@ pub fn fixed_system() -> System {
         scheme: accent::Scheme::Dark,
         animations: true,
     }
-}
-
-/// The theme's bars appearance, with `accent: auto` taken from the wallpaper's palette.
-fn theme_appearance() -> Appearance {
-    let loaded = Config::load()
-        .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
-        .and_then(LoadedTheme::load)
-        .ok();
-    let mut appearance = loaded
-        .as_ref()
-        .and_then(|t| t.theme.bars.as_ref())
-        .and_then(|s| s.appearance.clone())
-        .unwrap_or_default();
-    if let Some(t) = &loaded
-        && matches!(appearance.accent, Some(Paint::Auto))
-        && let Some(snapshot) = mypaper_tweaks::palette::read().filter(|p| p.is_for(&t.dir))
-    {
-        appearance.accent = Some(Paint::Color(snapshot.palette.accent));
-    }
-    appearance
-}
-
-fn hex(value: &str) -> Option<Rgba> {
-    let s = value.strip_prefix('#')?;
-    let v = u32::from_str_radix(s.get(..6)?, 16).ok()?;
-    Some(Rgba::rgb8([(v >> 16) as u8, (v >> 8) as u8, v as u8], 1.0))
-}
-
-/// The first concrete family of a CSS-like list.
-fn font_family(list: &str) -> String {
-    list.split(',')
-        .map(|f| f.trim().trim_matches(['"', '\'']).trim())
-        .find(|f| {
-            !f.is_empty()
-                && ![
-                    "system-ui",
-                    "sans-serif",
-                    "serif",
-                    "monospace",
-                    "ui-sans-serif",
-                ]
-                .iter()
-                .any(|g| g.eq_ignore_ascii_case(f))
-        })
-        .unwrap_or("Segoe UI")
-        .to_owned()
 }
 
 #[cfg(test)]
@@ -311,7 +303,10 @@ mod tests {
             assert!(look.fill.a >= 0.85, "{style:?}: a readable fill");
         }
         // One UI and Fluent: flat frosted glass, and the flyout's theme is the bar's style.
-        for (style, kit) in [(NativeStyle::OneUi, Style::OneUi), (NativeStyle::Fluent, Style::Fluent)] {
+        for (style, kit) in [
+            (NativeStyle::OneUi, Style::OneUi),
+            (NativeStyle::Fluent, Style::Fluent),
+        ] {
             let bar = BarLook {
                 style: Some(style),
                 ..Default::default()
@@ -349,7 +344,11 @@ mod tests {
             };
             let look = Look::resolve_with(&bar, &Appearance::default(), &fixed_system(), &knobs);
             let glass = look.glass.expect("glass");
-            assert_eq!((glass.clarity, glass.blur, glass.tint.a), (1.0, 0.0, 0.0), "{style:?}");
+            assert_eq!(
+                (glass.clarity, glass.blur, glass.tint.a),
+                (1.0, 0.0, 0.0),
+                "{style:?}"
+            );
         }
     }
 }
@@ -364,7 +363,11 @@ mod plugin_style_tests {
         let mut look = Look::resolve(&BarLook::default(), &Appearance::default(), &fixed_system());
         let before = look.ink;
         let token = |name: &str, value: TokenValue| (name.to_owned(), value);
-        look.patch_colors(&[token("accent", TokenValue::Color("#ff0000".into())), token("surface", TokenValue::Color("#102030".into())), token("label", TokenValue::Tone("accent".into()))]);
+        look.patch_colors(&[
+            token("accent", TokenValue::Color("#ff0000".into())),
+            token("surface", TokenValue::Color("#102030".into())),
+            token("label", TokenValue::Tone("accent".into())),
+        ]);
         assert_eq!(look.accent, Rgba::rgb8([255, 0, 0], 1.0));
         assert_eq!(look.fill, Rgba::rgb8([0x10, 0x20, 0x30], 1.0));
         assert_eq!(look.ink, before, "tones are left to the bars' resolver");

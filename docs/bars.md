@@ -129,6 +129,22 @@ is the theme's or Windows'. `look.glyphs: fluent` draws module icons from Segoe 
   tooltips with the app's name. The taskbar style keeps Windows' washes.
 - **Menus** the bars open (dock, tray) and the desktop menu use the bar theme's `theme.tokens()`.
 
+The appearance layer is resolved when configuration changes: `surface: none` removes the bar's
+body, `solid` draws the tint at `opacity`, and `glass` uses the style's engine material. An explicit
+`look.background` or `look.transparent` wins over that surface choice. `appearance.font` supplies
+the font under `look.font`; `appearance.scale` multiplies monitor DPI for content, geometry and
+reservations. Radius, text tone, accent and blur reach bars and popup themes; popup fonts and
+content scale also follow them. `shadow: false` removes bare-bar text shadows and menu shadows.
+An explicit solid background draws its own colour without a glass plate. Borders apply to drawn
+surfaces; glass keeps the engine's single edge.
+
+Every `system-accent-light-1..3` and `system-accent-dark-1..3` colour token uses its actual Windows
+palette entry (separate from a theme's `accent`). `wallpaper` backgrounds keep the wallpaper plate
+even when a window overlaps the bar; `blur` backgrounds always use the live overlay. Their legacy
+brightness and saturation controls still need renderer support. Glass `style: none` disables the
+material, `frosted` removes lensing, and `intensity` scales refraction, highlight and frost. Theme
+`bars.glass` is a partial layer under the bar's glass controls; removing fields restores defaults.
+
 CSS, gradient/image **surface fills**, noise, glow, neon and shaped corners are ignored with one
 warning per process. Image app icons are retained. There is no CSS renderer or DWM blur fallback.
 

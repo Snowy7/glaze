@@ -222,7 +222,7 @@ impl Bar {
     }
 
     pub fn scale(&self) -> f32 {
-        self.monitor.dpi as f32 / 96.0
+        self.monitor.dpi as f32 / 96.0 * self.tokens.scale
     }
     pub fn owns(&self, id: SurfaceId) -> bool {
         self.surface.id() == id || self.islands.iter().any(|s| s.id() == id)
@@ -251,6 +251,12 @@ impl Bar {
         }
     }
     fn covered(&self, body: Rect) -> bool {
+        if self.tokens.wallpaper_only {
+            return false;
+        }
+        if self.tokens.live_blur {
+            return true;
+        }
         let origin = self.origin();
         let body = body.offset(origin.0 as f32, origin.1 as f32);
         self.windows.iter().any(|w| w.intersects(&body))
@@ -706,8 +712,8 @@ impl Bar {
     /// the rest goes to sprites, else the whole frame.
     fn dock_list(&mut self, ui: &mut Ui) -> mypaper_ui::DisplayList {
         let t = &self.tokens;
-        let glass_plate = t.bare
-            || (t.fill.is_none() && t.material.is_some() && t.theme.glass.is_some());
+        let glass_plate =
+            t.bare || (t.fill.is_none() && t.material.is_some() && t.theme.glass.is_some());
         // Off by default: with the exact hit mask still re-uploaded each frame, a sweep cost more
         // CPU than drawing it all (27.6 % vs 20.1 %, 2026-11-05). `MYPAPER_DOCK_SPRITES=1` turns
         // it on; `=full` also keeps the whole window hit while composing (measures the floor).

@@ -575,6 +575,7 @@ impl Flyouts {
         mypaper_ui::menu::set_style(Some(self.look.menu_tokens()));
         self.follow_win_key(main);
         if let Some(open) = &mut self.open {
+            open.scale = open.monitor.dpi.max(96) as f32 / 96.0 * self.look.scale;
             open.dirty = true;
         }
     }
@@ -894,7 +895,7 @@ impl Flyouts {
         let return_to = bars.external_foreground();
         self.hide();
         self.release_due = None;
-        let scale = request.monitor.dpi.max(96) as f32 / 96.0;
+        let scale = request.monitor.dpi.max(96) as f32 / 96.0 * self.look.scale;
         let mut cx = Cx {
             lanes: &mut self.lanes,
             bars,
@@ -1045,7 +1046,11 @@ impl Flyouts {
         let state = (open.hover, open.pressed, open.focus);
         // On glass, never shrink while open (the glass would be rebuilt: a flash); the next
         // open takes the new size.
-        let keep = if glass.is_some() { open.size.1 as f32 } else { 0.0 };
+        let keep = if glass.is_some() {
+            open.size.1 as f32
+        } else {
+            0.0
+        };
         let (list, size) = build_at_least(
             open.panel.as_ref(),
             &mut ui.text,
@@ -1450,9 +1455,7 @@ pub fn build_at_least(
     let height = (kit.y + pad).round().max(min_height).min(max_height);
     let radius = (kit.theme.radius.surface * s).round();
     let Kit {
-        mut list,
-        theme,
-        ..
+        mut list, theme, ..
     } = kit;
     list.focus = state.2;
     Kit::body(&mut list, (width, height), radius, &theme, glass);

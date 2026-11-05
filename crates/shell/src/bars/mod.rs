@@ -85,6 +85,7 @@ pub struct Bars {
     watches: Vec<notify::RecommendedWatcher>,
     theme_watch: Option<notify::RecommendedWatcher>,
     appearance: Appearance,
+    theme_glass: Option<mypaper_theme::Liquid>,
     system: providers::accent::System,
     published: BTreeMap<String, Vec<glass::Plate>>,
     config_due: Option<Instant>,
@@ -155,6 +156,7 @@ impl Bars {
             watches: vec![],
             theme_watch: None,
             appearance: Appearance::default(),
+            theme_glass: None,
             system: providers::accent::read(),
             published: BTreeMap::new(),
             config_due: None,
@@ -341,16 +343,7 @@ impl Bars {
             }
             events::SETTINGS => {
                 self.system = providers::accent::read();
-                for b in &mut self.bars {
-                    let appearance = b.config.appearance.over(&self.appearance);
-                    let look = if b.kind == BarKind::Top {
-                        &b.config.top.look
-                    } else {
-                        &b.config.dock.look
-                    };
-                    b.tokens = look::Tokens::resolve(look, &appearance, &self.system);
-                    b.dirty = true;
-                }
+                self.config_changed();
             }
             events::TIME => self.services.clock_due = Some(now),
             events::POWER => {
@@ -557,7 +550,8 @@ impl Bars {
         if maximized_event {
             // One follow-up snapshot also covers focus/maximize arriving before the shared
             // source has attached its location hook to the newly foreground process.
-            self.maximized_due.get_or_insert(now + Duration::from_millis(150));
+            self.maximized_due
+                .get_or_insert(now + Duration::from_millis(150));
         }
         if maximized_event || maximized_settled {
             // Focus and monitor changes invalidate every monitor's independent z-order decision.
@@ -613,10 +607,16 @@ impl Bars {
         let Some(b) = self.bars.get(index).filter(|b| !b.hidden) else {
             return;
         };
-        let Some((i, app)) = b.frame.targets.iter().enumerate().find_map(|(i, t)| match t {
-            Target::Dock(app) if app.key == key => Some((i, app.clone())),
-            _ => None,
-        }) else {
+        let Some((i, app)) = b
+            .frame
+            .targets
+            .iter()
+            .enumerate()
+            .find_map(|(i, t)| match t {
+                Target::Dock(app) if app.key == key => Some((i, app.clone())),
+                _ => None,
+            })
+        else {
             return;
         };
         let Some(hit) = b.frame.list.hits.iter().find(|h| h.id == i as u32 + 1) else {
@@ -626,7 +626,13 @@ impl Bars {
         let anchor = hit.rect.offset(origin.0 as f32, origin.1 as f32);
         let (tokens, scale, vertical) = (b.tokens.clone(), b.scale(), !b.horizontal());
         let ink = tokens.theme.color.label;
-        let icon = view::app_icon(ui, &mut self.images, &app, ink, (16.0 * scale).round() as u32);
+        let icon = view::app_icon(
+            ui,
+            &mut self.images,
+            &app,
+            ink,
+            (16.0 * scale).round() as u32,
+        );
         let shown = if let Some(preview) = &mut self.preview {
             preview.switch(ui, app, anchor, icon)
         } else {
@@ -694,7 +700,8 @@ impl Bars {
                 // The kit's tooltip, placed in screen px (below the item, or above it when
                 // there is no room), then cut out with its shadow as the popup.
                 let input = mypaper_ui::Interaction::default();
-                let mut f = mypaper_ui::Frame::new(&mut ui.text, &b.tokens.theme, b.scale(), &input);
+                let mut f =
+                    mypaper_ui::Frame::new(&mut ui.text, &b.tokens.theme, b.scale(), &input);
                 let body = f.tooltip(anchor, &label, bounds);
                 let list = f.list;
                 let reach = list
@@ -1224,8 +1231,14 @@ impl Bars {
                     ModuleRef::Builtin(module) => module,
                     ModuleRef::Custom(id) => {
                         match plugin_modules::panel_of(&id).filter(|_| input == Trigger::Left) {
-                            Some(panel) => flyouts::open(flyouts::Kind::Plugin(plugin_modules::panel_number(&panel)), anchor, &monitor),
-                            None => { plugin_modules::click(&id); }
+                            Some(panel) => flyouts::open(
+                                flyouts::Kind::Plugin(plugin_modules::panel_number(&panel)),
+                                anchor,
+                                &monitor,
+                            ),
+                            None => {
+                                plugin_modules::click(&id);
+                            }
                         }
                         return;
                     }
@@ -1473,13 +1486,7 @@ impl Bars {
             self.menu = Menu::new("Dock commands").ok();
         }
         if let Some(menu) = &mut self.menu {
-            let _ = menu.open(
-                ui,
-                entries,
-                point,
-                screen_at(point.0, point.1),
-                tokens,
-            );
+            let _ = menu.open(ui, entries, point, screen_at(point.0, point.1), tokens);
         }
     }
     fn command(&mut self, command: Command) {
@@ -1614,7 +1621,14 @@ impl Bars {
                         || (config.performance == config::Performance::Auto
                             && mypaper_desktop::on_battery());
                     let mut look = look.clone();
-                    let colors = plugin_style::patch_look(surface, bar_key, self.config.raw(), &mut look, &mut appearance);
+                    look::theme_glass(&mut look, self.theme_glass);
+                    let colors = plugin_style::patch_look(
+                        surface,
+                        bar_key,
+                        self.config.raw(),
+                        &mut look,
+                        &mut appearance,
+                    );
                     let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
                     // No glass on battery saver: the theme's own surface draws instead.
@@ -1629,10 +1643,13 @@ impl Bars {
         // Keep each bar whose geometry stays; drop the others before any new one reserves.
         let kept: Vec<Option<Bar>> = wanted
             .iter()
-            .map(|(kind, config, monitor, ..)| {
+            .map(|(kind, config, monitor, tokens, ..)| {
                 let geometry = Bar::geometry(*kind, config, monitor);
                 old.iter()
-                    .position(|b| Bar::geometry(b.kind, &b.config, &b.monitor) == geometry)
+                    .position(|b| {
+                        Bar::geometry(b.kind, &b.config, &b.monitor) == geometry
+                            && b.tokens.scale == tokens.scale
+                    })
                     .map(|i| old.swap_remove(i))
             })
             .collect();
@@ -1797,6 +1814,11 @@ impl Bars {
                 .map_or_else(Default::default, |t| t.dir.clone()),
         );
         self.appearance = look::theme_appearance(loaded.as_ref());
+        self.theme_glass = loaded
+            .as_ref()
+            .and_then(|t| t.theme.bars.as_ref())
+            .and_then(|s| s.glass);
+        self.theme_watch = None;
         if let Some(t) = &loaded
             && let Ok(text) = std::fs::read_to_string(t.dir.join("theme.json"))
             && let Ok(value) = serde_json::from_str(&text)
