@@ -1,4 +1,5 @@
-//! User icon packs and cached raster/SVG decoding. All SVG work is CPU-only and done once.
+//! User icon packs and cached raster/SVG decoding, at the exact device size an icon is drawn
+//! (`Images::sized`). All SVG work is CPU-only and done once per size.
 use mypaper_bars::{apps::Item, icon_pack::IconPack};
 use mypaper_ui::{Image, Rgba, Ui};
 use std::{
@@ -102,6 +103,14 @@ impl Images {
             e.mono.unwrap_or(p.data.mono),
         ))
     }
+    /// A module glyph the user's own icon pack draws. The bundled mono pack draws app icons
+    /// only: the bars' module glyphs are the theme's icons.
+    pub fn custom(&self, key: &str) -> Option<(String, bool)> {
+        self.pack
+            .as_ref()
+            .filter(|p| !p.dir.starts_with("@builtin"))?;
+        self.key(key)
+    }
     pub fn glyph(&self, key: &str, set: mypaper_bars::style::Glyphs) -> Option<(String, bool)> {
         self.key(key).or_else(|| {
             mypaper_bars::glyphs::svg(set, key).map(|_| {
@@ -122,8 +131,32 @@ impl Images {
     pub fn get(&mut self, ui: &Ui, source: &str) -> Option<Arc<Image>> {
         self.load(ui, source, None)
     }
+    /// `source` decoded once (an SVG at 96 px), recoloured with `tint` when given.
     pub fn load(&mut self, ui: &Ui, source: &str, tint: Option<Rgba>) -> Option<Arc<Image>> {
-        let key = format!("{source}:{tint:?}");
+        self.cached(ui, source, tint, None)
+    }
+
+    /// `source` at exactly `px` device pixels on its longer side, so it is drawn 1:1 and stays
+    /// crisp at any DPI: an SVG rasterized at that size, a larger bitmap area-averaged down to
+    /// it. A smaller bitmap comes back as it is (the renderer scales it up).
+    pub fn sized(
+        &mut self,
+        ui: &Ui,
+        source: &str,
+        tint: Option<Rgba>,
+        px: u32,
+    ) -> Option<Arc<Image>> {
+        self.cached(ui, source, tint, Some(px.max(1)))
+    }
+
+    fn cached(
+        &mut self,
+        ui: &Ui,
+        source: &str,
+        tint: Option<Rgba>,
+        px: Option<u32>,
+    ) -> Option<Arc<Image>> {
+        let key = format!("{source}:{tint:?}:{px:?}");
         if let Some(image) = self.images.get(&key) {
             return image.clone();
         }
@@ -133,12 +166,13 @@ impl Images {
         } else {
             self.theme.join(path)
         };
+        let raster = px.unwrap_or(96);
         let mut image = if path
             .extension()
             .is_some_and(|x| x.eq_ignore_ascii_case("svg"))
         {
             if let Some(file) = source.replace('\\', "/").strip_prefix("@builtin/mono/") {
-                mypaper_bars::icon_pack::bundled_mono_icon(file).and_then(svg_bytes)
+                mypaper_bars::icon_pack::bundled_mono_icon(file).and_then(|b| svg_bytes(b, raster))
             } else if let Some(source) = source.strip_prefix("@glyph/") {
                 let (set, file) = source.split_once('/')?;
                 mypaper_bars::glyphs::svg(
@@ -149,12 +183,16 @@ impl Images {
                     },
                     file.strip_suffix(".svg")?,
                 )
-                .and_then(svg_bytes)
+                .and_then(|b| svg_bytes(b, raster))
             } else {
-                svg(&path)
+                std::fs::read(&path)
+                    .ok()
+                    .and_then(|b| svg_bytes(&b, raster))
             }
         } else {
-            Image::load(ui, &path).ok()
+            Image::load(ui, &path)
+                .ok()
+                .map(|image| px.map_or_else(|| image.clone(), |px| shrink(&image, px)))
         };
         if let (Some(image), Some(color)) = (&mut image, tint) {
             for pixel in image.pixels.as_chunks_mut::<4>().0 {
@@ -174,17 +212,14 @@ impl Images {
     }
 }
 
-fn svg(path: &Path) -> Option<Image> {
-    let bytes = std::fs::read(path).ok()?;
-    svg_bytes(&bytes)
-}
-fn svg_bytes(bytes: &[u8]) -> Option<Image> {
+/// An SVG rasterized with its longer side `px` pixels.
+fn svg_bytes(bytes: &[u8], px: u32) -> Option<Image> {
     let tree = resvg::usvg::Tree::from_data(bytes, &resvg::usvg::Options::default()).ok()?;
     let size = tree.size();
-    let scale = 96.0 / size.width().max(size.height());
+    let scale = px as f32 / size.width().max(size.height());
     let (width, height) = (
-        (size.width() * scale).ceil() as u32,
-        (size.height() * scale).ceil() as u32,
+        (size.width() * scale).round().max(1.0) as u32,
+        (size.height() * scale).round().max(1.0) as u32,
     );
     let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)?;
     resvg::render(
@@ -201,4 +236,92 @@ fn svg_bytes(bytes: &[u8]) -> Option<Image> {
         height,
         pixels,
     })
+}
+
+/// `image` (premultiplied BGRA) area-averaged down so its longer side is `px`; as it is when it
+/// already fits. Each target pixel is the coverage-weighted mean of the source pixels under it,
+/// so a 256 px app icon drawn at 48 keeps clean edges where bilinear sampling would alias.
+fn shrink(image: &Image, px: u32) -> Image {
+    let longer = image.width.max(image.height);
+    if longer <= px {
+        return image.clone();
+    }
+    let scale = px as f32 / longer as f32;
+    let w = ((image.width as f32 * scale).round() as u32).max(1);
+    let h = ((image.height as f32 * scale).round() as u32).max(1);
+    // For each target column (row): the first source index and the weights of those it covers.
+    let spans = |from: u32, to: u32| -> Vec<(usize, Vec<f32>)> {
+        let step = from as f32 / to as f32;
+        (0..to)
+            .map(|i| {
+                let (a, b) = (i as f32 * step, (i + 1) as f32 * step);
+                let first = a.floor() as usize;
+                let last = (b.ceil() as usize).min(from as usize);
+                let weights = (first..last)
+                    .map(|j| ((j + 1) as f32).min(b) - (j as f32).max(a))
+                    .collect();
+                (first, weights)
+            })
+            .collect()
+    };
+    let (columns, rows) = (spans(image.width, w), spans(image.height, h));
+    let (sw, tw) = (image.width as usize, w as usize);
+    // Across, into f32 rows; then down.
+    let mut wide = vec![0f32; tw * image.height as usize * 4];
+    for y in 0..image.height as usize {
+        for (x, (first, weights)) in columns.iter().enumerate() {
+            let total: f32 = weights.iter().sum();
+            for (k, weight) in weights.iter().enumerate() {
+                let src = (y * sw + first + k) * 4;
+                for c in 0..4 {
+                    wide[(y * tw + x) * 4 + c] += image.pixels[src + c] as f32 * weight / total;
+                }
+            }
+        }
+    }
+    let mut pixels = vec![0u8; tw * h as usize * 4];
+    for (y, (first, weights)) in rows.iter().enumerate() {
+        let total: f32 = weights.iter().sum();
+        for x in 0..tw {
+            for c in 0..4 {
+                let v: f32 = weights
+                    .iter()
+                    .enumerate()
+                    .map(|(k, weight)| wide[((first + k) * tw + x) * 4 + c] * weight / total)
+                    .sum();
+                pixels[(y * tw + x) * 4 + c] = v.round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    Image {
+        width: w,
+        height: h,
+        pixels,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_large_icon_shrinks_to_the_exact_size_and_keeps_its_edges() {
+        // 4x4 opaque white in an 8x8 transparent field, halved: 2x2 white in 4x4.
+        let mut pixels = vec![0u8; 8 * 8 * 4];
+        for y in 2..6 {
+            for x in 2..6 {
+                pixels[(y * 8 + x) * 4..][..4].copy_from_slice(&[255; 4]);
+            }
+        }
+        let image = Image {
+            width: 8,
+            height: 8,
+            pixels,
+        };
+        let small = shrink(&image, 4);
+        assert_eq!((small.width, small.height), (4, 4));
+        let alpha = |x: usize, y: usize| small.pixels[(y * 4 + x) * 4 + 3];
+        assert_eq!((alpha(1, 1), alpha(2, 2), alpha(0, 0)), (255, 255, 0));
+        assert_eq!(shrink(&small, 16).width, 4, "never scaled up");
+    }
 }

@@ -91,15 +91,43 @@ overrides. Theme `bars.appearance` supplies the appearance under `bars.json`'s a
 
 ### Native styles
 
-`look.style` selects liquid (default), mono or solid. `look.family` remains independent (mono,
-fluent, macos or material); Fluent groups network/volume/battery clicks into quick settings.
-N6 adds the remaining native styles and bundled icon fonts.
+The bars are drawn with the UI kit ([ui.md › The kit](ui.md#the-kit)): `bars/look.rs` makes one
+kit `Theme` per bar, and `bars/view.rs` draws the top bar, islands, dock, tray, workspace dots,
+media, clock, status text and tooltips with `kit::Frame` from it. `look.style` and `look.family`
+pick the kit style:
 
-Liquid content sits over the engine's plate, with an invisible `Rgba::HIT` shape in the shell.
-Mono draws a tint locally; solid draws an opaque local fill. Neither needs a plate or capture.
-Font family/size/weight, radius, scheme, tint and solid fills remain data. App icons use their cached
-PNGs; module icons use the embedded mono/default or Symbols SVGs, the Fluent icon font, or a configured icon pack. Raster and SVG user-pack icons
-are decoded once on the CPU, cached across monitors and tinted for mono entries.
+| `look.style` | `look.family` | kit style |
+|---|---|---|
+| liquid (default) | macos, mono | Liquid |
+| liquid | fluent | Fluent |
+| liquid | material | One UI |
+| solid | any | Solid |
+| mono | any | Mono |
+
+`look.family` also decides the menus and flyouts; Fluent groups network/volume/battery clicks
+into quick settings. `look.scheme` (or the theme's text tone) picks dark or light, and the accent
+is the theme's or Windows'. `look.glyphs: fluent` draws module icons from Segoe Fluent Icons.
+
+- **Body.** Over glass (liquid, fluent, oneui) the shell fills only `Rgba::HIT`; the engine's plate
+  draws the glass and its one edge. Mono and solid draw the theme's surface (solid adds its one
+  hairline); `look.background` as a solid colour replaces it; performance mode drops the glass and
+  draws the theme's surface. No outline is drawn on glass.
+- **Items** are kit washes (capsules in liquid and One UI, the theme's radius elsewhere), always in
+  the list and transparent at rest, so a hover redraws one item. Keyboard focus draws the kit's
+  focus ring; a click never does. Text is the theme's body role (`look.font` and module styles
+  override family, size and weight); colours are the theme's label steps. The minimal design
+  (no body, straight on the wallpaper) puts a soft shadow copy under its text.
+- **Icons.** Module glyphs are the kit's icons (Lucide vectors, or the Fluent font). A user icon
+  pack in `%APPDATA%\mypaper\icons` still replaces them by key; the bundled `mono` pack draws app
+  icons only. Every bitmap (tray icons, app icons, pack SVGs) is fetched at the exact device size
+  it is drawn (`Images::sized`: SVGs rasterized at that size, larger bitmaps area-averaged down)
+  and placed on whole pixels, so icons are crisp at every DPI and tray icons are evenly spaced.
+- **Dock.** Icons at `dock.size`; magnification as configured; a pressed icon sinks 3% and
+  darkens (the kit's press state); running dots in the padding below the icon (label for the
+  active app, secondary for the others, warning for attention, or `look.indicator` colours);
+  hairline dividers between kept and other apps and before the trash, as macOS draws them;
+  tooltips with the app's name. The taskbar style keeps Windows' washes.
+- **Menus** the bars open (dock, tray) and the desktop menu use the bar theme's `theme.tokens()`.
 
 CSS, gradient/image **surface fills**, noise, glow, neon and shaped corners are ignored with one
 warning per process. Image app icons are retained. There is no CSS renderer or DWM blur fallback.
@@ -521,7 +549,7 @@ There is no shell JSON transport or engine-side spring.
 
 `cargo check` / `cargo clippy -- -D warnings` target only bars, shell, core and ui.
 `cargo test` runs per crate. Shell tests render the same lists as the screen: six PNGs under
-`crates/shell/tests/golden/bars` (top/dock in liquid, mono and solid), alpha/click coverage for every body
+`crates/shell/tests/golden/bars` (top/dock in all five kit styles dark, and liquid light), alpha/click coverage for every body
 and hit, island click-through, minute-clock damage, dock edges/taskbar modules, magnification and
 preview clicks. The UI's separate process verifies no vendor GPU driver loads.
 

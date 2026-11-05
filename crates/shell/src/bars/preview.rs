@@ -1,9 +1,11 @@
-//! A native dock preview: software card frames, DWM's live thumbnails and typed window actions.
+//! A native dock preview: kit cards with a title and a close button over DWM's live thumbnails,
+//! and typed window actions.
 use super::look::Tokens;
 use anyhow::Result;
 use mypaper_bars::{apps::Item, preview::Previews};
 use mypaper_ui::{
-    DisplayList, Hit, Kind, Op, Point, Rect, Rgba, Role, Surface, SurfaceId, TextStyle, Ui,
+    Align, DisplayList, Frame, Insets, Interaction, Kind, Point, Rect, Rgba, Role, Surface,
+    SurfaceId, TextRole, Ui, icons::Icon,
 };
 
 pub struct Preview {
@@ -86,12 +88,13 @@ fn view_grid(
         (w * grid.cols as f32).ceil() as u32,
         (h * grid.rows as f32).ceil() as u32,
     );
-    let mut list = DisplayList::default();
-    list.ops.push(Op::Fill {
-        rect: Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32),
-        radius: tokens.radius * scale,
-        color: Rgba::HIT,
-    });
+    let input = Interaction::default();
+    let mut f = Frame::new(&mut ui.text, &tokens.theme, scale, &input);
+    let body = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
+    let radius = f.px(tokens.radius);
+    f.fill(body, radius, Rgba::HIT);
+    f.surface_shaped(body, radius, glass(tokens, scale, size).is_some());
+    let c = tokens.theme.color;
     for (i, window) in item
         .windows
         .iter()
@@ -100,72 +103,42 @@ fn view_grid(
         .take(grid.capacity)
     {
         let local = i - start;
-        let rect = Rect::new(
-            (local % grid.cols) as f32 * w + 4.0 * scale,
-            (local / grid.cols) as f32 * h + 4.0 * scale,
-            w - 8.0 * scale,
-            h - 8.0 * scale,
+        let cell = Rect::new(
+            (local % grid.cols) as f32 * w,
+            (local / grid.cols) as f32 * h,
+            w,
+            h,
+        )
+        .inset(Insets::all(f.px(4.0)));
+        f.card(cell);
+        // The title row above the live thumbnail (placed by `open_at` below it).
+        let (header, _) = cell.take_top(f.px(28.0), 0.0);
+        let (close, title) = header.take_right(header.height(), 0.0);
+        f.hit(
+            i as u32 * 2 + 1,
+            cell,
+            Role::Button,
+            &window.title,
+            true,
+            None,
         );
-        list.ops.extend([
-            Op::Fill {
-                rect,
-                radius: tokens.radius * scale,
-                color: Rgba::HIT,
-            },
-            Op::Fill {
-                rect,
-                radius: tokens.radius * scale,
-                color: if glass(tokens, scale, size).is_some() {
-                    tokens.fill.with_alpha(0.04)
-                } else {
-                    tokens.fill.with_alpha(0.96)
-                },
-            },
-        ]);
-        let mut title = window.title.clone();
-        let font = tokens.font.scaled(scale);
-        while title.chars().count() > 1
-            && ui.text.measure(&title, &font).0 > (rect.width() - 40.0 * scale).max(1.0)
-        {
-            title.pop();
-        }
-        let (tw, th) = ui.text.measure(&title, &font);
-        list.ops.push(Op::Text {
-            rect: Rect::new(rect.left + 8.0 * scale, rect.top + 5.0 * scale, tw, th),
-            text: title.into(),
-            style: font,
-            color: tokens.ink,
-        });
-        let close = Rect::new(
-            rect.right - 25.0 * scale,
-            rect.top,
-            25.0 * scale,
-            25.0 * scale,
+        f.text_in(
+            title.inset(Insets::xy(f.px(10.0), 0.0)),
+            &window.title,
+            TextRole::Subheadline,
+            c.label,
+            Align::Start,
         );
-        list.ops.push(Op::Text {
-            rect: close,
-            text: "×".into(),
-            style: TextStyle::new("Segoe UI", 16.0 * scale),
-            color: tokens.ink,
-        });
-        list.hits.push(Hit {
-            id: i as u32 * 2 + 1,
-            rect,
-            role: Role::Button,
-            label: window.title.clone().into(),
-            enabled: true,
-            checked: None,
-        });
-        list.hits.push(Hit {
-            id: i as u32 * 2 + 2,
-            rect: close,
-            role: Role::Button,
-            label: format!("Close {}", window.title).into(),
-            enabled: true,
-            checked: None,
-        });
+        f.icon_button(
+            i as u32 * 2 + 2,
+            close,
+            Icon::Close,
+            22.0,
+            &format!("Close {}", window.title),
+            false,
+        );
     }
-    (list, size)
+    (f.list, size)
 }
 impl Preview {
     pub fn open(

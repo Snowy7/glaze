@@ -555,30 +555,33 @@ impl Bars {
                 .filter(|b| b.hover == Some(hit) && !b.hidden)
                 && let Some(item) = b.frame.list.hits.iter().find(|h| h.id == hit)
             {
-                let font = b.tokens.font.scaled(b.scale());
                 let label: String = item.label.chars().take(160).collect();
-                let (w, h) = ui.text.measure(&label, &font);
-                let size = ((w + 20.0).ceil() as u32, (h + 12.0).ceil() as u32);
-                let body = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
                 let origin = b.origin();
                 let anchor = item.rect.offset(origin.0 as f32, origin.1 as f32);
                 let work = b.monitor.work;
-                let point = (
-                    ((anchor.left + anchor.right - size.0 as f32) / 2.0) as i32,
-                    if anchor.top > (work.y + work.height / 2) as f32 {
-                        anchor.top as i32 - size.1 as i32 - 8
-                    } else {
-                        anchor.bottom as i32 + 8
-                    },
+                let bounds = Rect::new(
+                    work.x as f32,
+                    work.y as f32,
+                    work.width as f32,
+                    work.height as f32,
                 );
-                let point = (
-                    point
-                        .0
-                        .clamp(work.x, (work.x + work.width - size.0 as i32).max(work.x)),
-                    point
-                        .1
-                        .clamp(work.y, (work.y + work.height - size.1 as i32).max(work.y)),
+                // The kit's tooltip, placed in screen px (below the item, or above it when
+                // there is no room), then cut out with its shadow as the popup.
+                let input = mypaper_ui::Interaction::default();
+                let mut f = mypaper_ui::Frame::new(&mut ui.text, &b.tokens.theme, b.scale(), &input);
+                let body = f.tooltip(anchor, &label, bounds);
+                let list = f.list;
+                let reach = list
+                    .ops
+                    .iter()
+                    .map(mypaper_ui::Op::bounds)
+                    .fold(body, Rect::union);
+                let (x, y) = (reach.left.floor(), reach.top.floor());
+                let size = (
+                    (reach.right.ceil() - x) as u32,
+                    (reach.bottom.ceil() - y) as u32,
                 );
+                let list = list.translated(-x, -y);
                 if self.tooltip.is_none() {
                     self.tooltip = mypaper_ui::Surface::new_deferred_accessibility(
                         mypaper_ui::Kind::Popup { activate: false },
@@ -589,23 +592,7 @@ impl Bars {
                 }
                 if let Some(tip) = &mut self.tooltip {
                     tip.set_click_through(true);
-                    let list = mypaper_ui::DisplayList {
-                        ops: vec![
-                            mypaper_ui::Op::Fill {
-                                rect: body,
-                                radius: 6.0,
-                                color: b.tokens.fill.with_alpha(0.98),
-                            },
-                            mypaper_ui::Op::Text {
-                                rect: Rect::new(10.0, 6.0, w, h),
-                                text: label.into(),
-                                style: font,
-                                color: b.tokens.ink,
-                            },
-                        ],
-                        ..Default::default()
-                    };
-                    if tip.present(ui, point, size, list).is_ok() {
+                    if tip.present(ui, (x as i32, y as i32), size, list).is_ok() {
                         tip.show();
                     }
                 }
@@ -1234,7 +1221,8 @@ impl Bars {
                             "Recent items and app actions",
                             Command::AppActions(Box::new((item.clone(), anchor, monitor.clone()))),
                         ));
-                        self.open_menu(ui, entries, point);
+                        let tokens = self.bars[index].tokens.menu(&ui.text);
+                        self.open_menu(ui, entries, point, &tokens);
                     }
                     _ => {}
                 }
@@ -1253,6 +1241,7 @@ impl Bars {
                     Entry::action("Empty Recycle Bin", Command::EmptyTrash),
                 ],
                 point,
+                &self.bars[index].tokens.menu(&ui.text),
             ),
             _ => {}
         }
@@ -1302,7 +1291,14 @@ impl Bars {
             self.dirty();
         }
     }
-    fn open_menu(&mut self, ui: &mut Ui, entries: Vec<Entry<Command>>, point: (i32, i32)) {
+    /// Opens the dock's menu at `point`, drawn with the bar's theme (`tokens`).
+    fn open_menu(
+        &mut self,
+        ui: &mut Ui,
+        entries: Vec<Entry<Command>>,
+        point: (i32, i32),
+        tokens: &mypaper_ui::Tokens,
+    ) {
         if self.menu.is_none() {
             self.menu = Menu::new("Dock commands").ok();
         }
@@ -1312,7 +1308,7 @@ impl Bars {
                 entries,
                 point,
                 screen_at(point.0, point.1),
-                &mypaper_ui::Tokens::default(),
+                tokens,
             );
         }
     }
@@ -1431,8 +1427,9 @@ impl Bars {
                         || (config.performance == config::Performance::Auto
                             && mypaper_desktop::on_battery());
                     let mut tokens = look::Tokens::resolve(look, &appearance, &self.system);
-                    if performance && let Some(material) = tokens.material.take() {
-                        tokens.fill = material.tint.with_alpha(0.88);
+                    // No glass on battery saver: the theme's own surface draws instead.
+                    if performance {
+                        tokens.material = None;
                     }
                     let mut bar = Bar::new(
                         kind,
@@ -1586,18 +1583,7 @@ impl Bars {
                 .as_ref()
                 .map_or_else(Default::default, |t| t.dir.clone()),
         );
-        self.appearance = loaded
-            .as_ref()
-            .and_then(|t| t.theme.bars.as_ref())
-            .and_then(|s| s.appearance.as_ref())
-            .cloned()
-            .unwrap_or_default();
-        if let Some(t) = &loaded
-            && matches!(self.appearance.accent, Some(mypaper_theme::Paint::Auto))
-            && let Some(snapshot) = mypaper_tweaks::palette::read().filter(|p| p.is_for(&t.dir))
-        {
-            self.appearance.accent = Some(mypaper_theme::Paint::Color(snapshot.palette.accent));
-        }
+        self.appearance = look::theme_appearance(loaded.as_ref());
         if let Some(t) = &loaded
             && let Ok(text) = std::fs::read_to_string(t.dir.join("theme.json"))
             && let Ok(value) = serde_json::from_str(&text)

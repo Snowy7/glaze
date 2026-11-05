@@ -16,7 +16,7 @@ use mypaper_bars::{
     events::Reservation,
 };
 use mypaper_desktop::{Monitor, Rect as DesktopRect};
-use mypaper_ui::{Glass, GlassMaterial, Kind, Op, Point, Rect, Role, Surface, SurfaceId, Ui};
+use mypaper_ui::{Glass, GlassMaterial, Kind, Point, Rect, Role, Surface, SurfaceId, Ui};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -424,21 +424,8 @@ impl Bar {
             self.focus = self
                 .focus
                 .filter(|id| self.frame.list.hits.iter().any(|h| h.id == *id));
+            // The view drew the kit's focus ring for it (keyboard focus only).
             self.frame.list.focus = self.focus;
-            if let Some(hit) = self
-                .frame
-                .list
-                .hits
-                .iter()
-                .find(|h| Some(h.id) == self.focus)
-            {
-                self.frame.list.ops.push(Op::Stroke {
-                    rect: hit.rect.inflate(-2.0 * scale),
-                    radius: 4.0 * scale,
-                    width: 2.0 * scale,
-                    color: self.tokens.accent,
-                });
-            }
             self.dirty = false;
         }
         if rebuilt || previous_slide != self.slide.value || self.presentation_dirty {

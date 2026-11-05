@@ -2,7 +2,7 @@
 use super::*;
 use mypaper_bars::{
     apps::{Item, ItemWindow},
-    style::NativeStyle,
+    style::{Family, NativeStyle, Scheme},
 };
 use mypaper_ui::{Image, Op, Rgba, render};
 
@@ -26,7 +26,7 @@ fn studio_fields_reach_the_shared_preview_and_native_bar_views() {
         if text.as_ref() == "Studio fields" && style.weight == 800 && style.size == 18.0
         && *color == Rgba::rgb8([0x11,0x22,0x33], 1.0))));
     assert!(top.list.ops.iter().any(|op| matches!(op, Op::Stroke { width, color, .. }
-        if *width == 3.0 && *color == tokens.rim)), "a width-only module edge follows the bar");
+        if *width == 3.0 && *color == tokens.theme.color.separator)), "a width-only module edge follows the bar");
     let dock = shared::dock(&config, &model, &apps(), &tokens, 1.0, (1280, 80), &[], &[], &mut ui, &mut images, None);
     let index = dock.targets.iter().position(|target| matches!(target, shared::Target::Dock(_))).unwrap();
     let hit = dock.list.hits.iter().find(|hit| hit.id == index as u32 + 1).unwrap();
@@ -299,15 +299,22 @@ fn bars_match_goldens_in_each_style_and_keep_glass_bodies_hit_testable() {
     let mut ui = Ui::new().unwrap();
     let model = model();
     let golden = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/bars");
-    for (name, style) in [
-        ("liquid", NativeStyle::Liquid),
-        ("mono", NativeStyle::Mono),
-        ("solid", NativeStyle::Solid),
+    // Every kit style through the bar's look (look.rs), dark; and liquid light.
+    for (name, style, family, scheme) in [
+        ("liquid", NativeStyle::Liquid, Family::Macos, Scheme::Dark),
+        ("liquid-light", NativeStyle::Liquid, Family::Macos, Scheme::Light),
+        ("oneui", NativeStyle::Liquid, Family::Material, Scheme::Dark),
+        ("fluent", NativeStyle::Liquid, Family::Fluent, Scheme::Dark),
+        ("mono", NativeStyle::Mono, Family::Mono, Scheme::Dark),
+        ("solid", NativeStyle::Solid, Family::Macos, Scheme::Dark),
     ] {
-        let mut config = BarsConfig::parse(r#"{"top":{"layout":"floating","left":["start","app"],"center":["clock"],"right":["volume","quick","power"]}}"#).unwrap();
+        let mut config = BarsConfig::parse(r#"{"top":{"layout":"floating","left":["start","workspaces","app"],"center":["clock"],"right":["network","volume","quick","power"]},"dock":{"extras":["trash"]}}"#).unwrap();
         config.resolve(Vec::new);
-        config.top.look.style = Some(style);
-        config.dock.look.style = Some(style);
+        for look in [&mut config.top.look, &mut config.dock.look] {
+            look.style = Some(style);
+            look.family = Some(family);
+            look.scheme = Some(scheme);
+        }
         let tokens = look::Tokens::resolve(
             &config.top.look,
             &Appearance::default(),

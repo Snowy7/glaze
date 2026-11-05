@@ -82,6 +82,9 @@ struct Pending {
 /// The running desktop menu; dropping it removes the hook and destroys the menu's windows.
 pub struct DesktopMenu {
     settings: Settings,
+    /// The menu's look: the top bar's theme (the kit's menu tokens), read on the first open after
+    /// the settings change, so the desktop, dock and tray menus and the bar look alike.
+    themed: Option<Tokens>,
     menu: Menu<Command>,
     uia: Option<IUIAutomation>,
     hook: HookThread,
@@ -111,6 +114,7 @@ impl DesktopMenu {
             .ok();
         let mut menu = Self {
             settings,
+            themed: None,
             menu: Menu::new("mypaper desktop menu")?,
             uia,
             hook: HookThread::spawn()?,
@@ -132,6 +136,7 @@ impl DesktopMenu {
     /// New items or look, used from the next time the menu opens.
     pub fn update(&mut self, settings: Settings) {
         self.settings = settings;
+        self.themed = None;
     }
 
     /// An inbox message for the menu (or a `WM_FACT` from the control window).
@@ -278,12 +283,20 @@ impl DesktopMenu {
         }
         MENU_OPEN.store(true, Ordering::Relaxed);
         let screen = screen_at(at.0, at.1);
+        let scale = self.settings.tokens.scale;
+        let base = self
+            .themed
+            .get_or_insert_with(|| Tokens {
+                scale,
+                ..crate::bars::look::menu_tokens(&ui.text)
+            })
+            .clone();
         // No outlines on glass: the engine draws its one edge and its shadow.
-        let glass = self.settings.tokens.glass.is_some() || mypaper_ui::glass::style().is_some();
+        let glass = base.glass.is_some() || mypaper_ui::glass::style().is_some();
         let tokens = Tokens {
-            border: self.settings.tokens.border && !glass,
-            shadow: self.settings.tokens.shadow && !glass,
-            ..self.settings.tokens.clone()
+            border: base.border && !glass,
+            shadow: base.shadow && !glass,
+            ..base
         };
         if let Err(e) = self.menu.open(ui, items, at, screen, &tokens) {
             log::warn!("desktop menu: {e:#}");

@@ -256,9 +256,16 @@ mod tests {
     #[test]
     fn the_default_menu_matches_its_golden_images() {
         let mut ui = Ui::new().unwrap();
+        // The bar theme's tokens, as the shell opens it (without the engine's glass here).
+        let theme = mypaper_ui::Theme::new(
+            mypaper_ui::Style::Liquid,
+            mypaper_ui::Scheme::Dark,
+            mypaper_ui::theme::SYSTEM_BLUE,
+        );
         let tokens = Tokens {
             icons: icons::system_family(&ui.text),
-            ..Tokens::default()
+            glass: None,
+            ..theme.tokens()
         };
         let state = ViewState {
             icon_size: Some(IconSize::Medium),

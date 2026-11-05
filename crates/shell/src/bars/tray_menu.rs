@@ -59,9 +59,8 @@ impl Host {
             self.finish(0);
             self.menu.close();
             self.caller = Some((caller, request.nonce));
-            let tokens = mypaper_config::Config::load()
-                .map(|c| crate::look::tokens(&c.theme, &ui.text))
-                .unwrap_or_default();
+            // The bar's theme, as the dock's and the desktop's menus.
+            let tokens = super::look::menu_tokens(&ui.text);
             if let Err(e) = self.menu.open(
                 ui,
                 entries(request.items),
