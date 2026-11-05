@@ -326,3 +326,44 @@ fn window_events_reach_a_subscribed_plugin() {
     });
     assert_eq!(caption.as_deref(), Some("Focused: notepad.exe"));
 }
+
+/// `cargo test --release -p mypaper-plugins live_t3_event_costs -- --ignored --nocapture`, with
+/// T3 Code running: the real `plugins/t3` against the local server (read-only: it subscribes and
+/// redraws), printing what each event cost, the baseline decode included, and a click-style
+/// action (a project pick, which only redraws) after it. Nothing is launched.
+#[test]
+#[ignore]
+fn live_t3_event_costs() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/t3");
+    let scratch = std::env::temp_dir().join(format!("mypaper-plugins-live-t3-{}", std::process::id()));
+    let rt = Runtime::new(scratch.join("cache"), scratch.join("data")).unwrap();
+    let (tx, rx) = mpsc::channel::<Input>();
+    let mut host = Host::new(rt, Vec::new(), tx);
+    let open = HostMsg::Open { plugin: "t3".into(), dir: dir.to_string_lossy().into_owned(), instance: "t1".into(), face: "running".into(), size: SizeClass::Large, settings: "{}".into() };
+    host.on_host(open, Instant::now());
+    let mut slowest = Duration::ZERO;
+    let until = Instant::now() + Duration::from_secs(20);
+    while let Ok(input) = rx.recv_timeout(until.saturating_duration_since(Instant::now())) {
+        let kind = match &input {
+            Input::Socket { event: crate::runtime::mypaper::plugin::websocket::SocketEvent::Message((_, m)), .. } => format!("socket message {} KiB", match m { crate::runtime::mypaper::plugin::websocket::Message::Text(t) => t.len(), crate::runtime::mypaper::plugin::websocket::Message::Binary(b) => b.len() } / 1024),
+            Input::Socket { .. } => "socket open/close".into(),
+            Input::Http { .. } | Input::PipeHttp { .. } => "http/process reply".into(),
+            _ => "other".into(),
+        };
+        let (before, started) = (host.memory("t3").unwrap_or(0), Instant::now());
+        host.on_input(input, Instant::now());
+        slowest = slowest.max(started.elapsed());
+        let after = host.memory("t3").unwrap_or(0);
+        println!("{kind}: {:.1} ms, linear memory {:.2} -> {:.2} MiB", started.elapsed().as_secs_f64() * 1000.0, before as f64 / 1048576.0, after as f64 / 1048576.0);
+    }
+    let started = Instant::now();
+    host.on_host(HostMsg::Action { instance: "t1".into(), action: "project".into(), value: Some("none".into()) }, Instant::now());
+    let click = started.elapsed();
+    let out = frames(&mut host);
+    let stopped = out.iter().any(|f| matches!(f, HelperMsg::Status { status: Status::Stopped(_) | Status::Restarting(_), .. }));
+    println!("slowest event {:.1} ms; click {:.2} ms; linear memory {:.2} MiB; stopped/restarting: {stopped}",
+        slowest.as_secs_f64() * 1000.0, click.as_secs_f64() * 1000.0, host.memory("t3").unwrap_or(0) as f64 / 1048576.0);
+    assert!(!stopped);
+    drop(host);
+    let _ = std::fs::remove_dir_all(scratch);
+}

@@ -187,8 +187,15 @@ impl T3 {
                     changed = true;
                 }
                 ("Exit", "metadata") => {
-                    let exit: Value = frame.exit.and_then(|e| serde_json::from_str(e.get()).ok()).unwrap_or_default();
-                    if let Ok(metadata) = serde_json::from_value::<Metadata>(exit["value"].clone()) {
+                    // `server.getConfig` is ~2.6 MiB (providers, models, settings, skills). Decode it
+                    // straight into `Metadata`: a `Value` tree of it peaked at ~16 MiB of linear
+                    // memory, which the guest never gives back.
+                    #[derive(serde::Deserialize)]
+                    struct Exit {
+                        value: Option<Metadata>,
+                    }
+                    let exit = frame.exit.and_then(|e| serde_json::from_str::<Exit>(e.get()).ok());
+                    if let Some(metadata) = exit.and_then(|e| e.value) {
                         self.metadata = Metadata { usage_limit_sources: std::mem::take(&mut self.metadata.usage_limit_sources), ..metadata };
                         self.state.configure(&self.metadata);
                     }
