@@ -1,0 +1,17 @@
+component_bytes=1557630
+aot_cache_bytes=5974424
+cold_load_ms=1746.895
+init_linear_bytes=1507328
+warm_load_ms=1.745
+open_linear_bytes=1507328
+second_instance_private_delta_bytes=1515520
+second_instance_linear_bytes=1507328
+event_p50_us=27.700
+event_p99_us=92.900
+event_mean_runtime_us=31.345
+after_1000_events_linear_bytes=1638400
+event_mean_thread_cpu_us=37.500
+after_11000_events_linear_bytes=1638400
+spin_trap_ms=49.627
+fresh_warm_component_ws_delta_bytes=2805760
+fresh_warm_component_private_delta_bytes=2080768

@@ -9,12 +9,13 @@ use runtime::{Effect, Manifest, Runtime, exports::mypaper::plugin::lifecycle::{A
 use runtime::mypaper::plugin::types::SizeClass;
 use windows::Win32::{Foundation::FILETIME, System::{ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX}, Threading::{GetCurrentProcess, GetCurrentThread, GetThreadTimes}}};
 
-fn private_bytes() -> usize {
+fn process_memory() -> (usize, usize) {
     let mut counters = PROCESS_MEMORY_COUNTERS_EX { cb: size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32, ..Default::default() };
     // SAFETY: correctly sized output structure and the current process pseudo handle.
     unsafe { GetProcessMemoryInfo(GetCurrentProcess(), (&raw mut counters).cast(), counters.cb).unwrap(); }
-    counters.PrivateUsage
+    (counters.WorkingSetSize, counters.PrivateUsage)
 }
+fn private_bytes() -> usize { process_memory().1 }
 
 fn thread_cpu_ns() -> u64 {
     let (mut created, mut exited, mut kernel, mut user) = (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());
@@ -25,6 +26,21 @@ fn thread_cpu_ns() -> u64 {
 }
 
 fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).is_some_and(|arg| arg == "--warm-memory") {
+        let dir = PathBuf::from(&args[3]);
+        let manifest = Manifest::load(&dir)?;
+        let rt = Runtime::new(PathBuf::from(&args[2]), PathBuf::from(&args[2]).join("data"))?;
+        let before = process_memory();
+        let (component, warm) = rt.component(&manifest, &dir)?;
+        ensure!(warm, "memory measurement must use an existing AOT cache");
+        let mut instance = rt.instantiate(&manifest, &component, None)?;
+        instance.event(&Event::Open(FaceOpen { instance: "warm-probe".into(), face: "main".into(), size: SizeClass::Medium, settings: "{}".into() }))?;
+        let after = process_memory();
+        println!("fresh_warm_component_ws_delta_bytes={}", after.0.saturating_sub(before.0));
+        println!("fresh_warm_component_private_delta_bytes={}", after.1.saturating_sub(before.1));
+        return Ok(());
+    }
     let dir = PathBuf::from(std::env::args().nth(1).expect("plugin directory"));
     let manifest = Manifest::load(&dir)?;
     let scratch = std::env::temp_dir().join(format!("mypaper-ts-probe-{}", std::process::id()));
@@ -90,5 +106,12 @@ fn measure(dir: PathBuf, manifest: Manifest, scratch: &std::path::Path) -> Resul
     let spin = restored.event(&Event::Action(Action { instance: "probe-1".into(), action: "spin".into(), value: None }));
     ensure!(spin.is_err(), "infinite loop must trap");
     println!("spin_trap_ms={:.3}", started.elapsed().as_secs_f64() * 1000.0);
+    // A separate process avoids attributing retained install-time compiler allocations to a
+    // warm active plugin. This includes the unique component mapping, rather than just a
+    // second instance of an already mapped component.
+    let output = std::process::Command::new(std::env::current_exe()?)
+        .arg("--warm-memory").arg(scratch.join("cache")).arg(&dir).output()?;
+    ensure!(output.status.success(), "warm memory probe: {}", String::from_utf8_lossy(&output.stderr));
+    print!("{}", String::from_utf8(output.stdout)?);
     Ok(())
 }

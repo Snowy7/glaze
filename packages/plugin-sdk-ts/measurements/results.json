@@ -1,0 +1,380 @@
+{
+  "measuredAt": "2026-11-05T20:47:08.668Z",
+  "revision": "8dfb5fdd12f67e0e30a5afe8c9cc63c7bfa3fe88",
+  "platform": "win32",
+  "os": "10.0.26300",
+  "cpu": "AMD Ryzen 7 7800X3D 8-Core Processor           ",
+  "node": "v24.14.0",
+  "runs": 3,
+  "probeOverrides": {
+    "maxCoreInstanceBytes": 524288,
+    "maxComponentInstanceBytes": 524288,
+    "linearMemoryCapBytes": 33554432
+  },
+  "fixtures": {
+    "hello": {
+      "sourceRevision": "8dfb5fdd12f67e0e30a5afe8c9cc63c7bfa3fe88",
+      "sha256": "c8f00248d54132d53591c8802020651b2f1da37e79a8beed01284643feba7c74",
+      "samples": [
+        {
+          "component_bytes": 110026,
+          "aot_cache_bytes": 440520,
+          "cold_load_ms": 138.694,
+          "init_linear_bytes": 1114112,
+          "warm_load_ms": 0.601,
+          "open_linear_bytes": 1114112,
+          "second_instance_private_delta_bytes": 1122304,
+          "second_instance_linear_bytes": 1114112,
+          "event_p50_us": 2.2,
+          "event_p99_us": 2.6,
+          "event_mean_runtime_us": 2.158,
+          "after_1000_events_linear_bytes": 1114112,
+          "event_mean_thread_cpu_us": 3.125,
+          "after_11000_events_linear_bytes": 1114112,
+          "spin_trap_ms": 51.652
+        },
+        {
+          "component_bytes": 110026,
+          "aot_cache_bytes": 440520,
+          "cold_load_ms": 120.579,
+          "init_linear_bytes": 1114112,
+          "warm_load_ms": 0.57,
+          "open_linear_bytes": 1114112,
+          "second_instance_private_delta_bytes": 1191936,
+          "second_instance_linear_bytes": 1114112,
+          "event_p50_us": 3.8,
+          "event_p99_us": 5.2,
+          "event_mean_runtime_us": 3.76,
+          "after_1000_events_linear_bytes": 1114112,
+          "event_mean_thread_cpu_us": 3.125,
+          "after_11000_events_linear_bytes": 1114112,
+          "spin_trap_ms": 50.848
+        },
+        {
+          "component_bytes": 110026,
+          "aot_cache_bytes": 440520,
+          "cold_load_ms": 131.199,
+          "init_linear_bytes": 1114112,
+          "warm_load_ms": 0.705,
+          "open_linear_bytes": 1114112,
+          "second_instance_private_delta_bytes": 1118208,
+          "second_instance_linear_bytes": 1114112,
+          "event_p50_us": 2.2,
+          "event_p99_us": 4.1,
+          "event_mean_runtime_us": 2.744,
+          "after_1000_events_linear_bytes": 1114112,
+          "event_mean_thread_cpu_us": 3.125,
+          "after_11000_events_linear_bytes": 1114112,
+          "spin_trap_ms": 51.959
+        }
+      ],
+      "median": {
+        "component_bytes": 110026,
+        "aot_cache_bytes": 440520,
+        "cold_load_ms": 131.199,
+        "init_linear_bytes": 1114112,
+        "warm_load_ms": 0.601,
+        "open_linear_bytes": 1114112,
+        "second_instance_private_delta_bytes": 1122304,
+        "second_instance_linear_bytes": 1114112,
+        "event_p50_us": 2.2,
+        "event_p99_us": 4.1,
+        "event_mean_runtime_us": 2.744,
+        "after_1000_events_linear_bytes": 1114112,
+        "event_mean_thread_cpu_us": 3.125,
+        "after_11000_events_linear_bytes": 1114112,
+        "spin_trap_ms": 51.652
+      },
+      "warmMemoryCheck": {
+        "workingSetBytes": 454656,
+        "privateBytes": 1404928
+      }
+    },
+    "starling": {
+      "sha256": "7c53eed675cdf440772fec48c4f9f9f7dd7b4f7c0fc391aef70441f76c63bdb0",
+      "samples": [
+        {
+          "component_bytes": 12625112,
+          "aot_cache_bytes": 47846640,
+          "cold_load_ms": 18440.414,
+          "init_linear_bytes": 9502720,
+          "warm_load_ms": 13.313,
+          "open_linear_bytes": 9502720,
+          "second_instance_private_delta_bytes": 9523200,
+          "second_instance_linear_bytes": 9502720,
+          "event_p50_us": 78.5,
+          "event_p99_us": 386.7,
+          "event_mean_runtime_us": 92.173,
+          "after_1000_events_linear_bytes": 9502720,
+          "event_mean_thread_cpu_us": 85.938,
+          "after_11000_events_linear_bytes": 13697024,
+          "spin_trap_ms": 54.033
+        },
+        {
+          "component_bytes": 12625112,
+          "aot_cache_bytes": 47846640,
+          "cold_load_ms": 29818.263,
+          "init_linear_bytes": 9502720,
+          "warm_load_ms": 150.164,
+          "open_linear_bytes": 9502720,
+          "second_instance_private_delta_bytes": 9654272,
+          "second_instance_linear_bytes": 9502720,
+          "event_p50_us": 91.7,
+          "event_p99_us": 16385,
+          "event_mean_runtime_us": 576.764,
+          "after_1000_events_linear_bytes": 9502720,
+          "event_mean_thread_cpu_us": 85.938,
+          "after_11000_events_linear_bytes": 13697024,
+          "spin_trap_ms": 256.454
+        },
+        {
+          "component_bytes": 12625112,
+          "aot_cache_bytes": 47846640,
+          "cold_load_ms": 34771.148,
+          "init_linear_bytes": 9502720,
+          "warm_load_ms": 17.524,
+          "open_linear_bytes": 9502720,
+          "second_instance_private_delta_bytes": 9736192,
+          "second_instance_linear_bytes": 9502720,
+          "event_p50_us": 85.4,
+          "event_p99_us": 1138.5,
+          "event_mean_runtime_us": 114.209,
+          "after_1000_events_linear_bytes": 9502720,
+          "event_mean_thread_cpu_us": 101.562,
+          "after_11000_events_linear_bytes": 13697024,
+          "spin_trap_ms": 54.137
+        }
+      ],
+      "median": {
+        "component_bytes": 12625112,
+        "aot_cache_bytes": 47846640,
+        "cold_load_ms": 29818.263,
+        "init_linear_bytes": 9502720,
+        "warm_load_ms": 17.524,
+        "open_linear_bytes": 9502720,
+        "second_instance_private_delta_bytes": 9654272,
+        "second_instance_linear_bytes": 9502720,
+        "event_p50_us": 85.4,
+        "event_p99_us": 1138.5,
+        "event_mean_runtime_us": 114.209,
+        "after_1000_events_linear_bytes": 9502720,
+        "event_mean_thread_cpu_us": 85.938,
+        "after_11000_events_linear_bytes": 13697024,
+        "spin_trap_ms": 54.137
+      },
+      "warmMemoryCheck": {
+        "workingSetBytes": 20029440,
+        "privateBytes": 10530816
+      }
+    },
+    "quickjs-minimal": {
+      "sha256": "058a3654f47202092c602253733235d8ec116432a428d7dda91e316b0a5ffa82",
+      "samples": [
+        {
+          "component_bytes": 1510844,
+          "aot_cache_bytes": 5908888,
+          "cold_load_ms": 2835.641,
+          "init_linear_bytes": 1441792,
+          "warm_load_ms": 4.034,
+          "open_linear_bytes": 1441792,
+          "second_instance_private_delta_bytes": 1445888,
+          "second_instance_linear_bytes": 1441792,
+          "event_p50_us": 20.8,
+          "event_p99_us": 204.2,
+          "event_mean_runtime_us": 29.806,
+          "after_1000_events_linear_bytes": 1441792,
+          "event_mean_thread_cpu_us": 23.438,
+          "after_11000_events_linear_bytes": 1441792,
+          "spin_trap_ms": 54.74
+        },
+        {
+          "component_bytes": 1510844,
+          "aot_cache_bytes": 5908888,
+          "cold_load_ms": 2780.977,
+          "init_linear_bytes": 1441792,
+          "warm_load_ms": 4.084,
+          "open_linear_bytes": 1441792,
+          "second_instance_private_delta_bytes": 1445888,
+          "second_instance_linear_bytes": 1441792,
+          "event_p50_us": 19.6,
+          "event_p99_us": 95.8,
+          "event_mean_runtime_us": 26.448,
+          "after_1000_events_linear_bytes": 1441792,
+          "event_mean_thread_cpu_us": 28.125,
+          "after_11000_events_linear_bytes": 1441792,
+          "spin_trap_ms": 54.248
+        },
+        {
+          "component_bytes": 1510844,
+          "aot_cache_bytes": 5908888,
+          "cold_load_ms": 2626.358,
+          "init_linear_bytes": 1441792,
+          "warm_load_ms": 2.968,
+          "open_linear_bytes": 1441792,
+          "second_instance_private_delta_bytes": 1536000,
+          "second_instance_linear_bytes": 1441792,
+          "event_p50_us": 20,
+          "event_p99_us": 210.6,
+          "event_mean_runtime_us": 25.637,
+          "after_1000_events_linear_bytes": 1441792,
+          "event_mean_thread_cpu_us": 21.875,
+          "after_11000_events_linear_bytes": 1441792,
+          "spin_trap_ms": 57.349
+        }
+      ],
+      "median": {
+        "component_bytes": 1510844,
+        "aot_cache_bytes": 5908888,
+        "cold_load_ms": 2780.977,
+        "init_linear_bytes": 1441792,
+        "warm_load_ms": 4.034,
+        "open_linear_bytes": 1441792,
+        "second_instance_private_delta_bytes": 1445888,
+        "second_instance_linear_bytes": 1441792,
+        "event_p50_us": 20,
+        "event_p99_us": 204.2,
+        "event_mean_runtime_us": 26.448,
+        "after_1000_events_linear_bytes": 1441792,
+        "event_mean_thread_cpu_us": 23.438,
+        "after_11000_events_linear_bytes": 1441792,
+        "spin_trap_ms": 54.74
+      },
+      "warmMemoryCheck": {
+        "workingSetBytes": 2420736,
+        "privateBytes": 2007040
+      }
+    },
+    "quickjs-sdk": {
+      "sha256": "471a346e4fe7d89846dc9bb5093c3376790e085b07cd239319d9da51e60bea85",
+      "samples": [
+        {
+          "component_bytes": 1557630,
+          "aot_cache_bytes": 5974424,
+          "cold_load_ms": 2549.667,
+          "init_linear_bytes": 1507328,
+          "warm_load_ms": 2.734,
+          "open_linear_bytes": 1507328,
+          "second_instance_private_delta_bytes": 1593344,
+          "second_instance_linear_bytes": 1507328,
+          "event_p50_us": 55.2,
+          "event_p99_us": 295.2,
+          "event_mean_runtime_us": 79.263,
+          "after_1000_events_linear_bytes": 1638400,
+          "event_mean_thread_cpu_us": 57.812,
+          "after_11000_events_linear_bytes": 1638400,
+          "spin_trap_ms": 54.499
+        },
+        {
+          "component_bytes": 1557630,
+          "aot_cache_bytes": 5974424,
+          "cold_load_ms": 2579.276,
+          "init_linear_bytes": 1507328,
+          "warm_load_ms": 2.664,
+          "open_linear_bytes": 1507328,
+          "second_instance_private_delta_bytes": 1589248,
+          "second_instance_linear_bytes": 1507328,
+          "event_p50_us": 48.9,
+          "event_p99_us": 301.4,
+          "event_mean_runtime_us": 75.022,
+          "after_1000_events_linear_bytes": 1638400,
+          "event_mean_thread_cpu_us": 50,
+          "after_11000_events_linear_bytes": 1638400,
+          "spin_trap_ms": 57.239
+        },
+        {
+          "component_bytes": 1557630,
+          "aot_cache_bytes": 5974424,
+          "cold_load_ms": 2629.744,
+          "init_linear_bytes": 1507328,
+          "warm_load_ms": 2.715,
+          "open_linear_bytes": 1507328,
+          "second_instance_private_delta_bytes": 1515520,
+          "second_instance_linear_bytes": 1507328,
+          "event_p50_us": 54.5,
+          "event_p99_us": 200.5,
+          "event_mean_runtime_us": 73.524,
+          "after_1000_events_linear_bytes": 1638400,
+          "event_mean_thread_cpu_us": 54.688,
+          "after_11000_events_linear_bytes": 1638400,
+          "spin_trap_ms": 49.754
+        }
+      ],
+      "median": {
+        "component_bytes": 1557630,
+        "aot_cache_bytes": 5974424,
+        "cold_load_ms": 2579.276,
+        "init_linear_bytes": 1507328,
+        "warm_load_ms": 2.715,
+        "open_linear_bytes": 1507328,
+        "second_instance_private_delta_bytes": 1589248,
+        "second_instance_linear_bytes": 1507328,
+        "event_p50_us": 54.5,
+        "event_p99_us": 295.2,
+        "event_mean_runtime_us": 75.022,
+        "after_1000_events_linear_bytes": 1638400,
+        "event_mean_thread_cpu_us": 54.688,
+        "after_11000_events_linear_bytes": 1638400,
+        "spin_trap_ms": 54.499
+      },
+      "warmMemoryCheck": {
+        "workingSetBytes": 2805760,
+        "privateBytes": 2080768
+      }
+    },
+    "abi": {
+      "sha256": "a04e55490cc8a83590a3b440ce41006f94617ace0070efa62c667b8ca7ac357b",
+      "samples": [
+        {
+          "component_bytes": 1575607,
+          "aot_cache_bytes": 5978520,
+          "cold_load_ms": 2352.292,
+          "init_linear_bytes": 1507328,
+          "warm_load_ms": 3.678,
+          "open_linear_bytes": 1507328,
+          "second_instance_private_delta_bytes": 1511424,
+          "second_instance_linear_bytes": 1507328,
+          "event_p50_us": 31.8,
+          "event_p99_us": 83,
+          "event_mean_runtime_us": 34.169,
+          "after_1000_events_linear_bytes": 1638400,
+          "event_mean_thread_cpu_us": 34.375,
+          "after_11000_events_linear_bytes": 1638400,
+          "spin_trap_ms": 52.334
+        }
+      ],
+      "median": {
+        "component_bytes": 1575607,
+        "aot_cache_bytes": 5978520,
+        "cold_load_ms": 2352.292,
+        "init_linear_bytes": 1507328,
+        "warm_load_ms": 3.678,
+        "open_linear_bytes": 1507328,
+        "second_instance_private_delta_bytes": 1511424,
+        "second_instance_linear_bytes": 1507328,
+        "event_p50_us": 31.8,
+        "event_p99_us": 83,
+        "event_mean_runtime_us": 34.169,
+        "after_1000_events_linear_bytes": 1638400,
+        "event_mean_thread_cpu_us": 34.375,
+        "after_11000_events_linear_bytes": 1638400,
+        "spin_trap_ms": 52.334
+      }
+    }
+  },
+  "production": {
+    "starling": {
+      "exitCode": 1,
+      "stdout": "| measure | value |\n|---|---|\n| process before the engine (WS / private) | 8.7 / 1.3 MiB |\n| engine + linker + ticker | 0.4 ms, +0.5 MiB WS / +3.2 MiB private |\n",
+      "stderr": "Error: module instance size does not fit in pooling allocator requirements\n\nCaused by:\n    instance allocation for this module requires 203212 bytes which exceeds the configured maximum of 131072 bytes; breakdown of allocation requirement:\n    \n     * 99.36% - 201920 bytes - module functions\n    \n"
+    },
+    "quickjs-sdk": {
+      "exitCode": 0,
+      "stdout": "| measure | value |\n|---|---|\n| process before the engine (WS / private) | 8.7 / 1.3 MiB |\n| engine + linker + ticker | 0.4 ms, +0.4 MiB WS / +3.2 MiB private |\n| quickjs-sdk: cold load (AOT compile + instantiate + init) | 1831.9 ms |\n| quickjs-sdk: warm load (cached .cwasm + instantiate + init) | 1.88 ms |\n| quickjs-sdk: active (linear memory / process private delta) | 1.44 MiB / +1.70 MiB |\n| process at the end (WS / private) | 19.7 / 9.8 MiB |\n",
+      "stderr": "[2026-11-05T20:49:23Z INFO  mypaper_plugins::host] plugin quickjs-sdk loaded\n"
+    }
+  },
+  "notes": [
+    "Rust hello was rebuilt from the pinned source after another agent overwrote the shared prebuilt artifact.",
+    "Other agents were active; load and wall-event timing samples include shared-machine contention."
+  ]
+}

@@ -9,7 +9,7 @@ import { cpus, release } from 'node:os';
 
 const sdk = new URL('../', import.meta.url);
 const { values } = parseArgs({ options: {
-  'rust-component': { type: 'string', default: '../../plugins/hello/hello.wasm' },
+  'rust-component': { type: 'string' },
   runs: { type: 'string', default: '3' },
 } });
 const runs = Number(values.runs);
@@ -26,6 +26,9 @@ function check(program, args, options) {
 }
 const revision = (await readFile(new URL('bench/BASELINE', sdk), 'utf8')).trim();
 check(process.execPath, ['bench/prepare.mjs', revision]);
+if (!values['rust-component']) {
+  check('cargo', ['build', '--release', '--locked', '--target', 'wasm32-wasip2', '--manifest-path', 'bench/.source/hello/Cargo.toml', '--target-dir', 'bench/target/guest']);
+}
 check('cargo', ['build', '--release', '--locked', '--manifest-path', 'bench/Cargo.toml', '--target-dir', 'bench/target'], {
   env: { ...process.env, MYPAPER_PROBE_MEMORY_MB: '32' },
 });
@@ -45,7 +48,7 @@ for (const fixture of fixtures) {
   if (fixture.source) {
     check(process.execPath, ['scripts/build.mjs', fixture.source, '-o', `measurements/stock/${fixture.id}/${fixture.id}.wasm`, '--backend', fixture.backend, ...(fixture.backend === 'starlingmonkey' ? ['--allow-high-memory'] : [])]);
   } else {
-    await cp(resolve(fileURLToPath(sdk), values['rust-component']), new URL('hello.wasm', folder));
+    await cp(resolve(fileURLToPath(sdk), values['rust-component'] ?? 'bench/target/guest/wasm32-wasip2/release/hello.wasm'), new URL('hello.wasm', folder));
   }
 }
 const data = {
