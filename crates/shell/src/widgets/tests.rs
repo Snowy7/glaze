@@ -111,6 +111,123 @@ fn now() -> Stamp {
 }
 
 #[test]
+#[ignore = "compares real meter repaint strategies under the desktop lock"]
+fn profile_system_repaint_cost() {
+    use windows::Win32::{
+        Foundation::FILETIME,
+        System::Threading::{GetCurrentProcess, GetProcessTimes},
+    };
+    let busy = || {
+        let (mut a, mut b, mut k, mut u) = (
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+            FILETIME::default(),
+        );
+        // SAFETY: read-only accounting of this test process into valid outputs.
+        unsafe { GetProcessTimes(GetCurrentProcess(), &mut a, &mut b, &mut k, &mut u).unwrap() };
+        let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
+        ticks(k) + ticks(u)
+    };
+    let root = temp("meter-repaint-cost");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut ui = Ui::new().unwrap();
+    let mut m = fixture("system-monitor", root.clone());
+    m.placed.appearance.insert("style".into(), json!("liquid"));
+    let tokens = tokens(&m.placed.appearance);
+    let size = (m.placed.size[0] * 96 - 8, m.placed.size[1] * 96 - 8);
+    let frames: Vec<_> = (0..60)
+        .map(|i| {
+            let stats = m.stats.as_mut().unwrap();
+            stats.cpu = (i % 12) as f64;
+            stats.gpu = Some((17 + i % 7) as f64);
+            stats.net = Some(mypaper_widgets::stats::Net {
+                down: (i % 8) as f64 * 1000.0,
+                up: (i % 5) as f64 * 1000.0,
+            });
+            view::view(
+                &m,
+                &tokens,
+                view::Frame {
+                    size,
+                    scale: 1.0,
+                    now: now(),
+                    instant: Instant::now(),
+                    editing: false,
+                },
+                &mut ui.text,
+            )
+        })
+        .collect();
+    for sparse in [false, true] {
+        let mut surface = Surface::new(
+            Kind::Popup { activate: false },
+            "Widget repaint probe",
+            Role::Pane,
+        )
+        .unwrap();
+        for pass in 0..2 {
+            let count = if pass == 0 { 120 } else { 1000 };
+            let at = Instant::now();
+            let before = busy();
+            for i in 0..count {
+                let list = frames[i % frames.len()].clone();
+                if sparse {
+                    surface.present_sparse(&mut ui, (0, 0), size, list).unwrap();
+                } else {
+                    surface.present(&mut ui, (0, 0), size, list).unwrap();
+                }
+            }
+            if pass != 0 {
+                println!(
+                    "meter sparse={sparse} wall_us={} cpu_us={}",
+                    at.elapsed().as_micros() / count as u128,
+                    (busy() - before) / (count as u64 * 10)
+                );
+            }
+        }
+    }
+    for capacity in [64, 192] {
+        let mut ui = Ui::new().unwrap();
+        ui.text.set_capacity(capacity);
+        for pass in 0..2 {
+            let count = if pass == 0 { 120 } else { 1000 };
+            let at = Instant::now();
+            let before = busy();
+            for i in 0..count {
+                let stats = m.stats.as_mut().unwrap();
+                stats.cpu = (i % 12) as f64;
+                stats.gpu = Some((17 + i % 7) as f64);
+                stats.net = Some(mypaper_widgets::stats::Net {
+                    down: (i % 60) as f64 * 1000.0,
+                    up: (i % 17) as f64 * 1000.0,
+                });
+                std::hint::black_box(view::view(
+                    &m,
+                    &tokens,
+                    view::Frame {
+                        size,
+                        scale: 1.0,
+                        now: now(),
+                        instant: Instant::now(),
+                        editing: false,
+                    },
+                    &mut ui.text,
+                ));
+            }
+            if pass != 0 {
+                println!(
+                    "meter view cache={capacity} wall_us={} cpu_us={}",
+                    at.elapsed().as_micros() / count as u128,
+                    (busy() - before) / (count as u64 * 10)
+                );
+            }
+        }
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn media_timeline_updates_reuse_artwork_and_removing_art_clears_its_material() {
     let ui = Ui::new().unwrap();
     let root = temp("media-art-cache");
