@@ -1314,6 +1314,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-studio"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "mypaper-bars",
+ "mypaper-config",
+ "mypaper-desktop",
+ "mypaper-plugin-weather",
+ "mypaper-shell",
+ "mypaper-theme",
+ "mypaper-ui",
+ "mypaper-widgets",
+ "notify",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
 name = "mypaper-theme"
 version = "0.1.0"
 dependencies = [

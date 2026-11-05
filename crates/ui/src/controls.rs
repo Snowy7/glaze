@@ -263,7 +263,12 @@ pub struct Target<A> {
     pub action: A,
     pub behavior: Behavior,
     pub group: Option<Key>,
+    /// The whole control, wherever it is scrolled.
     pub rect: Rect,
+    /// The part the pointer can reach (`None`: scrolled out of its view).
+    pub visible: Option<Rect>,
+    /// The innermost scroll view holding it: keyboard focus scrolls it into view.
+    pub scroll: Option<Key>,
 }
 
 /// A scroll view found while building: where it is and how tall its content was.
@@ -302,7 +307,7 @@ pub struct Builder<'a, A> {
     pub input: &'a Input,
     pub targets: Vec<Target<A>>,
     pub scrolls: Vec<ScrollArea>,
-    clips: Vec<Rect>,
+    clips: Vec<(Key, Rect)>,
     group: Option<Key>,
 }
 
@@ -353,11 +358,12 @@ impl<'a, A: Clone> Builder<'a, A> {
 
     /// The innermost clip, if any.
     pub fn clip_rect(&self) -> Option<Rect> {
-        self.clips.last().copied()
+        self.clips.last().map(|(_, r)| *r)
     }
 
-    /// Registers a target with its hit (clipped to the current scroll view; nothing when it
-    /// is scrolled out). Returns whether the pointer is over it.
+    /// Registers a target with its hit, clipped to the current scroll view. A control scrolled
+    /// out keeps its target (the keyboard can still reach it) with an empty hit. Returns whether
+    /// the pointer is over it.
     pub fn hit(
         &mut self,
         key: Key,
@@ -382,23 +388,22 @@ impl<'a, A: Clone> Builder<'a, A> {
         behavior: Behavior,
     ) -> bool {
         let visible = match self.clips.last() {
-            Some(clip) => intersect(rect, *clip),
+            Some((_, clip)) => intersect(rect, *clip),
             None => Some(rect),
-        };
-        let Some(visible) = visible else {
-            return false;
         };
         self.targets.push(Target {
             key,
             action,
             behavior,
             group: self.group,
-            rect: visible,
+            rect,
+            visible,
+            scroll: self.clips.last().map(|(k, _)| *k),
         });
         let id = self.targets.len() as u32;
         self.list.hits.push(Hit {
             id,
-            rect: visible,
+            rect: visible.unwrap_or(Rect::new(rect.left, rect.top, 0.0, 0.0)),
             role,
             label: label.into(),
             enabled: true,
@@ -407,7 +412,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         if self.input.focus == Some(key) {
             self.list.focus = Some(id);
         }
-        self.hovered(key)
+        visible.is_some() && self.hovered(key)
     }
 
     // --- Primitives ---------------------------------------------------------------------------
@@ -1166,15 +1171,11 @@ impl<'a, A: Clone> Builder<'a, A> {
     ) -> f32 {
         self.list.ops.push(Op::Clip { rect: viewport });
         let clip = match self.clips.last() {
-            Some(outer) => intersect(viewport, *outer).unwrap_or(Rect::new(
-                viewport.left,
-                viewport.top,
-                0.0,
-                0.0,
-            )),
+            Some((_, outer)) => intersect(viewport, *outer)
+                .unwrap_or(Rect::new(viewport.left, viewport.top, 0.0, 0.0)),
             None => viewport,
         };
-        self.clips.push(clip);
+        self.clips.push((key, clip));
         let top = viewport.top - offset;
         let bottom = content(self, top);
         self.clips.pop();
@@ -1275,16 +1276,13 @@ mod tests {
         );
         assert_eq!(height, 432.0);
         let labels: Vec<_> = b.list.hits.iter().map(|h| h.label.to_string()).collect();
-        assert_eq!(
-            labels,
-            ["A", "In", "Scroll"],
-            "the scrolled-out button has no hit"
-        );
-        for hit in &b.list.hits {
-            assert_eq!(b.targets[hit.id as usize - 1].rect, hit.rect);
-        }
+        assert_eq!(labels, ["A", "In", "Out", "Scroll"]);
+        assert!(b.list.hits[2].rect.is_empty(), "the scrolled-out button takes no clicks");
+        assert_eq!(b.targets[2].visible, None);
+        assert_eq!(b.targets[2].scroll, Some(key("view")), "but the keyboard can reach it");
+        assert_eq!(b.targets[1].visible, Some(b.targets[1].rect));
         assert_eq!(b.targets[1].action, Act::Go(1));
-        assert!(matches!(b.targets[2].behavior, Behavior::Thumb { .. }));
+        assert!(matches!(b.targets[3].behavior, Behavior::Thumb { .. }));
         assert_eq!(
             b.list
                 .ops

@@ -826,6 +826,16 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             push(id, Event::TextSubmit);
             return LRESULT(0);
         }
+        // A one-line field has no use for Tab, Up, Down, Page Up or Page Down: they stay the
+        // app's (moving focus, or through a list of results under a search field).
+        if msg == WM_KEYDOWN
+            && focused
+            && !field.multiline()
+            && matches!(wparam.0, 0x09 | 0x21 | 0x22 | 0x26 | 0x28)
+        {
+            push(id, Event::Key(wparam.0 as u16));
+            return LRESULT(0);
+        }
         if msg == WM_CHAR && focused && wparam.0 == 13 && !field.multiline() {
             return LRESULT(0);
         }
