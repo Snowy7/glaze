@@ -228,6 +228,14 @@ processes, arguments and desktop state are restored in `finally`. Raw evidence l
 `crates/shell/src/widgets/evidence/`; `-Interactions -Samples 0` records interaction checks separately
 in `evidence/interactions/`. `-Debug -Samples 0` is diagnostic only; measurements require release.
 No dev server is needed.
+Idle samples start after a full minute of warm-up with all six widgets visible; cold startup is
+measured separately. The earlier 18-second warm-up results remain in `evidence/before-full-warmup/`.
+The gate fixture prints hit/counter/cost checkpoints before and after external sampling. Its own
+periodic CPU/thread/window diagnostics run only in `-Profile`, so they do not pollute idle gates.
+GPU sampling uses raw PDH busy-time/timestamp deltas, with owned counter identities preserved across
+reordering and process churn. A live comparison against Windows' formatter checks identical values;
+the sampler opens no graphics device or vendor driver. Widget file watches use native directory
+signals and indefinite waits instead of the generic Windows backend's 100 ms worker tick.
 `-Profile -Samples 0` is a separate diagnostic: it compares the six-widget fixture, the same fixture
 without system-monitor, and bars alone, including UI/worker CPU and sampling/painting costs. These
 different phases are not combined into a gate result.

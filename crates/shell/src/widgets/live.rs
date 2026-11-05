@@ -121,10 +121,27 @@ fn main() -> Result<()> {
             &windows::core::HSTRING::from(stop_name),
         )
     }?;
+    // SAFETY: this named auto-reset event requests diagnostics only outside CPU windows.
+    let snapshot = unsafe {
+        windows::Win32::System::Threading::CreateEventW(
+            None,
+            false,
+            false,
+            &windows::core::HSTRING::from(format!(
+                "Local\\mypaper-n4-fixture-snapshot-{}",
+                std::process::id()
+            )),
+        )
+    }?;
+    let started = Instant::now();
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let profiling = std::env::var_os("MYPAPER_N4_PROFILE").is_some();
     let mut profile_phase = 0;
-    let mut sample_at = Instant::now() + Duration::from_secs(if profiling { 20 } else { 5 });
+    let mut sample_at = if profiling {
+        Instant::now() + Duration::from_secs(20)
+    } else {
+        deadline
+    };
     let mut sample: Option<(Instant, u64, u64)> = None;
     let mut samples = Vec::new();
     let mut message = MSG::default();
@@ -147,7 +164,7 @@ fn main() -> Result<()> {
                     .min(u128::from(u32::MAX - 1)) as u32,
             );
         // SAFETY: the ticker handle and all windows live through this standard UI pump.
-        let handles: Vec<_> = [host.timer_handle(), stop]
+        let handles: Vec<_> = [host.timer_handle(), stop, snapshot]
             .into_iter()
             .chain(bars.as_ref().into_iter().flat_map(bars::Bars::handles))
             .collect();
@@ -157,6 +174,10 @@ fn main() -> Result<()> {
         };
         if woke.0 == WAIT_OBJECT_0.0 + 1 {
             break;
+        }
+        if woke.0 == WAIT_OBJECT_0.0 + 2 {
+            checkpoint(&host, started);
+            continue;
         }
         if woke == WAIT_OBJECT_0 {
             host.frame_ready();
@@ -199,7 +220,7 @@ fn main() -> Result<()> {
         if let Some(bars) = &mut bars {
             bars.tick(&mut ui);
         }
-        if Instant::now() >= sample_at {
+        if profiling && Instant::now() >= sample_at {
             let at = Instant::now();
             let busy = busy_ticks(false);
             let ui_busy = busy_ticks(true);
@@ -292,15 +313,31 @@ fn main() -> Result<()> {
             break;
         }
     }
+    checkpoint(&host, started);
     println!("N4_DONE drivers={:?}", mypaper_ui::modules::gpu_drivers());
-    if !profiling {
-        println!("N4_MEDIAN {:?}", perf_cpu::median(&samples));
-    }
     // SAFETY: the harness owns this event and its wait loop has ended.
     unsafe {
         let _ = windows::Win32::Foundation::CloseHandle(stop);
+        let _ = windows::Win32::Foundation::CloseHandle(snapshot);
     }
     Ok(())
+}
+
+/// Window probes and logging are explicit checkpoints, never part of an external CPU sample.
+fn checkpoint(host: &widgets::Widgets, started: Instant) {
+    let probes = host.live_windows();
+    // SAFETY: read-only hit queries at the centers of this fixture's own windows.
+    let visible = probes.iter().filter(|p| unsafe { WindowFromPoint(windows::Win32::Foundation::POINT {
+        x: ((p.rect.left + p.rect.right) / 2.0) as i32,
+        y: ((p.rect.top + p.rect.bottom) / 2.0) as i32,
+    }) } == p.hwnd).count();
+    println!(
+        "N4_CHECKPOINT elapsed_s={:.3} counters={:?} visible={visible}/{} costs={:?}",
+        started.elapsed().as_secs_f64(),
+        host.counters(),
+        probes.len(),
+        host.costs()
+    );
 }
 
 fn busy_ticks(thread: bool) -> u64 {
@@ -532,8 +569,14 @@ fn exercise(ui: &mut Ui, host: &mut widgets::Widgets) -> Result<()> {
     let typed = "فحص 東京測試 한글입력";
     // SAFETY: read-only focus/style probes of this test's own surface before keyboard input.
     unsafe {
-        anyhow::ensure!(GetForegroundWindow()==note.hwnd && GetFocus()==note.hwnd,
-            "note field lacks real focus: foreground={:?} focus={:?} expected={:?} ex={:x}",GetForegroundWindow(),GetFocus(),note.hwnd,GetWindowLongPtrW(note.hwnd,GWL_EXSTYLE));
+        anyhow::ensure!(
+            GetForegroundWindow() == note.hwnd && GetFocus() == note.hwnd,
+            "note field lacks real focus: foreground={:?} focus={:?} expected={:?} ex={:x}",
+            GetForegroundWindow(),
+            GetFocus(),
+            note.hwnd,
+            GetWindowLongPtrW(note.hwnd, GWL_EXSTYLE)
+        );
     }
     let keys: Vec<_> = typed
         .encode_utf16()
