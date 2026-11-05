@@ -141,9 +141,15 @@ fn run() -> Result<()> {
     // The classic-menu switch (opt-in), via config.json (docs/desktop-extras.md). The desktop
     // right-click menu is the native shell's.
     let mut extras = DesktopExtras::new(&config);
+    let index_exe = exe.with_file_name("mypaper-index.exe");
+    let mut file_index = config
+        .experimental
+        .file_index
+        .then(|| start_optional("index", index_exe.clone()))
+        .flatten();
 
     let panicked = loop {
-        let children = [Some(&wallpaper), shell.as_ref()];
+        let children = [Some(&wallpaper), shell.as_ref(), file_index.as_ref()];
         let handles: Vec<HANDLE> = children
             .iter()
             .flatten()
@@ -200,6 +206,13 @@ fn run() -> Result<()> {
                     bars::replay_journal();
                     drop(journal);
                 }
+                "index" => {
+                    if let Some(child) = &mut file_index
+                        && child.on_exit()? == Outcome::Stopped
+                    {
+                        file_index = None;
+                    }
+                }
                 _ => {}
             }
         }
@@ -211,6 +224,12 @@ fn run() -> Result<()> {
             shell = None;
         }
         let pumped = pump();
+        if let Some(child) = &mut file_index
+            && let Err(error) = child.restart_if_due()
+        {
+            log::warn!("{error:#}; continuing without file search");
+            file_index = None;
+        }
         match pumped.signal {
             Some(Signal::Panic) => {
                 log::warn!("panic hotkey: stopping everything");
@@ -237,6 +256,16 @@ fn run() -> Result<()> {
         }
         if pumped.config_changed {
             extras.follow_config();
+            if let Ok(config) = Config::load() {
+                if config.experimental.file_index && file_index.is_none() {
+                    file_index = start_optional("index", index_exe.clone());
+                } else if !config.experimental.file_index {
+                    if let Some(child) = &mut file_index {
+                        child.stop();
+                    }
+                    file_index = None;
+                }
+            }
         }
     };
 
@@ -246,6 +275,9 @@ fn run() -> Result<()> {
     }
     bars::replay_journal();
     wallpaper.stop();
+    if let Some(child) = &mut file_index {
+        child.stop();
+    }
     if let Some(styling) = &mut styling {
         styling.stop();
     }
@@ -269,7 +301,15 @@ fn start_optional(name: &'static str, exe: PathBuf) -> Option<Supervised> {
     if !exe.exists() {
         return None;
     }
-    let mut child = Supervised::new(name, exe, Vec::new());
+    let args = if name == "index" {
+        vec![
+            PathBuf::from("--parent"),
+            PathBuf::from(std::process::id().to_string()),
+        ]
+    } else {
+        Vec::new()
+    };
+    let mut child = Supervised::new(name, exe, args);
     match child.start() {
         Ok(()) => Some(child),
         Err(e) => {
