@@ -11,7 +11,9 @@ use mypaper_bars::{
     network,
     style::{Family, Paint},
 };
-use mypaper_ui::{DisplayList, Hit, Op, Point, Rect, Rgba, Role, TextStyle, Ui};
+use mypaper_ui::icons::{self, Icon};
+use mypaper_ui::interact::State;
+use mypaper_ui::{DisplayList, Hit, Ink, Interaction, Op, Point, Rect, Rgba, Role, TextStyle, Ui};
 
 #[derive(Clone, Debug)]
 pub enum Target {
@@ -20,6 +22,19 @@ pub enum Target {
     Tray(String),
     Dock(Item),
     Extra(Extra),
+}
+
+/// Whether a click on `target` activates the bar: modules that open a flyout or start
+/// something, and tray icons (which hand their app the foreground), need it, or Windows refuses
+/// them while a shell window (Search, Start, a toast) holds the foreground. Media and the app
+/// title act in place and leave the app in front focused; dock items must too, since a click
+/// on the active app's icon minimizes it.
+pub fn claims_foreground(target: &Target) -> bool {
+    match target {
+        Target::Module(ModuleRef::Builtin(m)) => !matches!(m, Module::Media | Module::App),
+        Target::Module(_) | Target::Tray(_) => true,
+        Target::Workspace(_) | Target::Dock(_) | Target::Extra(_) => false,
+    }
 }
 
 pub struct Frame {
@@ -211,21 +226,19 @@ fn contents(
             None,
             target,
         ),
-        Module::Workspaces => {
-            for i in 0..model.workspaces.count.clamp(1, 16) {
+        // Dots, drawn by `item`; with one desktop there is nothing to switch to, so nothing.
+        Module::Workspaces if model.workspaces.count > 1 => {
+            for i in 0..model.workspaces.count.min(16) {
+                let current = i == model.workspaces.current;
                 add(
-                    if i == model.workspaces.current {
-                        "●"
-                    } else {
-                        "○"
-                    }
-                    .into(),
+                    if current { "current" } else { "other" }.into(),
                     None,
                     None,
                     Target::Workspace(i),
                 );
             }
         }
+        Module::Workspaces => {}
         Module::App => add(
             crate::integrations::app_title(&model.app_name),
             None,
@@ -341,7 +354,13 @@ fn contents(
                 );
             }
         }
-        Module::Language => add(model.language.clone(), None, None, target),
+        // Windows' indicator is two lines ("ENG\nUS"); a 24 px bar shows the language only.
+        Module::Language => add(
+            model.language.lines().next().unwrap_or_default().into(),
+            None,
+            None,
+            target,
+        ),
         Module::Notifications => add(
             model
                 .notifications
@@ -353,6 +372,9 @@ fn contents(
         ),
     }
     for c in &mut output {
+        if matches!(c.target, Target::Workspace(_)) {
+            c.width = if c.text == "current" { 26.0 } else { 14.0 } * scale;
+        }
         c.tooltip = match module {
             Module::Network => Some(model.network.as_ref().map_or(
                 "Offline".into(),
@@ -390,6 +412,9 @@ fn contents(
     output
 }
 
+/// One line centred in `rect`, cut with an ellipsis so no layout overpaints a neighbour.
+/// With a `shadow` (bars drawn straight on the wallpaper) a soft dark copy goes under it,
+/// one device pixel down, as macOS does to keep its menu bar legible on bright wallpapers.
 fn text(
     list: &mut DisplayList,
     ui: &mut Ui,
@@ -397,21 +422,27 @@ fn text(
     rect: Rect,
     font: &TextStyle,
     color: Rgba,
+    shadow: Option<Rgba>,
 ) {
-    // Text is deliberately truncated before shaping; no layout may overpaint a neighbor.
-    let mut value = value.to_owned();
-    while value.chars().count() > 1 && ui.text.measure(&value, font).0 > rect.width() {
-        value.pop();
-    }
+    let value = ui.text.fit(value, font, rect.width().max(1.0));
     let (w, h) = ui.text.measure(&value, font);
+    let at = Rect::new(
+        (rect.left + (rect.width() - w) / 2.0).round(),
+        (rect.top + (rect.height() - h) / 2.0).round(),
+        w,
+        h,
+    );
+    if let Some(shadow) = shadow {
+        list.ops.push(Op::Text {
+            rect: at.offset(0.0, (font.size / 13.0).max(1.0).round()),
+            text: value.clone(),
+            style: font.clone(),
+            color: shadow.with_alpha(shadow.a * color.a),
+        });
+    }
     list.ops.push(Op::Text {
-        rect: Rect::new(
-            rect.left + (rect.width() - w) / 2.0,
-            rect.top + (rect.height() - h) / 2.0,
-            w,
-            h,
-        ),
-        text: value.into(),
+        rect: at,
+        text: value,
         style: font.clone(),
         color,
     });
@@ -427,7 +458,7 @@ fn item(
     ui: &mut Ui,
     images: &mut Images,
     scale: f32,
-    hover: Option<u32>,
+    hot: Option<&Interaction>,
 ) {
     let label = if content.text.is_empty() {
         match &content.target {
@@ -435,6 +466,8 @@ fn item(
             Target::Tray(id) => id.clone(),
             _ => String::new(),
         }
+    } else if let Target::Workspace(i) = content.target {
+        format!("Desktop {}", i + 1)
     } else {
         content.text.clone()
     };
@@ -490,12 +523,39 @@ fn item(
             });
         }
     }
-    if Some(id) == hover {
+    // Always in the list (transparent at rest): damage is compared op by op, so a hover must
+    // not shift every later op and redraw the whole bar.
+    let state = hot.map_or(State::Rest, |h| h.state(id, true));
+    frame.list.ops.push(Op::Fill {
+        rect: rect.inflate(-2.0 * scale),
+        radius,
+        color: match state {
+            State::Hover => tokens.hover,
+            other => other.wash(tokens.ink),
+        },
+    });
+    if matches!(content.target, Target::Workspace(_)) {
+        // One dot per desktop, the current one stretched into a pill (the old bar's .ws-dot).
+        let current = content.text == "current";
+        let (w, h) = (if current { 16.0 } else { 6.0 } * scale, 6.0 * scale);
+        let ink = Ink::of(color);
         frame.list.ops.push(Op::Fill {
-            rect: rect.inflate(-2.0 * scale),
-            radius,
-            color: tokens.hover,
+            rect: Rect::new(
+                (rect.left + (rect.width() - w) / 2.0).round(),
+                (rect.top + (rect.height() - h) / 2.0).round(),
+                w,
+                h,
+            ),
+            radius: h / 2.0,
+            color: if current {
+                ink.primary
+            } else if state == State::Rest {
+                ink.disabled
+            } else {
+                ink.secondary
+            },
         });
+        return;
     }
     let mut label = rect;
     let key = options
@@ -523,18 +583,47 @@ fn item(
                 Module::Quick => "quick",
                 Module::Power => "power",
                 Module::Battery => "battery",
-                Module::Media => {
-                    if content.glyph == Some("\u{e769}") {
-                        "pause"
-                    } else {
-                        "play"
-                    }
-                }
                 _ => "",
             }),
             _ => None,
         });
-    let packed = key.and_then(|key| images.glyph(key, content.glyphs));
+    let shadow = tokens.shadow;
+    if matches!(
+        content.target,
+        Target::Module(ModuleRef::Builtin(Module::Media))
+    ) {
+        // A small solid play/pause before the title, as macOS draws it: the icon packs'
+        // 24-unit play triangles are too heavy next to 13 px text.
+        let family = mypaper_ui::icons::system_family(&ui.text);
+        let icon = if content.glyph == Some("\u{e769}") {
+            Icon::Pause
+        } else {
+            Icon::Play
+        };
+        let g = Rect::new(
+            rect.left + 7.0 * scale,
+            rect.top,
+            14.0 * scale,
+            rect.height(),
+        );
+        if let Some(shadow) = shadow {
+            let op = icons::centered(
+                &mut ui.text,
+                &family,
+                icon,
+                10.0 * scale,
+                g.offset(0.0, 1.0),
+                shadow,
+            );
+            frame.list.ops.push(op);
+        }
+        let op = icons::centered(&mut ui.text, &family, icon, 10.0 * scale, g, color);
+        frame.list.ops.push(op);
+        label.left += 18.0 * scale;
+    }
+    let packed = key
+        .filter(|key| !key.is_empty())
+        .and_then(|key| images.glyph(key, content.glyphs));
     let icon = packed
         .as_ref()
         .and_then(|(source, mono)| images.load(ui, source, mono.then_some(color)))
@@ -567,7 +656,12 @@ fn item(
             source: None,
         });
         label.left += 20.0 * scale;
-    } else if let Some(glyph) = content.glyph {
+    } else if let Some(glyph) = content.glyph.filter(|_| {
+        !matches!(
+            content.target,
+            Target::Module(ModuleRef::Builtin(Module::Media))
+        )
+    }) {
         text(
             &mut frame.list,
             ui,
@@ -575,6 +669,7 @@ fn item(
             g,
             &TextStyle::new(&mypaper_ui::icons::system_family(&ui.text), 15.0 * scale),
             color,
+            shadow,
         );
         label.left += 20.0 * scale;
     } else if let Some(icon) = content.icon.as_deref().filter(|s| s.chars().count() <= 4) {
@@ -585,6 +680,7 @@ fn item(
             g,
             &TextStyle::new("Segoe UI Emoji", 15.0 * scale),
             color,
+            None,
         );
         label.left += 20.0 * scale;
     }
@@ -610,6 +706,7 @@ fn item(
         label.inflate(-2.0 * scale),
         &font,
         color,
+        shadow,
     );
 }
 
@@ -653,7 +750,7 @@ pub fn top(
     scale: f32,
     ui: &mut Ui,
     images: &mut Images,
-    hover: Option<u32>,
+    hot: Option<&Interaction>,
 ) -> Frame {
     let t = &config.top;
     let mut design_tokens = tokens.clone();
@@ -723,9 +820,7 @@ pub fn top(
                             color: Rgba::HIT,
                         });
                     }
-                    item(
-                        &mut frame, c, rect, config, tokens, ui, images, scale, hover,
-                    );
+                    item(&mut frame, c, rect, config, tokens, ui, images, scale, hot);
                 }
                 x += c.width + gap;
             }
@@ -748,7 +843,7 @@ pub fn dock(
     hops: &[f32],
     ui: &mut Ui,
     images: &mut Images,
-    hover: Option<u32>,
+    hot: Option<&Interaction>,
 ) -> Frame {
     let d = &config.dock;
     let horizontal = matches!(d.position, DockPosition::Bottom | DockPosition::Top);
@@ -861,7 +956,7 @@ pub fn dock(
                 ui,
                 images,
                 scale,
-                hover,
+                hot,
             );
             a += c.width + gap;
         }
@@ -897,13 +992,16 @@ pub fn dock(
         );
         let id = frame.hit(rect.union(icon_rect), &app.name, Target::Dock(app.clone()));
         let active = app.windows.iter().any(|w| w.active);
-        if Some(id) == hover || active && taskbar {
-            frame.list.ops.push(Op::Fill {
-                rect: rect.inflate(3.0 * scale),
-                radius: 5.0 * scale,
-                color: tokens.hover,
-            });
-        }
+        frame.list.ops.push(Op::Fill {
+            rect: rect.inflate(3.0 * scale),
+            radius: 5.0 * scale,
+            color: match hot.map_or(State::Rest, |h| h.state(id, true)) {
+                State::Pressed => State::Pressed.wash(tokens.ink),
+                State::Hover => tokens.hover,
+                _ if active && taskbar => tokens.hover,
+                _ => Rgba::TRANSPARENT,
+            },
+        });
         let packed = images.app(app);
         let image = packed
             .as_ref()
@@ -931,6 +1029,7 @@ pub fn dock(
                 tokens
                     .ink
                     .with_alpha(if motion < 0.0 { -motion } else { 1.0 }),
+                None,
             );
         }
         if taskbar && d.titles && horizontal {
@@ -948,6 +1047,7 @@ pub fn dock(
                 ),
                 &tokens.font.scaled(scale),
                 tokens.ink,
+                None,
             );
         }
         if !app.windows.is_empty() && d.indicator != IndicatorStyle::None {
@@ -1012,6 +1112,7 @@ pub fn dock(
                 badge,
                 &TextStyle::new("Segoe UI", 10.0 * scale),
                 tokens.fill.with_alpha(1.0),
+                None,
             );
         }
     }
@@ -1078,6 +1179,7 @@ pub fn dock(
             } else {
                 tokens.ink
             },
+            None,
         );
     }
     frame

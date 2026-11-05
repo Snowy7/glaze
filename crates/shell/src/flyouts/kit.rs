@@ -169,7 +169,7 @@ impl<'a> Kit<'a> {
     /// order, so a hover must not shift every later op and redraw the whole panel.
     pub fn state(&mut self, id: HitId, rect: Rect, radius: f32) {
         let color = if self.pressed == Some(id) {
-            self.look.ink.with_alpha(0.14)
+            self.look.pressed()
         } else if self.hover == Some(id) {
             self.look.hover()
         } else {
