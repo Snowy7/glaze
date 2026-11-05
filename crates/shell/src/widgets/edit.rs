@@ -157,7 +157,7 @@ pub fn palette(
     let ink = Ink::of(Rgba::rgb8([245, 245, 247], 1.0));
     let mut list = DisplayList::default();
     let cols = 6;
-    let (tile_w, tile_h, gap, pad, header) = (136.0 * s, 44.0 * s, 6.0 * s, 12.0 * s, 44.0 * s);
+    let (tile_w, tile_h, gap, pad, header) = (150.0 * s, 44.0 * s, 6.0 * s, 12.0 * s, 44.0 * s);
     let rows = names.len().div_ceil(cols);
     let error_h = if error.is_some() { 40.0 * s } else { 0.0 };
     let size = (

@@ -1523,7 +1523,7 @@ fn media(c: &mut Draw<'_>, m: &Model, now: Stamp) {
             Some((position, duration))
         })
         .flatten();
-    let source = m.data["app"].as_str().unwrap_or("").to_uppercase();
+    let source = app_name(m.data["app"].as_str().unwrap_or("")).to_uppercase();
     let play_icon = if playing { Icon::Pause } else { Icon::Play };
 
     if !pill && r.width() < 150.0 * s {
@@ -3964,4 +3964,39 @@ fn long_weekday(date: Date) -> &'static str {
         "Friday",
         "Saturday",
     ][date.weekday() as usize]
+}
+
+/// A media source's display name from what Windows reports: a packaged app's id
+/// ("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify") gives "Spotify", an executable
+/// ("chrome.exe") gives "Chrome".
+fn app_name(app: &str) -> String {
+    let app = app.split('!').next().unwrap_or(app);
+    if let Some((family, _)) = app.split_once('_') {
+        // The package name's last part, up to its second capitalised word.
+        let last = family.rsplit('.').next().unwrap_or(family);
+        let end = last
+            .char_indices()
+            .skip(1)
+            .find(|(_, c)| c.is_uppercase())
+            .map_or(last.len(), |(i, _)| i);
+        last[..end].to_owned()
+    } else {
+        let stem = app.rsplit(['\\', '/']).next().unwrap_or(app);
+        let stem = stem.strip_suffix(".exe").unwrap_or(stem);
+        let mut chars = stem.chars();
+        chars
+            .next()
+            .map_or(String::new(), |c| c.to_uppercase().chain(chars).collect())
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn media_sources_read_as_app_names() {
+    assert_eq!(
+        app_name("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify"),
+        "Spotify"
+    );
+    assert_eq!(app_name("chrome.exe"), "Chrome");
+    assert_eq!(app_name(r"C:\Apps\foobar2000.exe"), "Foobar2000");
 }

@@ -1399,7 +1399,8 @@ impl Widgets {
                 let entry = self.entries.get_mut(&id).unwrap();
                 entry.surface.take_focus();
                 entry.model.pressed = entry.surface.shown().hit_at(p.at).map(|h| h.id);
-                entry.model.focus = entry.model.pressed.filter(|&h| h != view::BODY);
+                // A click focuses nothing (rings are for the keyboard); a field keeps its own.
+                entry.model.focus = entry.model.pressed.filter(|&h| h == view::FIELD);
                 entry.model.notice = None;
                 entry.model.dirty = true;
             }
