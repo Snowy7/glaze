@@ -3,6 +3,7 @@ use crate::{caps, runtime::{Effect, Manifest, Runtime}};
 use crate::runtime::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen};
 use crate::runtime::mypaper::plugin::{http::{Reply, Response}, types::SizeClass};
 use serde_json::json;
+use anyhow::Context;
 
 #[test]
 fn grok_wasm_brokers_routines_and_keeps_drafts_explicit() -> anyhow::Result<()> {
@@ -13,18 +14,18 @@ fn grok_wasm_brokers_routines_and_keeps_drafts_explicit() -> anyhow::Result<()> 
     let (component,_) = runtime.component(&manifest,&dir)?;
     let id = format!("wasm-test-{}",std::process::id());
     let settings = json!({"routines":[{"id":id,"title":"Fixture routine","url":"https://example.test/run","input":{"explicit":true}}]}).to_string();
-    let mut instance = runtime.instantiate_with_settings(&manifest,&component,None,&settings)?;
+    let mut instance = runtime.instantiate_with_settings(&manifest,&component,None,&settings).context("initialize Grok WASM")?;
     let open=|face: &str| Event::Open(FaceOpen {instance:face.into(),face:face.into(),size:SizeClass::Medium,settings:settings.clone()});
     let action=|instance: &str,name: &str,value: Option<&str>| Event::Action(Action {instance:instance.into(),action:name.into(),value:value.map(str::to_owned)});
     for face in ["routines","recent","prompt"] {
-        let effects = instance.event(&open(face))?;
+        let effects = instance.event(&open(face)).with_context(||format!("open {face}"))?;
         assert!(effects.iter().any(|e| matches!(e,Effect::View(id,_) if id==face)),"missing {face} view");
         assert!(!effects.iter().any(|e| matches!(e,Effect::Fetch {..})),"opening a face sent a webhook");
     }
     let effects=instance.event(&action("prompt","prompt",Some(" ")))?;
     assert!(effects.iter().any(|e|matches!(e,Effect::View(_,face) if face.footer.as_deref().is_some_and(|f|f.contains("shorter prompt")))));
     let secret_key=format!("grok/{id}");
-    caps::secret_set("grok",&secret_key,"fixture-key")?;
+    caps::secret_set("grok",&secret_key,"fixture-key").map_err(anyhow::Error::msg)?;
     let result=(|| -> anyhow::Result<()> {
         let effects=instance.event(&action("routines",&format!("run:{id}"),None))?;
         let request=effects.iter().find_map(|e|match e {Effect::Fetch {id,method,url,headers,body,..}=>Some((*id,*method,url,headers,body)),_=>None}).expect("brokered POST");
@@ -43,8 +44,9 @@ fn grok_wasm_brokers_routines_and_keeps_drafts_explicit() -> anyhow::Result<()> 
         assert!(!effects.iter().any(|e|matches!(e,Effect::Fetch {..})));
         Ok(())
     })();
-    caps::secret_remove("grok",&secret_key)?;
+    caps::secret_remove("grok",&secret_key).map_err(anyhow::Error::msg)?;
     drop(instance); drop(component); drop(runtime);
+    assert!(scratch.starts_with(std::env::temp_dir()) && scratch.file_name().unwrap().to_string_lossy().starts_with("mypaper-grok-wasm-"));
     let _=std::fs::remove_dir_all(&scratch);
     result
 }
