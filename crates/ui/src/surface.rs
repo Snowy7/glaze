@@ -88,6 +88,8 @@ pub struct Pointer {
 /// Input for a surface, taken from [`next_event`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
+    /// A temporary animation requested another frame; no timer remains once it settles.
+    Frame,
     Move(Pointer),
     Leave,
     /// Positive delta scrolls up; position uses the same coordinates as other pointer events.
@@ -118,6 +120,15 @@ pub enum Event {
     /// Windows' settings or theme changed (light or dark, contrast, text size).
     SettingChanged,
 }
+
+/// Stops a temporary frame producer when its surface's animation ends or closes.
+pub struct AnimationFrames(std::sync::Arc<std::sync::atomic::AtomicBool>);
+impl Drop for AnimationFrames {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+const WM_FRAME: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 30;
 
 thread_local! {
     static EVENTS: RefCell<VecDeque<(SurfaceId, Event)>> = const { RefCell::new(VecDeque::new()) };
@@ -225,6 +236,47 @@ pub struct Surface {
 }
 
 impl Surface {
+    /// Posts display-rate frames from a high-resolution waitable timer for this animation only.
+    pub fn animation_frames(&self, duration: std::time::Duration) -> AnimationFrames {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        let active = Arc::new(AtomicBool::new(true));
+        let running = active.clone();
+        let target = self.hwnd.0 as isize;
+        let _ = std::thread::Builder::new()
+            .name("ui-motion".into())
+            .spawn(move || {
+                let Ok(mut ticker) = crate::Ticker::new() else {
+                    return;
+                };
+                let started = std::time::Instant::now();
+                while running.load(Ordering::Relaxed) && started.elapsed() <= duration {
+                    ticker.schedule(true);
+                    // SAFETY: this worker owns its timer; the bounded wait ends with the next frame.
+                    unsafe {
+                        windows::Win32::System::Threading::WaitForSingleObject(
+                            ticker.handle(),
+                            100,
+                        );
+                    }
+                    if !running.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    // SAFETY: posting is safe across threads and a destroyed window simply refuses.
+                    let _ = unsafe {
+                        windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+                            Some(HWND(target as _)),
+                            WM_FRAME,
+                            WPARAM(0),
+                            LPARAM(0),
+                        )
+                    };
+                }
+            });
+        AnimationFrames(active)
+    }
     /// A hidden, empty window. `name` and `role` describe it to assistive technology.
     pub fn new(kind: Kind, name: &str, role: Role) -> Result<Self> {
         Self::create(kind, name, role, false)
@@ -424,8 +476,12 @@ impl Surface {
         ui: &mut Ui,
         origin: (i32, i32),
         size: (u32, u32),
-        list: DisplayList,
+        mut list: DisplayList,
     ) -> Result<bool> {
+        // A clipped or removed control must never leave an invalid UI Automation focus node.
+        list.focus = list
+            .focus
+            .filter(|id| list.hits.iter().any(|hit| hit.id == *id));
         if self.shared.app.is_some() {
             return self.present_app(ui, size, list);
         }
@@ -921,7 +977,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         // selection of whatever the field filters (the launcher's results).
         const NAVIGATION: [usize; 5] = [0x26, 0x28, 0x09, 0x21, 0x22];
         if focused && !field.multiline() {
-            if msg == WM_KEYDOWN && NAVIGATION.contains(&wparam.0) {
+            if msg == WM_KEYDOWN
+                && (NAVIGATION.contains(&wparam.0)
+                    || ([0x25, 0x27].contains(&wparam.0)
+                        && field.text().is_ok_and(|text| text.is_empty())))
+            {
                 push(id, Event::Key(wparam.0 as u16));
                 return LRESULT(0);
             }
@@ -946,6 +1006,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     }
     let button = |button| (pointer(shared, lparam), button);
     match msg {
+        WM_FRAME => push(id, Event::Frame),
         WM_MOUSEACTIVATE if !shared.activate => return LRESULT(MA_NOACTIVATE as isize),
         WM_MOUSEMOVE => {
             use windows::Win32::UI::Input::KeyboardAndMouse::{

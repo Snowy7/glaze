@@ -103,6 +103,19 @@ impl Panel for Overflow {
     fn context(&mut self, id: HitId, cx: &mut Cx) -> Effect {
         self.click(id, Button::Right, cx)
     }
+    fn middle(&mut self, id: HitId, cx: &mut Cx) -> Effect {
+        self.click(id, Button::Middle, cx)
+    }
+    fn double(&mut self, id: HitId, cx: &mut Cx) -> Effect {
+        if let Some(item) = id
+            .checked_sub(LIST)
+            .and_then(|i| self.items.get(i as usize))
+        {
+            cx.bars
+                .double_click_tray(&item.id, (cx.hit.left as i32, cx.hit.top as i32));
+        }
+        Effect::None
+    }
 
     fn refresh(&mut self, cx: &mut Cx) -> bool {
         let items = Self::of(cx.bars.tray());

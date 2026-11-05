@@ -142,6 +142,37 @@ pub struct DisplayList {
 }
 
 impl DisplayList {
+    /// Moves a list into a cropped surface without changing its hit identities.
+    pub fn translated(&self, dx: f32, dy: f32) -> Self {
+        let mut list = self.clone();
+        for op in &mut list.ops {
+            match op {
+                Op::Arc { center, .. } => {
+                    center.x += dx;
+                    center.y += dy;
+                }
+                Op::Line { from, to, .. } => {
+                    from.x += dx;
+                    from.y += dy;
+                    to.x += dx;
+                    to.y += dy;
+                }
+                Op::Image { rect, .. }
+                | Op::TextField { rect, .. }
+                | Op::Fill { rect, .. }
+                | Op::Stroke { rect, .. }
+                | Op::Text { rect, .. }
+                | Op::Clip { rect }
+                | Op::Shadow { rect, .. } => *rect = rect.offset(dx, dy),
+                Op::Unclip => {}
+            }
+        }
+        for hit in &mut list.hits {
+            hit.rect = hit.rect.offset(dx, dy);
+        }
+        list
+    }
+
     /// The topmost hit item under `p`.
     pub fn hit_at(&self, p: Point) -> Option<&Hit> {
         self.hits.iter().rev().find(|h| h.rect.contains(p))

@@ -7,6 +7,7 @@ mod preview;
 pub(crate) mod services;
 #[cfg(test)]
 mod tests;
+mod tray_menu;
 pub(crate) mod view;
 
 use crate::{flyouts, glass};
@@ -49,6 +50,7 @@ enum Command {
     AppActions(Box<(providers::apps::Item, Rect, Monitor)>),
     Activate(isize),
     Close(isize),
+    CloseAll(Vec<isize>),
     Launch(String),
     Pin(Pinned),
     Unpin(String),
@@ -74,8 +76,10 @@ pub struct Bars {
     ticker: Ticker,
     images: view::Images,
     menu: Option<Menu<Command>>,
+    tray_menu: Option<tray_menu::Host>,
     press: Option<Press>,
     watches: Vec<notify::RecommendedWatcher>,
+    theme_watch: Option<notify::RecommendedWatcher>,
     appearance: Appearance,
     system: providers::accent::System,
     published: BTreeMap<String, Vec<glass::Plate>>,
@@ -91,6 +95,9 @@ pub struct Bars {
     preview: Option<preview::Preview>,
     preview_due: Option<(Instant, usize, String)>,
     preview_close: Option<Instant>,
+    tooltip: Option<mypaper_ui::Surface>,
+    tooltip_due: Option<(Instant, usize, u32)>,
+    warm_due: Option<(Instant, usize, u32)>,
 }
 
 /// Keeps startup failures reversible before `Bars` owns the journal.
@@ -135,8 +142,10 @@ impl Bars {
             ticker: Ticker::new()?,
             images: Default::default(),
             menu: None,
+            tray_menu: None,
             press: None,
             watches: vec![],
+            theme_watch: None,
             appearance: Appearance::default(),
             system: providers::accent::read(),
             published: BTreeMap::new(),
@@ -152,6 +161,9 @@ impl Bars {
             preview: None,
             preview_due: None,
             preview_close: None,
+            tooltip: None,
+            tooltip_due: None,
+            warm_due: None,
         };
         bars.read_theme();
         startup::ready("shell", "theme_ms");
@@ -159,6 +171,20 @@ impl Bars {
         startup::ready("shell", "surfaces_ms");
         bars.paint(ui, Instant::now())?;
         startup::ready("shell", "bars_painted_ms");
+        // Pool popup HWNDs after first paint so neither bar startup nor a cold click pays for them.
+        bars.tray_menu = tray_menu::Host::new()
+            .inspect_err(|e| log::warn!("tray menu: {e:#}"))
+            .ok();
+        bars.menu = Menu::new("Dock commands").ok();
+        bars.tooltip = mypaper_ui::Surface::new_deferred_accessibility(
+            mypaper_ui::Kind::Popup { activate: false },
+            "Module description",
+            mypaper_ui::Role::Tooltip,
+        )
+        .ok();
+        if let Some(tip) = &bars.tooltip {
+            tip.set_click_through(true);
+        }
         bars.journal = Some(JournalLease::acquire()?);
         providers::replay()?;
         startup::ready("shell", "replayed_ms");
@@ -185,6 +211,17 @@ impl Bars {
             .chain(self.services.handles())
             .collect()
     }
+
+    /// Resolved configuration shared with the shell's panels.
+    pub fn config(&self) -> &BarsConfig {
+        &self.config
+    }
+    pub fn can_open_flyouts(&self) -> bool {
+        !self.asleep && self.bars.iter().any(Bar::shows_content)
+    }
+    pub fn external_foreground(&self) -> isize {
+        self.services.model.foreground.unwrap_or(0)
+    }
     pub fn timeout(&self) -> u32 {
         [
             self.config_due,
@@ -194,6 +231,8 @@ impl Bars {
             self.services.deadline(),
             self.preview_due.as_ref().map(|p| p.0),
             self.preview_close,
+            self.tooltip_due.map(|t| t.0),
+            self.warm_due.map(|t| t.0),
             self.bars.iter().filter_map(|b| b.hide_at).min(),
         ]
         .into_iter()
@@ -293,7 +332,11 @@ impl Bars {
 
     /// All drawing is gated by data changes or active animation. The ticker cancels at rest.
     pub fn tick(&mut self, ui: &mut Ui) {
+        if let Some(menu) = &mut self.tray_menu {
+            menu.process(ui);
+        }
         let now = Instant::now();
+        self.hover_tick(ui, now);
         let changes = self.services.tick(now);
         if changes.config || changes.theme {
             self.config_changed();
@@ -351,6 +394,46 @@ impl Bars {
             self.dirty();
         }
         if changes.data || changes.moved {
+            let windows: Vec<_> = self
+                .services
+                .apps
+                .groups
+                .iter()
+                .flat_map(|g| &g.windows)
+                .filter(|w| !w.minimized)
+                .filter_map(|w| {
+                    let mut rect = windows::Win32::Foundation::RECT::default();
+                    // SAFETY: enumerated application window; a stale handle fails harmlessly.
+                    unsafe {
+                        use windows::Win32::Graphics::Dwm::{
+                            DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute,
+                        };
+                        if DwmGetWindowAttribute(
+                            system::hwnd(w.hwnd),
+                            DWMWA_EXTENDED_FRAME_BOUNDS,
+                            (&raw mut rect).cast(),
+                            size_of_val(&rect) as u32,
+                        )
+                        .is_err()
+                        {
+                            windows::Win32::UI::WindowsAndMessaging::GetWindowRect(
+                                system::hwnd(w.hwnd),
+                                &mut rect,
+                            )
+                            .ok()?;
+                        }
+                    }
+                    Some(Rect::new(
+                        rect.left as f32,
+                        rect.top as f32,
+                        (rect.right - rect.left) as f32,
+                        (rect.bottom - rect.top) as f32,
+                    ))
+                })
+                .collect();
+            for b in &mut self.bars {
+                b.windows(&windows);
+            }
             let fullscreen = fullscreen_app_monitor()
                 .and_then(|rect| monitor_infos().into_iter().find(|m| m.rect == rect))
                 .map(|m| m.device);
@@ -398,15 +481,116 @@ impl Bars {
                         })
                 && let Some(hit) = b.frame.list.hits.iter().find(|h| h.id == i as u32 + 1)
             {
-                let origin = b.surface.origin();
+                let origin = b.origin();
                 let anchor = hit.rect.offset(origin.0 as f32, origin.1 as f32);
-                self.preview = preview::Preview::open(ui, app, anchor, &b.tokens, b.scale())
-                    .inspect_err(|e| log::warn!("dock previews: {e:#}"))
-                    .ok();
+                self.preview =
+                    preview::Preview::open(ui, app, anchor, &b.tokens, b.scale(), !b.horizontal())
+                        .inspect_err(|e| log::warn!("dock previews: {e:#}"))
+                        .ok();
             }
         }
         if let Err(e) = self.paint(ui, now) {
             log::error!("painting bars: {e:#}");
+        }
+    }
+
+    /// Delayed hover work has no recurring timer and never runs on pointer-down.
+    fn hover_tick(&mut self, ui: &mut Ui, now: Instant) {
+        if self.warm_due.is_some_and(|t| t.0 <= now) {
+            let (_, index, hit) = self.warm_due.take().unwrap();
+            if let Some(b) = self
+                .bars
+                .get(index)
+                .filter(|b| b.hover == Some(hit) && !b.hidden && b.tokens.material.is_some())
+            {
+                let origin = b.origin();
+                if self.tooltip.is_none() {
+                    self.tooltip = mypaper_ui::Surface::new_deferred_accessibility(
+                        mypaper_ui::Kind::Popup { activate: false },
+                        "Module description",
+                        mypaper_ui::Role::Tooltip,
+                    )
+                    .ok();
+                    if let Some(tip) = &self.tooltip {
+                        tip.set_click_through(true);
+                    }
+                }
+                if let Some(tip) = &self.tooltip {
+                    crate::overlay_client::warm(
+                        tip.hwnd(),
+                        mypaper_ui::glass::Shape {
+                            x: origin.0,
+                            y: origin.1,
+                            width: 1,
+                            height: 1,
+                        },
+                    );
+                }
+            }
+        }
+        if self.tooltip_due.is_some_and(|t| t.0 <= now) {
+            let (_, index, hit) = self.tooltip_due.take().unwrap();
+            if let Some(b) = self
+                .bars
+                .get(index)
+                .filter(|b| b.hover == Some(hit) && !b.hidden)
+                && let Some(item) = b.frame.list.hits.iter().find(|h| h.id == hit)
+            {
+                let font = b.tokens.font.scaled(b.scale());
+                let label: String = item.label.chars().take(160).collect();
+                let (w, h) = ui.text.measure(&label, &font);
+                let size = ((w + 20.0).ceil() as u32, (h + 12.0).ceil() as u32);
+                let body = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
+                let origin = b.origin();
+                let anchor = item.rect.offset(origin.0 as f32, origin.1 as f32);
+                let work = b.monitor.work;
+                let point = (
+                    ((anchor.left + anchor.right - size.0 as f32) / 2.0) as i32,
+                    if anchor.top > (work.y + work.height / 2) as f32 {
+                        anchor.top as i32 - size.1 as i32 - 8
+                    } else {
+                        anchor.bottom as i32 + 8
+                    },
+                );
+                let point = (
+                    point
+                        .0
+                        .clamp(work.x, (work.x + work.width - size.0 as i32).max(work.x)),
+                    point
+                        .1
+                        .clamp(work.y, (work.y + work.height - size.1 as i32).max(work.y)),
+                );
+                if self.tooltip.is_none() {
+                    self.tooltip = mypaper_ui::Surface::new_deferred_accessibility(
+                        mypaper_ui::Kind::Popup { activate: false },
+                        "Module description",
+                        mypaper_ui::Role::Tooltip,
+                    )
+                    .ok();
+                }
+                if let Some(tip) = &mut self.tooltip {
+                    tip.set_click_through(true);
+                    let list = mypaper_ui::DisplayList {
+                        ops: vec![
+                            mypaper_ui::Op::Fill {
+                                rect: body,
+                                radius: 6.0,
+                                color: b.tokens.fill.with_alpha(0.98),
+                            },
+                            mypaper_ui::Op::Text {
+                                rect: Rect::new(10.0, 6.0, w, h),
+                                text: label.into(),
+                                style: font,
+                                color: b.tokens.ink,
+                            },
+                        ],
+                        ..Default::default()
+                    };
+                    if tip.present(ui, point, size, list).is_ok() {
+                        tip.show();
+                    }
+                }
+            }
         }
     }
 
@@ -475,6 +659,15 @@ impl Bars {
             self.services.tray.click(id.into(), button);
         }
     }
+    pub fn double_click_tray(&self, id: &str, point: (i32, i32)) {
+        if self.services.tray_host.active() {
+            self.services
+                .tray_host
+                .click(id.to_owned(), Click::Double, point, None);
+        } else {
+            self.services.tray.click(id.to_owned(), TrayButton::Double);
+        }
+    }
 
     /// Current bar plates for the shell compositor. N4 can combine this with widget plates
     /// before calling the single monitor-replacement publisher.
@@ -487,10 +680,20 @@ impl Bars {
     }
 
     pub fn event(&mut self, ui: &mut Ui, id: SurfaceId, event: &Event) {
+        if let Some(menu) = &mut self.tray_menu
+            && menu.event(ui, id, event)
+        {
+            return;
+        }
         if let Some(preview) = &self.preview
             && preview.owns(id)
         {
             match event {
+                Event::Wheel(_, delta) => {
+                    if let Some(preview) = &mut self.preview {
+                        preview.scroll(ui, *delta);
+                    }
+                }
                 Event::Move(_) => self.preview_close = None,
                 Event::Leave => {
                     self.preview_close = Some(Instant::now() + Duration::from_millis(280))
@@ -527,10 +730,83 @@ impl Bars {
                 return;
             }
         }
-        let Some(index) = self.bars.iter().position(|b| b.surface.id() == id) else {
+        let Some(index) = self.bars.iter().position(|b| b.owns(id)) else {
             return;
         };
+        let offset = self.bars[index].input_offset(id);
+        let map = |mut p: mypaper_ui::Pointer| {
+            p.at.x += offset.x;
+            p.at.y += offset.y;
+            p
+        };
+        let event = match *event {
+            Event::Move(p) => Event::Move(map(p)),
+            Event::Press(p, b) => Event::Press(map(p), b),
+            Event::Release(p, b) => Event::Release(map(p), b),
+            Event::DoubleClick(p, b) => Event::DoubleClick(map(p), b),
+            Event::Wheel(p, d) => Event::Wheel(map(p), d),
+            e => e,
+        };
+        let event = &event;
+        if matches!(
+            event,
+            Event::Leave | Event::Press(..) | Event::Key(_) | Event::Deactivated
+        ) {
+            self.tooltip_due = None;
+            self.warm_due = None;
+            if let Some(tip) = &mut self.tooltip {
+                tip.hide();
+                tip.release();
+            }
+        }
         match event {
+            Event::Key(key) => {
+                use windows::Win32::UI::Input::KeyboardAndMouse::*;
+                let b = &mut self.bars[index];
+                if [VK_TAB.0, VK_LEFT.0, VK_RIGHT.0, VK_UP.0, VK_DOWN.0].contains(key) {
+                    // SAFETY: read-only keyboard modifier query on the input thread.
+                    let back = *key == VK_LEFT.0
+                        || *key == VK_UP.0
+                        || (*key == VK_TAB.0 && unsafe { GetKeyState(VK_SHIFT.0 as i32) } < 0);
+                    b.focus = mypaper_ui::focus::step(
+                        &b.frame.list.hits,
+                        b.focus,
+                        if back { -1 } else { 1 },
+                    );
+                    b.dirty = true;
+                } else if [VK_RETURN.0, VK_SPACE.0].contains(key) {
+                    if let Some(target) = b
+                        .focus
+                        .and_then(|id| b.frame.targets.get(id as usize - 1))
+                        .cloned()
+                    {
+                        let point = b
+                            .focus
+                            .and_then(|id| b.frame.list.hits.iter().find(|h| h.id == id))
+                            .map_or(b.origin(), |hit| {
+                                let o = b.origin();
+                                (
+                                    o.0 + ((hit.rect.left + hit.rect.right) / 2.0) as i32,
+                                    o.1 + ((hit.rect.top + hit.rect.bottom) / 2.0) as i32,
+                                )
+                            });
+                        self.activate(ui, index, target, Trigger::Left, point);
+                    }
+                } else if *key == VK_ESCAPE.0 {
+                    b.focus = None;
+                    b.dirty = true;
+                }
+            }
+            Event::Focus(hit) => {
+                let b = &mut self.bars[index];
+                b.focus = Some(*hit);
+                b.dirty = true;
+                b.surface.take_focus();
+            }
+            Event::Deactivated => {
+                self.bars[index].focus = None;
+                self.bars[index].dirty = true;
+            }
             Event::DpiChanged(_) => self.display_due = Some(now),
             Event::Leave => {
                 if self.press.is_none() {
@@ -547,6 +823,19 @@ impl Bars {
                 if hit != b.hover {
                     b.hover = hit;
                     b.dirty = true;
+                    if let Some(tip) = &mut self.tooltip {
+                        tip.hide();
+                        tip.release();
+                    }
+                    self.tooltip_due = hit.map(|h| (now + Duration::from_millis(450), index, h));
+                    self.warm_due = hit
+                        .filter(|h| {
+                            b.frame
+                                .targets
+                                .get(*h as usize - 1)
+                                .is_some_and(|target| opens_flyout(target, &b.config))
+                        })
+                        .map(|h| (now + Duration::from_millis(60), index, h));
                 }
                 b.zoom_to(Some(p.at), now);
                 if b.config.dock.preview.enabled
@@ -589,10 +878,14 @@ impl Bars {
                     } else {
                         self.services.tray.click(tray, TrayButton::Double);
                     }
+                    self.press = None;
                 }
             }
             Event::Press(p, Button::Left) => {
-                if let Some((_, target)) = self.bars[index].frame.target(p.at) {
+                if let Some((hit, target)) = self.bars[index].frame.target(p.at) {
+                    self.bars[index].focus = Some(hit);
+                    self.bars[index].dirty = true;
+                    self.bars[index].surface.take_focus();
                     if matches!(target, Target::Dock(_)) {
                         // SAFETY: capture belongs to this UI thread and is released on up/loss.
                         unsafe {
@@ -661,7 +954,20 @@ impl Bars {
                     .get(*hit as usize - 1)
                     .cloned()
                 {
-                    let p = self.bars[index].surface.origin();
+                    let b = &self.bars[index];
+                    let p =
+                        b.frame
+                            .list
+                            .hits
+                            .iter()
+                            .find(|h| h.id == *hit)
+                            .map_or(b.origin(), |h| {
+                                let o = b.origin();
+                                (
+                                    o.0 + ((h.rect.left + h.rect.right) / 2.0) as i32,
+                                    o.1 + ((h.rect.top + h.rect.bottom) / 2.0) as i32,
+                                )
+                            });
                     self.activate(ui, index, t, Trigger::Left, p);
                 }
             }
@@ -685,13 +991,12 @@ impl Bars {
             .iter()
             .find(|h| {
                 h.rect.contains(Point::new(
-                    (point.0 - b.surface.origin().0) as f32,
-                    (point.1 - b.surface.origin().1) as f32,
+                    (point.0 - b.origin().0) as f32,
+                    (point.1 - b.origin().1) as f32,
                 ))
             })
             .map_or(Rect::new(point.0 as f32, point.1 as f32, 1.0, 1.0), |h| {
-                h.rect
-                    .offset(b.surface.origin().0 as f32, b.surface.origin().1 as f32)
+                h.rect.offset(b.origin().0 as f32, b.origin().1 as f32)
             });
         let monitor = b.monitor.clone();
         let module = match &target {
@@ -877,6 +1182,12 @@ impl Bars {
                         entries.extend(item.windows.iter().map(|w| {
                             Entry::action(&format!("Close {}", w.title), Command::Close(w.hwnd))
                         }));
+                        if item.windows.len() > 1 {
+                            entries.push(Entry::action(
+                                "Close all windows",
+                                Command::CloseAll(item.windows.iter().map(|w| w.hwnd).collect()),
+                            ));
+                        }
                         entries.push(Entry::action(
                             "Recent items and app actions",
                             Command::AppActions(Box::new((item.clone(), anchor, monitor.clone()))),
@@ -911,20 +1222,17 @@ impl Bars {
             Action::Open { open } => system::open(open),
             Action::Builtin(action) => {
                 use BuiltinAction::*;
-                let kind = match action {
-                    Start | NativeStart => Some(flyouts::Kind::Launcher),
-                    Notifications | NativeNotifications => Some(flyouts::Kind::Notifications),
-                    QuickSettings | NativeQuickSettings => Some(flyouts::Kind::Quick),
-                    Calendar => Some(flyouts::Kind::Calendar),
-                    Network => Some(flyouts::Kind::Wifi),
-                    Mixer => Some(flyouts::Kind::Mixer),
-                    _ => Option::None,
-                };
+                let kind = builtin_flyout(action);
                 if let Some(kind) = kind {
                     flyouts::open(kind, anchor, monitor);
                     return;
                 }
                 match action {
+                    NativeStart => system::start_menu(),
+                    NativeNotifications => {
+                        system::action_center(providers::actions::Panel::Notifications)
+                    }
+                    NativeQuickSettings => system::action_center(providers::actions::Panel::Quick),
                     Search => system::search(),
                     TaskManager => system::open("taskmgr.exe".into()),
                     Settings => system::open("ms-settings:".into()),
@@ -972,6 +1280,11 @@ impl Bars {
                 system::activate(system::hwnd(w));
             }
             Command::Close(w) => system::close(system::hwnd(w)),
+            Command::CloseAll(windows) => {
+                for w in windows {
+                    system::close(system::hwnd(w));
+                }
+            }
             Command::Launch(path) => system::open(path),
             Command::AppActions(data) => crate::integrations::open_app(&data.0, data.1, &data.2),
             Command::EmptyTrash => trash::empty(),
@@ -1151,7 +1464,11 @@ impl Bars {
                 b.config.dock.clock.seconds
             }
         });
-        let tray = self.config.tray.host || self.config.taskbar.mode == TaskbarMode::Hide;
+        let tray = self
+            .bars
+            .iter()
+            .any(|b| b.topics().contains(&providers::actions::Topic::Tray))
+            && (self.config.tray.host || self.config.taskbar.mode == TaskbarMode::Hide);
         self.services.subscribe(topics, &configs, seconds, tray);
         crate::integrations::bar_subscriptions(
             self.bars
@@ -1223,6 +1540,27 @@ impl Bars {
         {
             look::warn_dropped(&value);
         }
+        if let Some(theme) = &loaded {
+            self.theme_watch =
+                notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+                    if event.is_ok_and(|e| {
+                        !matches!(e.kind, notify::EventKind::Access(_))
+                            && e.paths.iter().any(|p| {
+                                p.file_name()
+                                    .is_some_and(|f| f.eq_ignore_ascii_case("theme.json"))
+                            })
+                    }) {
+                        crate::inbox::post(crate::inbox::WM_CONFIG, 0);
+                    }
+                })
+                .ok()
+                .and_then(|mut watcher| {
+                    watcher
+                        .watch(&theme.dir, notify::RecursiveMode::NonRecursive)
+                        .ok()?;
+                    Some(watcher)
+                });
+        }
     }
     fn watch(&mut self) {
         let Ok(dir) = mypaper_config::dir() else {
@@ -1282,4 +1620,50 @@ fn load_config() -> Result<BarsConfig> {
     }
     config.resolve(services::default_pins);
     Ok(config)
+}
+
+/// Only flyout modules speculate a capture, never ordinary app/volume-wheel clicks.
+fn opens_flyout(target: &Target, config: &BarsConfig) -> bool {
+    let module = match target {
+        Target::Module(module) => Some(module.clone()),
+        Target::Tray(_) => Some(ModuleRef::Builtin(Module::Tray)),
+        _ => None,
+    };
+    if let Some(action) = module
+        .as_ref()
+        .and_then(|m| config.modules.get(m))
+        .and_then(|m| m.click.left.as_ref())
+    {
+        match action {
+            Action::Builtin(BuiltinAction::Default) => {}
+            Action::Builtin(action) => return builtin_flyout(*action).is_some(),
+            _ => return false,
+        }
+    }
+    matches!(
+        target,
+        Target::Module(ModuleRef::Builtin(
+            Module::Start
+                | Module::Clock
+                | Module::Quick
+                | Module::Network
+                | Module::Volume
+                | Module::Power
+                | Module::Language
+                | Module::Notifications
+        ))
+    ) || matches!(target, Target::Tray(id) if id == providers::tray::OVERFLOW)
+}
+
+fn builtin_flyout(action: BuiltinAction) -> Option<flyouts::Kind> {
+    use BuiltinAction::*;
+    match action {
+        Start => Some(flyouts::Kind::Launcher),
+        Notifications => Some(flyouts::Kind::Notifications),
+        QuickSettings => Some(flyouts::Kind::Quick),
+        Calendar => Some(flyouts::Kind::Calendar),
+        Network => Some(flyouts::Kind::Wifi),
+        Mixer => Some(flyouts::Kind::Mixer),
+        _ => Option::None,
+    }
 }

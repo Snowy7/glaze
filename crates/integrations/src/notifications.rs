@@ -138,9 +138,17 @@ pub(crate) async fn run(
             _ = changed.notified(), if token.is_some() => {
                 publish.set(availability.clone(), Some(Data::Notifications(read(&subscription.listener, config.show_text)?)));
             }
-            Some(action) = commands.recv() => if let crate::Action::Dismiss(ids) = action {
-                let result = ids.into_iter().try_for_each(|id| subscription.listener.RemoveNotification(id).map_err(anyhow::Error::from));
-                publish.action_result(result);
+            Some(action) = commands.recv() => if matches!(action, crate::Action::Dismiss(_) | crate::Action::RefreshNotifications) {
+                if let crate::Action::Dismiss(ids) = action {
+                    // Attempt every card, even if one toast disappeared between read and click.
+                    let mut error = None;
+                    for id in ids {
+                        if let Err(e) = subscription.listener.RemoveNotification(id) {
+                            error.get_or_insert(anyhow::Error::from(e));
+                        }
+                    }
+                    publish.action_result(error.map_or(Ok(()), Err));
+                }
                 publish.set(availability.clone(), Some(Data::Notifications(read(&subscription.listener, config.show_text)?)));
             }
         }

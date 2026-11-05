@@ -6,6 +6,7 @@
 //! elsewhere closes it. Submenus never activate. A submenu butts against its parent with no gap
 //! and no overlap (plan, "No popups overlap one another").
 
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use accesskit::Role;
@@ -27,6 +28,13 @@ use crate::scene::{DisplayList, Hit, HitId, Op};
 use crate::surface::{Event, Kind, Surface, SurfaceId};
 use crate::text::{Text, TextStyle};
 use crate::tokens::{MenuMetrics, Tokens};
+
+thread_local! { static STYLE: RefCell<Option<Tokens>> = const { RefCell::new(None) }; }
+
+/// The shell's shared menu style, updated when its active bars/theme change.
+pub fn set_style(tokens: Option<Tokens>) {
+    STYLE.with_borrow_mut(|style| *style = tokens);
+}
 
 /// One item of a menu; `C` is what choosing it does.
 #[derive(Debug, Clone, PartialEq)]
@@ -277,6 +285,9 @@ pub fn view<C>(
     let mut hits = Vec::with_capacity(items.len());
     for (index, (item, row)) in items.iter().zip(&layout.rows).enumerate() {
         let top = body.top + row.top;
+        if row.top < m.pad - 0.5 || row.top + row.height > layout.height - m.pad + 0.5 {
+            continue;
+        }
         if let Entry::Separator = item {
             let y = top + row.height / 2.0;
             let inset = 4.0 * s;
@@ -359,11 +370,10 @@ pub fn view<C>(
             checked,
         });
     }
-    DisplayList {
-        ops,
-        hits,
-        focus: hover.map(|i| i as HitId),
-    }
+    let focus = hover
+        .map(|i| i as HitId)
+        .filter(|id| hits.iter().any(|h| h.id == *id));
+    DisplayList { ops, hits, focus }
 }
 
 /// What a menu event came to.
@@ -379,6 +389,10 @@ struct Panel<C> {
     surface: Surface,
     items: Vec<Entry<C>>,
     layout: Layout,
+    natural: Layout,
+    scroll: f32,
+    motion: Option<crate::Tween>,
+    frames: Option<crate::surface::AnimationFrames>,
     /// The body's top-left on screen.
     origin: (i32, i32),
     hover: Option<usize>,
@@ -442,9 +456,12 @@ impl<C: Clone> Menu<C> {
     ) -> Result<()> {
         let started = std::time::Instant::now();
         self.close();
-        self.tokens = tokens.clone();
+        self.tokens = STYLE
+            .with_borrow(Clone::clone)
+            .unwrap_or_else(|| tokens.clone());
         // Glass when the engine can draw it: the tokens' own, else the active style's.
-        self.tokens.glass = tokens
+        self.tokens.glass = self
+            .tokens
             .glass
             .filter(|_| crate::glass::available())
             .or_else(crate::glass::style);
@@ -490,6 +507,41 @@ impl<C: Clone> Menu<C> {
     /// Handles an event for one of the menu's surfaces. Returns what it came to, if anything.
     pub fn handle(&mut self, ui: &mut Ui, id: SurfaceId, event: &Event) -> Option<Outcome<C>> {
         match *event {
+            Event::Frame => {
+                if let Some(p) = self.panels.iter_mut().find(|p| p.surface.id() == id)
+                    && let Some(motion) = p.motion
+                {
+                    let now = std::time::Instant::now();
+                    let progress = motion.value(now).clamp(0.0, 1.0);
+                    let edge = margin(&self.tokens, p.layout.scale) as i32;
+                    let _ = p
+                        .surface
+                        .set_alpha(((0.45 + progress * 0.8).min(1.0) * 255.0).round() as u8);
+                    let _ = p.surface.move_to((
+                        p.origin.0 - edge,
+                        p.origin.1 - edge
+                            + ((1.0 - progress) * 6.0 * p.layout.scale).round() as i32,
+                    ));
+                    if motion.done(now) {
+                        p.motion = None;
+                        p.frames = None;
+                    }
+                }
+                None
+            }
+            Event::Wheel(_, delta) => {
+                let panel = self.panels.iter().position(|p| p.surface.id() == id)?;
+                let p = &mut self.panels[panel];
+                let step =
+                    self.tokens.menu.row * p.layout.scale * if delta > 0 { -3.0 } else { 3.0 };
+                let scroll =
+                    (p.scroll + step).clamp(0.0, (p.natural.height - p.layout.height).max(0.0));
+                if scroll != p.scroll {
+                    p.scroll = scroll;
+                    self.redraw(ui, panel);
+                }
+                None
+            }
             Event::Move(p) => {
                 if let Some((panel, target)) = self.under(p.screen) {
                     self.select(ui, panel, target, false);
@@ -562,8 +614,20 @@ impl<C: Clone> Menu<C> {
         match key {
             k if k == VK_DOWN.0 || k == VK_UP.0 => {
                 let delta = if k == VK_DOWN.0 { 1 } else { -1 };
-                let hits = &self.panels[current].surface.shown().hits;
-                let next = focus::step(hits, hover.map(|h| h as HitId), delta);
+                let hits: Vec<_> = self.panels[current]
+                    .items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, item)| Hit {
+                        id: i as HitId,
+                        rect: Rect::default(),
+                        role: Role::MenuItem,
+                        label: item.label().into(),
+                        enabled: item.selectable(),
+                        checked: None,
+                    })
+                    .collect();
+                let next = focus::step(&hits, hover.map(|h| h as HitId), delta);
                 self.select(ui, current, next.map(|id| id as usize), false);
                 None
             }
@@ -602,6 +666,16 @@ impl<C: Clone> Menu<C> {
             }
         }
         if self.panels[panel].hover != target {
+            if let Some(row) = target {
+                let p = &mut self.panels[panel];
+                let r = &p.natural.rows[row];
+                let pad = self.tokens.menu.pad * p.layout.scale;
+                if r.top - p.scroll < pad {
+                    p.scroll = r.top - pad;
+                } else if r.top + r.height - p.scroll > p.layout.height - pad {
+                    p.scroll = r.top + r.height - p.layout.height + pad;
+                }
+            }
             self.panels[panel].hover = target;
             self.redraw(ui, panel);
         }
@@ -645,20 +719,62 @@ impl<C: Clone> Menu<C> {
         items: Vec<Entry<C>>,
         opened_by: Option<usize>,
         scale: f32,
-        place: impl FnOnce((i32, i32)) -> (i32, i32),
+        place: impl Fn((i32, i32)) -> (i32, i32),
     ) -> Result<()> {
-        let layout = layout(&items, &self.tokens, scale, &mut ui.text);
+        let mut layout = layout(&items, &self.tokens, scale, &mut ui.text);
+        let at = place(layout.size());
+        let work = screen_at(at.0, at.1).work;
+        let natural = layout.clone();
+        layout.height = layout
+            .height
+            .min((work.3 - work.1) as f32 - 2.0 * margin(&self.tokens, scale));
+        layout.width = layout
+            .width
+            .min((work.2 - work.0) as f32 - 2.0 * margin(&self.tokens, scale));
         let origin = place(layout.size());
         let surface = self.take(opened_by.is_some())?;
         self.panels.push(Panel {
             surface,
             items,
             layout,
+            natural,
+            scroll: 0.0,
+            motion: None,
+            frames: None,
             origin,
             hover: None,
             opened_by,
         });
-        self.redraw_checked(ui, self.panels.len() - 1)
+        self.redraw_checked(ui, self.panels.len() - 1)?;
+        let p = self.panels.last_mut().unwrap();
+        let mut animations = windows::core::BOOL(1);
+        // SAFETY: this system query writes one BOOL to our local.
+        let _ = unsafe {
+            windows::Win32::UI::WindowsAndMessaging::SystemParametersInfoW(
+                windows::Win32::UI::WindowsAndMessaging::SPI_GETCLIENTAREAANIMATION,
+                0,
+                Some((&raw mut animations).cast()),
+                Default::default(),
+            )
+        };
+        if !animations.as_bool() {
+            return Ok(());
+        }
+        let spring = crate::Spring::new(1.0, 420.0, 36.0);
+        p.motion = Some(crate::Tween::new(
+            0.0,
+            1.0,
+            spring,
+            std::time::Instant::now(),
+        ));
+        p.frames = Some(
+            p.surface
+                .animation_frames(std::time::Duration::from_secs_f32(
+                    spring.settle(0.001) + 0.05,
+                )),
+        );
+        p.surface.set_alpha(115)?;
+        Ok(())
     }
 
     fn redraw(&mut self, ui: &mut Ui, panel: usize) {
@@ -669,6 +785,9 @@ impl<C: Clone> Menu<C> {
 
     fn redraw_checked(&mut self, ui: &mut Ui, panel: usize) -> Result<()> {
         let p = &mut self.panels[panel];
+        for (row, natural) in p.layout.rows.iter_mut().zip(&p.natural.rows) {
+            row.top = natural.top - p.scroll;
+        }
         let edge = margin(&self.tokens, p.layout.scale) as i32;
         let (w, h) = p.layout.size();
         let list = view(&p.items, &p.layout, p.hover, &self.tokens);
@@ -706,13 +825,49 @@ impl<C: Clone> Menu<C> {
     }
 
     fn create(&self, submenu: bool) -> Result<Surface> {
-        Surface::new(Kind::Popup { activate: !submenu }, &self.name, Role::Menu)
+        Surface::new_deferred_accessibility(
+            Kind::Popup { activate: !submenu },
+            &self.name,
+            Role::Menu,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn long_menus_fit_the_monitor_and_keyboard_selection_scrolls_into_view() {
+        let mut ui = Ui::new().unwrap();
+        let mut menu = Menu::new("Long menu test").unwrap();
+        menu.push_panel(
+            &mut ui,
+            (0..150u32)
+                .map(|i| Entry::action(&format!("Theme {i}"), i))
+                .collect(),
+            None,
+            1.0,
+            |_| (100, 100),
+        )
+        .unwrap();
+        let screen = screen_at(100, 100);
+        assert!(menu.panels[0].layout.height <= (screen.work.3 - screen.work.1) as f32);
+        for _ in 0..150 {
+            menu.key(&mut ui, VK_DOWN.0);
+        }
+        let p = &menu.panels[0];
+        assert_eq!(p.hover, Some(149));
+        assert!(p.scroll > 0.0);
+        assert!(p.surface.shown().hits.iter().any(|h| h.id == 149));
+        assert!(
+            p.surface
+                .shown()
+                .hits
+                .iter()
+                .all(|h| h.rect.bottom <= p.layout.height + margin(&menu.tokens, 1.0))
+        );
+    }
 
     fn items() -> Vec<Entry<u32>> {
         vec![

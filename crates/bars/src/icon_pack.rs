@@ -102,6 +102,38 @@ pub fn find(name: &str, roots: &[PathBuf]) -> Option<PathBuf> {
         .find(|dir| dir.join(MANIFEST).is_file())
 }
 
+/// Built-in Mono pack, embedded so installed shells need no loose icon directory.
+pub fn bundled_mono() -> IconPack {
+    IconPack::parse(include_str!("../assets/icons/mono/icons.json"))
+        .expect("validated bundled pack")
+}
+pub fn bundled_mono_icon(file: &str) -> Option<&'static [u8]> {
+    match file {
+        "bolt.svg" => Some(include_bytes!("../assets/icons/mono/bolt.svg")),
+        "chevron.svg" => Some(include_bytes!("../assets/icons/mono/chevron.svg")),
+        "desktop.svg" => Some(include_bytes!("../assets/icons/mono/desktop.svg")),
+        "ethernet.svg" => Some(include_bytes!("../assets/icons/mono/ethernet.svg")),
+        "offline.svg" => Some(include_bytes!("../assets/icons/mono/offline.svg")),
+        "pause.svg" => Some(include_bytes!("../assets/icons/mono/pause.svg")),
+        "play.svg" => Some(include_bytes!("../assets/icons/mono/play.svg")),
+        "power.svg" => Some(include_bytes!("../assets/icons/mono/power.svg")),
+        "quick.svg" => Some(include_bytes!("../assets/icons/mono/quick.svg")),
+        "search.svg" => Some(include_bytes!("../assets/icons/mono/search.svg")),
+        "start.svg" => Some(include_bytes!("../assets/icons/mono/start.svg")),
+        "trash-full.svg" => Some(include_bytes!("../assets/icons/mono/trash-full.svg")),
+        "trash.svg" => Some(include_bytes!("../assets/icons/mono/trash.svg")),
+        "volume-high.svg" => Some(include_bytes!("../assets/icons/mono/volume-high.svg")),
+        "volume-low.svg" => Some(include_bytes!("../assets/icons/mono/volume-low.svg")),
+        "volume-mid.svg" => Some(include_bytes!("../assets/icons/mono/volume-mid.svg")),
+        "volume-mute.svg" => Some(include_bytes!("../assets/icons/mono/volume-mute.svg")),
+        "wifi-1.svg" => Some(include_bytes!("../assets/icons/mono/wifi-1.svg")),
+        "wifi-2.svg" => Some(include_bytes!("../assets/icons/mono/wifi-2.svg")),
+        "wifi-3.svg" => Some(include_bytes!("../assets/icons/mono/wifi-3.svg")),
+        "wifi-4.svg" => Some(include_bytes!("../assets/icons/mono/wifi-4.svg")),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,6 +159,18 @@ mod tests {
             r#"{ "name": "A", "entries": [], "size": 3 }"#,
         ] {
             assert!(IconPack::parse(bad).is_err(), "accepted {bad}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod bundled_tests {
+    #[test]
+    fn every_builtin_mapping_has_an_embedded_icon() {
+        let pack = super::bundled_mono();
+        assert!(pack.mono);
+        for entry in pack.entries {
+            assert!(super::bundled_mono_icon(&entry.icon).is_some());
         }
     }
 }
