@@ -992,7 +992,9 @@ impl App {
                 }
             }
             FieldId::Hex(path) => {
-                if let Some(color) = mypaper_config::Color::parse(text.trim()) {
+                // "#ff8800" or "ff8800".
+                let hex = format!("#{}", text.trim().trim_start_matches('#'));
+                if let Some(color) = mypaper_config::Color::parse(&hex) {
                     self.apply("Colour", vec![Op {
                         doc: DocId::Config,
                         path: path.to_string(),

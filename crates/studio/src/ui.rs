@@ -461,7 +461,8 @@ pub fn swatches(
     let rect = Rect::new(col.right() - fw, y - b.px(4.0), fw, b.px(32.0));
     let id = FieldId::Hex(edit.path.clone());
     let shown = if custom { current_hex } else { "" };
-    text_field(app, b, rect, id, Some('#'), "Custom", shown.trim_start_matches('#'), &format!("{} hex", edit.label));
+    // No glyph: the icon font has no '#', so the value carries it.
+    text_field(app, b, rect, id, None, "Custom", shown, &format!("{} hex", edit.label));
     col.y += b.px(34.0);
 }
 

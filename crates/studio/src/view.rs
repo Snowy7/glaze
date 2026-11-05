@@ -275,15 +275,8 @@ pub fn edit_tools(app: &App, b: &mut B, bar: Rect, mut right: f32) -> f32 {
         right -= w + b.px(28.0);
         b.icon(Rect::new(right, bar.top, b.px(14.0), bar.height()), g, 11.0, p.ink3);
         b.text_in(Rect::new(right + b.px(18.0), bar.top, w + b.px(2.0), bar.height()), label, &caption, p.ink3, Align::Start);
-        b.list.hits.push(mypaper_ui::Hit {
-            id: 0,
-            rect: Rect::new(right, bar.top, w + b.px(20.0), bar.height()),
-            role: Role::Status,
-            label: label.into(),
-            enabled: true,
-            checked: None,
-        });
-        b.list.hits.pop();
+        // Announced as a status; not a stop for Tab (it does nothing).
+        b.hit(key("save-state"), Rect::new(right, bar.top, w + b.px(20.0), bar.height()), Role::Status, label, Action::None, mypaper_ui::controls::Behavior::Click);
     }
     right - b.px(6.0)
 }
@@ -329,6 +322,9 @@ fn toast(app: &App, b: &mut B) {
     let r = regions(app);
     let rect = Rect::new(r.main.left + (r.main.width() - w) / 2.0, app.size.1 as f32 - h - b.px(24.0), w, h);
     b.elevated(rect, b.px(10.0));
+    // The toast as a status for screen readers; it also keeps clicks off the page beneath.
+    // Its buttons come after, so they win the pointer where they are.
+    b.hit(key("toast"), rect, Role::Status, &t.text, Action::None, mypaper_ui::controls::Behavior::Click);
     b.icon(Rect::new(rect.left + b.px(12.0), rect.top, b.px(16.0), h), if t.alert { glyph::ALERT } else { glyph::CHECK }, 12.0, p.ink1);
     b.text_in(Rect::new(rect.left + b.px(36.0), rect.top, tw + b.px(2.0), h), &t.text, &body, p.ink1, Align::Start);
     let mut x = rect.right - b.px(36.0);
@@ -338,15 +334,6 @@ fn toast(app: &App, b: &mut B) {
         x -= bw + b.px(4.0);
         b.button(key("toast-action"), Rect::new(x, rect.top + b.px(7.0), bw, b.px(28.0)), label, None, ButtonKind::Secondary, true, Action::ToastButton);
     }
-    b.list.hits.push(mypaper_ui::Hit {
-        id: 0,
-        rect: Rect::new(rect.left, rect.top, 0.0, 0.0),
-        role: Role::Status,
-        label: t.text.as_str().into(),
-        enabled: true,
-        checked: None,
-    });
-    b.list.hits.pop();
 }
 
 /// A sheet over the page: scrim, the centered panel with its title and close button. Returns

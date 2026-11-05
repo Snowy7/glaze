@@ -184,12 +184,19 @@ fn widget_inspector(app: &App, b: &mut B, col: &mut Col, layout: &Layout, instan
             groups.push(g);
         }
     }
-    for group in groups {
-        section(b, col, &group, |b, c| {
+    for group in &groups {
+        section(b, col, group, |b, c| {
             for s in manifest.settings.iter().filter(|s| group_of(s).unwrap_or("Options") == group) {
                 widget_setting(app, b, c, &base, &resolved, s, instance, manifest);
             }
+            // One Look section: the widget's own look joins its manifest's.
+            if group == "Look" {
+                own_look(app, b, c, &base, instance);
+            }
         });
+    }
+    if !groups.iter().any(|g| g == "Look") {
+        section(b, col, "Look", |b, c| own_look(app, b, c, &base, instance));
     }
     section(b, col, "Size", |b, c| {
         let half = (c.w - b.px(8.0)) / 2.0;
@@ -197,33 +204,35 @@ fn widget_inspector(app: &App, b: &mut B, col: &mut Col, layout: &Layout, instan
         stepper(b, Rect::new(c.x + half + b.px(8.0), c.y, half, b.px(32.0)), "Tall", instance.size[1], Action::ResizeWidget(0, -1), Action::ResizeWidget(0, 1));
         c.y += b.px(40.0);
     });
-    section(b, col, "Look", |b, c| {
-        let own = !instance.appearance.eq(&Default::default());
-        let row = Rect::new(c.x, c.y, c.w, b.px(36.0));
-        label(b, row, "Its own look", "", if own { None } else { Some("Follows Look") });
-        let edit = Edit::new(DocId::Widgets, format!("{base}/appearance/surface"), "Its own look");
-        let action = if own {
-            Action::Set(Edit::new(DocId::Widgets, format!("{base}/appearance"), "Follows Look"), Value::Null)
-        } else {
-            Action::Set(edit, json!("glass"))
-        };
-        b.switch(key("own-look"), Point::new(c.x + c.w - b.px(36.0), c.y + b.px(8.0)), own, "Its own look", action);
+}
+
+/// "Its own look": a widget's appearance over Look's, with its background and tint.
+fn own_look(app: &App, b: &mut B, c: &mut Col, base: &str, instance: &Instance) {
+    let own = !instance.appearance.eq(&Default::default());
+    let row = Rect::new(c.x, c.y, c.w, b.px(36.0));
+    label(b, row, "Its own look", "", if own { None } else { Some("Follows Look") });
+    let edit = Edit::new(DocId::Widgets, format!("{base}/appearance/surface"), "Its own look");
+    let action = if own {
+        Action::Set(Edit::new(DocId::Widgets, format!("{base}/appearance"), "Follows Look"), Value::Null)
+    } else {
+        Action::Set(edit, json!("glass"))
+    };
+    b.switch(key("own-look"), Point::new(c.x + c.w - b.px(36.0), c.y + b.px(8.0)), own, "Its own look", action);
+    c.y += b.px(40.0);
+    if own {
+        let surface = instance.appearance.surface.map_or("glass", |s| match s {
+            mypaper_theme::Surface::None => "none",
+            mypaper_theme::Surface::Glass => "glass",
+            mypaper_theme::Surface::Solid => "solid",
+        });
+        let values = ["glass", "solid", "none"];
+        let e = Edit::new(DocId::Widgets, format!("{base}/appearance/surface"), "Background");
+        b.segmented(key("own-surface"), Rect::new(c.x, c.y, c.w, b.px(32.0)), &["Glass", "Solid", "None"], values.iter().position(|v| *v == surface), "Background", true, |i| Action::Set(e.clone(), json!(values[i])));
         c.y += b.px(40.0);
-        if own {
-            let surface = instance.appearance.surface.map_or("glass", |s| match s {
-                mypaper_theme::Surface::None => "none",
-                mypaper_theme::Surface::Glass => "glass",
-                mypaper_theme::Surface::Solid => "solid",
-            });
-            let values = ["glass", "solid", "none"];
-            let e = Edit::new(DocId::Widgets, format!("{base}/appearance/surface"), "Background");
-            b.segmented(key("own-surface"), Rect::new(c.x, c.y, c.w, b.px(32.0)), &["Glass", "Solid", "None"], values.iter().position(|v| *v == surface), "Background", true, |i| Action::Set(e.clone(), json!(values[i])));
-            c.y += b.px(40.0);
-            let tint = Edit::new(DocId::Widgets, format!("{base}/appearance/tint"), "Tint");
-            let current = app.get(DocId::Widgets, &format!("{base}/appearance/tint")).cloned();
-            swatches(app, b, c, &tint, current.as_ref(), None, &[[0x34, 0x3a, 0x42], [0x8b, 0x9e, 0xb7], [0xc8, 0x8d, 0x3c], [0x7f, 0xae, 0x8e], [0xe6, 0xe6, 0xe6]]);
-        }
-    });
+        let tint = Edit::new(DocId::Widgets, format!("{base}/appearance/tint"), "Tint");
+        let current = app.get(DocId::Widgets, &format!("{base}/appearance/tint")).cloned();
+        swatches(app, b, c, &tint, current.as_ref(), None, &[[0x34, 0x3a, 0x42], [0x8b, 0x9e, 0xb7], [0xc8, 0x8d, 0x3c], [0x7f, 0xae, 0x8e], [0xe6, 0xe6, 0xe6]]);
+    }
 }
 
 fn group_of(s: &WidgetSetting) -> Option<&str> {
