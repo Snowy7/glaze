@@ -1,5 +1,6 @@
 //! WGSL shader wallpapers, with optional render scale (draw at a fraction
-//! of the screen resolution, then upscale through the blitter).
+//! of the screen resolution, then upscale through the blitter), image inputs, and baked
+//! layers: theme entry points drawn once per render size (`ShaderImage::bake`).
 
 use std::time::Duration;
 
@@ -34,11 +35,25 @@ pub struct ShaderSource {
     screens: Vec<Option<ScreenState>>,
     images: Vec<(u32, wgpu::TextureView)>,
     sampler: wgpu::Sampler,
+    /// The theme's code never names the cursor (`paper.mouse`), so every screen of one size
+    /// draws the same frame: time and resolution are all it reads.
+    shared: bool,
+    bakes: Bakes,
 }
 
 struct ScreenState {
+    /// The render size `bind_group`'s baked layers were drawn at.
+    size: (u32, u32),
     uniforms: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
+}
+
+/// The theme's baked layers: (binding, pipeline) each, drawn with `layout` (the paper layout
+/// without any baked binding), and their textures per render size seen, in `layers` order.
+struct Bakes {
+    layers: Vec<(u32, wgpu::RenderPipeline)>,
+    layout: wgpu::BindGroupLayout,
+    sizes: Vec<((u32, u32), Vec<wgpu::TextureView>)>,
 }
 
 impl ShaderSource {
@@ -56,10 +71,28 @@ impl ShaderSource {
             },
             count: None,
         }];
+        let texture_entry = |binding, filterable| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        };
+        let sampler_entry = |binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        };
         let mut images = Vec::new();
-        if !config.images.is_empty() {
+        let (baked, loaded): (Vec<_>, Vec<_>) =
+            config.images.iter().partition(|image| image.bake.is_some());
+        if !loaded.is_empty() {
             let decoder = Decoder::new()?;
-            for image in &config.images {
+            for image in loaded {
                 // Raw unorm matches the former WebGL ShaderMaterial; no implicit sRGB decode.
                 let decoded = match &image.source {
                     Some(source) => decoder.decode(
@@ -91,25 +124,10 @@ impl ShaderSource {
                         .map(|(code, effect)| (code.as_str(), *effect)),
                 )?;
                 images.push((image.binding, texture.create_view(&Default::default())));
+                let filterable = texture.format() != wgpu::TextureFormat::Rgba32Float;
                 entries.extend([
-                    wgpu::BindGroupLayoutEntry {
-                        binding: image.binding,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float {
-                                filterable: texture.format() != wgpu::TextureFormat::Rgba32Float,
-                            },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: image.binding + 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
+                    texture_entry(image.binding, filterable),
+                    sampler_entry(image.binding + 1),
                 ]);
             }
         }
@@ -120,13 +138,33 @@ impl ShaderSource {
             mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
-        let layout = gpu
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("paper"),
-                entries: &entries,
-            });
-        let pipeline = compile(gpu, &layout, &code).with_context(|| path.display().to_string())?;
+        let create_layout = |entries: &[wgpu::BindGroupLayoutEntry]| {
+            gpu.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("paper"),
+                    entries,
+                })
+        };
+        let bake_layout = create_layout(&entries);
+        for image in &baked {
+            entries.extend([
+                texture_entry(image.binding, true),
+                sampler_entry(image.binding + 1),
+            ]);
+        }
+        let layout = create_layout(&entries);
+        let mut pipelines = compile(
+            gpu,
+            &code,
+            std::iter::once((&layout, "mypaper_fs")).chain(
+                baked
+                    .iter()
+                    .filter_map(|image| Some((&bake_layout, image.bake.as_deref()?))),
+            ),
+        )
+        .with_context(|| path.display().to_string())?
+        .into_iter();
+        let pipeline = pipelines.next().context("no wallpaper pipeline")?;
         Ok(Self {
             pipeline,
             layout,
@@ -135,55 +173,140 @@ impl ShaderSource {
             screens: Vec::new(),
             images,
             sampler,
+            shared: !code.contains("mouse"),
+            bakes: Bakes {
+                layers: baked
+                    .iter()
+                    .map(|image| image.binding)
+                    .zip(pipelines)
+                    .collect(),
+                layout: bake_layout,
+                sizes: Vec::new(),
+            },
         })
     }
 
-    fn state(&mut self, gpu: &Gpu, screen: usize) -> &mut ScreenState {
+    /// The paper bind group entries for `uniforms`: the uniforms, then every loaded image.
+    fn entries<'a>(&'a self, uniforms: &'a wgpu::Buffer) -> Vec<wgpu::BindGroupEntry<'a>> {
+        let mut entries = vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: uniforms.as_entire_binding(),
+        }];
+        for (binding, view) in &self.images {
+            entries.extend(image_entries(*binding, view, &self.sampler));
+        }
+        entries
+    }
+
+    /// The baked layers at `size`, drawn into `encoder` the first time that size is seen.
+    fn baked(
+        &mut self,
+        gpu: &Gpu,
+        size: (u32, u32),
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> &[wgpu::TextureView] {
+        if let Some(at) = self.bakes.sizes.iter().position(|(s, _)| *s == size) {
+            return &self.bakes.sizes[at].1;
+        }
+        // The layers see the frame's resolution at time 0, and no cursor.
+        let uniforms = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("paper bake"),
+            size: size_of::<Uniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let paper = Uniforms {
+            resolution: [size.0 as f32, size.1 as f32],
+            ..Default::default()
+        };
+        gpu.queue
+            .write_buffer(&uniforms, 0, bytemuck::bytes_of(&paper));
+        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("paper bake"),
+            layout: &self.bakes.layout,
+            entries: &self.entries(&uniforms),
+        });
+        let mut views = Vec::new();
+        for (_, pipeline) in &self.bakes.layers {
+            let texture = gpu.texture(
+                "baked layer",
+                size,
+                gpu.format,
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+                None,
+            );
+            let view = texture.create_view(&Default::default());
+            let mut pass = begin(encoder, &view, wgpu::LoadOp::Clear(wgpu::Color::BLACK));
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.draw(0..3, 0..1);
+            drop(pass);
+            views.push(view);
+        }
+        self.bakes.sizes.push((size, views));
+        &self.bakes.sizes.last().expect("just pushed").1
+    }
+
+    /// The screen's uniforms and bind group, rebuilt when its render size (and so its baked
+    /// layers) changes.
+    fn state(&mut self, gpu: &Gpu, screen: usize, size: (u32, u32), baked: &[wgpu::TextureView]) {
         if self.screens.len() <= screen {
             self.screens.resize_with(screen + 1, || None);
         }
-        self.screens[screen].get_or_insert_with(|| {
-            let uniforms = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("paper"),
-                size: size_of::<Uniforms>() as u64,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            let mut entries = vec![wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniforms.as_entire_binding(),
-            }];
-            for (binding, view) in &self.images {
-                entries.extend([
-                    wgpu::BindGroupEntry {
-                        binding: *binding,
-                        resource: wgpu::BindingResource::TextureView(view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: binding + 1,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                    },
-                ]);
-            }
-            let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("paper"),
-                layout: &self.layout,
-                entries: &entries,
-            });
-            ScreenState {
-                uniforms,
-                bind_group,
-            }
-        })
+        if self.screens[screen]
+            .as_ref()
+            .is_some_and(|s| s.size == size)
+        {
+            return;
+        }
+        let uniforms = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("paper"),
+            size: size_of::<Uniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut entries = self.entries(&uniforms);
+        for ((binding, _), view) in self.bakes.layers.iter().zip(baked) {
+            entries.extend(image_entries(*binding, view, &self.sampler));
+        }
+        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("paper"),
+            layout: &self.layout,
+            entries: &entries,
+        });
+        self.screens[screen] = Some(ScreenState {
+            size,
+            uniforms,
+            bind_group,
+        });
     }
+}
+
+/// A texture at `binding` and the shared filtering sampler at `binding + 1`.
+fn image_entries<'a>(
+    binding: u32,
+    view: &'a wgpu::TextureView,
+    sampler: &'a wgpu::Sampler,
+) -> [wgpu::BindGroupEntry<'a>; 2] {
+    [
+        wgpu::BindGroupEntry {
+            binding,
+            resource: wgpu::BindingResource::TextureView(view),
+        },
+        wgpu::BindGroupEntry {
+            binding: binding + 1,
+            resource: wgpu::BindingResource::Sampler(sampler),
+        },
+    ]
 }
 
 impl Source for ShaderSource {
     fn render(&mut self, gpu: &Gpu, frame: Frame<'_>) {
-        let pipeline = self.pipeline.clone();
-        let state = self.state(gpu, frame.screen);
-
         let size = frame.size;
+        let baked = self.baked(gpu, size, frame.encoder).to_vec();
+        self.state(gpu, frame.screen, size, &baked);
+        let state = self.screens[frame.screen].as_ref().expect("screen state");
+
         let uniforms = Uniforms {
             resolution: [size.0 as f32, size.1 as f32],
             mouse: [
@@ -202,7 +325,7 @@ impl Source for ShaderSource {
             frame.view,
             wgpu::LoadOp::Clear(wgpu::Color::BLACK),
         );
-        pass.set_pipeline(&pipeline);
+        pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &state.bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
@@ -216,6 +339,10 @@ impl Source for ShaderSource {
 
     fn redraw(&self, _clock: Duration) -> Redraw {
         Redraw::Every(self.interval)
+    }
+
+    fn shared(&self) -> bool {
+        self.shared
     }
 }
 
@@ -427,8 +554,13 @@ fn prefilter(
     output
 }
 
-/// Compiles a theme shader. Errors come back as text with line numbers.
-fn compile(gpu: &Gpu, layout: &wgpu::BindGroupLayout, code: &str) -> Result<wgpu::RenderPipeline> {
+/// Compiles a theme shader and one pipeline per (layout, fragment entry point), in order.
+/// Errors come back as text with line numbers.
+fn compile<'a>(
+    gpu: &Gpu,
+    code: &str,
+    entries: impl IntoIterator<Item = (&'a wgpu::BindGroupLayout, &'a str)>,
+) -> Result<Vec<wgpu::RenderPipeline>> {
     gpu.checked(|| {
         let module = gpu
             .device
@@ -436,35 +568,40 @@ fn compile(gpu: &Gpu, layout: &wgpu::BindGroupLayout, code: &str) -> Result<wgpu
                 label: Some("wallpaper"),
                 source: wgpu::ShaderSource::Wgsl(format!("{code}\n{PRELUDE}").into()),
             });
-        let pipeline_layout = gpu
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("paper"),
-                bind_group_layouts: &[Some(layout)],
-                immediate_size: 0,
-            });
-        gpu.device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("wallpaper"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &module,
-                    entry_point: Some("mypaper_vs"),
-                    compilation_options: Default::default(),
-                    buffers: &[],
-                },
-                primitive: Default::default(),
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &module,
-                    entry_point: Some("mypaper_fs"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(gpu.format.into())],
-                }),
-                multiview_mask: None,
-                cache: None,
+        entries
+            .into_iter()
+            .map(|(layout, entry)| {
+                let pipeline_layout =
+                    gpu.device
+                        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                            label: Some("paper"),
+                            bind_group_layouts: &[Some(layout)],
+                            immediate_size: 0,
+                        });
+                gpu.device
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some(entry),
+                        layout: Some(&pipeline_layout),
+                        vertex: wgpu::VertexState {
+                            module: &module,
+                            entry_point: Some("mypaper_vs"),
+                            compilation_options: Default::default(),
+                            buffers: &[],
+                        },
+                        primitive: Default::default(),
+                        depth_stencil: None,
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: &module,
+                            entry_point: Some(entry),
+                            compilation_options: Default::default(),
+                            targets: &[Some(gpu.format.into())],
+                        }),
+                        multiview_mask: None,
+                        cache: None,
+                    })
             })
+            .collect()
     })
 }
 

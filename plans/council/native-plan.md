@@ -87,12 +87,12 @@ vendor driver stack (`docs/engine-notes.md:27-40`).
 | core | (part of 255) | ≤8 MB, ~0% |
 | shell, idle fixture | ~415 MB | **≤40 MB, ≤0.1%** (bars over maximized apps ≤0.05%) |
 | shell, a flyout or menu open | n/a | ≤+6 MB, freed on close; content on screen ≤30 ms; 0 redraws once settled |
-| engine, idle fixture | n/a (see above) | **≤458.1 MiB private** (N0.3: 448.1 + 10 MiB); CPU per the rain-city row (0% over a still image) |
+| engine, idle fixture | n/a (see above) | **≤272.4 MiB private** (engine hillclimb: 262.4 + 10 MiB; N0.3 was 458.1); CPU per the rain-city row (0% over a still image) |
 | plates on an animated wallpaper | n/a | ≤0.3 ms GPU per frame for all plates, measured with wgpu timestamp queries added in N2, only on frames drawn anyway |
 | default rain-city wallpaper, 2 screens at 30 fps, keeping its 0.65 render scale | ~30% (web) | ≤4% CPU (the per-frame cost is ~0.57 ms, from aurora's 3.43% at 60 fps, `perf/results/2026-11-04-0502-final.md:38,69`); GPU ≤2 ms per frame per screen with wgpu timestamps, which covers `rain.frag`'s inclusive blur loop (18 samples including the centre) |
 | glass overlay open | n/a | glass fades in within the 300 ms open animation; engine ≤3% CPU and ≤0.5 ms GPU per update; frames whose dirty rects miss the region are skipped; ≤ +30 MB while open, freed on close |
 | dwm.exe vs the same wallpaper without the shell | n/a | ≤ +0.5% CPU, ≤ +1% GPU at idle |
-| Whole product, idle fixture | ~670 MB | **≤ engine gate + 48 MB** (engine fixture gate: 458.1 MiB; combined allowance 506.1 MiB) |
+| Whole product, idle fixture | ~670 MB | **≤ engine gate + 48 MB** (engine fixture gate: 272.4 MiB; combined allowance 320.4 MiB) |
 
 ## UI technology: software D2D + DirectWrite + layered windows (`crates/ui`)
 Chosen over:
@@ -278,8 +278,15 @@ are preserved.
      measured on the rebuilt engine, default integrated GPU: full-scale aurora **420.21 MiB**,
      ported rain-city **448.07 MiB** (median of three 60-second runs each; 16 plates across both
      screens). Rain retains two 1664 x 936 frames and aurora two 2560 x 1440 frames; no plate
-     scratch remains. The larger measured median + 10 MiB sets **458.1 MiB** as the engine gate.
-     Reproduction and remaining GPU/lag gaps: `docs/performance.md`, Native measurements.
+     scratch remains. The larger measured median + 10 MiB set **458.1 MiB** as the engine gate.
+     **Engine hillclimb (5 November 2026):** optimization only, the same visuals (rain within 1/255
+     in at most 0.0005% of pixels, snow and aurora bit-identical): rain-city **257.11 MiB**, aurora
+     **262.35 MiB** (medians of three 60-second runs, same fixture). The gate is the larger median
+     + 10 MiB, **272.4 MiB**. The 10 MiB covers run-to-run spread (rain's three runs span 8.7 MiB)
+     and still leaves the gate 186 MiB below N0.3's. The engine now shares one wallpaper pass and
+     kept frame between screens that show the same frame. Still open: GPU per screen (2.7 ms
+     against 2 ms) and glass lag (about 1.5 frames, bounded by two flip buffers); see
+     `docs/performance.md`, Engine hillclimb.
 
   If spike 2 fails, redesign the overlay inside the engine before N3. There is no shell device.
 - **N1 `crates/ui` and `mypaper-shell`, with the desktop menu** (tint, no glass yet). ✅ A golden PNG

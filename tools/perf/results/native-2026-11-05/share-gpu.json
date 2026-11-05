@@ -1,0 +1,14 @@
+[
+  {
+    "scenario": "real-look",
+    "run": 0,
+    "seconds": 20.0118622,
+    "private_mb": 267.08203125,
+    "cpu_core_pct": 3.4354623929001473,
+    "cpu_machine_pct": 0.2147163995562592,
+    "visible_screens": 2,
+    "timing_file": "C:\\mypaper-targets\\hillclimb\\results\\share-gpu.run0.jsonl",
+    "sample_started_qpc": 3665264136798,
+    "sample_ended_qpc": 3665464255424
+  }
+]

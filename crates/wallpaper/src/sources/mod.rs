@@ -55,6 +55,12 @@ pub trait Source {
     fn render_size(&self, size: (u32, u32)) -> (u32, u32) {
         size
     }
+    /// True when every screen of one render size shows the same frame: the output depends on
+    /// neither the screen nor the cursor. The engine then draws it once per frame into one
+    /// kept frame that all those screens restore from.
+    fn shared(&self) -> bool {
+        false
+    }
     /// Advances time-based state once per engine tick, before any drawing
     /// (decode the next video frame, advance a slideshow, ...).
     fn update(&mut self, _gpu: &Gpu, _clock: Duration) {}

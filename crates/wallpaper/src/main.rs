@@ -21,6 +21,8 @@ mod control;
 mod engine;
 mod glass_pass;
 mod gpu;
+#[cfg(test)]
+mod lab;
 // Glass overlays, driven by the loop below; their measuring calls serve the spike examples.
 #[allow(dead_code)]
 mod overlay;

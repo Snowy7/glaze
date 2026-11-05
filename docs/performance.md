@@ -61,6 +61,97 @@ pacing, so it is excluded from idle CPU samples. `--window <sample.json>` on the
 selects the exact CPU window and excludes startup/teardown publications. The async slots may omit a
 sample if all are still mapping, and no timestamp work runs when telemetry is disabled.
 
+### Engine hillclimb (5 November 2026)
+
+Same machine, fixture and harness as the N0.3 measurements below (two visible 2560 x 1440
+screens, 16 clear plates, default integrated GPU, rain at 30 fps and 0.65 scale), on the
+final build (`bdefbb0`). Visual quality is unchanged: every blur tap,
+layer, render scale and frame rate is kept (proof below). Each change was measured and
+committed on its own; `docs/engine-notes.md` (Memory, Shader image inputs) explains them.
+
+| Metric | Before (N0.3) | After | Gate |
+|---|---:|---:|---|
+| Engine private memory, rain (median of 3 x 60 s) | 448.07 MiB | **257.11 MiB** (261.84 / 253.18 / 257.11) | new gate 272.4 MiB, below |
+| Engine private memory, aurora (median of 3 x 60 s) | 420.21 MiB | **262.35 MiB** (259.24 / 263.15 / 262.35) | |
+| Engine private memory, still photo (60 s) | 363.98 MiB | **233.65 MiB** | |
+| Interleaved A/B on the same desktop, rain (baseline / final, two pairs) | 375.18, 445.96 MiB | **253.77, 255.04 MiB** | |
+| Rain CPU, % of one core (same A/B pairs) | 4.369, 2.837% | **2.837, 2.369%** | <=4%: pass in the pairs; the busy 3 x 60 s below is above |
+| Rain CPU, the final 3 x 60 s above | 2.759% (N0.3, quieter desktop) | 4.580% (5.145 / 4.580 / 4.242) | see note |
+| Still CPU, % of one core (interleaved A/B pair) | 0.156% | 0.182% | 0%: **open** |
+| GPU per engine frame, both screens, rain (median / p95) | 10.749 / 11.203 ms | **5.410 / 5.762 ms** | |
+| GPU per screen: that divided by two | 5.37 ms | **2.71 ms** | <=2 ms: **open**, see below |
+| Rain wallpaper pass | 4.32 + 3.82 ms (one per screen) | **3.09 ms** (once for both) | |
+| Restore, per screen | 1.12 / 1.14 ms | 0.95 / 1.11 ms | |
+| All 16 plates, summed (median / p95) | 0.402 / 0.460 ms | **0.275 / 0.322 ms** | <=0.3 ms: **pass** (median) |
+| Glass-only lag, publish -> DWM completion bound, median (DISPLAY1 / DISPLAY2) | 7.49 / 5.86 ms | **6.52 / 6.11 ms** | <=1 frame (4.17 / 5.00 ms): **open** |
+| same, p95 | 11.98 / 8.31 ms | **8.86 / 7.93 ms** | |
+
+Measured wins, each in its own commit (live: 15-30 s probe runs; offline: `src/lab.rs`):
+
+| Commit | Win |
+|---|---|
+| Exact-size GPU heaps (4 MiB blocks) | 450.2 -> 398.7 MiB |
+| Backdrop from the kept frame + palette from the kept frame | 398.7 -> 366.1 MiB |
+| One wallpaper pass and kept frame for screens showing the same frame | GPU per engine frame 10.75 -> 7.25 ms; 366.1 -> 354.5 MiB |
+| Restore without clear or blend | 7.25 -> 6.68 ms; restore 1.27 / 1.33 -> 0.89 / 1.08 ms |
+| Rain: baked drop-free frame | offline rain pass 3.69 -> 2.88 ms (+5.9 MiB, one texture) |
+| Rain: layer gradients only where the field slopes | offline 2.88 -> 2.52 ms; live engine frame 6.68 -> 5.48 ms |
+| Glass: per-plate constants, zero-weight mixes skipped | offline 0.133 -> 0.102 ms per screen; live 16 plates 0.354 -> 0.280 ms |
+| 16k view descriptors instead of 1M | 361.7 -> 276.0 MiB |
+| One backdrop readback for screens sharing a kept frame | 276.0 -> 257.7 MiB |
+
+**Quality proof.** `cargo test -p mypaper-wallpaper lab::lab -- --ignored --exact` renders
+one screen of the engine's real path (wallpaper into the kept frame, restore, the fixture's
+eight plates) offscreen on the iGPU and dumps raw frames; `tools/perf/diff-frames.py` compares
+two captures. Frames at 3, 12 and 30 s from the original engine against the final one, final
+2560 x 1440 frames with glass and the kept frames: rain-city, rain-city-amber and
+rain-city-midnight differ by at most **1/255** in at most 0.0005% of pixels (the baked frame's
+compiled blur rounds differently in a handful of pixels); snow-city, snow-forest and aurora are
+**bit-identical**. The restore and glass changes are bit-identical on their own. Both screens
+of a live capture with the shared kept frame are pixel-identical, as before. The scaled-rain
+backdrop BMP differs by at most 2/255 (mean 0.12/255) after its 1/64 blur; palette.json is
+unchanged.
+
+The baseline engine's own memory moved between 375 and 446 MiB across today's runs, most
+likely because its growing 8-64 MiB suballocation blocks were reused or not depending on
+timing (not verified further). The final
+engine's stayed within 253-263 MiB. CPU depends on the desktop: another agent restarted its
+shell about once a minute during the final 3 x 60 s rain runs, and every window event costs
+the engine a cover rescan. The interleaved pairs (baseline, final, baseline, final, one minute
+each) compare the builds under the same conditions; the final build is lower in both pairs.
+Its A/B runs also carried the hook filter tried under Still CPU below, which only changes
+event handling and was dropped.
+
+**What stays open, and why.**
+- *GPU <= 2 ms per screen.* Rain's own pass is 3.09 ms for both screens, then each screen
+  restores (upscales) the kept frame into its swapchain, 0.95-1.11 ms, and draws its plates.
+  The same restore costs 0.42 ms into an offscreen texture: writes into these swapchains, an
+  iGPU swapchain shown on monitors driven by the RTX, are about 2.5x slower, and wgpu offers no
+  control of how DXGI allocates them. What remains in the rain pass is the drop field's ALU
+  (about 400 instructions per pixel) and the 18-tap blur where drops refract; exact
+  early-outs beyond the two above measured slower. Per engine frame the iGPU is busy 5.4 ms
+  of 33 ms (16%).
+- *Lag <= 1 frame.* With the minimum two flip buffers a glass-only update can start only after
+  DWM releases the previous image at a vblank, and shows at the next: publish -> composition
+  stays near 1.5 frames even with no GPU time. A third buffer per swapchain would remove up to
+  a frame of it at about +28 MiB or more per screen; that trade is the user's to make.
+- *Snow.* The snow ports cost about 18 ms per frame on this iGPU (50 layers of a hash whose
+  division by a fractional part moves flakes by pixels on a one-ulp change, so no cache of it
+  can be exact). Sharing one pass between both screens halves it to 18 ms per engine frame
+  (54% of the iGPU at 30 fps). Aurora (an example theme) costs about 20 ms per screen.
+- *Still CPU 0%.* Over a still photo the engine submits nothing, but it wakes for every
+  window event other processes cause (WinEvent hooks in `crates/desktop`) and rescans what
+  covers each monitor after each burst: 0.13-0.21% of one core on this busy desktop, 0.078%
+  on N0.3's quieter one. Ignoring child and tool windows in the hook was tried and showed no
+  measurable difference here, so it was not kept.
+- *Memory floor.* Probing the RTX and WARP before choosing the iGPU leaves up to about 25 MiB
+  (the single-adapter wgpu-hal patch is N5); the two swapchains cost +63 and +40 MiB for
+  2 x 2 x 14 MiB of pixels.
+- *First static snapshot of a theme* still renders each screen at full size (and, for rain, a
+  full-size baked layer), once per theme and screen size; not part of this fixture.
+
+Results: [`tools/perf/results/native-2026-11-05`](../tools/perf/results/native-2026-11-05).
+
 ### Native measurements (4-5 November 2026)
 
 Release build, AMD Radeon(TM) integrated GPU (DX12/FXC), Ryzen 7 7800X3D / 16 logical
