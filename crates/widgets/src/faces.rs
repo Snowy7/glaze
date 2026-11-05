@@ -19,6 +19,7 @@ pub struct FaceMove {
 
 /// Each port adds its own rows; the first matching row wins.
 pub const MOVED: &[FaceMove] = &[
+    FaceMove { widget: "discord", variant: None, face: "discord--main" },
     FaceMove { widget: "grok", variant: Some("prompt"), face: "grok--prompt" },
     FaceMove { widget: "grok", variant: Some("recent"), face: "grok--recent" },
     FaceMove { widget: "grok", variant: None, face: "grok--routines" },
