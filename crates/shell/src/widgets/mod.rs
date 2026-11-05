@@ -2141,6 +2141,10 @@ impl Widgets {
         let Ok(text) = field.text() else {
             return;
         };
+        if m.kind == Widget::Plugin {
+            self.submit_plugin_field(id, text);
+            return;
+        }
         if m.kind == Widget::Discord {
             crate::integrations::discord::action(m, crate::integrations::discord::SEND);
             m.dirty = true;

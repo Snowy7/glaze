@@ -21,10 +21,17 @@ pub enum Status<'a> {
     Failed(&'a str),
 }
 
+/// What a hit in a face asks for: a plain action, or text entry for a `field`'s action.
+#[derive(Debug, PartialEq)]
+pub enum Hit {
+    Action(String),
+    Field(String),
+}
+
 /// The plugin action behind hit `hit` in `face`, if any.
-pub fn action_at(face: &Face, hit: HitId) -> Option<String> {
+pub fn action_at(face: &Face, hit: HitId) -> Option<Hit> {
     if hit == REFRESH && face.refresh {
-        return Some("refresh".into());
+        return Some(Hit::Action("refresh".into()));
     }
     let n = hit.checked_sub(ACTION).filter(|n| *n < MAX_ACTIONS)? as usize;
     let mut actions = Vec::new();
@@ -32,14 +39,15 @@ pub fn action_at(face: &Face, hit: HitId) -> Option<String> {
     actions.into_iter().nth(n)
 }
 
-fn collect(view: &View, out: &mut Vec<String>) {
+fn collect(view: &View, out: &mut Vec<Hit>) {
     match view {
         View::Stack { children, .. } | View::Row { children, .. } | View::Grid { children, .. } => {
             children.iter().for_each(|c| collect(c, out))
         }
         View::Card { child, .. } => collect(child, out),
-        View::Button { action, .. } | View::Field { action, .. } => out.push(action.clone()),
-        View::ListRow { action: Some(action), .. } => out.push(action.clone()),
+        View::Button { action, .. } => out.push(Hit::Action(action.clone())),
+        View::Field { action, .. } => out.push(Hit::Field(action.clone())),
+        View::ListRow { action: Some(action), .. } => out.push(Hit::Action(action.clone())),
         _ => {}
     }
 }

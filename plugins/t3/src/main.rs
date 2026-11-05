@@ -172,6 +172,8 @@ pub enum Msg {
     Secret(String, String),
     /// The provider's run ended (error text), to retry later.
     Ended(String),
+    /// An action failed; shown in the footer until the next change.
+    Notice(String),
 }
 
 #[derive(Default)]
@@ -180,6 +182,7 @@ struct T3Plugin {
     faces: BTreeMap<String, (String, SizeClass)>,
     snapshot: Arc<Mutex<Snapshot>>,
     running: bool,
+    notice: Option<String>,
 }
 
 impl T3Plugin {
@@ -218,7 +221,11 @@ impl T3Plugin {
         let Some((face, size)) = self.faces.get(instance) else { return };
         let snapshot = self.snapshot.lock().unwrap().clone();
         let now_ms = chrono::Utc::now().timestamp_millis();
-        ctx.view(instance, faces::face(face, *size, &snapshot, now_ms));
+        let mut view = faces::face(face, *size, &snapshot, now_ms);
+        if let Some(notice) = &self.notice {
+            view.footer = Some(notice.clone());
+        }
+        ctx.view(instance, view);
     }
 
     fn draw_all(&self, ctx: &mut Ctx<Msg>) {
@@ -252,7 +259,7 @@ impl Plugin for T3Plugin {
                     ctx.cancel("minute");
                 }
             }
-            Event::Action { instance, action, .. } => {
+            Event::Action { instance, action, value } => {
                 match action.split_once(':') {
                     // Approvals run off the loop; the shell stream reports the outcome.
                     Some((verb @ ("approve" | "deny"), target)) => {
@@ -262,9 +269,26 @@ impl Plugin for T3Plugin {
                             std::thread::spawn(move || {
                                 let endpoint = t3_client::DEFAULT_ENDPOINT;
                                 if let Err(e) = t3_client::respond_blocking(endpoint, &thread, &request, approve) {
-                                    sender.send(Msg::Ended(format!("Action failed · {e:#}")));
+                                    sender.send(Msg::Notice(format!("Action failed · {e:#}")));
                                 }
                             });
+                        }
+                    }
+                    // New thread: the prompt from the host's text field, in T3's first project and model.
+                    None if action == "send" => {
+                        let snapshot = self.snapshot.lock().unwrap().clone();
+                        if let (Some(prompt), Some(Data::T3(state))) = (value, snapshot.data) {
+                            let project = state.projects.keys().next().cloned();
+                            let model = state.models.first().cloned();
+                            let sender = ctx.sender();
+                            if let (Some(project), Some(model)) = (project, model) {
+                                std::thread::spawn(move || {
+                                    let endpoint = t3_client::DEFAULT_ENDPOINT;
+                                    if let Err(e) = t3_client::launch_blocking(endpoint, &project, &model, &prompt) {
+                                        sender.send(Msg::Notice(format!("Couldn't start the thread · {e:#}")));
+                                    }
+                                });
+                            }
                         }
                     }
                     _ if (action == "retry" || action == "refresh") && !self.running => self.start(ctx),
@@ -272,7 +296,15 @@ impl Plugin for T3Plugin {
                 }
                 self.draw(ctx, &instance);
             }
-            Event::Timer("minute") | Event::Msg(Msg::Changed) => self.draw_all(ctx),
+            Event::Timer("minute") => self.draw_all(ctx),
+            Event::Msg(Msg::Changed) => {
+                self.notice = None;
+                self.draw_all(ctx);
+            }
+            Event::Msg(Msg::Notice(notice)) => {
+                self.notice = Some(notice);
+                self.draw_all(ctx);
+            }
             Event::Timer("retry") => self.start(ctx),
             Event::Msg(Msg::Secret(key, value)) => {
                 if let Err(e) = ctx.set_secret(&key, Some(&value)) {

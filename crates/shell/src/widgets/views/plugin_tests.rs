@@ -31,6 +31,21 @@ fn draw(ui: &mut Ui, m: &Model, size: (u32, u32)) -> DisplayList {
     views::view(m, &Tokens::default(), frame, &mut ui.text)
 }
 
+/// Hits map back to the plugin's actions in tree order; a `field` asks for text entry.
+#[test]
+fn hits_map_back_to_plugin_actions() {
+    use views::plugin::{ACTION, Hit, action_at};
+    let faces: Value = serde_json::from_str(include_str!("../../../../../plugins/t3/golden/faces.json")).unwrap();
+    let face = |id: &str| serde_json::from_value::<mypaper_plugin_sdk::Face>(faces[id]["medium"].clone()).unwrap();
+    let attention = face("attention");
+    assert_eq!(action_at(&attention, ACTION), Some(Hit::Action("thread:thread-0".into())));
+    assert_eq!(action_at(&attention, ACTION + 1), Some(Hit::Action("approve:thread-0:approval".into())));
+    assert_eq!(action_at(&attention, ACTION + 2), Some(Hit::Action("deny:thread-0:approval".into())));
+    assert_eq!(action_at(&attention, ACTION + 3), None);
+    assert_eq!(action_at(&attention, ACTION - 1), Some(Hit::Action("refresh".into())));
+    assert_eq!(action_at(&face("new"), ACTION), Some(Hit::Field("send".into())));
+}
+
 #[test]
 fn t3_plugin_faces_render_on_the_kit() {
     let faces: Value = serde_json::from_str(include_str!("../../../../../plugins/t3/golden/faces.json")).unwrap();

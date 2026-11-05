@@ -8,7 +8,7 @@ use serde_json::json;
 
 use super::Widgets;
 use super::model::{Model, Widget, plugin_face};
-use super::views::plugin::action_at;
+use super::views::plugin::{Hit, action_at};
 
 /// The size class the plugin designs for, from the tile's cells.
 fn size_class(cells: [u32; 2]) -> mypaper_plugin_sdk::SizeClass {
@@ -62,9 +62,29 @@ impl Widgets {
     }
 
     pub(super) fn plugin_action(&mut self, id: &str, hit: mypaper_ui::HitId) {
-        let action = self.plugins.face_view(id).and_then(|face| action_at(face, hit));
+        match self.plugins.face_view(id).and_then(|face| action_at(face, hit)) {
+            Some(Hit::Action(action)) => self.plugins.face_action(id, &action, None),
+            // Text goes through the shell's RichEdit field; `submit_plugin_field` sends it.
+            Some(Hit::Field(action)) => {
+                if let Some(entry) = self.entries.get_mut(id) {
+                    entry.model.data["field_action"] = action.into();
+                }
+                self.open_field(id, None);
+            }
+            None => {}
+        }
+    }
+
+    /// The field opened by a plugin `field` was submitted: its text goes back as the action's value.
+    pub(super) fn submit_plugin_field(&mut self, id: &str, text: String) {
+        let Some(entry) = self.entries.get_mut(id) else { return };
+        let action = entry.model.data["field_action"].as_str().map(str::to_owned);
+        if let Some(field) = &entry.model.field {
+            let _ = field.set_text("");
+        }
+        entry.model.dirty = true;
         if let Some(action) = action {
-            self.plugins.face_action(id, &action, None);
+            self.plugins.face_action(id, &action, Some(text));
         }
     }
 }

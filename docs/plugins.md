@@ -199,6 +199,7 @@ icon name `dot` draws a filled status dot.
 
 ## Status (2026-11-05)
 
-T3 runs on the SDK in `plugins/t3` with all five faces; it isn't cut over yet. Still to do before
-it replaces the built-in: the host's text field for `field` (New thread prompt), project/model
+T3 runs on the SDK in `plugins/t3` with all five faces (approvals and New thread send through T3's
+API; `field` opens the shell's text field); it isn't cut over yet. Still to do before
+it replaces the built-in: project/model
 pickers, opening a thread, and a last visual pass against `t3-sizes.png`.

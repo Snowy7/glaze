@@ -177,7 +177,6 @@ pub fn check_blocking(address: &str) -> Result<()> {
 }
 
 /// A click/Enter in mypaper is the only caller. The server still enforces its client's grant.
-#[allow(dead_code)] // wired once the host's text field sends `send` with a value
 pub fn launch_blocking(
     address: &str,
     project: &str,
