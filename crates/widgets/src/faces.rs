@@ -19,13 +19,20 @@ pub struct FaceMove {
 
 /// Each port adds its own rows; the first matching row wins.
 pub const MOVED: &[FaceMove] = &[
+    FaceMove { widget: "t3", variant: Some("running"), face: "t3--running" },
+    FaceMove { widget: "t3", variant: Some("attention"), face: "t3--attention" },
+    FaceMove { widget: "t3", variant: Some("limits"), face: "t3--limits" },
+    FaceMove { widget: "t3", variant: Some("usage"), face: "t3--usage" },
+    FaceMove { widget: "t3", variant: Some("new"), face: "t3--new" },
+    FaceMove { widget: "t3", variant: None, face: "t3--running" },
     FaceMove { widget: "obs", variant: None, face: "obs--controls" },
     FaceMove { widget: "discord", variant: None, face: "discord--main" },
     FaceMove { widget: "grok", variant: Some("prompt"), face: "grok--prompt" },
     FaceMove { widget: "grok", variant: Some("recent"), face: "grok--recent" },
     FaceMove { widget: "grok", variant: None, face: "grok--routines" },
     FaceMove { widget: "docker", variant: None, face: "docker--containers" },
-    FaceMove { widget: "tailscale", variant: None, face: "tailscale--connection" },];
+    FaceMove { widget: "tailscale", variant: None, face: "tailscale--connection" },
+];
 
 /// The face an instance of `widget` with `settings` moves to, if a row matches.
 pub fn face_for<'a>(table: &'a [FaceMove], widget: &str, settings: &Map<String, Value>) -> Option<&'a str> {
