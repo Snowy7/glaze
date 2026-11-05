@@ -83,7 +83,9 @@ impl Widgets {
     }
 
     pub(super) fn plugin_action(&mut self, ui: &mut mypaper_ui::Ui, id: &str, hit: mypaper_ui::HitId) {
-        match self.plugins.face_view(id).and_then(|face| action_at(face, hit)) {
+        let found = self.plugins.face_view(id).map(|face| action_at(face, hit));
+        log::debug!("plugin face {id}: hit {hit} -> {found:?}");
+        match found.flatten() {
             Some(Hit::Action(action)) => self.plugins.face_action(id, &action, None),
             // Text goes through the shell's RichEdit field; `submit_plugin_field` sends it.
             Some(Hit::Field(action)) => {

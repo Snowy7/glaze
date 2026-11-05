@@ -320,6 +320,9 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
         }
         View::Row { children, gap } => {
             let gap = f.px(gap.unwrap_or(8.0));
+            // A kind this shell doesn't know draws nothing, so it takes no room either: a newer
+            // plugin's status tag must not halve its row's title (2026-11-06, T3 "Running now").
+            let children: Vec<&View> = children.iter().filter(|c| !matches!(c, View::Unknown)).collect();
             // Icons and buttons keep their natural width; the rest share what's left.
             let natural = |f: &mut Frame<'_>, c: &View| match c {
                 View::Icon { size, .. } => Some(f.px(size.unwrap_or(16.0))),
@@ -642,6 +645,42 @@ mod tests {
                     if height <= 96.0 {
                         assert_eq!(f.list.ops.iter().filter(|op| matches!(op, Op::Icon { .. })).count(), 1, "short tiles keep only the header icon");
                     }
+                }
+            }
+        }
+    }
+
+    /// "Running now" rows span the widget at 100 % and 150 %, with their status pills at the
+    /// right edge; a kind the shell doesn't know (a newer plugin's) takes no room.
+    #[test]
+    fn running_rows_fill_the_widget_at_any_scale() {
+        let face = |pill: &str| {
+            let row = |n: usize| serde_json::json!({"kind": "row", "gap": 6, "children": [
+                {"kind": "list_row", "title": format!("Improve the App Store listing {n}"), "detail": "claude-opus-5-5", "icon": "terminal", "trailing": "", "action": format!("thread:{n}")},
+                {"kind": pill, "label": "Working", "color": "#7dd3fc", "dot": false},
+            ]});
+            let face = serde_json::json!({"body": {"kind": "stack", "gap": 6, "children": [row(0), row(1), row(2)]}, "footer": "Live from your local T3 Code"});
+            serde_json::from_value::<Face>(face).unwrap()
+        };
+        let (known, future) = (face("tag"), face("future-pill"));
+        let mut ui = Ui::new().unwrap();
+        let theme = Theme::new(Style::Liquid, Scheme::Dark, Rgba::rgb8([10, 132, 255], 1.0));
+        let input = Interaction::default();
+        for scale in [1.0, 1.5] {
+            for (face, pills) in [(&known, true), (&future, false)] {
+                let rect = Rect::new(0.0, 0.0, 420.0 * scale, 300.0 * scale);
+                let mut f = Frame::new(&mut ui.text, &theme, scale, &input);
+                draw(&mut f, rect, "T3 · Running now", Icon::Terminal, Some(face), Status::Live);
+                let rows: Vec<_> = f.list.hits.iter().filter(|h| h.id >= ACTION).collect();
+                assert!(rows.len() >= 3, "scale {scale}: {} rows", rows.len());
+                let least = if pills { 0.55 } else { 0.85 };
+                for row in rows {
+                    assert!(row.rect.width() >= rect.width() * least, "scale {scale}, pills {pills}: row {:?}", row.rect);
+                }
+                let pill = f.list.ops.iter().find_map(|op| match op { Op::Text { rect, text, .. } if text.as_ref() == "Working" => Some(*rect), _ => None });
+                match pill {
+                    Some(pill) => assert!(pills && pill.right >= rect.width() * 0.85, "scale {scale}: pill {pill:?}"),
+                    None => assert!(!pills, "scale {scale}: no status pill"),
                 }
             }
         }
