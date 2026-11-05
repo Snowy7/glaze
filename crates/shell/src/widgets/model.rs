@@ -32,7 +32,6 @@ pub enum Widget {
     T3,
     Obs,
     Docker,
-    Tailscale,
     Grok,
     Custom,
     /// A face drawn by an SDK plugin of the same id (docs/plugins.md); `data` holds its view.
@@ -61,7 +60,6 @@ impl Widget {
             "t3" => Self::T3,
             "obs" => Self::Obs,
             "docker" => Self::Docker,
-            "tailscale" => Self::Tailscale,
             "grok" => Self::Grok,
             custom if custom.starts_with("custom-") => Self::Custom,
             _ => return None,
