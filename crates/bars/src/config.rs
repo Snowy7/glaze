@@ -1082,6 +1082,12 @@ impl BarsConfig {
     /// This config as one monitor's bars see it: the `overrides` for `secondary` or `primary`,
     /// then for the device itself, merged over the file. Fails only if an override stopped
     /// parsing, which [`parse`](Self::parse) already rules out.
+    /// The user's own fields as written in the file (before presets and designs): what counts as
+    /// an explicit choice when plugin style patches fill the rest (docs/plugins.md, "Styling").
+    pub fn raw(&self) -> &Map<String, Value> {
+        &self.raw
+    }
+
     pub fn for_monitor(&self, device: &str, primary: bool) -> Result<Self> {
         let role = if primary { "primary" } else { "secondary" };
         let mut matching: Vec<(u8, &Value)> = self

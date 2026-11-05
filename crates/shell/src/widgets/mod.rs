@@ -777,6 +777,8 @@ impl Widgets {
         for out in plugin_out {
             self.deliver(ui, out, now);
         }
+        // Style patches the runtime reported reach the bars and menus (docs/plugins.md, "Styling").
+        crate::bars::plugin_style::publish(self.plugins.style_patches());
         self.sync_plugin_faces();
         let ids: Vec<_> = self.entries.keys().cloned().collect();
         for id in ids {

@@ -174,13 +174,14 @@ pub fn menu_tokens(text: &mypaper_ui::Text) -> mypaper_ui::Tokens {
         .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
         .and_then(LoadedTheme::load)
         .ok();
-    let appearance = theme_appearance(loaded.as_ref());
-    Tokens::resolve(
-        &bars.top.look,
-        &bars.appearance.over(&appearance),
-        &accent::read(),
-    )
-    .menu(text)
+    let mut appearance = bars.appearance.over(&theme_appearance(loaded.as_ref()));
+    // The menus follow the top bar's plugin patches, then the `menu` surface's own colours.
+    let mut look = bars.top.look.clone();
+    let mut colors = super::plugin_style::patch_look("top-bar", "top", bars.raw(), &mut look, &mut appearance);
+    colors.extend(super::plugin_style::tokens("menu"));
+    let mut tokens = Tokens::resolve(&look, &appearance, &accent::read());
+    super::plugin_style::colors(&colors, bars.raw(), &mut tokens.theme.color);
+    tokens.menu(text)
 }
 
 /// The theme's `bars` appearance, its `auto` accent taken from the wallpaper's palette.

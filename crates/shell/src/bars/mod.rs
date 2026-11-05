@@ -4,6 +4,7 @@ pub(crate) mod icons;
 pub(crate) mod look;
 mod maximized;
 mod motion;
+pub mod plugin_style;
 mod preview;
 pub(crate) mod services;
 mod sprites;
@@ -414,6 +415,10 @@ impl Bars {
         at = tick_spent("services", at);
         if changes.config || changes.theme {
             self.config_changed();
+        }
+        // A plugin patched or reset a bar's style: restyle in place like a settings change.
+        if plugin_style::take_changed() {
+            self.config_due.get_or_insert(now);
         }
         if services::take_due(&mut self.config_due, now) {
             match load_config() {
@@ -1561,8 +1566,17 @@ impl Bars {
         for monitor in monitors {
             let mut config = self.config.for_monitor(&monitor.device, monitor.primary)?;
             config.resolve(services::default_pins);
-            let appearance = config.appearance.over(&self.appearance);
+            // Plugin heights are geometry: the bar rebuilds for them, unlike the other tokens.
+            if let Some(h) = plugin_style::number("top-bar", "top", self.config.raw(), "height") {
+                config.top.height = f64::from(h.clamp(16.0, 96.0));
+            }
+            let base_appearance = config.appearance.over(&self.appearance);
             for kind in [BarKind::Top, BarKind::Dock] {
+                let (surface, bar_key) = match kind {
+                    BarKind::Top => ("top-bar", "top"),
+                    BarKind::Dock => ("dock", "dock"),
+                };
+                let mut appearance = base_appearance.clone();
                 let (enabled, includes, look) = match kind {
                     BarKind::Top => (
                         config.top.enabled,
@@ -1585,7 +1599,10 @@ impl Bars {
                     let performance = config.performance == config::Performance::On
                         || (config.performance == config::Performance::Auto
                             && mypaper_desktop::on_battery());
-                    let mut tokens = look::Tokens::resolve(look, &appearance, &self.system);
+                    let mut look = look.clone();
+                    let colors = plugin_style::patch_look(surface, bar_key, self.config.raw(), &mut look, &mut appearance);
+                    let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
+                    plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
                     // No glass on battery saver: the theme's own surface draws instead.
                     if performance {
                         tokens.material = None;
