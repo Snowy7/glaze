@@ -6,7 +6,7 @@ Read-only audit: no build, tests, application launch or desktop changes. **Done 
 
 Each row is one checklist item; related settings with the same status are enumerated together. Counts apply to rows, not individual JSON properties. Studio rows measure both the editor and whether its controls still affect the desktop. The final backlog references row IDs and excludes N3 and deliberate cuts.
 
-**Status counts:** **136 done**; **84 partial**; **17 missing**; **45 in progress by N3**; **17 dropped on purpose**. **299 rows total.**
+**Status counts:** **151 done**; **72 partial**; **15 missing**; **44 in progress by N3**; **17 dropped on purpose**. **299 rows total.** (Studio rows S01–S33 updated by N7, 2026-11-05.)
 
 Old locations below are paths at `f378a4c`, read with `git show f378a4c:<path>` and inventoried with `git ls-tree -r f378a4c`. Abbreviations in that column: `B/` = `bars/shell/src/`; `RB/` = `crates/bars/src/`; `RW/` = `crates/widgets/src/`; `W/` = `widgets/`; `S/` = `apps/studio/src/`; `ST/` = `apps/studio/src-tauri/src/`. Native evidence links point to current files, whose contents may change after this audit.
 
@@ -162,7 +162,7 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 | H20 Live edits of active theme appearance/materials | **partial** | `RW/theme.rs`, `RW/app.rs` | [Widget host][widget-host], [bar host][bar-host]: watch config/palette/layout, but no active-theme file watcher; direct theme-file edits need another watched event/restart. |
 | H21 Invalid layout: retain last good display, refuse writes and show edit-mode error | **partial** | `RW/app.rs`, `W/shell/src/edit.ts` | [Widget host][widget-host] retains good state but merely logs failure; later arranging/overlay saves can overwrite the invalid file. |
 | H22 Scroll and keyboard access to long content in notes/todo/RSS/calendar/launcher | **missing** | `W/*/style.css`, `W/*/main.js` | [Widget view][widget-view], [host][widget-host]: truncate/break at bounds with no scroll offset or wheel handler. |
-| H23 JSON-RPC plugin manifests, request/subscription protocol and Studio setting-search calls | **partial** | `RW/plugins.rs`, `RW/rpc.rs`, `docs/writing-plugins.md` | [Plugin library][widget-plugins], `apps/studio/src-tauri/src/plugins.rs` remain; shell owns a plugin manager but built-ins bypass it and no general native provider UI is wired. |
+| H23 JSON-RPC plugin manifests, request/subscription protocol and Studio setting-search calls | **partial** | `RW/plugins.rs`, `RW/rpc.rs`, `docs/writing-plugins.md` | [Plugin library][widget-plugins] remains (Studio's town search now calls the weather plugin's library directly, `crates/studio/src/app.rs`; the Tauri `plugins.rs` went with N7); shell owns a plugin manager but built-ins bypass it and no general native provider UI is wired. |
 | H24 File/image pickers: private copied files, 64 MB cap, filters, duplicate URL rebasing | **partial** | `RW/pick.rs`, `W/shell/src/settings-form.ts` | [Picker][widget-picker] and Studio imports retain limits/filters; [host][widget-host] copies files on duplicate without rewriting source-instance URLs. |
 | H25 Old `mypaper-widgets --edit/--overlay` executable invocation | **dropped on purpose** | `RW/main.rs` | [Plan line 63][html-plan] deletes the executable; [widget control][widget-control] preserves the edit/overlay outcomes through the old hotkeys and registered messages. |
 | H26 Per-widget web permissions/CSP/SDK mock harness | **dropped on purpose** | `RW/net.rs`, `packages/widget-sdk/`, `docs/writing-widgets.md` | [Plan lines 66–67][html-plan], [line 352][losses]: HTML execution and authoring contract is intentionally retired. |
@@ -235,7 +235,7 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
-| WW01 `city` auto location / place object, Studio town search; `units` metric/imperial | **done** | `W/weather/widget.json`, `W/weather/main.js` | [Widget fetcher][widget-data], `apps/studio/src/components/inspectors/WidgetSettingControl.tsx`: linked weather service and retained place inspector support both. |
+| WW01 `city` auto location / place object, Studio town search; `units` metric/imperial | **done** | `W/weather/widget.json`, `W/weather/main.js` | [Widget fetcher][widget-data], [widget inspector][n7-widgets]: linked weather service and the native place inspector (Automatic or a town, with search) support both. |
 | WW02 `variant` card/compact/forecast, current temperature/place/condition | **partial** | `W/weather/main.js`, `W/weather/weather-logic.js` | [Widget view][widget-view]: current data and variants work, but the old roomy layouts and day/night-specific illustration are reduced. |
 | WW03 Hourly forecast temperatures/chance/conditions; daily icons/chance/range bars and responsive seven-day view | **missing** | `W/weather/main.js:109`, `W/weather/weather-logic.js` | [Widget view][widget-view]: fetches hourly data but never draws it; daily view is only three/six date+high/low entries. |
 | WW04 Location unavailable/denied guidance, privacy Settings action, retry/stale states and ten-minute cache | **partial** | `W/weather/main.js`, `plugins/weather/src/service.rs` | [Widget fetcher][widget-data] keeps the service/cache; [view][widget-view] reduces actionable permission/error states to plain text. |
@@ -373,43 +373,43 @@ All 17 old manifests are represented by compiled [native catalog schemas][widget
 
 ## Studio
 
-All eight old view files remain: Desktop, Themes, NewTheme, ThemeEditor, Widgets, Bars, Windows and Settings. Except for widget catalog/preview glue, the React/Tauri UI is unchanged from `f378a4c`. **Studio is still Tauri; native Studio is N7 and is explicitly deferrable ([plan line 330][studio-plan]).** “Done” below can therefore mean retained Studio functionality; it does not mean a native settings window has shipped.
+N7 (2026-11-05) replaced the Tauri Studio with the native one (`crates/studio`, on `crates/ui`; `apps/studio` is deleted) and redesigned it ([spec][n7-spec], [how it works][n7-ux]). Old view files below are the Tauri ones, kept as the audit's baseline. **A Studio row is done when native Studio edits every field it lists and previews it with the shell's own views; where a desktop consumer of a field is still missing, the note names the row that tracks it** (those gaps belong to the shell or engine, not to Studio). Golden images of every screen, light and dark: [docs/media/studio][n7-goldens].
 
 | ID / feature and settings | Status | Old location | Native evidence and one-line note |
 |---|---|---|---|
-| S01 Page navigation, remembered route/selection, sidebar active theme/playing chip | **done** | `S/App.tsx`, `S/lib/pages.ts`, `S/lib/nav.tsx`, `S/components/Sidebar.tsx` | [Studio app][studio-app], `apps/studio/src/lib/nav.tsx`: retained navigation covers all six primary pages. |
-| S02 Ctrl+K search pages/settings/themes/actions, jump/open More/scroll/flash a setting | **done** | `S/components/CommandPalette.tsx`, `S/lib/settingsIndex.ts` | [Command palette][studio-search], [settings index][studio-settings-index]: retained keyboard-first search remains. |
-| S03 Undo/redo Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y, merged slider edits, autosave status/errors/toasts | **done** | `S/lib/history.tsx`, `S/lib/useAutosaved.ts`, `S/lib/studio.tsx` | [Studio history][studio-history], `apps/studio/src/lib/useAutosaved.ts`: retained transactional edits remain. |
-| S04 Desktop monitor picker, stage select wallpaper/widget/bar; active-theme strip, pause/resume, inspector navigation | **partial** | `S/views/Desktop.tsx`, `S/components/stage/DesktopScene.tsx` | [Desktop page][studio-desktop] retains editing, but widgets are name placeholders and bar previews still use old CSS presentation. |
-| S05 Themes gallery: search, Yours/Built-in/All filter, grouping, cards/thumbnails, apply with Undo | **done** | `S/views/Themes.tsx`, `S/components/ThemeCard.tsx` | [Themes page][studio-themes]: original gallery and theme application remain. |
-| S06 Invalid-config banner and Reset to defaults | **done** | `S/views/Themes.tsx`, `S/lib/studio.tsx`, `ST/config_edit.rs` | [Themes page][studio-themes], `apps/studio/src-tauri/src/config_edit.rs`: explicit recovery control is retained. |
-| S07 Duplicate built-in theme to edit; user theme editing, active state and source credits | **done** | `S/views/ThemeEditor.tsx`, `S/components/inspectors/MakeCopy.tsx`, `S/components/inspectors/DesktopInspectors.tsx` | [Theme editor][studio-theme-editor], [wallpaper inspector][studio-inspectors]: copy/edit/apply/credit workflows remain. |
-| S08 New theme: picture/video/WGSL/scene/file, image folder, URL/local HTML, program and args | **done** | `S/views/NewTheme.tsx`, `ST/source.rs`, `ST/themes.rs` | [New theme][studio-new], `apps/studio/src-tauri/src/source.rs`: all source choices still generate themes. |
-| S09 New-theme name, cover/contain/stretch/center fit, source preview, change source, Use it right away | **done** | `S/views/NewTheme.tsx`, `ST/manifest.rs` | [New theme][studio-new]: original options remain; source-specific runtime limitations are unchanged. |
-| S10 ThemeEditor Wallpaper tab: source metadata/credits, React to mouse for web/scene | **done** | `S/views/ThemeEditor.tsx`, `S/components/inspectors/DesktopInspectors.tsx` | [Theme editor][studio-theme-editor], [inspector][studio-inspectors]: existing editability rules and interactive switch remain. |
-| S11 ThemeEditor Windows tab; Windows page: accent, light/dark, corners, material, border/title/text and cursor picker | **done** | `S/views/Windows.tsx`, `S/components/inspectors/WindowsStyleFields.tsx` | [Windows page][studio-windows], [Windows fields][studio-windows-fields]: every old Windows field has a retained native effect. |
-| S12 Windows page Right-click menu: enabled, reorder/hide/add built-ins, custom label/command/args, classic-menu switch | **done** | `S/views/Windows.tsx`, `S/components/inspectors/MenuFields.tsx` | [Windows page][studio-windows], [menu fields][studio-menu-fields]: schema edits reach the native desktop menu. |
-| S13 Widgets catalog/search/add; missing-widget placeholder; per-display list, select/remove/duplicate/size and stage arrange | **done** | `S/views/Widgets.tsx`, `S/components/inspectors/WidgetCatalog.tsx`, `S/lib/desktop.ts` | [Widgets page][studio-widgets], [catalog backend][studio-widget-backend]: compiled built-ins still support placement and catalog search. |
-| S14 Each widget's manifest setting controls: string/number/boolean/select/slider/font/list/place/file/image, grouped options/reset | **partial** | `S/components/inspectors/WidgetSettingControl.tsx`, `S/components/inspectors/WidgetInspector.tsx` | [Widget inspector][studio-widget-fields], [catalog backend][studio-widget-backend]: forms remain, but runtime gaps are enumerated per widget above. |
-| S15 Global and instance widget look, inherited/reset-own look, overlay switch, Arrange on desktop | **partial** | `S/views/Widgets.tsx`, `S/components/inspectors/LookFields.tsx` | [Widgets page][studio-widgets], [look editor][studio-look]: controls remain; overlay/material/style/shadow gaps are H10/H14/H16/H17/H19. |
-| S16 Real widget content/settings/appearance preview on stage | **missing** | `S/components/stage/WidgetFrame.tsx`, `S/lib/widgetHost.ts` | [WidgetFrame][studio-widget-frame] explicitly replaces the iframe with the widget name pending N7; native-rendered preview has not landed. |
-| S17 ThemeEditor widget/bar appearance fields and widget glass Strength/Bend/Shine/Tint/Blur | **partial** | `S/views/ThemeEditor.tsx`, `S/components/inspectors/LookFields.tsx` | [Theme editor][studio-theme-editor], [look editor][studio-look]: editors save, but not every retained control affects native rendering and active theme edits lack shell watching. |
-| S18 Theme CSS choose/replace/remove, bar CSS variable controls and dropped decoration controls | **dropped on purpose** | `S/views/ThemeEditor.tsx`, `S/components/bars/ThemeVarsPanel.tsx`, `S/components/bars/PaintEditor.tsx` | [Plan lines 350–352][losses]: these controls still appear in Tauri and should be removed/marked unsupported rather than treated as a parity blocker. |
-| S19 Bars pairings, independent top/dock enable/design, live thumbnails and Windows-taskbar mode/alignment | **partial** | `S/views/Bars.tsx`, `S/components/bars/DesignPicker.tsx`, `S/components/bars/BarPanels.tsx` | [Bars page][studio-bars]: file edits work; design thumbnails are the old CSS designs and do not represent current native output. |
-| S20 Bars geometry: top shape/edge/height/width/room, dock style/edge/size/room/alignment/button/titles; display selectors | **partial** | `S/components/bars/BarSettings.tsx`, `S/components/bars/DockPanel.tsx` | [Bar settings][studio-bar-settings], [dock panel][studio-dock]: retained controls map to native geometry except the `dock.button`+titles gap D02. |
-| S21 Bars clocks (seconds/format); running/split/counter/previews/delay/bounce/attention/indicators/extras/magnify/autohide | **partial** | `S/components/bars/BarSettings.tsx`, `S/components/bars/DockPanel.tsx` | [Dock panel][studio-dock], [bar settings][studio-bar-settings]: all controls remain; native differences are D12/D14/D17/D18. |
-| S22 Pins: import Windows/default, custom path/name list, order/remove/add | **done** | `S/components/bars/PinnedList.tsx` | [Pins editor][studio-pins], [bar host][bar-host]: saved pin edits reach the native dock. |
-| S23 Modules: drag stage/list reorder/add/break/remove; custom module creation/deletion; command/args/interval | **done** | `S/components/bars/ModuleOptions.tsx`, `S/components/bars/BarFrame.tsx`, `S/lib/barsModules.ts` | [Module editor][studio-modules], [bar view][bar-view]: retained editor produces supported native lists/commands. |
-| S24 Module click/scroll action picker, icon and text/fill/border/padding/radius/size/weight controls | **partial** | `S/components/bars/ActionPicker.tsx`, `S/components/bars/ModuleOptions.tsx` | [Module editor][studio-modules]: controls remain; native image masking/tooltips and explicit native-panel actions have the gaps listed at T20/T22/T24. |
-| S25 Bar look: light/dark, background/material, glass knobs, corners, state edges/shadows/buttons and indicator colors | **partial** | `S/components/bars/LookPanel.tsx`, `S/components/bars/PaintEditor.tsx` | [Bar look editor][studio-bar-look]: old controls save valid JSON, but many native consumers are missing (C06–C12). |
-| S26 Bar motion enabled/duration/curve/show style, hover/press/open/magnify/bounce/attention, reduce-motion/performance | **partial** | `S/components/bars/MotionPanel.tsx`, `S/components/bars/CurvePicker.tsx` | [Motion editor][studio-motion]: native motion handles only some leaves; see C13–C15. |
-| S27 Start layout/files/Win key/pins, audio output switch, calendar zones/first day, tray-host setting | **in progress by N3** | `S/components/bars/MenusPanel.tsx` | [Menus editor][studio-menus], [flyout config][flyout-config]: schemas/editors remain; custom native panel consumers are N3. |
-| S28 Icon packs choose/create, per-app image add/remove and previews | **partial** | `S/components/bars/IconsPanel.tsx`, `ST/iconpacks.rs` | [Icon editor][studio-icons], [bar icons][bar-icons]: user packs work; bundled-pack lookup and state-key fidelity need parity (C16). |
-| S29 Per-display overrides list/remove and inherited values | **done** | `S/components/bars/MonitorPicker.tsx`, `S/components/bars/BarPanels.tsx`, `S/lib/barsDoc.ts` | [Bars page][studio-bars], [bar schema][bars-schema]: existing role/device overrides still resolve and can be cleared. |
-| S30 Settings: Start with Windows, startup still, pause on battery/fullscreen, start/stop/status, emergency hotkey display | **done** | `S/views/Settings.tsx`, `ST/autostart.rs`, `ST/engine.rs` | [Settings page][studio-settings], [autostart][autostart]: original controls and actions remain. |
-| S31 Settings “Parts of mypaper” installed/running components and startup-method/path detail | **partial** | `S/views/Settings.tsx`, `ST/engine.rs` | [Studio engine status][studio-engine]: still checks deleted `mypaper-widgets.exe` and `mypaper-bars.exe`, and does not report `mypaper-shell.exe`. |
-| S32 External-edit watcher and refresh of config/themes/bars/widgets | **done** | `ST/watch.rs`, `S/lib/hooks.ts` | [Studio watcher][studio-watch]: retained recursive debounced updates keep the settings app in sync. |
-| S33 Native Studio renderer, accurate native previews and no Tauri processes | **missing** | `apps/studio/` (old implementation); N7 replacement in plan | [Plan line 330][studio-plan] explicitly defers N7; no replacement settings app exists yet, and retained Tauri functionality should not be called native. |
+| S01 Page navigation, remembered route/selection, sidebar active theme/playing chip | **done** | `S/App.tsx`, `S/lib/pages.ts`, `S/lib/nav.tsx`, `S/components/Sidebar.tsx` | [Frame][n7-view], [app][n7-app]: sidebar of the six places plus Settings, status block (wallpaper, Pause, a stopped part); last page and selection kept in `studio.json`. |
+| S02 Ctrl+K search pages/settings/themes/actions, jump/open More/scroll/flash a setting | **done** | `S/components/CommandPalette.tsx`, `S/lib/settingsIndex.ts` | [Palette][n7-search] over the [settings index][n7-settings-index] (every setting, wallpaper, widget, integration, action): Enter opens the page, selects the owner, opens its More, scrolls and flashes; Space flips a focused switch. |
+| S03 Undo/redo Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y, merged slider edits, autosave status/errors/toasts | **done** | `S/lib/history.tsx`, `S/lib/useAutosaved.ts`, `S/lib/studio.tsx` | [Document store][n7-docs]: app-wide undo/redo (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y), a drag is one step, save state in the page bar, toasts with Undo; unreadable files are never written. |
+| S04 Desktop monitor picker, stage select wallpaper/widget/bar; active-theme strip, pause/resume, inspector navigation | **done** | `S/views/Desktop.tsx`, `S/components/stage/DesktopScene.tsx` | [Home][n7-home] on the [stage][n7-stage]: display chips, the real desktop (shell views for bars and widgets, engine glass), click the wallpaper, a widget or a bar to edit it; wallpapers strip; Pause in the sidebar. |
+| S05 Themes gallery: search, Yours/Built-in/All filter, grouping, cards/thumbnails, apply with Undo | **done** | `S/views/Themes.tsx`, `S/components/ThemeCard.tsx` | [Wallpapers][n7-wallpapers], [library][n7-library]: search (Ctrl+F), All/Yours/Built in, categories, cards with previews; a click selects and **Use** applies with Undo (D4). |
+| S06 Invalid-config banner and Reset to defaults | **done** | `S/views/Themes.tsx`, `S/lib/studio.tsx`, `ST/config_edit.rs` | [Store][n7-docs]: a file that does not parse is never written; its pages show a banner with the reason and **Start over** (keeps a backup). |
+| S07 Duplicate built-in theme to edit; user theme editing, active state and source credits | **done** | `S/views/ThemeEditor.tsx`, `S/components/inspectors/MakeCopy.tsx`, `S/components/inspectors/DesktopInspectors.tsx` | [Library][n7-library]: Duplicate a built-in in place; your own wallpapers edit their `theme.json` directly (validated); active state and credits on cards and in the inspector. |
+| S08 New theme: picture/video/WGSL/scene/file, image folder, URL/local HTML, program and args | **done** | `S/views/NewTheme.tsx`, `ST/source.rs`, `ST/themes.rs` | [Add wallpaper][n7-wallpapers]: picture, video, WGSL, 3D scene, any file, an image folder, a web page (URL or local HTML), a program with arguments (Unity preset). |
+| S09 New-theme name, cover/contain/stretch/center fit, source preview, change source, Use it right away | **done** | `S/views/NewTheme.tsx`, `ST/manifest.rs` | [Add wallpaper][n7-wallpapers]: name, fit (cover/contain/stretch/center), source preview, change source, Use it right away. |
+| S10 ThemeEditor Wallpaper tab: source metadata/credits, React to mouse for web/scene | **done** | `S/views/ThemeEditor.tsx`, `S/components/inspectors/DesktopInspectors.tsx` | [Wallpaper inspector][n7-wallpapers]: source, credit and license; React to the mouse for web and scene wallpapers; built-ins offer a copy. |
+| S11 ThemeEditor Windows tab; Windows page: accent, light/dark, corners, material, border/title/text and cursor picker | **done** | `S/views/Windows.tsx`, `S/components/inspectors/WindowsStyleFields.tsx` | [Look › Windows][n7-look]: accent, apps light/dark, corners, material, edge, title bar and text, pointer. D2: your layer is `config.json` › `look.windows` ([schema][n7-config-look]) over the wallpaper's, applied by [core][n7-styling]; existing theme styling migrates. |
+| S12 Windows page Right-click menu: enabled, reorder/hide/add built-ins, custom label/command/args, classic-menu switch | **done** | `S/views/Windows.tsx`, `S/components/inspectors/MenuFields.tsx` | [Settings › Desktop][n7-settings]: right-click menu on/off, items reorder/hide/add built-ins, your own (label, command, arguments), full menus in Explorer. |
+| S13 Widgets catalog/search/add; missing-widget placeholder; per-display list, select/remove/duplicate/size and stage arrange | **done** | `S/views/Widgets.tsx`, `S/components/inspectors/WidgetCatalog.tsx`, `S/lib/desktop.ts` | [Widgets][n7-widgets]: Add widget catalog with search, per-display list, select/remove/duplicate/size, drag and resize on the canvas; a widget that is not installed is a placeholder whose inspector removes it. |
+| S14 Each widget's manifest setting controls: string/number/boolean/select/slider/font/list/place/file/image, grouped options/reset | **done** | `S/components/inspectors/WidgetSettingControl.tsx`, `S/components/inspectors/WidgetInspector.tsx` | [Widget inspector][n7-widgets]: every manifest control (boolean, number, slider, select, string, font, color, file, image, list, place) in the manifest's groups. Widget runtime gaps stay on their widget rows. |
+| S15 Global and instance widget look, inherited/reset-own look, overlay switch, Arrange on desktop | **done** | `S/views/Widgets.tsx`, `S/components/inspectors/LookFields.tsx` | [Look][n7-look] is the look of all widgets (Different for › Widgets); a widget's own look (follows Look, or its own background and tint); Always on top; Arrange on desktop. Host material gaps: H10, H14, H16, H17, H19. |
+| S16 Real widget content/settings/appearance preview on stage | **done** | `S/components/stage/WidgetFrame.tsx`, `S/lib/widgetHost.ts` | [Stage][n7-stage]: widgets drawn by the shell's own views ([preview facade][n7-shell-preview]) with their settings and look, glass drawn by the engine ([preview protocol][n7-glass]). |
+| S17 ThemeEditor widget/bar appearance fields and widget glass Strength/Bend/Shine/Tint/Blur | **done** | `S/views/ThemeEditor.tsx`, `S/components/inspectors/LookFields.tsx` | [Look][n7-look]'s scope switch edits the look a wallpaper brings (your own wallpapers; built-ins via a copy); Material (clarity, blur, refraction, highlight, tint) replaces the old glass knobs (D7). Shell-side theme-file watching: backlog item 5. |
+| S18 Theme CSS choose/replace/remove, bar CSS variable controls and dropped decoration controls | **dropped on purpose** | `S/views/ThemeEditor.tsx`, `S/components/bars/ThemeVarsPanel.tsx`, `S/components/bars/PaintEditor.tsx` | [Plan lines 350–352][losses]: native Studio has no CSS, theme-variable or decoration controls. |
+| S19 Bars pairings, independent top/dock enable/design, live thumbnails and Windows-taskbar mode/alignment | **done** | `S/views/Bars.tsx`, `S/components/bars/DesignPicker.tsx`, `S/components/bars/BarPanels.tsx` | [Bars][n7-bars]: presets, each bar on/off and its design (tiles are the shell's real bar views, rebuilt on every change), Windows taskbar mode and alignment. |
+| S20 Bars geometry: top shape/edge/height/width/room, dock style/edge/size/room/alignment/button/titles; display selectors | **done** | `S/components/bars/BarSettings.tsx`, `S/components/bars/DockPanel.tsx` | [Bars][n7-bars]: top edge/height/shape/width/margin/padding/spacing; dock style/edge/size/margin/padding/spacing/apps alignment/button length/titles; displays. Shell gap D02. |
+| S21 Bars clocks (seconds/format); running/split/counter/previews/delay/bounce/attention/indicators/extras/magnify/autohide | **done** | `S/components/bars/BarSettings.tsx`, `S/components/bars/DockPanel.tsx` | [Bars][n7-bars]: clock seconds and format; running, one per window, count, previews and delay, bounce, attention, indicator, after the apps, magnify (scale, reach), auto-hide. Shell differences D12, D14, D17, D18. |
+| S22 Pins: import Windows/default, custom path/name list, order/remove/add | **done** | `S/components/bars/PinnedList.tsx` | [Bars][n7-bars]: Windows' pins or your own (start from Windows'), add, reorder (Alt+arrows), remove. |
+| S23 Modules: drag stage/list reorder/add/break/remove; custom module creation/deletion; command/args/interval | **done** | `S/components/bars/ModuleOptions.tsx`, `S/components/bars/BarFrame.tsx`, `S/lib/barsModules.ts` | [Bars][n7-bars]: drag modules on the stage or reorder in lists, add (built-ins, a gap, integrations, your own), remove; your own module's program, arguments and interval; delete it everywhere. |
+| S24 Module click/scroll action picker, icon and text/fill/border/padding/radius/size/weight controls | **done** | `S/components/bars/ActionPicker.tsx`, `S/components/bars/ModuleOptions.tsx` | [Module inspector][n7-bars]: click, middle, right, scroll up/down (its own, nothing, an action, a program); icon, text color, background, edge, padding, corners, text size, weight. Shell gaps T20, T22, T24. |
+| S25 Bar look: light/dark, background/material, glass knobs, corners, state edges/shadows/buttons and indicator colors | **done** | `S/components/bars/LookPanel.tsx`, `S/components/bars/PaintEditor.tsx` | [A bar › More][n7-bars]: style, light/dark, drawn like, corners, text size; edge line and color, shadow, buttons at rest/pointed/pressed (fill, text, corners); the dock's running-indicator colors; material via [Look][n7-look] (Different for › Bars). Consumers: C06–C12. |
+| S26 Bar motion enabled/duration/curve/show style, hover/press/open/magnify/bounce/attention, reduce-motion/performance | **done** | `S/components/bars/MotionPanel.tsx`, `S/components/bars/CurvePicker.tsx` | [A bar › More › Motion][n7-bars]: animations, appearing, curve, duration; pointing, pressing, menus opening; the dock's magnify, launch bounce, attention. Reduce motion and Save power in [Settings][n7-settings]. Consumers: C13–C15. |
+| S27 Start layout/files/Win key/pins, audio output switch, calendar zones/first day, tray-host setting | **done** | `S/components/bars/MenusPanel.tsx` | [Bars › Panels][n7-bars]: Start (layout, recent files, the Windows key, its own pins or the dock's), Sound (switch output), Calendar (time zones, first day), Tray (only while the Windows taskbar shows), Notifications. N3's flyouts read them. |
+| S28 Icon packs choose/create, per-app image add/remove and previews | **done** | `S/components/bars/IconsPanel.tsx`, `ST/iconpacks.rs` | [Look › Text and icons][n7-look]: choose a pack, start your own, give an app its icon (picture copied into the pack), remove one; the bars reload at once. Bundled-pack lookup in the shell: C16. |
+| S29 Per-display overrides list/remove and inherited values | **done** | `S/components/bars/MonitorPicker.tsx`, `S/components/bars/BarPanels.tsx`, `S/lib/barsDoc.ts` | [Bars][n7-bars]: Per display lists the file's overrides (only when there are any) and removes one. |
+| S30 Settings: Start with Windows, startup still, pause on battery/fullscreen, start/stop/status, emergency hotkey display | **done** | `S/views/Settings.tsx`, `ST/autostart.rs`, `ST/engine.rs` | [Settings][n7-settings]: Start with Windows, the still while Windows starts, pause on battery and behind fullscreen, graphics card, frame rate; Troubleshoot starts/stops/restarts; the emergency hotkey shown in Keyboard and Troubleshoot. |
+| S31 Settings “Parts of mypaper” installed/running components and startup-method/path detail | **done** | `S/views/Settings.tsx`, `ST/engine.rs` | [Troubleshoot][n7-system]: the three parts (core, engine, shell) with running state, memory and Restart; how it starts and where it is installed; diagnostics and logs. |
+| S32 External-edit watcher and refresh of config/themes/bars/widgets | **done** | `ST/watch.rs`, `S/lib/hooks.ts` | [Watcher][n7-watch]: config, bars, widgets, integrations and wallpaper folders reload on outside edits; an unreadable edit keeps the last good values on screen. |
+| S33 Native Studio renderer, accurate native previews and no Tauri processes | **done** | `apps/studio/` (old implementation); N7 replacement in plan | Native `mypaper-studio` (software Direct2D, one window, no WebView or GPU device; [cost][n7-ux]); previews are the shell's own views and the engine's glass; `apps/studio` and its pnpm/Tauri build are deleted. |
 
 ## Tray and hotkeys
 
@@ -489,11 +489,11 @@ This is the complete unresolved-row backlog grouped by user outcome. References 
 11. **P2 — Complete the remaining widget interactions.** Launcher zoom/launch/failure and quick-toggle press/failure feedback; countdown adaptive unit/detail layout; photo skip/retry after bad images; real notes Markdown; todo progress/compact behavior; heatmap labels/hover information and quote fit. Covers WL04, WQT05, WCD03, WP05, WN03, WTD04, WH03 and remaining WL05/WQ03 content details.
 12. **P2 — Finish dock behavior and status affordances.** Honor explicit titled-button width; add Close all; differentiate indicators/attention modes; fit previews to the monitor; restore the taskbar desktop sliver, network strength/SSID, volume tooltip, hover names/custom errors and module SVG masking. Covers D02, D07, D12, D14, D17, D18, T12, T13, T22, T24, T27.
 13. **P2 — Finish icon/font and motion fidelity.** Restore bundled icon-pack assets/lookup and dynamic state-key matching; honor glyph choice and bar motion styles/hover/press/bounce/attention leaves, including `reduceMotion:never`. Covers C11 (bar glyphs only; menu families stay N3), C13, C14, C15, C16.
-14. **P2 — Make retained Studio status/previews accurate now.** Replace deleted bar/widget process checks with shell status, restore real widget previews and stop presenting CSS design thumbnails as native output. Covers S04, S16, S19, S28, S31 and the truthfulness portions of S14, S15, S17, S20, S21, S24, S25, S26. Old CSS/theme/decoration controls should be removed as intentional cuts, not reimplemented.
+14. **Done by N7.** ~~**P2 — Make retained Studio status/previews accurate now.**~~ Replace deleted bar/widget process checks with shell status, restore real widget previews and stop presenting CSS design thumbnails as native output. Covers S04, S16, S19, S28, S31 and the truthfulness portions of S14, S15, S17, S20, S21, S24, S25, S26. Old CSS/theme/decoration controls should be removed as intentional cuts, not reimplemented.
 15. **P2 — Expose the new GPU/FPS settings.** Add global/per-wallpaper GPU and frame-rate controls to Studio while preserving explicit choices. Covers C26; coordinate with active engine optimization, and distinguish web/app self-paced rendering in the UI.
 16. **P3 — Finish N6's style system.** Add oneui/fluent, map retained style intent to the five approved native styles and wire the one-switch Windows accent/frame/light-dark synchronization. Covers C25 plus style/preview aspects of T05, H17, S19 and S25; old CSS designs need not be reconstructed byte-for-byte.
 17. **P3 — Clarify the remaining extension contract.** Wire the promised native JSON-RPC provider path or document its supported consumer boundary. Covers H23; HTML widgets/SDK and the old widget executable remain cut.
-18. **P3 — Native Studio (explicitly deferrable N7).** Replace Tauri with the native renderer and share real shell previews. Covers S33, with S16's preview regression already prioritized separately; preserve the retained page/settings inventory above.
+18. **Done by N7.** ~~**P3 — Native Studio (explicitly deferrable N7).**~~ Replace Tauri with the native renderer and share real shell previews. Covers S33, with S16's preview regression already prioritized separately; preserve the retained page/settings inventory above.
 
 ## + more: ten valuable improvements after parity
 
@@ -575,35 +575,6 @@ These are recommendations/inferences from comparable products, not claims that e
 [shader-source]: ../../crates/wallpaper/src/sources/shader.rs
 [slideshow-source]: ../../crates/wallpaper/src/sources/slideshow.rs
 [snapshot]: ../../crates/wallpaper/src/snapshot.rs
-[studio-app]: ../../apps/studio/src/App.tsx
-[studio-bar-look]: ../../apps/studio/src/components/bars/LookPanel.tsx
-[studio-bar-settings]: ../../apps/studio/src/components/bars/BarSettings.tsx
-[studio-bars]: ../../apps/studio/src/views/Bars.tsx
-[studio-desktop]: ../../apps/studio/src/views/Desktop.tsx
-[studio-dock]: ../../apps/studio/src/components/bars/DockPanel.tsx
-[studio-engine]: ../../apps/studio/src-tauri/src/engine.rs
-[studio-history]: ../../apps/studio/src/lib/history.tsx
-[studio-icons]: ../../apps/studio/src/components/bars/IconsPanel.tsx
-[studio-inspectors]: ../../apps/studio/src/components/inspectors/DesktopInspectors.tsx
-[studio-look]: ../../apps/studio/src/components/inspectors/LookFields.tsx
-[studio-menu-fields]: ../../apps/studio/src/components/inspectors/MenuFields.tsx
-[studio-menus]: ../../apps/studio/src/components/bars/MenusPanel.tsx
-[studio-modules]: ../../apps/studio/src/components/bars/ModuleOptions.tsx
-[studio-motion]: ../../apps/studio/src/components/bars/MotionPanel.tsx
-[studio-new]: ../../apps/studio/src/views/NewTheme.tsx
-[studio-pins]: ../../apps/studio/src/components/bars/PinnedList.tsx
-[studio-search]: ../../apps/studio/src/components/CommandPalette.tsx
-[studio-settings]: ../../apps/studio/src/views/Settings.tsx
-[studio-settings-index]: ../../apps/studio/src/lib/settingsIndex.ts
-[studio-theme-editor]: ../../apps/studio/src/views/ThemeEditor.tsx
-[studio-themes]: ../../apps/studio/src/views/Themes.tsx
-[studio-watch]: ../../apps/studio/src-tauri/src/watch.rs
-[studio-widget-backend]: ../../apps/studio/src-tauri/src/widgets.rs
-[studio-widget-fields]: ../../apps/studio/src/components/inspectors/WidgetSettingControl.tsx
-[studio-widget-frame]: ../../apps/studio/src/components/stage/WidgetFrame.tsx
-[studio-widgets]: ../../apps/studio/src/views/Widgets.tsx
-[studio-windows]: ../../apps/studio/src/views/Windows.tsx
-[studio-windows-fields]: ../../apps/studio/src/components/inspectors/WindowsStyleFields.tsx
 [styling]: ../../crates/core/src/styling.rs
 [surface]: ../../crates/ui/src/surface.rs
 [text-field]: ../../crates/ui/src/text_field.rs
@@ -641,5 +612,27 @@ These are recommendations/inferences from comparable products, not claims that e
 [decisions]: ../council/native-plan.md#user-decisions-fixed-not-up-for-review
 [html-plan]: ../council/native-plan.md#processes
 [losses]: ../council/native-plan.md#losses-taken-on-purpose
+[n7-spec]: studio-redesign.md
+[n7-ux]: ../../docs/studio-ux.md
+[n7-goldens]: ../../docs/media/studio
+[n7-app]: ../../crates/studio/src/app.rs
+[n7-view]: ../../crates/studio/src/view.rs
+[n7-search]: ../../crates/studio/src/search.rs
+[n7-settings-index]: ../../crates/studio/src/settings.rs
+[n7-docs]: ../../crates/studio/src/docs.rs
+[n7-watch]: ../../crates/studio/src/watch.rs
+[n7-stage]: ../../crates/studio/src/stage.rs
+[n7-library]: ../../crates/studio/src/library.rs
+[n7-system]: ../../crates/studio/src/system.rs
+[n7-home]: ../../crates/studio/src/pages/home.rs
+[n7-wallpapers]: ../../crates/studio/src/pages/wallpapers.rs
+[n7-look]: ../../crates/studio/src/pages/look.rs
+[n7-widgets]: ../../crates/studio/src/pages/widgets.rs
+[n7-bars]: ../../crates/studio/src/pages/bars.rs
+[n7-settings]: ../../crates/studio/src/pages/settings.rs
+[n7-config-look]: ../../crates/config/src/look.rs
+[n7-styling]: ../../crates/core/src/styling.rs
+[n7-shell-preview]: ../../crates/shell/src/preview.rs
+[n7-glass]: ../../crates/wallpaper/src/preview.rs
 [studio-plan]: ../council/native-plan.md#slices-destructive-in-dependency-order
 [style-plan]: ../council/native-plan.md#styles

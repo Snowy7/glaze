@@ -3,11 +3,11 @@
 mod control;
 mod data;
 mod edit;
-mod model;
+pub(crate) mod model;
 #[cfg(test)]
 mod tests;
-mod time;
-mod view;
+pub(crate) mod time;
+pub(crate) mod view;
 
 use crate::glass::{self, Material, Plate};
 use crate::inbox;
@@ -1883,7 +1883,7 @@ fn load_skin(config: &Config) -> look::Skin {
     let dir = mypaper_theme::locate(Some(&config.theme)).ok();
     look::load_skin(dir.as_deref())
 }
-fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
+pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
     let layer =
         serde_json::from_value::<mypaper_theme::Appearance>(Value::Object(appearance.clone()))
             .unwrap_or_default();

@@ -71,6 +71,11 @@ pub enum Op {
         drop: f32,
         color: Rgba,
     },
+    /// Clips what follows to `rect` (intersected with any clip already pushed) until the
+    /// matching [`Op::Unclip`]. Scroll views wrap their content in a pair.
+    Clip { rect: Rect },
+    /// Ends the innermost [`Op::Clip`].
+    Unclip,
 }
 
 impl Op {
@@ -106,6 +111,9 @@ impl Op {
             Self::Shadow {
                 rect, spread, drop, ..
             } => rect.inflate(spread + 1.0).offset(0.0, *drop),
+            // A changed clip changes what everything inside it may show.
+            Self::Clip { rect } => *rect,
+            Self::Unclip => Rect::default(),
         }
     }
 }
@@ -147,7 +155,8 @@ impl DisplayList {
             .filter_map(|i| match (old.ops.get(i), self.ops.get(i)) {
                 (Some(a), Some(b)) if a == b => None,
                 (a, b) => {
-                    let bounds = |op: Option<&Op>| op.map(Op::bounds);
+                    // `Unclip` paints nothing and has no area.
+                    let bounds = |op: Option<&Op>| op.map(Op::bounds).filter(|r| !r.is_empty());
                     match (bounds(a), bounds(b)) {
                         (Some(a), Some(b)) => Some(a.union(b)),
                         (one, other) => one.or(other),
