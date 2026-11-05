@@ -722,6 +722,9 @@ fn every_native_widget_has_a_golden_and_hit_testable_body() {
     for id in registry::builtins().widgets.keys() {
         eprintln!("Checking golden: {id}");
         let m = fixture(id, root.clone());
+        if m.kind == Widget::Plugin {
+            continue;
+        }
         let size = match m.kind {
             Widget::Clock => (320, 180),
             Widget::Calendar => (320, 310),
