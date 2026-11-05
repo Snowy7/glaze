@@ -203,9 +203,26 @@ pub fn draw(f: &mut Frame<'_>, rect: Rect, title: &str, header: Icon, face: Opti
             node(f, body, &face.body, &mut next);
         }
         None => {
-            f.empty(body, Some(header), "Starting…", None);
+            empty(f, body, Some(header), "Starting…", None);
         }
     }
+}
+
+/// Empty states give up their artwork and detail before they paint outside a short tile.
+fn empty(f: &mut Frame<'_>, rect: Rect, icon: Option<Icon>, title: &str, detail: Option<&str>) {
+    let head = f.px(12.0) + icon.map_or(0.0, |_| f.px(38.0)) + f.line(TextRole::Headline);
+    if rect.height() < head {
+        let (_, height) = f.text.measure(title, &f.font(TextRole::Headline));
+        if rect.height() >= height {
+            f.text_in(rect, title, TextRole::Headline, f.theme.color.secondary, Align::Center);
+        }
+        return;
+    }
+    let detail = detail.filter(|detail| {
+        let lines = f.text.lines(detail, &f.font(TextRole::Callout), rect.width(), 3).len();
+        head + f.px(2.0) + lines as f32 * f.line(TextRole::Callout) <= rect.height()
+    });
+    f.empty(rect, icon, title, detail);
 }
 
 /// Whether a node takes the free space of its stack (charts, empties, spacers).
@@ -483,7 +500,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             area_chart(f, rect, &kit, labels, |v| format!("{}{unit}", compact_number(v)));
         }
         View::Empty { icon: i, title, detail } => {
-            f.empty(rect, i.as_deref().map(icon), title, detail.as_deref());
+            empty(f, rect, i.as_deref().map(icon), title, detail.as_deref());
         }
         View::Canvas { commands, .. } => canvas::draw(f, rect, commands, |f, t| tone(f, Some(t), f.theme.color.label)),
         View::Animated { stiffness, damping, child } => animated::draw(f, rect, child, (*stiffness, *damping), next),
@@ -505,6 +522,29 @@ fn compact_number(v: f64) -> String {
 mod tests {
     use super::*;
     use mypaper_ui::{Interaction, Op, Scheme, Style, Theme, Ui};
+
+    #[test]
+    fn starting_faces_fit_short_tiles_without_an_empty_state_icon() {
+        let mut ui = Ui::new().unwrap();
+        let theme = Theme::new(Style::Liquid, Scheme::Dark, Rgba::rgb8([10, 132, 255], 1.0));
+        let input = Interaction::default();
+        for scale in [1.0, 1.5, 2.0] {
+            for width in [75.0, 96.0, 180.0, 720.0] {
+                for height in [75.0, 96.0, 132.0] {
+                    let rect = Rect::new(0.0, 0.0, width * scale, height * scale);
+                    let mut f = Frame::new(&mut ui.text, &theme, scale, &input);
+                    draw(&mut f, rect, "Hello TypeScript", Icon::Sparkles, None, Status::Starting);
+                    for op in &f.list.ops {
+                        let bounds = match op { Op::Text { rect, .. } | Op::Icon { rect, .. } => *rect, _ => continue };
+                        assert!(bounds.left >= -1.0 && bounds.top >= -1.0 && bounds.right <= rect.right + 1.0 && bounds.bottom <= rect.bottom + 1.0, "{width}x{height}, scale {scale}: {op:?}");
+                    }
+                    if height <= 96.0 {
+                        assert_eq!(f.list.ops.iter().filter(|op| matches!(op, Op::Icon { .. })).count(), 1, "short tiles keep only the header icon");
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn fields_use_the_kit_well_and_keep_their_action() {

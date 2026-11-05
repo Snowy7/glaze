@@ -38,7 +38,6 @@ impl Widgets {
         for entry in self.entries.values_mut() {
             let m = &mut entry.model;
             if m.kind != Widget::Plugin { continue; }
-            let Some(face) = plugin_face(&m.placed) else { continue };
             let size = size_class(entry.rect.width(), entry.rect.height(), entry.dpi_scale * entry.tokens.scale);
             let size_key = match size {
                 mypaper_plugin_sdk::SizeClass::Small => "small",
@@ -49,10 +48,13 @@ impl Widgets {
                 && m.data["opened_settings"].as_object() == Some(&m.placed.settings)
                 && m.data["opened_widget"].as_str() == Some(&m.placed.widget)
             { continue; }
+            let Some(face) = plugin_face(&m.placed) else { continue };
             let settings = serde_json::Value::Object(m.placed.settings.clone());
             m.data["opened_size"] = size_key.into();
             m.data["opened_widget"] = m.placed.widget.clone().into();
             m.data["opened_settings"] = settings.clone();
+            m.data["title"] = face.title.into();
+            m.data["icon"] = face.icon.into();
             if let Err(e) = self.plugins.open_face(&m.placed.instance, &face.plugin, &face.face, size, settings, Instant::now()) {
                 log::warn!("{}: {}", m.placed.instance, e.message);
                 m.data["status"] = "failed".into();
@@ -129,6 +131,7 @@ mod tests {
 
     #[test]
     fn face_variants_follow_rendered_size_and_scale() {
+        assert_eq!(size_class(180.0, 180.0, 1.5), SizeClass::Small);
         for scale in [1.0, 1.5, 2.0] {
             for (width, height, expected) in [
                 (180.0, 132.0, SizeClass::Small),
