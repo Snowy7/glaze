@@ -33,6 +33,86 @@ use crate::text::Text;
 
 #[cfg(test)]
 #[test]
+fn marker_and_retained_clips_are_nested_and_balanced() {
+    let mut ui = Ui::new().unwrap();
+    let fill = |color| Op::Fill {
+        rect: Rect::new(0.0, 0.0, 32.0, 32.0),
+        radius: 0.0,
+        color: Rgba::rgb8(color, 1.0),
+    };
+    let list = DisplayList {
+        ops: vec![
+            Op::Clip {
+                rect: Rect::new(0.0, 0.0, 12.0, 12.0),
+            },
+            Op::Clipped {
+                rect: Rect::new(4.0, 4.0, 20.0, 20.0),
+                ops: vec![
+                    fill([255, 0, 0]),
+                    Op::Clip {
+                        rect: Rect::new(8.0, 8.0, 20.0, 20.0),
+                    },
+                    fill([0, 255, 0]),
+                    Op::Unclip,
+                    Op::Unclip,
+                ]
+                .into(),
+            },
+            Op::Unclip,
+            Op::Fill {
+                rect: Rect::new(24.0, 24.0, 4.0, 4.0),
+                radius: 0.0,
+                color: Rgba::rgb8([0, 0, 255], 1.0),
+            },
+        ],
+        ..Default::default()
+    };
+    let image = render(&mut ui, &list, 32, 32).unwrap();
+    assert_eq!(image.pixel(5, 5), [0, 0, 255, 255]);
+    assert_eq!(image.pixel(10, 10), [0, 255, 0, 255]);
+    assert_eq!(image.pixel(16, 16), [0, 0, 0, 0]);
+    assert_eq!(image.pixel(25, 25), [255, 0, 0, 255]);
+}
+
+#[cfg(test)]
+#[test]
+fn partial_updates_preserve_oversized_elliptical_corners() {
+    let mut ui = Ui::new().unwrap();
+    let canvas = Canvas::new(&ui, 160, 40).unwrap();
+    let frame = |color| DisplayList {
+        ops: vec![Op::Fill {
+            rect: Rect::new(0.0, 0.0, 160.0, 40.0),
+            radius: 80.0,
+            color,
+        }],
+        ..Default::default()
+    };
+    canvas
+        .draw(
+            &mut ui.text,
+            &frame(Rgba::rgb8([255, 0, 0], 0.5)),
+            PixelRect::full(160, 40),
+        )
+        .unwrap();
+    let next = frame(Rgba::rgb8([0, 0, 255], 0.5));
+    let dirty = PixelRect {
+        x: 30,
+        y: 3,
+        width: 20,
+        height: 10,
+    };
+    canvas.draw(&mut ui.text, &next, dirty).unwrap();
+    let full = render(&mut ui, &next, 160, 40).unwrap();
+    canvas
+        .read(dirty, |row, bytes| {
+            let start = ((dirty.y + row) * 160 + dirty.x) as usize * 4;
+            assert_eq!(bytes, &full.pixels[start..start + dirty.width as usize * 4]);
+        })
+        .unwrap();
+}
+
+#[cfg(test)]
+#[test]
 fn sparse_meter_updates_match_a_complete_render() {
     let mut ui = Ui::new().unwrap();
     let canvas = Canvas::new(&ui, 120, 120).unwrap();
@@ -40,12 +120,12 @@ fn sparse_meter_updates_match_a_complete_render() {
         ops: vec![
             Op::Fill {
                 rect: Rect::new(0.0, 0.0, 120.0, 120.0),
-                radius: 12.0,
+                radius: 24.0,
                 color: Rgba::rgb8([30, 40, 50], 1.0),
             },
             Op::Stroke {
                 rect: Rect::new(1.0, 1.0, 118.0, 118.0),
-                radius: 12.0,
+                radius: 24.0,
                 width: 1.0,
                 color: Rgba::rgb8([80, 90, 100], 1.0),
             },
@@ -549,15 +629,7 @@ impl Canvas {
                     color: c,
                 } => {
                     brush.SetColor(&color(*c));
-                    let inset = radius.max(0.0);
-                    let inside = damage.left >= rect.left
-                        && damage.top >= rect.top
-                        && damage.right <= rect.right
-                        && damage.bottom <= rect.bottom;
-                    let flat = (damage.left >= rect.left + inset
-                        && damage.right <= rect.right - inset)
-                        || (damage.top >= rect.top + inset && damage.bottom <= rect.bottom - inset);
-                    if inside && flat {
+                    if rounded_contains(rect.inflate(-1.0), (radius - 1.0).max(0.0), damage) {
                         // Meter text is inside the plate's flat interior. Avoid tessellating
                         // the entire rounded outline just to refill this small dirty rectangle.
                         t.FillRectangle(&d2d(damage), brush);
@@ -732,14 +804,37 @@ fn touches(op: &Op, damage: Rect) -> bool {
             width,
             ..
         } => {
-            let inside = rect.inflate(-radius.max(width / 2.0 + 2.0));
-            !(damage.left >= inside.left
-                && damage.top >= inside.top
-                && damage.right <= inside.right
-                && damage.bottom <= inside.bottom)
+            let inset = width / 2.0 + 2.0;
+            !rounded_contains(rect.inflate(-inset), (radius - inset).max(0.0), damage)
         }
         _ => true,
     }
+}
+
+/// Convex rounded bounds contain a box when they contain all four corners. Callers inset
+/// the shape so its antialiased edge stays on the normal rendering path.
+fn rounded_contains(rect: Rect, radius: f32, damage: Rect) -> bool {
+    if rect.is_empty()
+        || damage.left < rect.left
+        || damage.top < rect.top
+        || damage.right > rect.right
+        || damage.bottom > rect.bottom
+    {
+        return false;
+    }
+    // Direct2D clamps oversized X/Y radii independently, producing elliptical corners.
+    // Leave that less common case to Direct2D rather than assume a circular interior.
+    if radius * 2.0 > rect.width().min(rect.height()) {
+        return false;
+    }
+    let radius = radius.max(0.0);
+    [damage.left, damage.right].into_iter().all(|x| {
+        [damage.top, damage.bottom].into_iter().all(|y| {
+            let dx = x - x.clamp(rect.left + radius, rect.right - radius);
+            let dy = y - y.clamp(rect.top + radius, rect.bottom - radius);
+            dx * dx + dy * dy <= radius * radius
+        })
+    })
 }
 
 fn d2d(r: Rect) -> D2D_RECT_F {
