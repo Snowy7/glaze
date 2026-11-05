@@ -1,9 +1,13 @@
 //! Retained Windows toasts, grouped by AUMID. These are never called unread messages.
 use crate::{Availability, Data, Publish};
 use anyhow::{Result, ensure};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Once},
+};
 use tokio::sync::{Notify, mpsc};
 use windows::{
+    ApplicationModel::Package,
     Foundation::TypedEventHandler,
     UI::Notifications::Management::{
         UserNotificationListener, UserNotificationListenerAccessStatus,
@@ -34,15 +38,71 @@ fn text(value: &str, bytes: usize) -> String {
     value[..end].to_owned()
 }
 
-/// Call on the UI thread, in response to the user's Enable/Grant access action. Never prompt at startup.
+/// Call on the UI thread after Enable/Grant access, or during the enabled integration's first run.
 pub fn request_access()
 -> windows::core::Result<windows_future::IAsyncOperation<UserNotificationListenerAccessStatus>> {
     UserNotificationListener::Current()?.RequestAccessAsync()
 }
+
+/// Request first-run consent on the UI thread; completion invalidates consumers without blocking it.
+/// Windows persists Allowed/Denied. A per-package marker also remembers a dismissed prompt.
+pub fn request_access_once(completed: impl Fn() + Send + Sync + 'static) -> Result<()> {
+    let Ok(package) = Package::Current() else {
+        log_snapshot_mode("package identity is absent");
+        return Ok(());
+    };
+    let listener = UserNotificationListener::Current()?;
+    if listener.GetAccessStatus()? != UserNotificationListenerAccessStatus::Unspecified {
+        return Ok(());
+    }
+    let family = package.Id()?.FamilyName()?.to_string();
+    let directory = std::path::PathBuf::from(
+        std::env::var_os("LOCALAPPDATA")
+            .ok_or_else(|| anyhow::anyhow!("LOCALAPPDATA is missing"))?,
+    )
+    .join("mypaper/notification-consent");
+    std::fs::create_dir_all(&directory)?;
+    let marker = directory.join(family);
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&marker)
+    {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(()),
+        Err(e) => return Err(e.into()),
+    }
+    let operation = match request_access() {
+        Ok(operation) => operation,
+        Err(e) => {
+            let _ = std::fs::remove_file(&marker);
+            return Err(e.into());
+        }
+    };
+    // The finite consent waiter owns the operation until completion. The shell keeps pumping UI.
+    std::thread::Builder::new().name("notification-consent".into()).spawn(move || {
+        match operation.join() {
+            Ok(UserNotificationListenerAccessStatus::Allowed) => log::info!("notification access allowed"),
+            Ok(UserNotificationListenerAccessStatus::Denied) => log::info!("notification access denied; enable it in Windows Settings > Privacy & security > Notifications"),
+            Ok(_) => log::info!("notification access not granted; snapshots remain unavailable until access is granted"),
+            Err(e) => {
+                let _ = std::fs::remove_file(marker);
+                log::warn!("notification consent: {e}");
+            }
+        }
+        completed();
+    })?;
+    Ok(())
+}
+
+fn log_snapshot_mode(reason: &str) {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| log::info!("notifications: snapshot mode ({reason}); no polling"));
+}
 pub fn read(listener: &UserNotificationListener, show_text: bool) -> Result<Snapshot> {
     ensure!(
         listener.GetAccessStatus()? == UserNotificationListenerAccessStatus::Allowed,
-        "notification access is off; grant access from Studio"
+        "notification access is off; allow mypaper in Windows Settings > Privacy & security > Notifications"
     );
     let list = listener
         .GetNotificationsAsync(NotificationKinds::Toast)?
@@ -101,22 +161,32 @@ pub(crate) async fn run(
     commands: &mut mpsc::Receiver<crate::Action>,
 ) -> Result<()> {
     let _com = crate::media::Com::new()?;
+    let packaged = Package::Current().is_ok();
+    if !packaged {
+        log_snapshot_mode("package identity is absent");
+    }
     let listener = UserNotificationListener::Current()?;
     ensure!(
         listener.GetAccessStatus()? == UserNotificationListenerAccessStatus::Allowed,
-        "grant Windows notification access in Studio"
+        "notification access is off; allow mypaper in Windows Settings > Privacy & security > Notifications"
     );
     let changed = Arc::new(Notify::new());
     let notify = changed.clone();
     let events = publish.clone();
-    let token = if config.live_verified {
-        Some(
-            listener.NotificationChanged(&TypedEventHandler::new(move |_, _| {
-                events.delivered();
-                notify.notify_one();
-                Ok(())
-            }))?,
-        )
+    let token = if !packaged {
+        None
+    } else if config.live_verified {
+        match listener.NotificationChanged(&TypedEventHandler::new(move |_, _| {
+            events.delivered();
+            notify.notify_one();
+            Ok(())
+        })) {
+            Ok(token) => Some(token),
+            Err(e) => {
+                log_snapshot_mode(&format!("event registration failed: {e}"));
+                None
+            }
+        }
     } else {
         None
     };

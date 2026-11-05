@@ -31,6 +31,7 @@ struct State {
     bars: BTreeMap<Provider, Lease>,
     dirty: Arc<AtomicBool>,
     reload: Arc<AtomicBool>,
+    consent_complete: Arc<AtomicBool>,
     _watcher: Option<notify::RecommendedWatcher>,
     app: Option<(String, String)>,
     generation: u64,
@@ -86,14 +87,20 @@ impl State {
         {
             let _ = w.watch(parent, notify::RecursiveMode::NonRecursive);
         }
+        let config = load()
+            .inspect_err(|e| log::warn!("integrations.json: {e:#}"))
+            .unwrap_or_default();
+        let consent_complete = Arc::new(AtomicBool::new(false));
+        if config.notifications.enabled {
+            request_notification_consent(thread, &consent_complete);
+        }
         Self {
-            config: load()
-                .inspect_err(|e| log::warn!("integrations.json: {e:#}"))
-                .unwrap_or_default(),
+            config,
             hub,
             bars: BTreeMap::new(),
             dirty,
             reload,
+            consent_complete,
             _watcher: watcher,
             app: None,
             generation: 0,
@@ -103,6 +110,19 @@ impl State {
             #[cfg(test)]
             fixtures: BTreeMap::new(),
         }
+    }
+}
+
+fn request_notification_consent(thread: u32, complete: &Arc<AtomicBool>) {
+    if cfg!(test) {
+        return;
+    }
+    let complete = complete.clone();
+    if let Err(e) = mypaper_integrations::notifications::request_access_once(move || {
+        complete.store(true, Ordering::Release);
+        wake(thread);
+    }) {
+        log::warn!("notification consent: {e:#}");
     }
 }
 pub fn config() -> Config {
@@ -156,6 +176,14 @@ pub fn process() -> bool {
         if reload_requested {
             match load() {
                 Ok(config) if state.config != config => {
+                    if config.notifications.enabled && !state.config.notifications.enabled {
+                        // Studio's Enable writes this file; consent must originate on this UI thread.
+                        // SAFETY: obtains only the calling thread's numeric id.
+                        request_notification_consent(
+                            unsafe { GetCurrentThreadId() },
+                            &state.consent_complete,
+                        );
+                    }
                     state.hub.stop_all();
                     state.bars.clear();
                     state.config = config;
@@ -165,6 +193,12 @@ pub fn process() -> bool {
                 Ok(_) => {}
                 Err(e) => log::warn!("integrations.json: {e:#}; keeping valid config"),
             }
+        }
+        if state.consent_complete.swap(false, Ordering::AcqRel) {
+            state.hub.stop_all();
+            state.bars.clear();
+            state.generation += 1;
+            reload = true;
         }
         (state.dirty.swap(false, Ordering::AcqRel), reload)
     });
