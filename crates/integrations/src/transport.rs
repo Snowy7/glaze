@@ -81,10 +81,15 @@ pub async fn send(socket: &mut Socket, value: Value) -> Result<()> {
 }
 
 pub async fn receive(socket: &mut Socket) -> Result<Value> {
+    let message = receive_message(socket).await?;
+    Ok(serde_json::from_slice(&message.into_data())?)
+}
+
+/// Typed decoders can skip unneeded large fields without first allocating a JSON tree.
+pub async fn receive_message(socket: &mut Socket) -> Result<Message> {
     loop {
         match socket.next().await.transpose()? {
-            Some(Message::Text(text)) => return Ok(serde_json::from_str(&text)?),
-            Some(Message::Binary(bytes)) => return Ok(serde_json::from_slice(&bytes)?),
+            Some(message @ (Message::Text(_) | Message::Binary(_))) => return Ok(message),
             // Server maintenance disqualifies the persistent mode. Do not conceal it with a pong loop.
             Some(Message::Ping(_) | Message::Pong(_)) => {
                 bail!("server heartbeat detected; use snapshot-on-open")

@@ -15,6 +15,12 @@ fn shape(value: &Value) -> Value {
 }
 fn main() -> Result<()> {
     tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
+        if std::env::args().nth(1).as_deref()==Some("--features") {
+            let metadata=mypaper_integrations::t3_client::metadata("").await?;
+            let permissions=mypaper_integrations::t3_client::permissions("").await?;
+            println!("{}",json!({"omitOlderSettled":metadata.shell_older_settled,"environmentKnown":!metadata.environment.environment_id.is_empty(),"modelCount":metadata.providers.iter().map(|p|p.models.len()).sum::<usize>(),"permissions":permissions,"grok":format!("{:?}",mypaper_integrations::grok::discover())}));
+            return Ok(());
+        }
         let secret=credentials::read("t3")?;
         let mut request="ws://127.0.0.1:3773/ws?orchestrationProtocol=2".into_client_request()?;
         request.headers_mut().insert("authorization",format!("Bearer {}",secret.text()?).parse()?);
@@ -22,7 +28,7 @@ fn main() -> Result<()> {
         let (mut socket,_) = tokio_tungstenite::connect_async_with_config(request,Some(config),true).await?;
         let args:Vec<_>=std::env::args().collect();
         let method=args.get(1).map(String::as_str).unwrap_or("orchestration.subscribeShell");
-        let payload:Value=args.get(2).map(|s|serde_json::from_str(s)).transpose()?.unwrap_or_else(|| if method == "server.getUsageSummary" {json!({"sinceDay":"2026-11-05","untilDay":"2026-11-05","timeZone":"UTC"})}else{json!({})});
+        let payload:Value=if args.get(2).is_some_and(|s|s=="--narrow"){json!({"omitOlderSettled":true,"omitIdleSubagents":true})}else{args.get(2).map(|s|serde_json::from_str(s)).transpose()?.unwrap_or_else(|| if method == "server.getUsageSummary" {let day=chrono::Utc::now().format("%Y-%m-%d").to_string();json!({"sinceDay":day,"untilDay":day,"timeZone":"UTC"})}else{json!({})})};
         socket.send(Message::Text(json!({"_tag":"Request","id":"1","tag":method,"payload":payload,"headers":[]}).to_string().into())).await?;
         for _ in 0..5 {
             let message=tokio::time::timeout(std::time::Duration::from_secs(10),socket.next()).await?.ok_or_else(||anyhow::anyhow!("closed"))??;
