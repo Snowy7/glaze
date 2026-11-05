@@ -33,6 +33,8 @@ mod integrations;
 pub(crate) mod plugin;
 #[cfg(test)]
 mod plugin_tests;
+#[cfg(test)]
+mod plugin_tailscale_tests;
 
 use super::model::{Model, Widget};
 use super::time::Stamp;
@@ -294,7 +296,6 @@ fn content(c: &mut Ctx, body: Rect) {
         Widget::Quote => quote::draw(c, body),
         Widget::Discord => integrations::discord::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::T3 => integrations::t3::view(&mut c.f, c.m, c.rect, c.now.ms),
-        Widget::Obs => integrations::obs::view(&mut c.f, c.m, c.rect, c.now.ms),
         Widget::Custom => integrations::custom::view(&mut c.f, c.m, c.rect),
         Widget::Plugin => plugin_face(c),
     }
