@@ -6,8 +6,10 @@ $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
 # Each guest is its own workspace (the root Cargo.toml excludes them) built for wasm32-wasip2.
 $guests = @(
+  @{ Crate = "plugins\docker"; Wasm = "docker.wasm"; Into = "plugins\docker\docker.wasm" },
   @{ Crate = "plugins\hello"; Wasm = "hello.wasm"; Into = "plugins\hello\hello.wasm" },
-  @{ Crate = "plugins\weather\component"; Wasm = "weather.wasm"; Into = "plugins\weather\weather.wasm" }
+  @{ Crate = "plugins\weather\component"; Wasm = "weather.wasm"; Into = "plugins\weather\weather.wasm" },
+  @{ Crate = "plugins\tailscale"; Wasm = "tailscale.wasm"; Into = "plugins\tailscale\tailscale.wasm" }
 )
 if (-not (rustup target list --installed | Select-String -SimpleMatch "wasm32-wasip2")) { rustup target add wasm32-wasip2 }
 foreach ($guest in $guests) {
