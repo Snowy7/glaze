@@ -1078,7 +1078,7 @@ impl Widgets {
                 .collect();
         } else {
             if m.kind == Widget::Media {
-                update_artwork(m, ui, &data);
+                update_artwork(m, ui, &data, entry.rect, entry.dpi_scale);
                 if let Some(object) = data.as_object_mut() {
                     object.insert("_at".into(), json!(now.ms));
                 }
@@ -1175,6 +1175,7 @@ impl Widgets {
                     .map_err(|e| e.to_string())
                 }) {
                     Ok(image) => {
+                        let image = photo_bitmap(m, entry.rect, entry.dpi_scale, image);
                         m.photo.previous = m.photo.current.take();
                         m.photo.current = Some(Arc::new(image));
                         m.photo.fade = m.photo.previous.is_some().then_some(instant);
@@ -2861,8 +2862,9 @@ fn palette_scale(monitor: &Monitor, bounds: Rect) -> f32 {
         .max(0.01)
 }
 
-/// Timeline and transport changes reuse decoded art and its blurred/tinted material.
-fn update_artwork(model: &mut Model, ui: &Ui, data: &Value) {
+/// Timeline and transport changes reuse decoded art and its blurred/tinted material. `rect`
+/// and `dpi` are the widget's, so the blur backdrop comes out rounded to its plate.
+fn update_artwork(model: &mut Model, ui: &Ui, data: &Value, rect: Rect, dpi: f32) {
     if model.data.get("artwork") == data.get("artwork") {
         return;
     }
@@ -2872,41 +2874,135 @@ fn update_artwork(model: &mut Model, ui: &Ui, data: &Value) {
     (model.artwork_backdrop, model.artwork_tint) = decoded
         .as_ref()
         .map_or((None, None), |art| artwork_material(art));
+    // The backdrop fills the whole plate: rounded like it, at a size whose corners stay smooth.
+    if let Some(small) = model.artwork_backdrop.take() {
+        let radius = views::plate_radius(model, rect, widget_scale(model, dpi));
+        let fit = (192.0 / rect.width().max(rect.height()).max(1.0)).min(1.0);
+        let (w, h) = (
+            (rect.width() * fit).round().max(1.0) as u32,
+            (rect.height() * fit).round().max(1.0) as u32,
+        );
+        let mut big = resample(&small, w, h);
+        round_corners(&mut big, radius * fit);
+        model.artwork_backdrop = Some(Arc::new(big));
+    }
     model.artwork = decoded.map(|art| Arc::new(rounded_square(&art, 0.12)));
 }
 
-/// A centred square crop of `image` with its corners cut round (radius = `radius` × side) to
-/// transparent, antialiased over one pixel. Covers are drawn rounded this way: a layered
-/// window's bitmap op has no clip shape, and this runs once per track, not per frame.
-fn rounded_square(image: &mypaper_ui::Image, radius: f32) -> mypaper_ui::Image {
-    let side = image.width.min(image.height);
-    let (x0, y0) = ((image.width - side) / 2, (image.height - side) / 2);
-    let r = side as f32 * radius;
-    let mut pixels = Vec::with_capacity((side * side * 4) as usize);
-    for y in 0..side {
-        let start = (((y0 + y) * image.width + x0) * 4) as usize;
-        pixels.extend_from_slice(&image.pixels[start..start + side as usize * 4]);
+/// The widget's own scale on its monitor, as [`paint`] draws it.
+fn widget_scale(m: &Model, dpi: f32) -> f32 {
+    m.placed
+        .appearance
+        .get("scale")
+        .and_then(Value::as_f64)
+        .unwrap_or(1.0) as f32
+        * dpi
+}
+
+/// A photo as its frame draws it: filling the widget's padded body (**bleed**, covering), it is
+/// cropped to the body's shape and its corners rounded concentric with the plate, so it never
+/// shows square corners inside rounded glass. Mounts, prints and `contain` keep it as is.
+fn photo_bitmap(m: &Model, rect: Rect, dpi: f32, image: mypaper_ui::Image) -> mypaper_ui::Image {
+    if m.str("variant", "bleed") != "bleed" || m.str("fit", "cover") == "contain" {
+        return image;
     }
-    let edge = side as f32;
-    for y in 0..side {
-        for x in 0..side {
+    // The view's padding and inner radius (`views::Ctx::body`, `inner_radius`).
+    let s = widget_scale(m, dpi);
+    let pad = s * (rect.width().min(rect.height()) / s * 0.09).clamp(12.0, 20.0);
+    let body = rect.inflate(-pad);
+    if body.width() < 1.0 || body.height() < 1.0 {
+        return image;
+    }
+    let radius = (views::plate_radius(m, rect, s) - pad).max(6.0 * s);
+    let mut crop = crop_to(&image, body.width() / body.height());
+    let r = radius * crop.width as f32 / body.width();
+    round_corners(&mut crop, r);
+    crop
+}
+
+/// A centred square crop of `image` with its corners cut round (radius = `radius` × side).
+/// Covers are drawn rounded this way.
+fn rounded_square(image: &mypaper_ui::Image, radius: f32) -> mypaper_ui::Image {
+    let mut square = crop_to(image, 1.0);
+    let r = square.width as f32 * radius;
+    round_corners(&mut square, r);
+    square
+}
+
+/// The centred crop of `image` with `aspect` (width / height).
+fn crop_to(image: &mypaper_ui::Image, aspect: f32) -> mypaper_ui::Image {
+    let (iw, ih) = (image.width, image.height);
+    let (w, h) = if iw as f32 / ih.max(1) as f32 > aspect {
+        (((ih as f32 * aspect).round() as u32).clamp(1, iw), ih)
+    } else {
+        (iw, ((iw as f32 / aspect).round() as u32).clamp(1, ih))
+    };
+    let (x0, y0) = ((iw - w) / 2, (ih - h) / 2);
+    let mut pixels = Vec::with_capacity((w * h * 4) as usize);
+    for y in 0..h {
+        let start = (((y0 + y) * iw + x0) * 4) as usize;
+        pixels.extend_from_slice(&image.pixels[start..start + w as usize * 4]);
+    }
+    mypaper_ui::Image {
+        width: w,
+        height: h,
+        pixels,
+    }
+}
+
+/// Cuts `image`'s corners round to transparent (radius `r` pixels), antialiased over one
+/// pixel. A layered window's bitmap op has no clip shape, and this runs once per picture, not
+/// per frame.
+fn round_corners(image: &mut mypaper_ui::Image, r: f32) {
+    let (w, h) = (image.width, image.height);
+    let r = r.min(w.min(h) as f32 / 2.0).max(0.0);
+    let (ew, eh) = (w as f32, h as f32);
+    for y in 0..h {
+        for x in 0..w {
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let dx = (r - px).max(px - (edge - r)).max(0.0);
-            let dy = (r - py).max(py - (edge - r)).max(0.0);
+            let dx = (r - px).max(px - (ew - r)).max(0.0);
+            let dy = (r - py).max(py - (eh - r)).max(0.0);
             if dx == 0.0 || dy == 0.0 {
                 continue;
             }
             // Coverage of the pixel by the corner's circle; premultiplied, so scale all four.
             let coverage = (r - (dx * dx + dy * dy).sqrt() + 0.5).clamp(0.0, 1.0);
-            let at = ((y * side + x) * 4) as usize;
-            for channel in &mut pixels[at..at + 4] {
+            let at = ((y * w + x) * 4) as usize;
+            for channel in &mut image.pixels[at..at + 4] {
                 *channel = (*channel as f32 * coverage).round() as u8;
             }
         }
     }
+}
+
+/// `image` stretched bilinearly to cover `w` × `h` (centred, never distorted): a tiny blurred
+/// backdrop made big enough to round smoothly.
+fn resample(image: &mypaper_ui::Image, w: u32, h: u32) -> mypaper_ui::Image {
+    let (iw, ih) = (image.width as f32, image.height as f32);
+    let scale = (w as f32 / iw).max(h as f32 / ih);
+    let (ox, oy) = ((iw - w as f32 / scale) / 2.0, (ih - h as f32 / scale) / 2.0);
+    let at = |x: i32, y: i32, c: usize| {
+        let x = x.clamp(0, image.width as i32 - 1) as u32;
+        let y = y.clamp(0, image.height as i32 - 1) as u32;
+        image.pixels[((y * image.width + x) * 4) as usize + c] as f32
+    };
+    let mut pixels = Vec::with_capacity((w * h * 4) as usize);
+    for y in 0..h {
+        let sy = oy + (y as f32 + 0.5) / scale - 0.5;
+        let (y0, fy) = (sy.floor() as i32, sy - sy.floor());
+        for x in 0..w {
+            let sx = ox + (x as f32 + 0.5) / scale - 0.5;
+            let (x0, fx) = (sx.floor() as i32, sx - sx.floor());
+            for c in 0..4 {
+                let top = at(x0, y0, c) * (1.0 - fx) + at(x0 + 1, y0, c) * fx;
+                let bottom = at(x0, y0 + 1, c) * (1.0 - fx) + at(x0 + 1, y0 + 1, c) * fx;
+                pixels.push((top * (1.0 - fy) + bottom * fy).round() as u8);
+            }
+        }
+    }
     mypaper_ui::Image {
-        width: side,
-        height: side,
+        width: w,
+        height: h,
         pixels,
     }
 }

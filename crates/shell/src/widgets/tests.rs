@@ -259,19 +259,38 @@ fn media_timeline_updates_reuse_artwork_and_removing_art_clears_its_material() {
     );
     let mut m = fixture("now-playing", root.clone());
     let mut data = json!({"artwork":uri,"position":0,"playing":true});
-    update_artwork(&mut m, &ui, &data);
+    let widget = Rect::new(0.0, 0.0, 300.0, 150.0);
+    update_artwork(&mut m, &ui, &data, widget, 1.0);
     let art = m.artwork.clone().unwrap();
     let material = m.artwork_backdrop.clone().unwrap();
+    // The blur backdrop has the plate's shape: its corners are cut, its middle is opaque.
+    assert_eq!((material.width, material.height), (192, 96));
+    assert_eq!(material.pixels[3], 0, "the corner is transparent");
+    let middle = ((48 * 192 + 96) * 4 + 3) as usize;
+    assert_eq!(material.pixels[middle], 255);
     m.data = data.clone();
     data["position"] = json!(30);
     data["playing"] = json!(false);
-    update_artwork(&mut m, &ui, &data);
+    update_artwork(&mut m, &ui, &data, widget, 1.0);
     assert!(Arc::ptr_eq(&art, m.artwork.as_ref().unwrap()));
     assert!(Arc::ptr_eq(&material, m.artwork_backdrop.as_ref().unwrap()));
     data["artwork"] = Value::Null;
-    update_artwork(&mut m, &ui, &data);
+    update_artwork(&mut m, &ui, &data, widget, 1.0);
     assert!(m.artwork.is_none() && m.artwork_backdrop.is_none() && m.artwork_tint.is_none());
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_bleed_photo_is_cropped_to_the_body_and_rounded_like_the_plate() {
+    let root = temp("photo-round");
+    let m = fixture("photo", root.clone());
+    let photo = mypaper_ui::Image { width: 300, height: 200, pixels: [90, 90, 90, 255].repeat(300 * 200) };
+    // A square widget: a square body, so a square crop with transparent corners.
+    let out = photo_bitmap(&m, Rect::new(0.0, 0.0, 200.0, 200.0), 1.0, photo);
+    assert_eq!((out.width, out.height), (200, 200));
+    assert_eq!(out.pixels[3], 0, "the corner is cut");
+    assert_eq!(out.pixels[((100 * 200 + 100) * 4 + 3) as usize], 255);
+    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]
