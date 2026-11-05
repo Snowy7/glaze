@@ -91,6 +91,10 @@ fn dock(c: &mut Ctx, r: Rect, n: usize) {
         .min((r.height() - label_h) * 0.8)
         .clamp(c.px(16.0), c.px(96.0))
         .floor();
+    // Too many apps for one row: the grid, whose icons keep a readable size.
+    if size < c.px(28.0) {
+        return grid(c, r, n);
+    }
     let gap = if size < c.px(36.0) { c.px(4.0) } else { gap };
     let cell = (size + gap).min(r.width() / n as f32);
     let left = r.left + ((r.width() - cell * n as f32) / 2.0).round();

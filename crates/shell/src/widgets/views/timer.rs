@@ -13,7 +13,7 @@ pub fn draw(c: &mut Ctx, r: Rect) {
     let (w, h) = (c.rect.width() / s, c.rect.height() / s);
     let tile = w < 130.0 || (h < 130.0 && w < 150.0);
     let row = !tile && (h < 130.0 || w / h > 1.4);
-    let switch = !tile && h >= 130.0 && w >= 175.0;
+    let switch = !tile && h >= 130.0 && w >= 290.0;
     let r = if switch {
         let (bar, rest) = r.take_top(c.px(c.f.theme.metrics.control_small), c.px(10.0));
         let selected = MODES.iter().position(|(m, _)| *m == c.m.timer.mode).unwrap_or(0);
@@ -30,7 +30,7 @@ pub fn draw(c: &mut Ctx, r: Rect) {
         let center = r.center();
         dial(c, center, d / 2.0, false);
         let p = c.px(play.min(d / s * 0.42));
-        let at = Rect::new(center.x - p / 2.0, center.y - p / 2.0, p, p).offset(0.0, d * 0.16);
+        let at = Rect::new(center.x - p / 2.0, center.y - p / 2.0, p, p);
         play_button(c, at);
         return;
     }
