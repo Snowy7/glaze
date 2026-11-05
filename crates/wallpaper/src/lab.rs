@@ -52,6 +52,52 @@ fn fixture(dock_x: f32) -> Vec<Plate> {
     plates
 }
 
+/// One plate per line, `x,y,w,h,radius,clarity,blur,refraction,highlight,r,g,b,a` in physical
+/// pixels of the lab's screen (`MYPAPER_LAB_PLATES`; `lab::live_plates` prints this form).
+fn plates_file(path: &Path) -> Vec<Plate> {
+    std::fs::read_to_string(path)
+        .unwrap()
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+        .enumerate()
+        .map(|(i, line)| {
+            let v: Vec<f32> = line.split(',').map(|x| x.trim().parse().unwrap()).collect();
+            Plate {
+                id: i as u64,
+                rect: [v[0], v[1], v[2], v[3]],
+                radius: v[4],
+                material: Material {
+                    clarity: v[5],
+                    blur: v[6],
+                    refraction: v[7],
+                    highlight: v[8],
+                    tint: [v[9], v[10], v[11], v[12]],
+                },
+            }
+        })
+        .collect()
+}
+
+/// The shell's live plates on the screen at the origin, in [`plates_file`]'s form (a passive
+/// read of the shared snapshot).
+#[test]
+#[ignore = "dev tool: needs a running shell"]
+fn live_plates() {
+    let mut reader = mypaper_glass_ipc::Reader::open().unwrap();
+    let snapshot = reader.read_changed().unwrap().expect("a snapshot");
+    eprintln!("{} plates; screens: {:?}", snapshot.plates.len(), mypaper_desktop::monitor_infos());
+    for p in snapshot.plates {
+        let ([x, y, w, h], m) = (p.rect, p.material);
+        if x >= 0.0 && y >= 0.0 && x < SIZE.0 as f32 && y < SIZE.1 as f32 {
+            let [r, g, b, a] = m.tint;
+            println!(
+                "{x},{y},{w},{h},{},{},{},{},{},{r},{g},{b},{a}",
+                p.radius, m.clarity, m.blur, m.refraction, m.highlight
+            );
+        }
+    }
+}
+
 struct Lab {
     gpu: Gpu,
     source: Box<dyn Source>,
@@ -309,8 +355,25 @@ fn lab() {
     let frames: u32 = parts.get(3).map_or(150, |s| s.parse().unwrap());
     let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
     let mut lab = Lab::new(&root.join(parts[0]));
-    lab.glass.set_plates(fixture(0.0));
+    let custom = std::env::var_os("MYPAPER_LAB_PLATES").map(|p| plates_file(Path::new(&p)));
+    lab.glass
+        .set_plates(custom.clone().unwrap_or_else(|| fixture(0.0)));
     lab.glass.settle();
+    if custom.is_some() {
+        // Captures only: the timed runs move the fixture's dock.
+        let mut entries = Vec::new();
+        for (i, &t) in times.iter().enumerate() {
+            let encoder = lab.encode(Duration::from_secs_f32(t), i as u32, true);
+            lab.gpu.queue.submit([encoder.finish()]);
+            let name = format!("{t}s.bgra");
+            std::fs::write(out.join(&name), lab.pixels(&lab.target)).unwrap();
+            let (w, h) = SIZE;
+            entries.push(format!("{{\"file\":\"{name}\",\"width\":{w},\"height\":{h}}}"));
+        }
+        std::fs::write(out.join("frames.json"), format!("[{}]", entries.join(","))).unwrap();
+        eprintln!("wrote {}", out.display());
+        return;
+    }
 
     let mut files = Vec::new();
     for (i, &t) in times.iter().enumerate() {

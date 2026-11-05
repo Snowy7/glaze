@@ -538,6 +538,8 @@ fn preset_style_grid() {
 /// The docs' headless renders (`docs/media/native/bar-*.png`): the macOS preset's top bar and
 /// dock at 100 % and 150 %, dark and light, over `MYPAPER_BAR_BACKDROP` (a wallpaper PNG) with a
 /// flat stand-in for the engine's glass. Run with `MYPAPER_BAR_SHOTS=<dir>`.
+/// `MYPAPER_BAR_CONTENT_ONLY=1` draws only the bars' content on transparency, to lay over the
+/// engine's real glass from its frame lab, and prints each bar's glass shapes and material.
 #[test]
 #[ignore = "writes images: MYPAPER_BAR_SHOTS=<dir> [MYPAPER_BAR_BACKDROP=<png>]"]
 fn headless_bar_renders() {
@@ -579,9 +581,19 @@ fn headless_bar_renders() {
                 &config, &model, &apps(), &dock_tokens, scale, (width, 400), &[], &[], &mut ui,
                 &mut images, None,
             );
+            let content_only = std::env::var_os("MYPAPER_BAR_CONTENT_ONLY").is_some();
             for (name, frame, tokens) in [("top", top, &top_tokens), ("dock", dock, &dock_tokens)] {
                 let (w, h) = frame.size;
                 let mut list = mypaper_ui::DisplayList::default();
+                if content_only {
+                    eprintln!("{name} {scheme} {scale}: shapes {:?}, material {:?}", frame.shapes, tokens.material);
+                    list.ops.extend(frame.list.ops.iter().cloned());
+                    let image = render(&mut ui, &list, w, h).unwrap();
+                    let pct = (scale * 100.0) as u32;
+                    mypaper_ui::golden::write(&image, &dir.join(format!("content-{name}-{scheme}-{pct}.png")))
+                        .unwrap();
+                    continue;
+                }
                 if let Some(image) = &backdrop {
                     list.ops.push(Op::Image {
                         rect: mypaper_ui::Rect::new(0.0, 0.0, w as f32, h as f32),
