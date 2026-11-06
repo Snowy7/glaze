@@ -36,9 +36,145 @@ pub struct Selection {
     pub display: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Document {
+    Config,
+    Bars,
+    Widgets,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PreviewOp {
+    pub path: String,
+    /// `null` removes an override, revealing the layer underneath.
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PreviewDocument {
+    pub document: Document,
+    pub base_revision: u64,
+    pub ops: Vec<PreviewOp>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Revision {
+    pub document: Document,
+    pub revision: u64,
+}
+
+impl PreviewOp {
+    /// Preview can change only material and size; it cannot invoke actions or edit files.
+    pub fn valid(&self, document: Document) -> bool {
+        let path: Vec<_> = self.path.trim_start_matches('/').split('/').collect();
+        let field = match (document, path.as_slice()) {
+            (Document::Config, ["look", "material", field])
+            | (Document::Config, ["look", "bars" | "widgets" | "menus", "material", field]) => {
+                *field
+            }
+            (Document::Bars, ["look", "glass", field])
+            | (Document::Bars, ["top" | "dock", "look", "glass", field]) => *field,
+            (Document::Bars, ["look", "tint"] | ["top" | "dock", "look", "tint"]) => "opacity",
+            (Document::Bars, ["appearance", "tint"] | ["top" | "dock", "appearance", "tint"]) => {
+                "color"
+            }
+            (Document::Bars, ["dock", "size"]) => "dock_size",
+            (Document::Bars, ["top", "height"]) => "bar_height",
+            (Document::Widgets, ["appearance", field])
+            | (Document::Widgets, ["instances", _, "appearance", field]) => *field,
+            (Document::Widgets, ["instances", _, "size", "0" | "1"]) => "widget_size",
+            (Document::Widgets, ["instances", _, "cell", "0" | "1"]) => "cell",
+            _ => return false,
+        };
+        if !self.path.starts_with('/') || self.path.len() > 256 {
+            return false;
+        }
+        let max = match field {
+            "clarity" | "refraction" | "highlight" | "opacity" => 1.0,
+            "blur" if document == Document::Widgets => 64.0,
+            "blur" => 32.0,
+            "tint" if document == Document::Bars => 1.0,
+            "tint" | "color" => {
+                return self.value.is_null()
+                    || self.value.as_str().is_some_and(|s| {
+                        (document == Document::Config && s == "auto")
+                            || mypaper_config::Color::parse(s).is_some()
+                    });
+            }
+            "dock_size" => 96.0,
+            "bar_height" => 96.0,
+            "widget_size" => 256.0,
+            "cell" => 16384.0,
+            _ => return false,
+        };
+        let min = match field {
+            "dock_size" => 24.0,
+            "bar_height" => 16.0,
+            "widget_size" => 1.0,
+            _ => 0.0,
+        };
+        self.value.is_null()
+            || self.value.as_f64().is_some_and(|n| {
+                n.is_finite()
+                    && (min..=max).contains(&n)
+                    && (!matches!(field, "widget_size" | "cell") || n.fract() == 0.0)
+            })
+    }
+}
+
+/// Applies a validated transient patch to an owned copy. There is no storage boundary here.
+pub fn patched(raw: &serde_json::Value, ops: &[PreviewOp]) -> Option<serde_json::Value> {
+    fn set(at: &mut serde_json::Value, path: &[&str], value: &serde_json::Value) -> Option<()> {
+        let (key, rest) = path.split_first()?;
+        if let Some(array) = at.as_array_mut() {
+            let slot = array.get_mut(key.parse::<usize>().ok()?)?;
+            if rest.is_empty() {
+                *slot = value.clone();
+            } else {
+                set(slot, rest, value)?;
+            }
+        } else {
+            let object = at.as_object_mut()?;
+            if rest.is_empty() {
+                if value.is_null() {
+                    object.remove(*key);
+                } else {
+                    object.insert((*key).into(), value.clone());
+                }
+            } else {
+                set(
+                    object
+                        .entry((*key).to_owned())
+                        .or_insert_with(|| serde_json::json!({})),
+                    rest,
+                    value,
+                )?;
+            }
+        }
+        Some(())
+    }
+    let mut result = raw.clone();
+    for op in ops {
+        let path: Vec<_> = op.path.strip_prefix('/')?.split('/').collect();
+        set(&mut result, &path, &op.value)?;
+    }
+    Some(result)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
+    Preview {
+        session: u64,
+        sequence: u64,
+        documents: Vec<PreviewDocument>,
+    },
+    PreviewCommit {
+        session: u64,
+        sequence: u64,
+        revisions: Vec<Revision>,
+    },
     PreviewDock {
         session: u64,
         sequence: u64,
@@ -66,6 +202,15 @@ pub enum Message {
         display: String,
         text: String,
     },
+    UndoNotice {
+        display: String,
+        text: String,
+        step: u64,
+    },
+    UndoRequest {
+        step: u64,
+    },
+    UndoDismiss,
     ResizeWidget {
         selection: Selection,
         before_cell: [u32; 2],
@@ -87,17 +232,27 @@ struct Queue {
 impl Queue {
     fn enqueue(&self, source: HWND, message: Message) -> bool {
         let mut messages = self.messages.borrow_mut();
-        if let Message::PreviewDock {
-            session, sequence, ..
-        } = &message && let Some((_, pending)) = messages.iter_mut().find(|(from, m)| {
-            *from == source
-                && matches!(m, Message::PreviewDock { session: pending, .. } if pending == session)
-        }) {
-            if matches!(pending, Message::PreviewDock { sequence: previous, .. } if *previous < *sequence)
-            {
-                *pending = message;
+        let preview = |m: &Message| match m {
+            Message::Preview {
+                session, sequence, ..
             }
-            return true;
+            | Message::PreviewDock {
+                session, sequence, ..
+            } => Some((*session, *sequence)),
+            _ => None,
+        };
+        if let Some((session, sequence)) = preview(&message) {
+            // A commit/cancel is a barrier: a subsequent drag must remain after it.
+            if let Some((from, pending)) = messages.back_mut()
+                && *from == source
+                && let Some((old_session, old_sequence)) = preview(pending)
+                && session == old_session
+            {
+                if sequence > old_sequence {
+                    *pending = message;
+                }
+                return true;
+            }
         }
         if messages.len() >= 64 {
             return false;

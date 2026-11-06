@@ -52,6 +52,7 @@ pub(super) fn total_repaints() -> u64 {
 
 pub struct Bar {
     studio_active: bool,
+    studio_base: Option<BarsConfig>,
     pub surface: Surface,
     pub kind: BarKind,
     pub config: BarsConfig,
@@ -176,6 +177,7 @@ impl Bar {
         slide.settings = slide_settings;
         let mut bar = Self {
             studio_active: false,
+            studio_base: None,
             surface,
             kind,
             config,
@@ -371,6 +373,7 @@ impl Bar {
     /// reservation, repainted with the new content and material (the engine fades a plate's
     /// material change, since its id, the window, stays the same).
     pub fn restyle(&mut self, config: BarsConfig, tokens: Tokens, animate: bool) {
+        self.studio_base = None;
         let motion = if self.kind == BarKind::Dock {
             &config.dock.animation
         } else {
@@ -408,13 +411,16 @@ impl Bar {
     }
 
     /// Repaint transient geometry without changing the appbar reservation or saved config.
-    pub(super) fn studio_size(&mut self, size: Option<f64>) {
-        if self.config.dock.size != size {
-            self.config.dock.size = size;
-            self.dirty = true;
-            self.presentation_dirty = true;
-            self.zoom_due = true;
-        }
+    pub(super) fn durable_config(&self) -> &BarsConfig { self.studio_base.as_ref().unwrap_or(&self.config) }
+
+    pub(super) fn studio_appearance(&mut self, config: BarsConfig, tokens: Tokens, transient: bool) {
+        if transient { self.studio_base.get_or_insert_with(|| self.config.clone()); }
+        else { self.studio_base = None; }
+        self.config = config;
+        self.tokens = tokens;
+        self.dirty = true;
+        self.presentation_dirty = true;
+        self.zoom_due = true;
     }
     pub fn shows_content(&self) -> bool {
         !self.hidden && self.slide.value < 0.999

@@ -320,10 +320,10 @@ impl Shell {
             if let Some(widgets) = &self.widgets { targets.extend(widgets.studio_targets()); }
         }
         self.studio.tick(ui, &targets, self.bars.config());
-        let dock_size = self.studio.dock_preview(self.bars.config());
-        self.bars.studio_dock_size(dock_size);
+        self.bars.studio_preview(self.studio.preview());
         self.bars.studio_session(self.studio.active());
         if let Some(widgets) = &mut self.widgets {
+            widgets.studio_preview(ui, self.studio.preview());
             widgets.studio_session(ui, self.studio.active(), self.studio.lifted());
         }
     }

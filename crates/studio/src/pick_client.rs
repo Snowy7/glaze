@@ -22,64 +22,200 @@ struct Client {
     session: u64,
     sequence: u64,
     preview: Option<PreviewDrag>,
+    undo_serial: u64,
+    undo_step: Option<UndoGuard>,
+    page_selection: Option<Selection>,
+    desktop_selected: bool,
 }
 
 struct PreviewDrag {
-    base_revision: u64,
-    size: f64,
+    documents: Vec<wire::PreviewDocument>,
+    label: String,
+    checkpoint: usize,
+}
+
+#[derive(Clone, Copy)]
+struct UndoGuard {
+    step: u64,
+    count: usize,
+    version: u64,
+}
+
+impl UndoGuard {
+    fn matches(self, app: &App, step: u64) -> bool {
+        self.step == step
+            && self.count == app.docs.undo_count()
+            && self.version == app.docs.version
+            && app.drag.is_none()
+    }
 }
 
 impl Client {
     fn stream_preview(&mut self, app: &App) {
         let Some(shell) = self.shell else { return };
-        let size = match &app.drag {
-            Some(crate::app::Drag::Slider { edit, .. })
-                if edit.doc == DocId::Bars && edit.path.as_ref() == "/dock/size" =>
-            {
-                app.get(DocId::Bars, "/dock/size").and_then(Value::as_f64)
-            }
-            _ => None,
-        };
-        if let Some(size) = size {
-            if self.preview.as_ref().is_some_and(|p| p.size == size) {
-                return;
-            }
-            let base_revision = self
+        if let Some(crate::app::Drag::Slider { edit, .. }) = &app.drag {
+            let documents = preview_documents(&self.observed, app);
+            if self
                 .preview
                 .as_ref()
-                .map_or_else(|| wire::revision(&self.observed[1].1), |p| p.base_revision);
+                .is_some_and(|p| p.documents == documents)
+            {
+                return;
+            }
             self.sequence += 1;
-            wire::send(
-                shell,
-                self.endpoint.hwnd(),
-                &Message::PreviewDock {
-                    session: self.session,
-                    sequence: self.sequence,
-                    base_revision,
-                    size,
-                },
-            );
-            self.preview = Some(PreviewDrag {
-                base_revision,
-                size,
-            });
-        } else if self.preview.take().is_some() {
-            self.sequence += 1;
-            let message = if matches!(app.docs.saved, crate::docs::Saved::Failed(_)) {
+            let message = if documents.is_empty() {
                 Message::PreviewCancel {
                     session: self.session,
                     sequence: self.sequence,
                 }
             } else {
-                Message::PreviewSaved {
+                Message::Preview {
                     session: self.session,
                     sequence: self.sequence,
-                    revision: wire::revision(&app.docs.doc(DocId::Bars).raw),
+                    documents: documents.clone(),
                 }
             };
             wire::send(shell, self.endpoint.hwnd(), &message);
+            let checkpoint = self
+                .preview
+                .as_ref()
+                .map_or(app.docs.undo_count(), |p| p.checkpoint);
+            self.preview = Some(PreviewDrag {
+                documents,
+                label: edit.label.to_string(),
+                checkpoint,
+            });
+        } else if let Some(drag) = self.preview.take() {
+            // A release can share a pump turn with the last move, before another panel frame.
+            let documents = preview_documents(&self.observed, app);
+            if !documents.is_empty() && documents != drag.documents {
+                self.sequence += 1;
+                wire::send(
+                    shell,
+                    self.endpoint.hwnd(),
+                    &Message::Preview {
+                        session: self.session,
+                        sequence: self.sequence,
+                        documents,
+                    },
+                );
+            }
+            self.sequence += 1;
+            let saved = !matches!(app.docs.saved, crate::docs::Saved::Failed(_));
+            let message = if saved {
+                Message::PreviewCommit {
+                    session: self.session,
+                    sequence: self.sequence,
+                    revisions: self
+                        .observed
+                        .iter()
+                        .map(|(id, _)| wire::Revision {
+                            document: document(*id),
+                            revision: wire::revision(&app.docs.doc(*id).raw),
+                        })
+                        .collect(),
+                }
+            } else {
+                Message::PreviewCancel {
+                    session: self.session,
+                    sequence: self.sequence,
+                }
+            };
+            wire::send(shell, self.endpoint.hwnd(), &message);
+            if saved && app.docs.undo_count() > drag.checkpoint {
+                self.announce(app, format!("{} · Undo", drag.label));
+            }
         }
     }
+
+    fn announce(&mut self, app: &App, text: String) {
+        let (Some(shell), Some(display)) = (self.shell, app.display()) else {
+            return;
+        };
+        self.undo_serial += 1;
+        let step = self.undo_serial;
+        self.undo_step = Some(UndoGuard {
+            step,
+            count: app.docs.undo_count(),
+            version: app.docs.version,
+        });
+        wire::send(
+            shell,
+            self.endpoint.hwnd(),
+            &Message::UndoNotice {
+                display: display.device.clone(),
+                text,
+                step,
+            },
+        );
+    }
+}
+
+fn document(id: DocId) -> wire::Document {
+    match id {
+        DocId::Config => wire::Document::Config,
+        DocId::Bars => wire::Document::Bars,
+        DocId::Widgets => wire::Document::Widgets,
+        _ => unreachable!("only desktop documents have previews"),
+    }
+}
+
+fn preview_documents(before: &[(DocId, Value); 3], app: &App) -> Vec<wire::PreviewDocument> {
+    fn diff(
+        document: wire::Document,
+        path: &str,
+        before: &Value,
+        after: &Value,
+        ops: &mut Vec<wire::PreviewOp>,
+    ) {
+        if before == after {
+            return;
+        }
+        if before.is_object() || after.is_object() {
+            let keys: std::collections::BTreeSet<_> = before
+                .as_object()
+                .into_iter()
+                .flat_map(|o| o.keys())
+                .chain(after.as_object().into_iter().flat_map(|o| o.keys()))
+                .collect();
+            for key in keys {
+                diff(
+                    document,
+                    &format!("{path}/{key}"),
+                    &before[key],
+                    &after[key],
+                    ops,
+                );
+            }
+        } else if let (Some(old), Some(new)) = (before.as_array(), after.as_array()) {
+            if old.len() == new.len() {
+                for (i, (old, new)) in old.iter().zip(new).enumerate() {
+                    diff(document, &format!("{path}/{i}"), old, new, ops);
+                }
+            }
+        } else {
+            let op = wire::PreviewOp {
+                path: path.into(),
+                value: after.clone(),
+            };
+            if op.valid(document) {
+                ops.push(op);
+            }
+        }
+    }
+    before
+        .iter()
+        .filter_map(|(id, raw)| {
+            let document = document(*id);
+            let mut ops = Vec::new();
+            diff(document, "", raw, &app.docs.doc(*id).raw, &mut ops);
+            (!ops.is_empty() && ops.len() <= 32).then(|| wire::PreviewDocument {
+                document,
+                base_revision: wire::revision(raw),
+                ops,
+            })
+        })
+        .collect()
 }
 
 #[derive(Default)]
@@ -100,7 +236,7 @@ impl UndoChain {
             self.values.remove(1);
         }
         format!(
-            "{}{} · Ctrl Z",
+            "{}{} · Undo",
             self.values.join(" → "),
             if merge { " is one step" } else { "" }
         )
@@ -152,6 +288,10 @@ pub fn connect(app: &App) {
                     .as_nanos() as u64,
                 sequence: 0,
                 preview: None,
+                undo_serial: 0,
+                undo_step: None,
+                page_selection: None,
+                desktop_selected: false,
             });
         }
         let client = client.as_mut().unwrap();
@@ -161,6 +301,9 @@ pub fn connect(app: &App) {
             client.begun = false;
             client.highlighted = None;
             client.preview = None;
+            client.page_selection = None;
+            client.desktop_selected = false;
+            client.undo_step = None;
         }
         if !client.begun
             && let Some(shell) = shell
@@ -175,22 +318,72 @@ pub fn connect(app: &App) {
                 },
             );
         }
+        if client.undo_step.is_some_and(|g| !g.matches(app, g.step)) {
+            client.undo_step = None;
+            if let Some(shell) = client.shell {
+                wire::send(shell, client.endpoint.hwnd(), &Message::UndoDismiss);
+            }
+        }
         client.stream_preview(app);
-        if client.observed_version != app.docs.version {
+        let selection = page_selection(app);
+        if client.page_selection != selection {
+            if let Some(shell) = client.shell {
+                let message = selection
+                    .clone()
+                    .map_or(Message::ClearSelection, |selection| Message::Selected {
+                        selection,
+                    });
+                if wire::send(shell, client.endpoint.hwnd(), &message) {
+                    client.desktop_selected = selection.is_some();
+                    client.page_selection = selection;
+                }
+            }
+        }
+        if app.drag.is_none() && client.observed_version != app.docs.version {
             client.observed = snapshot(app);
             client.observed_version = app.docs.version;
         }
     });
-    let hovered = app
-        .input
-        .hover
-        .and_then(|key| app.frame.targets.iter().find(|t| t.key == key))
+    highlight(hovered_widget(app, app.input.pointer));
+}
+
+fn page_selection(app: &App) -> Option<Selection> {
+    let page = app.panel.as_ref()?.page;
+    let display = app.display()?.device.clone();
+    let (kind, id) = match page {
+        Page::Widget => (Kind::Widget, app.nav.widget.clone()?),
+        Page::Top => (Kind::Bar, "top".into()),
+        Page::Dock => (Kind::Bar, "dock".into()),
+        Page::Module => {
+            let slot = app.nav.module.as_ref()?;
+            (
+                Kind::Module,
+                format!(
+                    "{}/{}/{}",
+                    if slot.bar == Bar::Dock { "dock" } else { "top" },
+                    slot.list,
+                    slot.index
+                ),
+            )
+        }
+        _ => return None,
+    };
+    Some(Selection { kind, id, display })
+}
+
+/// Resolve the actual row rectangle: accessibility and pointer hover need not share a key.
+fn hovered_widget(app: &App, point: Option<mypaper_ui::Point>) -> Option<String> {
+    let point = point?;
+    app.frame
+        .targets
+        .iter()
+        .rev()
+        .find(|t| t.visible.is_some_and(|r| r.contains(point)))
         .and_then(|target| match &target.action {
             Action::SelectWidget(id) => id.clone(),
             Action::Panel(Command::Open(Page::Widget)) => app.nav.widget.clone(),
             _ => None,
-        });
-    highlight(hovered);
+        })
 }
 
 /// Called only after a successful pick has entered Studio's undo history.
@@ -203,8 +396,9 @@ pub fn record_pick(app: &App, label: &str, ops: &[Op], checkpoint: usize, merge:
         let Some(client) = client.as_mut() else {
             return;
         };
-        let Some(shell) = client.shell else { return };
-        let Some(display) = app.display() else { return };
+        if client.shell.is_none() {
+            return;
+        }
         let choice = ops.iter().find_map(|op| {
             let before = client
                 .observed
@@ -221,14 +415,7 @@ pub fn record_pick(app: &App, label: &str, ops: &[Op], checkpoint: usize, merge:
         });
         if let Some((before, after)) = choice {
             let text = client.undo_chain.record(before, after, merge);
-            wire::send(
-                shell,
-                client.endpoint.hwnd(),
-                &Message::UndoStep {
-                    display: display.device.clone(),
-                    text,
-                },
-            );
+            client.announce(app, text);
         }
         client.observed = snapshot(app);
         client.observed_version = app.docs.version;
@@ -278,18 +465,30 @@ pub fn highlight(id: Option<String>) {
 
 /// Display switches end the desktop selection and place the panel without activation.
 pub fn clear(app: &App) {
+    deselect();
+    reposition(app);
+}
+
+fn deselect() {
     CLIENT.with(|client| {
         if let Some(client) = client.borrow_mut().as_mut() {
             if let Some(shell) = client.shell {
                 wire::send(shell, client.endpoint.hwnd(), &Message::ClearSelection);
             }
             client.highlighted = None;
+            client.desktop_selected = false;
         }
     });
-    reposition(app);
 }
 
 pub fn on_key(app: &mut App, key: u16) -> bool {
+    if key == 0x1B && app.field.is_none() && app.overlay.is_none() && app.drag.is_none() {
+        let selected = CLIENT.with(|c| c.borrow().as_ref().is_some_and(|c| c.desktop_selected));
+        if selected {
+            deselect();
+            return true;
+        }
+    }
     if key != wire::PICK_EVENT {
         return false;
     }
@@ -308,7 +507,28 @@ pub fn on_key(app: &mut App, key: u16) -> bool {
     });
     for message in messages {
         match message {
-            Message::Selected { selection } => selected(app, selection),
+            Message::Selected { selection } => {
+                CLIENT.with(|c| {
+                    if let Some(c) = c.borrow_mut().as_mut() {
+                        c.desktop_selected = true;
+                    }
+                });
+                selected(app, selection);
+            }
+            Message::UndoRequest { step } => {
+                let guard =
+                    CLIENT.with(|c| c.borrow_mut().as_mut().and_then(|c| c.undo_step.take()));
+                if guard.is_some_and(|g| g.matches(app, step)) {
+                    app.run(Action::Undo);
+                }
+                CLIENT.with(|c| {
+                    if let Some(c) = c.borrow().as_ref()
+                        && let Some(shell) = c.shell
+                    {
+                        wire::send(shell, c.endpoint.hwnd(), &Message::UndoDismiss);
+                    }
+                });
+            }
             Message::ResizeWidget {
                 selection,
                 before_cell,
@@ -503,15 +723,15 @@ mod tests {
         let mut chain = UndoChain::default();
         assert_eq!(
             chain.record("Liquid".into(), "Fluent".into(), false),
-            "Liquid → Fluent · Ctrl Z"
+            "Liquid → Fluent · Undo"
         );
         assert_eq!(
             chain.record("Fluent".into(), "One UI".into(), true),
-            "Liquid → Fluent → One UI is one step · Ctrl Z"
+            "Liquid → Fluent → One UI is one step · Undo"
         );
         assert_eq!(
             chain.record("Digital".into(), "World".into(), false),
-            "Digital → World · Ctrl Z"
+            "Digital → World · Undo"
         );
         for i in 0..20 {
             chain.record("World".into(), i.to_string(), true);
@@ -646,6 +866,10 @@ mod tests {
             session: 123,
             sequence: 0,
             preview: None,
+            undo_serial: 0,
+            undo_step: None,
+            page_selection: None,
+            desktop_selected: false,
         };
         let edit = crate::actions::Edit::new(DocId::Bars, "/dock/size", "Icon size");
         app.drag = Some(crate::app::Drag::Slider {
@@ -664,7 +888,9 @@ mod tests {
             .unwrap();
         client.stream_preview(&app);
         assert!(
-            matches!(receiver.next(), Some((_, Message::PreviewDock { session: 123, sequence: 1, base_revision: base, size: 64.0 })) if base == base_revision)
+            matches!(receiver.next(), Some((_, Message::Preview { session: 123, sequence: 1, documents }))
+                if documents.len() == 1 && documents[0].base_revision == base_revision
+                    && documents[0].ops[0].value.as_f64() == Some(64.0))
         );
         assert!(
             !app.docs.can_undo(),
@@ -674,7 +900,8 @@ mod tests {
         app.drag = None;
         client.stream_preview(&app);
         assert!(
-            matches!(receiver.next(), Some((_, Message::PreviewSaved { session: 123, sequence: 2, revision })) if revision == wire::revision(&app.docs.doc(DocId::Bars).raw))
+            matches!(receiver.next(), Some((_, Message::PreviewCommit { session: 123, sequence: 2, revisions }))
+                if revisions.iter().any(|r| r.document == wire::Document::Bars && r.revision == wire::revision(&app.docs.doc(DocId::Bars).raw)))
         );
         assert_eq!(app.docs.undo_count(), 1);
         assert!(DocId::ALL.iter().all(|id| app.docs.doc(*id).path.is_none()));
@@ -733,5 +960,122 @@ mod tests {
         assert_eq!(app.panel.as_ref().unwrap().page, Page::Dock);
         assert!(app.nav.module.is_none());
         assert_eq!(app.docs.version, revision);
+    }
+
+    #[test]
+    fn material_preview_includes_projection_and_retains_the_durable_base() {
+        let ui = Ui::new().unwrap();
+        for (field, value) in [
+            ("clarity", serde_json::json!(0.4)),
+            ("blur", serde_json::json!(24)),
+            ("refraction", serde_json::json!(0.8)),
+            ("highlight", serde_json::json!(0.7)),
+            ("tint", serde_json::json!("#987654")),
+        ] {
+            let mut app = crate::goldens::app(true, &ui);
+            let before = snapshot(&app);
+            let mut ops = vec![Op {
+                doc: DocId::Config,
+                path: format!("/look/material/{field}"),
+                value: Some(value.clone()),
+            }];
+            ops.extend(crate::look::projection_after(&app.docs, &ops));
+            app.docs.live(&ops).unwrap();
+            let first = preview_documents(&before, &app);
+            assert!(
+                first.iter().any(|d| d.document == wire::Document::Config
+                    && d.ops.iter().any(|o| o.value == value)),
+                "{field}"
+            );
+            assert!(
+                first.iter().any(|d| d.document == wire::Document::Bars),
+                "{field}"
+            );
+            for d in &first {
+                let raw = &before
+                    .iter()
+                    .find(|(id, _)| document(*id) == d.document)
+                    .unwrap()
+                    .1;
+                assert_eq!(d.base_revision, wire::revision(raw));
+                assert!(d.ops.iter().all(|o| o.valid(d.document)));
+            }
+            assert_eq!(app.docs.undo_count(), 0);
+            app.docs.commit_live("Material").unwrap();
+            assert_eq!(app.docs.undo_count(), 1);
+            app.docs.undo().unwrap();
+            assert_eq!(snapshot(&app), before);
+        }
+    }
+
+    #[test]
+    fn chip_undo_uses_the_announced_step_and_rejects_stale_history() {
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.docs
+            .edit(
+                "Blur",
+                &[Op {
+                    doc: DocId::Config,
+                    path: "/look/material/blur".into(),
+                    value: Some(serde_json::json!(24)),
+                }],
+            )
+            .unwrap();
+        let guard = UndoGuard {
+            step: 12,
+            count: app.docs.undo_count(),
+            version: app.docs.version,
+        };
+        assert!(guard.matches(&app, 12));
+        assert!(!guard.matches(&app, 11));
+        app.docs.undo().unwrap();
+        assert!(!guard.matches(&app, 12));
+        app.docs
+            .edit(
+                "Other step",
+                &[Op {
+                    doc: DocId::Config,
+                    path: "/look/material/blur".into(),
+                    value: Some(serde_json::json!(12)),
+                }],
+            )
+            .unwrap();
+        assert_eq!(guard.count, app.docs.undo_count());
+        assert!(
+            !guard.matches(&app, 12),
+            "a new branch with the same count is still a different step"
+        );
+    }
+
+    #[test]
+    fn rows_and_widget_pages_resolve_lifts_from_geometry_and_instance_identity() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State {
+            page: Page::Widgets,
+            ..Default::default()
+        });
+        let built = crate::panel::build(&app, &mut ui.text);
+        app.frame.targets = built.targets;
+        let row = app
+            .frame
+            .targets
+            .iter()
+            .find(|t| matches!(&t.action, Action::SelectWidget(Some(id)) if id == "clock-1"))
+            .unwrap();
+        let rect = row.visible.unwrap();
+        let pointer = mypaper_ui::Point::new(rect.left + 4.0, rect.top + 4.0);
+        assert!(app.input.hover.is_none());
+        assert_eq!(
+            hovered_widget(&app, Some(pointer)).as_deref(),
+            Some("clock-1")
+        );
+        assert_eq!(hovered_widget(&app, None), None);
+        app.nav.widget = Some("clock-1".into());
+        app.panel.as_mut().unwrap().page = Page::Widget;
+        assert_eq!(page_selection(&app).unwrap().id, "clock-1");
+        app.panel.as_mut().unwrap().page = Page::Root;
+        assert_eq!(page_selection(&app), None);
     }
 }

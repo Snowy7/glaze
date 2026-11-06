@@ -70,7 +70,8 @@ struct Press {
 
 pub struct Bars {
     studio_active: bool,
-    studio_dock_size: Option<f64>,
+    studio_config: Option<BarsConfig>,
+    studio_stamp: (Option<u64>, u64),
     studio_dock_pending: bool,
     studio_dock_applied: Instant,
     studio_frame: Duration,
@@ -146,7 +147,8 @@ impl Bars {
         startup::ready("shell", "services_ms");
         let mut bars = Self {
             studio_active: false,
-            studio_dock_size: None,
+            studio_config: None,
+            studio_stamp: (None, 0),
             studio_dock_pending: false,
             studio_dock_applied: Instant::now(),
             studio_frame: mypaper_ui::display_frame(),
@@ -766,11 +768,21 @@ impl Bars {
 
     fn paint(&mut self, ui: &mut Ui, now: Instant) -> Result<()> {
         if self.studio_dock_pending && now.saturating_duration_since(self.studio_dock_applied) >= self.studio_frame {
-            let preview = Self::studio_preview_config(&self.config, self.studio_dock_size);
-            let effective = preview.as_ref().unwrap_or(&self.config);
-            for bar in self.bars.iter_mut().filter(|b| b.kind == BarKind::Dock) {
-                let size = effective.for_monitor(&bar.monitor.device, bar.monitor.primary).map_or(effective.dock.size, |c| c.dock.size);
-                bar.studio_size(size);
+            let effective = self.studio_config.as_ref().unwrap_or(&self.config);
+            for bar in &mut self.bars {
+                let mut config = effective.for_monitor(&bar.monitor.device, bar.monitor.primary)?;
+                config.resolve(services::default_pins);
+                let key = if bar.kind == BarKind::Top { "top" } else { "dock" };
+                let mut appearance = config.appearance.over(&self.appearance);
+                let mut look = if bar.kind == BarKind::Top { config.top.look.clone() } else { config.dock.look.clone() };
+                look::appearance_layer(&config, key, &mut look, &appearance);
+                look::glass_layer(&config, key, &mut look, self.theme_glass);
+                let colors = plugin_style::patch_look(if bar.kind == BarKind::Top { "top-bar" } else { "dock" }, key, effective.raw(), &mut look, &mut appearance);
+                let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
+                plugin_style::colors(&colors, effective.raw(), &mut tokens.theme.color);
+                tokens.cache_config(&look, &config);
+                if config.performance.active(mypaper_desktop::on_battery()) { tokens.material = None; }
+                bar.studio_appearance(config, tokens, self.studio_config.is_some());
             }
             // No reservation or config file changes during preview; only shell-owned pixels.
             self.studio_dock_pending = false;
@@ -876,19 +888,25 @@ impl Bars {
         for bar in &mut self.bars { bar.studio_session(active); }
     }
 
-    pub fn studio_dock_size(&mut self, size: Option<f64>) {
-        if self.studio_dock_size != size {
-            self.studio_dock_size = size;
-            self.studio_dock_pending = true;
-        }
+    pub fn studio_preview(&mut self, preview: &mut crate::studio_pick::preview::Preview) {
+        use crate::studio_pick::wire::{self, Document};
+        if !preview.has(Document::Bars) && self.studio_stamp.0.is_none() { return; }
+        let raw = serde_json::Value::Object(self.config.raw().clone());
+        let revision = wire::revision(&raw);
+        let value = preview.effective(Document::Bars, revision);
+        let stamp = (value.map(|v| v.0), revision);
+        if self.studio_stamp == stamp { return; }
+        self.studio_stamp = stamp;
+        self.studio_config = value.and_then(|(_, ops)| Self::studio_preview_config(&self.config, ops));
+        self.studio_dock_pending = true;
     }
 
-    /// Resolve the same per-display overrides the durable document will use on release.
-    fn studio_preview_config(config: &BarsConfig, size: Option<f64>) -> Option<BarsConfig> {
-        let size = size?;
-        let mut raw = config.raw().clone();
-        raw.entry("dock").or_insert_with(|| serde_json::json!({})).as_object_mut()?.insert("size".into(), serde_json::json!(size));
-        BarsConfig::parse(&serde_json::to_string(&raw).ok()?).ok()
+    /// Resolve the same layers and per-display overrides as the eventual durable save.
+    fn studio_preview_config(config: &BarsConfig, ops: &[crate::studio_pick::wire::PreviewOp]) -> Option<BarsConfig> {
+        let raw = crate::studio_pick::wire::patched(&serde_json::Value::Object(config.raw().clone()), ops)?;
+        let mut config = BarsConfig::parse(&serde_json::to_string(&raw).ok()?).ok()?;
+        config.resolve(services::default_pins);
+        Some(config)
     }
 
     pub fn studio_targets(&self) -> Vec<crate::studio_pick::Target> {
@@ -1755,13 +1773,9 @@ impl Bars {
             }
         }
         self.monitors = monitors.clone();
-        let preview = Self::studio_preview_config(&self.config, self.studio_dock_size);
         let mut wanted = Vec::new();
         for monitor in monitors {
             let mut config = self.config.for_monitor(&monitor.device, monitor.primary)?;
-            if let Some(preview) = &preview {
-                config.dock.size = preview.for_monitor(&monitor.device, monitor.primary)?.dock.size;
-            }
             config.resolve(services::default_pins);
             // Plugin heights are geometry: the bar rebuilds for them, unlike the other tokens.
             if let Some(h) = plugin_style::number("top-bar", "top", self.config.raw(), "height") {
@@ -1825,7 +1839,7 @@ impl Bars {
                 let geometry = Bar::geometry(*kind, config, monitor);
                 old.iter()
                     .position(|b| {
-                        Bar::geometry(b.kind, &b.config, &b.monitor) == geometry
+                        Bar::geometry(b.kind, b.durable_config(), &b.monitor) == geometry
                             && b.tokens.scale == tokens.scale
                     })
                     .map(|i| old.swap_remove(i))
@@ -1881,6 +1895,8 @@ impl Bars {
             self.schedule_reservations();
         }
         self.update_items();
+        // Reconciliation always reserves durable geometry, then previews only owned pixels.
+        self.studio_dock_pending |= self.studio_config.is_some();
         Ok(())
     }
     fn schedule_reservations(&mut self) {

@@ -178,6 +178,12 @@ pub struct Widgets {
     editing: bool,
     studio_active: bool,
     studio_lift: BTreeSet<String>,
+    studio_layout: Option<Layout>,
+    studio_raw: Value,
+    studio_config_raw: Value,
+    studio_stamp: (Option<u64>, Option<u64>, u64, u64),
+    studio_applied: Instant,
+    studio_pending: bool,
     drag: Option<Drag>,
     settling: BTreeMap<String, Settle>,
     ghost: Option<EditSurface>,
@@ -288,6 +294,12 @@ impl Widgets {
         let mut widgets = Self {
             studio_active: false,
             studio_lift: BTreeSet::new(),
+            studio_layout: None,
+            studio_raw: studio_raw(&path),
+            studio_config_raw: mypaper_config::path().ok().map_or_else(|| serde_json::json!({}), |p| studio_raw(&p)),
+            studio_stamp: (None, None, 0, 0),
+            studio_applied: Instant::now(),
+            studio_pending: false,
             layout,
             layout_error,
             theme_path: None,
@@ -416,6 +428,7 @@ impl Widgets {
                     {
                         log::warn!("widget migration: {e:#}");
                     }
+                    self.studio_raw = studio_raw(&self.path);
                     if layout != self.layout {
                         self.cancel_drag();
                         self.settling.clear();
@@ -457,6 +470,8 @@ impl Widgets {
     }
     fn follow_config(&mut self) {
         if let Ok(config) = Config::load() {
+            self.studio_stamp.0 = None;
+            if let Ok(path) = mypaper_config::path() { self.studio_config_raw = studio_raw(&path); }
             self.holds.apply(&config);
             if apply_style(&config) {
                 for entry in self.entries.values_mut() {
@@ -502,6 +517,37 @@ impl Widgets {
                 editing_text: e.model.field.is_some(),
             })
             .collect()
+    }
+
+    /// Transient Studio policy. No layout or widget storage is changed by selection.
+    pub fn studio_preview(&mut self, ui: &mut Ui, preview: &mut crate::studio_pick::preview::Preview) {
+        use crate::studio_pick::wire::{self, Document};
+        if !preview.has(Document::Config) && !preview.has(Document::Widgets)
+            && self.studio_stamp.0.is_none() && self.studio_stamp.1.is_none() { return; }
+        let config_revision = wire::revision(&self.studio_config_raw);
+        let widget_revision = wire::revision(&self.studio_raw);
+        let config = preview.effective(Document::Config, config_revision)
+            .map(|(seq, ops)| (seq, ops.to_vec()));
+        let widgets = preview.effective(Document::Widgets, widget_revision);
+        let stamp = (config.as_ref().map(|v| v.0), widgets.map(|v| v.0), config_revision, widget_revision);
+        if self.studio_stamp == stamp { return; }
+        if self.studio_applied.elapsed() < mypaper_ui::display_frame() {
+            self.studio_pending = true;
+            self.ticker.schedule(true);
+            return;
+        }
+        self.studio_pending = false;
+        self.studio_applied = Instant::now();
+        self.studio_stamp = stamp;
+        let config = config.and_then(|(_, ops)| wire::patched(&self.studio_config_raw, &ops))
+            .unwrap_or_else(|| self.studio_config_raw.clone());
+        if let Ok(config) = Config::parse(&config.to_string()) {
+            self.knobs = glass::knobs(&config.look, glass::Family::Widgets);
+        }
+        self.studio_layout = widgets.and_then(|(_, ops)| wire::patched(&self.studio_raw, ops))
+            .and_then(|raw| Layout::parse(&raw.to_string()).ok());
+        self.reconcile_needed = true;
+        self.poll(ui);
     }
 
     /// Transient Studio policy. No layout or widget storage is changed by selection.
@@ -987,7 +1033,7 @@ impl Widgets {
         self.motion_frame = false;
         self.ticker.schedule(
             !self.held
-                && (self.drag.is_some()
+                && (self.studio_pending || self.drag.is_some()
                     || !self.settling.is_empty()
                     || self.entries.values().any(|e| {
                         e.model.visible
@@ -1005,9 +1051,10 @@ impl Widgets {
         };
         let devices: Vec<_> = self.monitors.iter().map(|m| m.device.clone()).collect();
         let primary = self.monitors.iter().position(|m| m.primary).unwrap_or(0);
-        let mut constrained = self.layout.clone();
+        let mut effective = self.studio_layout.clone().unwrap_or_else(|| self.layout.clone());
+        let mut constrained = effective.clone();
         for monitor in &self.monitors {
-            let grid = grid_for_bars(&self.layout, monitor, &self.bars);
+            let grid = grid_for_bars(&effective, monitor, &self.bars);
             constrained.instances = edit::constrain(
                 &grid,
                 &constrained.instances,
@@ -1015,11 +1062,11 @@ impl Widgets {
                 &self.registry,
             );
         }
-        if constrained != self.layout {
-            self.commit_layout(constrained);
+        if constrained != effective {
+            if self.studio_layout.is_none() { self.commit_layout(constrained.clone()); }
+            effective = constrained;
         }
-        let installed: BTreeSet<_> = self
-            .layout
+        let installed: BTreeSet<_> = effective
             .instances
             .iter()
             .map(|i| i.instance.clone())
@@ -1034,7 +1081,7 @@ impl Widgets {
             self.forget(&id);
             self.entries.remove(&id);
         }
-        for instance in &self.layout.instances {
+        for instance in &effective.instances {
             let Some(manifest) = self.registry.get(&instance.widget).map(|i| &i.manifest) else {
                 continue;
             };
@@ -1043,10 +1090,10 @@ impl Widgets {
             };
             let monitor = devices.iter().position(|d| d == device).unwrap();
             let screen = &self.monitors[monitor];
-            let grid = grid_for_bars(&self.layout, screen, &self.bars);
+            let grid = grid_for_bars(&effective, screen, &self.bars);
             let appearance = look::resolve(
                 &instance.appearance,
-                &self.layout.appearance,
+                &effective.appearance,
                 &look::base(&self.skin),
                 self.accent,
             );
@@ -1062,7 +1109,7 @@ impl Widgets {
                 && (self.editing || lifted
                     || overlay
                     || !self.covered.get(monitor).copied().unwrap_or(false))
-                && (self.editing || self.layout.overlay || !overlay);
+                && (self.editing || effective.overlay || !overlay);
             if !self.entries.contains_key(&instance.instance) {
                 match Model::new(placed.clone(), &mut self.storage, now) {
                     Ok(mut model) => {
@@ -3315,6 +3362,7 @@ impl Widgets {
                     let a = &e.model.placed.appearance;
                     let surface = a.get("surface").and_then(Value::as_str).unwrap_or("glass");
                     if matches!(surface, "none" | "solid" | "tint") {
+                        e.surface.set_glass(None);
                         return None;
                     }
                     let material = plate_material(
@@ -3322,7 +3370,17 @@ impl Widgets {
                         &self.skin,
                         &self.knobs,
                         monitor.dpi as f32 / 96.0,
-                    )?;
+                    );
+                    // Lifted widgets use the same popup backdrop channel as bars and flyouts.
+                    // The desktop publisher keeps the HWND id, so the engine excludes doubles.
+                    e.surface.set_glass(if e.topmost {
+                        material.map(|material| mypaper_ui::Glass {
+                            body: Rect::new(0.0, 0.0, e.rect.width(), e.rect.height()),
+                            radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
+                            material,
+                        })
+                    } else { None });
+                    let material = material?;
                     Some(Plate {
                         id: e.surface.hwnd().0 as usize as u64,
                         rect: e
@@ -3685,6 +3743,11 @@ fn finish_field(entry: &mut Entry, storage: &mut Storage) {
         log::error!("widget storage: {e:#}");
     }
 }
+fn studio_raw(path: &std::path::Path) -> Value {
+    std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+
 /// A glass widget's plate material in physical px, or `None` in a style without glass (the view
 /// draws the body). The user's style (`theme::material`) at the widget's own default (Liquid's
 /// from the wallpaper's skin), under the user's controls (`config.json` › `look.widgets`, else

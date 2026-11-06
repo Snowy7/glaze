@@ -10,7 +10,7 @@ use mypaper_ui::{Image, Op, Rgba, render};
 fn studio_dock_preview_matches_saved_override_resolution_without_mutating_the_base() {
     let config = BarsConfig::parse(r#"{"dock":{"size":48},"overrides":{"secondary":{"dock":{"size":40}}}}"#).unwrap();
     let before = crate::studio_pick::wire::revision(config.raw());
-    let preview = Bars::studio_preview_config(&config, Some(72.0)).unwrap();
+    let preview = Bars::studio_preview_config(&config, &[crate::studio_pick::wire::PreviewOp { path: "/dock/size".into(), value: serde_json::json!(72) }]).unwrap();
     assert_eq!(preview.for_monitor("DISPLAY1", true).unwrap().dock.size(), 72.0);
     assert_eq!(preview.for_monitor("DISPLAY2", false).unwrap().dock.size(), 40.0);
     assert_eq!(crate::studio_pick::wire::revision(config.raw()), before);

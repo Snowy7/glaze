@@ -1,22 +1,23 @@
-//! One latest-value dock-size override, tied to a Studio session and a durable revision.
+//! Latest-value overrides. Durable revisions, cancellation and disconnect retire them.
+use super::wire::{Document, PreviewDocument, PreviewOp, Revision};
+
 #[derive(Default)]
-pub(super) struct Preview {
+pub struct Preview {
     session: Option<u64>,
     sequence: u64,
-    value: Option<Value>,
+    values: Vec<Value>,
 }
 
 struct Value {
-    base: u64,
-    size: f64,
+    document: PreviewDocument,
+    sequence: u64,
     saved: Option<u64>,
 }
 
 impl Preview {
-    pub fn active(&self) -> bool {
-        self.value.is_some()
+    pub fn has(&self, document: Document) -> bool {
+        self.values.iter().any(|v| v.document.document == document)
     }
-
     fn accepts(&mut self, session: u64, sequence: u64) -> bool {
         if self.session.is_some_and(|old| old != session) || sequence <= self.sequence {
             return false;
@@ -26,75 +27,222 @@ impl Preview {
         true
     }
 
-    pub fn update(&mut self, session: u64, sequence: u64, base: u64, size: f64) {
-        if size.is_finite() && (24.0..=96.0).contains(&size) && self.accepts(session, sequence) {
-            self.value = Some(Value {
-                base,
-                size,
-                saved: None,
-            });
+    pub fn update(&mut self, session: u64, sequence: u64, documents: Vec<PreviewDocument>) {
+        if documents.is_empty()
+            || documents.len() > 3
+            || documents.iter().enumerate().any(|(i, d)| {
+                d.ops.is_empty()
+                    || d.ops.len() > 32
+                    || d.ops.iter().any(|op| !op.valid(d.document))
+                    || documents[..i].iter().any(|old| old.document == d.document)
+            })
+            || !self.accepts(session, sequence)
+        {
+            return;
         }
+        self.values = documents
+            .into_iter()
+            .map(|document| Value {
+                document,
+                sequence,
+                saved: None,
+            })
+            .collect();
     }
 
-    pub fn saved(&mut self, session: u64, sequence: u64, revision: u64) {
-        if self.accepts(session, sequence)
-            && let Some(value) = &mut self.value
-        {
-            value.saved = Some(revision);
+    pub fn dock(&mut self, session: u64, sequence: u64, base: u64, size: f64) {
+        if !size.is_finite() || !(24.0..=96.0).contains(&size) {
+            return;
+        }
+        self.update(
+            session,
+            sequence,
+            vec![PreviewDocument {
+                document: Document::Bars,
+                base_revision: base,
+                ops: vec![PreviewOp {
+                    path: "/dock/size".into(),
+                    value: serde_json::json!(size),
+                }],
+            }],
+        );
+    }
+
+    pub fn saved(&mut self, session: u64, sequence: u64, revisions: &[Revision]) {
+        if !self.accepts(session, sequence) {
+            return;
+        }
+        for value in &mut self.values {
+            value.saved = revisions
+                .iter()
+                .find(|r| r.document == value.document.document)
+                .map(|r| r.revision);
         }
     }
 
     pub fn cancel(&mut self, session: u64, sequence: u64) {
         if self.accepts(session, sequence) {
-            self.value = None;
+            self.values.clear();
         }
     }
 
-    pub fn effective(&mut self, durable: u64) -> Option<f64> {
-        let value = self.value.as_ref()?;
-        if value.saved == Some(durable) || value.base != durable {
-            // Matching save takes over without bouncing; an external edit wins on conflict.
-            self.value = None;
-            None
-        } else {
-            Some(value.size)
+    /// Each file hands over independently: saves across files need not arrive together.
+    pub fn effective(&mut self, document: Document, durable: u64) -> Option<(u64, &[PreviewOp])> {
+        let index = self
+            .values
+            .iter()
+            .position(|v| v.document.document == document)?;
+        let value = &self.values[index];
+        if value.saved == Some(durable) || value.document.base_revision != durable {
+            // An external edit wins too. An old drag must never overwrite newer saved state.
+            self.values.remove(index);
+            return None;
         }
+        let value = &self.values[index];
+        Some((value.sequence, &value.document.ops))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::wire::patched;
     use super::*;
-    #[test]
-    fn release_holds_until_matching_save_and_old_messages_cannot_reopen_it() {
-        let mut p = Preview::default();
-        p.update(7, 1, 10, 48.0);
-        p.update(7, 2, 10, 70.0);
-        p.update(7, 1, 10, 30.0);
-        assert_eq!(p.effective(10), Some(70.0));
-        p.saved(7, 3, 20);
-        assert_eq!(p.effective(10), Some(70.0));
-        assert_eq!(p.effective(20), None);
-        p.update(7, 2, 10, 70.0);
-        assert_eq!(p.effective(20), None);
-        p.update(7, 4, 20, 50.0);
-        assert_eq!(p.effective(20), Some(50.0));
+    use serde_json::json;
+
+    fn document(
+        document: Document,
+        base_revision: u64,
+        path: &str,
+        value: serde_json::Value,
+    ) -> PreviewDocument {
+        PreviewDocument {
+            document,
+            base_revision,
+            ops: vec![PreviewOp {
+                path: path.into(),
+                value,
+            }],
+        }
     }
+
     #[test]
-    fn conflicts_cancel_disconnect_and_invalid_values_drop_transient_state() {
+    fn release_holds_each_document_until_its_matching_save() {
         let mut p = Preview::default();
-        p.update(7, 1, 10, 48.0);
-        assert_eq!(p.effective(11), None);
-        p.update(7, 2, 11, 64.0);
-        p.update(8, 3, 11, 80.0);
-        p.update(7, 3, 11, f64::NAN);
-        assert_eq!(p.effective(11), Some(64.0));
+        p.update(
+            7,
+            1,
+            vec![
+                document(Document::Config, 10, "/look/material/blur", json!(24)),
+                document(Document::Bars, 11, "/look/glass/blur", json!(24)),
+                document(Document::Widgets, 12, "/appearance/blur", json!(24)),
+            ],
+        );
+        p.saved(
+            7,
+            2,
+            &[
+                Revision {
+                    document: Document::Config,
+                    revision: 20,
+                },
+                Revision {
+                    document: Document::Bars,
+                    revision: 21,
+                },
+                Revision {
+                    document: Document::Widgets,
+                    revision: 22,
+                },
+            ],
+        );
+        assert!(p.effective(Document::Config, 10).is_some());
+        assert!(p.effective(Document::Config, 20).is_none());
+        assert!(p.effective(Document::Bars, 11).is_some());
+        assert!(p.effective(Document::Bars, 21).is_none());
+        assert!(p.effective(Document::Widgets, 12).is_some());
+        assert!(p.effective(Document::Widgets, 22).is_none());
+        p.dock(7, 1, 11, 72.0);
+        assert!(p.effective(Document::Bars, 21).is_none());
+    }
+
+    #[test]
+    fn stale_sessions_conflicts_cancel_and_disconnect_cannot_reopen_overrides() {
+        let mut p = Preview::default();
+        p.dock(7, 1, 10, 48.0);
+        p.dock(7, 2, 10, 70.0);
+        p.dock(7, 1, 10, 30.0);
+        p.dock(8, 3, 10, 80.0);
+        p.dock(7, 3, 10, f64::NAN);
+        assert_eq!(
+            patched(&json!({}), p.effective(Document::Bars, 10).unwrap().1).unwrap()["dock"]["size"],
+            70.0
+        );
+        assert!(p.effective(Document::Bars, 11).is_none());
+        p.dock(7, 3, 11, 60.0);
         p.cancel(7, 4);
-        assert_eq!(p.effective(11), None);
-        p.update(7, 3, 11, 48.0);
-        assert_eq!(p.effective(11), None);
+        p.dock(7, 3, 11, 48.0);
+        assert!(p.effective(Document::Bars, 11).is_none());
         p = Preview::default();
-        p.update(8, 1, 11, 60.0);
-        assert_eq!(p.effective(11), Some(60.0));
+        p.dock(8, 1, 11, 60.0);
+        assert!(p.effective(Document::Bars, 11).is_some());
+    }
+
+    #[test]
+    fn invalid_materials_and_non_preview_paths_are_rejected_atomically() {
+        let mut p = Preview::default();
+        for (doc, path, value) in [
+            (Document::Config, "/look/material/blur", json!(33)),
+            (Document::Config, "/look/material/refraction", json!(-1)),
+            (
+                Document::Config,
+                "/look/material/tint",
+                json!("not a color"),
+            ),
+            (Document::Config, "/theme", json!("other")),
+            (Document::Widgets, "/instances/0/size/0", json!(2.5)),
+        ] {
+            p.update(7, 1, vec![document(doc, 10, path, value)]);
+            assert!(p.effective(doc, 10).is_none());
+        }
+        p.update(
+            7,
+            1,
+            vec![document(
+                Document::Config,
+                10,
+                "/look/material/highlight",
+                json!(0.7),
+            )],
+        );
+        assert!(p.effective(Document::Config, 10).is_some());
+    }
+
+    #[test]
+    fn patches_preserve_unrelated_state_and_reject_missing_widget_indices() {
+        let raw = json!({"instances":[{"size":[8,5],"cell":[1,2],"appearance":{"tint":"#123456"}}], "grid":{"gap":8}});
+        let ops = [
+            PreviewOp {
+                path: "/instances/0/appearance/blur".into(),
+                value: json!(20),
+            },
+            PreviewOp {
+                path: "/instances/0/size/0".into(),
+                value: json!(10),
+            },
+        ];
+        let changed = patched(&raw, &ops).unwrap();
+        assert_eq!(changed["instances"][0]["size"], json!([10, 5]));
+        assert_eq!(changed["instances"][0]["appearance"]["tint"], "#123456");
+        assert_eq!(raw["instances"][0]["size"], json!([8, 5]));
+        assert!(
+            patched(
+                &raw,
+                &[PreviewOp {
+                    path: "/instances/7/size/0".into(),
+                    value: json!(10)
+                }]
+            )
+            .is_none()
+        );
     }
 }

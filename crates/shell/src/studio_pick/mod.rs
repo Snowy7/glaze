@@ -2,7 +2,7 @@
 //! Catchers sit below widgets in the desktop band; widget input still reaches its real HWND.
 mod chrome;
 mod notice;
-mod preview;
+pub mod preview;
 pub mod resize;
 pub mod wire;
 
@@ -161,12 +161,8 @@ impl StudioPick {
         self.session.active()
     }
 
-    pub fn dock_preview(&mut self, bars: &BarsConfig) -> Option<f64> {
-        if !self.preview.active() {
-            return None;
-        }
-        self.preview.effective(wire::revision(bars.raw()))
-    }
+    pub fn preview(&mut self) -> &mut preview::Preview { &mut self.preview }
+
     pub fn lifted(&self) -> BTreeSet<String> {
         // Keep the receiving HWND alive until its button release has run.
         if self.pressed && self.gesture.is_none() {
@@ -193,6 +189,10 @@ impl StudioPick {
                     }
                 }
                 Message::End => self.session.end(source.0 as isize),
+                Message::Preview { session, sequence, documents }
+                    if self.owns(source) => self.preview.update(session, sequence, documents),
+                Message::PreviewCommit { session, sequence, revisions }
+                    if self.owns(source) => self.preview.saved(session, sequence, &revisions),
                 Message::PreviewDock {
                     session,
                     sequence,
@@ -202,7 +202,7 @@ impl StudioPick {
                     h == source.0 as isize && wire::process(source) == pid
                 }) =>
                 {
-                    self.preview.update(session, sequence, base_revision, size);
+                    self.preview.dock(session, sequence, base_revision, size);
                 }
                 Message::PreviewSaved {
                     session,
@@ -212,7 +212,7 @@ impl StudioPick {
                     h == source.0 as isize && wire::process(source) == pid
                 }) =>
                 {
-                    self.preview.saved(session, sequence, revision);
+                    self.preview.saved(session, sequence, &[wire::Revision { document: wire::Document::Bars, revision }]);
                 }
                 Message::PreviewCancel { session, sequence }
                     if self.session.owner.is_some_and(|(h, pid)| {
@@ -228,11 +228,17 @@ impl StudioPick {
                         && !text.chars().any(char::is_control) =>
                 {
                     if let Some(notice) = &mut self.notice {
-                        notice.update(display, text);
+                        notice.update(display, text, 0);
                     } else {
-                        self.notice = Some(notice::Notice::new(display, text));
+                        self.notice = Some(notice::Notice::new(display, text, 0));
                     }
                 }
+                Message::UndoNotice { display, text, step }
+                    if self.owns(source) && text.chars().count() <= 200 && !text.chars().any(char::is_control) => {
+                    if let Some(notice) = &mut self.notice { notice.update(display, text, step); }
+                    else { self.notice = Some(notice::Notice::new(display, text, step)); }
+                }
+                Message::UndoDismiss if self.owns(source) => self.notice = None,
                 Message::ClearSelection
                     if self.session.owner.is_some_and(|(h, pid)| {
                         h == source.0 as isize && wire::process(source) == pid
@@ -250,6 +256,10 @@ impl StudioPick {
                     }) =>
                 {
                     self.session.highlight = id;
+                }
+                Message::Selected { selection } if self.owns(source) => {
+                    self.gesture = None;
+                    self.session.selected = Some(selection);
                 }
                 _ => {}
             }
@@ -451,6 +461,18 @@ impl StudioPick {
         if !self.active() {
             return false;
         }
+        if let Some(notice) = &mut self.notice
+            && let Some(undo) = notice.event(surface, event)
+        {
+            if undo {
+                let step = notice.step;
+                if let Some((owner, _)) = self.session.owner {
+                    wire::send(HWND(owner as _), self.endpoint.hwnd(), &Message::UndoRequest { step });
+                }
+                self.notice = None;
+            }
+            return true;
+        }
         if let Some(gesture) = &mut self.gesture {
             if gesture.capture == surface {
                 match event {
@@ -558,6 +580,10 @@ impl StudioPick {
             );
             log::info!("Studio pick {selection:?}, delivered={taken}");
         }
+    }
+
+    fn owns(&self, source: HWND) -> bool {
+        self.session.owner.is_some_and(|(h, pid)| h == source.0 as isize && wire::process(source) == pid)
     }
 
     fn reset_transients(&mut self) {
