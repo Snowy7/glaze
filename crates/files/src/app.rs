@@ -781,8 +781,24 @@ impl App {
             }
             Command::Refresh => self.refresh()?,
             Command::Terminal => {
-                if let Some(location) = self.location.as_ref().filter(|l| l.filesystem) {
-                    shell::terminal(&location.path)?;
+                let folder = (self.selection.items.len() == 1)
+                    .then(|| {
+                        self.selection
+                            .items
+                            .first()
+                            .and_then(|i| self.shown.get(*i))
+                    })
+                    .flatten()
+                    .filter(|entry| entry.directory)
+                    .map(|entry| entry.path.as_str())
+                    .or_else(|| {
+                        self.location
+                            .as_ref()
+                            .filter(|l| l.filesystem)
+                            .map(|l| l.path.as_str())
+                    });
+                if let Some(folder) = folder {
+                    shell::terminal(folder)?;
                 }
             }
             Command::CopyPath => {
@@ -1597,12 +1613,14 @@ impl App {
                     }
                     self.loading = !complete;
                     if complete {
-                        self.remember_folder();
                         self.save_session()?;
                         self.refreshing = false;
                     }
                     self.elapsed_ms = elapsed_ms;
                     self.entries = entries.clone();
+                    if complete {
+                        self.remember_folder();
+                    }
                     if self.query_text.is_empty() {
                         self.shown = entries;
                     } else {
