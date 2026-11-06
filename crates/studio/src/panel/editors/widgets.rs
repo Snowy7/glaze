@@ -770,53 +770,18 @@ pub(super) fn face(
         }
     }
     let appearance = mypaper_widgets::look::json_of(&resolved_appearance);
-    let placed = mypaper_widgets::layout::Placed {
-        instance: "panel-face-preview".into(),
-        widget: instance.widget.clone(),
-        cell: [0, 0],
-        size: manifest.size.default,
-        settings: manifest.resolve_settings(&settings),
-        appearance: appearance.clone(),
-        own: Map::new(),
-    };
-    let now = Stamp {
-        date: mypaper_ui::calendar::Date {
-            year: 2026,
-            month: 11,
-            day: 6,
-        },
-        hour: 10,
-        minute: 42,
-        second: 18,
-        ms: 1793958138000,
-    };
-    let mut storage = mypaper_widgets::storage::Storage::new(
-        std::env::temp_dir().join("mypaper-panel-face-preview"),
-    );
-    let Ok(mut model) = Model::new(placed, &mut storage, now) else {
-        unavailable_face(app, b, manifest, pic);
-        return;
-    };
-    if instance.widget.contains("--") && model.data.get("face").is_none() {
-        unavailable_face(app, b, manifest, pic);
-        return;
+    let mut resolved_settings = manifest.resolve_settings(&settings);
+    if instance.widget == "clock" && value == "words" {
+        resolved_settings.insert("name".into(), json!("Ada"));
     }
-    sample_content(&mut model, now);
-    if instance.widget == "weather" {
-        model.data = json!({"current":{"temperature":22,"condition":"Partly cloudy","code":2,"isDay":true,"location":{"name":"Hong Kong"}},"forecast":{"days":[{"date":"2026-11-06","max":24,"min":19,"code":2},{"date":"2026-11-07","max":23,"min":18,"code":3},{"date":"2026-11-08","max":25,"min":20,"code":0}]}});
-    }
-    if instance.widget == "photo" {
-        model.photo.current = app
-            .library
-            .active()
+    let photo = (instance.widget == "photo")
+        .then(|| app.library.active()
             .and_then(|i| app.library.items[i].preview.as_ref())
-            .and_then(|p| app.images.borrow_mut().get(p, (256, 160)));
-    }
+            .and_then(|p| app.images.borrow_mut().get(p, (256, 160))))
+        .flatten();
     // Render at native scale before reducing. The shell's text fitting works in DIPs;
     // tiny fractional scales can otherwise turn the greeting into “Good…”.
-    let variant = model
-        .placed
-        .settings
+    let variant = resolved_settings
         .get("variant")
         .and_then(Value::as_str)
         .unwrap_or("");
@@ -837,26 +802,56 @@ pub(super) fn face(
             _ => (360, 220),
         }
     };
-    if instance.widget == "clock" && value == "words" {
-        model.placed.settings.insert("name".into(), json!("Ada"));
-    }
     let cache_key = format!(
-        "face:{}:{setting}:{value}:{width}:{height}:{}:{}:{}:{:p}",
+        "face:{}:{setting}:{value}:{width}:{height}:{:.0}x{:.0}:{}:{}:{}:{:p}",
         instance.widget,
+        pic.width(), pic.height(),
         serde_json::to_string(&appearance).unwrap_or_default(),
-        serde_json::to_string(&model.placed.settings).unwrap_or_default(),
+        serde_json::to_string(&resolved_settings).unwrap_or_default(),
         app.library
             .active()
             .map_or("", |i| app.library.items[i].id.as_str()),
-        model
-            .photo
-            .current
-            .as_ref()
+        photo.as_ref()
             .map_or(std::ptr::null(), std::sync::Arc::as_ptr)
     );
     let state = app.panel.as_ref().unwrap();
     let cached = state.specimens.borrow().get(&cache_key).cloned();
+    // Construct the isolated runtime only on a bitmap miss; cached gallery rows own pixels.
     let image = cached.or_else(|| {
+    let placed = mypaper_widgets::layout::Placed {
+        instance: "panel-face-preview".into(),
+        widget: instance.widget.clone(),
+        cell: [0, 0],
+        size: manifest.size.default,
+        settings: resolved_settings,
+        appearance: appearance.clone(),
+        own: Map::new(),
+    };
+    let now = Stamp {
+        date: mypaper_ui::calendar::Date {
+            year: 2026,
+            month: 11,
+            day: 6,
+        },
+        hour: 10,
+        minute: 42,
+        second: 18,
+        ms: 1793958138000,
+    };
+    let mut storage = mypaper_widgets::storage::Storage::new(
+        std::env::temp_dir().join("mypaper-panel-face-preview"),
+    );
+    let Ok(mut model) = Model::new(placed, &mut storage, now) else {
+        return None;
+    };
+    if instance.widget.contains("--") && model.data.get("face").is_none() {
+        return None;
+    }
+    sample_content(&mut model, now);
+    if instance.widget == "weather" {
+        model.data = json!({"current":{"temperature":22,"condition":"Partly cloudy","code":2,"isDay":true,"location":{"name":"Hong Kong"}},"forecast":{"days":[{"date":"2026-11-06","max":24,"min":19,"code":2},{"date":"2026-11-07","max":23,"min":18,"code":3},{"date":"2026-11-08","max":25,"min":20,"code":0}]}});
+    }
+    model.photo.current = photo;
         let mut list = view(
             &model,
             &tokens(&appearance),
@@ -908,7 +903,7 @@ pub(super) fn face(
         let mut ui = mypaper_ui::Ui::new().ok()?;
         let native = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, width, height).ok()?);
         // Cache only the picture's size, not a native widget-sized raster per gallery tile.
-        let thumb_width = if standalone { 224 } else { 440 };
+        let thumb_width = pic.width().ceil().max(1.0) as u32;
         let thumb_height = (thumb_width * height / width).max(1);
         let mut reduced = mypaper_ui::DisplayList::default();
         reduced.ops.push(mypaper_ui::Op::Image {
@@ -955,6 +950,8 @@ pub(super) fn face(
             1.0,
             b.px(8.0),
         );
+    } else {
+        unavailable_face(app, b, manifest, pic);
     }
 }
 
