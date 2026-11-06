@@ -99,6 +99,7 @@ fn run(root: PathBuf) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     let field = mypaper_ui::TextField::new(windows[5].hwnd(), Rect::new(14.0, 5.0, 590.0, 30.0), false, 14.0, mypaper_ui::Rgba::rgb8([255;3], 1.0))?;
     field.set_text("Editable text keeps its content")?;
+    field.prepare()?;
     let mut revisions = 0u64;
     let until = Instant::now() + Duration::from_secs(115);
     let mut dirty = true;

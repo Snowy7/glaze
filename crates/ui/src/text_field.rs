@@ -43,6 +43,7 @@ impl HostVTable {
 }
 
 struct State {
+    allow_focus: Cell<bool>,
     window: HWND,
     rect: Cell<RECT>,
     revision: Cell<u64>,
@@ -117,6 +118,7 @@ impl TextField {
             *slot = ch;
         }
         let state = Rc::new(State {
+            allow_focus: Cell::new(true),
             window,
             rect: Cell::new(winrect(rect)),
             revision: Cell::new(0),
@@ -246,7 +248,16 @@ impl TextField {
         self.inner.state.posted.set(false);
         self.inner.state.invalidate();
     }
+
+    /// Prepare an inactive specimen for drawing; focus/capture stay disabled until `focus`.
+    pub fn prepare(&self) -> Result<()> {
+        self.inner.state.allow_focus.set(false);
+        // SAFETY: layout activation on the owning UI thread, with the field's client rect.
+        unsafe { self.inner.services.OnTxInPlaceActivate(&mut self.inner.state.rect.get())?; }
+        Ok(())
+    }
     pub fn focus(&self) {
+        self.inner.state.allow_focus.set(true);
         // SAFETY: the field's surface lives throughout the field's use.
         unsafe {
             let _ = SetForegroundWindow(self.inner.state.window);
@@ -438,6 +449,7 @@ impl ITextHost_Impl for Host_Impl {
         self.state.invalidate();
     }
     fn TxSetCapture(&self, capture: BOOL) {
+        if !self.state.allow_focus.get() { return; }
         // SAFETY: synchronous host callback on the UI thread; the surface owns this HWND.
         unsafe {
             if capture.as_bool() {
@@ -448,6 +460,7 @@ impl ITextHost_Impl for Host_Impl {
         }
     }
     fn TxSetFocus(&self) {
+        if !self.state.allow_focus.get() { return; }
         // SAFETY: synchronous host callback on the UI thread; the surface owns this HWND.
         unsafe {
             let _ = SetFocus(Some(self.state.window));
@@ -684,6 +697,7 @@ mod tests {
         let surface = Surface::new(Kind::Popup {activate:false}, "Live type test", Role::TextInput).unwrap();
         let field = TextField::new(surface.hwnd(), Rect::new(0.0,0.0,300.0,80.0), false, 14.0, Rgba::HIT).unwrap();
         field.set_text("Keep this text").unwrap();
+        field.prepare().unwrap();
         field.select_range(2..6);
         let style = crate::TextStyle::new("Consolas", 24.0);
         field.set_style(&style, Rgba::rgb8([255;3],1.0));
@@ -696,6 +710,10 @@ mod tests {
         let end = format.szFaceName.iter().position(|c|*c==0).unwrap_or(32);
         assert_eq!(String::from_utf16_lossy(&format.szFaceName[..end]), "Consolas");
         assert_eq!(format.yHeight, 360);
+        let mut ui = Ui::new().unwrap();
+        let list = DisplayList {ops:vec![Op::TextField {rect:Rect::new(0.0,0.0,300.0,80.0),field:field.clone(),revision:field.revision()}],..Default::default()};
+        let image = render(&mut ui,&list,300,80).unwrap();
+        assert!(image.pixels.as_chunks::<4>().0.iter().any(|px|px[3]>1), "an inactive field paints real glyphs without taking focus");
         let revision = field.revision();
         field.set_style(&style, Rgba::rgb8([255;3],1.0));
         assert_eq!(field.revision(), revision, "no recurring restyle invalidations");
