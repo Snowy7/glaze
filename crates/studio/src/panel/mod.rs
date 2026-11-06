@@ -151,6 +151,7 @@ pub struct State {
     pub save_doc: std::cell::Cell<Option<crate::docs::DocId>>,
     pub sort_drag: Option<lists::Drag>,
     pub color_drag: Option<colors::Drag>,
+    pub color_overlay: std::cell::RefCell<Vec<mypaper_ui::Op>>,
     pub color_values: std::cell::RefCell<std::collections::HashMap<mypaper_ui::controls::Key, (String, mypaper_ui::color_row::popover::Hsv)>>,
     pub fonts: std::cell::OnceCell<Vec<String>>,
     pub save_errors: std::cell::RefCell<std::collections::HashMap<crate::docs::DocId, String>>,
@@ -594,6 +595,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         }
         pages::view(app, b, &mut c, page);
         controls::boundaries(b);
+        colors::finish(app, b);
         c.y + b.px(16.0)
     });
     editors::footer(

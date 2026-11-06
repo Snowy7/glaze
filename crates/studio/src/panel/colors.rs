@@ -106,6 +106,7 @@ pub fn swatches(
     );
     c.y += row_height + b.px(6.0);
     if app.is_open(picker_key(edit)) {
+        let first_op = b.list.ops.len();
         let rgb = mypaper_config::Color::parse(current).map_or([139, 158, 183], |color| color.0);
         let hsv = color_value(app, edit, current, rgb);
         app.panel
@@ -136,6 +137,14 @@ pub fn swatches(
             below
         };
         let rect = Rect::new(c.right() - width, top, width, popover_height);
+        b.hit(
+            key((picker_key(edit), "background")),
+            rect,
+            mypaper_ui::Role::Group,
+            "Custom color",
+            Action::None,
+            mypaper_ui::controls::Behavior::Click,
+        );
         let well = mypaper_ui::color_row::popover::draw(
             b,
             picker_key(edit),
@@ -187,7 +196,25 @@ pub fn swatches(
         if !flipped {
             c.y = rect.bottom + b.px(10.0);
         }
+        app.panel
+            .as_ref()
+            .unwrap()
+            .color_overlay
+            .borrow_mut()
+            .extend(b.list.ops.drain(first_op..));
     }
+}
+
+/// Popovers paint after the body's final control boundaries, including when they flip up.
+pub fn finish(app: &App, b: &mut B) {
+    b.list.ops.extend(
+        app.panel
+            .as_ref()
+            .unwrap()
+            .color_overlay
+            .borrow_mut()
+            .drain(..),
+    );
 }
 
 fn picker_key(edit: &Edit) -> mypaper_ui::controls::Key {
