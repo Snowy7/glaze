@@ -327,6 +327,9 @@ pub fn record_edit(app: &mut App, label: &str, ops: &[Op], checkpoint: usize) {
         last.as_ref()
             .is_some_and(|(key, count)| key == pick && *count == checkpoint)
     }) && app.docs.coalesce_last_pick(checkpoint);
+    if pick.is_some() {
+        super::pick_client::record_pick(app, label, ops, checkpoint, merge);
+    }
     app.panel.as_ref().unwrap().history.borrow_mut().last_pick =
         pick.map(|key| (key, app.docs.undo_count()));
     capture(app, Some(label), merge);
