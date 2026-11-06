@@ -1,9 +1,10 @@
 # Native file index (experimental)
 
-**Status:** the source includes follow-up `6ebad2c`, shipped in the later shared workspace
-deployment recorded in the [night log](../plans/night/2026-11-06.md). The 10:54 build passed the
-initial rebuild RAM gate but failed a broad game replay. Its correction passed an isolated replay;
-post-repair production game certification remains open. See the independent-review evidence below.
+**Status:** deferred, CPU-budgeted offline catch-up (`8b4d885`, `f18aa06`) was deployed
+on 2026-11-06 at 12:35 local; measurements and policy are below. The earlier memory/game
+follow-up `6ebad2c` remains included, as recorded in the
+[night log](../plans/night/2026-11-06.md). Its isolated replay passed; the earlier independent
+review's broad post-repair production game certification remains separate from this startup work.
 
 `mypaper-index` is an optional native process, enabled with
 `"experimental": { "file_index": true }` in `%APPDATA%\mypaper\config.json`.
@@ -27,6 +28,8 @@ freshness, changed include/exclude rules, clock rollback, an older snapshot gene
 missing roots all require catch-up. The first run after upgrading a legacy cache therefore
 does one delayed, throttled verification. Freshness is saved only after scan completion,
 notification replay and a durable checkpoint. Recovery failures do not certify freshness.
+Startup timing settings apply on the next service start; include/exclude edits retain
+their immediate rule-reload reconciliation.
 
 Recent volumes skip startup scanning. A one-shot deadline at their age limit eventually
 verifies the offline interval even if this process stays running for days. Stale volumes
@@ -89,7 +92,24 @@ converged. Its ancestor timestamp was explicitly kept unchanged, and the log rec
 recent restart performed no scan in the observation window, and manual `--rescan` completed
 in **138.47 ms** on this tiny tree. These are fixture timings, not full-volume timings.
 
-Evidence: `crates/index/evidence/startup-{before,after,fixture}.json`,
+The uninterrupted production catch-up completed C:/D:/E: plus notification replay at
+**841.49 seconds after process start**, including the initial delay. Active catch-up
+averaged **20.79% of one core**; the largest rolling 60-second average was **23.79%**,
+including generation replacement and replay. Final sampled residency was **8.92 MiB**.
+Non-admin inaccessible-directory counts remained C: **565**, D: **2**, E: **0**.
+
+A subsequent index-only restart using core's normal flag path logged **0 stale / 3 recent
+volumes**, and performed **zero startup volume scans**. Its three-minute sample used
+**36.16 CPU-seconds / 20.08% of one core**, with a first result at **3,778.09 ms**.
+This was **not a quiet-startup CPU measurement**: existing game-resume notifications
+replayed several dirty directories, twice including the 474k-entry AppData/Local subtree.
+That live-recovery work retains its existing path and can still burst CPU; it is outside
+the offline catch-up budget. The full sample and service log are retained rather than
+discarded. The new policy removes unconditional startup volume scans; it does not cap
+query or live/overflow/game-resume recovery CPU.
+
+Evidence: `crates/index/evidence/startup-{before,after,fixture,catchup,recent,summary}.json`,
+`startup-production-freshness.json`, `startup-parent.json`, `startup-recent-service.log`,
 `startup-deploy.log`, and `startup-comparison.html`. Tools are
 `crates/index/tools/{measure-startup,verify-startup,observe-catchup}.ps1`.
 Implementation commits: `8b4d885`, `f18aa06`. Index/config tests: **35 + 24 passed**;

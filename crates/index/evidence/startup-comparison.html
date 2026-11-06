@@ -12,9 +12,11 @@
 #startup-cpu .value { font-variant-numeric:tabular-nums; }
 #startup-cpu .scale { display:flex; justify-content:space-between; color:var(--muted-foreground); }
 </style></head>
-<body><figure id="startup-cpu" style="margin:0" role="img" aria-label="Index CPU during the first three minutes: before 89.61 CPU seconds, after 17.33 CPU seconds, an 80.7 percent reduction.">
+<body><figure id="startup-cpu" style="margin:0" role="img" aria-label="Index CPU during the first three minutes: before 89.61 CPU seconds, after deployment 17.33 CPU seconds, an 80.7 percent reduction. A separate recent-cache restart used 36.16 CPU seconds including live game-resume recovery.">
 <h3>Index CPU during the first three minutes</h3>
 <div class="row"><div class="label"><span>Before</span><span class="value">89.61 CPU-seconds &middot; 49.77% of one core</span></div><div class="track"><div class="bar" style="width:99.566%"></div></div></div>
 <div class="row"><div class="label"><span>After</span><span class="value">17.33 CPU-seconds &middot; 9.62% of one core</span></div><div class="track"><div class="bar after" style="width:19.253%"></div></div></div>
+<div class="row"><div class="label"><span>Recent*</span><span class="value">36.16 CPU-seconds &middot; 20.08% of one core</span></div><div class="track"><div class="bar after" style="width:40.178%"></div></div></div>
 <div class="scale"><span>0 CPU-seconds</span><span>90</span></div>
+<small>*Recent restart includes live game-resume recovery.</small>
 </figure></body></html>

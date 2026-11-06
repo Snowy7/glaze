@@ -1,0 +1,6 @@
+﻿{
+    "ProcessId":  60180,
+    "ParentProcessId":  84384,
+    "ExecutablePath":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-index.exe",
+    "CommandLine":  "\"D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-index.exe\" --parent 84384"
+}
