@@ -206,7 +206,7 @@ fn module_rows(app: &App, b: &mut B, c: &mut Col, bar: Bar, list: &'static str, 
             &if id == "|" {
                 "A gap".into()
             } else {
-                format!("{} \u{b7} {}", name(id), click_label(app, id))
+                format!("{} \u{b7} {}", name(id), click_label(app, id, bar))
             },
             id == "|",
             Some(crate::panel::icons::module(id)),
@@ -880,34 +880,72 @@ pub fn move_module(app: &mut App, bar: Bar, zone: &'static str) {
     }
 }
 
-fn click_label(app: &App, id: &str) -> String {
+fn click_label(app: &App, id: &str, bar: Bar) -> String {
     let own = app.get(
         DocId::Bars,
         &format!("/modules/{}/click/left", crate::docs::token(id)),
     );
-    if own.is_some_and(Value::is_object) {
-        return "Click runs a program".into();
+    if let Some(program) = own
+        .and_then(|value| value.get("exec"))
+        .and_then(Value::as_str)
+    {
+        return format!("Click: Run {}", mypaper_bars::apps::file_stem(program));
     }
-    let action = own.and_then(Value::as_str).unwrap_or(match id {
-        "clock" => "calendar",
-        "volume" => "mixer",
-        "quick" => "quick-settings",
-        "start" => "start",
-        "media" => "media-toggle",
-        "network" => "network",
-        "notifications" => "notifications",
-        _ => "default",
-    });
-    let name = match action {
+    if let Some(target) = own
+        .and_then(|value| value.get("open"))
+        .and_then(Value::as_str)
+    {
+        return format!("Click: Open {target}");
+    }
+    let grouped = app
+        .get(DocId::Bars, &format!("/{}/look/family", bar.key()))
+        .and_then(Value::as_str)
+        == Some("fluent");
+    let default = match id {
+        "start" => "Start menu",
+        "search" => "Search",
+        "clock" | "notifications" => "Notifications",
+        "quick" => "Quick settings",
+        "network" | "volume" | "battery" if grouped => "Quick settings",
+        "network" => "Wi-Fi",
+        "volume" => "Volume mixer",
+        "battery" => "Battery settings",
+        "power" => "Power menu",
+        "language" => "Keyboard language",
+        "stats" => "Task Manager",
+        "media" => "Play / pause",
+        "workspaces" => "Switch desktop",
+        "tray" => "Tray icon's action",
+        "app" => "No action",
+        _ if id.starts_with("custom:") => "Connection action",
+        _ => "No action",
+    };
+    let name = match own.and_then(Value::as_str).unwrap_or("default") {
+        "default" => default,
         "calendar" => "Calendar",
         "mixer" => "Volume mixer",
         "quick-settings" => "Quick settings",
         "start" => "Start menu",
+        "search" => "Search",
         "media-toggle" => "Play / pause",
-        "network" => "Network",
+        "media-next" => "Next track",
+        "media-previous" => "Previous track",
+        "network" => "Wi-Fi",
         "notifications" => "Notifications",
-        "none" => "Nothing",
-        "default" => "Its own action",
+        "native-start" => "Windows Start",
+        "native-notifications" => "Windows notifications",
+        "native-quick-settings" => "Windows quick settings",
+        "task-manager" => "Task Manager",
+        "settings" => "Windows Settings",
+        "show-desktop" => "Show desktop",
+        "volume-up" => "Volume up",
+        "volume-down" => "Volume down",
+        "volume-mute" => "Mute",
+        "workspace-next" => "Next desktop",
+        "workspace-previous" => "Previous desktop",
+        "lock" => "Lock",
+        "explorer" => "File Explorer",
+        "none" => "No action",
         other => other,
     };
     format!("Click: {name}")

@@ -96,6 +96,8 @@ fn render_panel_pages() {
             (Page::FirstRun, "first-run-taskbar"),
             (Page::FirstRun, "first-run-recovery"),
             (Page::Module, "module"),
+            (Page::Module, "module-more"),
+            (Page::Module, "module-program"),
             (Page::AddModule, "add-module"),
             (Page::Panels, "panels"),
             (Page::BarPanel, "start-menu"),
@@ -321,13 +323,32 @@ fn render_panel_pages() {
                         crate::actions::Bar::Dock,
                     )));
                 }
-                "module" => {
+                "module" | "module-more" | "module-program" => {
                     app.nav.bar = Some(crate::actions::Bar::Top);
                     app.nav.module = Some(crate::actions::Slot {
                         bar: crate::actions::Bar::Top,
                         list: "right",
                         index: 0,
                     });
+                    if name == "module-more" {
+                        app.nav.more.insert(mypaper_ui::controls::key((
+                            "panel-more",
+                            mypaper_ui::controls::key(("studio-panel", page)),
+                        )));
+                    }
+                    if name == "module-program" {
+                        app.nav.more.insert(mypaper_ui::controls::key((
+                            "panel-trigger",
+                            "/modules/media/click/left",
+                        )));
+                        app.texts.insert(
+                            crate::actions::FieldId::Text(
+                                DocId::Studio,
+                                "/panel/draft/module-trigger/media/left".into(),
+                            ),
+                            "notepad.exe".into(),
+                        );
+                    }
                 }
                 "add-module" => {
                     app.nav.bar = Some(crate::actions::Bar::Top);
