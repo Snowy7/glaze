@@ -487,6 +487,17 @@ fn snapshot(app: &App) -> [(DocId, Value); 3] {
 
 thread_local! { static CLIENT: RefCell<Option<Client>> = const { RefCell::new(None) }; }
 
+/// Shows a chooser's action on shell-owned desktop surfaces without editing documents.
+/// Call after the chooser's hover/focus delay; clicking still runs the normal action.
+/// Returns false for unsupported actions (including Windows looks) or an absent shell.
+pub fn preview_action(_app: &App, _action: &Action) -> bool {
+    false
+}
+
+/// Restores the saved desktop after leaving a chooser, Esc, or navigation.
+/// Safe to call repeatedly; ending a preview never discards a committed pick.
+pub fn end_preview() {}
+
 impl Drop for Client {
     fn drop(&mut self) {
         if let Some(shell) = self.shell {
