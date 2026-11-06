@@ -24,7 +24,11 @@ pub struct GlassStyle {
     pub smoothing: f32,
     pub sheen: Option<f32>,
     pub depth: Option<f32>,
+    /// Independent bottom inner shadow; zero is off.
+    pub inner_shadow: f32,
     pub fade_ms: f32,
+    /// Resolved opening curve; None preserves the engine's original cubic ease-out.
+    pub fade_curve: Option<crate::transition::Easing>,
 }
 
 impl Default for GlassStyle {
@@ -35,7 +39,9 @@ impl Default for GlassStyle {
             smoothing: 0.0,
             sheen: None,
             depth: None,
+            inner_shadow: 0.0,
             fade_ms: 300.0,
+            fade_curve: None,
         }
     }
 }
