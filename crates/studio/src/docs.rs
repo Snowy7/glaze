@@ -782,6 +782,7 @@ impl Docs {
             }
         }
         for id in &ids {
+            self.failed_doc = Some(*id);
             if let Some(e) = self.error(*id) {
                 bail!(
                     "{} can't be read, so Studio won't change it: {e}",
@@ -797,6 +798,7 @@ impl Docs {
                 );
             }
         }
+        self.failed_doc = None;
         let mut staged = Vec::new();
         for id in ids {
             let before = self.doc(id).raw.clone();
@@ -1031,6 +1033,26 @@ mod tests {
             path: path.into(),
             value,
         }
+    }
+
+    #[test]
+    fn an_unreadable_second_file_is_named_before_any_part_of_an_edit_takes_effect() {
+        let mut docs = Docs::fixture(["{}", "{bad", "{}", "{}"]);
+        assert!(
+            docs.edit(
+                "Desktop",
+                &[
+                    op(DocId::Config, "/paused", Some(json!(true))),
+                    op(DocId::Bars, "/top/enabled", Some(json!(true))),
+                ]
+            )
+            .is_err()
+        );
+        assert_eq!(docs.failed_doc(), Some(DocId::Bars));
+        assert_eq!(docs.save_outcome(), "Change did not take effect");
+        assert!(docs.doc(DocId::Config).raw.pointer("/paused").is_none());
+        assert_eq!(docs.undo_count(), 0);
+        assert!(docs.retry().is_err());
     }
 
     #[test]
