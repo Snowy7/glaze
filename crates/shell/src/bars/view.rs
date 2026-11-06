@@ -870,7 +870,7 @@ pub fn top(
     let m = px(t.margin() as f32);
     let h = px(t.height as f32);
     // A rounded bar or island keeps its first and last item off the curve of its corners.
-    let corner = if t.layout == TopLayout::Strip {
+    let corner = if t.layout == TopLayout::Strip && !tokens.explicit_radius {
         0.0
     } else {
         (px(tokens.radius) * 0.4).round()
@@ -915,7 +915,7 @@ pub fn top(
     let mut f = kit::Frame::new(&mut ui.text, &tokens.theme, scale, &input);
     let radius = px(tokens.radius);
     if t.layout != TopLayout::Islands && !minimal {
-        let r = if t.layout == TopLayout::Strip {
+        let r = if t.layout == TopLayout::Strip && !tokens.explicit_radius {
             0.0
         } else {
             radius

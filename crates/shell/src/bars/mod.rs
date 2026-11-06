@@ -1696,6 +1696,7 @@ impl Bars {
                         &mut appearance,
                     );
                     let mut tokens = look::Tokens::resolve_settings(&look, &appearance, &self.system, &desktop, &ui.text);
+                    tokens.explicit_radius |= look::explicit_look(&config, bar_key, "/radius");
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
                     tokens.cache_config(&look, &config);
                     let animation = if kind == BarKind::Dock {

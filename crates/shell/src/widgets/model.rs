@@ -206,6 +206,7 @@ pub struct Model {
     pub placed: Placed,
     /// An explicit radius beats variant shapes such as the media pill.
     pub corner_override: Option<f32>,
+    pub edge_override: Option<bool>,
     pub kind: Widget,
     pub data: Value,
     pub error: Option<String>,
@@ -309,6 +310,7 @@ impl Model {
         }
         Ok(Self {
             corner_override: None,
+            edge_override: None,
             integration: Default::default(),
             scroll: 0.0,
             scroll_max: Cell::new(0.0),
