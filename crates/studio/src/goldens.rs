@@ -162,6 +162,12 @@ fn sidebar_preferences_survive_reopening_and_narrow_windows_do_not_change_them()
             .iter()
             .any(|op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Look"))
     );
+    // The existing close path replaces the placement object, including in older readers.
+    app.apply("Window", vec![crate::docs::Op {
+        doc: DocId::Studio,
+        path: "/window".into(),
+        value: Some(serde_json::json!({"x":0,"y":0,"width":1280,"height":800,"maximized":false})),
+    }]);
     let studio = app.docs.doc(DocId::Studio).raw.to_string();
     let documents =
         [DocId::Config, DocId::Bars, DocId::Widgets].map(|id| app.docs.doc(id).raw.to_string());

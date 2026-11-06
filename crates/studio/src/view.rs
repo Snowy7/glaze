@@ -16,9 +16,10 @@ use crate::stage::{Item, Show, What};
 use crate::theme::glyph;
 use crate::ui::B;
 
-const SIDEBAR_SETTING: &str = "/window/sidebar_collapsed";
-const SETTINGS_SECTION: &str = "/window/settings_collapsed";
-pub const INSPECTOR_SETTING: &str = "/window/inspector_width";
+// Placement replaces /window on close; frame preferences also survive older placement writers.
+const SIDEBAR_SETTING: &str = "/frame/sidebar_collapsed";
+const SETTINGS_SECTION: &str = "/frame/settings_collapsed";
+pub const INSPECTOR_SETTING: &str = "/frame/inspector_width";
 const COLLAPSE_TIME: std::time::Duration = std::time::Duration::from_millis(160);
 
 #[derive(Debug, Default)]
