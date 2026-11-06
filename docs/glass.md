@@ -280,6 +280,68 @@ renderer 61 tests, IPC 4, UI 62, shell 146 plus the targeted engine/wire/curve t
 tests in the full run, then the added legacy-receiver test). The first GPU shadow fixture caught
 top-edge shading; bottom-facing normal weighting fixed it, and the fixture then passed.
 
+## Glass over web and app wallpapers (P14, 6 November 2026)
+
+A `web` or `app` wallpaper draws with windows of its own (WebView2, an embedded app), so the
+engine has no kept frame to draw the shell's plates into, and widgets and bars had no glass there.
+Now the engine draws those plates as overlays itself (`Overlays::sync_plates`,
+`Engine::native_plates`). The shell is unchanged: it publishes plates as always, and each screen
+takes the route its source needs.
+
+- **Which plates.** Those on a screen whose source is native (`Source::native`) and whose centre
+  is on that screen. A web page's held still is not native (the swapchain shows it), so a screen
+  next to a fullscreen game gets plates drawn over its still as before.
+- **Which window.** A plate's id carries its surface's window in its low 32 bits (widgets use their
+  HWND; bars their island's, plus the shape index above bit 32; `mypaper_glass_ipc::Plate::id`).
+  The overlay goes directly under that window, if it is a live window of the plates' publisher:
+  in the desktop band for a widget (`Layer::Desktop`, which the kit keeps together with its
+  widget, `Surface::keep_above_desktop`), topmost under a bar (`Layer::Popup`). These overlays are
+  keyed by plate id, apart from the shell's own requests for the same window (a bar over an app
+  window still opens its own, P15).
+- **Same glass.** The plate's material (with its stained tint, carried in the overlay material's
+  fourth tint byte, which the shell leaves at 0), style (brightness, saturation, smoothing,
+  sheen, depth, inner shadow) and corners; it fades in over 300 ms like other overlay glass.
+- **Refresh follows the wallpaper.** The capture delivers a frame only when that monitor changes;
+  frames whose dirty rects miss every overlay are dropped on WGC's thread, and a crop that is
+  touched is compared on the GPU before any glass is drawn. A still page costs no glass passes.
+  An animated one redraws its plates at most 30 times a second, or at the theme's `fps` when that
+  is lower (`Overlays::set_fps`, the capture's minimum update interval).
+- **Stops.** On a covered or held screen (a maximized window, a game, paused) the overlays are
+  *frozen*: the glass stays as last drawn, nothing is captured for them, and a monitor with only
+  frozen overlays has no capture session. Released (every screen covered for 10 s), or another
+  kind of wallpaper: they close. A plate first seen on a covered screen waits until it is seen.
+
+Other routes, and why not: the static snapshot only has stills; capturing the wallpaper's own
+window would still need a window above the WebView to show the glass in, which is what the overlay
+route already has (and its monitor capture already leaves our windows out); WebView2's
+`CapturePreview` is a PNG encode per frame.
+
+**Measured** on the live desktop (RTX 4070 SUPER, DISPLAY2 visible with seven glass plates: six
+widgets and the dock, the top bar draws none; DISPLAY1 covered), 30 s each with `measure.ps1`, the theme
+switched in place (`webglass/ab.ps1`), CPU in % of one core. Glass updates and passes come from the
+engine's overlay totals over the time the theme was shown.
+
+| `themes/examples/webdemo` (animated, 30 fps) | Engine CPU | Engine GPU 3D | Engine private | WebView2 CPU | Glass updates/s (passes/s) |
+|---|---:|---:|---:|---:|---:|
+| Before (no glass, 08:01 build) | 0.21 % | 0 % | 169 MB | 9.6 % | - |
+| After | 5.83 % | 6.81 % | 206 MB | 12.1 % | 29.2 (198) |
+| After, a still page (`still-web`) | **0.31 %** | 0.12 % | 210 MB | 0.15 % | 1.7 (1.8) |
+
+So a still page costs what the wallpaper did (its few updates are windows overlapping widgets, such
+as Studio's, whose glass is under them), and an animated page costs one glass update per
+captured frame for every plate it touches: here about 0.28 ms of engine CPU per overlay pass, and
++37 MB for the capture device, DirectComposition and each overlay's crops. Lower the page's own
+rate, or the theme's `engine.fps`, to lower both.
+
+Captures (DPI-aware, 2560x1440 of DISPLAY2) are in `C:\mypaper-targets\engine-perf\webglass`:
+`webglass-web-before-1.png` (no glass under the widgets or the dock), `webglass-web-after-2.png`,
+`webglass-still-after.png`, and crops `widgets-{before-1,after-2}.png`, `dock-{before-1,after-2}.png`.
+
+**Known limit.** Two engines at once (one still exiting while its replacement starts, seen once
+tonight during another agent's lifecycle test) each capture the other's glass, which feeds back
+into red and blue blocks under the bars until the old one exits. A normal restart stops the old
+engine first.
+
 ## Images
 
 - Before (two outlines, one less rounded): `media/native/glass-before-widgets.png`

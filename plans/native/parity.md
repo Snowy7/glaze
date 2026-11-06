@@ -6,7 +6,7 @@ The original audit was read-only. Widget follow-up incorporates native through `
 
 Each row is one checklist item; related settings with the same status are enumerated together. Counts apply to rows, not individual JSON properties. Studio rows measure both the editor and whether its controls still affect the desktop. The final backlog references row IDs and excludes N3 and deliberate cuts.
 
-**Status counts:** **276 done**; **18 dropped on purpose**; **5 partial**. **299 rows total.**
+**Status counts:** **280 done**; **18 dropped on purpose**; **1 partial**. **299 rows total.**
 
 Old locations below are paths at `f378a4c`, read with `git show f378a4c:<path>` and inventoried with `git ls-tree -r f378a4c`. Abbreviations in that column: `B/` = `bars/shell/src/`; `RB/` = `crates/bars/src/`; `RW/` = `crates/widgets/src/`; `W/` = `widgets/`; `S/` = `apps/studio/src/`; `ST/` = `apps/studio/src-tauri/src/`. Native evidence links point to current files, whose contents may change after this audit.
 
@@ -353,7 +353,7 @@ Widget “done” rows describe implemented behavior. Final production CPU/RAM q
 | P11 Web/scene `interactive`: bare-desktop move/buttons/wheel, scene drag orbit, coalescing and hold | **done** | `crates/desktop/src/raw_input.rs`, `crates/wallpaper/src/sources/web.rs`, `docs/desktop-extras.md:223` | [Raw input][raw-input], [web source][web-source], [scene source][scene-source]: old interaction paths remain. |
 | P12 User pause, battery/fullscreen policies, lock/display-off hold; per-monitor coverage and display changes | **done** | `crates/desktop/src/hold.rs`, `crates/wallpaper/src/main.rs` | [Holds][holds], [engine main][engine-main]: existing coverage and power policies remain. |
 | P13 Live native glass over native shader/image/video/scene wallpaper and moving surfaces | **done** | `crates/wallpaper/src/glass_pass.rs`, `B/liquid.ts`, `W/shell/src/plates.ts` | [Glass transport][glass-transport], [glass pass][glass-pass], [engine][engine]: plates are merged and rendered using the engine's retained frame. |
-| P14 Glass over web/app wallpaper (old web snapshot lens, new live capture requirement) | **partial** | `crates/wallpaper/src/sources/web.rs`, `RB/capture.rs`, `W/shell/src/plates.ts` | [Glass transport][glass-transport] only sends plates; [engine][engine] skips plate rendering for native-window sources; [overlay engine][overlay-engine] exists but shell does not request these overlays yet (N5/engine work). |
+| P14 Glass over web/app wallpaper (old web snapshot lens, new live capture requirement) | **done** | `crates/wallpaper/src/sources/web.rs`, `RB/capture.rs`, `W/shell/src/plates.ts` | [Engine][engine] (`Engine::native_plates`) hands the plates on web/app screens to the [overlay engine][overlay-engine] (`Overlays::sync_plates`), which draws each under its widget or bar with the plate's material, style and corners; the capture follows the wallpaper (a still page ~0 passes, an animated one at most 30/s or the theme fps), frozen while covered or held, closed when released. Live on the web demo and a still page, before/after captures and costs in [docs/glass.md](../../docs/glass.md#glass-over-web-and-app-wallpapers-p14-6-november-2026); `app` takes the same path (not seen live: it shows on monitor 0, covered all night). |
 | P15 Bar changes from wallpaper plate to app-window backdrop while overlapped | **done** | `RB/glass.rs`, `RB/capture.rs`, `B/liquid.ts` | [Bar window][bar-window]: each overlapping bar/island sets Surface glass and omits its wallpaper plate; separate island HWNDs switch independently on window/geometry events. |
 | P16 Static sign-in snapshot, per-monitor originals, panic/off/autostart-off restore; keep still on normal quit | **done** | `crates/wallpaper/src/snapshot.rs`, `crates/desktop/src/desktop_wallpaper.rs`, `docs/performance.md:344` | [Snapshot][snapshot], [desktop wallpaper][desktop-wallpaper], [core autostart][autostart]: reversible still-wallpaper behavior remains. |
 | P17 Palette-derived auto accent, matching active-theme identity and live styling propagation | **done** | `crates/wallpaper/src/palette.rs`, `crates/core/src/styling.rs` | [Engine palette][engine-palette], [core styling][styling]: native wallpaper/color extraction and Windows application remain. |
@@ -478,7 +478,7 @@ The T19 action inventory is: `default`, `none`, `start`, `search`, `notification
 
 The remaining rows belong to retained appearance, motion and engine/Studio controls; widget behavior rows are implemented. Performance gates are tracked separately in docs/widgets.md.
 
-1. **P1 — Finish glass over web/app wallpapers.** Connect top-level widget/bar surfaces to the existing overlay engine when the wallpaper owns native windows. Covers P14; coordinate with the active engine agent (N5), separate from N3's app-overlap/flyout work.
+1. ~~**P1 — Finish glass over web/app wallpapers.**~~ Done 6 November 2026: the engine draws the plates on web/app screens as overlays itself (P14).
 2. **P2 — Expose the new GPU/FPS settings.** Add global/per-wallpaper GPU and frame-rate controls to Studio while preserving explicit choices. Covers C26; coordinate with active engine optimization, and distinguish web/app self-paced rendering in the UI.
 
 ## + more: ten valuable improvements after parity
