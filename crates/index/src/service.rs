@@ -284,6 +284,19 @@ pub fn cli(args: Vec<String>) -> Result<()> {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(1_000_000),
         ),
+        Some("--bench-load") => {
+            let path = args
+                .get(1)
+                .map(PathBuf::from)
+                .unwrap_or(cache_dir()?.join("snapshot.bin"));
+            let at = Instant::now();
+            let store = Store::open(&path)?;
+            println!(
+                "{}",
+                serde_json::json!({"entries":store.len()-1,"load_ms":at.elapsed().as_secs_f64()*1000.0,"snapshot_bytes":std::fs::metadata(path)?.len()})
+            );
+            Ok(())
+        }
         Some("--bench-query") => {
             let mut times = Vec::new();
             let queries = [

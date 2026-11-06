@@ -537,32 +537,77 @@ impl Store {
             mapped_names: names,
             ..Self::default()
         };
-        for (id, r) in store.range(0, count) {
-            ensure!(
-                (r.name as usize)
-                    .checked_add(r.name_len as usize + r.fold_len as usize)
-                    .is_some_and(|n| n <= names),
-                "bad name offset"
-            );
-            ensure!(
-                (r.parent as usize) < count || (id == 0 && r.parent == NONE),
-                "bad parent"
-            );
-            ensure!(r.first == NONE || (r.first as usize) < count, "bad child");
-            ensure!(r.next == NONE || (r.next as usize) < count, "bad sibling");
-            ensure!(id == 0 || r.parent < id, "cyclic parent");
-            if r.first != NONE {
-                ensure!(r.first > id, "cyclic child");
-            }
-            if r.next != NONE {
+        // One streaming UTF-8 validation is much cheaper than two decoder calls for each
+        // short name. Record slices are then checked against character boundaries below.
+        let blob = std::str::from_utf8(
+            &store.mapping.as_ref().expect("mapped snapshot")
+                [HEADER + count * size_of::<Record>()..],
+        )?;
+        let validate = |start: usize, end: usize| -> Result<()> {
+            for (id, r) in store.range(start, end) {
                 ensure!(
-                    r.next < id && store.record(r.next).parent == r.parent,
-                    "cyclic sibling"
+                    (r.name as usize)
+                        .checked_add(r.name_len as usize + r.fold_len as usize)
+                        .is_some_and(|n| n <= names),
+                    "bad name offset"
+                );
+                ensure!(
+                    (r.parent as usize) < count || (id == 0 && r.parent == NONE),
+                    "bad parent"
+                );
+                ensure!(r.first == NONE || (r.first as usize) < count, "bad child");
+                ensure!(r.next == NONE || (r.next as usize) < count, "bad sibling");
+                ensure!(id == 0 || r.parent < id, "cyclic parent");
+                if r.first != NONE {
+                    ensure!(r.first > id, "cyclic child");
+                }
+                if r.next != NONE {
+                    ensure!(
+                        r.next < id && store.record(r.next).parent == r.parent,
+                        "cyclic sibling"
+                    );
+                }
+                let start = r.name as usize;
+                let middle = start + r.name_len as usize;
+                let end = middle + r.fold_len as usize;
+                ensure!(
+                    blob.is_char_boundary(start)
+                        && blob.is_char_boundary(middle)
+                        && blob.is_char_boundary(end),
+                    "name splits a UTF-8 character"
                 );
             }
-            let bytes = store.bytes(r.name as usize, r.name_len as usize + r.fold_len as usize);
-            std::str::from_utf8(&bytes[..r.name_len as usize])?;
-            std::str::from_utf8(&bytes[r.name_len as usize..])?;
+            Ok(())
+        };
+        let workers = if count >= 250_000 {
+            std::thread::available_parallelism().map_or(2, |n| n.get().min(8))
+        } else {
+            1
+        };
+        if workers == 1 {
+            validate(0, count)?;
+        } else {
+            // Temporary workers keep validation and page faults parallel without retaining
+            // another idle pool in the helper. The mapping outlives every scoped worker.
+            std::thread::scope(|scope| -> Result<()> {
+                let mut tasks = Vec::new();
+                for worker in 0..workers {
+                    let validate = &validate;
+                    tasks.push(
+                        std::thread::Builder::new()
+                            .name(format!("index-load-{worker}"))
+                            .stack_size(256 * 1024)
+                            .spawn_scoped(scope, move || {
+                                validate(count * worker / workers, count * (worker + 1) / workers)
+                            })?,
+                    );
+                }
+                for task in tasks {
+                    task.join()
+                        .map_err(|_| anyhow::anyhow!("index validation worker panicked"))??;
+                }
+                Ok(())
+            })?;
         }
         Ok(store)
     }
@@ -641,6 +686,23 @@ mod tests {
         let mut bytes = std::fs::read(&path).unwrap();
         bytes[HEADER + 2 * size_of::<Record>() + 8..HEADER + 2 * size_of::<Record>() + 12]
             .copy_from_slice(&2u32.to_le_bytes());
+        std::fs::write(&path, bytes).unwrap();
+        assert!(Store::open(&path).is_err());
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn snapshot_validation_rejects_a_slice_starting_inside_utf8() {
+        let path =
+            std::env::temp_dir().join(format!("mypaper-index-utf8-{}.bin", std::process::id()));
+        let mut store = Store::new();
+        let root = store.insert(0, "X:", DIRECTORY, 0, 0);
+        store.insert(root, "é.txt", 128, 1, 0);
+        store.save(&path).unwrap();
+        let mut bytes = std::fs::read(&path).unwrap();
+        let at = HEADER + 2 * size_of::<Record>();
+        bytes[at..at + 4].copy_from_slice(&3u32.to_le_bytes());
+        bytes[at + 4..at + 6].copy_from_slice(&5u16.to_le_bytes());
         std::fs::write(&path, bytes).unwrap();
         assert!(Store::open(&path).is_err());
         std::fs::remove_file(&path).unwrap();
