@@ -326,6 +326,7 @@ engine's overlay totals over the time the theme was shown.
 | Before (no glass, 08:01 build) | 0.21 % | 0 % | 169 MB | 9.6 % | - |
 | After | 5.83 % | 6.81 % | 206 MB | 12.1 % | 29.2 (198) |
 | After, a still page (`still-web`) | **0.31 %** | 0.12 % | 210 MB | 0.15 % | 1.7 (1.8) |
+| After, the web demo under `"engine": { "fps": 10 }` (`web-10fps`) | 1.41 % | 2.93 % | 211 MB | 8.5 % | 9.7 (66) |
 
 So a still page costs what the wallpaper did (its few updates are windows overlapping widgets, such
 as Studio's, whose glass is under them), and an animated page costs one glass update per

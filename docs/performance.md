@@ -248,7 +248,9 @@ after is the same desktop on the 08:36 build, three minutes apart.
 | `fd33733` | `DesktopEvents` (Explorer restart detection, on the engine's and the widgets' main thread) hooked window creation, destruction and showing in *every* process: 1.1-2.4 callbacks a second on a quiet desktop (agents' consoles, headless browsers). It now hooks only the desktop's Explorer while one is known, and every process again once it is lost. |
 | `d35f6ff` | The coverage hook woke its consumers for every window destroyed anywhere (a destroyed window can't be classified): 1.25 of 1.4 coverage wakes a second on a quiet desktop. Coverage is always one window's, so each scan now records the windows that covered something, and only those closing wake anyone. |
 
-With the three, the main thread had no wake in the 20 s sample: it now wakes only for a coverage
+| `1f2a508` | The coverage hook also took every system event between `EVENT_SYSTEM_FOREGROUND` and `MINIMIZEEND`: mouse capture (every click in any app), menus, move/size loops, dialogs, scrolling, alt-tab. A hidden window of ours taking and releasing the capture 10 times a second (`capture-churn.ps1`, no input) took the engine's main thread from 56 to 138 wakes a second, all of them rescans. It now takes focus, minimize/restore, move, show/hide/destroy and cloak only: 52.6, **64.7** and 37.9 wakes a second (quiet, captures, quiet; the screen visible with rain, whose frames vary it 38-56). |
+
+With these, the main thread had no wake in the 20 s sample: it now wakes only for a coverage
 change, a config or theme file change, a display or power change, the shell's plates or Studio.
 
 **What stays, and why.** The two NVIDIA threads (~90 wakes/s, ~0 % CPU) belong to the device.
@@ -259,10 +261,8 @@ presented swapchain 66.0 + 24.3 wakes/s, swapchain released 63.3 + 22.1, device 
 `window-events` thread takes every process's raw WinEvents (window moves, captures, the cursor) and
 filters them there; it is bounded at 20 batches a second and follows the desktop's activity (2-36
 a second tonight, 7 with the desktop quiet). Scoping its location hook to the foreground and
-covering windows' processes (as the shell's `win_events` does) would cut it further; and its
-system range (`EVENT_SYSTEM_FOREGROUND..MINIMIZEEND`) also takes mouse-capture and menu events, so
-every click in an app rescans coverage. Neither was measurable without clicking into the user's
-apps, so both are left as follow-ups.
+covering windows' processes (as the shell's `win_events` does) would cut it further; that is left
+as a follow-up.
 
 Other processes still run notify watches, each a 10 Hz thread (counted per process after the
 deploy): shell 5 (bars, theme, flyouts' index, game signal), index 2, core 1 (tweaks), Studio 1.
