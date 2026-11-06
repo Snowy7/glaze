@@ -81,6 +81,9 @@ impl Default for Config {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Experimental {
+    /// Route folder launches and Win+E to the on-demand native Files app.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub files_default: bool,
     pub file_index: bool,
     /// Restyle the XAML inside File Explorer and Settings (docs/windows-styling.md, "App
     /// styler"): core runs `mypaper-styler` only while this is on. Written only when on.
@@ -138,6 +141,16 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn folder_routing_is_explicitly_opt_in() {
+        let off = Config::parse("{}").unwrap();
+        assert!(!off.experimental.files_default);
+        assert!(!serde_json::to_string(&off).unwrap().contains("files_default"));
+        let on = Config::parse(r#"{"experimental":{"files_default":true}}"#).unwrap();
+        assert!(on.experimental.files_default);
+        assert_eq!(Config::parse(&serde_json::to_string(&on).unwrap()).unwrap(), on);
+    }
 
     #[test]
     fn file_index_is_explicitly_opt_in() {
