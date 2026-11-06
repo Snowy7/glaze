@@ -84,6 +84,7 @@ fn run() -> Result<()> {
         widgets: None,
         pending_widget_facts: Vec::new(),
         game_active: false,
+        game_enabled: true,
     };
     shell.follow_config(&ui);
     shell.bars.tick(&mut ui);
@@ -102,6 +103,7 @@ fn run() -> Result<()> {
     let mut widgets_polled = Instant::now();
     let mut game = game::GameControl::new();
     'run: loop {
+        game.set_enabled(shell.game_enabled);
         game.refresh();
         shell.set_game_activity(&mut ui, game.active);
         let start = Instant::now();
@@ -317,6 +319,7 @@ struct Shell {
     flyouts: flyouts::Flyouts,
     pending_widget_facts: Vec<(usize, isize)>,
     game_active: bool,
+    game_enabled: bool,
 }
 
 impl Shell {
@@ -418,6 +421,7 @@ impl Shell {
                 return;
             }
         };
+        self.game_enabled = config.system.game_activity.unwrap_or(true);
         if !config.desktop_menu.enabled {
             if self.menu.take().is_some() {
                 log::info!("desktop right-click menu off");
