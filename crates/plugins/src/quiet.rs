@@ -27,7 +27,9 @@ pub(crate) fn key(input: &Input) -> Option<Key> {
         ),
         Input::Socket { plugin, event } => match event {
             SocketEvent::Opened(id) => (plugin.as_str(), "socket-open", id.to_string()),
-            SocketEvent::Message((id, _)) => (plugin.as_str(), "socket-message", id.to_string()),
+            // A socket can multiplex request/reply traffic: every message keeps its read
+            // credit and arrival order, just like pipe chunks.
+            SocketEvent::Message(_) => return None,
             SocketEvent::Closed((id, _)) => (plugin.as_str(), "socket-close", id.to_string()),
         },
         Input::Pipe { plugin, event } => match event {

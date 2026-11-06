@@ -286,7 +286,7 @@ fn websockets_round_trip_with_headers_and_subprotocols() {
 }
 
 #[test]
-fn game_pause_keeps_socket_connected_and_coalesces_its_events() {
+fn game_pause_keeps_socket_connected_and_delivers_replies_in_order() {
     let (port, heads) = ws_server(true);
     let origin = format!("ws://127.0.0.1:{port}");
     let mut rig = Rig::new("game-socket");
@@ -316,8 +316,8 @@ fn game_pause_keeps_socket_connected_and_coalesces_its_events() {
     assert_eq!(rig.lines["probe"], before);
     rig.host.on_host(HostMsg::GameActivity(false), Instant::now());
     rig.read();
-    assert!(rig.has("probe", "ws text echo:latest"));
-    assert!(!rig.has("probe", "ws text echo:first"));
+    let replies: Vec<_> = rig.lines["probe"].iter().filter(|line| line.starts_with("ws text")).map(String::as_str).collect();
+    assert_eq!(replies, ["ws text echo:first", "ws text echo:latest"]);
     rig.act("probe", "ws-send", "after");
     rig.wait("probe", "ws text echo:after");
     assert_eq!(heads.lock().unwrap().len(), 1, "same connection after resume");

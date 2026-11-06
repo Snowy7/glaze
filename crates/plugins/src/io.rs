@@ -122,6 +122,16 @@ impl Conn {
         }
     }
 
+    /// Discard queued writes and request shutdown, retaining read credit until close delivery.
+    pub(crate) fn request_close(&self) {
+        let mut queue = self.0.lock();
+        queue.out.clear();
+        queue.bytes = 0;
+        queue.closing = true;
+        drop(queue);
+        self.0.poke();
+    }
+
     fn close(&self) {
         self.0.lock().closing = true;
         self.0.poke();

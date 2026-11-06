@@ -169,18 +169,21 @@ input or third-party tray updates while the shell is quiescent.
 The shell relays `mypaper_plugin_api::wire::HostMsg::GameActivity(bool)` to its helper (appended
 to the wire enum, preserving existing discriminants). It precedes opens after a helper restart.
 While true, the helper has **no background deadline**: timers, retries, move flushes and idle
-unloads stop. Plugin code receives no background I/O/system events; connections stay open.
-Queued state coalesces to the latest per system source/window and per websocket connection;
-open/close and distinct request completions retain their identity. Coalesced websocket data
-returns read credit. Raw pipe chunks retain order under the existing 64-event read-credit cap
-(16 KiB chunks); coalescing a byte stream would corrupt its framing. Queued connection writes
+unloads stop. Plugin code receives no background I/O/system events. Queued state coalesces to
+the latest per system source/window; open/close and distinct request completions retain their
+identity. Websocket messages and raw pipe chunks retain arrival order and their read credit
+under the existing 64-event cap (pipes use 16 KiB chunks). Replies sharing one socket cannot
+replace one another. A paused socket that fills its 64-message backlog is closed; resume delivers
+the retained messages followed by a close event explaining the game-pause backlog limit, so
+the plugin can reconnect. Later transport closure cannot overwrite that reason. Other
+connections stay open, with pipes applying read backpressure. Queued connection writes
 wait too. WinHTTP transport keepalives remain: the documented default is 30 s, with
 [a 15 s minimum and no documented disable value](https://learn.microsoft.com/en-us/windows/win32/winhttp/option-flags#winhttp_option_web_socket_keepalive_interval).
 Live probing rejected changing this option on an already upgraded socket with
 `ERROR_WINHTTP_INCORRECT_HANDLE_STATE`. Preserving the connection therefore does not promise
 zero transport timer wakes. Incoming peer traffic can also wake its reader.
 On false, retained events resume and an overdue periodic timer fires once,
-then schedules from now. There is no catch-up timer burst. State streams must tolerate losing
+then schedules from now. There is no catch-up timer burst. Coalesced system state may lose
 intermediate updates during the hold; transport-level incoming traffic still wakes its reader.
 
 This is background quiescence, not process exit. Processes retain private memory, incoming OS/

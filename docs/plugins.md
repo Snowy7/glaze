@@ -157,6 +157,11 @@ calls (`secrets`, `storage`, `system`) are synchronous.
   peer instead of growing the helper. A plugin may have 8 websockets and 8 pipes open, and they
   all close when it unloads, traps or is stopped. Request ids are unique across the helper, so a
   late event from a dropped instance never reaches its replacement.
+  During a game pause, socket messages and pipe chunks retain arrival order and read credit;
+  request/reply messages on one socket are never coalesced. If a paused socket fills its
+  64-message backlog, the host closes it and, on resume, delivers the retained messages followed
+  by `socket.closed` with a game-pause backlog reason. Plugins should reconnect from that event.
+  The worker's later close cannot replace this reason. Pipes keep their existing read backpressure.
 - **Notifications**: `notify.show` raises a Windows toast from mypaper (AppUserModelID
   `mypaper.Plugins`, display name "mypaper", registered under HKCU on first use) with the
   plugin's title and body and "via <plugin name>" as the attribution line, from a worker thread.

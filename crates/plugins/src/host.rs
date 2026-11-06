@@ -99,7 +99,7 @@ pub struct Host<W: Write> {
     notification_plugins: Vec<String>,
     /// The topics last reported in [`HelperMsg::Demand`].
     demand: Vec<String>,
-    /// A game freezes deadlines; retained input is coalesced rather than replayed as a burst.
+    /// A game freezes deadlines; state coalesces, while socket/pipe traffic retains order.
     game: bool,
     deferred: Vec<Input>,
 }
@@ -457,17 +457,36 @@ impl<W: Write> Host<W> {
         }
     }
 
-    /// Keep the latest state per source/request. Socket/pipe credit belongs to the retained
-    /// event; replacing it returns the old credit, leaving the connection open and bounded.
+    /// Coalesce state, retaining ordered socket/pipe data with its read credit. Exhausting
+    /// a socket's pause backlog closes it; resume delivers retained messages then the reason.
     fn defer(&mut self, input: Input) {
+        if let Input::Socket { plugin, event } = &input {
+            let id = match event {
+                SocketEvent::Opened(id) | SocketEvent::Message((id, _)) | SocketEvent::Closed((id, _)) => *id,
+            };
+            // In particular, a worker's later close must not erase our overflow reason.
+            if self.deferred.iter().any(|old| matches!(old,
+                Input::Socket { plugin: owner, event: SocketEvent::Closed((socket, _)) } if owner == plugin && *socket == id
+            )) {
+                return;
+            }
+            if matches!(event, SocketEvent::Message(_))
+                && self.deferred.iter().filter(|old| crate::quiet::credit(old) == Some((plugin.as_str(), id))).count() + 1 >= crate::io::IN_FLIGHT
+            {
+                if let Some(conn) = self.plugins.get(plugin).and_then(|p| p.instance.as_ref()).and_then(|i| i.store.data().conn(id)) {
+                    conn.request_close();
+                }
+                let closed = Input::Socket { plugin: plugin.clone(), event: SocketEvent::Closed((id, Some(format!(
+                    "game pause backlog reached {} messages; reconnect after resume", crate::io::IN_FLIGHT
+                )))) };
+                self.deferred.push(input);
+                self.deferred.push(closed);
+                return;
+            }
+        }
         let key = crate::quiet::key(&input);
         if key.is_some() && let Some(index) = self.deferred.iter().position(|old| crate::quiet::key(old) == key) {
-            let old = self.deferred.remove(index);
-            if let Some((plugin, id)) = crate::quiet::credit(&old)
-                && let Some(conn) = self.plugins.get(plugin).and_then(|p| p.instance.as_ref()).and_then(|i| i.store.data().conn(id))
-            {
-                conn.delivered();
-            }
+            self.deferred.remove(index);
         }
         self.deferred.push(input);
     }
@@ -828,4 +847,63 @@ pub fn compile_all(rt: &Runtime, roots: &[PathBuf]) -> Result<()> {
     }
     anyhow::ensure!(errors.is_empty(), "{}", errors.join("\n"));
     Ok(())
+}
+
+#[cfg(test)]
+mod pause_tests {
+    use super::*;
+    use crate::runtime::mypaper::plugin::websocket::{Host as SocketHost, Message};
+
+    #[test]
+    fn game_pause_preserves_socket_replies_and_closes_a_full_backlog() {
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/hello");
+        let root = std::env::temp_dir().join(format!("mypaper-socket-pause-{}", std::process::id()));
+        let dir = root.join("hello");
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = std::fs::read_to_string(source.join("plugin.json")).unwrap()
+            .replace("network:https://api.open-meteo.com", "network:ws://localhost:12345");
+        std::fs::write(dir.join("plugin.json"), manifest).unwrap();
+        std::fs::copy(source.join("hello.wasm"), dir.join("hello.wasm")).unwrap();
+        let rt = Runtime::new(root.join("cache"), root.join("data")).unwrap();
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut host = Host::new(rt, Vec::new(), tx);
+        let now = Instant::now();
+        host.on_host(HostMsg::Open { plugin: "hello".into(), dir: dir.to_string_lossy().into_owned(), instance: "h1".into(), face: "main".into(), size: SizeClass::Medium, settings: "{}".into() }, now);
+        // Allocate a real connection/credit owner, without starting a network worker.
+        let instance = host.plugins.get_mut("hello").unwrap().instance.as_mut().unwrap();
+        let id = instance.store.data_mut().connect("ws://localhost:12345".into()).unwrap();
+        instance.take_effects();
+        let before = instance.events;
+        let message = |text: String| Input::Socket { plugin: "hello".into(), event: SocketEvent::Message((id, Message::Text(text))) };
+        host.on_host(HostMsg::GameActivity(true), now);
+        for reply in ["reply-1", "reply-2"] {
+            host.on_input(message(reply.into()), now);
+        }
+        let replies: Vec<_> = host.deferred.iter().filter_map(|input| match input {
+            Input::Socket { event: SocketEvent::Message((_, Message::Text(text))), .. } => Some(text.as_str()),
+            _ => None,
+        }).collect();
+        assert_eq!(replies, ["reply-1", "reply-2"], "distinct replies on one socket must survive in arrival order");
+        assert_eq!(host.plugins["hello"].instance.as_ref().unwrap().events, before);
+        host.on_host(HostMsg::GameActivity(false), now);
+        assert_eq!(host.plugins["hello"].instance.as_ref().unwrap().events, before + 2);
+
+        host.on_host(HostMsg::GameActivity(true), now);
+        for n in 0..crate::io::IN_FLIGHT {
+            host.on_input(message(n.to_string()), now);
+        }
+        let conn = host.plugins["hello"].instance.as_ref().unwrap().store.data().conn(id).unwrap();
+        assert!(conn.send(Message::Text("write".into())).is_err(), "a full paused backlog must close the transport");
+        // Late transport completion cannot replace the informative synthetic close reason.
+        host.on_input(Input::Socket { plugin: "hello".into(), event: SocketEvent::Closed((id, None)) }, now);
+        host.on_input(message("late".into()), now);
+        assert_eq!(host.deferred.len(), crate::io::IN_FLIGHT + 1);
+        assert!(matches!(host.deferred.last(), Some(Input::Socket { event: SocketEvent::Closed((_, Some(reason))), .. }) if reason.contains("game pause") && reason.contains("64")));
+        host.on_host(HostMsg::GameActivity(false), now);
+        let instance = host.plugins["hello"].instance.as_ref().unwrap();
+        assert_eq!(instance.events, before + 2 + crate::io::IN_FLIGHT as u64 + 1, "retained replies precede the close event on resume");
+        assert!(instance.store.data().conn(id).is_none());
+        drop(host);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
