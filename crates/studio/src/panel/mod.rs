@@ -143,6 +143,8 @@ pub struct State {
     specimen_page: std::cell::Cell<Option<Page>>,
     pub save_doc: std::cell::Cell<Option<crate::docs::DocId>>,
     pub sort_drag: Option<lists::Drag>,
+    pub color_drag: Option<colors::Drag>,
+    pub color_values: std::cell::RefCell<std::collections::HashMap<mypaper_ui::controls::Key, (String, mypaper_ui::color_row::popover::Hsv)>>,
     pub fonts: std::cell::OnceCell<Vec<String>>,
     pub save_errors: std::cell::RefCell<std::collections::HashMap<crate::docs::DocId, String>>,
     pub theme_retry: Option<crate::actions::Action>,
@@ -178,6 +180,7 @@ pub enum Command {
     Display(usize),
     Peek,
     PickColor(crate::actions::Edit),
+    ColorDrag(crate::actions::Edit, mypaper_ui::color_row::popover::Part, Rect),
     SortRow(SortList, usize),
     SortHandle(SortList, usize),
     SortRemove(SortList, usize),
@@ -320,6 +323,7 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::Peek => peek::start(app, None),
         Command::PickColor(edit) => colors::pick(app, &edit),
+        Command::ColorDrag(..) => {},
         Command::SortRow(list, index) => {
             app.input.focus = Some(lists::row_key(&list, index));
             if let SortList::Widget(path) = &list {
@@ -427,6 +431,7 @@ pub fn run(app: &mut App, command: Command) {
 
 /// Panel shortcuts are resolved before the legacy app's page shortcuts.
 pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) -> bool {
+    if colors::on_key(app, vk, ctrl, shift, alt) { return true; }
     if pick_client::on_key(app, vk) {
         return true;
     }
@@ -753,6 +758,7 @@ pub fn end_peek() {
 
 /// List drags are transient until release. This early bridge leaves legacy input intact.
 pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
+    if app.panel.is_some() && colors::event(app, event) { return true; }
     app.panel.is_some() && lists::event(app, event)
 }
 
@@ -1183,6 +1189,7 @@ pub fn accessibility(
     else {
         return;
     };
+    if colors::accessibility(app, &target, &action) { return; }
     match (&target.behavior, &target.action, action) {
         (
             Behavior::Slider {
