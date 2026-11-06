@@ -21,7 +21,7 @@ public static class MypaperCapture {
     [StructLayout(LayoutKind.Sequential)] struct Point {public int X,Y;}
     public sealed class Window {
         public long Handle; public uint Pid; public int Z; public Rect Bounds;
-        public bool Mypaper,OpaquePanel,InvisibleAlpha; public Rect Client;
+        public bool Mypaper,OpaquePanel,InvisibleAlpha,DesktopBackground; public Rect Client;
     }
     public sealed class Report {
         public Rect Desktop; public Window[] Before,After; public DateTime CapturedUtc;
@@ -50,8 +50,6 @@ public static class MypaperCapture {
             if(!IsWindowVisible(h)||IsIconic(h))return true;
             int cloaked;if(DwmGetWindowAttribute(h,14,out cloaked,4)==0 && cloaked!=0)return true;
             var cls=new StringBuilder(256);GetClassName(h,cls,cls.Capacity);
-            // Explorer's desktop is the background, not an application content rectangle.
-            if(cls.ToString()=="Progman"||cls.ToString()=="WorkerW")return true;
             Rect bounds;if(!GetWindowRect(h,out bounds))throw new Exception("Cannot locate a visible window; capture refused");
             Rect frame;if(DwmGetWindowAttribute(h,9,out frame,16)==0 && frame.Right>frame.Left && frame.Bottom>frame.Top)bounds=frame;
             if(!R(bounds).IntersectsWith(desktop))return true;
@@ -59,6 +57,8 @@ public static class MypaperCapture {
             string name="";try{using(var p=Process.GetProcessById((int)pid)){name=p.ProcessName;}}catch{}
             bool ours=name=="mypaper-shell"||name=="mypaper-studio"||name=="mypaper-wallpaper"||name=="mypaper-core";
             var window=new Window{Handle=h.ToInt64(),Pid=pid,Z=order,Bounds=bounds,Mypaper=ours};
+            // Record Explorer's desktop too, while keeping it distinct from app content.
+            window.DesktopBackground=cls.ToString()=="Progman"||cls.ToString()=="WorkerW";
             uint key,flags;byte alpha;
             window.InvisibleAlpha=GetLayeredWindowAttributes(h,out key,out alpha,out flags) && (flags&2)!=0 && alpha==0;
             if(name=="mypaper-studio" && cls.ToString()=="mypaper.ui.app") {
@@ -80,7 +80,7 @@ public static class MypaperCapture {
     }
     static void Redact(Graphics g,Window[] windows,Rectangle desktop) {
         foreach(var window in windows) {
-            if(window.Mypaper||window.InvisibleAlpha)continue;
+            if(window.Mypaper||window.InvisibleAlpha||window.DesktopBackground)continue;
             using(var region=new Region(Rectangle.Intersect(R(window.Bounds),desktop))) {
                 foreach(var above in windows) {
                     if(above.Z>=window.Z)break;
