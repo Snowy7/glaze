@@ -59,11 +59,14 @@ Pins, the chosen view and column widths are stored in `%APPDATA%\mypaper\files.j
 ## Search and folder sizes
 
 Files calls only the bounded [index pipe client](index.md), from a background worker:
-`mypaper_index::pipe::request(&Request::Search { query, limit: 2000 }, 100)` and
+`mypaper_index::pipe::request(&Request::Search { query, limit: 2000 }, 250)` and
 `Request::Sizes { path, limit: 4096 }`. A running index searches its indexed files; otherwise
 search filters the current directory. The status bar says **Indexed files** or **This folder**.
 Folder sizes are the index's cached logical sizes, not a recursive scan performed by Files.
 Missing index results leave directory sizes blank. No index process is started by Files.
+Both calls have a 250 ms deadline. A response with `scanning: true` contains cached results
+while the helper reconciles its snapshot. Sizes includes the requested folder followed by
+its immediate children; Files associates each logical byte count with the returned path.
 
 ## Experimental folder routing
 

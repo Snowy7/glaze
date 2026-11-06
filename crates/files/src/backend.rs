@@ -163,7 +163,7 @@ impl Backend {
                                             path: location.path,
                                             limit: 4096,
                                         },
-                                        100,
+                                        250,
                                     )
                                     && response.error.is_none()
                                 {
@@ -199,7 +199,7 @@ impl Backend {
                                                 query: text.clone(),
                                                 limit: 2000,
                                             },
-                                            100,
+                                            250,
                                         )
                                     })
                                     .transpose()
