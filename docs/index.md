@@ -40,8 +40,7 @@ but an 11M-entry query after resident-page trimming was measured above 100 ms.
   and uses four workers sharing twelve resident windows (96 MiB), then releases them.
   Eviction follows the documented [VirtualUnlock behavior](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualunlock)
   for unlocked pages. Virtual addresses stay valid; physical pages become reclaimable.
-  Ordinary searches retain their existing paging policy and can still touch the full
-  name index while active. The 256 MiB measurement target applies to background
+  Round 2 adds a separate bounded query column (below). The 256 MiB measurement target applies to background
   scanning/replacement without concurrent full-index queries.
 - Substring terms are ANDed. Exact name matches rank first, then name prefix, word
   prefix, substring; newer modification times break ties. Filters: `ext:rs,toml`,
@@ -50,6 +49,63 @@ but an 11M-entry query after resident-page trimming was measured above 100 ms.
   requests. Each searches a shard with reusable substring finders and a bounded top-k
   heap. Parent-path filters are reused across adjacent siblings. Wide directories get
   lazy hash-to-record lookups for updates, with original-name verification on collisions.
+
+### Round 2: compact query column and exclusions
+
+New snapshots append a separate folded-name column, streamed with the generation rather
+than built in a private full-index buffer. Each 32-name block stores a 1024-bit trigram
+union plus IDs, parents, modification times, directory/excluded bits and folded UTF-8.
+A query combines its name terms' trigrams, rejects impossible blocks, and checks every
+surviving name exactly. One- and two-byte terms bypass the prefilter. The filter has false
+positives but no false negatives; filters on paths are applied after name matching.
+Live overlays are searched separately and suppress their original entries. Ranking and
+Unicode folding are unchanged. Normal query mappings now retain eight 8 MiB name windows
+and four 8 MiB record/path windows; they do not read every 40-byte record on every query.
+Existing snapshots remain readable and gain the column when reconciled/checkpointed.
+
+Built-in exclusions prune `node_modules`, `.git`, `__pycache__`, `.venv`, `venv`, `.gradle`,
+`$Recycle.Bin`, `System Volume Information`, drive-root `Windows/WinSxS` and
+`Windows/Installer`, `AppData/Local/Temp`, `AppData/Local/**/Cache*`, `npm-cache`,
+`pnpm-store`, `.cargo/registry`, `.rustup/toolchains`, and `C:/mypaper-targets`.
+`target` is excluded only when it contains `CACHEDIR.TAG` or `.rustc_info.json`;
+`bin` and `obj` only when their parent contains a `.csproj` file. A plain folder called
+`target` or `bin` remains searchable. Reparse traversal remains disabled.
+
+User rules layer onto these defaults in `%APPDATA%/mypaper/config.json`:
+
+```json
+{
+  "index": {
+    "exclude": ["D:/private/**", "**/*.tmp"],
+    "include": ["D:/project/node_modules/my-package/**"]
+  }
+}
+```
+
+Globs are case-insensitive and component-aware; use `/` separators (`\\` also works).
+`*` stays within a component; `**` crosses directories. A matched path excludes/includes
+its whole subtree. Includes override both built-in and user exclusions. The scanner
+retains ancestors needed to reach included descendants. The service's own cache is
+always excluded. Atomic config changes reload valid rules and reconcile the watched
+roots; invalid globs are logged and the last valid rules remain in use.
+
+Excluded subtrees are **not walked just to calculate their size**. They remain as one
+aggregate with `excluded: true`, `size_unknown: true`, and zero known bytes. Ancestors
+inherit `size_unknown`; their byte/file totals are lower bounds, never exact totals.
+Inaccessible directories are marked the same way. Excluded entries do not appear in
+search, but the sizes API lists their aggregates. Removing the last unknown subtree
+restores a known parent size. The launcher displays “Size unknown” for incomplete sizes.
+Notification readers discard changes below static exclusions while preserving boundary
+create/delete events; Rust/.NET marker changes re-evaluate the affected subtree.
+
+The helper also consumes `mypaper_tweaks::game_activity::Snapshot`: scan workers and
+generation streams block at bounded work boundaries while `pause_background` is true.
+Watches keep coalescing and queries stay available. Reconciliation/checkpoint/trim
+deadlines use a clock stopped for the entire pause. A directory notification wakes the
+reader, and the checked publisher process handle joins its blocking wait set; missing,
+corrupt, disabled or dead publication resumes work. No polling timer is added. Initial
+or paused notification accumulation is bounded to 128,000 unique paths, then falls back
+to volume reconciliation rather than retaining an unbounded list.
 
 Search is **names and paths only**, not document contents. Sizes count every accessible
 file's logical length, including each directory entry of a hard link. They do not
@@ -91,7 +147,7 @@ Scratch mappings close after each volume is checkpointed. Reconciliation complet
 queries arm a one-shot two-second quiet deadline; `EmptyWorkingSet` then returns resident
 pages to Windows' reclaimable cache. Status requests do not arm it. There is no recurring
 trim timer. A new query faults the needed pages back in, so warm-query latency and the
-first query after a trim must be measured separately. A whole-index substring scan touches
+first query after a trim must be measured separately. Round 1's whole-record searches touched
 much of the mapped snapshot while active; low private allocation is not low resident RAM.
 
 **TODO:** a separately authorized elevated MFT bootstrap / USN replay path. Neither
@@ -130,7 +186,8 @@ Requests (serde internally tagged by `method`):
 
 `Response { hits: Vec<Hit>, entries: usize, scanning: bool, elapsed_us: u64,
 error: Option<String> }`. `Hit { name: String, path: String, directory: bool,
-size: u64, files: u32, modified: u32 }`. Search returns up to 100 results.
+size: u64, files: u32, modified: u32, size_unknown: bool, excluded: bool }`.
+The two booleans default to false when deserializing older replies. Search returns up to 100 results.
 `entries` counts record slots, including tombstones until compaction; query hits and
 folder sizes exclude deleted records. Fresh scan and compacted snapshot counts are live.
 Sizes returns the requested path **first**, followed by up to `limit` immediate children
