@@ -4,8 +4,9 @@ A native look can restyle Windows itself while it is active: window borders, tit
 backdrop (Mica and friends), the system accent color, light/dark mode and accent visibility.
 Selecting `config.json` > `look.style` supplies Windows defaults as well as the native shell's.
 A wallpaper can refine those defaults with its `windows` section. Everything uses supported public
-APIs (`DwmSetWindowAttribute` and the same per-user registry values the Settings app writes). No code
-runs inside any other process, and everything is undone when the theme changes, mypaper quits, the
+APIs (`DwmSetWindowAttribute` and the same per-user registry values the Settings app writes). Frame
+styling runs in core; the separate [experimental App styler](#app-styler-experimental) is opt-in.
+Frame and preference changes are undone when the theme changes, mypaper quits, the
 panic hotkey fires, or core restarts after a crash.
 
 ```json
@@ -22,7 +23,7 @@ panic hotkey fires, or core restarts after a crash.
 }
 ```
 
-[`themes/midnight`](../themes/midnight) is a working example.
+[`themes/examples/midnight`](../themes/examples/midnight) is a working example.
 
 **Your look wins.** A theme's `windows` section is a suggestion: `config.json` › `look.windows`
 (edited in Studio › Look › Windows) is your layer over it, field by field. A field absent there

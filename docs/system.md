@@ -114,7 +114,7 @@ explain the tradeoffs and evidence limits.
 - `read() -> Option<(Snapshot, Owner)>`, where `Snapshot { publisher_pid, publisher_started,
   activity }` identifies the publisher by PID **and process creation time**. Missing/corrupt data,
   dead publisher or reused PID returns `None`. `Snapshot::open_owner()` also validates identity.
-- `watch(changed) -> Result<notify::RecommendedWatcher>`: directory notifications for atomic
+- `watch(changed) -> Result<mypaper_fswatch::Watch>`: native directory notifications for atomic
   replacement/removal, released on drop. Callback should post to the consumer's loop.
 - `Owner::handle() -> HANDLE`: add this process handle to the consumer's wait set while holding
   `Owner`. A signaled handle invalidates the signal immediately after a crash. Re-read/replace the
@@ -154,7 +154,15 @@ foreground_pid } }`. Start watching before the initial read, re-read on `watch` 
 retain `Owner`, and include `Owner::handle()` in the normal blocking wait. Missing/corrupt/dead
 publisher means resume. Never add a polling timer. Index consumers pause background scans and
 reconciliation, keep a single pending reconciliation, and resume after the hint clears. Explicit
-file operations are not cancelled by this hint. The index agent owns that implementation.
+file operations are not cancelled by this hint. See [index.md](index.md).
+
+**Pause during games:** `engine.during_games` defaults to `"pause"`: the wallpaper stops on
+every screen while the hint is active. With the installed theme still available, it is revealed
+immediately; after 10 s the engine releases its drawing resources, retaining the GPU device for
+fast resume. Without a usable still, drawing pauses on the held frame and resources remain.
+Choose `"keep"` to keep uncovered screens animating; ordinary coverage, tray, battery and lock
+holds still apply. Changing this setting does not disable background quiescence in the shell,
+plugins or index. To remove the observer itself, use `system.game_activity: false`.
 
 The shell drops game-time clock/stats/custom-command deadlines and provider subscriptions on
 all screens. Covered screens keep their existing visibility behavior; visible secondary bars

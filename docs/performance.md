@@ -264,11 +264,12 @@ a second tonight, 7 with the desktop quiet). Scoping its location hook to the fo
 covering windows' processes (as the shell's `win_events` does) would cut it further; that is left
 as a follow-up.
 
-The other processes' notify watches (each a 10 Hz thread; after this deploy: shell 5, index 2,
-core 1 via tweaks, Studio 1) moved to the `fswatch` crate later the same morning (`3a3a29e` and
-the commits after it), which also sleeps on directory I/O. Two such watchers now exist
-(`mypaper_desktop::dir_watch` for `watch_file` and the engine's theme, `fswatch` for the rest);
-they should become one.
+The other processes' notify watches (each a 10 Hz thread; then shell 5, index 2,
+core 1 via tweaks, Studio 1) moved to `mypaper_fswatch` later the same morning (`3a3a29e` and
+the commits after it). `31b51d2` then consolidated `watch_file` and the engine's theme watch
+onto that same crate and removed `mypaper_desktop::dir_watch`. It blocks on overlapped directory
+I/O while idle, debounces only actual changes, and rearms replaced directories. The table above
+records the earlier build, not a new measurement of the consolidated watcher.
 
 ### Games (6 November 2026)
 
@@ -373,6 +374,15 @@ keeps its GPU device when covered (the ~66 wakes/s driver thread described above
 transport keepalives and external incoming events remain while sockets stay connected; changing
 keepalive on an upgraded live socket was rejected with `ERROR_WINHTTP_INCORRECT_HANDLE_STATE`.
 Processes retain memory. No FPS or game frame-time improvement is inferred from quiescence.
+
+**Later engine pass (10:25).** The [night log](../plans/night/2026-11-06.md) records the separate
+`engine.during_games: "pause"` check: a game covering one screen paused both, measured engine CPU
+was **0.000% of one core**, private memory **208.7 → 124.7 MiB**, and resume **74 ms**. This is a later
+engine-only sample, not a repeat of the whole-product table above. The device still remains;
+no new whole-product zero-wake claim follows from the rounded CPU result. Live glass over web/app
+wallpapers measured **5.83%** engine CPU for the 30 fps demo, **0.31%** for a still page, and
+**1.41%** with a 10 fps cap; the fixture, GPU/memory figures and captures are in
+[glass.md](glass.md#glass-over-web-and-app-wallpapers-p14-6-november-2026).
 
 ### Engine hillclimb (5 November 2026)
 
