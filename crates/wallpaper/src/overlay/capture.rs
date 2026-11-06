@@ -32,7 +32,8 @@ use windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessSt
 use windows::Win32::Foundation::{CloseHandle, HMODULE, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN;
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11_BOX, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_QUERY_DATA_TIMESTAMP_DISJOINT,
+    D3D11_BOX, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+    D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS, D3D11_QUERY_DATA_TIMESTAMP_DISJOINT,
     D3D11_QUERY_DESC, D3D11_QUERY_TIMESTAMP, D3D11_QUERY_TIMESTAMP_DISJOINT, D3D11_SDK_VERSION,
     D3D11CreateDevice, ID3D11Device, ID3D11Device1, ID3D11Device5, ID3D11DeviceContext,
     ID3D11DeviceContext4, ID3D11Fence, ID3D11Query, ID3D11Texture2D,
@@ -106,13 +107,18 @@ impl CaptureDevice {
         };
         let mut d3d11 = None;
         let mut context = None;
+        // No driver threads of its own: this device only copies crops and fills DirectComposition
+        // surfaces. Without the flag NVIDIA's D3D11 driver starts ~56 worker threads with the
+        // first overlay, +40 MiB private that stay until the engine exits.
+        let flags =
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS;
         // SAFETY: a live adapter; the out pointers outlive the call.
         unsafe {
             D3D11CreateDevice(
                 &dxgi_adapter,
                 D3D_DRIVER_TYPE_UNKNOWN,
                 HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                flags,
                 None,
                 D3D11_SDK_VERSION,
                 Some(&mut d3d11),
