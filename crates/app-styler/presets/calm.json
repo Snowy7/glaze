@@ -12,7 +12,7 @@
       "Grid#NavigationBarControlGrid": { "Background": "Transparent" },
       "CommandBar#FileExplorerCommandBar": { "Background": "Transparent" },
       "CommandBar#FileExplorerSecondaryCommandBar": { "Background": "Transparent" },
-      "AutoSuggestBox#FileExplorerSearchBox Border#BorderElement": { "Background": "#0C808080", "BorderThickness": "0", "CornerRadius": "6" }
+      "AutoSuggestBox TextBox#TextBox": { "Background": "#0C808080", "BorderThickness": "0", "CornerRadius": "6" }
     }
   }
 }

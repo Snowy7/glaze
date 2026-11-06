@@ -4,6 +4,7 @@
 //!
 //! ```text
 //! mypaper-styler                       follow the config and style Explorer and Settings
+//! mypaper-styler --preview PRESET      the same with that preset, whatever the flag and theme
 //! mypaper-styler --dump PID [--winui] [--out FILE]
 //!                                      write that app's live XAML tree (for writing rules)
 //! mypaper-styler --attach PID [--winui] --rules FILE [--seconds N]
@@ -40,7 +41,7 @@ fn run() -> Result<()> {
         args.get(at + 1).cloned()
     };
     let (pid, dump) = match (value("--attach"), value("--dump")) {
-        (None, None) => return helper::run::run(),
+        (None, None) => return helper::run::run(value("--preview")),
         (Some(pid), _) => (pid, None),
         (None, Some(pid)) => {
             let out = value("--out").map_or_else(

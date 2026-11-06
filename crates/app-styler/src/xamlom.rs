@@ -60,6 +60,9 @@ pub const SOURCE_LOCAL: i32 = 4;
 /// `MetadataBit::IsValueHandle`: `PropertyChainValue::Value` is the value object's handle.
 pub const IS_VALUE_HANDLE: i64 = 0x1;
 
+/// `MetadataBit::IsValueNull`: the value is null (`Value` then reads "0").
+pub const IS_VALUE_NULL: i64 = 0x20;
+
 #[repr(C)]
 pub struct PropertyChainValue {
     pub Index: u32,

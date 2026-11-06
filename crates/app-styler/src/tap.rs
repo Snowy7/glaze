@@ -56,7 +56,7 @@ use windows_core::{BOOL, BSTR, GUID, HRESULT, IUnknown, Interface, PCWSTR, Ref, 
 
 use crate::selector::{Node, Selector};
 use crate::xamlom::{
-    IS_VALUE_HANDLE, IVisualTreeService3, IVisualTreeServiceCallback_Impl,
+    IS_VALUE_HANDLE, IS_VALUE_NULL, IVisualTreeService3, IVisualTreeServiceCallback_Impl,
     IVisualTreeServiceCallback2, IVisualTreeServiceCallback2_Impl, IXamlDiagnostics,
     InstanceHandle, MUTATION_ADD, ParentChildRelation, PropertyChainSource, PropertyChainValue,
     SOURCE_LOCAL, VisualElement, free, free_chain, text,
@@ -672,7 +672,8 @@ impl Session {
                         kind: text(v.Type),
                         local: None,
                     });
-                if local {
+                // A local null can't be recreated; clearing is the closest way back.
+                if local && v.MetadataBits & IS_VALUE_NULL == 0 {
                     let value = text(v.Value);
                     entry.local = Some(
                         match value

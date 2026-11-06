@@ -14,7 +14,7 @@
       "CommandBar#FileExplorerCommandBar": { "Background": "Transparent" },
       "CommandBar#FileExplorerSecondaryCommandBar": { "Background": "Transparent" },
       "Grid#DetailsViewControlRootGrid": { "Background": "Transparent" },
-      "AutoSuggestBox#FileExplorerSearchBox Border#BorderElement": { "Background": "#10FFFFFF", "BorderBrush": "#18FFFFFF", "CornerRadius": "12" }
+      "AutoSuggestBox TextBox#TextBox": { "Background": "#14FFFFFF", "BorderBrush": "#22FFFFFF", "BorderThickness": "1", "CornerRadius": "12" }
     }
   }
 }

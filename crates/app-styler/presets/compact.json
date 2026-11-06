@@ -10,7 +10,8 @@
   "explorer": {
     "rules": {
       "CommandBar#FileExplorerCommandBar": { "Padding": "0" },
-      "AutoSuggestBox#FileExplorerSearchBox": { "MinHeight": "28" }
+      "AutoSuggestBox TextBox#TextBox": { "MinHeight": "28", "Padding": "8,3,6,3" },
+      "BreadcrumbBarItemControl TextBlock": { "FontSize": "13" }
     }
   }
 }

@@ -23,9 +23,9 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, EVENT_OBJECT_SHOW, EnumWindows, GA_ROOT, GetAncestor, GetClassNameW,
-    GetWindowThreadProcessId, IsWindowVisible, MSG, MsgWaitForMultipleObjects, OBJID_WINDOW,
-    PM_REMOVE, PeekMessageW, PostThreadMessageW, QS_ALLINPUT, TranslateMessage,
+    DispatchMessageW, EVENT_OBJECT_SHOW, EnumChildWindows, EnumWindows, GA_ROOT, GetAncestor,
+    GetClassNameW, GetWindowThreadProcessId, IsWindowVisible, MSG, MsgWaitForMultipleObjects,
+    OBJID_WINDOW, PM_REMOVE, PeekMessageW, PostThreadMessageW, QS_ALLINPUT, TranslateMessage,
     WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_APP, WM_QUIT,
 };
 use windows_core::{BOOL, w};
@@ -45,7 +45,9 @@ thread_local! {
     static SHOWN: RefCell<Vec<HWND>> = const { RefCell::new(Vec::new()) };
 }
 
-pub fn run() -> Result<()> {
+/// Runs until the flag goes off or the process is told to quit. `preview`: style with that
+/// preset (under the user's `look.apps`) whatever the flag and the theme say, to try one.
+pub fn run(preview: Option<String>) -> Result<()> {
     // SAFETY: a named mutex held for the life of the process.
     let _single = unsafe { CreateMutexW(None, true, w!("Local\\mypaper-styler"))? };
     // SAFETY: reads this thread's last error.
@@ -65,7 +67,7 @@ pub fn run() -> Result<()> {
         .inspect_err(|e| log::warn!("rules won't follow the wallpaper: {e:#}"))
         .ok();
 
-    let mut helper = Helper::new()?;
+    let mut helper = Helper::new(preview)?;
     if !helper.resolve() {
         log::info!("experimental.app_styler is off; exiting");
         return Ok(());
@@ -103,6 +105,8 @@ fn palette_path() -> Result<PathBuf> {
 }
 
 struct Helper {
+    /// `--preview PRESET`: ignore the flag and the theme's `apps`.
+    preview: Option<String>,
     tap: PathBuf,
     dir: PathBuf,
     /// Attached processes by pid.
@@ -132,9 +136,10 @@ impl Drop for Attached {
 }
 
 impl Helper {
-    fn new() -> Result<Self> {
+    fn new(preview: Option<String>) -> Result<Self> {
         Ok(Self {
             tap: tap_path()?,
+            preview,
             dir: data_dir()?,
             attached: HashMap::new(),
             refused: HashSet::new(),
@@ -154,7 +159,7 @@ impl Helper {
                 return true;
             }
         };
-        if !config.experimental.app_styler {
+        if !config.experimental.app_styler && self.preview.is_none() {
             return false;
         }
         let theme = mypaper_theme::locate(Some(&config.theme))
@@ -172,7 +177,16 @@ impl Helper {
         };
         let theme_apps = theme.as_ref().and_then(|t| t.theme.apps.as_ref());
         for app in mypaper_config::apps::APPS {
-            let rules = presets::resolve(app, theme_apps, &config.look.apps, colors);
+            let rules = match &self.preview {
+                Some(name) => {
+                    let user = mypaper_config::AppsStyle {
+                        preset: Some(name.clone()),
+                        ..config.look.apps.clone()
+                    };
+                    presets::resolve(app, None, &user, colors)
+                }
+                None => presets::resolve(app, theme_apps, &config.look.apps, colors),
+            };
             let text = serde_json::to_string_pretty(&rules).unwrap_or_default();
             let path = self.dir.join(format!("{app}.json"));
             if std::fs::read_to_string(&path).ok().as_deref() != Some(text.as_str())
@@ -388,19 +402,28 @@ fn write_atomic(path: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
-/// Queues every visible top-level window, for the first pass.
+/// Queues every visible top-level window, and the app windows inside UWP frames (Settings'
+/// `CoreWindow` lives in an `ApplicationFrameWindow` that ApplicationFrameHost owns), for the
+/// first pass.
 fn sweep() {
     unsafe extern "system" fn visit(hwnd: HWND, _: LPARAM) -> BOOL {
         // SAFETY: a plain query.
         if unsafe { IsWindowVisible(hwnd) }.as_bool() {
             SHOWN.with_borrow_mut(|s| s.push(hwnd));
+            if root_class(hwnd).as_deref() == Some("ApplicationFrameWindow") {
+                // SAFETY: as for the top level; children are queued the same way.
+                let _ = unsafe { EnumChildWindows(Some(hwnd), Some(child), LPARAM(0)) };
+            }
         }
         true.into()
     }
-    // SAFETY: the callback only touches a thread-local on this thread.
+    unsafe extern "system" fn child(hwnd: HWND, _: LPARAM) -> BOOL {
+        SHOWN.with_borrow_mut(|s| s.push(hwnd));
+        true.into()
+    }
+    // SAFETY: the callbacks only touch a thread-local on this thread.
     let _ = unsafe { EnumWindows(Some(visit), LPARAM(0)) };
 }
-
 unsafe extern "system" fn on_show(
     _: HWINEVENTHOOK,
     _: u32,
