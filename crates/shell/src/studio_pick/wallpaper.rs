@@ -116,8 +116,16 @@ fn image_rect(size: (f32, f32), screen: Rect, fit: Fit) -> Rect {
 
 #[derive(Default)]
 pub struct Still {
-    stamp: Option<(u64, Vec<(String, mypaper_desktop::Rect)>)>,
+    stamp: Option<Stamp>,
     surfaces: Vec<Surface>,
+}
+
+#[derive(PartialEq)]
+struct Stamp {
+    sequence: u64,
+    monitors: Vec<(String, mypaper_desktop::Rect)>,
+    widgets: Vec<(String, mypaper_ui::SurfaceId)>,
+    parent: isize,
 }
 impl Still {
     pub fn clear(&mut self) {
@@ -133,18 +141,21 @@ impl Still {
         theme: Option<&LoadedTheme>,
         monitors: &[Monitor],
         anchor: Option<windows::Win32::Foundation::HWND>,
+        widgets: Vec<(String, mypaper_ui::SurfaceId)>,
     ) -> anyhow::Result<()> {
         let (Some(sequence), Some(theme), Some(parent)) = (sequence, theme, anchor) else {
             self.clear();
             return Ok(());
         };
-        let stamp = (
+        let stamp = Stamp {
             sequence,
-            monitors
+            monitors: monitors
                 .iter()
                 .map(|m| (m.device.clone(), m.rect))
                 .collect(),
-        );
+            widgets,
+            parent: parent.0 as isize,
+        };
         if self.stamp.as_ref() == Some(&stamp) {
             return Ok(());
         }

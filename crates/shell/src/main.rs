@@ -337,7 +337,20 @@ impl Shell {
             widgets.studio_preview(ui, preview, resize, warm);
             widgets.studio_session(ui, self.studio.active(), self.studio.lifted());
         }
-        self.studio.wallpaper_preview(ui);
+        let widgets = if self.studio.preview().snapshot_sequence().is_some() {
+            self.widgets
+                .as_ref()
+                .map(|w| {
+                    w.studio_targets()
+                        .into_iter()
+                        .map(|target| (target.selection.id, target.surface))
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        self.studio.wallpaper_preview(ui, widgets);
     }
 
     /// Handles everything queued: inbox messages and input, in order, until both are empty.

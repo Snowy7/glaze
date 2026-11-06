@@ -206,13 +206,14 @@ impl StudioPick {
         (&mut self.preview, self.module_preview.as_ref())
     }
 
-    pub fn wallpaper_preview(&mut self, ui: &mut Ui) {
+    pub fn wallpaper_preview(&mut self, ui: &mut Ui, widgets: Vec<(String, SurfaceId)>) {
         if let Err(error) = self.wallpaper_still.update(
             ui,
             self.preview.snapshot_sequence(),
             self.preview.snapshot_theme().flatten(),
             &self.monitors,
             self.anchor,
+            widgets,
         ) {
             log::warn!("Studio History wallpaper still: {error:#}");
         }
@@ -352,6 +353,7 @@ impl StudioPick {
                     if self.session.selected.as_ref() != Some(&selection) {
                         self.gesture = None;
                         self.resize_preview = None;
+                        self.finish_module(false);
                     }
                     self.session.selected = Some(selection);
                 }
@@ -412,6 +414,7 @@ impl StudioPick {
             .collect();
         if self.catchers.is_empty() || anchor != self.anchor || geometry != previous {
             self.gesture = None;
+            self.finish_module(false);
             self.catchers.clear();
             self.decorations.clear();
             self.monitors = monitors;
