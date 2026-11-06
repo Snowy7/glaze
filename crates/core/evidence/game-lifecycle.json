@@ -1,0 +1,100 @@
+[
+  {
+    "elapsed_ms": 7.0286,
+    "expected_pause": false,
+    "phase": "normal",
+    "snapshot": {
+      "activity": {
+        "foreground_pid": 3168,
+        "pause_background": false,
+        "reason": "idle"
+      },
+      "publisher_pid": 77640,
+      "publisher_started": 134384151625947638
+    }
+  },
+  {
+    "elapsed_ms": 1.3811,
+    "expected_pause": true,
+    "phase": "fullscreen-before-focus-away",
+    "snapshot": {
+      "activity": {
+        "foreground_pid": 3168,
+        "pause_background": true,
+        "reason": "busy"
+      },
+      "publisher_pid": 77640,
+      "publisher_started": 134384151625947638
+    }
+  },
+  {
+    "elapsed_ms": 3.209,
+    "expected_pause": false,
+    "phase": "focus-away",
+    "snapshot": {
+      "activity": {
+        "foreground_pid": 3168,
+        "pause_background": false,
+        "reason": "idle"
+      },
+      "publisher_pid": 77640,
+      "publisher_started": 134384151625947638
+    }
+  },
+  {
+    "elapsed_ms": 1.393,
+    "expected_pause": true,
+    "phase": "fullscreen-before-minimize",
+    "snapshot": {
+      "activity": {
+        "foreground_pid": 3168,
+        "pause_background": true,
+        "reason": "busy"
+      },
+      "publisher_pid": 77640,
+      "publisher_started": 134384151625947638
+    }
+  },
+  {
+    "elapsed_ms": 1.3584,
+    "expected_pause": false,
+    "phase": "minimize",
+    "snapshot": {
+      "activity": {
+        "foreground_pid": 3168,
+        "pause_background": false,
+        "reason": "idle"
+      },
+      "publisher_pid": 77640,
+      "publisher_started": 134384151625947638
+    }
+  },
+  {
+    "elapsed_ms": 5.4906,
+    "expected_pause": true,
+    "phase": "fullscreen-before-exit",
+    "snapshot": {
+      "activity": {
+        "foreground_pid": 3168,
+        "pause_background": true,
+        "reason": "fullscreen"
+      },
+      "publisher_pid": 77640,
+      "publisher_started": 134384151625947638
+    }
+  },
+  {
+    "elapsed_ms": 4.6271,
+    "expected_pause": false,
+    "phase": "exit",
+    "snapshot": {
+      "activity": {
+        "foreground_pid": 3168,
+        "pause_background": false,
+        "reason": "idle"
+      },
+      "publisher_pid": 77640,
+      "publisher_started": 134384151625947638
+    }
+  }
+]

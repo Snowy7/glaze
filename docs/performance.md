@@ -240,7 +240,7 @@ periodic timer once, without a catch-up burst. Independent user/session holds re
 The focused tests cover a 10-minute logical hold without events/deadlines, latest state on
 resume, one overdue timer, deferred opens/removal, independent holds, an unchanged real
 websocket connection, and 32 pipe pause/resume cycles with no incoming peer traffic. All five
-pass. Core/config/wire tests pass; shell has 143 passing tests. Widgets has 146 passing tests
+pass. Core/config/wire tests pass; shell has 147 passing tests. Widgets has 146 passing tests
 with one unrelated registry-count assertion excluded (`registry.widgets.len() >= 23`).
 
 The production helper was also measured in an isolated profile with Hello's one-second timer
@@ -255,6 +255,50 @@ a CPU improvement from two rounded zeros. [Raw result](../crates/core/evidence/g
 | Private at end | 4.39 MiB | **4.39 MiB** |
 
 Resume and clean shutdown passed; the temporary profile and both probe processes were removed.
+
+**Final live result, including the resume guard.** Two owned borderless windows covered both
+2560x1440 monitors, with rain-city and the user's existing weather/T3 widgets. Each sample was
+60 s, after settling. The foreground hint stayed active for the entire game sample. The user's
+open Studio stayed running. [Final process/thread evidence](../crates/core/evidence/game-resume-guard.json),
+[GPU harness evidence](../crates/core/evidence/game-gpu-resume-guard.json),
+[preceding paired baseline](../crates/core/evidence/game-before-source.json).
+The baseline had an active index scan and is not an idle-desktop comparison.
+
+| Process | Game CPU, % of one core | Private MiB | Context switches/s |
+|---|---:|---:|---:|
+| Core | 0 | 2.88 | 36.6 |
+| Index | 0 | 99.77 | 18.7 |
+| Plugins | 0 | 12.58 | 0.4 |
+| Shell | 0.0260 | 22.95 | 79.7 |
+| Studio (left open) | 0 | 79.77 | 9.3 |
+| App styler | 0 | 3.54 | 18.5 |
+| Wallpaper | 0.1302 | 171.72 | 132.3 |
+| **Total** | **0.1562** | **393.21** | **295.4** |
+
+The standard harness measured **0.18% of one core / 0.011% of the machine**, GPU **0%**.
+Its window differs slightly from the thread sampler; process CPU advances in ~15.6 ms ticks
+(~0.026% per 60 s). Context switches are a wake proxy, including external events and preemption;
+they do not identify timer origin. Removing the shell's shared event source reduced its game
+sample from 0.156% / 210.6 switches/s to 0.026% / 73.1 switches/s in the preceding run.
+
+**The strict 0.0x% total one-core gate is still unmet.** Remaining measured CPU is chiefly in
+the wallpaper process, outside this slice. Earlier covered runs retained ~66/s driver wakes;
+the final thread data contains a 62.3/s context-switch thread and another 22.1/s thread. These
+unnamed thread counts are not proof of which timer owns them. Memory remains resident; the
+final engine retained 172 MiB, versus 127 MiB in a previous covered run. No engine code, render
+quality or FPS policy was changed here.
+
+**Resume is verified without restarting.** A regression test first reproduced `QUNS_BUSY`
+holding a non-covering foreground window, then passed after requiring coverage. Foreground/
+location events still react immediately. One core **1 Hz recheck exists only while paused**,
+and is killed on resume/drop; idle has no timer. It covers missing/delayed Windows events.
+The owned fixture exercised focus-away, minimize and exit: all returned to Idle (2.2, 1.0,
+4.5 ms in the recorded run), with three shell and three helper resume logs and unchanged
+core/shell/helper PIDs. [Lifecycle](../crates/core/evidence/game-lifecycle.json),
+[consumer assertions](../crates/core/evidence/game-lifecycle-consumers.json).
+The last 60 s fixture also cleared its original Busy-after-exit case automatically with the
+same publisher PID. Widgets, bars and the clock were visually checked after restore, and no
+fixture remains. Tweaks: **56 tests passed**; release workspace build and scoped Clippy passed.
 
 **Limits:** no application background deadline is different from no OS/driver wake. The engine
 keeps its GPU device when covered (the ~66 wakes/s driver thread described above). WinHTTP's

@@ -1,0 +1,714 @@
+﻿{
+    "label":  "before-source",
+    "seconds":  60.009536,
+    "signal_before":  {
+                          "publisher_pid":  91448,
+                          "publisher_started":  134384139850847612,
+                          "activity":  {
+                                           "pause_background":  false,
+                                           "reason":  "idle",
+                                           "foreground_pid":  27116
+                                       }
+                      },
+    "processes":  [
+                      {
+                          "name":  "mypaper-core",
+                          "pid":  91448,
+                          "cpu_ms":  15.625,
+                          "cpu_core_pct":  0.026,
+                          "private_before_mib":  2.91,
+                          "private_after_mib":  2.83,
+                          "switches_per_second":  37.811,
+                          "threads":  [
+                                          {
+                                              "tid":  71536,
+                                              "name":  "",
+                                              "switches":  578,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  86748,
+                                              "name":  "",
+                                              "switches":  562,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  48316,
+                                              "name":  "",
+                                              "switches":  561,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  9888,
+                                              "name":  "",
+                                              "switches":  514,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  32720,
+                                              "name":  "",
+                                              "switches":  54,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  59328,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-index",
+                          "pid":  42624,
+                          "cpu_ms":  50484.375,
+                          "cpu_core_pct":  84.1273,
+                          "private_before_mib":  105.59,
+                          "private_after_mib":  102.63,
+                          "switches_per_second":  8252.488,
+                          "threads":  [
+                                          {
+                                              "tid":  62952,
+                                              "name":  "",
+                                              "switches":  121025,
+                                              "cpu_core_pct":  13.4874
+                                          },
+                                          {
+                                              "tid":  66636,
+                                              "name":  "",
+                                              "switches":  120547,
+                                              "cpu_core_pct":  13.4614
+                                          },
+                                          {
+                                              "tid":  65516,
+                                              "name":  "",
+                                              "switches":  120286,
+                                              "cpu_core_pct":  13.6957
+                                          },
+                                          {
+                                              "tid":  64008,
+                                              "name":  "",
+                                              "switches":  120125,
+                                              "cpu_core_pct":  13.7218
+                                          },
+                                          {
+                                              "tid":  66700,
+                                              "name":  "",
+                                              "switches":  6200,
+                                              "cpu_core_pct":  6.5094
+                                          },
+                                          {
+                                              "tid":  92528,
+                                              "name":  "",
+                                              "switches":  2333,
+                                              "cpu_core_pct":  0.026
+                                          },
+                                          {
+                                              "tid":  27496,
+                                              "name":  "",
+                                              "switches":  2283,
+                                              "cpu_core_pct":  0.1302
+                                          },
+                                          {
+                                              "tid":  87832,
+                                              "name":  "",
+                                              "switches":  1074,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  78396,
+                                              "name":  "",
+                                              "switches":  580,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  37404,
+                                              "name":  "",
+                                              "switches":  555,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  67128,
+                                              "name":  "",
+                                              "switches":  83,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  87696,
+                                              "name":  "",
+                                              "switches":  82,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  53784,
+                                              "name":  "",
+                                              "switches":  28,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  36072,
+                                              "name":  "",
+                                              "switches":  27,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  29168,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  22900,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  77964,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  34508,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  81256,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  59556,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-plugins",
+                          "pid":  79964,
+                          "cpu_ms":  0,
+                          "cpu_core_pct":  0,
+                          "private_before_mib":  9.6,
+                          "private_after_mib":  9.47,
+                          "switches_per_second":  0.55,
+                          "threads":  [
+                                          {
+                                              "tid":  62600,
+                                              "name":  "",
+                                              "switches":  16,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  55892,
+                                              "name":  "",
+                                              "switches":  12,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  57204,
+                                              "name":  "",
+                                              "switches":  3,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  54880,
+                                              "name":  "",
+                                              "switches":  2,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  39284,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  74300,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  94124,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  87656,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-shell",
+                          "pid":  84380,
+                          "cpu_ms":  125,
+                          "cpu_core_pct":  0.2083,
+                          "private_before_mib":  34.77,
+                          "private_after_mib":  33.81,
+                          "switches_per_second":  97.501,
+                          "threads":  [
+                                          {
+                                              "tid":  79716,
+                                              "name":  "",
+                                              "switches":  1017,
+                                              "cpu_core_pct":  0.1562
+                                          },
+                                          {
+                                              "tid":  58872,
+                                              "name":  "",
+                                              "switches":  574,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  58068,
+                                              "name":  "",
+                                              "switches":  571,
+                                              "cpu_core_pct":  0.026
+                                          },
+                                          {
+                                              "tid":  45956,
+                                              "name":  "",
+                                              "switches":  564,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  48684,
+                                              "name":  "",
+                                              "switches":  560,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  44364,
+                                              "name":  "",
+                                              "switches":  560,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  25564,
+                                              "name":  "",
+                                              "switches":  559,
+                                              "cpu_core_pct":  0.026
+                                          },
+                                          {
+                                              "tid":  7808,
+                                              "name":  "",
+                                              "switches":  299,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  61592,
+                                              "name":  "",
+                                              "switches":  198,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  73584,
+                                              "name":  "",
+                                              "switches":  192,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  15796,
+                                              "name":  "",
+                                              "switches":  191,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  58524,
+                                              "name":  "",
+                                              "switches":  167,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  22120,
+                                              "name":  "",
+                                              "switches":  130,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  72844,
+                                              "name":  "",
+                                              "switches":  120,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  24668,
+                                              "name":  "",
+                                              "switches":  71,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  45740,
+                                              "name":  "",
+                                              "switches":  41,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  69996,
+                                              "name":  "",
+                                              "switches":  16,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  45832,
+                                              "name":  "",
+                                              "switches":  15,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  65048,
+                                              "name":  "",
+                                              "switches":  4,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  63612,
+                                              "name":  "",
+                                              "switches":  2,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  82296,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  82936,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  25124,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  72784,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  80268,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  67728,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  23704,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  58428,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  42848,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  1832,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  86440,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  85256,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  15600,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  22076,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  36996,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  80140,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  29820,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  64740,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-studio",
+                          "pid":  32732,
+                          "cpu_ms":  0,
+                          "cpu_core_pct":  0,
+                          "private_before_mib":  75.53,
+                          "private_after_mib":  75.56,
+                          "switches_per_second":  9.432,
+                          "threads":  [
+                                          {
+                                              "tid":  22608,
+                                              "name":  "",
+                                              "switches":  565,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  69068,
+                                              "name":  "",
+                                              "switches":  1,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  54724,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  60240,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  20892,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  20840,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  42240,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  83632,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-styler",
+                          "pid":  21092,
+                          "cpu_ms":  31.25,
+                          "cpu_core_pct":  0.0521,
+                          "private_before_mib":  3.16,
+                          "private_after_mib":  2.97,
+                          "switches_per_second":  18.847,
+                          "threads":  [
+                                          {
+                                              "tid":  78248,
+                                              "name":  "",
+                                              "switches":  569,
+                                              "cpu_core_pct":  0.026
+                                          },
+                                          {
+                                              "tid":  64492,
+                                              "name":  "",
+                                              "switches":  562,
+                                              "cpu_core_pct":  0.026
+                                          },
+                                          {
+                                              "tid":  47536,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  28216,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-wallpaper",
+                          "pid":  30984,
+                          "cpu_ms":  1250,
+                          "cpu_core_pct":  2.083,
+                          "private_before_mib":  168.71,
+                          "private_after_mib":  168.58,
+                          "switches_per_second":  312.717,
+                          "threads":  [
+                                          {
+                                              "tid":  74732,
+                                              "name":  "",
+                                              "switches":  7011,
+                                              "cpu_core_pct":  0.0521
+                                          },
+                                          {
+                                              "tid":  73244,
+                                              "name":  "",
+                                              "switches":  3917,
+                                              "cpu_core_pct":  0.026
+                                          },
+                                          {
+                                              "tid":  10844,
+                                              "name":  "",
+                                              "switches":  3276,
+                                              "cpu_core_pct":  1.8226
+                                          },
+                                          {
+                                              "tid":  7036,
+                                              "name":  "",
+                                              "switches":  1549,
+                                              "cpu_core_pct":  0.1562
+                                          },
+                                          {
+                                              "tid":  91880,
+                                              "name":  "",
+                                              "switches":  1384,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  16136,
+                                              "name":  "",
+                                              "switches":  556,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  81296,
+                                              "name":  "",
+                                              "switches":  556,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  21700,
+                                              "name":  "",
+                                              "switches":  513,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  49572,
+                                              "name":  "",
+                                              "switches":  3,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  89456,
+                                              "name":  "",
+                                              "switches":  1,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  62888,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  77928,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  56160,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  82052,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  77404,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  26728,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  68964,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          },
+                                          {
+                                              "tid":  83344,
+                                              "name":  "",
+                                              "switches":  0,
+                                              "cpu_core_pct":  0
+                                          }
+                                      ]
+                      }
+                  ],
+    "signal_after":  {
+                         "publisher_pid":  91448,
+                         "publisher_started":  134384139850847612,
+                         "activity":  {
+                                          "pause_background":  false,
+                                          "reason":  "idle",
+                                          "foreground_pid":  27116
+                                      }
+                     },
+    "local_time":  "2026-11-06T07:49:05.5640199+03:00"
+}

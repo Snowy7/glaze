@@ -1,4 +1,4 @@
-//! Opt-in fullscreen/presentation hint, not a game classifier. No polling or injection.
+//! Fullscreen/presentation hint, not a game classifier. No idle polling or injection.
 //! Install on a message-pumping thread; drop removes hooks/window and publication.
 //! Cross-process clients watch `game-activity.json` and wait on the publisher's
 //! process handle as well, so a crash cannot leave them paused indefinitely.
@@ -218,7 +218,7 @@ thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
 }
 
-/// Only constructed when `system.game_activity` is true. Owns no worker thread/timer.
+/// Only constructed while game activity is enabled. No worker; one 1 Hz timer only while paused.
 /// One publisher per desktop session (core owns it); bound to the installing thread.
 pub struct GameWatcher {
     hooks: Vec<HWINEVENTHOOK>,

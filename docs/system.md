@@ -101,7 +101,8 @@ explain the tradeoffs and evidence limits.
 
 - `classify(notification_state: Option<i32>, foreground_covers_monitor: bool, foreground_pid: u32) -> Activity`:
   pure policy, prioritizing `QUNS_RUNNING_D3D_FULL_SCREEN`, `QUNS_PRESENTATION_MODE`, `QUNS_BUSY`, then
-  monitor coverage. Quiet time alone does not pause anything.
+  monitor coverage. **Busy requires actual foreground monitor coverage**; it cannot latch a
+  pause after exit, minimize or focus-away. Quiet time alone does not pause anything.
 - `covers_monitor(window: [i32; 4], monitor: [i32; 4]) -> bool`: physical screen rectangles
   `[left, top, right, bottom]`, including negative monitor coordinates and one-pixel tolerance.
 - `Activity { pause_background: bool, reason: Reason, foreground_pid: u32 }`, with
@@ -122,15 +123,18 @@ explain the tradeoffs and evidence limits.
 The watcher has out-of-context foreground, foreground location, minimize and desktop-switch
 WinEvent hooks, plus a hidden top-level window for presentation/display settings broadcasts. It
 queries `SHQueryUserNotificationState` when those events occur. It publishes only when the sampled
-activity changes, by atomic file replacement. It creates no worker thread, periodic timer or
-polling loop and injects nothing. The optional consumer's filesystem watch is also event-driven.
+activity changes, by atomic file replacement. It creates no worker thread and injects nothing.
+Idle has no timer. While paused, one **1 Hz** timer on the existing hidden window rechecks the
+hint/geometry in case Windows misses an event; resume/drop removes it. Consumers use event-driven
+filesystem watches, with no polling timer.
 [WinEvent contract](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwineventhook),
 [notification-state limitations](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shqueryusernotificationstate).
 
 This is a conservative background-pause **hint**, not identification of a running game. Fullscreen
 video, editors and presentations can match. Windowed games may not match. Notification state has
 no fullscreen start/stop notification of its own; foreground/geometry events are the trigger, so
-internal state changes without one can remain unseen until the next relevant event. The foreground
+idle-to-active internal changes without one can remain unseen until the next relevant event.
+An existing pause is rechecked once a second so missed exit events cannot strand it. The foreground
 geometry check excludes Explorer's desktop/taskbars and the publishing process. It uses a scoped
 per-monitor-DPI-aware thread context for physical coordinates. The observer retains memory while
 enabled: zero rendering/jobs and literal zero product footprint are different policies.
@@ -153,6 +157,8 @@ The shell drops game-time clock/stats/custom-command deadlines and provider subs
 all screens. Covered screens keep their existing visibility behavior; visible secondary bars
 keep their cached content until resume. Widgets hold fetchers, stats, media/audio and motion.
 The game hold is independent of tray pause, battery, lock and display-off holds.
+The shared shell WinEvent source, including its 25 ms event-batching sleep, is released during
+the hold. Resume recreates it and takes fresh bar/widget window snapshots before reconciliation.
 The desktop menu's mouse hook and the tray-host worker also leave during games, returning
 notification-area ownership to Explorer until resume. This avoids handling a game's mouse
 input or third-party tray updates while the shell is quiescent.
@@ -218,10 +224,11 @@ and a fresh watcher acquired the abandoned lease and removed the stale publicati
 | Disabled preferences | No retained controller allocation, hook, timer or worker; crash recovery still runs at startup |
 
 The [idle measurement](../crates/tweaks/evidence/game-activity-idle.json) excludes startup. The
-[lifecycle probe](../crates/tweaks/evidence/game-activity-live.txt) received a Busy notification-state
-change, but Windows did not grant its child foreground focus. **A real foreground fullscreen
-enter/resize/exit sequence remains unverified live.** Geometry and policy unit tests pass; the
-probe did not inject input to force focus. There was no game/PresentMon performance benchmark.
+[initial lifecycle probe](../crates/tweaks/evidence/game-activity-live.txt) received a Busy hint,
+but Windows did not grant its child foreground focus. The later
+[owned game lifecycle](../crates/core/evidence/game-lifecycle.json) now verifies focus-away,
+minimize and exit. [Consumer assertions](../crates/core/evidence/game-lifecycle-consumers.json)
+verify three shell/helper resumes with unchanged PIDs. There was no game/PresentMon frame-time benchmark.
 No performance improvement is inferred from preference readback.
 
 Config tests: 20 passed. Tweaks tests: 41 passed. Core: 16 passed, four ignored. Shell: 140 passed,
