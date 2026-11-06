@@ -1,7 +1,7 @@
 use super::{
     Command,
     controls::{notice, row},
-    editors::{field, select},
+    editors::{action_button, field, select},
 };
 use crate::{
     actions::{Action, Edit, FieldId},
@@ -11,6 +11,112 @@ use crate::{
 };
 use mypaper_ui::controls::key;
 use serde_json::{Value, json};
+
+/// Pick an installed app for a launcher entry; names and resolved targets are one edit.
+pub fn launcher(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    path: &str,
+    items: &[Value],
+    index: Option<usize>,
+) {
+    let query_id = FieldId::Text(
+        DocId::Studio,
+        format!("/panel/draft/apps/{:x}", key((path, index))).into(),
+    );
+    let query = app.text(&query_id).trim().to_lowercase();
+    field(
+        app,
+        b,
+        c,
+        query_id,
+        if index.is_some() {
+            "Choose an app"
+        } else {
+            "Add an app"
+        },
+        "Search installed apps",
+        "",
+    );
+    let apps = super::icons::apps();
+    let mut count = 0;
+    for (name, target) in apps
+        .iter()
+        .filter(|(name, _)| name.to_lowercase().contains(&query))
+        .take(if query.is_empty() { 4 } else { 6 })
+    {
+        let mut next = items.to_vec();
+        let value = json!({"label":name,"target":target});
+        if let Some(index) = index {
+            if let Some(item) = next.get_mut(index) {
+                *item = value;
+            }
+        } else {
+            next.push(value);
+        }
+        row(
+            b,
+            c,
+            Some(crate::theme::glyph::APP),
+            name,
+            "",
+            "",
+            Some(
+                index
+                    .and_then(|i| items.get(i))
+                    .is_some_and(|item| item["target"] == *target),
+            ),
+            Action::Set(Edit::new(DocId::Widgets, path, "Launcher app"), json!(next)),
+        );
+        count += 1;
+    }
+    if count == 0 {
+        notice(
+            b,
+            c,
+            "No installed apps match. Use Advanced target for a path or link.",
+        );
+    }
+    if index.is_none() {
+        let advanced = key(("launcher-manual", path));
+        action_button(b, c, "Advanced target", Action::More(advanced));
+        if app.is_open(advanced) {
+            let label_id = FieldId::Text(
+                DocId::Studio,
+                format!("/panel/draft/launcher-name{path}").into(),
+            );
+            let target_id = FieldId::Text(
+                DocId::Studio,
+                format!("/panel/draft/launcher-target{path}").into(),
+            );
+            field(app, b, c, label_id.clone(), "Name", "App or link name", "");
+            field(
+                app,
+                b,
+                c,
+                target_id.clone(),
+                "Target",
+                "Path, app ID or link",
+                "",
+            );
+            let label = app.text(&label_id).trim();
+            let target = app.text(&target_id).trim();
+            let mut next = items.to_vec();
+            next.push(json!({"label":if label.is_empty() {target} else {label},"target":target}));
+            super::controls::button(
+                b,
+                mypaper_ui::Rect::new(c.x, c.y, c.w, b.px(30.0)),
+                "Add target",
+                None,
+                false,
+                !target.is_empty(),
+                Action::Set(Edit::new(DocId::Widgets, path, "Launcher app"), json!(next)),
+            );
+            c.y += b.px(38.0);
+        }
+    }
+}
 
 pub fn font(app: &App, b: &mut B, c: &mut Col, edit: Edit, current: &str) {
     let fonts = app

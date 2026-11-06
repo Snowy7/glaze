@@ -32,6 +32,19 @@ fn shortcuts() -> &'static BTreeMap<String, PathBuf> {
     })
 }
 
+/// Installed Start menu apps, kept in the same read-only catalog as the icon resolver.
+pub fn apps() -> Vec<(String, String)> {
+    shortcuts()
+        .values()
+        .filter_map(|path| {
+            Some((
+                path.file_stem()?.to_str()?.to_owned(),
+                path.display().to_string(),
+            ))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 pub fn fixture_pins() -> Vec<serde_json::Value> {
     let mut pins = vec![];

@@ -46,11 +46,10 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     let base = format!("/instances/{index}");
     let resolved = manifest.resolve_settings(&instance.settings);
     let mut groups = Vec::new();
-    for setting in manifest
-        .settings
-        .iter()
-        .filter(|s| crate::panel::options::visible(&instance.widget, s, &resolved))
-    {
+    for setting in manifest.settings.iter().filter(|s| {
+        !matches!(s, Setting::Font { .. })
+            && crate::panel::options::visible(&instance.widget, s, &resolved)
+    }) {
         let group = legacy::group_of(setting).unwrap_or("Options");
         if !groups.contains(&group) {
             groups.push(group);
@@ -64,14 +63,17 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             }
             for setting in manifest.settings.iter().filter(|s| {
                 legacy::group_of(s).unwrap_or("Options") == heading
+                    && !matches!(s, Setting::Font { .. })
                     && crate::panel::options::visible(&instance.widget, s, &resolved)
             }) {
                 manifest_control(app, b, c, &base, &resolved, setting, instance, manifest);
             }
         });
     }
-    size_controls(b, c, instance);
-    notice(b, c, "Drag the corner brackets on the desktop to resize.");
+    group(b, c, "Size", |b, c| {
+        size_controls(b, c, instance);
+        notice(b, c, "Drag the corner brackets on the desktop to resize.");
+    });
     group(b, c, "Its look", |b, c| {
         let own = instance.appearance != Default::default();
         let inherited = crate::panel::widget_look::inherited_style(app);
@@ -108,60 +110,62 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             let effective = instance
                 .appearance
                 .over(&layout.appearance.over(&mypaper_widgets::look::defaults()));
+            let mut sliders = Vec::new();
             if uses[0] {
-                let opacity = effective.opacity.unwrap_or(0.46) as f64;
-                material_row(
-                    b,
-                    c,
-                    "Clarity",
-                    1.0 - opacity,
-                    (0.0, 1.0, 0.01),
-                    &format!("{:.0}%", (1.0 - opacity) * 100.0),
-                    Edit::new(
+                sliders.push(crate::panel::material::Slider {
+                    label: "Clarity",
+                    value: 1.0 - effective.opacity.unwrap_or(0.46) as f64,
+                    max: 1.0,
+                    edit: Edit::new(
                         DocId::Widgets,
                         format!("/_panel/clarity{base}/appearance/opacity"),
                         "Clarity",
                     ),
-                );
+                });
             }
             if uses[1] {
-                let blur = effective.blur.unwrap_or(12.0) as f64;
-                material_row(
-                    b,
-                    c,
-                    "Blur",
-                    blur,
-                    (0.0, 32.0, 1.0),
-                    &format!("{blur:.0} px"),
-                    Edit::new(DocId::Widgets, format!("{base}/appearance/blur"), "Blur"),
-                );
+                sliders.push(crate::panel::material::Slider {
+                    label: "Blur",
+                    value: effective.blur.unwrap_or(12.0) as f64,
+                    max: 32.0,
+                    edit: Edit::new(DocId::Widgets, format!("{base}/appearance/blur"), "Blur"),
+                });
             }
-            text(
-                b,
-                Rect::new(c.x, c.y, c.w, height(b, 26.0)),
-                "Tint",
-                13.0,
-                400,
-                b.p.ink1,
-                Align::Start,
-            );
-            c.y += height(b, 28.0);
-            crate::panel::colors::swatches(
+            crate::panel::material::block(
                 app,
                 b,
                 c,
-                &Edit::new(DocId::Widgets, format!("{base}/appearance/tint"), "Tint"),
+                &sliders,
+                Edit::new(DocId::Widgets, format!("{base}/appearance/tint"), "Tint"),
                 app.get(DocId::Widgets, &format!("{base}/appearance/tint")),
                 false,
-                false,
-                &[
-                    [139, 158, 183],
-                    [127, 174, 142],
-                    [200, 141, 60],
-                    [230, 230, 230],
-                ],
             );
             action_button(b, c, "Follow Look", reset);
+        }
+        select(
+            b,
+            c,
+            "Background",
+            app.get(DocId::Widgets, &format!("{base}/appearance/surface"))
+                .cloned()
+                .unwrap_or(Value::Null),
+            Edit::new(
+                DocId::Widgets,
+                format!("{base}/appearance/surface"),
+                "Background",
+            ),
+            vec![
+                (Value::Null, "From Look".into()),
+                (json!("none"), "None".into()),
+                (json!("glass"), "Glass".into()),
+                (json!("solid"), "Solid".into()),
+            ],
+        );
+        for setting in manifest.settings.iter().filter(|s| {
+            matches!(s, Setting::Font { .. })
+                && crate::panel::options::visible(&instance.widget, s, &resolved)
+        }) {
+            manifest_control(app, b, c, &base, &resolved, setting, instance, manifest);
         }
     });
     let half = (c.w - b.px(8.0)) / 2.0;
@@ -189,16 +193,6 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
 
 /// Wide and Tall measure grid cells, with separate named steppers on the same line.
 fn size_controls(b: &mut B, c: &mut Col, instance: &Instance) {
-    text(
-        b,
-        Rect::new(c.x, c.y, c.w, height(b, 24.0)),
-        "Size",
-        13.0,
-        500,
-        b.p.ink1,
-        Align::Start,
-    );
-    c.y += height(b, 27.0);
     let gap = b.px(12.0);
     let width = (c.w - gap) / 2.0;
     let h = height(b, 34.0);
@@ -252,48 +246,6 @@ fn size_controls(b: &mut B, c: &mut Col, instance: &Instance) {
         }
     }
     c.y += h + b.px(6.0);
-}
-
-fn material_row(
-    b: &mut B,
-    c: &mut Col,
-    label: &str,
-    value: f64,
-    range: (f64, f64, f64),
-    readout: &str,
-    edit: Edit,
-) {
-    let stacked = c.w < b.px(340.0) || b.t.text_scale > 1.0;
-    let h = height(b, 38.0);
-    text(
-        b,
-        Rect::new(
-            c.x,
-            c.y,
-            if stacked { c.w } else { b.px(80.0) },
-            if stacked { height(b, 24.0) } else { h },
-        ),
-        label,
-        13.0,
-        400,
-        b.p.ink1,
-        Align::Start,
-    );
-    if stacked {
-        c.y += height(b, 24.0);
-    }
-    let inset = if stacked { 0.0 } else { b.px(84.0) };
-    b.slider(
-        key(("widget-material", edit.path.as_ref())),
-        Rect::new(c.x + inset, c.y, c.w - inset, h),
-        value,
-        range,
-        readout,
-        b.px(58.0),
-        label,
-        Action::Slider(edit),
-    );
-    c.y += h;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -350,14 +302,25 @@ fn manifest_control(
                     )
                 })
                 .collect();
-            crate::ui::tiles(
+            text(
+                b,
+                Rect::new(c.x, c.y, c.w, height(b, 24.0)),
+                label,
+                13.0,
+                500,
+                b.p.ink1,
+                Align::Start,
+            );
+            c.y += height(b, 28.0);
+            let picture_height = b.px(184.0);
+            crate::panel::choosers::draw(
+                app,
                 b,
                 c,
-                key(("panel-faces", name)),
-                options.len().min(2),
-                false,
+                key(("panel-faces", &instance.instance, name)),
+                picture_height,
                 &tiles,
-                |b, i, pic| face(app, b, instance, manifest, name, options[i].0, pic),
+                |b, index, rect| face(app, b, instance, manifest, name, options[index].0, rect),
             );
         }
         Setting::Number {
@@ -383,7 +346,7 @@ fn manifest_control(
             );
             let unit = number_unit(name, &schema);
             let shown = number_readout(value, &unit);
-            material_row(
+            crate::panel::material::row(
                 b,
                 c,
                 label,
@@ -482,7 +445,10 @@ fn manifest_control(
             for (i, item) in items.iter().enumerate() {
                 let summary = fields
                     .iter()
-                    .filter(|f| name != "zones" || f["key"] != "tz")
+                    .filter(|f| {
+                        (name != "zones" || f["key"] != "tz")
+                            && (instance.widget != "launcher" || f["key"] != "target")
+                    })
                     .filter_map(|f| f["key"].as_str().and_then(|k| item[k].as_str()))
                     .collect::<Vec<_>>()
                     .join(" · ");
@@ -514,6 +480,9 @@ fn manifest_control(
                             continue;
                         };
                         let label = schema["label"].as_str().unwrap_or(name);
+                        if instance.widget == "launcher" && name == "target" {
+                            continue;
+                        }
                         let field_path = format!("{path}/{i}/{}", crate::docs::token(name));
                         let value = item
                             .get(name)
@@ -598,10 +567,28 @@ fn manifest_control(
                             ),
                         }
                     }
+                    if instance.widget == "launcher" && name == "shortcuts" {
+                        crate::panel::pickers::launcher(app, b, c, &path, &items, Some(i));
+                        let advanced = key(("launcher-target", path.as_str(), i));
+                        action_button(b, c, "Advanced target", Action::More(advanced));
+                        if app.is_open(advanced) {
+                            field(
+                                app,
+                                b,
+                                c,
+                                FieldId::Text(DocId::Widgets, format!("{path}/{i}/target").into()),
+                                "Target",
+                                "Path, app ID or link",
+                                item["target"].as_str().unwrap_or(""),
+                            );
+                        }
+                    }
                 }
             }
             if max_items.is_none_or(|max| items.len() < max) {
-                if name == "zones" {
+                if instance.widget == "launcher" && name == "shortcuts" {
+                    crate::panel::pickers::launcher(app, b, c, &path, &items, None);
+                } else if name == "zones" {
                     crate::panel::pickers::zones(
                         app,
                         b,
@@ -903,23 +890,25 @@ pub(super) fn face(
         let plate_index = usize::from(
             !standalone && matches!(list.ops.first(), Some(mypaper_ui::Op::RoundedImage { .. })),
         );
-        list.ops.insert(
-            plate_index,
-            mypaper_ui::Op::Fill {
-                rect: Rect::new(0.0, 0.0, width as f32, height as f32),
-                radius: resolved_appearance.radius.unwrap_or(22.0),
-                color: resolved_appearance
-                    .tint
-                    .map_or(crate::panel::tokens::hex(0x344052), |color| {
-                        mypaper_ui::Rgba::rgb8(color.0, 1.0)
-                    })
-                    .with_alpha(resolved_appearance.opacity.unwrap_or(0.85)),
-            },
-        );
+        if resolved_appearance.surface != Some(mypaper_theme::Surface::None) {
+            list.ops.insert(
+                plate_index,
+                mypaper_ui::Op::Fill {
+                    rect: Rect::new(0.0, 0.0, width as f32, height as f32),
+                    radius: resolved_appearance.radius.unwrap_or(22.0),
+                    color: resolved_appearance
+                        .tint
+                        .map_or(crate::panel::tokens::hex(0x344052), |color| {
+                            mypaper_ui::Rgba::rgb8(color.0, 1.0)
+                        })
+                        .with_alpha(resolved_appearance.opacity.unwrap_or(0.85)),
+                },
+            );
+        }
         let mut ui = mypaper_ui::Ui::new().ok()?;
         let native = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, width, height).ok()?);
         // Cache only the picture's size, not a native widget-sized raster per gallery tile.
-        let thumb_width = 224;
+        let thumb_width = if standalone { 224 } else { 440 };
         let thumb_height = (thumb_width * height / width).max(1);
         let mut reduced = mypaper_ui::DisplayList::default();
         reduced.ops.push(mypaper_ui::Op::Image {
