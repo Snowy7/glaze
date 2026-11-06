@@ -25,9 +25,9 @@ keep its shaders, pipeline and parameter values as they are.
    opaque face.
 6. **A soft drop shadow** grows with size and over busy content.
 7. **Shape matters.** One edge, matching the surface exactly. The UI draws no outline on glass
-   (widgets, bar islands, flyouts and the desktop menu only take clicks there). We use quarter-circle
-   corners (`Shape::Circular`) because our surfaces are D2D rounded rectangles. Apple's
-   continuous corners (`Shape::Rounded`) are one switch away once the UI kit draws squircles.
+   (widgets, bar islands, flyouts and the desktop menu only take clicks there). The default is
+   quarter-circle corners (`Shape::Circular`); squircle surfaces use smoothing 0.6 with the same
+   continuous contour in the kit, plate shader and overlay coverage.
 8. **Liquid merging and glass on glass** are in the renderer (smooth-union SDF per container;
    higher layers refract lower glass). Plates don't use containers yet, because our islands
    don't fuse in the UI.
@@ -66,14 +66,19 @@ sent after each `Open` (a new overlay starts at `Style::DEFAULT`).
 | `smoothing` | 0..=1, 0 | corner smoothing: 0 quarter circles, 0.6 iOS's continuous squircle (`Shape::Smooth`); the surface must draw the same corners |
 | `sheen` | 0..=1, unset | the kit's rim light inside the lit (top) edge, 0.5 = the kit's; unset (`None`, or negative on the overlay wire) follows `highlight` |
 | `depth` | 0..=1, unset | the kit's broad rim shade under the lit edge, 0.5 = the kit's; unset follows `highlight` |
-| `fade_ms` (overlays only) | 0..=2000, 300 | how long the glass fades in when it first shows; 0 shows it at once (reduced motion) |
+| `inner_shadow` | 0..=1, 0 | independent soft shade at the bottom-facing inner edge; zero skips its SDF/blur work |
+| `fade_ms` (overlays only) | 0..=5000, 300 | how long the glass fades in when it first shows; 0 shows it at once (reduced motion) |
+| `fade_curve` (overlays only) | resolved Bézier or physical spring; default cubic ease-out | shell names resolve to the content's curve; compiled into a DirectComposition animation once when glass shows |
 
 Plate blur (`Material::blur`, physical px) now takes up to 256 px (64 DIP at 400 %); frost still
 tops out at 64 pt. Styles resolve into the glass's material and shape only when a plate (or
 overlay) changes, never per frame; brightness and saturation are one multiply-add in the glass
 shader, skipped when both are 1. Plate styles travel in a second section stamped with the
-snapshot's sequence, and only a `Style` request is longer than the old overlay wire, so a shell
-or engine on either side of the change keeps working with defaults.
+snapshot's sequence. `inner_shadow` uses another sequence-stamped section, `<channel>.inner-shadow`
+(392 bytes), leaving the original five-word style stride unchanged. Only a `Style` request is
+longer than the old overlay wire. Engines accept both its original 80-byte form (new fields
+default) and its extended 104-byte form. A new shell retries the original form, with the supported
+2,000 ms cap, when an older engine rejects the extension; its other optics still work.
 
 Glass follows the scheme, never the content (`adapt_to_content` off): our labels follow the
 surface's colours. Plates move exactly as published (`Scene::place`, since the shell owns motion);
@@ -189,6 +194,58 @@ to 77.3 mid-bar and rising to 95.7 at the bottom, a gradient under every label; 
 top line (90.3), a flat face (77-79) from row 2 to row 21, and the bottom rim in rows 22-23. The
 glass costs no more: glass-only frames 2.39 ms median on the iGPU (2.48 ms before, the fixture's
 40 pt bar now has a shallower lens).
+
+## Engine parity (6 November 2026)
+
+C10, C12 and C14 finish the [bars handoff](bars.md#finer-glass-controls-2026-11-06).
+For smoothed overlays, `Material::clip_to_shape` makes the shader's own continuous coverage the
+clip and suppresses its outer shadow/hairline; DirectComposition supplies only the rectangular
+bound. The circular/default path is unchanged. A visible restyle commits its new clip with the
+matching shader frame, avoiding an intermediate mismatched contour.
+
+The bars' legacy `look.glass.depth` now maps, times glass intensity, to
+`mypaper_glass_ipc::Style::inner_shadow` and overlay `request::Style::inner_shadow`.
+This is a bottom-facing inset shade, independent of the engine's existing top-rim `depth`.
+Unset is zero. It resolves with the plate/overlay material, and at zero the shader skips its
+distance/blur calculation entirely. It occupies an unused GPU material slot; GPU buffers keep
+their existing sizes. `mypaper_ui::glass::GlassStyle` carries the same field through
+`Tokens::glass_style`, menus, flyouts and bars.
+
+Glass takes the same resolved show/open duration and curve as the content, including the full
+5,000 ms limit, every named curve, custom cubic Béziers and physical springs. The UI carries
+`GlassStyle::fade_curve: Option<transition::Easing>`; the wire carries
+`request::FadeCurve::{DEFAULT, bezier([f32; 4]), spring(mass, stiffness, damping, seconds)}`.
+At first show, the engine builds DirectComposition polynomial segments with adaptive subdivision;
+no engine animation frames or curve-sampling timer were added. The default wire curve retains
+the original cubic polynomial exactly. Disabled/reduced motion sends zero milliseconds and
+settles opacity immediately. Glass slides remain a stationary fade to avoid capture flashes.
+
+Offline verification (`CARGO_TARGET_DIR=C:\mypaper-targets\engine-perf`):
+
+- `lab::lab`, rain-city, RTX 4070 SUPER, 2560x1440, eight plates, captures at 3 and 12 seconds:
+  default final and kept frames are **100% bit-identical**, largest difference **0/255**.
+- GPU timestamps, 150 frames per run: baseline glass-only median **0.090 ms**, after runs
+  **0.088 and 0.092 ms**; glass on wallpaper-change frames **0.127 ms** before and
+  **0.101 / 0.114 ms** after. No added shadow SDF/blur work at defaults and no sustained GPU
+  regression observed; the small timing differences are not claimed as an improvement.
+- `lab::glass_parity` renders a transparent 512x320 continuous overlay fixture. Its new bottom
+  shadow leaves the top pixel and every alpha byte unchanged; bottom BGRA changes from
+  `[181,196,210,255]` to `[150,166,180,255]`. At radius 48, 18 sampled corner pixels retain
+  alpha that a circular clip would trim (up to 49/255). The outside stays transparent.
+- Curve tests compare compositor pieces against 10,001 samples plus endpoint probes, within
+  one alpha step, including extreme Béziers and the fastest permitted undamped spring. Shell
+  tests match every named curve, a custom Bézier and an overdamped spring to the content's
+  resolved transition. Five-second duration and reduced-motion policy are covered.
+- Compatibility: the original 1,928-byte style section keeps its five-word stride. Tests cover
+  mismatched/missing extension stamps and a real message-only legacy receiver that rejects
+  104 bytes then accepts the 80-byte fallback with its original optics and 2,000 ms cap.
+
+Raw lab frames/timestamps are `C:\mypaper-targets\engine-parity\{before,after,after-final}`;
+the inspected overlay images and metrics are in its `overlay` directory. Reproduce the overlay
+fixture with `MYPAPER_PARITY_OUT=<directory>` and
+`cargo test -p mypaper-wallpaper lab::glass_parity -- --ignored --exact --nocapture`.
+The main lab additionally accepts `MYPAPER_LAB_STYLE=brightness,saturation,smoothing,sheen,depth,inner_shadow`
+(negative sheen/depth means unset), applied to captures and timed frames.
 
 ## Images
 

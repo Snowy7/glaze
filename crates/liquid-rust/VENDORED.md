@@ -48,3 +48,8 @@ Each is marked `mypaper:` in the source.
   the same factor (`ShapeGpu.extra.y`, blended with the depth as shapes fuse). Upstream's 30 pt
   lens covered a 24 pt menu bar edge to edge. The factor is exactly 1 from about 166 pt, so large
   glass is bit-identical (`docs/glass.md`, Thin glass).
+- Independent `Material::inner_shadow`: a bottom-facing inset shade, skipped at zero. The
+  strength uses `MaterialGpu.dark_b.z`, so buffers retain their original size. `clip_to_shape`
+  uses `.w` to suppress the outer shadow/hairline for continuous overlays: their shader coverage
+  defines the contour, with a rectangular DirectComposition bound. Both default to zero/off,
+  preserving the default lab frames bit for bit (`docs/glass.md`, Engine parity).
