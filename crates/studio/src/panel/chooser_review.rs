@@ -43,7 +43,7 @@ fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: b
             .targets
             .iter()
             .find(|target| target.action == action)
-            .unwrap();
+            .expect("hovered action must be present on the review page");
         app.input.pointer = Some(Point::new(target.rect.left + 30.0, target.rect.top + 10.0));
         app.input.hover = Some(target.key);
     }
@@ -161,6 +161,7 @@ fn render_chooser_review() {
                 starter: 0,
                 taskbar: 0,
             });
+            starter.panel.as_mut().unwrap().page = Page::FirstRun;
             shot(
                 &mut starter,
                 &mut ui,

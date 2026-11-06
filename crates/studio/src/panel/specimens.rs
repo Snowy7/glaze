@@ -416,12 +416,7 @@ pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
     };
     let ink = hex(if light { 0x1a1a1a } else { 0xf5f5f5 });
     let plate = if look == 1 {
-        app.get(DocId::Config, "/look/material/tint")
-            .and_then(serde_json::Value::as_str)
-            .and_then(mypaper_config::Color::parse)
-            .map_or(current_theme.color.surface, |color| {
-                Rgba::rgb8(color.0, 1.0)
-            })
+        super::material::look_tint(app, style)
     } else {
         hex(if light { 0xf5f5f5 } else { 0x24262b })
     };

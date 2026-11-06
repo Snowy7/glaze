@@ -36,14 +36,16 @@ pub fn row(
     readout: &str,
     edit: Edit,
 ) {
-    let stacked = c.w < b.px(340.0) || b.t.text_scale > 1.0;
+    let label_width =
+        (b.measure(label, &super::controls::font(b, 13.0, 400)).0 + b.px(8.0)).max(b.px(84.0));
+    let stacked = c.w < b.px(340.0) || b.t.text_scale > 1.0 || label_width > c.w * 0.45;
     let h = height(b, 38.0);
     text(
         b,
         Rect::new(
             c.x,
             c.y,
-            if stacked { c.w } else { b.px(84.0) },
+            if stacked { c.w } else { label_width },
             if stacked { height(b, 24.0) } else { h },
         ),
         label,
@@ -55,7 +57,11 @@ pub fn row(
     if stacked {
         c.y += height(b, 24.0);
     }
-    let inset = if stacked { 0.0 } else { b.px(88.0) };
+    let inset = if stacked {
+        0.0
+    } else {
+        label_width + b.px(4.0)
+    };
     b.slider(
         key(("panel-material", edit.doc, edit.path.as_ref())),
         Rect::new(c.x + inset, c.y, c.w - inset, h),
@@ -191,4 +197,32 @@ pub fn look_value(app: &App, style: mypaper_config::look::Style, id: &str) -> f6
         "highlight" => defaults.map_or(0.0, |m| m.highlight),
         _ => 0.0,
     }) as f64
+}
+
+/// The Windows matching specimen uses the same tint source as the desktop's current material.
+pub fn look_tint(app: &App, style: mypaper_config::look::Style) -> mypaper_ui::Rgba {
+    use crate::docs::DocId;
+    let theme = super::specimens::style_theme(app, style);
+    let current = app
+        .get(DocId::Config, "/look/material/tint")
+        .and_then(Value::as_str);
+    if current == Some("auto") {
+        return super::specimens::wallpaper_color(app).unwrap_or(theme.color.surface);
+    }
+    if let Some(color) = current.and_then(mypaper_config::Color::parse) {
+        return mypaper_ui::Rgba::rgb8(color.0, 1.0);
+    }
+    if app.get(DocId::Config, "/look/style").is_none()
+        && let Some(wallpaper) = app
+            .library
+            .active()
+            .and_then(|index| app.library.items.get(index))
+        && let Some(color) = super::saving::theme_value(app, wallpaper)
+            .pointer("/widgets/appearance/tint")
+            .and_then(Value::as_str)
+            .and_then(mypaper_config::Color::parse)
+    {
+        return mypaper_ui::Rgba::rgb8(color.0, 1.0);
+    }
+    theme.color.surface
 }
