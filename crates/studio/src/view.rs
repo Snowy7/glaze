@@ -2,9 +2,7 @@
 //! All editors are the shared panel pages. Navigation and stage zoom never edit documents.
 
 use crate::panel::tokens::radius;
-use mypaper_ui::controls::{
-    Align, Behavior, ButtonKind, Font, Glyph, ScrollArea, Target, key,
-};
+use mypaper_ui::controls::{Align, Behavior, Font, Glyph, ScrollArea, Target, key};
 use mypaper_ui::{Chrome, DisplayList, Point, Rect, Role};
 use serde_json::Value;
 
@@ -912,18 +910,18 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
             |i| Action::Panel(Command::StageZoom(i == 1)),
         );
         end = zoom.left - b.px(8.0);
-        if page == Page::Look {
-            let windows = Rect::new(end - b.px(74.0), y, b.px(74.0), b.px(28.0));
-            b.button(
-                key("look-windows"),
-                windows,
-                "Windows",
-                None,
-                ButtonKind::Ghost,
+        if matches!(page, Page::Look | Page::Windows) {
+            let scope = Rect::new(end - b.px(160.0), y, b.px(160.0), b.px(28.0));
+            b.segmented(
+                key("look-stage-scope"),
+                scope,
+                &["Desktop", "Windows"],
+                Some(usize::from(page == Page::Windows)),
+                "Look preview",
                 true,
-                Action::Panel(Command::Open(Page::Windows)),
+                |i| Action::Panel(Command::Open(if i == 0 { Page::Look } else { Page::Windows })),
             );
-            end = windows.left - b.px(8.0);
+            end = scope.left - b.px(8.0);
         }
     }
     let mut x = bar.left + b.px(12.0);

@@ -387,7 +387,7 @@ pub fn style_theme(app: &App, style: Style) -> mypaper_ui::Theme {
     )
 }
 
-/// Pick a bright, quiet crop so the material, rather than the wallpaper, leads.
+/// Keep bright detail behind the plate: clear, frosted and opaque must read at card size.
 fn material_backdrop(app: &App, size: (u32, u32)) -> Arc<Image> {
     material_backdrop_from(app, size, wallpaper(app))
 }
@@ -404,7 +404,7 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
     let (width, height) = (size.0.max(1) as usize, size.1.max(1) as usize);
     let pixels = if let Some(source) = source {
         let aspect = width as f32 / height as f32;
-        let sw = (source.width as f32 * 0.58).min(source.height as f32 * aspect);
+        let sw = (source.width as f32 * 0.46).min(source.height as f32 * aspect);
         let sh = sw / aspect;
         let mut best = (f32::MIN, 0.0, 0.0);
         for row in 0..4 {
@@ -429,7 +429,7 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
                     }
                 }
                 let mean = sum / 144.0;
-                let score = mean - (squares / 144.0 - mean * mean) * 0.8;
+                let score = mean * 0.45 + (squares / 144.0 - mean * mean) * 5.0;
                 if score > best.0 {
                     best = (score, x, y);
                 }
@@ -437,7 +437,11 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
         }
         let mut pixels = area_crop(&source, Rect::new(best.1, best.2, sw, sh), size).pixels;
         // Expose a dim wallpaper crop so clear glass and opaque plates remain comparable.
-        let lift = ((0.65 - best.0) / (1.0 - best.0).max(0.01)).clamp(0.0, 0.6);
+        let mean = pixels
+            .chunks_exact(4)
+            .map(|p| (p[0] as f32 + p[1] as f32 + p[2] as f32) / 765.0)
+            .sum::<f32>() / (width * height) as f32;
+        let lift = ((0.52 - mean) / (1.0 - mean).max(0.01)).clamp(0.0, 0.3);
         for pixel in pixels.chunks_exact_mut(4) {
             for channel in &mut pixel[..3] {
                 *channel = (*channel as f32 * (1.0 - lift) + 255.0 * lift).round() as u8;
@@ -543,7 +547,7 @@ impl MaterialSample {
             highlight: material.map_or(0.0, |m| m.highlight),
             tint: theme.color.surface,
             radius: theme.radius.surface,
-            edge: matches!(style, Style::Solid | Style::Fluent),
+            edge: matches!(style, Style::Solid | Style::Fluent | Style::Mono),
         }
     }
 
@@ -577,6 +581,100 @@ pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
     material_sample(app, b, r, MaterialSample::defaults(app, style), None);
 }
 
+/// Optical details need pixel coverage even in a 130-pixel card. The material values
+/// still come from the kit; the lens and grain are drawn here rather than by the engine.
+fn paint_material(
+    background: &Image,
+    sample: MaterialSample,
+    surface: Rect,
+    scale: f32,
+    radius: f32,
+) -> Image {
+    let (width, height) = (background.width as usize, background.height as usize);
+    let style = sample.style;
+    let alpha = match style {
+        Style::Solid => 1.0,
+        Style::Oneui => (1.0 - sample.clarity) * (1.0 + sample.clarity * sample.tint.a),
+        _ => 1.0 - sample.clarity,
+    };
+    let frost = if style == Style::Liquid { 0.16 } else { 0.6 };
+    let frosted = blur_crop(
+        background.clone(),
+        (sample.blur * scale * frost).round() as usize,
+    );
+    let mut pixels = background.pixels.clone();
+    let radius = radius
+        .min(surface.height() / 2.0)
+        .min(surface.width() / 2.0);
+    let (cx, cy) = (
+        (surface.left + surface.right) / 2.0,
+        (surface.top + surface.bottom) / 2.0,
+    );
+    for y in 0..height {
+        for x in 0..width {
+            let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+            let (qx, qy) = (
+                dx.abs() - (surface.width() / 2.0 - radius),
+                dy.abs() - (surface.height() / 2.0 - radius),
+            );
+            let distance = qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - radius;
+            if distance > 0.5 {
+                continue;
+            }
+            let coverage = (0.5 - distance).clamp(0.0, 1.0);
+            let rim = (1.0 + distance / (12.0 * scale).max(3.0)).clamp(0.0, 1.0);
+            let bend = if style == Style::Liquid {
+                rim * rim * sample.refraction * 26.0 * scale
+            } else {
+                0.0
+            };
+            let sx = (x as f32 - dx.signum() * bend)
+                .round()
+                .clamp(0.0, width as f32 - 1.0) as usize;
+            let sy = (y as f32 - dy.signum() * bend)
+                .round()
+                .clamp(0.0, height as f32 - 1.0) as usize;
+            let from = (sy * width + sx) * 4;
+            let edge = if style == Style::Liquid {
+                rim.powf(3.0) * sample.highlight * if dx + dy < 0.0 { 1.15 } else { 0.5 }
+            } else if sample.edge && distance > -0.85 {
+                match style {
+                    Style::Solid => 0.10,
+                    Style::Mono => 0.52,
+                    _ => 0.65,
+                }
+            } else {
+                0.0
+            };
+            let grain = if style == Style::Fluent {
+                // Stable, neutral acrylic grain; no random state or image allocation.
+                let hash = (x as u32).wrapping_mul(374761393) ^ (y as u32).wrapping_mul(668265263);
+                (((hash ^ (hash >> 13)).wrapping_mul(1274126177) >> 24) as f32 / 255.0 - 0.5) * 15.0
+            } else {
+                0.0
+            };
+            let at = (y * width + x) * 4;
+            for (channel, color) in [sample.tint.b, sample.tint.g, sample.tint.r]
+                .into_iter()
+                .enumerate()
+            {
+                let body =
+                    frosted[from + channel] as f32 * (1.0 - alpha) + color * 255.0 * alpha + grain;
+                let body = body * (1.0 - edge) + 255.0 * edge;
+                pixels[at + channel] = (pixels[at + channel] as f32 * (1.0 - coverage)
+                    + body * coverage)
+                    .round()
+                    .clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    Image {
+        width: background.width,
+        height: background.height,
+        pixels,
+    }
+}
+
 pub fn material_sample(
     app: &App,
     b: &mut B,
@@ -593,7 +691,6 @@ pub fn material_sample(
     } else {
         material_backdrop(app, size)
     };
-    let style = sample.style;
     let cache_key = format!(
         "material:{sample:?}:{}:{}:{:p}",
         desktop_dark(app),
@@ -602,68 +699,23 @@ pub fn material_sample(
     );
     let cached = cached_image(app, &cache_key);
     let image = cached.unwrap_or_else(|| {
-        let (width, height) = (background.width as usize, background.height as usize);
         // Compose a whole weather widget, leaving room around every edge.
         let scale = (r.width() / 280.0).min(r.height() / 180.0);
-        let alpha = 1.0 - sample.clarity;
-        let frosted = blur_crop(
-            background.as_ref().clone(),
-            (sample.blur * scale * 0.35).round() as usize,
+        let surface = Rect::new(
+            r.width() * 0.08,
+            r.height() * 0.10,
+            r.width() * 0.84,
+            r.height() * 0.80,
         );
-        let mut pixels = background.pixels.clone();
-        let tint = sample.tint;
-        for y in 0..height {
-            for x in 0..width {
-                let (cx, cy, hw, hh) = (0.5, 0.5, 0.42, 0.40);
-                let radius = (sample.radius * scale)
-                    .min(height as f32 * hh)
-                    .min(width as f32 * hw);
-                let (dx, dy) = (x as f32 - width as f32 * cx, y as f32 - height as f32 * cy);
-                let (qx, qy) = (
-                    dx.abs() - (width as f32 * hw - radius),
-                    dy.abs() - (height as f32 * hh - radius),
-                );
-                let distance = qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - radius;
-                let at = (y * width + x) * 4;
-                if distance > 0.6 {
-                    continue;
-                }
-                let coverage = (0.6 - distance).clamp(0.0, 1.0);
-                let rim = (1.0 + distance / (5.0 * scale).max(1.0)).clamp(0.0, 1.0);
-                let bend = if style == Style::Liquid {
-                    rim * rim * sample.refraction * 10.0 * scale
-                } else {
-                    0.0
-                };
-                let sx = (x as f32 - dx.signum() * bend)
-                    .round()
-                    .clamp(0.0, width as f32 - 1.0) as usize;
-                let sy = (y as f32 - dy.signum() * bend)
-                    .round()
-                    .clamp(0.0, height as f32 - 1.0) as usize;
-                let from = (sy * width + sx) * 4;
-                let edge = if style == Style::Liquid {
-                    rim.powf(4.0) * sample.highlight * if dx + dy < 0.0 { 0.95 } else { 0.38 }
-                } else if sample.edge && distance > -1.1 * b.s {
-                    0.24
-                } else {
-                    0.0
-                };
-                for (channel, color) in [tint.b, tint.g, tint.r].into_iter().enumerate() {
-                    let sample = frosted[from + channel] as f32;
-                    let body = sample * (1.0 - alpha) + color * 255.0 * alpha;
-                    let body = body * (1.0 - edge) + 255.0 * edge;
-                    pixels[at + channel] = (pixels[at + channel] as f32 * (1.0 - coverage)
-                        + body * coverage)
-                        .round() as u8;
-                }
-            }
-        }
-        let image = Arc::new(Image {
-            width: background.width,
-            height: background.height,
-            pixels,
-        });
+        // Preserve the style's silhouette after reducing a whole widget into a card.
+        let radius = sample.radius
+            * scale
+            * match sample.style {
+                Style::Oneui => 1.7,
+                Style::Solid => 0.55,
+                _ => 1.0,
+            };
+        let image = Arc::new(paint_material(&background, sample, surface, scale, radius));
         remember(app, cache_key, &image);
         image
     });
@@ -749,19 +801,24 @@ fn window_at(app: &App, b: &mut B, r: Rect, look: Option<usize>, thumbnail: bool
         r.height().round().max(1.0) as u32,
     );
     let background = material_backdrop(app, size);
-    crate::stage::image_round(b, r, &background, 1.0, b.px(8.0));
-    let win = if thumbnail { Rect::new(
-        r.left + r.width() * 0.12,
-        r.top + r.height() * 0.18,
-        r.width() * 1.10,
-        r.height() * 1.65,
-    ) } else {
+    let win = if thumbnail {
+        Rect::new(
+            r.left + r.width() * 0.08,
+            r.top + r.height() * 0.12,
+            r.width() * 0.84,
+            r.height() * 0.76,
+        )
+    } else {
         let width = b.px(520.0).min(r.width() - b.px(48.0));
         let height = b.px(340.0).min(r.height() - b.px(48.0));
         Rect::new(r.left + (r.width() - width) / 2.0, r.top + (r.height() - height) / 2.0, width, height)
     };
     let content_start = b.list.ops.len();
-    let scale = if thumbnail { win.width() / 180.0 } else { b.s };
+    let scale = if thumbnail {
+        (win.width() / 180.0).min(win.height() / 112.0)
+    } else {
+        b.s
+    };
     let style = app
         .get(DocId::Config, "/look/style")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -773,7 +830,7 @@ fn window_at(app: &App, b: &mut B, r: Rect, look: Option<usize>, thumbnail: bool
         app.get(DocId::Config, "/look/shape/corners")
             .and_then(serde_json::Value::as_f64)
             .map_or(current_theme.radius.surface, |v| v as f32)
-            * b.s
+            * scale
     } else {
         8.0 * scale
     };
@@ -824,47 +881,35 @@ fn window_at(app: &App, b: &mut B, r: Rect, look: Option<usize>, thumbnail: bool
     };
     let accent = wallpaper_color(app).unwrap_or(hex(0x8b9eb7));
     if look == 1 || look == 2 {
-        let blur = if look == 1 {
-            super::material::look_value(app, style, "blur") as f32
+        let sample = if look == 1 {
+            MaterialSample::look(app, style, true)
         } else {
-            14.0
-        };
-        crate::stage::image_round(
-            b,
-            win,
-            &softened(
-                app,
-                &background,
-                (blur * b.s / 2.0).round() as usize,
-                (
-                    win.width().round().max(1.0) as u32,
-                    win.height().round().max(1.0) as u32,
-                ),
-            ),
-            1.0,
-            radius,
-        );
-    }
-    b.fill(
-        win,
-        radius,
-        plate.with_alpha(match look {
-            0 | 3 => 1.0,
-            1 => {
-                if style == Style::Solid {
-                    1.0
-                } else {
-                    1.0 - super::material::look_value(app, style, "clarity") as f32
-                }
+            MaterialSample {
+                clarity: 0.48,
+                tint: plate,
+                ..MaterialSample::defaults(app, Style::Fluent)
             }
-            _ => 0.45,
-        }),
-    );
+        };
+        let surface = win.offset(-r.left, -r.top);
+        let cache_key = format!(
+            "window-material:{sample:?}:{surface:?}:{scale}:{radius}:{:p}",
+            Arc::as_ptr(&background)
+        );
+        let image = cached_image(app, &cache_key).unwrap_or_else(|| {
+            let image = Arc::new(paint_material(&background, sample, surface, scale, radius));
+            remember(app, cache_key, &image);
+            image
+        });
+        crate::stage::image_round(b, r, &image, 1.0, b.px(8.0));
+    } else {
+        crate::stage::image_round(b, r, &background, 1.0, b.px(8.0));
+        b.fill(win, radius, plate);
+    }
     let caption = Rect::new(
         win.left,
         win.top,
         win.width(),
-        b.px(28.0).min(win.height() * 0.3),
+        (28.0 * scale).min(win.height() * 0.3),
     );
     b.fill(
         caption,
@@ -897,7 +942,7 @@ fn window_at(app: &App, b: &mut B, r: Rect, look: Option<usize>, thumbnail: bool
         Rect::new(
             win.left + 8.0 * scale,
             caption.top,
-            win.width() * 0.6,
+            (win.width() - 76.0 * scale).max(1.0),
             caption.height(),
         ),
         "Files",
@@ -1303,6 +1348,87 @@ fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn card_materials_keep_their_optical_signatures() {
+        let ui = Ui::new().unwrap();
+        let app = crate::goldens::app(true, &ui);
+        let mut background = Image {
+            width: 130,
+            height: 82,
+            pixels: vec![255; 130 * 82 * 4],
+        };
+        for (index, pixel) in background.pixels.chunks_exact_mut(4).enumerate() {
+            pixel[..3].fill(if index % 130 / 6 % 2 == 0 { 40 } else { 220 });
+        }
+        let surface = Rect::new(10.0, 8.0, 110.0, 66.0);
+        let draw = |sample| paint_material(&background, sample, surface, 0.46, 8.0);
+        let center = (41 * 130 + 65) * 4;
+        let solid = MaterialSample::defaults(&app, Style::Solid);
+        let opaque = draw(solid);
+        assert_eq!(&opaque.pixels[center..center + 3], &[30, 28, 28]);
+        let mono = MaterialSample::defaults(&app, Style::Mono);
+        let flat = draw(mono);
+        for (channel, tint) in [mono.tint.b, mono.tint.g, mono.tint.r]
+            .into_iter()
+            .enumerate()
+        {
+            assert_eq!(
+                flat.pixels[center + channel],
+                (background.pixels[center + channel] as f32 * mono.clarity
+                    + tint * 255.0 * (1.0 - mono.clarity))
+                    .round() as u8,
+                "Mono uses the original backdrop pixel, without frost"
+            );
+        }
+        let liquid = MaterialSample::defaults(&app, Style::Liquid);
+        assert_ne!(
+            draw(liquid).pixels,
+            draw(MaterialSample {
+                refraction: 0.0,
+                ..liquid
+            })
+            .pixels
+        );
+        assert_ne!(
+            draw(liquid).pixels,
+            draw(MaterialSample {
+                highlight: 0.0,
+                ..liquid
+            })
+            .pixels
+        );
+        let oneui = MaterialSample::defaults(&app, Style::Oneui);
+        assert_eq!(
+            &draw(MaterialSample {
+                clarity: 1.0,
+                blur: 0.0,
+                ..oneui
+            })
+            .pixels[center..center + 3],
+            &background.pixels[center..center + 3],
+            "the clarity control still reaches clear"
+        );
+        let uniform = Image {
+            width: 130,
+            height: 82,
+            pixels: vec![255; 130 * 82 * 4],
+        };
+        let acrylic = paint_material(
+            &uniform,
+            MaterialSample::defaults(&app, Style::Fluent),
+            surface,
+            0.46,
+            4.0,
+        );
+        let row = (30..100)
+            .map(|x| acrylic.pixels[(41 * 130 + x) * 4])
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            row.len() > 5,
+            "Fluent retains grain even over a uniform backdrop"
+        );
+    }
 
     #[test]
     fn superseded_crops_retire_after_the_replacement_frame_is_presented() {
