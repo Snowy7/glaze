@@ -7,7 +7,8 @@
 //! 1. reads the attach data (helper pid, rules file, log) the helper passed,
 //! 2. subscribes to the visual tree (`AdviseVisualTreeChange`, which first replays the whole
 //!    existing tree as additions, then reports every element added or removed),
-//! 3. sleeps on two handles: the helper process and a change notification on the rules folder.
+//! 3. sleeps on three handles: the helper process, a change notification on the rules folder and
+//!    the session's `recycle` event ([`SessionEvent`]).
 //!
 //! Each added element is matched against the rules on its own UI thread and styled there, with
 //! the value it had before recorded. Each UI thread's theme-brush overrides ([`resources`]) are
@@ -16,6 +17,16 @@
 //! any reason (flag off, quit, panic hotkey, crash) or writes this app's stop marker (its crash
 //! guard), every recorded value and brush is put back and the session ends: no thread, hook or
 //! timer of ours is left in the app. The DLL itself stays mapped (a TAP can't unload safely).
+//!
+//! **Recycling.** XAML Diagnostics keeps every tree root it has reported, and with it the whole
+//! tree, for as long as its object lives, and WinUI 3 never reports a `DesktopWindowXamlSource`
+//! leaving: so while a session holds it, every Explorer window that closes stays in memory. Only
+//! letting go of XAML Diagnostics frees them. When the helper sets `recycle` (after a window
+//! closed), the session ends *without* putting anything back: each UI thread hands what it set
+//! over to the next session (each styled element held, so its handle can't name another object
+//! meanwhile), the session lets go of XAML Diagnostics and sets `ended`, and the helper attaches
+//! again. The next session takes the hand-over, sees the live tree replayed and carries on; the
+//! elements it doesn't see again (the closed windows') are let go of, and so freed.
 //!
 //! XAML Diagnostics' handles don't keep objects alive (see [`Original`]): anything kept is held
 //! by a strong reference and re-resolved to a fresh handle before use. Work for a UI thread is
@@ -36,14 +47,14 @@ use std::io::Write;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, Weak};
 use std::time::Duration;
 
 use mypaper_config::AppRules;
 use windows::Win32::Foundation::{
     CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, CloseHandle, E_INVALIDARG, E_NOTIMPL,
-    E_POINTER, HANDLE, HINSTANCE, HMODULE, HWND, LPARAM, LRESULT, S_FALSE, S_OK, WAIT_OBJECT_0,
-    WAIT_TIMEOUT, WPARAM,
+    E_POINTER, ERROR_ALREADY_EXISTS, GetLastError, HANDLE, HINSTANCE, HMODULE, HWND, LPARAM,
+    LRESULT, S_FALSE, S_OK, WAIT_OBJECT_0, WAIT_TIMEOUT, WPARAM,
 };
 use windows::Win32::Storage::FileSystem::{
     FILE_NOTIFY_CHANGE_FILE_NAME, FILE_NOTIFY_CHANGE_LAST_WRITE, FindCloseChangeNotification,
@@ -58,8 +69,8 @@ use windows::Win32::System::LibraryLoader::{
 };
 use windows::Win32::System::Ole::{IObjectWithSite, IObjectWithSite_Impl};
 use windows::Win32::System::Threading::{
-    GetCurrentProcessId, GetCurrentThreadId, INFINITE, OpenProcess, PROCESS_SYNCHRONIZE,
-    WaitForMultipleObjects,
+    CreateEventW, GetCurrentProcessId, GetCurrentThreadId, INFINITE, OpenProcess,
+    PROCESS_SYNCHRONIZE, SetEvent, WaitForMultipleObjects,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GCW_ATOM, GWLP_USERDATA, GWLP_WNDPROC,
@@ -78,7 +89,7 @@ use crate::xamlom::{
     InstanceHandle, MUTATION_ADD, ParentChildRelation, PropertyChainSource, PropertyChainValue,
     RawBstr, SOURCE_LOCAL, VisualElement, free, free_chain, text,
 };
-use crate::{Attach, CLSID_TAP, Framework};
+use crate::{Attach, CLSID_TAP, Framework, SessionEvent};
 
 /// COM entry point: XAML Diagnostics asks for our class factory.
 ///
@@ -155,12 +166,26 @@ impl IObjectWithSite_Impl for Tap_Impl {
         };
         set_log(Some(attach.log_path()));
         log(&format!("attached ({})", attach.framework));
+        // Both while the helper is still inside its attach call: a helper that exits right
+        // after it is still seen exiting, and it finds the events once the call returns.
+        // SAFETY: SYNCHRONIZE only; closed by `Owned`.
+        let helper = match unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, attach.helper) } {
+            Ok(handle) => Owned(handle),
+            Err(e) => {
+                log(&format!("can't watch the helper ({}): {e}", attach.helper));
+                return Ok(());
+            }
+        };
+        // SAFETY: no preconditions.
+        let pid = unsafe { GetCurrentProcessId() };
+        let recycle = event(SessionEvent::Recycle.name(pid, attach.framework), false);
+        let ended = Ended(event(SessionEvent::Ended.name(pid, attach.framework), true));
         let diagnostics = Sendable(diagnostics);
         // `AdviseVisualTreeChange` from this thread hangs (it waits on the UI thread we are on),
         // so the session runs on its own thread.
         let spawned = std::thread::Builder::new()
             .name("mypaper-app-styler".into())
-            .spawn(move || run(diagnostics, attach));
+            .spawn(move || run(diagnostics, attach, helper, recycle, ended));
         if let Err(e) = spawned {
             log(&format!("no session thread: {e}"));
         }
@@ -176,6 +201,80 @@ impl IObjectWithSite_Impl for Tap_Impl {
 struct Sendable<T>(T);
 // SAFETY: see above; the diagnostics site and tree service may be called from any thread.
 unsafe impl<T> Send for Sendable<T> {}
+
+/// A kernel handle we own, closed on drop.
+struct Owned(HANDLE);
+// SAFETY: a kernel handle may be used and closed from any thread.
+unsafe impl Send for Owned {}
+// SAFETY: as above.
+unsafe impl Sync for Owned {}
+
+impl Drop for Owned {
+    fn drop(&mut self) {
+        // SAFETY: ours, closed once.
+        let _ = unsafe { CloseHandle(self.0) };
+    }
+}
+
+/// One of the session's named events (see [`SessionEvent`]); `None` if it can't be made (then
+/// the session just can't be recycled).
+fn event(name: String, manual_reset: bool) -> Option<Owned> {
+    let wide: Vec<u16> = name.encode_utf16().chain([0]).collect();
+    // SAFETY: a NUL-terminated name; closed by `Owned`.
+    let made = unsafe { CreateEventW(None, manual_reset, false, PCWSTR(wide.as_ptr())) };
+    match made {
+        Ok(handle) => {
+            // SAFETY: reads this thread's last error, set by the call above.
+            if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+                log(&format!("{name} already exists: another session is still attached"));
+            }
+            Some(Owned(handle))
+        }
+        Err(e) => {
+            log(&format!("no {name}: {e}"));
+            None
+        }
+    }
+}
+
+/// Sets the session's `ended` event when dropped. It is [`Session`]'s last field, so it drops
+/// after the XAML Diagnostics references above it: the helper attaches again only once those
+/// are gone (otherwise the old XAML Diagnostics, going last, switches the new one off).
+struct Ended(Option<Owned>);
+
+impl Drop for Ended {
+    fn drop(&mut self) {
+        if let Some(event) = &self.0 {
+            // SAFETY: our own event handle.
+            let _ = unsafe { SetEvent(event.0) };
+        }
+    }
+}
+
+/// How a session ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ending {
+    /// The helper is gone (or the crash guard stopped this app): put everything back.
+    Restore,
+    /// The helper asked to recycle: keep the look and hand it to the next session.
+    Carry,
+}
+
+/// What ended sessions handed over (`Ending::Carry`), per framework, for the next session in
+/// this process (every session of this TAP build shares these statics).
+static CARRIED: Mutex<Vec<(Framework, State)>> = Mutex::new(Vec::new());
+
+fn take_carried(framework: Framework) -> Option<State> {
+    let mut carried = CARRIED.lock().unwrap_or_else(|e| e.into_inner());
+    let at = carried.iter().position(|(f, _)| *f == framework)?;
+    let mut state = carried.swap_remove(at).1;
+    // Handles only this session's XAML Diagnostics knows are found again from held objects;
+    // the application dictionary isn't held, so it is looked up again when needed.
+    for resources in state.resources.values_mut() {
+        resources.forget_dictionary();
+    }
+    Some(state)
+}
 
 static LOG: OnceLock<Option<PathBuf>> = OnceLock::new();
 
@@ -217,6 +316,8 @@ struct Session {
     restyles: AtomicU64,
     /// Removals of elements the map doesn't have (logged when closing, for diagnosis).
     unknown_removals: AtomicU64,
+    /// Last, so it is set only after everything above is let go of.
+    _ended: Ended,
 }
 
 // SAFETY: the tree service is free-threaded; everything else is behind the mutex or atomic.
@@ -250,6 +351,11 @@ struct State {
     resources: HashMap<u32, resources::ThreadResources>,
     /// Brushes whose colour we set (one override per brush).
     recolored: HashSet<InstanceHandle>,
+    /// While ending with `Carry`: the UI threads that haven't handed over yet.
+    handing: HashSet<u32>,
+    /// Styled elements held across a hand-over (by thread), until this session has seen the
+    /// tree again: while held, their handles can't name other objects.
+    adopted: HashMap<InstanceHandle, (u32, Held)>,
 }
 
 /// One UI thread we work on: the message-only window its jobs are posted to, and that window's
@@ -428,17 +534,32 @@ impl Node for At<'_> {
     }
 }
 
-fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
+fn run(
+    diagnostics: Sendable<IXamlDiagnostics>,
+    attach: Attach,
+    helper: Owned,
+    recycle: Option<Owned>,
+    ended: Ended,
+) {
     // SAFETY: plain COM init on our own thread.
     let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
     let tree: IVisualTreeService3 = match diagnostics.0.cast() {
         Ok(tree) => tree,
-        Err(e) => return log(&format!("no IVisualTreeService3: {e}")),
+        Err(e) => {
+            // XAML Diagnostics first, `ended` after (see `Ended`).
+            drop(diagnostics);
+            drop(ended);
+            return log(&format!("no IVisualTreeService3: {e}"));
+        }
     };
     let stop = attach.stop_path();
-    if stop.exists() {
+    let adopted = take_carried(attach.framework);
+    if stop.exists() && adopted.is_none() {
+        drop((tree, diagnostics));
+        drop(ended);
         return log("the helper stopped styling this app; not attaching");
     }
+    let adopting = adopted.is_some();
     let session = Arc::new(Session {
         diagnostics: diagnostics.0,
         tree,
@@ -446,18 +567,13 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         rules_path: attach.rules_path(),
         closing: AtomicBool::new(false),
         abandoned: AtomicBool::new(false),
-        state: Mutex::new(State::default()),
+        state: Mutex::new(adopted.unwrap_or_default()),
         cleaned: Condvar::new(),
         restyles: AtomicU64::new(0),
         unknown_removals: AtomicU64::new(0),
+        _ended: ended,
     });
-    session.reload_rules();
-
-    // SAFETY: SYNCHRONIZE only; closed below.
-    let helper = match unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, attach.helper) } {
-        Ok(handle) => handle,
-        Err(e) => return log(&format!("can't watch the helper ({}): {e}", attach.helper)),
-    };
+    let changed = session.reload_rules();
     let folder = session
         .rules_path
         .parent()
@@ -475,64 +591,118 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
     .inspect_err(|e| log(&format!("rules won't apply live: {e}")))
     .ok();
 
+    // The callback doesn't keep the session alive: whatever XAML does with it, the session (and
+    // XAML Diagnostics with it) goes when this function lets go.
     let callback: IVisualTreeServiceCallback2 = Callback {
-        session: session.clone(),
+        session: Arc::downgrade(&session),
     }
     .into();
     // SAFETY: a live callback object; the service AddRefs it.
     let advised = unsafe { session.tree.AdviseVisualTreeChange(callback.as_raw()) };
-    log(&format!("watching the visual tree: {advised:?}"));
+    log(&format!(
+        "watching the visual tree: {advised:?}{}",
+        if adopting {
+            " (taking over the last session's look)"
+        } else {
+            ""
+        }
+    ));
+    // The replay of the live tree is done (Advise returns after it, on every UI thread).
+    if adopting {
+        session.settle_adopted();
+        if changed {
+            session.restyle();
+        }
+    }
 
     let mut dump = attach.dump.then(|| {
         // SAFETY: no preconditions.
         let pid = unsafe { GetCurrentProcessId() };
         attach.dir.join(format!("tree-{pid}.txt"))
     });
-    let handles: Vec<HANDLE> = [Some(helper), changes].into_iter().flatten().collect();
-    loop {
-        let timeout = if dump.is_some() { 3000 } else { INFINITE };
-        // SAFETY: the handles stay open for the loop.
-        let woke = unsafe { WaitForMultipleObjects(&handles, false, timeout) };
-        if woke == WAIT_TIMEOUT {
-            if let Some(path) = dump.take() {
-                session.dump(&path);
-                if let Ok(selector) = std::fs::read_to_string(attach.dir.join("props.txt")) {
-                    session.dump_props(&path, selector.trim());
+    // The helper first, then the rules folder and the recycle event, when there are.
+    let mut handles = vec![helper.0];
+    let changes_at = changes.map(|c| {
+        handles.push(c);
+        handles.len() - 1
+    });
+    let recycle_at = recycle.as_ref().map(|r| {
+        handles.push(r.0);
+        handles.len() - 1
+    });
+    let ending = if stop.exists() {
+        log("the helper stopped styling this app (crash guard)");
+        Ending::Restore
+    } else {
+        loop {
+            let timeout = if dump.is_some() { 3000 } else { INFINITE };
+            // SAFETY: the handles stay open for the loop.
+            let woke = unsafe { WaitForMultipleObjects(&handles, false, timeout) };
+            if woke == WAIT_TIMEOUT {
+                if let Some(path) = dump.take() {
+                    session.dump(&path);
+                    if let Ok(selector) = std::fs::read_to_string(attach.dir.join("props.txt")) {
+                        session.dump_props(&path, selector.trim());
+                    }
                 }
+                continue;
             }
-        } else if woke == WAIT_OBJECT_0 {
-            break; // the helper exited
-        } else if woke.0 == WAIT_OBJECT_0.0 + 1
-            && let Some(changes) = changes
-        {
-            // SAFETY: the notification handle from above.
-            let _ = unsafe { FindNextChangeNotification(changes) };
-            if stop.exists() {
-                log("the helper stopped styling this app (crash guard)");
-                break;
+            let index = woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
+            if index == 0 {
+                break Ending::Restore; // the helper exited
+            } else if Some(index) == changes_at
+                && let Some(changes) = changes
+            {
+                // SAFETY: the notification handle from above.
+                let _ = unsafe { FindNextChangeNotification(changes) };
+                if stop.exists() {
+                    log("the helper stopped styling this app (crash guard)");
+                    break Ending::Restore;
+                }
+                if session.reload_rules() {
+                    session.restyle();
+                }
+            } else if Some(index) == recycle_at {
+                break Ending::Carry;
+            } else {
+                log(&format!("wait failed ({woke:?}); detaching"));
+                break Ending::Restore;
             }
-            if session.reload_rules() {
-                session.restyle();
-            }
-        } else {
-            log(&format!("wait failed ({woke:?}); detaching"));
-            break;
         }
-    }
+    };
 
-    // Every UI thread puts its values back while the tree is still followed (removals keep the
-    // map true until each clean-up has run); only then stop following it.
-    session.close();
+    // Every UI thread puts its values back (or hands them over) while the tree is still
+    // followed (removals keep the map true until each has run); only then stop following it.
+    session.end(ending);
     // SAFETY: the callback we advised.
     let unadvised = unsafe { session.tree.UnadviseVisualTreeChange(callback.as_raw()) };
-    session.forget_rest();
-    log(&format!("detached: {unadvised:?}"));
-    // SAFETY: handles opened above, closed once.
+    match ending {
+        Ending::Restore => session.forget_rest(),
+        Ending::Carry => session.stash(),
+    }
+    drop(callback);
+    if let Some(changes) = changes {
+        // SAFETY: the notification handle from above, closed once.
+        let _ = unsafe { FindCloseChangeNotification(changes) };
+    }
+    // Ours are the two interface pointers in the session.
+    let others = references(&session.diagnostics).saturating_sub(2);
+    let jobs = Arc::strong_count(&session) - 1;
+    log(&format!(
+        "detached ({ending:?}): {unadvised:?}; letting go of XAML Diagnostics ({others} other \
+         reference(s), {jobs} job(s) running)"
+    ));
+    // The session (XAML Diagnostics, then `ended`) goes here, or after the jobs still running.
+}
+
+/// How many references the XAML Diagnostics object has, ours included (for the log).
+fn references(diagnostics: &IXamlDiagnostics) -> u32 {
+    // SAFETY: AddRef, then Release, on a live interface: the count is unchanged.
     unsafe {
-        let _ = CloseHandle(helper);
-        if let Some(changes) = changes {
-            let _ = FindCloseChangeNotification(changes);
-        }
+        let raw = diagnostics.as_raw();
+        let vtable = *(raw as *const *const windows_core::IUnknown_Vtbl);
+        ((*vtable).AddRef)(raw);
+        ((*vtable).Release)(raw)
     }
 }
 
@@ -751,8 +921,12 @@ impl Session {
         };
         self.restore_taken(&taken);
         if emptied {
-            let session = self.clone();
-            run_or_defer(Box::new(move || session.clean_thread(thread, true)));
+            let session = Arc::downgrade(self);
+            run_or_defer(Box::new(move || {
+                if let Some(session) = session.upgrade() {
+                    session.clean_thread(thread, true);
+                }
+            }));
         }
     }
 
@@ -1089,11 +1263,29 @@ impl Session {
             .map(|(&t, &ui)| (t, ui))
             .collect();
         for (thread, ui) in threads {
-            let session = self.clone();
-            if !post(thread, ui, move || session.restyle_thread(thread, round)) {
+            let posted = self.post_job(thread, ui, move |session| {
+                session.restyle_thread(thread, round);
+            });
+            if !posted {
                 self.forget_thread(thread, ui.generation);
             }
         }
+    }
+
+    /// Posts `job` to `thread` with a weak reference to the session: a job that runs after the
+    /// session ended does nothing, and a job that never runs doesn't keep XAML Diagnostics.
+    fn post_job(
+        self: &Arc<Self>,
+        thread: u32,
+        ui: UiThread,
+        job: impl FnOnce(&Arc<Session>) + Send + 'static,
+    ) -> bool {
+        let session = Arc::downgrade(self);
+        post(thread, ui, move || {
+            if let Some(session) = session.upgrade() {
+                job(&session);
+            }
+        })
     }
 
     /// One UI thread's part of restyle `round`, on that thread: its resources, then every
@@ -1217,12 +1409,14 @@ impl Session {
         if !self.abandoned.load(Ordering::SeqCst) {
             self.restore_taken(&taken);
             self.restore_resources(thread);
-            let values: Vec<_> = self
-                .lock()
-                .values
-                .extract_if(|(t, _, _), _| *t == thread)
-                .collect();
-            drop(values);
+            let (values, adopted): (Vec<_>, Vec<_>) = {
+                let mut state = self.lock();
+                (
+                    state.values.extract_if(|(t, _, _), _| *t == thread).collect(),
+                    state.adopted.extract_if(|_, (t, _)| *t == thread).collect(),
+                )
+            };
+            drop((values, adopted));
             log(&format!(
                 "thread {thread}: put back {} element(s){}",
                 taken.len(),
@@ -1243,6 +1437,8 @@ impl Session {
             {
                 state.threads.remove(&thread);
             }
+            // Retired while handing over: nothing of it is left to hand over.
+            state.handing.remove(&thread);
         }
         self.cleaned.notify_all();
         // Only while it is still ours: a recycled handle could name one of the app's windows.
@@ -1254,38 +1450,52 @@ impl Session {
         }
     }
 
-    /// The helper is gone: stop styling, then have every UI thread clean up after whatever it
-    /// is doing (a job queued behind its in-flight work), and wait for them. A thread that
-    /// doesn't answer in time is abandoned and leaks what we hold there.
-    fn close(self: &Arc<Self>) {
+    /// The session is ending: stop styling, then have every UI thread, after whatever it is
+    /// doing (a job queued behind its in-flight work), clean up (`Restore`) or hand over
+    /// (`Carry`), and wait for them. A thread that doesn't answer in time is abandoned and leaks
+    /// what we hold there.
+    fn end(self: &Arc<Self>, ending: Ending) {
         let threads: Vec<(u32, UiThread)> = {
-            let state = self.lock();
+            let mut state = self.lock();
             self.closing.store(true, Ordering::SeqCst);
-            state.threads.iter().map(|(&t, &ui)| (t, ui)).collect()
+            let threads: Vec<(u32, UiThread)> =
+                state.threads.iter().map(|(&t, &ui)| (t, ui)).collect();
+            if ending == Ending::Carry {
+                state.handing = threads.iter().map(|&(t, _)| t).collect();
+            }
+            threads
         };
         let (count, known) = {
             let state = self.lock();
             (state.styled.len(), state.nodes.len())
         };
         log(&format!(
-            "restoring {count} element(s) on {} thread(s) ({known} known; {} removal(s) of \
-             elements never seen)",
+            "{} {count} element(s) on {} thread(s) ({known} known; {} removal(s) of elements \
+             never seen)",
+            match ending {
+                Ending::Restore => "restoring",
+                Ending::Carry => "handing over",
+            },
             threads.len(),
             self.unknown_removals.load(Ordering::Relaxed)
         ));
         for &(thread, ui) in &threads {
-            let session = self.clone();
-            if !post(thread, ui, move || session.clean_thread(thread, false)) {
+            let posted = self.post_job(thread, ui, move |session| match ending {
+                Ending::Restore => session.clean_thread(thread, false),
+                Ending::Carry => session.hand_over(thread),
+            });
+            if !posted {
                 self.forget_thread(thread, ui.generation);
             }
         }
-        let pending = |state: &mut State| {
-            threads.iter().any(|(t, ui)| {
+        let pending = |state: &mut State| match ending {
+            Ending::Restore => threads.iter().any(|(t, ui)| {
                 state
                     .threads
                     .get(t)
                     .is_some_and(|r| r.generation == ui.generation)
-            })
+            }),
+            Ending::Carry => !state.handing.is_empty(),
         };
         let state = self.lock();
         let (state, waited) = self
@@ -1295,9 +1505,135 @@ impl Session {
         if waited.timed_out() {
             self.abandoned.store(true, Ordering::SeqCst);
             log(&format!(
-                "{} thread(s) didn't clean up in {CLEAN_UP_TIMEOUT:?}; leaving them",
-                state.threads.len()
+                "{} thread(s) didn't answer in {CLEAN_UP_TIMEOUT:?}; leaving them",
+                match ending {
+                    Ending::Restore => state.threads.len(),
+                    Ending::Carry => state.handing.len(),
+                }
             ));
+        }
+    }
+
+    /// Hands this UI thread over to the next session, on it: what we set stays set, and each
+    /// element we styled is held, so its handle can't name another object until the next
+    /// session has seen the tree again. The thread's map goes (the next session rebuilds it from
+    /// the replay); an element that can't be held is gone, and its record with it.
+    fn hand_over(&self, thread: u32) {
+        let styled: Vec<InstanceHandle> = {
+            let mut state = self.lock();
+            if !state.handing.contains(&thread) {
+                return; // forgotten meanwhile
+            }
+            let mine: Vec<InstanceHandle> = state
+                .nodes
+                .iter()
+                .filter(|(_, e)| e.thread == thread)
+                .map(|(&h, _)| h)
+                .collect();
+            for h in &mine {
+                state.nodes.remove(h);
+            }
+            mine.into_iter()
+                .filter(|h| state.styled.contains_key(h))
+                .collect()
+        };
+        let held: Vec<(InstanceHandle, Option<Held>)> =
+            styled.into_iter().map(|h| (h, self.hold(h))).collect();
+        let gone: Vec<Vec<Applied>> = {
+            let mut state = self.lock();
+            let mut gone = Vec::new();
+            for (h, keep) in held {
+                match keep {
+                    Some(keep) => {
+                        state.adopted.insert(h, (thread, keep));
+                    }
+                    None => gone.extend(state.styled.remove(&h)),
+                }
+            }
+            state.handing.remove(&thread);
+            gone
+        };
+        log(&format!(
+            "thread {thread}: handed over ({} gone)",
+            gone.len()
+        ));
+        // The originals of elements that are gone are let go of here, on their thread.
+        drop(gone);
+        self.cleaned.notify_all();
+    }
+
+    /// After a `Carry` ending: leaves the state for the next session in this process. Threads
+    /// that didn't hand over leak what is held there.
+    fn stash(&self) {
+        let carried = {
+            let mut state = self.lock();
+            let late: Vec<(u32, u64)> = state
+                .handing
+                .iter()
+                .filter_map(|t| state.threads.get(t).map(|ui| (*t, ui.generation)))
+                .collect();
+            for (thread, generation) in late {
+                forget_locked(&mut state, thread, generation);
+            }
+            state.handing.clear();
+            state.nodes.clear();
+            std::mem::take(&mut *state)
+        };
+        CARRIED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((self.framework, carried));
+    }
+
+    /// After taking over a session and seeing the live tree replayed: each UI thread, on it,
+    /// lets go of the elements held across the hand-over. Those not seen again are in windows
+    /// that closed meanwhile (or left the tree in that moment): their records go without
+    /// putting anything back (asking XAML Diagnostics about them would keep them alive again),
+    /// and a thread with no elements left is retired.
+    fn settle_adopted(self: &Arc<Self>) {
+        let threads: Vec<(u32, UiThread)> = self
+            .lock()
+            .threads
+            .iter()
+            .map(|(&t, &ui)| (t, ui))
+            .collect();
+        for (thread, ui) in threads {
+            let posted = self.post_job(thread, ui, move |session| session.settle_thread(thread));
+            if !posted {
+                self.forget_thread(thread, ui.generation);
+            }
+        }
+    }
+
+    fn settle_thread(&self, thread: u32) {
+        let (held, unseen, empty) = {
+            let mut state = self.lock();
+            let held: Vec<(InstanceHandle, Held)> = state
+                .adopted
+                .extract_if(|_, (t, _)| *t == thread)
+                .map(|(h, (_, keep))| (h, keep))
+                .collect();
+            let unseen: Vec<Vec<Applied>> = held
+                .iter()
+                .filter(|(h, _)| !state.nodes.contains_key(h))
+                .map(|(h, _)| *h)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .filter_map(|h| state.styled.remove(&h))
+                .collect();
+            let empty = !state.nodes.values().any(|e| e.thread == thread);
+            (held, unseen, empty)
+        };
+        if !held.is_empty() {
+            log(&format!(
+                "thread {thread}: took over {} element(s), {} of them gone",
+                held.len(),
+                unseen.len()
+            ));
+        }
+        drop((unseen, held));
+        if empty {
+            self.clean_thread(thread, true);
         }
     }
 
@@ -1322,6 +1658,7 @@ impl Session {
         std::mem::forget(std::mem::take(&mut state.styled));
         std::mem::forget(std::mem::take(&mut state.values));
         std::mem::forget(std::mem::take(&mut state.resources));
+        std::mem::forget(std::mem::take(&mut state.adopted));
         state.nodes.clear();
     }
 
@@ -1425,6 +1762,12 @@ fn forget_locked(state: &mut State, thread: u32, generation: u64) -> usize {
     {
         state.threads.remove(&thread);
     }
+    state.handing.remove(&thread);
+    let adopted: Vec<_> = state
+        .adopted
+        .extract_if(|_, (t, _)| *t == thread)
+        .collect();
+    std::mem::forget(adopted);
     if let Some(resources) = state.resources.remove(&thread) {
         for brush in resources.brushes() {
             state.recolored.remove(&brush);
@@ -1595,7 +1938,7 @@ impl Drop for ElementStrings {
 
 #[implement(IVisualTreeServiceCallback2)]
 struct Callback {
-    session: Arc<Session>,
+    session: Weak<Session>,
 }
 
 impl IVisualTreeServiceCallback_Impl for Callback_Impl {
@@ -1611,7 +1954,9 @@ impl IVisualTreeServiceCallback_Impl for Callback_Impl {
             element.SrcInfo.FileName,
             element.SrcInfo.Hash,
         ]);
-        let session = &self.session;
+        let Some(session) = self.session.upgrade() else {
+            return S_OK; // the session has ended
+        };
         guarded(|| {
             if mutation == MUTATION_ADD {
                 // Nothing new is styled once closing (checked again under the lock).
