@@ -291,11 +291,25 @@ pub fn record_edit(app: &mut App, label: &str, ops: &[Op], checkpoint: usize) {
     }
     let pick = ops.iter().find_map(|op| match (op.doc, op.path.as_str()) {
         (DocId::Config, "/theme" | "/look/style" | "/look/windows") => Some(op.path.clone()),
+        (DocId::Config, path)
+            if path.starts_with("/look/material/")
+                || matches!(path, "/look/appearance" | "/look/accent")
+                || path.starts_with("/look/") && path.ends_with("/style") =>
+        {
+            Some(path.into())
+        }
         (DocId::Bars, "/preset" | "/top/design" | "/dock/design") => Some(op.path.clone()),
         (DocId::Widgets, path)
             if path.ends_with("/variant")
                 || path.ends_with("/face")
-                || path.ends_with("/layout") =>
+                || path.ends_with("/layout")
+                || path.ends_with("/style")
+                || path.ends_with("/look")
+                || path.ends_with("/shape")
+                || path.ends_with("/display")
+                || path.ends_with("/frame")
+                || path.ends_with("/appearance/surface")
+                || path.ends_with("/appearance/tint") =>
         {
             Some(path.into())
         }

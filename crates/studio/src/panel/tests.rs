@@ -400,6 +400,13 @@ fn consecutive_live_picks_share_an_undo_step_and_history_row() {
         2,
         "leaving the list ends the pick sequence"
     );
+    let tint = crate::actions::Edit::new(DocId::Config, "/look/material/tint", "Tint");
+    for color in ["#8b9eb7", "#7fae8e", "#c88d3c"] {
+        app.run(Action::Set(tint.clone(), json!(color)));
+    }
+    assert_eq!(app.docs.undo_count(), 3, "material picks also coalesce");
+    app.run(Action::Undo);
+    assert_eq!(app.get(DocId::Config, "/look/material/tint"), None);
 }
 
 #[test]
