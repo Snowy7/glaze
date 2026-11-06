@@ -239,12 +239,41 @@ fn run() -> Result<()> {
             startup::ready("shell", "widgets_ready_ms");
         }
     }
-    drop(shell);
+    // Core gives the shell three seconds to restore the taskbar and exit: each part's teardown
+    // is timed, in the order the fields used to drop.
+    log::info!("stopping");
+    let mut at = Instant::now();
+    let mut stopped = Vec::new();
+    let mut part = |name: &'static str, at: &mut Instant| {
+        let now = Instant::now();
+        stopped.push(format!("{name} {} ms", (now - *at).as_millis()));
+        *at = now;
+    };
+    let Shell {
+        bars,
+        menu,
+        widgets,
+        flyouts,
+        ..
+    } = shell;
+    drop(bars);
+    part("bars", &mut at);
+    drop(menu);
+    part("menu", &mut at);
+    drop(widgets);
+    part("widgets", &mut at);
+    drop(flyouts);
+    part("flyouts", &mut at);
+    // Every lease is gone with them: the providers' workers are joined now, while they run.
+    integrations::shutdown();
+    part("integrations", &mut at);
+    drop(win_events);
+    part("window events", &mut at);
     if let Some(parent) = parent {
         // SAFETY: our own handle, closed once.
         let _ = unsafe { CloseHandle(parent) };
     }
-    log::info!("stopped");
+    log::info!("stopped ({})", stopped.join(", "));
     Ok(())
 }
 

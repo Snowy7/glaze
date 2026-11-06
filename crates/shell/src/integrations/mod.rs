@@ -132,6 +132,17 @@ fn request_notification_consent(thread: u32, complete: &Arc<AtomicBool>) {
 pub fn config() -> Config {
     STATE.with_borrow(|s| s.config.clone())
 }
+
+/// Stops every provider and joins its worker while the workers still run. Call once, after
+/// everything holding a lease is gone and before `main` returns. The state is a thread-local of
+/// the UI thread, and those are dropped only inside `ExitProcess`, after Windows has ended every
+/// other thread: its `join` would then meet a killed worker, which std treats as a bug ("threads
+/// should not terminate unexpectedly"): the shell's exit crash (0xc0000409, 0xe06d7363 unwinding).
+pub fn shutdown() {
+    let leases = STATE.with_borrow_mut(|s| std::mem::take(&mut s.bars));
+    drop(leases);
+    STATE.with_borrow(|s| s.hub.stop_all());
+}
 pub fn acquire(provider: Provider) -> anyhow::Result<Lease> {
     STATE.with_borrow(|s| {
         anyhow::ensure!(!s.locked && !s.display_off, "integrations suspended");
