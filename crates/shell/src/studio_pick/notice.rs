@@ -163,8 +163,9 @@ fn position(work: Rect, panel: Option<Rect>, (width, height): (f32, f32), scale:
             panel.left
         }
     });
+    let bottom = panel.map_or(work.bottom, |panel| panel.bottom.min(work.bottom));
     (x.clamp(work.left, (work.right - width).max(work.left)).round() as i32,
-        (work.bottom - height - gap).max(work.top).round() as i32)
+        (bottom - height - gap).max(work.top).round() as i32)
 }
 
 struct Lifetime {
@@ -208,6 +209,10 @@ mod tests {
         assert_eq!(a.1, 1296);
         assert_eq!(a.1, b.1);
         assert!(a.1 as f32 + 32.0 < work.bottom);
+        let short = Rect::new(-2560.0, 40.0, 492.0, 500.0);
+        let (_, y) = position(work, Some(short), (280.0, 32.0), 1.0);
+        assert_eq!(y, 496);
+        assert!(y as f32 >= short.top && y as f32 + 32.0 < short.bottom);
     }
     #[test]
     fn stays_calm_then_fades_out_at_three_seconds() {
