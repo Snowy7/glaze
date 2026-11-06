@@ -7,9 +7,11 @@
 pub mod apps;
 pub mod desktop_menu;
 mod engine;
+mod system;
 pub mod look;
 mod windows;
 pub use engine::{EngineConfig, GpuPreference, RenderOptions, RenderSettings};
+pub use system::{PowerMode, SystemConfig};
 pub use apps::{AppRules, AppsStyle};
 pub use look::Look;
 pub use windows::{Backdrop, Color, Corners, Paint, WindowsStyle};
@@ -24,6 +26,9 @@ pub use desktop_menu::DesktopMenu;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    /// Reversible per-user Windows preferences, independent of the wallpaper's styling.
+    #[serde(skip_serializing_if = "SystemConfig::is_empty")]
+    pub system: SystemConfig,
     /// Optional native services. Every experiment is off until explicitly enabled.
     pub experimental: Experimental,
     /// Wallpaper GPU preference and frame cap, with optional overrides keyed by theme folder ID.
@@ -57,6 +62,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            system: SystemConfig::default(),
             experimental: Experimental::default(),
             engine: EngineConfig::default(),
             theme: "aurora".into(),
