@@ -1079,6 +1079,7 @@ pub fn on_key(app: &mut App, key: u16) -> bool {
     });
     for message in messages {
         match message {
+            Message::PanelMove { x, y } => move_panel(app.window, x, y),
             Message::MoveModule {selection,destination,base_revision} => {
                 let revision=move_module(app,selection,destination,base_revision);
                 CLIENT.with(|c| {
@@ -1369,6 +1370,23 @@ fn reposition(app: &App) {
     super::move_to_display(app);
 }
 
+fn move_panel(window: Option<HWND>, x: i32, y: i32) {
+    use windows::Win32::{
+        Foundation::{POINT, RECT}, Graphics::Gdi::ClientToScreen,
+        UI::WindowsAndMessaging::{GetWindowRect, SetWindowPos, SWP_NOSIZE, SWP_NOACTIVATE, SWP_NOZORDER},
+    };
+    let Some(window) = window else { return; };
+    if x.abs_diff(0) > 100_000 || y.abs_diff(0) > 100_000 { return; }
+    let (mut outer, mut origin) = (RECT::default(), POINT::default());
+    // SAFETY: shell requests are authenticated above; move only our own HWND on its UI thread.
+    unsafe {
+        if GetWindowRect(window, &mut outer).is_ok() && ClientToScreen(window, &mut origin).as_bool() {
+            let _ = SetWindowPos(window, None, x - (origin.x - outer.left), y - (origin.y - outer.top),
+                0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1579,6 +1597,25 @@ mod tests {
         assert_eq!(app.docs.undo_count(), 1);
         assert_eq!(app.docs.undo().unwrap().as_deref(), Some("Move Clock"));
         assert_eq!(app.docs.doc(DocId::Widgets).raw, before);
+    }
+
+    #[test]
+    fn avoidance_frames_move_only_the_owned_panel_without_activation_or_resize() {
+        use windows::Win32::{Foundation::POINT, Graphics::Gdi::ClientToScreen,
+            UI::WindowsAndMessaging::GetForegroundWindow};
+        let surface = mypaper_ui::Surface::new(mypaper_ui::Kind::App { min: (360, 160) },
+            "Studio avoidance placement test", mypaper_ui::Role::Window).unwrap();
+        surface.place((100, 100, 480, 600));
+        let size = surface.client_size();
+        let foreground = unsafe { GetForegroundWindow() };
+        for (x, y) in [(-2552, 49), (-488, 49), (8, 40)] {
+            move_panel(Some(surface.hwnd()), x, y);
+            let mut at = POINT::default();
+            assert!(unsafe { ClientToScreen(surface.hwnd(), &mut at) }.as_bool());
+            assert_eq!((at.x, at.y), (x, y));
+            assert_eq!(surface.client_size(), size);
+            assert_eq!(unsafe { GetForegroundWindow() }, foreground);
+        }
     }
 
     #[test]

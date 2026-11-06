@@ -627,7 +627,13 @@ impl StudioPick {
         }
         let avoid: Vec<_> = wanted.iter().filter(|(t, _)| t.selection.kind == Kind::Widget)
             .map(|(t, _)| t.rect).collect();
-        self.panel_position.tick(self.panel, &self.monitors, &avoid);
+        if let Some(at) = self.panel_position.tick(self.panel, &self.monitors, &avoid)
+            && let Some((owner, _)) = self.session.owner
+        {
+            wire::send(HWND(owner as _), self.endpoint.hwnd(), &Message::PanelMove {
+                x: at.x.round() as i32, y: at.y.round() as i32,
+            });
+        }
         if self
             .decorations
             .iter()

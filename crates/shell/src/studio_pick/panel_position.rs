@@ -5,9 +5,7 @@ use std::time::{Duration, Instant};
 use windows::Win32::{
     Foundation::{HWND, POINT, RECT},
     Graphics::Gdi::ClientToScreen,
-    UI::WindowsAndMessaging::{
-        GetClientRect, GetWindowRect, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos,
-    },
+    UI::WindowsAndMessaging::GetClientRect,
 };
 
 const DURATION: Duration = Duration::from_millis(170);
@@ -51,20 +49,16 @@ impl Position {
         self.destination.is_some() && self.destination != self.home
     }
 
-    pub fn tick(&mut self, panel: HWND, monitors: &[Monitor], avoid: &[Rect]) {
-        let Some(home) = self.home else {
-            return;
-        };
-        let (mut outer, mut client, mut origin) =
-            (RECT::default(), RECT::default(), POINT::default());
+    pub fn tick(&mut self, panel: HWND, monitors: &[Monitor], avoid: &[Rect]) -> Option<Point> {
+        let home = self.home?;
+        let (mut client, mut origin) = (RECT::default(), POINT::default());
         // SAFETY: panel was authenticated against the session owner; queries only its geometry.
         let queried = unsafe {
-            GetWindowRect(panel, &mut outer).is_ok()
-                && GetClientRect(panel, &mut client).is_ok()
+            GetClientRect(panel, &mut client).is_ok()
                 && ClientToScreen(panel, &mut origin).as_bool()
         };
         if !queried {
-            return;
+            return None;
         }
         let size = (
             (client.right - client.left) as f32,
@@ -97,26 +91,13 @@ impl Position {
                 start: now,
             });
         }
-        let Some(motion) = &self.motion else {
-            return;
-        };
+        let motion = self.motion.as_ref()?;
         let at = motion.at(now);
         let finished = now.saturating_duration_since(motion.start) >= DURATION;
-        // SAFETY: only the authenticated Studio panel moves. Focus, size and Z-order stay intact.
-        unsafe {
-            let _ = SetWindowPos(
-                panel,
-                None,
-                at.x.round() as i32 - (origin.x - outer.left),
-                at.y.round() as i32 - (origin.y - outer.top),
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER,
-            );
-        }
         if finished {
             self.motion = None;
         }
+        Some(at)
     }
 }
 

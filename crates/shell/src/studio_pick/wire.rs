@@ -256,6 +256,8 @@ pub fn patched(raw: &serde_json::Value, ops: &[PreviewOp]) -> Option<serde_json:
 pub enum Message {
     /// Studio's remembered resting position, in physical screen coordinates.
     PanelHome { x: i32, y: i32 },
+    /// A transient animation frame. Studio moves its own HWND on its owning UI thread.
+    PanelMove { x: i32, y: i32 },
     /// A display segment's transient hover; None removes the identification frame.
     FlashDisplay { display: Option<String> },
     /// Prime the existing preview machinery at saved values, without an override or save.
@@ -347,6 +349,13 @@ struct Queue {
 impl Queue {
     fn enqueue(&self, source: HWND, message: Message) -> bool {
         let mut messages = self.messages.borrow_mut();
+        if matches!(message, Message::PanelMove { .. })
+            && let Some((from, pending @ Message::PanelMove { .. })) = messages.back_mut()
+            && *from == source
+        {
+            *pending = message;
+            return true;
+        }
         let preview = |m: &Message| match m {
             Message::Preview {
                 session, sequence, ..
@@ -548,6 +557,17 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, wp: WPARAM, lp: LP
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn panel_animation_coalesces_frames_but_keeps_selection_order() {
+        let queue = Queue::default();
+        let source = HWND(1 as _);
+        for x in 0..1000 { assert!(queue.enqueue(source, Message::PanelMove { x, y: 49 })); }
+        assert_eq!(queue.messages.borrow().len(), 1);
+        assert!(matches!(queue.messages.borrow().front(), Some((_, Message::PanelMove { x: 999, .. }))));
+        queue.enqueue(source, Message::ClearSelection);
+        queue.enqueue(source, Message::PanelMove { x: 0, y: 49 });
+        assert_eq!(queue.messages.borrow().len(), 3);
+    }
     #[test]
     fn complete_snapshots_cross_copydata_without_relaxing_normal_message_limits() {
         let receiver = Endpoint::new(false).unwrap();
