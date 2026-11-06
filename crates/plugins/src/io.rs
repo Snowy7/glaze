@@ -436,6 +436,10 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
     let result = loop {
         // Start a read when there's credit, and a write when something is queued.
         let mut queue = shared.lock();
+        // Reset while holding the queue lock, before inspecting it. A concurrent resume/
+        // send must either be observed below or leave the event set for the next wait.
+        // SAFETY: this pipe's wake event stays owned by Shared for the thread's lifetime.
+        let _ = unsafe { ResetEvent(wake.0) };
         if queue.closing {
             break Ok(());
         }
@@ -467,8 +471,6 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
             writing = Some(bytes);
         }
         drop(queue);
-        // SAFETY: valid event handles owned above.
-        let _ = unsafe { ResetEvent(wake.0) };
         let handles = [read_done.0, write_done.0, wake.0];
         let count = if writing.is_some() { 3 } else { 3 };
         // SAFETY: as above.
