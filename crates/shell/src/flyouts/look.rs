@@ -40,6 +40,8 @@ pub struct Look {
     pub shadow: bool,
     resolved: Theme,
     pub opening: mypaper_ui::transition::Timing,
+    pub hover_motion: mypaper_ui::transition::Timing,
+    pub press_motion: mypaper_ui::transition::Timing,
     pub opening_style: mypaper_bars::style::MotionStyle,
 }
 
@@ -95,6 +97,20 @@ impl Look {
             system.animations,
             performance,
         );
+        look.hover_motion = crate::bars::motion::resolve(
+            &bars.top.animation,
+            false,
+            crate::bars::motion::Leaf::Hover,
+            system.animations,
+            performance,
+        );
+        look.press_motion = crate::bars::motion::resolve(
+            &bars.top.animation,
+            false,
+            crate::bars::motion::Leaf::Press,
+            system.animations,
+            performance,
+        );
         look.opening_style = crate::bars::motion::presentation(
             &bars.top.animation,
             false,
@@ -146,6 +162,7 @@ impl Look {
     pub fn install(&self) {
         mypaper_ui::glass::set_style(self.glass);
         mypaper_ui::menu::set_style(Some(self.menu_tokens()));
+        mypaper_ui::menu::set_interaction_motion(Some((self.hover_motion, self.press_motion)));
         mypaper_ui::menu::set_open_motion(Some(mypaper_ui::menu::MenuMotion {
             timing: self.opening,
             style: crate::bars::motion::reveal(self.opening_style),
@@ -278,6 +295,20 @@ impl Look {
                 &Default::default(),
                 false,
                 crate::bars::motion::Leaf::Open,
+                system.animations,
+                false,
+            ),
+            hover_motion: crate::bars::motion::resolve(
+                &Default::default(),
+                false,
+                crate::bars::motion::Leaf::Hover,
+                system.animations,
+                false,
+            ),
+            press_motion: crate::bars::motion::resolve(
+                &Default::default(),
+                false,
+                crate::bars::motion::Leaf::Press,
                 system.animations,
                 false,
             ),

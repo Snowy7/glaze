@@ -32,6 +32,7 @@ pub struct Styles {
     pub press_sink: bool,
     pub edges: [Edge; 3],
     pub shadows: [Option<Shadow>; 3],
+    pub outset: f32,
 }
 
 impl Styles {
@@ -118,6 +119,16 @@ impl Styles {
                 .or(base)
         };
         let rest_shadow = shadow(None, look.shadow.rest.as_ref());
+        let shadows = [
+            rest_shadow,
+            shadow(rest_shadow, look.shadow.hover.as_ref()),
+            shadow(rest_shadow, look.shadow.active.as_ref()),
+        ];
+        let outset = shadows
+            .iter()
+            .flatten()
+            .map(|s| s.blur + s.spread.max(0.0) + s.x.abs().max(s.y.abs()) + 1.0)
+            .fold(0.0_f32, f32::max);
         Self {
             items: [rest, hover, active],
             item_radius: look.items.radius,
@@ -135,11 +146,8 @@ impl Styles {
                 edge(body, look.border.hover.as_ref()),
                 edge(body, look.border.active.as_ref()),
             ],
-            shadows: [
-                rest_shadow,
-                shadow(rest_shadow, look.shadow.hover.as_ref()),
-                shadow(rest_shadow, look.shadow.active.as_ref()),
-            ],
+            shadows,
+            outset,
         }
     }
 }

@@ -167,7 +167,7 @@ impl Bar {
         let press_settings =
             motion::resolve(motion, dock, motion::Leaf::Press, animate, performance);
         let mut slide = Value::new(if autohide { 1.0 } else { 0.0 });
-        slide.settings = slide_settings.clone();
+        slide.settings = slide_settings;
         let mut bar = Self {
             surface,
             kind,
@@ -201,7 +201,7 @@ impl Bar {
             slide,
             presence: {
                 let mut v = Value::new(0.0);
-                v.settings = magnify_settings.clone();
+                v.settings = magnify_settings;
                 v
             },
             along: None,
@@ -719,7 +719,7 @@ impl Bar {
                 0.0,
             ));
             let crop = if self.kind == BarKind::Top {
-                body.inflate(1.0)
+                body.inflate(self.tokens.shadow_outset(self.scale()).max(1.0))
             } else {
                 Rect::new(0.0, 0.0, self.frame.size.0 as f32, self.frame.size.1 as f32)
             };
@@ -867,6 +867,15 @@ impl Bar {
                 self.band.y + (self.band.height - h) / 2,
             ),
         };
+        if self.kind == BarKind::Dock {
+            let outset = self.tokens.shadow_outset(self.scale()) as i32;
+            match e {
+                Edge::Top => y -= outset,
+                Edge::Bottom => y += outset,
+                Edge::Left => x -= outset,
+                Edge::Right => x += outset,
+            }
+        }
         let slide = self.slide.value;
         match e {
             Edge::Top => y -= ((h + margin) as f32 * slide).round() as i32,

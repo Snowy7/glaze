@@ -52,7 +52,7 @@ pub fn presentation(root: &Motion, dock: bool, leaf: Leaf) -> MotionStyle {
         .into_iter()
         .flatten()
         .filter_map(|m| m.style)
-        .last()
+        .next_back()
         .unwrap_or(MotionStyle::Slide)
 }
 

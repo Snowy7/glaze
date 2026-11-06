@@ -1287,7 +1287,11 @@ pub fn dock(
                     shown,
                     &letter,
                     TextRole::Title2,
-                    c.label.with_alpha(fade),
+                    if tokens.styles.item_color {
+                        visual.color.with_alpha(fade)
+                    } else {
+                        c.label.with_alpha(fade)
+                    },
                     Align::Center,
                 );
             }
@@ -1301,7 +1305,18 @@ pub fn dock(
             let font = tokens.font.scaled(scale);
             let (_, h) = f.text.measure("Ag", &font);
             let y = text.top + ((text.height() - h) / 2.0).round();
-            f.label_styled(text.left, y, title, &font, c.label, text.width());
+            f.label_styled(
+                text.left,
+                y,
+                title,
+                &font,
+                if tokens.styles.item_color {
+                    visual.color
+                } else {
+                    c.label
+                },
+                text.width(),
+            );
         }
         if !app.windows.is_empty() && d.indicator != IndicatorStyle::None {
             let (w, thickness) = match d.indicator {
@@ -1434,7 +1449,12 @@ pub fn dock(
                 } else {
                     ink
                 };
-                f.icon(shown, *icon, d.size() as f32 * 0.5 * zoomed(k).0, ink);
+                f.icon(
+                    shown,
+                    *icon,
+                    d.size() as f32 * 0.5 * zoomed(k).0 * visual.scale,
+                    ink,
+                );
             }
             _ => {}
         }
@@ -1448,6 +1468,20 @@ pub fn dock(
     }
     let mut frame = out.finish(list, dimensions);
     frame.rest = rest;
+    let outset = tokens.shadow_outset(scale);
+    if outset > 0.0 {
+        frame.list = frame.list.translated(outset, outset);
+        for (rect, _) in &mut frame.shapes {
+            *rect = rect.offset(outset, outset);
+        }
+        for center in &mut frame.rest {
+            *center += outset;
+        }
+        frame.size = (
+            frame.size.0 + 2 * outset as u32,
+            frame.size.1 + 2 * outset as u32,
+        );
+    }
     frame
 }
 

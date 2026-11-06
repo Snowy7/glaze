@@ -169,6 +169,13 @@ the stationary fade to avoid repeated overlay capture flashes. Bar show/hide sti
 other bar presentation styles, popup/menu hover/press timing, continuous squircle corners,
 backdrop brightness/saturation, glass depth/sheen and Windows-wide one-switch styling remain open.
 
+Flyout kit controls and menu rows now consume the hover/press leaves too. Their sampled washes
+keep state only for entered controls, remove resting entries, and stop the frame source when
+settled. `mypaper_ui::interact::motion::InteractionMotion`, `Frame::with_motion` and the menu's
+optional interaction timings add this behavior without changing existing kit callers. Configured
+flat-surface shadows reserve a bounded outset, including for cropped islands and docks; their
+screen anchors remain unchanged.
+
 CSS, gradient/image **surface fills**, noise, glow, neon and shaped corners are ignored with one
 warning per process. Image app icons are retained. There is no CSS renderer or DWM blur fallback.
 

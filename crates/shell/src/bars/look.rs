@@ -133,9 +133,7 @@ impl Tokens {
         if look.glyphs == Some(Glyphs::Fluent) {
             theme.icons = IconSet::Font(mypaper_ui::icons::SYSTEM_FAMILY.into());
         }
-        // A solid background colour only where the style draws its own body: a glass style
-        // keeps its glass (a design's tint colour is no reason to drop it).
-        // The glass's tint is the theme's (appearance) tint.
+        // A tint colour tunes glass; an explicit solid background replaces its material.
         let tint = appearance.tint.map_or(
             Rgba::rgb8(if dark { [23, 24, 28] } else { [243, 243, 247] }, 1.0),
             |c| Rgba::rgb8(c.0, 1.0),
@@ -290,6 +288,14 @@ impl Tokens {
             }
         }
         self.styles = super::styling::Styles::resolve(look, &self.theme, |c| self.color(c));
+    }
+
+    pub fn shadow_outset(&self, scale: f32) -> f32 {
+        if self.material.is_none() && self.shadow {
+            (self.styles.outset * scale).ceil()
+        } else {
+            0.0
+        }
     }
 
     pub fn item(
@@ -478,8 +484,12 @@ fn explicit_look(config: &mypaper_bars::BarsConfig, bar: &str, path: &str) -> bo
 /// A bar design's 13 px / 400 label is a bar metric. Popup roles retain their own type ramp
 /// unless the user explicitly overrides the shared/per-bar font size or weight.
 pub fn popup_font(config: &mypaper_bars::BarsConfig, bar: &str, look: &mut Look) {
-    if !explicit_look(config, bar, "/font/size") { look.font.size = None; }
-    if !explicit_look(config, bar, "/font/weight") { look.font.weight = None; }
+    if !explicit_look(config, bar, "/font/size") {
+        look.font.size = None;
+    }
+    if !explicit_look(config, bar, "/font/weight") {
+        look.font.weight = None;
+    }
 }
 
 pub fn glass_layer(

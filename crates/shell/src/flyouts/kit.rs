@@ -29,6 +29,7 @@ pub struct Kit<'a> {
     pub pressed: Option<HitId>,
     /// Keyboard focus, drawn as a ring.
     pub focus: Option<HitId>,
+    pub motion: Option<&'a mypaper_ui::interact::motion::InteractionMotion>,
 }
 
 impl<'a> Kit<'a> {
@@ -49,6 +50,7 @@ impl<'a> Kit<'a> {
             hover: None,
             pressed: None,
             focus: None,
+            motion: None,
         }
     }
 
@@ -78,6 +80,9 @@ impl<'a> Kit<'a> {
             (self.limit - self.y).max(0.0),
         );
         let mut f = Frame::new(self.text, &self.theme, self.s, &input);
+        if let Some(motion) = self.motion {
+            f = f.with_motion(motion);
+        }
         let bottom = draw(&mut f, area);
         self.list.ops.append(&mut f.list.ops);
         self.list.hits.append(&mut f.list.hits);
@@ -88,18 +93,16 @@ impl<'a> Kit<'a> {
     /// device px): with glass only an invisible hit fill (the engine draws the glass and its one
     /// rim, `Frame::surface`'s contract); without, the theme's surface and, for Solid, its one
     /// hairline. Goes first, under everything else.
-    pub fn body(
-        list: &mut DisplayList,
-        size: (f32, f32),
-        radius: f32,
-        theme: &Theme,
-        glass: bool,
-    ) {
+    pub fn body(list: &mut DisplayList, size: (f32, f32), radius: f32, theme: &Theme, glass: bool) {
         let rect = Rect::new(0.0, 0.0, size.0, size.1);
         let mut ops = vec![Op::Fill {
             rect,
             radius,
-            color: if glass { Rgba::HIT } else { theme.color.surface },
+            color: if glass {
+                Rgba::HIT
+            } else {
+                theme.color.surface
+            },
         }];
         if let Some(border) = theme.border.filter(|_| !glass) {
             ops.push(Op::Stroke {

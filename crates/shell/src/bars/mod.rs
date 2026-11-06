@@ -1526,6 +1526,23 @@ impl Bars {
             if config.performance.active(mypaper_desktop::on_battery()) {
                 popup.glass = None;
             }
+            let performance = config.performance.active(mypaper_desktop::on_battery());
+            menu.set_interaction_timings(
+                motion::resolve(
+                    animation,
+                    true,
+                    motion::Leaf::Hover,
+                    self.system.animations,
+                    performance,
+                ),
+                motion::resolve(
+                    animation,
+                    true,
+                    motion::Leaf::Press,
+                    self.system.animations,
+                    performance,
+                ),
+            );
             menu.set_presentation(
                 popup,
                 mypaper_ui::menu::MenuMotion {

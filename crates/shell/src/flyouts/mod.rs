@@ -431,6 +431,7 @@ struct Open {
     motion: Option<mypaper_ui::transition::Transition>,
     motion_style: mypaper_bars::style::MotionStyle,
     snapshot: Option<mypaper_ui::reveal::Snapshot>,
+    interaction: mypaper_ui::interact::motion::InteractionMotion,
     /// When its motion started (the fade follows the glass from there).
     opened_at: Instant,
     hover: Option<HitId>,
@@ -578,6 +579,10 @@ impl Flyouts {
         if let Some(open) = &mut self.open {
             open.scale = open.monitor.dpi.max(96) as f32 / 96.0 * self.look.scale;
             open.motion_style = self.look.opening_style;
+            open.interaction = mypaper_ui::interact::motion::InteractionMotion::new(
+                self.look.hover_motion,
+                self.look.press_motion,
+            );
             if !self.look.opening.enabled {
                 open.motion = None;
                 open.snapshot = None;
@@ -694,6 +699,15 @@ impl Flyouts {
                 self.lanes.release();
                 log::debug!("flyouts: providers released");
             }
+        }
+        if let Some(open) = &mut self.open {
+            let input = mypaper_ui::Interaction {
+                hover: open.hover,
+                pressed: open.pressed,
+                focus: open.focus,
+                focus_visible: open.focus.is_some(),
+            };
+            open.dirty |= open.interaction.step(&input, now);
         }
         if self.open.as_ref().is_some_and(|o| o.dirty) {
             self.render(ui);
@@ -943,6 +957,10 @@ impl Flyouts {
             motion: None,
             motion_style: self.look.opening_style,
             snapshot: None,
+            interaction: mypaper_ui::interact::motion::InteractionMotion::new(
+                self.look.hover_motion,
+                self.look.press_motion,
+            ),
             opened_at: Instant::now(),
             hover: None,
             pressed: None,
@@ -1073,7 +1091,7 @@ impl Flyouts {
         } else {
             0.0
         };
-        let (list, size) = build_at_least(
+        let (list, size) = build_animated(
             open.panel.as_ref(),
             &mut ui.text,
             &self.look,
@@ -1082,6 +1100,7 @@ impl Flyouts {
             state,
             glass.is_some(),
             keep,
+            Some(&open.interaction),
         );
         let (width, height) = (size.0 as f32, size.1 as f32);
         // The body's radius (`Look::theme`): the glass has exactly the body's shape.
@@ -1128,7 +1147,7 @@ impl Flyouts {
         let Some(motion) = open.motion else {
             let _ = self.surface.set_alpha(255);
             let _ = self.surface.move_to(open.origin);
-            self.ticker.schedule(false);
+            self.ticker.schedule(open.interaction.moving());
             return;
         };
         let p = motion.value(now);
@@ -1171,7 +1190,8 @@ impl Flyouts {
         let at = position(open, now);
         let _ = self.surface.set_alpha((alpha * 255.0).round() as u8);
         let _ = self.surface.move_to(at);
-        self.ticker.schedule(open.motion.is_some());
+        self.ticker
+            .schedule(open.motion.is_some() || open.interaction.moving());
     }
 
     /// Input for the flyout's window.
@@ -1496,8 +1516,26 @@ pub fn build_at_least(
     glass: bool,
     min_height: f32,
 ) -> (mypaper_ui::DisplayList, (u32, u32)) {
+    build_animated(
+        panel, text, look, s, max_height, state, glass, min_height, None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_animated(
+    panel: &dyn Panel,
+    text: &mut mypaper_ui::Text,
+    look: &Look,
+    s: f32,
+    max_height: f32,
+    state: (Option<HitId>, Option<HitId>, Option<HitId>),
+    glass: bool,
+    min_height: f32,
+    motion: Option<&mypaper_ui::interact::motion::InteractionMotion>,
+) -> (mypaper_ui::DisplayList, (u32, u32)) {
     let width = (panel.width() * s).round();
     let mut kit = Kit::new(text, look, s, width);
+    kit.motion = motion;
     let pad = kit.pad();
     kit.limit = max_height - pad;
     (kit.hover, kit.pressed, kit.focus) = state;
