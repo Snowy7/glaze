@@ -768,11 +768,14 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                 if !paths.is_empty() || !overflows.is_empty() || !directories.is_empty() {
                     dirty.get_or_insert_with(|| quiet.now());
                 }
+                let mut verified_roots = Vec::new();
                 for root in &overflows {
                     event(&cache, format_args!("reconcile root {}", root.display()));
                     if let Err(error) = reconcile(&state, root, true) {
                         eprintln!("reconcile {} offline: {error:#}", root.display());
                         offline_root(&state, root);
+                    } else {
+                        verified_roots.push(root.clone());
                     }
                     trim_at = Some(quiet.now() + Duration::from_secs(2));
                 }
@@ -788,6 +791,7 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                         );
                         if roots.contains(&directory) {
                             reconcile(&state, &directory, true)?;
+                            verified_roots.push(directory.clone());
                         } else {
                             reconcile(&state, &directory, false)?;
                         }
@@ -812,28 +816,36 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                     dirty = None;
                     trim_at = Some(quiet.now() + Duration::from_secs(2));
                 }
-                if let Some(scanned_roots) = completed.take() {
-                    checkpoint_changes(&state, &snapshot)?;
-                    dirty = None;
-                    if catchup_config
+                let catchup_finished = completed.is_some();
+                if let Some(scanned_roots) = completed.take()
+                    && catchup_config
                         .take()
                         .is_some_and(|config: mypaper_config::IndexConfig| {
                             config.exclude == current_config.exclude
                                 && config.include == current_config.include
                         })
-                    {
+                {
+                    verified_roots.extend(scanned_roots);
+                }
+                if catchup_finished || !verified_roots.is_empty() {
+                    checkpoint_changes(&state, &snapshot)?;
+                    dirty = None;
+                    if !verified_roots.is_empty() {
                         let mut freshness =
                             crate::startup::Freshness::load(&cache, &current_config);
                         let state = state.read().expect("index state");
-                        for root in scanned_roots {
+                        for root in verified_roots {
                             if !state.offline.contains(&root) {
                                 freshness.complete(&root, &state.store, crate::startup::now());
+                                scheduled.remove(&root);
                             }
                         }
                         if let Err(error) = freshness.save(&cache) {
                             event(&cache, format_args!("save scan freshness: {error:#}"));
                         }
                     }
+                }
+                if catchup_finished {
                     state.write().expect("index state").scanning = false;
                     event(
                         &cache,

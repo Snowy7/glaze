@@ -216,7 +216,8 @@ hardware is not required for that test and is not claimed as separately verified
 
 Directory entries are enumerated without elevation, through
 `FindFirstFileExW(FindExInfoBasic)` and `FindNextFileW`,
-with four background-priority directory workers. No file contents are opened.
+with four background-priority directory workers for ordinary recovery/benchmarks and
+one CPU-budgeted worker for startup/manual catch-up. No file contents are opened.
 `THREAD_MODE_BACKGROUND_BEGIN` lowers CPU and I/O priority for enumeration and
 maintenance workers; an unsuccessful priority change is logged. Existing bounded
 game checkpoints also call `yield_now` after releasing their gate lock, so runnable
@@ -242,9 +243,9 @@ affected **watched subtree** is the volume root, so that volume is reconciled; o
 volumes are left alone. The non-admin API cannot safely identify a smaller lost subtree.
 This is a limitation relative to precise journal replay.
 
-A cached snapshot answers queries after cached-load validation. A background reconciliation
-still runs once because changes made while the service was off cannot be recovered
-reliably without a journal. Buffered notifications are replayed after scanning. An
+A cached snapshot answers queries after cached-load validation. The deferred per-volume
+policy above schedules offline reconciliation because changes made while the service was
+off cannot be recovered reliably from ancestor timestamps. Buffered notifications are replayed after scanning. An
 event-driven two-second quiet deadline (or two minutes during sustained writes)
 checkpoints changes; there are no checkpoint wakeups when clean.
 
