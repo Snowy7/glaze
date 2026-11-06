@@ -36,6 +36,7 @@ pub struct Frame<'a> {
     pub s: f32,
     pub list: DisplayList,
     pub input: &'a Interaction,
+    motion: Option<&'a crate::interact::motion::InteractionMotion>,
 }
 
 /// A button's emphasis.
@@ -113,7 +114,14 @@ impl<'a> Frame<'a> {
             s,
             list: DisplayList::default(),
             input,
+            motion: None,
         }
+    }
+
+    /// Opt into sampled hover/press washes. Existing kit callers keep immediate states.
+    pub fn with_motion(mut self, motion: &'a crate::interact::motion::InteractionMotion) -> Self {
+        self.motion = Some(motion);
+        self
     }
 
     /// Design px to device px, on whole pixels.
@@ -186,6 +194,12 @@ impl<'a> Frame<'a> {
             State::Pressed => self.theme.color.pressed,
             State::Rest | State::Disabled => Rgba::TRANSPARENT,
         };
+        let color = self
+            .motion
+            .filter(|_| enabled && id != NONE)
+            .map_or(color, |motion| {
+                motion.wash(id, self.theme.color.hover, self.theme.color.pressed, color)
+            });
         self.fill(rect, radius, color);
     }
 
