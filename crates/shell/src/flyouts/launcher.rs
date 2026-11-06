@@ -217,6 +217,8 @@ pub struct Launcher {
     files: bool,
     indexed_files: Option<Vec<App>>,
     file_sizes: HashMap<String, String>,
+    // Separate from COM app discovery; a cold AppsFolder build must not delay instant files.
+    index_lane: Option<mypaper_bars::flyouts::Lane<()>>,
     clipboard_open: bool,
     clipboard: Option<mypaper_bars::flyouts::clipboard::History>,
     menu_entries: Vec<Entry<PanelCommand>>,
@@ -303,6 +305,7 @@ impl Launcher {
             files,
             indexed_files: None,
             file_sizes: HashMap::new(),
+            index_lane: None,
             clipboard_open: false,
             clipboard: None,
             menu_entries: vec![],
@@ -339,6 +342,7 @@ impl Launcher {
             files: false,
             indexed_files: None,
             file_sizes: HashMap::new(),
+            index_lane: None,
             clipboard_open: false,
             clipboard: None,
             menu_entries: vec![],
@@ -473,17 +477,24 @@ impl Launcher {
             return;
         }
         let query = self.query.clone();
-        cx.lanes.apps(move |_| {
-            let request = mypaper_index::Request::Search {
-                query: query.clone(),
-                limit: 50,
-            };
-            let hits = mypaper_index::pipe::request(&request, 100)
-                .ok()
-                .filter(|r| r.error.is_none())
-                .map(|r| r.hits);
-            Reply::IndexedFiles { query, hits }
-        });
+        super::Lanes::run(
+            &mut self.index_lane,
+            "launcher-files",
+            || (),
+            &cx.lanes.replies,
+            &cx.lanes.waker,
+            move |_| {
+                let request = mypaper_index::Request::Search {
+                    query: query.clone(),
+                    limit: 50,
+                };
+                let hits = mypaper_index::pipe::request(&request, 100)
+                    .ok()
+                    .filter(|r| r.error.is_none())
+                    .map(|r| r.hits);
+                Reply::IndexedFiles { query, hits }
+            },
+        );
     }
 
     fn launch(&mut self, index: usize) -> Effect {
