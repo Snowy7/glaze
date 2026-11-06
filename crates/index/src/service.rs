@@ -9,6 +9,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::{
     Request, pipe, query,
+    rules::{Decision, Rules},
     scan::{self, Background, Fetch},
     store::{DIRECTORY, NONE, REPARSE, Store},
     watch::{self, Change},
@@ -19,6 +20,8 @@ pub struct State {
     pub scanning: bool,
     cache: PathBuf,
     activity: Option<mpsc::SyncSender<Change>>,
+    rules: Arc<RwLock<Rules>>,
+    quiet: Arc<crate::quiet::Quiet>,
 }
 
 impl State {
@@ -52,20 +55,60 @@ pub fn cache_dir() -> Result<PathBuf> {
 /// Applies the final state after a burst. A remove/rename event is just a missing old path;
 /// metadata I/O happens outside the store write lock. Access-denied never erases an entry.
 fn apply(state: &RwLock<State>, path: &Path) -> Result<()> {
+    state.read().expect("index state").quiet.wait();
+    let rules = state
+        .read()
+        .expect("index state")
+        .rules
+        .read()
+        .expect("index rules")
+        .clone();
     let text = path.to_string_lossy();
     let metadata = scan::metadata(path);
     match metadata {
         Ok(entry) if entry.attributes & REPARSE == 0 => {
+            let decision = rules.decide(path, entry.attributes & DIRECTORY != 0);
+            if decision != Decision::Index {
+                if decision == Decision::Traverse {
+                    return reconcile(state, path, false);
+                }
+                let mut state = state.write().expect("index state");
+                if let Some(id) = state.store.find(&text) {
+                    state.store.remove(id);
+                }
+                if let Some(parent) = path
+                    .parent()
+                    .and_then(|p| state.store.find(&p.to_string_lossy()))
+                {
+                    state.store.upsert(
+                        parent,
+                        &entry.name,
+                        entry.attributes | crate::store::EXCLUDED | crate::store::SIZE_UNKNOWN,
+                        0,
+                        entry.modified,
+                    );
+                    state.store.refresh_unknown(parent);
+                }
+                return Ok(());
+            }
             let Some(parent) = path.parent() else {
                 return Ok(());
             };
             let parent_text = parent.to_string_lossy();
+            let shared = state;
             let existing = {
                 let mut state = state.write().expect("index state");
                 let Some(parent_id) = state.store.find(&parent_text) else {
                     return Ok(());
                 };
                 let existing = state.store.find(&text);
+                if existing.is_some_and(|id| {
+                    state.store.record(id).attributes & crate::store::EXCLUDED != 0
+                }) && entry.attributes & DIRECTORY != 0
+                {
+                    drop(state);
+                    return reconcile(shared, path, false);
+                }
                 state.store.upsert(
                     parent_id,
                     &entry.name,
@@ -104,13 +147,22 @@ fn apply(state: &RwLock<State>, path: &Path) -> Result<()> {
 }
 
 fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
+    let quiet = state.read().expect("index state").quiet.clone();
+    quiet.wait();
     // Measured warm trees on this machine favor Basic over LARGE_FETCH; the CLI retains both
     // so the choice can be remeasured on another disk or Windows version.
+    let rules = state
+        .read()
+        .expect("index state")
+        .rules
+        .read()
+        .expect("index rules")
+        .clone();
     let scanned = if parallel {
         let cache = state.read().expect("index state").cache.clone();
-        scan::scan_cached(root, Fetch::Basic, &cache)?
+        scan::scan_cached(root, Fetch::Basic, &cache, &rules, &quiet)?
     } else {
-        scan::subtree(root, Fetch::Basic)?
+        scan::subtree(root, Fetch::Basic, &rules, &quiet)?
     };
     if parallel {
         eprintln!(
@@ -183,13 +235,17 @@ fn merge(store: &mut Store, source_store: &Store, root: &Path) -> Result<()> {
             }
         }
     }
+    store.refresh_unknown(parent);
     Ok(())
 }
 
 fn checkpoint(state: &RwLock<State>, path: &Path) -> Result<()> {
     // Only this event-loop thread mutates the store. Let pipe readers continue throughout
     // disk I/O and validation, taking the exclusive lock only for the mapping swap.
-    state.read().expect("index state").store.save(path)?;
+    {
+        let state = state.read().expect("index state");
+        state.store.save_quiet(path, state.quiet.clone())?;
+    }
     let mapped = Store::open(path)?;
     let old = {
         let mut state = state.write().expect("index state");
@@ -232,27 +288,47 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
         started.elapsed().as_secs_f64() * 1000.0
     );
     let (tx, rx) = mpsc::sync_channel(256);
+    let config = mypaper_config::Config::load()?;
+    let rules = Arc::new(RwLock::new(Rules::new(&config.index, &cache)?));
+    let quiet = crate::quiet::Quiet::start(tx.clone())?;
     let state = Arc::new(RwLock::new(State {
         store,
         scanning: true,
         cache: cache.clone(),
         activity: Some(tx.clone()),
+        rules: rules.clone(),
+        quiet: quiet.clone(),
     }));
     pipe::start(state.clone())?;
     crate::spool::cleanup(&cache.join("scan"));
     for root in &roots {
-        watch::start(root.clone(), tx.clone())
+        watch::start(root.clone(), tx.clone(), rules.clone())
             .with_context(|| format!("watch {}", root.display()))?;
     }
     // Watches are armed before reconciliation so scan races are replayed afterwards. A
     // non-admin snapshot cannot know what changed while the service was off: reconcile once
     // in the background while cached queries are already available (USN replay is future work).
     let initial = state.clone();
+    let scan_roots = roots.clone();
+    let config_tx = tx.clone();
+    use notify::Watcher;
+    let mut config_watch =
+        notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+            if let Ok(event) = event
+                && event.paths.iter().any(|p| {
+                    p.file_name()
+                        .is_some_and(|n| n.eq_ignore_ascii_case("config.json"))
+                })
+            {
+                let _ = config_tx.try_send(Change::RulesChanged);
+            }
+        })?;
+    config_watch.watch(&mypaper_config::dir()?, notify::RecursiveMode::NonRecursive)?;
     std::thread::Builder::new()
         .name("index-initial".into())
         .spawn(move || {
             let _background = Background::enter();
-            for root in roots {
+            for root in scan_roots {
                 if let Err(error) = reconcile(&initial, &root, true) {
                     eprintln!("scan {}: {error:#}", root.display());
                 }
@@ -263,11 +339,14 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     let mut initializing = true;
     let mut pending_paths = BTreeSet::new();
     let mut pending_overflows = BTreeSet::new();
-    let mut dirty = None::<Instant>;
-    let mut trim_at = None::<Instant>;
+    let mut dirty = None::<Duration>;
+    let mut trim_at = None::<Duration>;
+    let mut current_config = config.index;
     loop {
-        let trim_wait = trim_at.map(|at| at.saturating_duration_since(Instant::now()));
-        let wait = if dirty.is_some() {
+        let trim_wait = trim_at.map(|at| at.saturating_sub(quiet.now()));
+        let wait = if quiet.paused() {
+            None
+        } else if dirty.is_some() {
             Some(trim_wait.map_or(Duration::from_secs(2), |t| t.min(Duration::from_secs(2))))
         } else {
             trim_wait
@@ -284,15 +363,30 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 let mut overflows = BTreeSet::new();
                 for change in std::iter::once(first).chain(rx.try_iter().take(255)) {
                     match change {
+                        Change::Activity => {}
+                        Change::RulesChanged => {
+                            if let Ok(config) = mypaper_config::Config::load()
+                                && config.index != current_config
+                            {
+                                match Rules::new(&config.index, &cache) {
+                                    Ok(next) => {
+                                        *rules.write().expect("index rules") = next;
+                                        current_config = config.index;
+                                        overflows.extend(roots.iter().cloned());
+                                    }
+                                    Err(error) => eprintln!("invalid index rules: {error:#}"),
+                                }
+                            }
+                        }
                         Change::InitialDone => {
                             initializing = false;
                             initial_finished = true;
-                            dirty = Some(Instant::now());
-                            trim_at = Some(Instant::now() + Duration::from_secs(2));
+                            dirty = Some(quiet.now());
+                            trim_at = Some(quiet.now() + Duration::from_secs(2));
                         }
                         Change::Queried => {
                             if !initializing {
-                                trim_at = Some(Instant::now() + Duration::from_secs(2));
+                                trim_at = Some(quiet.now() + Duration::from_secs(2));
                             }
                         }
                         Change::Paths {
@@ -312,33 +406,42 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 // Keep draining watch completions during initial scans. Applying them before
                 // import would race the scan; blocking the reader would overflow the kernel
                 // buffer. A deduplicated set retains only the final state of each changed path.
-                if initializing {
+                if initializing || quiet.paused() {
                     pending_paths.extend(paths);
                     pending_overflows.extend(overflows);
+                    if pending_paths.len() > 128_000 {
+                        pending_paths.clear();
+                        pending_overflows.extend(roots.iter().cloned());
+                    }
                     continue;
                 }
                 paths.append(&mut pending_paths);
                 overflows.append(&mut pending_overflows);
                 if !paths.is_empty() || !overflows.is_empty() {
-                    dirty.get_or_insert_with(Instant::now);
+                    dirty.get_or_insert_with(|| quiet.now());
                 }
                 for root in &overflows {
                     reconcile(&state, root, true)?;
-                    trim_at = Some(Instant::now() + Duration::from_secs(2));
+                    trim_at = Some(quiet.now() + Duration::from_secs(2));
                 }
                 // Parent paths sort before their children. New directories import complete
                 // subtrees; later events are idempotent final-state updates.
                 for path in paths {
                     if !overflows.iter().any(|r| path.starts_with(r)) {
-                        apply(&state, &path)?;
+                        if let Some(root) = Rules::marker_root(&path) {
+                            reconcile(&state, &root, false)?;
+                        } else {
+                            apply(&state, &path)?;
+                        }
                     }
                 }
-                if dirty.is_some_and(|t| t.elapsed() >= Duration::from_secs(120)) {
+                if dirty.is_some_and(|t| quiet.now().saturating_sub(t) >= Duration::from_secs(120))
+                {
                     checkpoint_changes(&state, &snapshot)?;
                     dirty = None;
-                    trim_at = Some(Instant::now() + Duration::from_secs(2));
+                    trim_at = Some(quiet.now() + Duration::from_secs(2));
                 }
-                if initial_finished {
+                if initial_finished || state.read().expect("index state").scanning {
                     state.write().expect("index state").scanning = false;
                     eprintln!("initial reconciliation and notification replay complete");
                 }
@@ -350,7 +453,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
-        if !initializing && trim_at.is_some_and(|at| Instant::now() >= at) {
+        if !initializing && !quiet.paused() && trim_at.is_some_and(|at| quiet.now() >= at) {
             trim_working_set();
             trim_at = None;
         }
@@ -604,6 +707,10 @@ mod tests {
             scanning: false,
             cache: dir.join("cache"),
             activity: None,
+            rules: Arc::new(RwLock::new(
+                Rules::new(&Default::default(), Path::new("")).unwrap(),
+            )),
+            quiet: Arc::new(crate::quiet::Quiet::default()),
         });
         std::fs::write(dir.join("a/test.txt"), b"1234567").unwrap();
         assert_eq!(scan::metadata(&dir.join("a/test.txt")).unwrap().size, 7);

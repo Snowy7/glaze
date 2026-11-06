@@ -18,6 +18,8 @@ use crate::scan::{Background, long};
 pub enum Change {
     InitialDone,
     Queried,
+    RulesChanged,
+    Activity,
     Paths {
         root: PathBuf,
         paths: Vec<PathBuf>,
@@ -50,7 +52,11 @@ impl Pending {
     }
 }
 
-pub fn start(root: PathBuf, tx: SyncSender<Change>) -> Result<()> {
+pub fn start(
+    root: PathBuf,
+    tx: SyncSender<Change>,
+    rules: Arc<std::sync::RwLock<crate::rules::Rules>>,
+) -> Result<()> {
     let name = long(&root);
     // SAFETY: directory-list access only, with all sharing modes; no elevation required.
     let handle = unsafe {
@@ -190,7 +196,10 @@ pub fn start(root: PathBuf, tx: SyncSender<Change>) -> Result<()> {
                         .iter()
                         .map(|c| u16::from_le_bytes(*c))
                         .collect();
-                    paths.push(root.join(String::from_utf16_lossy(&name)));
+                    let path = root.join(String::from_utf16_lossy(&name));
+                    if rules.read().expect("index rules").notify(&path) {
+                        paths.push(path);
+                    }
                     if next < 12 {
                         break;
                     }

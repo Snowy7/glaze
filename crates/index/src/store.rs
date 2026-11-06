@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::os::windows::fs::OpenOptionsExt;
 use std::path::Path;
 
@@ -19,6 +19,9 @@ use crate::Hit;
 pub const NONE: u32 = u32::MAX;
 pub const DIRECTORY: u32 = 0x10;
 pub const REPARSE: u32 = 0x400;
+// Private snapshot bits, outside Win32's currently defined file attribute range.
+pub const EXCLUDED: u32 = 0x4000_0000;
+pub const SIZE_UNKNOWN: u32 = 0x8000_0000;
 const MAGIC: &[u8; 8] = b"MYPIDX01";
 const HEADER: usize = 64;
 
@@ -73,6 +76,10 @@ struct Changes<'a> {
 
 #[derive(Default)]
 pub struct Store {
+    quiet: Option<std::sync::Arc<crate::quiet::Quiet>>,
+    column: Option<crate::names::Column>,
+    column_start: usize,
+    search_windows: Option<crate::residency::Windows>,
     windows: Option<crate::residency::Windows>,
     spool: Option<crate::spool::Spool>,
     mapping: Option<Mmap>,
@@ -89,6 +96,12 @@ pub struct Store {
 }
 
 impl Store {
+    pub(crate) fn set_quiet(&mut self, quiet: std::sync::Arc<crate::quiet::Quiet>) {
+        self.quiet = Some(quiet);
+    }
+    pub(crate) fn quiet(&self) -> Option<std::sync::Arc<crate::quiet::Quiet>> {
+        self.quiet.clone()
+    }
     /// An independent view for volume reconciliation. The immutable mapping is shared by the
     /// OS; only the bounded overlay is copied. Readers keep the old view until the final swap.
     pub fn fork(&self) -> Result<Self> {
@@ -99,6 +112,10 @@ impl Store {
             None => None,
         };
         Ok(Self {
+            quiet: self.quiet.clone(),
+            column: None,
+            column_start: self.column_start,
+            search_windows: None,
             windows: None,
             spool: None,
             mapping,
@@ -141,6 +158,80 @@ impl Store {
     }
     pub fn is_empty(&self) -> bool {
         self.len() <= 1
+    }
+
+    pub fn search_blocks(&self) -> usize {
+        self.column
+            .as_ref()
+            .map_or(self.len(), |column| column.offsets.len())
+    }
+
+    pub fn overridden(&self, id: u32) -> bool {
+        (id as usize) < self.mapped_count && self.changed.contains_key(&id)
+    }
+
+    /// Search reads only folded names and ranking fields. Overlay entries are searched once
+    /// by the final shard; old versions are ignored before candidate ranking.
+    pub fn visit_names(
+        &self,
+        start: usize,
+        end: usize,
+        required: &crate::names::Bloom,
+        mut visit: impl FnMut(u32, u32, u32, u32, &[u8], bool),
+    ) {
+        if let Some(column) = &self.column {
+            let map = self.mapping.as_ref().expect("names mapping");
+            let touch = |offset, len| {
+                if let Some(windows) = &self.search_windows {
+                    windows.touch(map.as_ptr(), map.len(), self.column_start + offset, len);
+                }
+            };
+            for index in (start..end).rev() {
+                let offset = column.offsets[index];
+                let next = column
+                    .offsets
+                    .get(index + 1)
+                    .copied()
+                    .unwrap_or(map.len() - self.column_start);
+                touch(offset, 136.min(next - offset));
+                crate::names::Column::visit(
+                    &map[self.column_start + offset..self.column_start + next],
+                    required,
+                    |len| touch(offset, len),
+                    |id, parent, attr, modified, name| {
+                        visit(id, parent, attr, modified, name, true)
+                    },
+                );
+            }
+            if end == column.offsets.len() {
+                for (id, r) in self.changed.iter().map(|(id, r)| (*id, *r)).chain(
+                    self.records
+                        .iter()
+                        .enumerate()
+                        .map(|(i, r)| ((self.mapped_count + i) as u32, *r)),
+                ) {
+                    visit(
+                        id,
+                        r.parent,
+                        r.attributes,
+                        r.modified,
+                        self.folded(r),
+                        false,
+                    );
+                }
+            }
+        } else {
+            for (id, r) in self.reverse_range(start, end) {
+                visit(
+                    id,
+                    r.parent,
+                    r.attributes,
+                    r.modified,
+                    self.folded(r),
+                    false,
+                );
+            }
+        }
     }
     pub fn overlay_len(&self) -> usize {
         self.changed.len() + self.records.len()
@@ -311,6 +402,11 @@ impl Store {
     pub fn range(&self, start: usize, end: usize) -> impl Iterator<Item = (u32, Record)> + '_ {
         let mut changes = self.changed.range(start as u32..end as u32).peekable();
         (start..end).map(move |id| {
+            if id % 4096 == 0
+                && let Some(quiet) = &self.quiet
+            {
+                quiet.wait();
+            }
             let record = if changes.peek().is_some_and(|(key, _)| **key == id as u32) {
                 *changes.next().expect("peeked").1
             } else if let Some(spool) = &self.spool {
@@ -541,6 +637,8 @@ impl Store {
             size: r.size,
             files: r.files,
             modified: r.modified,
+            size_unknown: r.attributes & SIZE_UNKNOWN != 0,
+            excluded: r.attributes & EXCLUDED != 0,
         }
     }
 
@@ -567,6 +665,11 @@ impl Store {
     /// Parent IDs precede children during enumeration, so one backwards pass rolls everything up.
     pub fn roll_up(&mut self) {
         for id in 0..self.len() {
+            if id % 4096 == 0
+                && let Some(quiet) = &self.quiet
+            {
+                quiet.wait();
+            }
             let mut r = self.record(id as u32);
             if r.directory() {
                 r.size = 0;
@@ -575,10 +678,41 @@ impl Store {
             }
         }
         for id in (1..self.len()).rev() {
+            if id % 4096 == 0
+                && let Some(quiet) = &self.quiet
+            {
+                quiet.wait();
+            }
             let r = self.record(id as u32);
             if r.live() {
                 self.adjust(r.parent, i128::from(r.size), i64::from(r.files), false);
+                if r.attributes & SIZE_UNKNOWN != 0 {
+                    let mut parent = self.record(r.parent);
+                    parent.attributes |= SIZE_UNKNOWN;
+                    self.set(r.parent, parent);
+                }
             }
+        }
+    }
+
+    /// Recompute only the affected ancestry; other excluded siblings must keep it unknown.
+    pub fn refresh_unknown(&mut self, mut id: u32) {
+        while id != NONE {
+            let mut record = self.record(id);
+            let mut unknown = record.attributes & EXCLUDED != 0;
+            let mut child = record.first;
+            while child != NONE {
+                let r = self.record(child);
+                unknown |= r.live() && r.attributes & SIZE_UNKNOWN != 0;
+                child = r.next;
+            }
+            record.attributes = if unknown {
+                record.attributes | SIZE_UNKNOWN
+            } else {
+                record.attributes & !SIZE_UNKNOWN
+            };
+            self.set(id, record);
+            id = record.parent;
         }
     }
 
@@ -607,7 +741,12 @@ impl Store {
             let old = self.record(id);
             if old.directory() == (attributes & DIRECTORY != 0) {
                 let mut r = old;
-                r.attributes = attributes;
+                r.attributes = attributes
+                    | if r.directory() {
+                        old.attributes & SIZE_UNKNOWN
+                    } else {
+                        0
+                    };
                 r.modified = modified;
                 if !r.directory() {
                     r.size = size;
@@ -646,6 +785,9 @@ impl Store {
             record.attributes = 0;
             self.set(at, record);
         }
+        if r.attributes & SIZE_UNKNOWN != 0 {
+            self.refresh_unknown(r.parent);
+        }
     }
 
     /// Replaces one root/subtree after reconciliation, leaving other volumes untouched.
@@ -675,6 +817,15 @@ impl Store {
                 child = c.next;
             }
         }
+        if r.attributes & SIZE_UNKNOWN != 0 {
+            let mut at = parent;
+            while at != NONE {
+                let mut record = self.record(at);
+                record.attributes |= SIZE_UNKNOWN;
+                self.set(at, record);
+                at = record.parent;
+            }
+        }
         id
     }
 
@@ -683,6 +834,17 @@ impl Store {
             return self.save_snapshot(path, None);
         }
         let mut streamed = self.fork()?;
+        streamed.windows = Some(crate::residency::Windows::default());
+        streamed.save_snapshot(path, None)
+    }
+
+    pub(crate) fn save_quiet(
+        &self,
+        path: &Path,
+        quiet: std::sync::Arc<crate::quiet::Quiet>,
+    ) -> Result<()> {
+        let mut streamed = self.fork()?;
+        streamed.quiet = Some(quiet);
         streamed.windows = Some(crate::residency::Windows::default());
         streamed.save_snapshot(path, None)
     }
@@ -702,6 +864,7 @@ impl Store {
             "replacement must contain one scanned root"
         );
         let mut streamed = self.fork()?;
+        streamed.quiet = source.quiet.clone();
         streamed.windows = Some(crate::residency::Windows::default());
         streamed.save_snapshot(path, Some((source, excluded)))
     }
@@ -825,6 +988,45 @@ impl Store {
                 ))?;
             }
         }
+        // The independent column is streamed, never materialized as a full private copy.
+        let mut column = crate::names::Builder::default();
+        for (id, record) in self
+            .range(0, self.len())
+            .filter(|(id, _)| ids[*id as usize] != NONE)
+        {
+            column.push(
+                &mut out,
+                ids[id as usize],
+                if record.parent == NONE {
+                    NONE
+                } else {
+                    ids[record.parent as usize]
+                },
+                record.attributes,
+                record.modified,
+                self.folded(record),
+            )?;
+        }
+        if let Some((source, _)) = replacement {
+            for (id, record) in source.range(1, source.len()) {
+                column.push(
+                    &mut out,
+                    id + kept - 1,
+                    if record.parent == 0 {
+                        0
+                    } else {
+                        record.parent + kept - 1
+                    },
+                    record.attributes,
+                    record.modified,
+                    source.folded(record),
+                )?;
+            }
+        }
+        column.flush(&mut out)?;
+        out.seek(SeekFrom::Start(32))?;
+        out.write_all(&(column.bytes as u64).to_le_bytes())?;
+        out.write_all(b"NAME0001")?;
         out.flush()?;
         out.get_ref().sync_all()?;
         drop(out);
@@ -846,10 +1048,12 @@ impl Store {
         );
         let count = usize::try_from(u64::from_le_bytes(mapping[8..16].try_into()?))?;
         let names = usize::try_from(u64::from_le_bytes(mapping[16..24].try_into()?))?;
+        let column_bytes = usize::try_from(u64::from_le_bytes(mapping[32..40].try_into()?))?;
         let end = count
             .checked_mul(size_of::<Record>())
             .and_then(|n| n.checked_add(HEADER))
-            .and_then(|n| n.checked_add(names));
+            .and_then(|n| n.checked_add(names))
+            .and_then(|n| n.checked_add(column_bytes));
         ensure!(
             count > 0 && count < u32::MAX as usize && end == Some(mapping.len()),
             "bad index length"
@@ -867,7 +1071,8 @@ impl Store {
         // One streaming UTF-8 validation is much cheaper than two decoder calls for each
         // short name. Record slices are then checked against character boundaries below.
         let names_start = HEADER + count * size_of::<Record>();
-        let blob_bytes = &store.mapping.as_ref().expect("mapped snapshot")[names_start..];
+        let blob_bytes =
+            &store.mapping.as_ref().expect("mapped snapshot")[names_start..names_start + names];
         let mut start = 0;
         while start < blob_bytes.len() {
             let mut end = (start + 4 * 1024 * 1024).min(blob_bytes.len());
@@ -941,6 +1146,23 @@ impl Store {
         if let Some(windows) = store.windows.take() {
             windows.release();
         }
+        if column_bytes != 0 {
+            let map = store.mapping.as_ref().expect("mapped snapshot");
+            ensure!(&map[40..48] == b"NAME0001", "bad names column version");
+            let start = names_start + names;
+            let windows = crate::residency::Windows::default();
+            store.column = Some(crate::names::Column::open(
+                &map[start..],
+                count,
+                |offset, length| {
+                    windows.touch(map.as_ptr(), map.len(), start + offset, length);
+                },
+            )?);
+            windows.release();
+            store.column_start = start;
+            store.search_windows = Some(crate::residency::Windows::search());
+        }
+        store.windows = Some(crate::residency::Windows::default());
         Ok(store)
     }
 }

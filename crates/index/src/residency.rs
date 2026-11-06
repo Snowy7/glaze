@@ -43,6 +43,12 @@ fn release(address: usize, length: usize, writable: bool) {
 }
 
 impl Windows {
+    pub fn search() -> Self {
+        Self {
+            retained: 8,
+            ..Self::default()
+        }
+    }
     /// Four validators need record/name windows each, plus a few older sibling records.
     /// Their shared 96 MiB budget still fits below the process's 256 MiB startup target.
     pub fn validation() -> Self {

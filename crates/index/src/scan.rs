@@ -14,7 +14,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::core::PCWSTR;
 
-use crate::store::{DIRECTORY, REPARSE, Store};
+use crate::rules::{Decision, Rules};
+use crate::store::{DIRECTORY, EXCLUDED, REPARSE, SIZE_UNKNOWN, Store};
 
 pub fn wide(path: &str) -> Vec<u16> {
     path.encode_utf16().chain([0]).collect()
@@ -105,6 +106,14 @@ pub fn metadata(path: &Path) -> Result<Entry> {
 }
 
 pub fn enumerate(path: &Path, fetch: Fetch) -> Result<Vec<Entry>> {
+    enumerate_quiet(path, fetch, None)
+}
+
+fn enumerate_quiet(
+    path: &Path,
+    fetch: Fetch,
+    quiet: Option<&crate::quiet::Quiet>,
+) -> Result<Vec<Entry>> {
     let pattern = long(&path.join("*"));
     let mut data = WIN32_FIND_DATAW::default();
     let flags = match fetch {
@@ -125,6 +134,11 @@ pub fn enumerate(path: &Path, fetch: Fetch) -> Result<Vec<Entry>> {
     let _handle = Find(handle);
     let mut entries = Vec::new();
     loop {
+        if entries.len() % 256 == 0
+            && let Some(quiet) = quiet
+        {
+            quiet.wait();
+        }
         let item = entry(&data);
         if item.name != "." && item.name != ".." && item.attributes & REPARSE == 0 {
             entries.push(item);
@@ -180,36 +194,69 @@ pub struct Scanned {
 
 /// Live-created subtrees are usually a few entries. Enumerate on the already-background
 /// service thread instead of starting four OS threads for every build/cache directory.
-pub fn subtree(root: &Path, fetch: Fetch) -> Result<Scanned> {
+pub(crate) fn subtree(
+    root: &Path,
+    fetch: Fetch,
+    rules: &Rules,
+    quiet: &std::sync::Arc<crate::quiet::Quiet>,
+) -> Result<Scanned> {
     let started = Instant::now();
     let mut store = Store::new();
+    store.set_quiet(quiet.clone());
     let info = metadata(root).ok();
+    let root_decision = rules.decide(root, true);
     let id = store.insert(
         0,
         root.to_string_lossy().trim_end_matches('\\'),
-        info.as_ref().map_or(DIRECTORY, |entry| entry.attributes),
+        info.as_ref().map_or(DIRECTORY, |entry| entry.attributes)
+            | if root_decision != Decision::Index {
+                EXCLUDED | SIZE_UNKNOWN
+            } else {
+                0
+            },
         0,
         info.as_ref().map_or(0, |entry| entry.modified),
     );
-    let mut pending = vec![(id, root.to_owned())];
+    let mut pending = if root_decision == Decision::Excluded {
+        vec![]
+    } else {
+        vec![(id, root.to_owned())]
+    };
     let mut denied = 0;
     while let Some((parent, path)) = pending.pop() {
-        match enumerate(&path, fetch) {
+        quiet.wait();
+        match enumerate_quiet(&path, fetch, Some(quiet)) {
             Ok(entries) => {
                 for entry in entries {
+                    let path = path.join(&entry.name);
+                    let decision = rules.decide(&path, entry.attributes & DIRECTORY != 0);
                     let child = store.insert(
                         parent,
                         &entry.name,
-                        entry.attributes,
-                        entry.size,
+                        entry.attributes
+                            | if decision != Decision::Index {
+                                EXCLUDED | SIZE_UNKNOWN
+                            } else {
+                                0
+                            },
+                        if decision == Decision::Excluded {
+                            0
+                        } else {
+                            entry.size
+                        },
                         entry.modified,
                     );
-                    if entry.attributes & DIRECTORY != 0 {
-                        pending.push((child, path.join(&entry.name)));
+                    if entry.attributes & DIRECTORY != 0 && decision != Decision::Excluded {
+                        pending.push((child, path));
                     }
                 }
             }
-            Err(_) => denied += 1,
+            Err(_) => {
+                denied += 1;
+                let mut record = store.record(parent);
+                record.attributes |= EXCLUDED | SIZE_UNKNOWN;
+                store.set(parent, record);
+            }
         }
     }
     store.roll_up();
@@ -223,29 +270,38 @@ pub fn subtree(root: &Path, fetch: Fetch) -> Result<Scanned> {
 /// Four workers share a directory queue; enumeration happens outside the short store lock.
 /// TODO: optional elevated MFT bootstrap / USN replay, in a separate explicit admin path.
 pub fn scan(root: &Path, fetch: Fetch) -> Result<Scanned> {
-    scan_with_store(root, fetch, Store::new(), None)
-}
-
-pub fn scan_cached(root: &Path, fetch: Fetch, cache: &Path) -> Result<Scanned> {
     scan_with_store(
         root,
         fetch,
-        Store::temporary(&cache.join("scan"))?,
-        Some(cache),
+        Store::new(),
+        &Rules::new(&Default::default(), Path::new(""))?,
     )
 }
 
-fn scan_with_store(
+pub(crate) fn scan_cached(
     root: &Path,
     fetch: Fetch,
-    mut store: Store,
-    exclude: Option<&Path>,
+    cache: &Path,
+    rules: &Rules,
+    quiet: &std::sync::Arc<crate::quiet::Quiet>,
 ) -> Result<Scanned> {
+    let mut store = Store::temporary(&cache.join("scan"))?;
+    store.set_quiet(quiet.clone());
+    scan_with_store(root, fetch, store, rules)
+}
+
+fn scan_with_store(root: &Path, fetch: Fetch, mut store: Store, rules: &Rules) -> Result<Scanned> {
     let started = Instant::now();
+    let root_decision = rules.decide(root, true);
     let root_id = store.insert(
         0,
         root.to_string_lossy().trim_end_matches('\\'),
-        DIRECTORY,
+        DIRECTORY
+            | if root_decision != Decision::Index {
+                EXCLUDED | SIZE_UNKNOWN
+            } else {
+                0
+            },
         0,
         0,
     );
@@ -255,10 +311,15 @@ fn scan_with_store(
         active: usize,
         denied: usize,
     }
+    let quiet = store.quiet();
     let shared = (
         Mutex::new(Work {
             store,
-            pending: VecDeque::from([(root_id, root.to_owned())]),
+            pending: if root_decision == Decision::Excluded {
+                VecDeque::new()
+            } else {
+                VecDeque::from([(root_id, root.to_owned())])
+            },
             active: 0,
             denied: 0,
         }),
@@ -267,6 +328,7 @@ fn scan_with_store(
     std::thread::scope(|scope| {
         for _ in 0..4 {
             let shared = &shared;
+            let work_quiet = quiet.clone();
             scope.spawn(move || {
                 let _background = Background::enter();
                 loop {
@@ -283,29 +345,54 @@ fn scan_with_store(
                             work = shared.1.wait(work).expect("scan queue wake");
                         }
                     };
-                    let entries = enumerate(&path, fetch);
+                    if let Some(quiet) = &work_quiet {
+                        quiet.wait();
+                    }
+                    let entries =
+                        enumerate_quiet(&path, fetch, work_quiet.as_deref()).map(|entries| {
+                            entries
+                                .into_iter()
+                                .map(|entry| {
+                                    let child_path = path.join(&entry.name);
+                                    let decision = rules
+                                        .decide(&child_path, entry.attributes & DIRECTORY != 0);
+                                    (entry, child_path, decision)
+                                })
+                                .collect::<Vec<_>>()
+                        });
                     let mut work = shared.0.lock().expect("scan queue");
                     match entries {
                         Ok(entries) => {
-                            for entry in entries {
-                                if exclude.is_some_and(|excluded| {
-                                    path.join(&entry.name).starts_with(excluded)
-                                }) {
-                                    continue;
-                                }
+                            for (entry, child_path, decision) in entries {
                                 let child = work.store.insert(
                                     id,
                                     &entry.name,
-                                    entry.attributes,
-                                    entry.size,
+                                    entry.attributes
+                                        | if decision != Decision::Index {
+                                            EXCLUDED | SIZE_UNKNOWN
+                                        } else {
+                                            0
+                                        },
+                                    if decision == Decision::Excluded {
+                                        0
+                                    } else {
+                                        entry.size
+                                    },
                                     entry.modified,
                                 );
-                                if entry.attributes & DIRECTORY != 0 {
-                                    work.pending.push_back((child, path.join(&entry.name)));
+                                if entry.attributes & DIRECTORY != 0
+                                    && decision != Decision::Excluded
+                                {
+                                    work.pending.push_back((child, child_path));
                                 }
                             }
                         }
-                        Err(_) => work.denied += 1,
+                        Err(_) => {
+                            work.denied += 1;
+                            let mut record = work.store.record(id);
+                            record.attributes |= EXCLUDED | SIZE_UNKNOWN;
+                            work.store.set(id, record);
+                        }
                     }
                     work.active -= 1;
                     shared.1.notify_all();
@@ -320,4 +407,70 @@ fn scan_with_store(
         seconds: started.elapsed().as_secs_f64(),
         denied: work.denied,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn conditional_build_trees_includes_and_unknown_sizes() {
+        let root =
+            std::env::temp_dir().join(format!("mypaper-index-excludes-{}", std::process::id()));
+        for dir in [
+            "rust/target/keep",
+            "ordinary/target",
+            "dotnet/bin",
+            "dotnet/obj",
+            "node_modules/pkg",
+            ".git/objects",
+        ] {
+            std::fs::create_dir_all(root.join(dir)).unwrap();
+            std::fs::write(root.join(dir).join("file.txt"), b"12345").unwrap();
+        }
+        std::fs::write(root.join("rust/target/CACHEDIR.TAG"), b"").unwrap();
+        std::fs::write(root.join("dotnet/app.csproj"), b"").unwrap();
+        let rules = Rules::new(
+            &mypaper_config::IndexConfig {
+                include: vec![format!(
+                    "{}/rust/target/keep/**",
+                    root.to_string_lossy().replace('\\', "/")
+                )],
+                ..Default::default()
+            },
+            Path::new(""),
+        )
+        .unwrap();
+        let quiet = std::sync::Arc::new(crate::quiet::Quiet::default());
+        let scanned = subtree(&root, Fetch::Basic, &rules, &quiet).unwrap();
+        let mut store = scanned.store;
+        assert_eq!(store.record(1).size, 10);
+        assert!(store.hit(1).size_unknown);
+        assert!(
+            store
+                .find(&root.join("node_modules/pkg/file.txt").to_string_lossy())
+                .is_none()
+        );
+        assert!(
+            store
+                .find(&root.join("rust/target/keep/file.txt").to_string_lossy())
+                .is_some()
+        );
+        assert!(
+            store
+                .find(&root.join("ordinary/target/file.txt").to_string_lossy())
+                .is_some()
+        );
+        for path in ["dotnet/bin", "dotnet/obj", "node_modules", ".git"] {
+            let id = store.find(&root.join(path).to_string_lossy()).unwrap();
+            assert!(store.hit(id).excluded);
+            assert!(store.hit(id).size_unknown);
+        }
+        for path in ["dotnet/bin", "dotnet/obj", "node_modules", ".git", "rust"] {
+            let id = store.find(&root.join(path).to_string_lossy()).unwrap();
+            store.remove(id);
+        }
+        assert!(!store.hit(1).size_unknown);
+        assert_eq!(store.hit(1).size, 5);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
