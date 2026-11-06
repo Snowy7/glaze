@@ -856,7 +856,7 @@ impl Store {
         );
         let generation = u64::from_le_bytes(mapping[24..32].try_into()?);
         let mut store = Self {
-            windows: Some(crate::residency::Windows::default()),
+            windows: Some(crate::residency::Windows::validation()),
             mapping: Some(mapping),
             source: Some(std::sync::Arc::new(file)),
             mapped_count: count,
@@ -918,9 +918,26 @@ impl Store {
             }
             Ok(())
         };
-        // Serial validation keeps one bounded resident window set; parallel fault streams
-        // defeated the RAM bound and provided little benefit once pages are trimmed.
-        validate(0, count)?;
+        let workers = if count >= 250_000 { 4 } else { 1 };
+        std::thread::scope(|scope| -> Result<()> {
+            let mut tasks = Vec::new();
+            for worker in 0..workers {
+                let validate = &validate;
+                tasks.push(
+                    std::thread::Builder::new()
+                        .name(format!("index-load-{worker}"))
+                        .stack_size(256 * 1024)
+                        .spawn_scoped(scope, move || {
+                            validate(count * worker / workers, count * (worker + 1) / workers)
+                        })?,
+                );
+            }
+            for task in tasks {
+                task.join()
+                    .map_err(|_| anyhow::anyhow!("index validation worker panicked"))??;
+            }
+            Ok(())
+        })?;
         if let Some(windows) = store.windows.take() {
             windows.release();
         }

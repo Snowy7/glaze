@@ -10,12 +10,24 @@ use std::sync::{
 
 pub(crate) const WINDOW: usize = 8 * 1024 * 1024;
 const RETAINED: usize = 4;
+const VALIDATION_WINDOWS: usize = 12;
 
-#[derive(Default)]
 pub(crate) struct Windows {
     resident: Mutex<VecDeque<(usize, usize)>>,
-    cached: [AtomicUsize; RETAINED],
+    cached: [AtomicUsize; VALIDATION_WINDOWS],
+    retained: usize,
     writable: bool,
+}
+
+impl Default for Windows {
+    fn default() -> Self {
+        Self {
+            resident: Mutex::new(VecDeque::new()),
+            cached: [const { AtomicUsize::new(0) }; VALIDATION_WINDOWS],
+            retained: RETAINED,
+            writable: false,
+        }
+    }
 }
 
 fn release(address: usize, length: usize, writable: bool) {
@@ -31,6 +43,14 @@ fn release(address: usize, length: usize, writable: bool) {
 }
 
 impl Windows {
+    /// Four validators need record/name windows each, plus a few older sibling records.
+    /// Their shared 96 MiB budget still fits below the process's 256 MiB startup target.
+    pub fn validation() -> Self {
+        Self {
+            retained: VALIDATION_WINDOWS,
+            ..Self::default()
+        }
+    }
     pub fn writable() -> Self {
         Self {
             writable: true,
@@ -48,13 +68,14 @@ impl Windows {
             if self
                 .cached
                 .iter()
+                .take(self.retained)
                 .any(|key| key.load(Ordering::Relaxed) == address)
             {
                 continue;
             }
             let mut resident = self.resident.lock().expect("resident windows");
             if !resident.iter().any(|(p, _)| *p == address) {
-                if resident.len() == RETAINED {
+                if resident.len() == self.retained {
                     let (old, len) = resident.pop_front().expect("full resident windows");
                     release(old, len, self.writable);
                 }
