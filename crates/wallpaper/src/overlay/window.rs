@@ -217,7 +217,7 @@ impl OverlayWindow {
                 fade.AddCubic(0.0, 0.0, 3.0 / t, -3.0 / (t * t), 1.0 / (t * t * t))?;
             } else {
                 for [x0, y0, x1, y1] in curve.segments() {
-                    fade.AddCubic(f64::from(x0 * t), y0, (y1 - y0) / ((x1 - x0) * t), 0.0, 0.0)?;
+                    fade.AddCubic(f64::from(x0) * f64::from(t), y0, (y1 - y0) / ((x1 - x0) * t), 0.0, 0.0)?;
                 }
             }
             fade.End(f64::from(t), 1.0)?;

@@ -330,8 +330,8 @@ pub unsafe fn decode(lparam: LPARAM) -> Option<Request> {
     {
         return None;
     }
-    // A short wire has no style tail: it reads as zeros, which only a `Style` request (which
-    // must be long) would look at.
+    // An old style prefix leaves the new fields at their neutral defaults. Short lifecycle
+    // messages do not inspect any style fields.
     let mut wire = Wire::zeroed();
     wire.style = Style::DEFAULT;
     // SAFETY: `len` (at most the wire's size) bytes at `lpData`, alive for the message.
@@ -351,7 +351,8 @@ pub fn find_engine() -> Option<HWND> {
 }
 
 /// The shell side: sends `request` to the engine window `engine`, waiting at most 50 ms for the
-/// engine to take it (it is queued there, not drawn yet).
+/// engine to take each payload (queued there, not drawn yet). A refused extended style gets
+/// one compatibility retry; a timeout is never retried.
 pub fn send(engine: HWND, request: &Request) -> Reply {
     let mut wire = Wire::from(request);
     let Some(reply) = send_wire(engine, wire.bytes()) else {
@@ -374,7 +375,7 @@ fn send_wire(engine: HWND, bytes: &[u8]) -> Option<Reply> {
         lpData: bytes.as_ptr().cast_mut().cast(),
     };
     let mut result = 0usize;
-    // SAFETY: `data` and `wire` outlive the call; the engine copies them before it returns.
+    // SAFETY: `data` and `bytes` outlive the call; the engine copies them before it returns.
     let sent = unsafe {
         SendMessageTimeoutW(
             engine,

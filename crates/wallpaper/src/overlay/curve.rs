@@ -10,43 +10,6 @@ pub struct FadeCurve {
     points: [f32; 4],
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn compositor_pieces_follow_beziers_and_springs_within_one_alpha_step() {
-        for curve in [
-            FadeCurve::bezier([0.0, 0.0, 1.0, 1.0]),
-            FadeCurve::bezier([0.42, 0.0, 0.58, 1.0]),
-            FadeCurve::bezier([0.2, 1.4, 0.4, 1.0]),
-            FadeCurve::bezier([0.0, 3.0, 0.0, -2.0]),
-            FadeCurve::bezier([1.0, 3.0, 1.0, -2.0]),
-            FadeCurve::spring(1.0, 220.0, 22.0, 0.8),
-            FadeCurve::spring(1.0, 260.0, 13.0, 1.2),
-            FadeCurve::spring(0.1, 2000.0, 0.0, 5.0),
-        ] {
-            assert!(curve.valid());
-            let pieces = curve.segments();
-            assert_eq!(pieces.first().unwrap()[..2], [0.0, 0.0]);
-            assert_eq!(pieces.last().unwrap()[2..], [1.0, 1.0]);
-            let mut piece = 0;
-            for i in 0..=10000 {
-                let x = i as f32 / 10000.0;
-                while piece + 1 < pieces.len() && x > pieces[piece][2] {
-                    piece += 1;
-                }
-                let [x0, y0, x1, y1] = pieces[piece];
-                let value = y0 + (y1 - y0) * ((x - x0) / (x1 - x0));
-                assert!(
-                    (value - curve.at(x)).abs() < 1.0 / 255.0,
-                    "{curve:?} at {x}"
-                );
-            }
-        }
-    }
-}
-
 impl FadeCurve {
     /// The original cubic ease-out, preserved exactly for clients without a curve.
     pub const DEFAULT: Self = Self {
@@ -137,7 +100,7 @@ impl FadeCurve {
     }
 
     /// Linear pieces for DirectComposition's AddCubic. Quarter/midpoint refinement limits
-    /// opacity error to under one alpha step, including extreme Béziers and fast springs.
+    /// opacity error to under one alpha step, including extreme BÃ©ziers and fast springs.
     pub fn segments(self) -> Vec<[f32; 4]> {
         fn split(curve: FadeCurve, piece: [f32; 4], depth: u8, out: &mut Vec<[f32; 4]>) {
             let [x0, y0, x1, y1] = piece;
@@ -145,7 +108,7 @@ impl FadeCurve {
                 .into_iter()
                 .map(|p| (curve.at(x0 + (x1 - x0) * p) - (y0 + (y1 - y0) * p)).abs())
                 .fold(0.0_f32, f32::max);
-            if error > 1.0 / 2048.0 && depth < 12 {
+            if error > 1.0 / 2048.0 && depth < 24 && (x0 + x1) / 2.0 > x0 && (x0 + x1) / 2.0 < x1 {
                 let x = (x0 + x1) / 2.0;
                 let y = curve.at(x);
                 split(curve, [x0, y0, x, y], depth + 1, out);
@@ -156,12 +119,60 @@ impl FadeCurve {
         }
         let mut pieces = Vec::new();
         // 256 starting intervals cover even the fastest permitted physical spring without
-        // aliasing its oscillations. Ordinary Béziers need just 16 before adaptive splitting.
+        // aliasing its oscillations. Ordinary BÃ©ziers need just 16 before adaptive splitting.
         let count = if self.kind == 2 { 256 } else { 16 };
         for i in 0..count {
             let (x0, x1) = (i as f32 / count as f32, (i + 1) as f32 / count as f32);
             split(self, [x0, self.at(x0), x1, self.at(x1)], 0, &mut pieces);
         }
         pieces
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compositor_pieces_follow_beziers_and_springs_within_one_alpha_step() {
+        for curve in [
+            FadeCurve::bezier([0.0, 0.0, 1.0, 1.0]),
+            FadeCurve::bezier([0.42, 0.0, 0.58, 1.0]),
+            FadeCurve::bezier([0.2, 1.4, 0.4, 1.0]),
+            FadeCurve::bezier([0.0, 3.0, 0.0, -2.0]),
+            FadeCurve::bezier([1.0, 3.0, 1.0, -2.0]),
+            FadeCurve::spring(1.0, 220.0, 22.0, 0.8),
+            FadeCurve::spring(1.0, 260.0, 13.0, 1.2),
+            FadeCurve::spring(0.1, 2000.0, 0.0, 5.0),
+        ] {
+            assert!(curve.valid());
+            let pieces = curve.segments();
+            assert_eq!(pieces.first().unwrap()[..2], [0.0, 0.0]);
+            assert_eq!(pieces.last().unwrap()[2..], [1.0, 1.0]);
+            let mut piece = 0;
+            for i in 0..=10000 {
+                let x = i as f32 / 10000.0;
+                while piece + 1 < pieces.len() && x > pieces[piece][2] {
+                    piece += 1;
+                }
+                let [x0, y0, x1, y1] = pieces[piece];
+                let value = y0 + (y1 - y0) * ((x - x0) / (x1 - x0));
+                assert!(
+                    (value - curve.at(x)).abs() < 1.0 / 255.0,
+                    "{curve:?} at {x}"
+                );
+            }
+            for x in (2..=7).flat_map(|p| {
+                let x = 10.0_f32.powi(-p);
+                [x, 1.0 - x]
+            }) {
+                let &[x0, y0, x1, y1] = pieces.iter().find(|p| x <= p[2]).unwrap();
+                let value = y0 + (y1 - y0) * ((x - x0) / (x1 - x0));
+                assert!(
+                    (value - curve.at(x)).abs() < 1.0 / 255.0,
+                    "endpoint {curve:?} at {x}"
+                );
+            }
+        }
     }
 }
