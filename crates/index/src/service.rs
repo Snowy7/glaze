@@ -371,6 +371,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     let mut initializing = true;
     let mut pending_paths = BTreeSet::new();
     let mut pending_overflows = BTreeSet::new();
+    let mut pending_subtrees = BTreeSet::new();
     let mut dirty = None::<Duration>;
     let mut trim_at = None::<Duration>;
     let mut current_config = config.index;
@@ -393,9 +394,17 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 let mut initial_finished = false;
                 let mut paths = BTreeSet::new();
                 let mut overflows = BTreeSet::new();
+                let mut subtrees = BTreeSet::new();
                 for change in std::iter::once(first).chain(rx.try_iter().take(255)) {
                     match change {
                         Change::Activity => {}
+                        Change::Subtrees(directories) => {
+                            subtrees.extend(directories);
+                            if subtrees.len() > 4096 {
+                                subtrees.clear();
+                                overflows.extend(roots.iter().cloned());
+                            }
+                        }
                         Change::RulesChanged => {
                             if let Ok(config) = mypaper_config::Config::load()
                                 && config.index != current_config
@@ -441,19 +450,35 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 if initializing || quiet.paused() {
                     pending_paths.extend(paths);
                     pending_overflows.extend(overflows);
-                    if pending_paths.len() > 128_000 {
+                    pending_subtrees.extend(subtrees);
+                    if pending_paths.len() > 128_000 || pending_subtrees.len() > 4096 {
                         pending_paths.clear();
+                        pending_subtrees.clear();
                         pending_overflows.extend(roots.iter().cloned());
                     }
                     continue;
                 }
                 paths.append(&mut pending_paths);
                 overflows.append(&mut pending_overflows);
-                if !paths.is_empty() || !overflows.is_empty() {
+                subtrees.append(&mut pending_subtrees);
+                if !paths.is_empty() || !overflows.is_empty() || !subtrees.is_empty() {
                     dirty.get_or_insert_with(|| quiet.now());
                 }
                 for root in &overflows {
                     reconcile(&state, root, true)?;
+                    trim_at = Some(quiet.now() + Duration::from_secs(2));
+                }
+                let mut ancestor: Option<PathBuf> = None;
+                for directory in subtrees {
+                    if overflows.iter().any(|root| directory.starts_with(root))
+                        || ancestor
+                            .as_ref()
+                            .is_some_and(|root| directory.starts_with(root))
+                    {
+                        continue;
+                    }
+                    reconcile(&state, &directory, roots.contains(&directory))?;
+                    ancestor = Some(directory);
                     trim_at = Some(quiet.now() + Duration::from_secs(2));
                 }
                 // Parent paths sort before their children. New directories import complete
