@@ -82,39 +82,9 @@ pub fn emphasize_feedback(b: &mut B, from: usize) {
     }
 }
 
-/// Keep selected segments consistent, and make a file's unavailable controls visibly inert.
+/// Make a file's unavailable controls visibly inert. The kit owns selection appearance.
 pub fn finish_page(app: &App, b: &mut B, page: Page, first_op: usize, first_target: usize) {
     use mypaper_ui::Op;
-    let selected: Vec<_> = b
-        .list
-        .hits
-        .iter()
-        .filter(|hit| {
-            hit.role == mypaper_ui::Role::RadioButton
-                && hit.checked == Some(true)
-                && hit.rect.height() <= b.px(36.0)
-                && hit.rect.width() > hit.rect.height()
-        })
-        .map(|hit| hit.rect)
-        .collect();
-    for op in &mut b.list.ops[first_op..] {
-        match op {
-            Op::Fill { rect, color, .. } if selected.contains(rect) => {
-                *color = super::tokens::thumb(b.p.dark);
-            }
-            Op::Text { rect, color, .. }
-                if selected.iter().any(|r| {
-                    r.left <= rect.left
-                        && r.right >= rect.right
-                        && r.top <= rect.top
-                        && r.bottom >= rect.bottom
-                }) =>
-            {
-                *color = super::tokens::hex(0xffffff);
-            }
-            _ => {}
-        }
-    }
     if !super::controls::relevant_docs(page)
         .iter()
         .any(|id| app.docs.doc(*id).issue.is_some())

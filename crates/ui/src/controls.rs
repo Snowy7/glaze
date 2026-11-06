@@ -55,6 +55,11 @@ pub fn format_value(value: f64, unit: &str) -> String {
     )
 }
 
+/// Opaque segment selection, legible in both app schemes.
+pub fn segment_fill(dark: bool) -> Rgba {
+    hex(if dark { 0x6b6b6b } else { 0x5e5e5e })
+}
+
 /// The gray tokens of the monochrome design (plans/native/studio-redesign.md, 8.3), retuned
 /// for fills instead of outlines: each surface step is a clear fill step, hover and selection
 /// are washes that read on any of them, and every text step meets the kit's floors (ink-1 7:1,
@@ -1020,20 +1025,7 @@ impl<'a, A: Clone> Builder<'a, A> {
                 })
                 .collect()
         };
-        let proportional = segs
-            .first()
-            .is_some_and(|r| (r.width() - equal.round()).abs() > 0.5);
-        if proportional || self.t.text_scale != 1.0 {
-            self.segments_drawn(&keys, outer, &segs, items, selected);
-        } else {
-            self.kit(
-                &keys,
-                |_| {},
-                |f, base| {
-                    f.segmented(base, outer, items, selected.unwrap_or(usize::MAX));
-                },
-            );
-        }
+        self.segments_drawn(&keys, outer, &segs, items, selected);
         self.group(key, |b| {
             for (i, item) in items.iter().enumerate() {
                 let seg = segs[i];
@@ -1072,11 +1064,23 @@ impl<'a, A: Clone> Builder<'a, A> {
                 self.fill(
                     *seg,
                     inner_radius,
-                    if self.p.dark { c.fill } else { c.knob },
+                    if self.p.selected == self.p.solid {
+                        self.p.solid
+                    } else {
+                        segment_fill(self.p.dark)
+                    },
                 );
             }
             self.wash(keys[i], *seg, inner_radius);
-            let ink = if on { c.label } else { c.secondary };
+            let ink = if on {
+                if self.p.selected == self.p.solid {
+                    self.p.on_solid
+                } else {
+                    hex(0xffffff)
+                }
+            } else {
+                c.secondary
+            };
             self.text_in(seg.inflate(-self.px(4.0)), item, &style, ink, Align::Center);
             self.focus_ring(keys[i], *seg, inner_radius);
         }

@@ -7,9 +7,8 @@ pub fn hex(v: u32) -> Rgba {
     Rgba::rgb8([(v >> 16) as u8, (v >> 8) as u8, v as u8], 1.0)
 }
 
-pub fn thumb(dark: bool) -> Rgba {
-    hex(if dark { 0x6b6b6b } else { 0x5e5e5e })
-}
+#[cfg(test)]
+pub use mypaper_ui::controls::segment_fill as thumb;
 
 pub fn palette(dark: bool) -> Palette {
     let mut p = if dark {
