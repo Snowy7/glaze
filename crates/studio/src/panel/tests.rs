@@ -149,6 +149,9 @@ fn render_panel_pages() {
                             ),
                             json!("glass"),
                         ));
+                        let layout = crate::pages::widgets::layout(&app);
+                        let own = super::widget_look::appearance(&app, &layout.instances[0], super::widget_look::inherited_style(&app));
+                        app.run(Action::Set(crate::actions::Edit::new(DocId::Widgets, "/instances/0/appearance", "Its own look"), own));
                     } else if name != "clock" {
                         app.run(Action::Set(
                             crate::actions::Edit::new(
