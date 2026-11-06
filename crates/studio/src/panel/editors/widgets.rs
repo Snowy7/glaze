@@ -72,6 +72,7 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     }
     group(b, c, "Size", |b, c| {
         size_controls(b, c, instance);
+        notice(b, c, "Drag to move · arrows move one cell");
         notice(b, c, "Drag the corner brackets on the desktop to resize.");
     });
     group(b, c, "Its look", |b, c| {
@@ -99,13 +100,28 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
         );
         if own {
             let selected = crate::panel::widget_look::selected(&instance.appearance);
-            super::look::style_tiles(app, b, c, selected, |style| {
-                Action::Set(
+            let choices: Vec<_> = super::look::STYLES.iter().map(|(style, name, _)| {
+                (*name, selected == Some(*style), Action::Set(
                     Edit::new(DocId::Widgets, format!("{base}/appearance"), "Widget style"),
-                    crate::panel::widget_look::appearance(app, instance, style),
-                )
-            });
+                    crate::panel::widget_look::appearance(app, instance, *style),
+                ))
+            }).collect();
+            crate::panel::choosers::draw(
+                app, b, c, key(("panel-widget-styles", &instance.instance)), b.px(184.0), &choices,
+                |b, index, rect| {
+                    let mut preview = instance.clone();
+                    if let Some(index) = index.filter(|index| selected != Some(super::look::STYLES[*index].0)) {
+                        preview.appearance = serde_json::from_value(
+                            crate::panel::widget_look::appearance(app, instance, super::look::STYLES[index].0)
+                        ).unwrap_or_default();
+                    }
+                    let (setting, value) = crate::panel::options::face_choice(manifest, &resolved)
+                        .unwrap_or(("variant", ""));
+                    face(app, b, &preview, manifest, setting, value, rect);
+                },
+            );
             let style = selected.unwrap_or(inherited);
+            notice(b, c, &format!("This widget's {} settings", selected.map_or("Custom", super::look::style_name)));
             let uses = crate::look::uses(style);
             let effective = instance
                 .appearance
@@ -140,7 +156,6 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                 app.get(DocId::Widgets, &format!("{base}/appearance/tint")),
                 false,
             );
-            action_button(b, c, "Follow Look", reset);
         }
         select(
             b,
@@ -320,7 +335,7 @@ fn manifest_control(
                 key(("panel-faces", &instance.instance, name)),
                 picture_height,
                 &tiles,
-                |b, index, rect| face(app, b, instance, manifest, name, options[index].0, rect),
+                |b, index, rect| face(app, b, instance, manifest, name, index.map_or(current, |index| options[index].0), rect),
             );
         }
         Setting::Number {

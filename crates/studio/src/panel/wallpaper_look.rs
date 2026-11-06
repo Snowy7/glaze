@@ -2,38 +2,105 @@
 use mypaper_config::look::Style;
 use serde_json::{Value, json};
 
-use crate::{actions::{Action, Edit}, app::App, docs::DocId, library::Wallpaper};
 use super::specimens::MaterialSample;
+use crate::{
+    actions::{Action, Edit},
+    app::App,
+    docs::DocId,
+    library::Wallpaper,
+};
 
 pub fn target(app: &App) -> Option<&Wallpaper> {
-    let index = if app.nav.look_theme { app.nav.wallpaper.or_else(|| app.library.active()) } else { app.library.active() }?;
+    let index = if app.nav.look_theme {
+        app.nav.wallpaper.or_else(|| app.library.active())
+    } else {
+        app.library.active()
+    }?;
     app.library.items.get(index)
 }
 
 pub fn edit(wallpaper: &Wallpaper, path: &str, label: &str) -> Edit {
-    Edit::new(DocId::Studio, format!("/theme:{}{path}", crate::docs::token(&wallpaper.dir.display().to_string())), label)
+    Edit::new(
+        DocId::Studio,
+        format!(
+            "/theme:{}{path}",
+            crate::docs::token(&wallpaper.dir.display().to_string())
+        ),
+        label,
+    )
 }
 
 pub fn selected(theme: &Value) -> Option<Style> {
-    let appearance: mypaper_theme::Appearance = serde_json::from_value(theme.pointer("/widgets/appearance")?.clone()).ok()?;
-    super::widget_look::selected(&appearance)
+    let style = |family| {
+        let appearance: mypaper_theme::Appearance =
+            serde_json::from_value(theme.pointer(&format!("/{family}/appearance"))?.clone())
+                .ok()?;
+        super::widget_look::selected(&appearance)
+    };
+    let widgets = style("widgets")?;
+    (style("bars") == Some(widgets)).then_some(widgets)
 }
 
 pub fn sample(app: &App, theme: &Value) -> MaterialSample {
-    let style = selected(theme).unwrap_or_default();
+    let appearance: mypaper_theme::Appearance = theme
+        .pointer("/widgets/appearance")
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default();
+    let style = super::widget_look::selected(&appearance).unwrap_or(
+        if appearance.style == Some(mypaper_theme::WidgetStyle::Liquid) {
+            Style::Liquid
+        } else {
+            Style::Mono
+        },
+    );
     let mut sample = MaterialSample::defaults(app, style);
-    let appearance: mypaper_theme::Appearance = theme.pointer("/widgets/appearance")
-        .and_then(|value| serde_json::from_value(value.clone()).ok()).unwrap_or_default();
-    let glass: mypaper_theme::Liquid = theme.pointer("/widgets/glass")
-        .and_then(|value| serde_json::from_value(value.clone()).ok()).unwrap_or_default();
-    sample.clarity = glass.tint.map(|value| 1.0 - value).or_else(|| appearance.opacity.map(|value| 1.0 - value)).unwrap_or(sample.clarity);
+    let glass: mypaper_theme::Liquid = theme
+        .pointer("/widgets/glass")
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default();
+    sample.clarity = glass
+        .tint
+        .map(|value| 1.0 - value)
+        .or_else(|| appearance.opacity.map(|value| 1.0 - value))
+        .unwrap_or(sample.clarity);
     sample.blur = glass.blur.or(appearance.blur).unwrap_or(sample.blur);
     sample.refraction = glass.refraction.unwrap_or(sample.refraction);
     sample.highlight = glass.highlight.unwrap_or(sample.highlight);
-    sample.tint = appearance.tint.map_or(sample.tint, |color| mypaper_ui::Rgba::rgb8(color.0, 1.0));
+    sample.tint = appearance
+        .tint
+        .map_or(sample.tint, |color| mypaper_ui::Rgba::rgb8(color.0, 1.0));
     sample.radius = appearance.radius.unwrap_or(sample.radius);
     sample.edge = appearance.border.unwrap_or(sample.edge);
-    if appearance.surface == Some(mypaper_theme::Surface::Solid) { sample.clarity = 0.0; }
+    if appearance.surface == Some(mypaper_theme::Surface::Solid) {
+        sample.clarity = 0.0;
+    }
+    if let Some((edit, value)) = &app.pending_value
+        && let Some(wallpaper) = target(app)
+    {
+        for id in ["clarity", "blur", "refraction", "highlight"] {
+            if edit.path == material_edit(wallpaper, id, "").path
+                && let Some(value) = value.as_f64()
+            {
+                match id {
+                    "clarity" => sample.clarity = value as f32,
+                    "blur" => sample.blur = value as f32,
+                    "refraction" => sample.refraction = value as f32,
+                    "highlight" => sample.highlight = value as f32,
+                    _ => unreachable!(),
+                }
+            }
+        }
+        if edit.path == self::edit(wallpaper, "/@both/appearance/tint", "").path
+            && let Some(color) = value.as_str().and_then(mypaper_config::Color::parse)
+        {
+            sample.tint = mypaper_ui::Rgba::rgb8(color.0, 1.0);
+        }
+        if edit.path == self::edit(wallpaper, "/@both/appearance/radius", "").path
+            && let Some(radius) = value.as_f64()
+        {
+            sample.radius = radius as f32;
+        }
+    }
     sample
 }
 
@@ -43,9 +110,30 @@ pub fn with_style(app: &App, theme: &Value, style: Style) -> Value {
     let mut next = theme.clone();
     for family in ["widgets", "bars"] {
         for (field, value) in [
-            ("style", json!(if style == Style::Liquid { "liquid" } else { "minimal" })),
-            ("surface", json!(if style == Style::Solid { "solid" } else { "glass" })),
-            ("opacity", json!(if style == Style::Solid { 1.0 } else { 1.0 - sample.clarity })),
+            (
+                "style",
+                json!(if style == Style::Liquid {
+                    "liquid"
+                } else {
+                    "minimal"
+                }),
+            ),
+            (
+                "surface",
+                json!(if style == Style::Solid {
+                    "solid"
+                } else {
+                    "glass"
+                }),
+            ),
+            (
+                "opacity",
+                json!(if style == Style::Solid {
+                    1.0
+                } else {
+                    1.0 - sample.clarity
+                }),
+            ),
             ("blur", json!(sample.blur)),
             ("radius", json!(sample.radius)),
             ("border", json!(sample.edge)),
@@ -53,8 +141,10 @@ pub fn with_style(app: &App, theme: &Value, style: Style) -> Value {
             next[family]["appearance"][field] = value;
         }
         for (field, value) in [
-            ("tint", 1.0 - sample.clarity), ("blur", sample.blur),
-            ("refraction", sample.refraction), ("highlight", sample.highlight),
+            ("tint", 1.0 - sample.clarity),
+            ("blur", sample.blur),
+            ("refraction", sample.refraction),
+            ("highlight", sample.highlight),
         ] {
             next[family]["glass"][field] = json!(value);
         }
@@ -63,28 +153,99 @@ pub fn with_style(app: &App, theme: &Value, style: Style) -> Value {
 }
 
 pub fn style_action(wallpaper: &Wallpaper, style: Style) -> Action {
-    Action::Set(Edit::new(DocId::Studio,
-        format!("/panel/wallpaper-style/{}", crate::docs::token(&wallpaper.dir.display().to_string())),
-        "Wallpaper style"), json!(style))
+    Action::Set(
+        Edit::new(
+            DocId::Studio,
+            format!(
+                "/panel/wallpaper-style/{}",
+                crate::docs::token(&wallpaper.dir.display().to_string())
+            ),
+            "Wallpaper style",
+        ),
+        json!(style),
+    )
+}
+
+pub fn material_edit(wallpaper: &Wallpaper, id: &str, label: &str) -> Edit {
+    Edit::new(
+        DocId::Studio,
+        format!(
+            "/panel/wallpaper-material/{}/{id}",
+            crate::docs::token(&wallpaper.dir.display().to_string())
+        ),
+        label,
+    )
+}
+
+fn with_material(theme: &Value, id: &str, value: f64) -> Option<Value> {
+    let mut next = theme.clone();
+    let (field, value) = match id {
+        "clarity" => ("tint", 1.0 - value.clamp(0.0, 1.0)),
+        "blur" => ("blur", value.clamp(0.0, 32.0)),
+        "refraction" => ("refraction", value.clamp(0.0, 1.0)),
+        "highlight" => ("highlight", value.clamp(0.0, 1.0)),
+        _ => return None,
+    };
+    for family in ["widgets", "bars"] {
+        next[family]["glass"][field] = json!(value);
+        if matches!(id, "clarity" | "blur") {
+            next[family]["appearance"][if id == "clarity" { "opacity" } else { "blur" }] =
+                json!(value);
+        }
+    }
+    Some(next)
 }
 
 pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
-    if edit.doc != DocId::Studio { return false; }
-    let Some(folder) = edit.path.strip_prefix("/panel/wallpaper-style/") else { return false };
+    if edit.doc != DocId::Studio {
+        return false;
+    }
+    let (folder, knob) = if let Some(folder) = edit.path.strip_prefix("/panel/wallpaper-style/") {
+        (folder, None)
+    } else if let Some(rest) = edit.path.strip_prefix("/panel/wallpaper-material/") {
+        let Some((folder, knob)) = rest.rsplit_once('/') else {
+            return true;
+        };
+        (folder, Some(knob))
+    } else {
+        return false;
+    };
     let folder = std::path::PathBuf::from(folder.replace("~1", "/").replace("~0", "~"));
-    let Some(wallpaper) = app.library.items.iter().find(|wallpaper| wallpaper.dir == folder) else { return true };
-    let Ok(style) = serde_json::from_value(value.clone()) else { return true };
+    let Some(wallpaper) = app
+        .library
+        .items
+        .iter()
+        .find(|wallpaper| wallpaper.dir == folder)
+    else {
+        return true;
+    };
     let theme = super::saving::theme_value(app, wallpaper);
-    let next = with_style(app, &theme, style);
-    if app.fixture { return true; }
+    let next = if let Some(knob) = knob {
+        let Some(next) = value
+            .as_f64()
+            .and_then(|value| with_material(&theme, knob, value))
+        else {
+            return true;
+        };
+        next
+    } else {
+        let Ok(style) = serde_json::from_value(value.clone()) else {
+            return true;
+        };
+        with_style(app, &theme, style)
+    };
+    if app.fixture {
+        return true;
+    }
     app.panel.as_mut().unwrap().theme_retry = Some(Action::Set(edit.clone(), value.clone()));
     // The existing writer checks ownership and validates the complete theme before one write.
     match crate::library::edit_theme(&folder, "", Some(next)) {
         Ok(()) => {
             super::saving::theme_saved(app, &folder);
-            app.library = crate::library::Library::scan(crate::app::theme_name(&app.docs).as_deref());
+            app.library =
+                crate::library::Library::scan(crate::app::theme_name(&app.docs).as_deref());
             app.docs.saved = crate::docs::Saved::Done(std::time::Instant::now());
-            super::history::record_drag(app, "Wallpaper style");
+            super::history::record_drag(app, &edit.label);
         }
         Err(error) => super::saving::theme_failed(app, &folder, &format!("{error:#}")),
     }

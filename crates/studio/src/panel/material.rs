@@ -36,8 +36,7 @@ pub fn row(
     readout: &str,
     edit: Edit,
 ) {
-    let label_width =
-        (b.measure(label, &super::controls::font(b, 13.0, 400)).0 + b.px(8.0)).max(b.px(84.0));
+    let label_width = super::controls::label_width(b, c);
     let stacked = c.w < b.px(340.0) || b.t.text_scale > 1.0 || label_width > c.w * 0.45;
     let h = height(b, 38.0);
     text(
@@ -87,9 +86,9 @@ pub fn block(
     for slider in sliders {
         let percent = slider.max == 1.0;
         let readout = if percent {
-            format!("{:.0}%", slider.value * 100.0)
+            super::controls::unit(slider.value * 100.0, "%")
         } else {
-            format!("{:.0} px", slider.value)
+            super::controls::unit(slider.value, "px")
         };
         row(
             b,
@@ -121,35 +120,32 @@ pub fn wallpaper(
     wallpaper: &crate::library::Wallpaper,
     theme: &Value,
 ) {
-    let edit = |path: &str, label: &str| {
-        Edit::new(
-            crate::docs::DocId::Studio,
-            format!(
-                "/theme:{}{path}",
-                crate::docs::token(&wallpaper.dir.display().to_string())
-            ),
-            label,
-        )
-    };
+    let sample = super::wallpaper_look::sample(app, theme);
+    let uses = super::wallpaper_look::selected(theme)
+        .map(crate::look::uses)
+        .unwrap_or([true; 4]);
     let sliders: Vec<_> = [
-        ("clarity", "Clarity", 0.94),
-        ("blur", "Blur", 0.0),
-        ("refraction", "Refraction", 0.6),
-        ("highlight", "Highlight", 0.55),
+        ("clarity", "Clarity", sample.clarity),
+        ("blur", "Blur", sample.blur),
+        ("refraction", "Refraction", sample.refraction),
+        ("highlight", "Highlight", sample.highlight),
     ]
     .into_iter()
-    .map(|(id, label, fallback)| {
-        let stored = if id == "clarity" { "tint" } else { id };
-        let value = theme
-            .pointer(&format!("/widgets/glass/{stored}"))
-            .and_then(Value::as_f64)
-            .map(|v| if id == "clarity" { 1.0 - v } else { v })
-            .unwrap_or(fallback);
+    .zip(uses)
+    .filter(|(_, used)| *used)
+    .map(|((id, label, current), _)| {
+        let edit = super::wallpaper_look::material_edit(wallpaper, id, label);
+        let value = app
+            .pending_value
+            .as_ref()
+            .filter(|(pending, _)| pending == &edit)
+            .and_then(|(_, value)| value.as_f64())
+            .unwrap_or(current as f64);
         Slider {
             label,
             value,
             max: if id == "blur" { 32.0 } else { 1.0 },
-            edit: edit(&format!("/@both/glass/{id}"), label),
+            edit,
         }
     })
     .collect();
@@ -158,15 +154,25 @@ pub fn wallpaper(
         b,
         c,
         &sliders,
-        edit("/@both/appearance/tint", "Tint"),
+        super::wallpaper_look::edit(wallpaper, "/@both/appearance/tint", "Tint"),
         theme.pointer("/widgets/appearance/tint"),
-        true,
+        false,
     );
 }
 
 /// Unset knobs follow the wallpaper until a style is chosen, then that style's defaults.
 pub fn look_value(app: &App, style: mypaper_config::look::Style, id: &str) -> f64 {
     use crate::docs::DocId;
+    if let Some(value) = app
+        .pending_value
+        .as_ref()
+        .filter(|(edit, _)| {
+            edit.doc == DocId::Config && edit.path.as_ref() == format!("/look/material/{id}")
+        })
+        .and_then(|(_, value)| value.as_f64())
+    {
+        return value;
+    }
     if let Some(value) = app
         .get(DocId::Config, &format!("/look/material/{id}"))
         .and_then(Value::as_f64)
@@ -204,7 +210,13 @@ pub fn look_tint(app: &App, style: mypaper_config::look::Style) -> mypaper_ui::R
     use crate::docs::DocId;
     let theme = super::specimens::style_theme(app, style);
     let current = app
-        .get(DocId::Config, "/look/material/tint")
+        .pending_value
+        .as_ref()
+        .filter(|(edit, _)| {
+            edit.doc == DocId::Config && edit.path.as_ref() == "/look/material/tint"
+        })
+        .map(|(_, value)| value)
+        .or_else(|| app.get(DocId::Config, "/look/material/tint"))
         .and_then(Value::as_str);
     if current == Some("auto") {
         return super::specimens::wallpaper_color(app).unwrap_or(theme.color.surface);

@@ -21,6 +21,7 @@ mod review;
 
 #[derive(Debug, Default)]
 pub struct State {
+    groups: std::collections::HashSet<Key>,
     pointer_mode: bool,
     requested: Option<(Key, Action)>,
     pending: Option<(Key, Action, Instant)>,
@@ -29,7 +30,9 @@ pub struct State {
 }
 
 pub fn begin(app: &App) {
-    app.panel.as_ref().unwrap().chooser.borrow_mut().requested = None;
+    let mut state = app.panel.as_ref().unwrap().chooser.borrow_mut();
+    state.requested = None;
+    state.groups.clear();
 }
 
 /// Existing click actions also describe desktop previews, including per-display choices.
@@ -40,13 +43,39 @@ pub fn draw(
     id: Key,
     picture_height: f32,
     choices: &[(&str, bool, Action)],
-    picture: impl FnOnce(&mut B, usize, Rect),
+    picture: impl FnOnce(&mut B, Option<usize>, Rect),
 ) -> Option<usize> {
     if choices.is_empty() {
         return None;
     }
-    let rows_top = c.y + picture_height + b.px(8.0);
+    app.panel
+        .as_ref()
+        .unwrap()
+        .chooser
+        .borrow_mut()
+        .groups
+        .insert(id);
+    let caption_font = super::controls::font(b, 12.0, 500);
+    let caption_lines = choices
+        .iter()
+        .map(|(name, _, _)| {
+            b.text
+                .lines(
+                    &format!("Previewing {name} · Click to apply"),
+                    &caption_font,
+                    c.w,
+                    3,
+                )
+                .len()
+        })
+        .max()
+        .unwrap_or(1)
+        .max(1);
+    let caption_height = height(b, 20.0 * caption_lines as f32) + b.px(6.0);
+    let rows_top = c.y + caption_height + picture_height + b.px(8.0);
     let row_height = height(b, 34.0);
+    let selected = choices.iter().position(|(_, selected, _)| *selected);
+    let count = choices.len() + usize::from(selected.is_none());
     let row_rect = |index| Rect::new(c.x, rows_top + index as f32 * row_height, c.w, row_height);
     let pointer = if app.fixture || app.window.is_none() {
         b.input.pointer
@@ -56,42 +85,77 @@ pub fn draw(
     .filter(|point| b.clip_rect().is_none_or(|clip| clip.contains(*point)));
     let keyboard =
         b.input.focus_visible && !app.panel.as_ref().unwrap().chooser.borrow().pointer_mode;
-    let hot = pointer
-        .and_then(|point| (0..choices.len()).find(|index| row_rect(*index).contains(point)))
-        .or_else(|| {
-            if keyboard {
-                (0..choices.len()).find(|index| {
-                    b.input.focus == Some(key((id, *index)))
-                        && b.clip_rect()
-                            .is_none_or(|clip| row_rect(*index).intersects(&clip))
-                })
-            } else {
-                None
-            }
-        });
-    let shown = hot
-        .or_else(|| choices.iter().position(|(_, selected, _)| *selected))
-        .unwrap_or(0);
-    picture(b, shown, Rect::new(c.x, c.y, c.w, picture_height));
+    let hot = if keyboard {
+        (0..count).find(|index| {
+            b.input.focus == Some(key((id, *index)))
+                && b.clip_rect()
+                    .is_none_or(|clip| row_rect(*index).intersects(&clip))
+        })
+    } else {
+        pointer.and_then(|point| (0..count).find(|index| row_rect(*index).contains(point)))
+    };
+    let highlighted = hot.filter(|index| {
+        app.panel.as_ref().unwrap().chooser.borrow().suppressed != Some(key((id, *index)))
+    });
+    let shown = highlighted
+        .or(selected)
+        .filter(|index| *index < choices.len());
+    let name = shown.map_or("Custom", |index| choices[index].0);
+    let previewing = shown.is_some() && shown != selected;
+    let caption = if previewing {
+        format!("Previewing {name} · Click to apply")
+    } else {
+        name.to_owned()
+    };
+    for (line, label) in b
+        .text
+        .lines(&caption, &caption_font, c.w, 3)
+        .iter()
+        .enumerate()
+    {
+        text(
+            b,
+            Rect::new(
+                c.x,
+                c.y + line as f32 * height(b, 20.0),
+                c.w,
+                height(b, 20.0),
+            ),
+            label,
+            12.0,
+            500,
+            b.p.ink2,
+            Align::Start,
+        );
+    }
+    b.announce(&caption, id);
+    picture(
+        b,
+        shown,
+        Rect::new(c.x, c.y + caption_height, c.w, picture_height),
+    );
     c.y = rows_top;
     b.group(id, |b| {
-        for (index, (name, selected, action)) in choices.iter().enumerate() {
+        let custom = ("Custom", true, Action::None);
+        for (index, (name, selected, action)) in choices
+            .iter()
+            .chain(selected.is_none().then_some(&custom))
+            .enumerate()
+        {
             let k = key((id, index));
             let rect = Rect::new(c.x, c.y, c.w, row_height);
-            b.plate(k, rect, b.px(7.0), *selected);
-            let mark = Rect::new(
-                rect.left + b.px(10.0),
-                rect.top + (rect.height() - b.px(7.0)) / 2.0,
-                b.px(7.0),
-                b.px(7.0),
-            );
-            b.fill(mark, b.px(if index % 2 == 0 { 3.5 } else { 1.0 }), b.p.ink3);
+            // The native pointer sample drives both the specimen and its row highlight.
+            if highlighted == Some(index) {
+                b.fill(rect, b.px(7.0), b.p.hover);
+            } else if *selected {
+                b.fill(rect, b.px(7.0), b.p.selected);
+            }
             text(
                 b,
                 Rect::new(
-                    rect.left + b.px(27.0),
+                    rect.left + b.px(10.0),
                     rect.top,
-                    rect.width() - b.px(60.0),
+                    rect.width() - b.px(44.0),
                     rect.height(),
                 ),
                 name,
@@ -105,7 +169,7 @@ pub fn draw(
                     Rect::new(rect.right - b.px(30.0), rect.top, b.px(20.0), rect.height()),
                     crate::theme::glyph::CHECK,
                     13.0,
-                    b.p.ink1,
+                    super::tokens::hex(0xffffff),
                 );
             }
             b.hit_checked(
@@ -122,11 +186,80 @@ pub fn draw(
         }
     });
     c.y += b.px(6.0);
-    if let Some(index) = hot {
+    if let Some(index) = hot.filter(|index| *index < choices.len()) {
         app.panel.as_ref().unwrap().chooser.borrow_mut().requested =
             Some((key((id, index)), choices[index].2.clone()));
     }
-    Some(shown)
+    shown
+}
+
+/// Arrows browse a chooser; Enter/Space and clicks apply through the existing target action.
+pub fn on_key(app: &mut App, vk: u16, ctrl: bool, shift: bool, alt: bool) -> bool {
+    if ctrl
+        || shift
+        || alt
+        || !matches!(vk, 0x25..=0x28)
+        || app.field.is_some()
+        || app
+            .overlay
+            .as_ref()
+            .is_some_and(|overlay| !matches!(overlay, crate::app::Overlay::FirstRun { .. }))
+    {
+        return false;
+    }
+    let Some(panel) = &app.panel else {
+        return false;
+    };
+    let Some(current) = app
+        .input
+        .focus
+        .and_then(|key| app.frame.targets.iter().find(|target| target.key == key))
+    else {
+        return false;
+    };
+    let Some(group) = current
+        .group
+        .filter(|group| panel.chooser.borrow().groups.contains(group))
+    else {
+        return false;
+    };
+    let rows: Vec<_> = app
+        .frame
+        .targets
+        .iter()
+        .filter(|target| target.group == Some(group))
+        .collect();
+    let at = rows
+        .iter()
+        .position(|target| target.key == current.key)
+        .unwrap();
+    let next = (at as isize + if matches!(vk, 0x25 | 0x26) { -1 } else { 1 })
+        .clamp(0, rows.len() as isize - 1) as usize;
+    let target = rows[next];
+    app.input.focus = Some(target.key);
+    app.input.focus_visible = true;
+    panel.chooser.borrow_mut().pointer_mode = false;
+    if let Some(view) = target.scroll
+        && let Some(area) = app.frame.scrolls.iter().find(|area| area.key == view)
+    {
+        let offset = app.nav.scroll(view);
+        let pad = app.px(16.0);
+        let y = if target.rect.top < area.viewport.top {
+            Some((offset - area.viewport.top + target.rect.top - pad).max(0.0))
+        } else if target.rect.bottom > area.viewport.bottom {
+            Some(offset + target.rect.bottom - area.viewport.bottom + pad)
+        } else {
+            None
+        };
+        if let Some(y) = y {
+            app.nav.scroll.insert(
+                view,
+                y.min((area.content - area.viewport.height()).max(0.0)),
+            );
+        }
+    }
+    app.dirty = true;
+    true
 }
 
 pub fn finish(app: &App) {
@@ -242,6 +375,108 @@ mod tests {
     };
     use mypaper_config::look::Style;
     use mypaper_ui::{Point, Ui};
+
+    #[test]
+    fn stale_input_hover_does_not_split_row_highlight_from_the_preview() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(PanelState {
+            page: Page::Look,
+            ..Default::default()
+        });
+        app.size = (480, 1200);
+        let frame = crate::panel::build(&app, &mut ui.text);
+        let target = frame
+            .targets
+            .iter()
+            .find(|target| target.action == Action::SetStyle(Some(Style::Fluent)))
+            .unwrap();
+        let rect = target.rect;
+        app.input.pointer = Some(Point::new(rect.left + 20.0, rect.top + 10.0));
+        app.input.hover = None;
+        let frame = crate::panel::build(&app, &mut ui.text);
+        assert!(frame.list.ops.iter().any(
+            |op| matches!(op, mypaper_ui::Op::Fill { rect: drawn, color, .. }
+            if *drawn == rect && *color == crate::panel::palette_for(&app).hover)
+        ));
+        assert!(frame.semantics.iter().any(
+            |(_, semantic)| matches!(semantic, mypaper_ui::Semantics::Status(message)
+            if message.as_ref() == "Previewing Fluent · Click to apply")
+        ));
+        assert!(crate::panel::on_key(&mut app, 0x1B, (false, false, false)));
+        let frame = crate::panel::build(&app, &mut ui.text);
+        assert!(!frame.semantics.iter().any(
+            |(_, semantic)| matches!(semantic, mypaper_ui::Semantics::Status(message)
+            if message.starts_with("Previewing"))
+        ));
+    }
+
+    #[test]
+    fn arrows_preview_without_applying_and_keyboard_wins_over_a_stationary_pointer() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(PanelState {
+            page: Page::Look,
+            ..Default::default()
+        });
+        app.size = (480, 1200);
+        let frame = crate::panel::build(&app, &mut ui.text);
+        let current = frame
+            .targets
+            .iter()
+            .find(|target| target.action == Action::SetStyle(Some(Style::Liquid)))
+            .unwrap();
+        app.input.focus = Some(current.key);
+        app.input.pointer = Some(Point::new(
+            current.rect.left + 20.0,
+            current.rect.top + 10.0,
+        ));
+        app.frame.targets = frame.targets;
+        app.frame.scrolls = frame.scrolls;
+        let before = app.docs.doc(DocId::Config).raw.clone();
+        assert!(crate::panel::on_key(&mut app, 0x28, (false, false, false)));
+        let frame = crate::panel::build(&app, &mut ui.text);
+        assert_eq!(app.docs.doc(DocId::Config).raw, before);
+        assert_eq!(app.docs.undo_count(), 0);
+        assert!(frame.semantics.iter().any(
+            |(_, semantic)| matches!(semantic, mypaper_ui::Semantics::Status(message)
+            if message.as_ref() == "Previewing One UI · Click to apply")
+        ));
+    }
+
+    #[test]
+    fn unmatched_windows_settings_have_one_checked_custom_row() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(PanelState {
+            page: Page::Windows,
+            ..Default::default()
+        });
+        app.size = (480, 1200);
+        app.run(Action::Set(
+            crate::actions::Edit::new(DocId::Config, "/look/windows", "Windows look"),
+            serde_json::json!({"caption":"#123456","corners":"square","apps":"dark"}),
+        ));
+        let frame = crate::panel::build(&app, &mut ui.text);
+        assert_eq!(
+            frame
+                .list
+                .hits
+                .iter()
+                .filter(|hit| hit.label.as_ref() == "Custom" && hit.checked == Some(true))
+                .count(),
+            1
+        );
+        for name in ["As is", "Match mypaper", "Glass", "Sharp"] {
+            assert!(
+                frame
+                    .list
+                    .hits
+                    .iter()
+                    .any(|hit| hit.label.as_ref() == name && hit.checked == Some(false))
+            );
+        }
+    }
 
     #[test]
     fn pointer_and_keyboard_choices_preview_without_editing_and_escape_restores() {

@@ -21,9 +21,16 @@ pub fn wallpaper(app: &App) -> Option<Arc<Image>> {
         .library
         .active()
         .and_then(|i| app.library.items.get(i))?;
+    wallpaper_image(app, item)
+}
+
+pub fn wallpaper_image(app: &App, item: &crate::library::Wallpaper) -> Option<Arc<Image>> {
     app.images
         .borrow_mut()
-        .get(item.preview.as_ref().or(item.video.as_ref())?, (384, 256))
+        .get(item.preview.as_ref().or(item.video.as_ref())?, {
+            let width = app.size.0.clamp(384, 1024);
+            (width, width * 2 / 3)
+        })
 }
 
 pub fn wallpaper_color(app: &App) -> Option<Rgba> {
@@ -58,10 +65,50 @@ pub fn backdrop(app: &App, b: &mut B, r: Rect) {
     }
 }
 
-/// Two-pass box blur on a cropped, small bitmap. Its cache key includes the source and blur.
-fn softened(app: &App, image: &Arc<Image>, radius: usize) -> Arc<Image> {
+/// Fractional pixel coverage preserves detail when a wallpaper crop is reduced.
+fn area_crop(image: &Image, crop: Rect, size: (u32, u32)) -> Image {
+    let (width, height) = (size.0.max(1) as usize, size.1.max(1) as usize);
+    let mut pixels = vec![0; width * height * 4];
+    for y in 0..height {
+        let top = crop.top + y as f32 * crop.height() / height as f32;
+        let bottom = crop.top + (y + 1) as f32 * crop.height() / height as f32;
+        for x in 0..width {
+            let left = crop.left + x as f32 * crop.width() / width as f32;
+            let right = crop.left + (x + 1) as f32 * crop.width() / width as f32;
+            let mut sum = [0.0; 4];
+            let mut area = 0.0;
+            for sy in
+                top.floor().max(0.0) as usize..(bottom.ceil() as usize).min(image.height as usize)
+            {
+                let h = (bottom.min(sy as f32 + 1.0) - top.max(sy as f32)).max(0.0);
+                for sx in left.floor().max(0.0) as usize
+                    ..(right.ceil() as usize).min(image.width as usize)
+                {
+                    let weight = h * (right.min(sx as f32 + 1.0) - left.max(sx as f32)).max(0.0);
+                    let at = (sy * image.width as usize + sx) * 4;
+                    for channel in 0..4 {
+                        sum[channel] += image.pixels[at + channel] as f32 * weight;
+                    }
+                    area += weight;
+                }
+            }
+            for channel in 0..4 {
+                pixels[(y * width + x) * 4 + channel] =
+                    (sum[channel] / area.max(f32::EPSILON)).round() as u8;
+            }
+        }
+    }
+    Image {
+        width: width as u32,
+        height: height as u32,
+        pixels,
+    }
+}
+
+/// Two-pass box blur on a crop rendered at the specimen's actual pixel dimensions.
+fn softened(app: &App, image: &Arc<Image>, radius: usize, size: (u32, u32)) -> Arc<Image> {
     let cache_key = format!(
-        "{}:{:p}:{radius}",
+        "soft:{}:{:p}:{radius}:{size:?}",
         app.library
             .active()
             .map_or("", |i| app.library.items[i].id.as_str()),
@@ -71,53 +118,23 @@ fn softened(app: &App, image: &Arc<Image>, radius: usize) -> Arc<Image> {
     if let Some(image) = state.specimens.borrow().get(&cache_key) {
         return image.clone();
     }
-    let (width, height) = (128usize, 80usize);
-    let mut pixels = vec![0; width * height * 4];
-    let aspect = width as f32 / height as f32;
+    let aspect = size.0 as f32 / size.1.max(1) as f32;
     let sw = (image.height as f32 * aspect).min(image.width as f32);
     let sh = sw / aspect;
-    for y in 0..height {
-        for x in 0..width {
-            let sx = ((image.width as f32 - sw) / 2.0 + x as f32 * sw / width as f32) as usize;
-            let sy = ((image.height as f32 - sh) / 2.0 + y as f32 * sh / height as f32) as usize;
-            let source = (sy.min(image.height as usize - 1) * image.width as usize
-                + sx.min(image.width as usize - 1))
-                * 4;
-            pixels[(y * width + x) * 4..(y * width + x + 1) * 4]
-                .copy_from_slice(&image.pixels[source..source + 4]);
-        }
-    }
-    for horizontal in [true, false] {
-        let source = pixels.clone();
-        for y in 0..height {
-            for x in 0..width {
-                let mut sum = [0usize; 4];
-                let mut count = 0;
-                for offset in -(radius as isize)..=radius as isize {
-                    let sx = if horizontal {
-                        (x as isize + offset).clamp(0, width as isize - 1) as usize
-                    } else {
-                        x
-                    };
-                    let sy = if horizontal {
-                        y
-                    } else {
-                        (y as isize + offset).clamp(0, height as isize - 1) as usize
-                    };
-                    for channel in 0..4 {
-                        sum[channel] += source[(sy * width + sx) * 4 + channel] as usize;
-                    }
-                    count += 1;
-                }
-                for channel in 0..4 {
-                    pixels[(y * width + x) * 4 + channel] = (sum[channel] / count) as u8;
-                }
-            }
-        }
-    }
+    let crop = area_crop(
+        image,
+        Rect::new(
+            (image.width as f32 - sw) / 2.0,
+            (image.height as f32 - sh) / 2.0,
+            sw,
+            sh,
+        ),
+        size,
+    );
+    let pixels = blur_crop(&crop, radius);
     let image = Arc::new(Image {
-        width: width as u32,
-        height: height as u32,
+        width: size.0,
+        height: size.1,
         pixels,
     });
     remember(app, cache_key, &image);
@@ -144,10 +161,14 @@ pub fn style_theme(app: &App, style: Style) -> mypaper_ui::Theme {
 }
 
 /// Pick a bright, detailed crop so glass can be judged even on a quiet wallpaper.
-fn material_backdrop(app: &App) -> Arc<Image> {
-    let source = wallpaper(app);
+fn material_backdrop(app: &App, size: (u32, u32)) -> Arc<Image> {
+    material_backdrop_from(app, size, wallpaper(app))
+}
+
+fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>>) -> Arc<Image> {
     let cache_key = format!(
-        "material-crop:{:p}",
+        "material-crop:{size:?}:{}:{:p}",
+        desktop_dark(app),
         source.as_ref().map_or(std::ptr::null(), Arc::as_ptr)
     );
     if let Some(image) = app
@@ -160,11 +181,12 @@ fn material_backdrop(app: &App) -> Arc<Image> {
     {
         return image.clone();
     }
-    let (width, height) = (384usize, 144usize);
+    let (width, height) = (size.0.max(1) as usize, size.1.max(1) as usize);
     let mut pixels = vec![255; width * height * 4];
     if let Some(source) = source {
-        let sw = (source.width as f32 * 0.58).min(source.height as f32 * (384.0 / 144.0));
-        let sh = sw / (384.0 / 144.0);
+        let aspect = width as f32 / height as f32;
+        let sw = (source.width as f32 * 0.58).min(source.height as f32 * aspect);
+        let sh = sw / aspect;
         let mut best = (f32::MIN, 0.0, 0.0);
         for row in 0..4 {
             for col in 0..4 {
@@ -194,30 +216,19 @@ fn material_backdrop(app: &App) -> Arc<Image> {
                 }
             }
         }
-        for y in 0..height {
-            for x in 0..width {
-                let sx = (best.1 + x as f32 * sw / width as f32) as usize;
-                let sy = (best.2 + y as f32 * sh / height as f32) as usize;
-                let at = (sy.min(source.height as usize - 1) * source.width as usize
-                    + sx.min(source.width as usize - 1))
-                    * 4;
-                for channel in 0..3 {
-                    pixels[(y * width + x) * 4 + channel] = source.pixels[at + channel];
-                }
-            }
-        }
+        pixels = area_crop(&source, Rect::new(best.1, best.2, sw, sh), size).pixels;
     } else {
-        // A colorful desktop crop when no wallpaper is available; no external asset or service.
+        // Neutral context makes the material legible without suggesting a different wallpaper.
         for y in 0..height {
             for x in 0..width {
-                let band = ((x + y / 2) / 24) % 4;
-                let color = [
-                    [228, 174, 80],
-                    [92, 181, 209],
-                    [174, 125, 199],
-                    [112, 205, 165],
-                ][band];
-                pixels[(y * width + x) * 4..(y * width + x) * 4 + 3].copy_from_slice(&color);
+                let t = (x as f32 / width as f32 * 0.65 + y as f32 / height as f32 * 0.35)
+                    .clamp(0.0, 1.0);
+                let gray = if desktop_dark(app) {
+                    48.0 + t * 58.0
+                } else {
+                    235.0 - t * 55.0
+                } as u8;
+                pixels[(y * width + x) * 4..(y * width + x) * 4 + 3].fill(gray);
             }
         }
     }
@@ -266,17 +277,105 @@ fn blur_crop(source: &Image, radius: usize) -> Vec<u8> {
 
 pub fn frosted_wallpaper(app: &App, blur: f32) -> Option<Arc<Image>> {
     let source = wallpaper(app)?;
-    Some(softened(app, &source, (blur / 2.0).round() as usize))
+    let width = app.size.0.clamp(384, 1024);
+    Some(softened(
+        app,
+        &source,
+        (blur / 2.0).round() as usize,
+        (width, width * 2 / 3),
+    ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MaterialSample {
+    pub style: Style,
+    pub clarity: f32,
+    pub blur: f32,
+    pub refraction: f32,
+    pub highlight: f32,
+    pub tint: Rgba,
+    pub radius: f32,
+    pub edge: bool,
+}
+
+impl MaterialSample {
+    pub fn defaults(app: &App, style: Style) -> Self {
+        let theme = style_theme(app, style);
+        let material = mypaper_ui::theme::material(theme.style, theme.color.surface);
+        Self {
+            style,
+            clarity: material.map_or(1.0 - theme.color.surface.a, |m| m.clarity),
+            blur: material.map_or(0.0, |m| m.blur),
+            refraction: material.map_or(0.0, |m| m.refraction),
+            highlight: material.map_or(0.0, |m| m.highlight),
+            tint: theme.color.surface,
+            radius: theme.radius.surface,
+            edge: style == Style::Fluent,
+        }
+    }
+
+    pub fn look(app: &App, style: Style, applied: bool) -> Self {
+        let mut sample = Self::defaults(app, style);
+        sample.tint = super::material::look_tint(app, style);
+        if applied {
+            sample.clarity = super::material::look_value(app, style, "clarity") as f32;
+            sample.blur = super::material::look_value(app, style, "blur") as f32;
+            sample.refraction = super::material::look_value(app, style, "refraction") as f32;
+            sample.highlight = super::material::look_value(app, style, "highlight") as f32;
+            sample.radius = app
+                .get(DocId::Config, "/look/shape/corners")
+                .and_then(serde_json::Value::as_f64)
+                .map_or(sample.radius, |v| v as f32);
+            sample.edge = app
+                .get(DocId::Config, "/look/shape/edge")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(sample.edge);
+        }
+        if style == Style::Solid {
+            sample.clarity = 0.0;
+        }
+        sample
+    }
 }
 
 /// A software lens uses the same defaults as the kit. Its backdrop stays registered through
 /// the plate; Liquid bends the crop at its rim, the other styles only frost or tint it.
 pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
-    let background = material_backdrop(app);
+    let current: Style = app
+        .get(DocId::Config, "/look/style")
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default();
+    material_sample(
+        app,
+        b,
+        r,
+        MaterialSample::look(app, style, current == style),
+        None,
+    );
+}
+
+pub fn material_sample(
+    app: &App,
+    b: &mut B,
+    r: Rect,
+    sample: MaterialSample,
+    wallpaper: Option<&crate::library::Wallpaper>,
+) {
+    let size = (
+        r.width().round().max(1.0) as u32,
+        r.height().round().max(1.0) as u32,
+    );
+    let background = if let Some(wallpaper) = wallpaper {
+        material_backdrop_from(app, size, wallpaper_image(app, wallpaper))
+    } else {
+        material_backdrop(app, size)
+    };
+    let style = sample.style;
     let theme = style_theme(app, style);
     let cache_key = format!(
-        "material:{style:?}:{}:{:p}",
+        "material:{sample:?}:{}:{}:{:p}",
         desktop_dark(app),
+        b.s,
         Arc::as_ptr(&background)
     );
     let cached = app
@@ -289,20 +388,13 @@ pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
         .cloned();
     let image = cached.unwrap_or_else(|| {
         let (width, height) = (background.width as usize, background.height as usize);
-        let defaults = mypaper_ui::theme::material(theme.style, theme.color.surface);
-        let blur = defaults.map_or(0.0, |m| m.blur);
-        let alpha = defaults.map_or(
-            if style == Style::Solid {
-                1.0
-            } else {
-                theme.color.surface.a
-            },
-            |m| 1.0 - m.clarity,
-        );
-        let frosted = blur_crop(&background, (blur * 0.35).round() as usize);
+        let alpha = 1.0 - sample.clarity;
+        let frosted = blur_crop(&background, (sample.blur * b.s * 0.35).round() as usize);
         let mut pixels = background.pixels.clone();
-        let radius = theme.radius.surface;
-        let tint = theme.color.surface;
+        let radius = (sample.radius * b.s)
+            .min(height as f32 * 0.36)
+            .min(width as f32 * 0.39);
+        let tint = sample.tint;
         for y in 0..height {
             for x in 0..width {
                 let (dx, dy) = (
@@ -319,9 +411,9 @@ pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
                     continue;
                 }
                 let coverage = (0.6 - distance).clamp(0.0, 1.0);
-                let rim = (1.0 + distance / 5.0).clamp(0.0, 1.0);
+                let rim = (1.0 + distance / (5.0 * b.s)).clamp(0.0, 1.0);
                 let bend = if style == Style::Liquid {
-                    rim * rim * defaults.unwrap().refraction * 10.0
+                    rim * rim * sample.refraction * 10.0 * b.s
                 } else {
                     0.0
                 };
@@ -333,10 +425,8 @@ pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
                     .clamp(0.0, height as f32 - 1.0) as usize;
                 let from = (sy * width + sx) * 4;
                 let edge = if style == Style::Liquid {
-                    rim.powf(4.0)
-                        * defaults.unwrap().highlight
-                        * if dx + dy < 0.0 { 0.95 } else { 0.38 }
-                } else if style == Style::Fluent && distance > -1.1 {
+                    rim.powf(4.0) * sample.highlight * if dx + dy < 0.0 { 0.95 } else { 0.38 }
+                } else if sample.edge && distance > -1.1 * b.s {
                     0.24
                 } else {
                     0.0
@@ -385,7 +475,37 @@ pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
 }
 
 pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
-    let background = material_backdrop(app);
+    window_choice(app, b, r, Some(look));
+}
+
+pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
+    let is_custom = look.is_none();
+    let custom = app.get(DocId::Config, "/look/windows");
+    let look = look.unwrap_or_else(|| {
+        match custom
+            .and_then(|v| v.get("backdrop"))
+            .and_then(serde_json::Value::as_str)
+        {
+            Some("acrylic") => 2,
+            Some("mica" | "tabbed") => 1,
+            _ => {
+                if custom
+                    .and_then(|v| v.get("corners"))
+                    .and_then(serde_json::Value::as_str)
+                    == Some("square")
+                {
+                    3
+                } else {
+                    0
+                }
+            }
+        }
+    });
+    let size = (
+        r.width().round().max(1.0) as u32,
+        r.height().round().max(1.0) as u32,
+    );
+    let background = material_backdrop(app, size);
     crate::stage::image_round(b, r, &background, 1.0, b.px(8.0));
     let win = Rect::new(
         r.left + r.width() * 0.09,
@@ -399,7 +519,7 @@ pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
     let current_theme = style_theme(app, style);
-    let radius = if look == 3 {
+    let mut radius = if look == 3 {
         0.0
     } else if look == 1 {
         app.get(DocId::Config, "/look/shape/corners")
@@ -409,12 +529,45 @@ pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
     } else {
         8.0 * scale
     };
-    let light = if look == 0 {
+    if is_custom {
+        radius = match custom
+            .and_then(|v| v.get("corners"))
+            .and_then(serde_json::Value::as_str)
+        {
+            Some("square") => 0.0,
+            Some("small") => 4.0 * scale,
+            Some("round") => 8.0 * scale,
+            _ => radius,
+        };
+    }
+    let mut light = if look == 0 {
         !windows_dark(app)
     } else {
         !desktop_dark(app)
     };
+    if is_custom {
+        light = match custom
+            .and_then(|v| v.get("apps"))
+            .and_then(serde_json::Value::as_str)
+        {
+            Some("light") => true,
+            Some("dark") => false,
+            _ => light,
+        };
+    }
     let ink = hex(if light { 0x1a1a1a } else { 0xf5f5f5 });
+    let custom_color = |field| {
+        is_custom
+            .then(|| {
+                custom?
+                    .get(field)?
+                    .as_str()
+                    .and_then(mypaper_config::Color::parse)
+            })
+            .flatten()
+            .map(|color| Rgba::rgb8(color.0, 1.0))
+    };
+    let caption_ink = custom_color("caption_text").unwrap_or(ink);
     let plate = if look == 1 {
         super::material::look_tint(app, style)
     } else {
@@ -430,7 +583,15 @@ pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
         crate::stage::image_round(
             b,
             win,
-            &softened(app, &background, (blur / 2.0).round() as usize),
+            &softened(
+                app,
+                &background,
+                (blur * b.s / 2.0).round() as usize,
+                (
+                    win.width().round().max(1.0) as u32,
+                    win.height().round().max(1.0) as u32,
+                ),
+            ),
             1.0,
             radius,
         );
@@ -454,21 +615,21 @@ pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
     b.fill(
         caption,
         radius,
-        match look {
+        custom_color("caption").unwrap_or_else(|| match look {
             1 => current_theme.color.label.with_alpha(0.06),
             2 => hex(0xffffff).with_alpha(0.12),
             _ => ink.with_alpha(0.06),
-        },
+        }),
     );
     b.stroke(
         win,
         radius,
         b.px(if look == 3 { 1.5 } else { 0.8 }),
-        match look {
+        custom_color("border").unwrap_or_else(|| match look {
             0 => ink.with_alpha(0.25),
             2 => hex(0xffffff).with_alpha(0.8),
             _ => accent,
-        },
+        }),
     );
     if look == 3 {
         b.fill(
@@ -488,19 +649,23 @@ pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
         "Files",
         10.0,
         500,
-        ink,
+        caption_ink,
         Align::Start,
     );
-    for n in 0..3 {
-        b.fill(
+    for (n, symbol) in ["–", "□", "×"].into_iter().enumerate() {
+        text(
+            b,
             Rect::new(
-                win.right - (11.0 + n as f32 * 13.0) * scale,
-                win.top + 11.0 * scale,
-                5.0 * scale,
-                1.2 * scale,
+                win.right - (3 - n) as f32 * 20.0 * scale,
+                caption.top,
+                20.0 * scale,
+                caption.height(),
             ),
-            0.0,
-            ink,
+            symbol,
+            13.0,
+            400,
+            caption_ink,
+            Align::Center,
         );
     }
     let sidebar = Rect::new(
@@ -558,7 +723,7 @@ pub fn bars(
     only: Option<crate::actions::Bar>,
 ) {
     let width = (rect.width() / b.s).round().max(280.0) as u32;
-    let height = (rect.height() / b.s).round().max(64.0) as u32;
+    let height = (rect.height() / b.s).round().max(32.0) as u32;
     let mut specimen = raw.clone();
     if only != Some(crate::actions::Bar::Top) {
         specimen["dock"]["enabled"] = serde_json::json!(true);
@@ -603,7 +768,9 @@ fn bars_at(
         })
         .collect();
     let cache_key = format!(
-        "bars:{raw}:{only:?}:{size:?}:{icon_stamp:?}:{}",
+        "bars:{raw}:{only:?}:{size:?}:{icon_stamp:?}:{:.0}x{:.0}:{}",
+        rect.width(),
+        rect.height(),
         desktop_dark(app)
     );
     let cached = app
@@ -637,7 +804,7 @@ fn bars_at(
             "Explorer",
         );
         // Keep desktop proportions without allocating a monitor-sized software bitmap.
-        let raster_width = size.0.min(800).max(1);
+        let raster_width = rect.width().round().max(1.0) as u32;
         let scale = raster_width as f32 / size.0.max(1) as f32;
         let raster = (raster_width, (size.1 as f32 * scale).ceil().max(1.0) as u32);
         let mut list = DisplayList::default();
@@ -667,12 +834,7 @@ fn bars_at(
                 &mut images,
                 None,
             );
-            let y = if only.is_some() {
-                (raster.1 as f32 - frame.size.1 as f32) / 2.0
-            } else {
-                16.0 * scale
-            };
-            append(frame, 0.0, y, &tokens);
+            append(frame, 0.0, 0.0, &tokens);
         }
         if only != Some(crate::actions::Bar::Top) && config.dock.enabled {
             let tokens = shell::Tokens::resolve(&config.dock.look, &config.appearance, &system);
@@ -718,18 +880,7 @@ fn bars_at(
             };
             append(frame, x, y, &tokens);
         }
-        let native = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, raster.1).ok()?);
-        let reduced_width = raster_width.min(480);
-        let reduced_height = (reduced_width * size.1 / size.0).max(1);
-        let mut reduced = DisplayList::default();
-        reduced.ops.push(Op::Image {
-            rect: Rect::new(0.0, 0.0, reduced_width as f32, reduced_height as f32),
-            image: native,
-            opacity: 1.0,
-            source: None,
-        });
-        let image =
-            Arc::new(mypaper_ui::render(&mut ui, &reduced, reduced_width, reduced_height).ok()?);
+        let image = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, raster.1).ok()?);
         remember(app, cache_key, &image);
         Some(image)
     });
@@ -792,5 +943,112 @@ fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame)
         if let Some(icon) = replaced {
             frame.list.ops.retain(|op| !matches!(op,Op::Text {rect,text,..} if text.as_ref() == initial && rect.intersects(&icon)));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mypaper_ui::{Ui, controls::Builder};
+
+    #[test]
+    fn shrinking_averages_fractional_source_coverage() {
+        let image = Image {
+            width: 4,
+            height: 1,
+            pixels: [
+                0, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255,
+            ]
+            .to_vec(),
+        };
+        let reduced = area_crop(&image, Rect::new(0.0, 0.0, 4.0, 1.0), (2, 1));
+        assert_eq!(reduced.pixels, [128, 128, 128, 255, 128, 128, 128, 255]);
+        let cropped = area_crop(&image, Rect::new(0.5, 0.0, 1.5, 1.0), (1, 1));
+        assert_eq!(cropped.pixels, [170, 170, 170, 255]);
+    }
+
+    #[test]
+    fn missing_wallpaper_uses_a_neutral_gradient_at_the_real_pixel_size() {
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        app.library.items.clear();
+        let image = material_backdrop(&app, (672, 246));
+        assert_eq!((image.width, image.height), (672, 246));
+        assert!(
+            image
+                .pixels
+                .chunks_exact(4)
+                .all(|pixel| pixel[0] == pixel[1] && pixel[1] == pixel[2] && pixel[3] == 255)
+        );
+        assert_ne!(&image.pixels[..4], &image.pixels[image.pixels.len() - 4..]);
+    }
+
+    #[test]
+    fn current_material_picture_and_cache_follow_every_knob_and_tint() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        app.size = (480, 760);
+        let draw = |ui: &mut Ui, sample| {
+            let mut b = Builder::new(
+                &mut ui.text,
+                &app.theme.palette,
+                &app.theme.ty,
+                1.0,
+                &app.input,
+            );
+            material_sample(
+                &app,
+                &mut b,
+                Rect::new(0.0, 0.0, 424.0, 164.0),
+                sample,
+                None,
+            );
+            b.list
+                .ops
+                .into_iter()
+                .find_map(|op| match op {
+                    mypaper_ui::Op::RoundedImage { image, .. } => Some(image),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        let sample = MaterialSample::look(&app, Style::Liquid, true);
+        let initial = draw(&mut ui, sample);
+        assert_eq!((initial.width, initial.height), (424, 164));
+        let changed = [
+            MaterialSample {
+                clarity: 0.05,
+                ..sample
+            },
+            MaterialSample {
+                blur: 32.0,
+                ..sample
+            },
+            MaterialSample {
+                refraction: 0.0,
+                ..sample
+            },
+            MaterialSample {
+                highlight: 0.0,
+                ..sample
+            },
+            MaterialSample {
+                tint: hex(0x239569),
+                ..sample
+            },
+        ];
+        for (index, sample) in changed.into_iter().enumerate() {
+            assert_ne!(
+                draw(&mut ui, sample).pixels,
+                initial.pixels,
+                "material knob {index}"
+            );
+        }
+        assert!(
+            Arc::ptr_eq(&draw(&mut ui, sample), &initial),
+            "the applied sample is reused after browsing"
+        );
     }
 }

@@ -2,12 +2,57 @@
 use mypaper_widgets::manifest::Setting;
 use serde_json::{Map, Value};
 
+const FACE_KEYS: [&str; 8] = [
+    "variant", "face", "style", "layout", "look", "shape", "display", "frame",
+];
+
+pub fn face_choice<'a>(
+    manifest: &'a mypaper_widgets::manifest::WidgetManifest,
+    values: &'a Map<String, Value>,
+) -> Option<(&'a str, &'a str)> {
+    FACE_KEYS.into_iter().find_map(|key| {
+        let setting = manifest.setting(key)?;
+        let value = values.get(key)?.as_str()?;
+        matches!(setting, Setting::Select { .. }).then_some((setting.key(), value))
+    })
+}
+
+/// Keep identical widget types distinguishable even when they share a display corner.
+pub fn summary(
+    app: &crate::app::App,
+    layout: &mypaper_widgets::layout::Layout,
+    instance: &mypaper_widgets::layout::Instance,
+) -> String {
+    let face = app.registry.get(&instance.widget).and_then(|installed| {
+        let manifest = &installed.manifest;
+        let values = manifest.resolve_settings(&instance.settings);
+        let (key, value) = face_choice(manifest, &values)?;
+        let Setting::Select { options, .. } = manifest.setting(key)? else {
+            return None;
+        };
+        options.iter().find_map(|option| match option {
+            mypaper_widgets::manifest::SelectOption::Plain(name) if name == value => {
+                Some(name.clone())
+            }
+            mypaper_widgets::manifest::SelectOption::Detailed(option) if option.value == value => {
+                Some(option.label.as_ref().unwrap_or(&option.value).clone())
+            }
+            _ => None,
+        })
+    });
+    let area = super::editors::position(app, layout, instance)
+        .split(',')
+        .next()
+        .unwrap_or("on this display")
+        .to_lowercase();
+    let size = format!("{} × {}, {area}", instance.size[0], instance.size[1]);
+    face.map_or(size.clone(), |face| format!("{face}, {size}"))
+}
+
 pub fn visible(_widget: &str, setting: &Setting, values: &Map<String, Value>) -> bool {
-    let face = [
-        "variant", "face", "style", "layout", "look", "shape", "display", "frame",
-    ]
-    .into_iter()
-    .find_map(|key| values.get(key).and_then(Value::as_str));
+    let face = FACE_KEYS
+        .into_iter()
+        .find_map(|key| values.get(key).and_then(Value::as_str));
     setting.visible_on(face, values)
 }
 
