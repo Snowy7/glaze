@@ -83,6 +83,9 @@ pub struct Snapshot {
     retries: u32,
     /// Set by the worker when it met an all-black frame.
     blank: Arc<AtomicBool>,
+    /// Set by the worker once every screen shows the current theme's still. A new one per theme
+    /// load, so a late answer about an older theme can't count.
+    shown: Arc<AtomicBool>,
     jobs: Option<mpsc::Sender<Job>>,
 }
 
@@ -104,6 +107,7 @@ impl Snapshot {
             not_before: None,
             retries: 0,
             blank: Arc::default(),
+            shown: Arc::default(),
             jobs: None,
         }
     }
@@ -116,6 +120,13 @@ impl Snapshot {
         self.not_before = None;
         self.retries = 0;
         self.blank.store(false, Ordering::Relaxed);
+        self.shown = Arc::default();
+    }
+
+    /// Does Windows show the current theme's still on every screen? Then a screen without our
+    /// window (hidden, or without a frame yet) shows the theme, not the user's own wallpaper.
+    pub fn showing(&self) -> bool {
+        self.enabled && self.shown.load(Ordering::Relaxed)
     }
 
     /// Turns the feature on or off. Returns whether it was just turned on, so the engine draws
@@ -134,6 +145,7 @@ impl Snapshot {
             return turned_on;
         }
         self.enabled = false;
+        self.shown = Arc::default();
         if desktop_wallpaper::pending_in(&base) {
             self.send(Job::Restore);
         }
@@ -219,7 +231,7 @@ impl Snapshot {
             stills.len(),
             started.elapsed()
         );
-        self.send(Job::Apply(stills));
+        self.send(Job::Apply(stills, self.shown.clone()));
     }
 
     /// Queues `job`, starting the worker on first use (and again if it died).
@@ -243,8 +255,9 @@ impl Snapshot {
 
 /// What the worker is asked to do. Only the latest queued job matters.
 enum Job {
-    /// Make these the Windows wallpapers, and delete our stills nobody shows.
-    Apply(Vec<Still>),
+    /// Make these the Windows wallpapers, and delete our stills nobody shows. The flag is set
+    /// when every one of them is on its monitor.
+    Apply(Vec<Still>, Arc<AtomicBool>),
     /// Put the user's wallpapers back.
     Restore,
 }
@@ -406,7 +419,9 @@ fn work(base: &Path, jobs: &mpsc::Receiver<Job>, blank: &AtomicBool) {
         }
         let started = Instant::now();
         let done = match job {
-            Job::Apply(stills) => apply(base, stills, blank),
+            Job::Apply(stills, shown) => {
+                apply(base, stills, blank).map(|all| shown.store(all, Ordering::Relaxed))
+            }
             Job::Restore => desktop_wallpaper::restore_in(base).map(|restored| {
                 if restored {
                     log::info!("snapshot: the original wallpaper is back");
@@ -421,12 +436,14 @@ fn work(base: &Path, jobs: &mpsc::Receiver<Job>, blank: &AtomicBool) {
 }
 
 /// Writes the stills that are only pixels so far and sets each on its monitor, unless it is
-/// already showing it. Then deletes the stills no monitor shows.
-fn apply(base: &Path, stills: Vec<Still>, blank: &AtomicBool) -> Result<()> {
+/// already showing it. Then deletes the stills no monitor shows. Returns whether every still is
+/// on its monitor now.
+fn apply(base: &Path, stills: Vec<Still>, blank: &AtomicBool) -> Result<bool> {
     let mut wallpapers = Wallpapers::native_in(base)?;
     let slots = wallpapers.monitors()?;
     let factory = wic_factory()?;
     let (mut waited, mut encoded, mut set) = (Duration::ZERO, Duration::ZERO, Duration::ZERO);
+    let mut all = true;
 
     for still in stills {
         if let Content::Pixels(readback) = &still.content {
@@ -442,6 +459,7 @@ fn apply(base: &Path, stills: Vec<Still>, blank: &AtomicBool) -> Result<()> {
             let Some(encode_time) = encode_time else {
                 log::info!("snapshot: the first frame is black; trying again shortly");
                 blank.store(true, Ordering::Relaxed);
+                all = false;
                 continue;
             };
             encoded += encode_time;
@@ -453,6 +471,7 @@ fn apply(base: &Path, stills: Vec<Still>, blank: &AtomicBool) -> Result<()> {
                 "snapshot: Windows has no wallpaper monitor at {:?}",
                 still.rect
             );
+            all = false;
             continue;
         };
         if slot.shows(&still.path) {
@@ -466,7 +485,7 @@ fn apply(base: &Path, stills: Vec<Still>, blank: &AtomicBool) -> Result<()> {
     log::info!(
         "snapshot (worker thread): GPU wait {waited:.1?}, encode {encoded:.1?}, set {set:.1?}"
     );
-    Ok(())
+    Ok(all)
 }
 
 fn wic_factory() -> Result<IWICImagingFactory> {

@@ -61,6 +61,13 @@ pub trait Source {
     fn shared(&self) -> bool {
         false
     }
+    /// True when loading the theme again shows exactly what this source would have: its frame
+    /// is a function of the engine clock alone (a shader, a still image). The engine then drops
+    /// it while every screen has been covered for a while and loads it again on the way back.
+    /// A video, slideshow or scene keeps its place in time instead (a reload would restart it).
+    fn releasable(&self) -> bool {
+        false
+    }
     /// Advances time-based state once per engine tick, before any drawing
     /// (decode the next video frame, advance a slideshow, ...).
     fn update(&mut self, _gpu: &Gpu, _clock: Duration) {}
@@ -149,6 +156,19 @@ impl Source for Broken {
                 a: 1.0,
             },
         );
+    }
+    fn redraw(&self, _clock: Duration) -> Redraw {
+        Redraw::OnChange
+    }
+}
+
+/// Stands in for a source the engine released while every screen is covered
+/// (`Engine::release`). Never drawn: the theme is loaded again before any screen shows.
+pub struct Released;
+
+impl Source for Released {
+    fn render(&mut self, _gpu: &Gpu, frame: Frame<'_>) {
+        clear(frame.encoder, frame.view, wgpu::Color::BLACK);
     }
     fn redraw(&self, _clock: Duration) -> Redraw {
         Redraw::OnChange

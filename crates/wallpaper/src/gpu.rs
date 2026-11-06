@@ -205,6 +205,58 @@ impl Gpu {
         })
     }
 
+    /// A surface for `window` (a screen whose swapchain was released gets a new one).
+    pub fn surface(&self, window: &Window) -> Result<wgpu::Surface<'static>> {
+        create_surface(&self._instance, window)
+    }
+
+    /// The device `opening` made, with no windows (the release lab: the engine's real adapter
+    /// choice and device, without surfaces).
+    #[cfg(test)]
+    pub fn opened(opening: Opening) -> Self {
+        let Opened {
+            instance,
+            adapter,
+            device,
+            queue,
+            preference,
+        } = opening.wait().expect("a DX12 GPU");
+        let format = wgpu::TextureFormat::Bgra8Unorm;
+        let blit = Blitter::new(&device, format);
+        Self {
+            _instance: instance,
+            adapter,
+            device,
+            queue,
+            format,
+            blit,
+            preference,
+        }
+    }
+
+    /// Drops the device and keeps what it was opened from (the release lab).
+    #[cfg(test)]
+    pub fn into_adapter(self) -> (wgpu::Instance, wgpu::Adapter) {
+        (self._instance, self.adapter)
+    }
+
+    /// A new device on a kept adapter (the release lab).
+    #[cfg(test)]
+    pub fn from_adapter(instance: wgpu::Instance, adapter: wgpu::Adapter) -> Self {
+        let (device, queue) = open_device(&adapter, false).expect("a device");
+        let format = wgpu::TextureFormat::Bgra8Unorm;
+        let blit = Blitter::new(&device, format);
+        Self {
+            _instance: instance,
+            adapter,
+            device,
+            queue,
+            format,
+            blit,
+            preference: GpuPreference::Auto,
+        }
+    }
+
     /// Runs `build` with validation errors captured instead of panicking,
     /// so a broken asset is reported and the previous frame keeps running.
     pub fn checked<T>(&self, build: impl FnOnce() -> T) -> Result<T> {
@@ -266,7 +318,8 @@ impl Gpu {
 /// One window being rendered to.
 pub struct Screen {
     // Field order matters: the surface must drop before its window.
-    surface: wgpu::Surface<'static>,
+    /// `None` once [`release`](Self::release)d; made again on the next [`acquire`](Self::acquire).
+    surface: Option<wgpu::Surface<'static>>,
     config: wgpu::SurfaceConfiguration,
     /// Whether `config` has been applied to `surface` yet (see `acquire`).
     configured: bool,
@@ -367,7 +420,7 @@ impl Screen {
             config.usage |= wgpu::TextureUsages::COPY_DST;
         }
         Ok(Self {
-            surface,
+            surface: Some(surface),
             config,
             configured: false,
             window,
@@ -388,8 +441,8 @@ impl Screen {
         if w > 0 && h > 0 && (w, h) != self.size() {
             self.config.width = w;
             self.config.height = h;
-            if self.configured {
-                self.surface.configure(&gpu.device, &self.config);
+            if let (true, Some(surface)) = (self.configured, &self.surface) {
+                surface.configure(&gpu.device, &self.config);
             }
             self.dirty = true;
         }
@@ -399,19 +452,37 @@ impl Screen {
     /// The swapchain is created here on first use, so screens whose source
     /// draws with windows of its own (web, app) never pay for one.
     pub fn acquire(&mut self, gpu: &Gpu) -> Option<wgpu::SurfaceTexture> {
+        let surface = match &mut self.surface {
+            Some(surface) => surface,
+            None => match gpu.surface(&self.window) {
+                Ok(surface) => self.surface.insert(surface),
+                Err(e) => {
+                    log::error!("no swapchain: {e:#}");
+                    return None;
+                }
+            },
+        };
         if !self.configured {
-            self.surface.configure(&gpu.device, &self.config);
+            surface.configure(&gpu.device, &self.config);
             self.configured = true;
         }
-        match self.surface.get_current_texture() {
+        match surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => Some(t),
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                self.surface.configure(&gpu.device, &self.config);
+                surface.configure(&gpu.device, &self.config);
                 None
             }
             _ => None, // timeout / occluded: try next frame
         }
+    }
+
+    /// Drops the swapchain and the kept frame (every screen is covered; see
+    /// `Engine::release`). The next [`acquire`](Self::acquire) makes the swapchain again.
+    pub fn release(&mut self) {
+        self.surface = None;
+        self.configured = false;
+        self.kept = None;
     }
 }
 

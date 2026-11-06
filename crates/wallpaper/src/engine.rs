@@ -3,7 +3,9 @@
 //! The engine never draws a frame nobody can see or that would look the
 //! same as the last one: covered screens are skipped, static sources draw
 //! once, animated ones are paced by their own fps cap, and the clock that
-//! drives animation stops while everything is hidden.
+//! drives animation stops while everything is hidden. Once every screen has
+//! been covered for [`RELEASE_AFTER`], it also lets go of what drawing holds
+//! (swapchains, kept frames, pyramids, the source; see [`Engine::release`]).
 
 use std::path::Path;
 use std::rc::Rc;
@@ -32,6 +34,9 @@ use crate::window::Window;
 const RELOAD_DEBOUNCE: Duration = Duration::from_millis(80);
 /// Coalesces window-move storms before re-checking what is covered.
 const COVER_DEBOUNCE: Duration = Duration::from_millis(100);
+/// How long every screen must have been covered before the engine lets go of what it draws with
+/// (`Engine::release`). An alt-tab or a window restored sooner keeps everything: no thrash.
+const RELEASE_AFTER: Duration = Duration::from_secs(10);
 /// Slack on the longest clock step between ticks, so a stall (or system
 /// sleep) never jumps the clock ahead. The step may also cover the sleep the
 /// engine itself planned (see `Engine::step_limit`), or a source scheduled
@@ -82,6 +87,14 @@ pub struct Engine {
     renderer_config: EngineConfig,
     render_settings: RenderSettings,
     restart_due: bool,
+    /// Since when every screen has been covered (desktop mode).
+    covered_since: Option<Instant>,
+    /// The drawing is released ([`release`](Self::release)): our windows are hidden.
+    released: bool,
+    /// ... and so is the source, which [`resume`](Self::resume) loads again.
+    source_released: bool,
+    /// When the last resume began, until its first frame is presented (logged).
+    resuming: Option<Instant>,
 }
 
 impl Engine {
@@ -152,6 +165,10 @@ impl Engine {
             renderer_config,
             render_settings,
             restart_due: false,
+            covered_since: None,
+            released: false,
+            source_released: false,
+            resuming: None,
         })
     }
 
@@ -322,6 +339,7 @@ impl Engine {
                 screen.sync_size(&self.gpu);
             }
         }
+        self.follow_cover(now);
 
         self.sync_visibility();
         self.glass.reload();
@@ -380,6 +398,90 @@ impl Engine {
         Flow::Wait(self.deadline(frame_deadline))
     }
 
+    /// Releases the drawing once every screen has been covered for [`RELEASE_AFTER`], and
+    /// resumes it as soon as one is not.
+    fn follow_cover(&mut self, now: Instant) {
+        if self.monitors.is_none() {
+            return;
+        }
+        if self.screens.iter().any(|s| !s.paused) {
+            self.covered_since = None;
+            if self.released {
+                self.resume();
+            }
+            return;
+        }
+        let since = *self.covered_since.get_or_insert(now);
+        if !self.released && now >= since + RELEASE_AFTER && self.can_release() {
+            self.release();
+        }
+    }
+
+    /// Only while Windows shows the theme's still on every screen (the static snapshot): that is
+    /// what a hidden window leaves on the desktop, and what covers the resume. Without it the
+    /// user's own wallpaper would flash by on the way back, so the drawing is kept.
+    fn can_release(&self) -> bool {
+        self.snapshot.showing()
+    }
+
+    /// When the drawing is due to be released, if it will be.
+    fn release_at(&self) -> Option<Instant> {
+        let since = self.covered_since.filter(|_| !self.released)?;
+        self.can_release().then_some(since + RELEASE_AFTER)
+    }
+
+    /// Lets go of what drawing holds while nobody can see it. Our windows hide, so Windows shows
+    /// the theme's still in their place; every swapchain, kept frame, blur pyramid and backdrop
+    /// pyramid is dropped, and so is the source when loading it again shows the same frame
+    /// ([`Source::releasable`]). The device and its compiled pipelines stay: a new device
+    /// recompiles every shader, ~1.6 s before a first frame on the RTX, against a few tens of ms
+    /// to come back from this (docs/performance.md, "Hidden = free").
+    fn release(&mut self) {
+        let started = Instant::now();
+        let before = crate::trim::private_mib();
+        for screen in &mut self.screens {
+            screen.window.show(false);
+            screen.release();
+        }
+        self.glass.reset();
+        self.backdrop.release();
+        if self.source.releasable() {
+            self.source = Box::new(sources::Released);
+            self.source_released = true;
+        }
+        self.released = true;
+        // wgpu frees what the last submissions used once they are seen done.
+        for _ in 0..2 {
+            let _ = self.gpu.device.poll(wgpu::PollType::wait_indefinitely());
+        }
+        log::info!(
+            "every screen covered for {RELEASE_AFTER:?}: drawing released in {:.1?} \
+             (source too: {}), private {before:.0} -> {:.0} MiB",
+            started.elapsed(),
+            self.source_released,
+            crate::trim::private_mib()
+        );
+    }
+
+    /// Takes the drawing back: the source again if it went, and the windows, which show nothing
+    /// (the still under them) until their first frame. Swapchains and kept frames are made by
+    /// the frame that follows.
+    fn resume(&mut self) {
+        self.released = false;
+        self.resuming = Some(Instant::now());
+        if std::mem::take(&mut self.source_released) {
+            let hwnds: Vec<HWND> = self.screens.iter().map(|s| s.window.0).collect();
+            let (source, _) = load_or_broken(&self.gpu, &self.theme, &hwnds);
+            self.source = source;
+            // A new source starts with every screen visible.
+            self.shown.fill(Visibility::Live);
+        }
+        for screen in &mut self.screens {
+            screen.window.show(true);
+            screen.dirty = true;
+        }
+    }
+
     /// Tells the source about screens whose visibility changed since the last
     /// call, so it can suspend what it runs for them.
     fn sync_visibility(&mut self) {
@@ -402,6 +504,7 @@ impl Engine {
                 .then(|| Instant::now() + Duration::from_millis(4)),
             self.reload_at,
             self.recheck_at,
+            self.release_at(),
             self.timing
                 .as_ref()
                 .filter(|t| t.pending())
@@ -537,6 +640,13 @@ impl Engine {
         if drew && let Some(timing) = &mut self.timing {
             timing.presented(self.frame);
         }
+        if drew && let Some(started) = self.resuming.take() {
+            log::info!(
+                "resumed: first frame presented {:.1?} after a screen was uncovered, private {:.0} MiB",
+                started.elapsed(),
+                crate::trim::private_mib()
+            );
+        }
 
         // First frame of a newly loaded theme: publish its palette, once.
         if drew && std::mem::take(&mut self.palette_due) {
@@ -620,6 +730,14 @@ impl Engine {
         let hwnds: Vec<HWND> = self.screens.iter().map(|s| s.window.0).collect();
         let source = sources::load(&self.gpu, &theme, &hwnds)?;
         log::info!("{} loaded in {:.1?}", theme.theme.name, started.elapsed());
+        // Switched while released: the new theme has no still yet, so it waits under covered
+        // screens as it would have, windows shown, and isn't released until it has one.
+        if std::mem::take(&mut self.released) {
+            self.source_released = false;
+            for screen in &self.screens {
+                screen.window.show(true);
+            }
+        }
         self.glass.reset();
         for screen in &mut self.screens {
             screen.kept = None;

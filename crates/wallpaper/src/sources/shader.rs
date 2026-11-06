@@ -315,6 +315,10 @@ impl Source for ShaderSource {
     fn shared(&self) -> bool {
         self.shared
     }
+
+    fn releasable(&self) -> bool {
+        true
+    }
 }
 
 /// The former WebGL photo sources used trilinear mipmaps: implicit derivatives of their
