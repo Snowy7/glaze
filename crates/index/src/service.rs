@@ -18,6 +18,28 @@ pub struct State {
     pub store: Store,
     pub scanning: bool,
     cache: PathBuf,
+    activity: Option<mpsc::SyncSender<Change>>,
+}
+
+impl State {
+    pub(crate) fn queried(&self) {
+        if let Some(activity) = &self.activity {
+            let _ = activity.try_send(Change::Queried);
+        }
+    }
+}
+
+fn trim_working_set() {
+    // Reclaim validated/scanned file pages when the service settles. The mappings remain
+    // valid; future queries fault their pages back from Windows' reclaimable file cache.
+    // SAFETY: only trims this optional process, after its query quiet deadline.
+    if let Err(error) = unsafe {
+        windows::Win32::System::ProcessStatus::EmptyWorkingSet(
+            windows::Win32::System::Threading::GetCurrentProcess(),
+        )
+    } {
+        eprintln!("trim working set: {error}");
+    }
 }
 
 pub fn cache_dir() -> Result<PathBuf> {
@@ -205,14 +227,15 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
         store.len() - 1,
         started.elapsed().as_secs_f64() * 1000.0
     );
+    let (tx, rx) = mpsc::sync_channel(256);
     let state = Arc::new(RwLock::new(State {
         store,
         scanning: true,
         cache: cache.clone(),
+        activity: Some(tx.clone()),
     }));
     pipe::start(state.clone())?;
     crate::spool::cleanup(&cache.join("scan"));
-    let (tx, rx) = mpsc::sync_channel(256);
     for root in &roots {
         watch::start(root.clone(), tx.clone())
             .with_context(|| format!("watch {}", root.display()))?;
@@ -237,9 +260,16 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     let mut pending_paths = BTreeSet::new();
     let mut pending_overflows = BTreeSet::new();
     let mut dirty = None::<Instant>;
+    let mut trim_at = None::<Instant>;
     loop {
-        let message = if dirty.is_some() {
-            rx.recv_timeout(Duration::from_secs(2))
+        let trim_wait = trim_at.map(|at| at.saturating_duration_since(Instant::now()));
+        let wait = if dirty.is_some() {
+            Some(trim_wait.map_or(Duration::from_secs(2), |t| t.min(Duration::from_secs(2))))
+        } else {
+            trim_wait
+        };
+        let message = if let Some(wait) = wait {
+            rx.recv_timeout(wait)
         } else {
             rx.recv().map_err(|_| mpsc::RecvTimeoutError::Disconnected)
         };
@@ -254,6 +284,12 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                             initializing = false;
                             initial_finished = true;
                             dirty = Some(Instant::now());
+                            trim_at = Some(Instant::now() + Duration::from_secs(2));
+                        }
+                        Change::Queried => {
+                            if !initializing {
+                                trim_at = Some(Instant::now() + Duration::from_secs(2));
+                            }
                         }
                         Change::Paths {
                             root: _,
@@ -284,6 +320,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 }
                 for root in &overflows {
                     reconcile(&state, root, true)?;
+                    trim_at = Some(Instant::now() + Duration::from_secs(2));
                 }
                 // Parent paths sort before their children. New directories import complete
                 // subtrees; later events are idempotent final-state updates.
@@ -295,6 +332,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 if dirty.is_some_and(|t| t.elapsed() >= Duration::from_secs(120)) {
                     checkpoint_changes(&state, &snapshot)?;
                     dirty = None;
+                    trim_at = Some(Instant::now() + Duration::from_secs(2));
                 }
                 if initial_finished {
                     state.write().expect("index state").scanning = false;
@@ -302,10 +340,15 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                checkpoint_changes(&state, &snapshot)?;
-                dirty = None;
+                if dirty.take().is_some() {
+                    checkpoint_changes(&state, &snapshot)?;
+                }
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+        if !initializing && trim_at.is_some_and(|at| Instant::now() >= at) {
+            trim_working_set();
+            trim_at = None;
         }
     }
     Ok(())
@@ -502,9 +545,25 @@ fn benchmark(count: usize) -> Result<()> {
             size_of_val(&after_lookup) as u32,
         )?;
     }
+    trim_working_set();
+    let mut trimmed = windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX::default();
+    trimmed.cb = size_of_val(&trimmed) as u32;
+    // SAFETY: current process, correctly sized output counter structure.
+    unsafe {
+        windows::Win32::System::ProcessStatus::GetProcessMemoryInfo(
+            windows::Win32::System::Threading::GetCurrentProcess(),
+            (&mut trimmed
+                as *mut windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX)
+                .cast(),
+            size_of_val(&trimmed) as u32,
+        )?;
+    }
+    let cold = Instant::now();
+    std::hint::black_box(query::search(&store, "report", 50));
+    let post_trim_query_ms = cold.elapsed().as_secs_f64() * 1000.0;
     println!(
         "{}",
-        serde_json::json!({"entries":count,"record_bytes":size_of::<crate::store::Record>(),"snapshot_bytes":std::fs::metadata(&path)?.len(),"load_ms":load_ms,"queries":elapsed.len(),"p50_ms":elapsed[elapsed.len()/2],"p95_ms":elapsed[elapsed.len()*95/100],"max_ms":elapsed.last(),"by_query":by_query,"private_bytes":memory.PrivateUsage,"peak_pagefile_bytes":memory.PeakPagefileUsage,"working_set_bytes":memory.WorkingSetSize,"private_with_wide_lookup_bytes":after_lookup.PrivateUsage,"wide_lookup_build_ms":lookup_ms})
+        serde_json::json!({"entries":count,"record_bytes":size_of::<crate::store::Record>(),"snapshot_bytes":std::fs::metadata(&path)?.len(),"load_ms":load_ms,"queries":elapsed.len(),"p50_ms":elapsed[elapsed.len()/2],"p95_ms":elapsed[elapsed.len()*95/100],"max_ms":elapsed.last(),"by_query":by_query,"private_bytes":memory.PrivateUsage,"peak_pagefile_bytes":memory.PeakPagefileUsage,"working_set_bytes":memory.WorkingSetSize,"private_with_wide_lookup_bytes":after_lookup.PrivateUsage,"wide_lookup_build_ms":lookup_ms,"trimmed_working_set_bytes":trimmed.WorkingSetSize,"first_query_after_trim_ms":post_trim_query_ms})
     );
     drop(store);
     std::fs::remove_file(&path)?;
@@ -526,6 +585,7 @@ mod tests {
             store: scanned.store,
             scanning: false,
             cache: dir.join("cache"),
+            activity: None,
         });
         std::fs::write(dir.join("a/test.txt"), b"1234567").unwrap();
         assert_eq!(scan::metadata(&dir.join("a/test.txt")).unwrap().size, 7);

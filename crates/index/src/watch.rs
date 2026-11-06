@@ -17,6 +17,7 @@ use crate::scan::{Background, long};
 #[derive(Debug)]
 pub enum Change {
     InitialDone,
+    Queried,
     Paths {
         root: PathBuf,
         paths: Vec<PathBuf>,

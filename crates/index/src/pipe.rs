@@ -195,11 +195,15 @@ fn serve_one(handle: HANDLE, state: &RwLock<State>) -> Result<()> {
     let started = Instant::now();
     let mut response = {
         let state = state.read().expect("index state");
+        let queried = !matches!(&request, Request::Status);
         let hits = match request {
             Request::Search { query: text, limit } => query::search(&state.store, &text, limit),
             Request::Sizes { path, limit } => state.store.sizes(&path, limit),
             Request::Status => Vec::new(),
         };
+        if queried {
+            state.queried();
+        }
         Response {
             hits,
             entries: state.store.len().saturating_sub(1),
