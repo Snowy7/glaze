@@ -97,42 +97,55 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
             scanned.denied
         );
     }
+    if parallel {
+        let mut replacement = state.read().expect("index state").store.fork()?;
+        if replacement.is_empty() {
+            replacement = scanned.store;
+        } else {
+            merge(&mut replacement, &scanned.store, root)?;
+        }
+        let old = {
+            let mut state = state.write().expect("index state");
+            std::mem::replace(&mut state.store, replacement)
+        };
+        drop(old);
+        return Ok(());
+    }
     let mut state = state.write().expect("index state");
     if state.store.is_empty() {
         // First volume: move its buffers instead of allocating a duplicate full index.
         state.store = scanned.store;
         return Ok(());
     }
+    merge(&mut state.store, &scanned.store, root)
+}
+
+fn merge(store: &mut Store, source_store: &Store, root: &Path) -> Result<()> {
     let text = root.to_string_lossy();
-    let old = state.store.find(&text);
+    let old = store.find(&text);
     let parent = old
-        .map(|id| state.store.record(id).parent)
-        .or_else(|| {
-            root.parent()
-                .and_then(|p| state.store.find(&p.to_string_lossy()))
-        })
+        .map(|id| store.record(id).parent)
+        .or_else(|| root.parent().and_then(|p| store.find(&p.to_string_lossy())))
         .unwrap_or(0);
     if let Some(id) = old {
-        state.store.remove(id);
+        store.remove(id);
     }
-    if scanned.store.record(0).first != NONE {
-        let source = scanned.store.record(0).first;
+    if source_store.record(0).first != NONE {
+        let source = source_store.record(0).first;
         // A scan names its root with the whole path; an in-tree import needs its basename.
         if parent == 0 {
-            state.store.import(&scanned.store, source, parent);
+            store.import(source_store, source, parent);
         } else {
             let name = root
                 .file_name()
                 .context("subtree basename")?
                 .to_string_lossy();
-            let root_info = scanned.store.record(source);
-            let id = state
-                .store
-                .upsert(parent, &name, root_info.attributes, 0, root_info.modified);
-            let mut child = scanned.store.record(source).first;
+            let root_info = source_store.record(source);
+            let id = store.upsert(parent, &name, root_info.attributes, 0, root_info.modified);
+            let mut child = source_store.record(source).first;
             while child != NONE {
-                state.store.import(&scanned.store, child, id);
-                child = scanned.store.record(child).next;
+                store.import(source_store, child, id);
+                child = source_store.record(child).next;
             }
         }
     }
@@ -144,7 +157,11 @@ fn checkpoint(state: &RwLock<State>, path: &Path) -> Result<()> {
     // disk I/O and validation, taking the exclusive lock only for the mapping swap.
     state.read().expect("index state").store.save(path)?;
     let mapped = Store::open(path)?;
-    state.write().expect("index state").store = mapped;
+    let old = {
+        let mut state = state.write().expect("index state");
+        std::mem::replace(&mut state.store, mapped)
+    };
+    drop(old);
     // If a crash left an older overlay behind, its generation also prevents replay.
     let _ = std::fs::remove_file(path.with_file_name("changes.json"));
     Ok(())

@@ -73,6 +73,7 @@ struct Changes<'a> {
 #[derive(Default)]
 pub struct Store {
     mapping: Option<Mmap>,
+    source: Option<std::sync::Arc<File>>,
     mapped_count: usize,
     mapped_names: usize,
     generation: u64,
@@ -85,6 +86,27 @@ pub struct Store {
 }
 
 impl Store {
+    /// An independent view for volume reconciliation. The immutable mapping is shared by the
+    /// OS; only the bounded overlay is copied. Readers keep the old view until the final swap.
+    pub(crate) fn fork(&self) -> Result<Self> {
+        let mapping = match &self.source {
+            // SAFETY: snapshots are immutable, replaced by rename, never truncated in place.
+            Some(file) => Some(unsafe { Mmap::map(file.as_ref())? }),
+            None => None,
+        };
+        Ok(Self {
+            mapping,
+            source: self.source.clone(),
+            mapped_count: self.mapped_count,
+            mapped_names: self.mapped_names,
+            generation: self.generation,
+            records: self.records.clone(),
+            names: self.names.clone(),
+            changed: self.changed.clone(),
+            children: std::sync::Mutex::new(HashMap::new()),
+        })
+    }
+
     pub fn new() -> Self {
         let mut store = Self::default();
         store.records.push(Record {
@@ -673,6 +695,7 @@ impl Store {
         let generation = u64::from_le_bytes(mapping[24..32].try_into()?);
         let store = Self {
             mapping: Some(mapping),
+            source: Some(std::sync::Arc::new(file)),
             mapped_count: count,
             mapped_names: names,
             generation,
