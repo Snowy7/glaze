@@ -1,100 +1,100 @@
 [
   {
-    "elapsed_ms": 7.0286,
+    "elapsed_ms": 9.982899999999999,
     "expected_pause": false,
     "phase": "normal",
     "snapshot": {
       "activity": {
-        "foreground_pid": 3168,
+        "foreground_pid": 78948,
         "pause_background": false,
         "reason": "idle"
       },
-      "publisher_pid": 77640,
-      "publisher_started": 134384151625947638
+      "publisher_pid": 53744,
+      "publisher_started": 134384178794728328
     }
   },
   {
-    "elapsed_ms": 1.3811,
+    "elapsed_ms": 4.9249,
     "expected_pause": true,
     "phase": "fullscreen-before-focus-away",
     "snapshot": {
       "activity": {
-        "foreground_pid": 3168,
+        "foreground_pid": 78948,
         "pause_background": true,
         "reason": "busy"
       },
-      "publisher_pid": 77640,
-      "publisher_started": 134384151625947638
+      "publisher_pid": 53744,
+      "publisher_started": 134384178794728328
     }
   },
   {
-    "elapsed_ms": 3.209,
+    "elapsed_ms": 1.4821,
     "expected_pause": false,
     "phase": "focus-away",
     "snapshot": {
       "activity": {
-        "foreground_pid": 3168,
+        "foreground_pid": 78948,
         "pause_background": false,
         "reason": "idle"
       },
-      "publisher_pid": 77640,
-      "publisher_started": 134384151625947638
+      "publisher_pid": 53744,
+      "publisher_started": 134384178794728328
     }
   },
   {
-    "elapsed_ms": 1.393,
+    "elapsed_ms": 2.069,
     "expected_pause": true,
     "phase": "fullscreen-before-minimize",
     "snapshot": {
       "activity": {
-        "foreground_pid": 3168,
+        "foreground_pid": 78948,
         "pause_background": true,
         "reason": "busy"
       },
-      "publisher_pid": 77640,
-      "publisher_started": 134384151625947638
+      "publisher_pid": 53744,
+      "publisher_started": 134384178794728328
     }
   },
   {
-    "elapsed_ms": 1.3584,
+    "elapsed_ms": 56.7304,
     "expected_pause": false,
     "phase": "minimize",
     "snapshot": {
       "activity": {
-        "foreground_pid": 3168,
+        "foreground_pid": 14420,
         "pause_background": false,
         "reason": "idle"
       },
-      "publisher_pid": 77640,
-      "publisher_started": 134384151625947638
+      "publisher_pid": 53744,
+      "publisher_started": 134384178794728328
     }
   },
   {
-    "elapsed_ms": 5.4906,
+    "elapsed_ms": 2.4388,
     "expected_pause": true,
     "phase": "fullscreen-before-exit",
     "snapshot": {
       "activity": {
-        "foreground_pid": 3168,
+        "foreground_pid": 78948,
         "pause_background": true,
         "reason": "fullscreen"
       },
-      "publisher_pid": 77640,
-      "publisher_started": 134384151625947638
+      "publisher_pid": 53744,
+      "publisher_started": 134384178794728328
     }
   },
   {
-    "elapsed_ms": 4.6271,
+    "elapsed_ms": 57.3835,
     "expected_pause": false,
     "phase": "exit",
     "snapshot": {
       "activity": {
-        "foreground_pid": 3168,
+        "foreground_pid": 14420,
         "pause_background": false,
         "reason": "idle"
       },
-      "publisher_pid": 77640,
-      "publisher_started": 134384151625947638
+      "publisher_pid": 53744,
+      "publisher_started": 134384178794728328
     }
   }
 ]

@@ -337,13 +337,34 @@ quality or FPS policy was changed here.
 holding a non-covering foreground window, then passed after requiring coverage. Foreground/
 location events still react immediately. One core **1 Hz recheck exists only while paused**,
 and is killed on resume/drop; idle has no timer. It covers missing/delayed Windows events.
-The owned fixture exercised focus-away, minimize and exit: all returned to Idle (2.2, 1.0,
-4.5 ms in the recorded run), with three shell and three helper resume logs and unchanged
+The owned fixture exercised focus-away, minimize and exit: all returned to Idle within 60 ms
+in the recorded run, with three shell and three helper resume logs and unchanged
 core/shell/helper PIDs. [Lifecycle](../crates/core/evidence/game-lifecycle.json),
 [consumer assertions](../crates/core/evidence/game-lifecycle-consumers.json).
 The last 60 s fixture also cleared its original Busy-after-exit case automatically with the
 same publisher PID. Widgets, bars and the clock were visually checked after restore, and no
 fixture remains. Tweaks: **56 tests passed**; release workspace build and scoped Clippy passed.
+
+**Foreground entry was rechecked against the index agent's exact fixture.** A plain topmost
+`WS_POPUP` covering the primary monitor reproduced a stale published PID for ten seconds,
+despite real foreground activation. The foreground callback arrived, but an immediate
+`GetForegroundWindow` query still returned the previous window; posting an immediate refresh
+also ran too early. A later forced sample correctly recognized coverage. The publisher now
+samples the HWND supplied by `EVENT_SYSTEM_FOREGROUND`, as specified by Windows, while other
+events and the paused-only fallback query the current foreground. This adds no timer or thread.
+[Original failure](../crates/core/evidence/game-foreground-before.json),
+[delayed-sample diagnosis](../crates/core/evidence/game-foreground-delayed.json).
+
+The [repeatable cross-process probe](../crates/core/evidence/game-foreground.ps1) starts from
+Idle, independently checks actual foreground ownership, samples the real publication, verifies
+the publisher stays alive and requires resume on exit. On the final workspace deployment,
+the fixture's correct PID and pause were present at the first one-second sample and remained
+through the ten-second run; exit returned to Idle. The lifecycle/consumer assertions above also
+passed on this deployment. [Final foreground evidence](../crates/core/evidence/game-foreground-fixed.json),
+[exit](../crates/core/evidence/game-foreground-fixed-restored.json),
+[deployed binary identity](../crates/core/evidence/game-foreground-build.json).
+Both covering and restored desktops were visually checked; core/tweaks tests (16/56) and
+scoped all-target Clippy passed. No index code was changed here.
 
 **Limits:** no application background deadline is different from no OS/driver wake. The engine
 keeps its GPU device when covered (the ~66 wakes/s driver thread described above). WinHTTP's

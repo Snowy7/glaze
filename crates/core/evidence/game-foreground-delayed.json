@@ -1,0 +1,169 @@
+﻿{
+    "fixture_pid":  64784,
+    "before":  {
+                   "publisher_pid":  14628,
+                   "publisher_started":  134384173283412543,
+                   "activity":  {
+                                    "pause_background":  false,
+                                    "reason":  "idle",
+                                    "foreground_pid":  27116
+                                }
+               },
+    "activated":  true,
+    "engaged_without_wake":  false,
+    "observations":  [
+                         {
+                             "second":  1.0133341,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         },
+                         {
+                             "second":  2.0378726,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         },
+                         {
+                             "second":  3.0430237,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         },
+                         {
+                             "second":  4.0581154999999995,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         },
+                         {
+                             "second":  5.06417,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         },
+                         {
+                             "second":  6.0717776,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         },
+                         {
+                             "second":  7.0850371999999995,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         },
+                         {
+                             "second":  8.0906106,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         },
+                         {
+                             "second":  9.0932736,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         },
+                         {
+                             "second":  10.1009043,
+                             "foreground_pid":  64784,
+                             "signal":  {
+                                            "publisher_pid":  14628,
+                                            "publisher_started":  134384173283412543,
+                                            "activity":  {
+                                                             "pause_background":  false,
+                                                             "reason":  "idle",
+                                                             "foreground_pid":  27116
+                                                         }
+                                        }
+                         }
+                     ],
+    "wake_probe":  {
+                       "refresh_posted":  true,
+                       "after_refresh":  {
+                                             "publisher_pid":  14628,
+                                             "publisher_started":  134384173283412543,
+                                             "activity":  {
+                                                              "pause_background":  true,
+                                                              "reason":  "busy",
+                                                              "foreground_pid":  64784
+                                                          }
+                                         },
+                       "foreground_pid":  64784,
+                       "posted":  true,
+                       "signal":  {
+                                      "publisher_pid":  14628,
+                                      "publisher_started":  134384173283412543,
+                                      "activity":  {
+                                                       "pause_background":  false,
+                                                       "reason":  "idle",
+                                                       "foreground_pid":  27116
+                                                   }
+                                  }
+                   }
+}
