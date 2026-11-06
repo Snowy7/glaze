@@ -101,12 +101,16 @@ impl Studio {
         if app.panel.is_none() && let Some((frame, show)) = pages::stage(app) {
             stage::prepare(app, ui, (frame.width() as u32, frame.height() as u32), show);
         }
-        let built = if app.panel.is_some() {
+        let mut built = if app.panel.is_some() {
             panel::build(app, &mut ui.text)
         } else {
             stage::prepare_designs(app, ui);
             view::build(app, &mut ui.text)
         };
+        if app.panel.is_some() && panel::fit_height(app, surface, &built) {
+            built = panel::build(app, &mut ui.text);
+        }
+        let size = surface.client_size();
         surface.set_chrome(&built.chrome);
         surface.set_background(panel::palette_for(app).chrome);
         let anchors = std::mem::take(&mut *app.anchors.borrow_mut());
@@ -255,7 +259,7 @@ fn run() -> Result<()> {
     // Studio shows a few hundred labels at once: keep them all laid out.
     ui.text.set_capacity(480);
     // UI Automation loads on its first request rather than before the first paint.
-    let min = if panel_mode { (360, 320) } else { (960, 640) };
+    let min = if panel_mode { (360, 160) } else { (960, 640) };
     let surface = Surface::new_deferred_accessibility(Kind::App { min }, title, Role::Window)?;
     let scale = surface.scale();
     // SAFETY: the calling thread's id.

@@ -23,7 +23,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         done,
         "Done",
         None,
-        false,
+        true,
         true,
         Action::Panel(Command::Done),
     );
@@ -57,8 +57,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     x -= b.px(4.0);
     for (icon, label) in [
         (glyph::EYE, "Peek (coming soon)"),
-        (glyph::MONITOR, "Show desktop (coming soon)"),
-        (glyph::CLOCK, "History (coming soon)"),
+        (glyph::CLOCK, "History (Ctrl H)"),
     ] {
         x -= b.px(26.0);
         icon_button(
@@ -66,8 +65,8 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             Rect::new(x, b.px(10.0), b.px(24.0), b.px(28.0)),
             icon,
             label,
-            false,
-            Action::None,
+            icon == glyph::CLOCK,
+            if icon == glyph::CLOCK { open(Page::History) } else { Action::None },
         );
     }
     let left = b.px(12.0);
@@ -142,14 +141,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::Settings => settings(app, b, c),
         Page::Performance => performance(app, b, c),
         Page::Top | Page::Dock => bar(app, b, c, page),
-        _ => {
-            title(b, c, page.title(), "Your desktop");
-            notice(
-                b,
-                c,
-                "This editor is coming to the panel. Its settings are available in the existing Studio.",
-            );
-        }
+        _ => super::editors::view(app, b, c, page),
     }
 }
 
@@ -303,7 +295,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
                     r,
                     Role::Button,
                     &app.library.items[i].name,
-                    open(Page::Wallpapers),
+                    Action::UseWallpaper(i),
                     Behavior::Click,
                 );
                 b.focus_ring(k, r, b.px(6.0));
@@ -428,7 +420,7 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
         b.px(60.0),
         b.px(28.0),
     );
-    button(b, add, "Add", Some(glyph::ADD), false, false, Action::None);
+    button(b, add, "Add", Some(glyph::ADD), false, true, open(Page::AddWidget));
     title(
         b,
         c,
@@ -451,14 +443,13 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
                 name,
                 "",
                 &format!(
-                    "{} × {} · column {}, row {}",
+                    "{} × {} · {}",
                     instance.size[0],
                     instance.size[1],
-                    instance.cell[0] + 1,
-                    instance.cell[1] + 1
+                    super::editors::position(app, &layout, instance)
                 ),
                 None,
-                Action::None,
+                Action::SelectWidget(Some(instance.instance.clone())),
             );
         }
     });
@@ -501,16 +492,7 @@ fn bars(app: &App, b: &mut B, c: &mut Col) {
         .unwrap_or("monochrome");
     group(b, c, "Design", |b, c| {
         for &(id, name) in &crate::pages::bars::PRESETS {
-            row(
-                b,
-                c,
-                Some(glyph::BARS),
-                name,
-                "",
-                "",
-                Some(current == id),
-                Action::Preset(id),
-            );
+            super::editors::design_row(b, c, id, name, current == id, Action::Preset(id));
         }
     });
     group(b, c, "", |b, c| {
@@ -570,6 +552,7 @@ fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
 fn settings(_app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "Settings", "mypaper and Studio");
     group(b, c, "", |b, c| {
+        row(b, c, Some(glyph::SLIDERS), "General", "", "Startup, Studio, history", None, open(Page::General));
         row(
             b,
             c,
@@ -580,6 +563,11 @@ fn settings(_app: &App, b: &mut B, c: &mut Col) {
             None,
             open(Page::Performance),
         );
+        for (icon, page, caption) in [
+            (glyph::KEYBOARD, Page::Keyboard, "All shortcuts"),
+            (glyph::WRENCH, Page::Troubleshoot, "Parts, logs and recovery"),
+            (glyph::INFO, Page::About, "Version, licenses and credits"),
+        ] { row(b, c, Some(icon), page.title(), "", caption, None, open(page)); }
     });
 }
 

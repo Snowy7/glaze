@@ -119,6 +119,7 @@ pub fn button(
             b.p.fill
         },
     );
+    if !primary { b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge); }
     let ink = if !enabled {
         b.p.ink3
     } else if primary {
@@ -369,6 +370,7 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
             );
             let k = key(("panel-setting", id));
             b.fill(control, b.px(6.0), b.p.fill);
+            b.stroke(control, b.px(6.0), b.px(1.0), b.p.edge);
             b.wash(k, control, b.px(6.0));
             text(
                 b,
@@ -440,6 +442,7 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 )
             };
             b.fill(control, b.px(7.0), b.p.fill);
+            b.stroke(control, b.px(7.0), b.px(1.0), b.p.edge);
             let sw = control.width() / options.len() as f32;
             b.group(key(("panel-segment", id)), |b| {
                 for (i, (v, label)) in options.iter().enumerate() {
@@ -488,16 +491,36 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 r.bottom
             };
         }
-        _ => c.y += h,
+        Kind::Slider { min, max, step, unit, factor, default } => {
+            let value = value.as_f64().unwrap_or(default);
+            let stacked = c.w < b.px(360.0) || b.t.text_scale > 1.0;
+            let control = if stacked {
+                Rect::new(c.x, c.y + height(b, 28.0), c.w, height(b, 36.0))
+            } else {
+                Rect::new(c.x + label_w + b.px(8.0), c.y, c.w - label_w - b.px(8.0), h)
+            };
+            b.slider(key(("panel-setting", id)), control, value, (min, max, step),
+                &format!("{:.0}{unit}", value * factor), b.px(48.0), label, Action::Slider(edit));
+            c.y = control.bottom + if stacked { b.px(4.0) } else { 0.0 };
+        }
+        Kind::Text { placeholder } => {
+            let control = Rect::new(c.x, c.y + height(b, 28.0), c.w, height(b, 32.0));
+            crate::ui::text_field(app, b, control, FieldId::Text(s.doc, s.path.into()), None,
+                placeholder, value.as_str().unwrap_or(""), label);
+            b.stroke(control, b.px(6.0), b.px(1.0), b.p.edge);
+            c.y = control.bottom + b.px(8.0);
+        }
+        Kind::Custom => c.y += h,
     }
     b.hline(c.x, c.right(), c.y - 1.0, b.p.line);
 }
 
 pub fn search(app: &App, b: &mut B, c: &mut Col) {
-    let id = FieldId::WallpaperSearch;
+    let id = FieldId::Palette;
     let k = field_key(&id);
     let r = Rect::new(c.x, c.y, c.w, height(b, 32.0));
     b.fill(r, b.px(7.0), b.p.fill);
+    b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
     b.icon(
         Rect::new(r.left + b.px(10.0), r.top, b.px(16.0), r.height()),
         glyph::SEARCH,

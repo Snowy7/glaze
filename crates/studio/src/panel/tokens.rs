@@ -26,7 +26,7 @@ pub fn palette(dark: bool) -> Palette {
     p.hover = choose(0x2c2c2c, 0xf2f2f2);
     p.selected = choose(0x4a4a4a, 0xd4d4d4);
     p.line = choose(0x2f2f2f, 0xe4e4e4);
-    p.edge = p.line;
+    p.edge = choose(0x777777, 0x8a8a8a);
     p.ink1 = choose(0xf5f5f5, 0x0a0a0a);
     p.ink2 = choose(0xc8c8c8, 0x333333);
     p.ink3 = choose(0xababab, 0x555555);

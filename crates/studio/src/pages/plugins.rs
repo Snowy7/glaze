@@ -294,7 +294,7 @@ fn contributions(m: &PluginManifest) -> Vec<(&'static str, Vec<String>)> {
     }
     out
 }
-fn setting(app: &App, b: &mut B, m: &PluginManifest, s: &Value, x: f32, y: f32, w: f32) -> f32 {
+pub(crate) fn setting(app: &App, b: &mut B, m: &PluginManifest, s: &Value, x: f32, y: f32, w: f32) -> f32 {
     let Some(k) = s["key"].as_str() else { return y };
     let name = s["label"].as_str().unwrap_or(k);
     let path = format!(

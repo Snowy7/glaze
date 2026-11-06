@@ -277,7 +277,7 @@ fn own_look(app: &App, b: &mut B, c: &mut Col, base: &str, instance: &Instance) 
     }
 }
 
-fn group_of(s: &WidgetSetting) -> Option<&str> {
+pub(crate) fn group_of(s: &WidgetSetting) -> Option<&str> {
     match s {
         WidgetSetting::Boolean { group, .. }
         | WidgetSetting::Number { group, .. }
@@ -307,7 +307,7 @@ fn capitalize(s: &str) -> String {
 
 /// One manifest setting as a row.
 #[allow(clippy::too_many_arguments)]
-fn widget_setting(app: &App, b: &mut B, c: &mut Col, base: &str, resolved: &Map<String, Value>, s: &WidgetSetting, instance: &Instance, manifest: &WidgetManifest) {
+pub(crate) fn widget_setting(app: &App, b: &mut B, c: &mut Col, base: &str, resolved: &Map<String, Value>, s: &WidgetSetting, instance: &Instance, manifest: &WidgetManifest) {
     let key_of = |k: &str| format!("{base}/settings/{}", token(k));
     match s {
         WidgetSetting::Boolean { key: k, label: l, .. } => {
@@ -423,7 +423,7 @@ fn trim(v: f64) -> String {
 }
 
 /// A − value + stepper.
-fn stepper(b: &mut B, rect: Rect, name: &str, value: u32, minus: Action, plus: Action) {
+pub(crate) fn stepper(b: &mut B, rect: Rect, name: &str, value: u32, minus: Action, plus: Action) {
     let p = *b.p;
     b.fill(rect, b.px(8.0), p.well);
     let caption = b.font(Font::Caption);

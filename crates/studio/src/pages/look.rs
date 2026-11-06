@@ -487,7 +487,7 @@ fn pointer_tile(b: &mut B, i: usize, pic: Rect) {
 }
 
 /// Look scoped to the wallpaper: the look the active wallpaper brings, edited in its own file.
-fn theme_scope(app: &App, b: &mut B, col: &mut Col) {
+pub(crate) fn theme_scope(app: &App, b: &mut B, col: &mut Col) {
     let Some(w) = app.library.active().map(|i| app.library.items[i].clone()) else { return };
     if !w.editable() {
         section(b, col, "", |b, c| {

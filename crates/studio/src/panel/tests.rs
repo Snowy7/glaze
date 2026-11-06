@@ -11,6 +11,7 @@ use crate::docs::DocId;
 fn app(ui: &Ui, dark: bool) -> App {
     let mut app = crate::goldens::app(dark, ui);
     app.panel = Some(State::default());
+    crate::pages::plugins::fixture(&mut app.plugins);
     app.size = (480, 760);
     // Bare IDs resolve beside the executable. An isolated target isn't beside the repo's
     // themes; keep the fixture's bundled wallpaper active without touching any files.
@@ -34,21 +35,103 @@ fn render_panel_pages() {
         .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-panel\shots"));
     let mut ui = Ui::new().unwrap();
     for dark in [true, false] {
-        let mut app = app(&ui, dark);
         for (page, name) in [
             (Page::Root, "root"),
             (Page::Widgets, "widgets"),
             (Page::Bars, "bars"),
             (Page::Performance, "performance"),
+            (Page::Top, "top-bar"),
+            (Page::Dock, "dock"),
+            (Page::Widget, "weather"),
+            (Page::Widget, "clock"),
+            (Page::Widget, "photos"),
+            (Page::AddWidget, "add-widget"),
+            (Page::Look, "look"),
+            (Page::Look, "look-more"),
+            (Page::Look, "wallpaper-look"),
+            (Page::Windows, "windows"),
+            (Page::Windows, "windows-more"),
+            (Page::Wallpapers, "wallpapers"),
+            (Page::Wallpapers, "wallpapers-broken"),
+            (Page::Wallpaper, "wallpaper"),
+            (Page::Wallpaper, "wallpaper-broken"),
+            (Page::AddWallpaper, "add-wallpaper"),
+            (Page::AddWallpaper, "add-wallpaper-app"),
+            (Page::Connections, "connections"),
+            (Page::Connection, "connection"),
+            (Page::Connection, "connection-reconnect"),
+            (Page::Settings, "settings"),
+            (Page::General, "general"),
+            (Page::Keyboard, "keyboard"),
+            (Page::Troubleshoot, "troubleshoot"),
+            (Page::About, "about"),
+            (Page::DesktopMenu, "desktop-menu"),
+            (Page::History, "history"),
+            (Page::Search, "search"),
         ] {
+            let mut app = app(&ui, dark);
             app.panel.as_mut().unwrap().page = page;
+            match name {
+                "weather" => app.nav.widget = Some("weather-1".into()),
+                "clock" => app.nav.widget = Some("clock-1".into()),
+                "photos" => {
+                    let mut layout = crate::pages::widgets::layout(&app);
+                    let mut photo = layout.instances[0].clone();
+                    photo.widget = "photo".into(); photo.instance = "photo-1".into(); photo.size = [6, 4];
+                    for (n, item) in app.library.items.iter().filter(|w| w.preview.is_some()).take(3).enumerate() {
+                        photo.settings.insert(format!("image{}", n + 1), json!(item.preview.as_ref().unwrap()));
+                    }
+                    layout.instances.push(photo);
+                    app.docs.edit("Fixture", &[crate::docs::Op { doc: DocId::Widgets, path: String::new(), value: Some(serde_json::to_value(layout).unwrap()) }]).unwrap();
+                    app.nav.widget = Some("photo-1".into());
+                }
+                "look-more" | "windows-more" => { app.nav.more.insert(mypaper_ui::controls::key(("panel-more", mypaper_ui::controls::key(("studio-panel", page))))); }
+                "wallpaper-look" => app.nav.look_theme = true,
+                "wallpaper" => {
+                    app.nav.wallpaper = app.library.items.iter().position(|w| w.kind.is_some_and(crate::library::Kind::uses_fit));
+                }
+                "wallpapers-broken" | "wallpaper-broken" => {
+                    let mut wallpaper = app.library.items[0].clone();
+                    wallpaper.id = "missing".into(); wallpaper.name = "beach-loop.mp4".into(); wallpaper.active = false;
+                    wallpaper.error = Some("The file was moved or is no longer available.".into());
+                    wallpaper.origin = crate::library::Origin::User;
+                    app.library.items.insert(0, wallpaper); app.nav.filter = 1; app.nav.wallpaper = Some(0);
+                }
+                "add-wallpaper" => app.overlay = Some(crate::app::Overlay::AddWallpaper { source: None, picked: None }),
+                "add-wallpaper-app" => {
+                    app.overlay = Some(crate::app::Overlay::AddWallpaper { source: Some(crate::actions::Source::App), picked: Some(r"C:\Apps\visualizer.exe".into()) });
+                    app.texts.insert(crate::actions::FieldId::AddName, "Visualizer".into());
+                    app.texts.insert(crate::actions::FieldId::AddArgs, "--embed {hwnd}".into());
+                }
+                "connection" => app.nav.integration = crate::pages::integrations::LIST.len(),
+                "connection-reconnect" => app.nav.integration = crate::pages::integrations::LIST.len() + 3,
+                "history" => {
+                    super::history::observe(&app);
+                    app.run(Action::Preset("islands"));
+                    super::history::observe(&app);
+                    app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(0);
+                }
+                "search" => { app.texts.insert(crate::actions::FieldId::Palette, "wallpaper".into()); }
+                _ => {}
+            }
             let built = super::build(&app, &mut ui.text);
-            let image = render(&mut ui, &built.list, 480, 760).unwrap();
+            let content = built.scrolls.last().unwrap().content;
+            app.size.1 = (content + 48.0 + super::editors::footer_height(&app)).ceil().clamp(160.0, 760.0) as u32;
+            let built = super::build(&app, &mut ui.text);
+            let image = render(&mut ui, &built.list, 480, app.size.1).unwrap();
             let path = out.join(format!(
                 "{name}-{}.png",
                 if dark { "dark" } else { "light" }
             ));
             golden::write(&image, &path).unwrap();
+            // Full content is an additional review artifact for long pages, so every option
+            // can be visually checked without synthesizing desktop input.
+            if content + 48.0 + super::editors::footer_height(&app) > 760.0 {
+                app.size.1 = (content + 48.0 + super::editors::footer_height(&app)).ceil() as u32;
+                let built = super::build(&app, &mut ui.text);
+                let image = render(&mut ui, &built.list, 480, app.size.1).unwrap();
+                golden::write(&image, &out.join(format!("{name}-full-{}.png", if dark { "dark" } else { "light" }))).unwrap();
+            }
         }
     }
 }

@@ -987,7 +987,9 @@ impl App {
         let text = f.field.text().unwrap_or_default();
         let id = f.id.clone();
         if self.texts.get(&id) != Some(&text) {
-            if matches!(id, FieldId::Palette) {
+            if self.panel.is_some() && matches!(id, FieldId::Palette) {
+                self.panel.as_mut().unwrap().page = crate::panel::Page::Search;
+            } else if matches!(id, FieldId::Palette) {
                 self.overlay = Some(Overlay::Palette { selected: 0 });
             }
             if matches!(id, FieldId::PlaceSearch) {
@@ -1356,6 +1358,7 @@ impl App {
     // --- Actions ------------------------------------------------------------------------------
 
     pub fn run(&mut self, action: Action) {
+        crate::panel::before_action(self, &action);
         self.dirty = true;
         match action {
             Action::None => {}
