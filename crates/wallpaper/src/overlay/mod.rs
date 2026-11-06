@@ -72,7 +72,9 @@ use windows::core::{PCWSTR, w};
 pub use self::capture::Counts;
 use self::capture::{CaptureDevice, CopyTimer, Session};
 use self::glass::{Pipelines, Targets};
-use self::request::{Channel, Layer, Material, OVERLAY_CLASS, Reply, Request, WM_PLACEMENT};
+use self::request::{
+    Channel, Layer, Material, OVERLAY_CLASS, Reply, Request, Style, WM_PLACEMENT,
+};
 use self::timing::Timer;
 use self::window::OverlayWindow;
 
@@ -286,6 +288,8 @@ struct Overlay {
     rect: Rect,
     radius: f32,
     material: Material,
+    /// The finer knobs and the fade, from the shell's `Style` request.
+    style: Style,
     monitor: HMONITOR,
     bounds: Rect,
     /// The monitor's px per point.
@@ -477,6 +481,17 @@ impl Overlays {
                 self.close(client);
                 Ok(())
             }
+            Request::Style { client, style } => {
+                let Some(o) = self.find(client) else {
+                    return Ok(());
+                };
+                let changed = std::mem::replace(&mut self.open[o].style, style) != style;
+                // Shown glass takes new knobs at once; the fade only applies to glass not shown yet.
+                if changed && self.open[o].shown.is_some() && !self.open[o].fresh {
+                    self.draw(&[o])?;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -544,6 +559,7 @@ impl Overlays {
             rect,
             radius,
             material,
+            style: Style::DEFAULT,
             monitor,
             bounds,
             scale,
@@ -871,17 +887,19 @@ impl Overlays {
             overlay
                 .window
                 .show(&live.capture, overlay.targets.glass())?;
+            let fade = Duration::from_secs_f32(overlay.style.fade_ms / 1000.0);
             match overlay.shown {
                 None => {
-                    overlay.window.fade_in(&live.dcomp)?;
+                    overlay.window.fade_in(&live.dcomp, fade)?;
                     overlay.shown = Some(Instant::now());
+                    overlay.faded = fade.is_zero();
                     self.stats.open_to_glass = Some(overlay.opened.elapsed());
                     log::info!(
                         "glass overlay: open to glass {:.1} ms",
                         overlay.opened.elapsed().as_secs_f64() * 1000.0
                     );
                 }
-                Some(at) if !overlay.faded && at.elapsed() > window::FADE => {
+                Some(at) if !overlay.faded && at.elapsed() > fade => {
                     overlay.window.settle()?;
                     overlay.faded = true;
                 }
@@ -992,6 +1010,7 @@ fn render(
             geometry::local(overlay.rect, overlay.frame),
             overlay.radius,
             &overlay.material,
+            &overlay.style,
             overlay.scale,
         );
         overlay.targets.draw(

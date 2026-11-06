@@ -17,7 +17,7 @@ use liquid_rust as lr;
 use mypaper_desktop::Rect;
 
 use super::capture::{CaptureDevice, Crop};
-use super::request::Material;
+use super::request::{Material, Style};
 
 /// The crop and glass format (the capture's own).
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
@@ -112,6 +112,8 @@ pub struct Targets {
     scene: lr::Scene,
     glass: lr::GlassId,
     scale: f32,
+    /// What the scene's glass was last set to (`set_plate`): the same again resolves nothing.
+    plate: Option<(Rect, f32, Material, Style, f32)>,
     /// Per crop: that crop compared against the other.
     compare: [wgpu::BindGroup; 2],
     differ: wgpu::Buffer,
@@ -211,6 +213,7 @@ impl Targets {
             scene,
             glass,
             scale: 1.0,
+            plate: None,
             compare,
             differ,
             readback,
@@ -305,8 +308,21 @@ impl Targets {
     }
 
     /// Sets this overlay's glass before a draw: the surface at `plate` (frame-local px), its
-    /// corner radius (px), its material, on a screen of `scale` px per point.
-    pub fn set_plate(&mut self, plate: Rect, radius: f32, material: &Material, scale: f32) {
+    /// corner radius (px), its material and style, on a screen of `scale` px per point. Resolved
+    /// only when one of them changed since the last draw.
+    pub fn set_plate(
+        &mut self,
+        plate: Rect,
+        radius: f32,
+        material: &Material,
+        style: &Style,
+        scale: f32,
+    ) {
+        let key = (plate, radius, *material, *style, scale);
+        if self.plate == Some(key) {
+            return;
+        }
+        self.plate = Some(key);
         let s = scale.max(0.5);
         let frame = lr::Rect::new(
             plate.x as f32 / s,
@@ -315,10 +331,18 @@ impl Targets {
             plate.height as f32 / s,
         );
         let (material, appearance) = crate::material::liquid(&controls(material), s);
+        let set = |v: f32| (v >= 0.0).then_some(v);
+        let material = crate::material::styled(
+            material,
+            style.brightness,
+            style.saturation,
+            set(style.sheen),
+            set(style.depth),
+        );
         self.scene.place(self.glass, frame);
-        // Quarter circles: exactly the surface's own rounded rectangle.
+        // Exactly the surface's own corners: quarter circles unless the style smooths them.
         self.scene
-            .set_shape(self.glass, lr::Shape::Circular(radius.max(0.0) / s));
+            .set_shape(self.glass, crate::material::shape(radius / s, style.smoothing));
         self.scene.set_material(self.glass, material);
         self.scene.set_appearance(self.glass, Some(appearance));
         self.scene.update(0.0);
