@@ -206,14 +206,13 @@ impl StudioPick {
         (&mut self.preview, self.module_preview.as_ref())
     }
 
-    pub fn wallpaper_preview(&mut self, ui: &mut Ui, widgets: Vec<(String, SurfaceId)>) {
+    pub fn wallpaper_preview(&mut self, ui: &mut Ui) {
         if let Err(error) = self.wallpaper_still.update(
             ui,
             self.preview.snapshot_sequence(),
             self.preview.snapshot_theme().flatten(),
             &self.monitors,
             self.anchor,
-            widgets,
         ) {
             log::warn!("Studio History wallpaper still: {error:#}");
         }

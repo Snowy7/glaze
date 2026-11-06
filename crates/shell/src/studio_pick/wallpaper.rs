@@ -124,7 +124,6 @@ pub struct Still {
 struct Stamp {
     sequence: u64,
     monitors: Vec<(String, mypaper_desktop::Rect)>,
-    widgets: Vec<(String, mypaper_ui::SurfaceId)>,
     parent: isize,
 }
 impl Still {
@@ -141,7 +140,6 @@ impl Still {
         theme: Option<&LoadedTheme>,
         monitors: &[Monitor],
         anchor: Option<windows::Win32::Foundation::HWND>,
-        widgets: Vec<(String, mypaper_ui::SurfaceId)>,
     ) -> anyhow::Result<()> {
         let (Some(sequence), Some(theme), Some(parent)) = (sequence, theme, anchor) else {
             self.clear();
@@ -153,11 +151,10 @@ impl Still {
                 .iter()
                 .map(|m| (m.device.clone(), m.rect))
                 .collect(),
-            widgets,
             parent: parent.0 as isize,
         };
         if self.stamp.as_ref() == Some(&stamp) {
-            return Ok(());
+            return self.keep_bottom(parent, true);
         }
         self.clear();
         self.stamp = Some(stamp);
@@ -173,12 +170,13 @@ impl Still {
             let r = monitor.rect;
             let screen = Rect::new(0., 0., r.width as f32, r.height as f32);
             let mut surface = Surface::new(
-                Kind::DesktopChild { parent },
+                Kind::Popup { activate: false },
                 "Studio history wallpaper still",
                 Role::Pane,
             )?;
             surface.set_no_activate(true);
             surface.set_click_through(true);
+            prepare(surface.hwnd())?;
             surface.present(
                 ui,
                 (r.x, r.y),
@@ -204,16 +202,165 @@ impl Still {
                     ..Default::default()
                 },
             )?;
-            surface.show();
             self.surfaces.push(surface);
+        }
+        self.keep_bottom(parent, true)
+    }
+
+    /// Stills are a contiguous run directly above Explorer, under widgets and their glass.
+    /// A newly reconciled widget may have entered below an existing still; repair that too.
+    fn keep_bottom(
+        &self,
+        anchor: windows::Win32::Foundation::HWND,
+        show: bool,
+    ) -> anyhow::Result<()> {
+        use windows::Win32::UI::WindowsAndMessaging::*;
+        // SAFETY: query the anchor's neighbours, moving only these owned no-activate windows.
+        unsafe {
+            let mut before = GetWindow(anchor, GW_HWNDPREV).unwrap_or(HWND_TOP);
+            while self.surfaces.iter().any(|s| s.hwnd() == before) {
+                before = GetWindow(before, GW_HWNDPREV).unwrap_or(HWND_TOP);
+            }
+            for surface in &self.surfaces {
+                let visible = IsWindowVisible(surface.hwnd()).as_bool();
+                if GetWindow(surface.hwnd(), GW_HWNDPREV).ok() != Some(before) || (show && !visible)
+                {
+                    SetWindowPos(
+                        surface.hwnd(),
+                        Some(before),
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE
+                            | SWP_NOSIZE
+                            | SWP_NOACTIVATE
+                            | if show {
+                                SWP_SHOWWINDOW
+                            } else {
+                                SET_WINDOW_POS_FLAGS(0)
+                            },
+                    )?;
+                }
+                before = surface.hwnd();
+            }
         }
         Ok(())
     }
 }
 
+/// Use explicit band placement: DesktopChild intentionally refuses arbitrary z-order moves.
+fn prepare(window: windows::Win32::Foundation::HWND) -> anyhow::Result<()> {
+    use windows::Win32::{Foundation::HANDLE, UI::WindowsAndMessaging::*};
+    // SAFETY: this marks only our own HWND as a desktop-band member; the property is a tag,
+    // not an owned handle. Windows removes it with the HWND. No other window is changed.
+    unsafe {
+        SetPropW(
+            window,
+            windows::core::w!("mypaper.ui.desktop"),
+            Some(HANDLE(std::ptr::dangling_mut())),
+        )?;
+        SetWindowPos(
+            window,
+            Some(HWND_NOTOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        )?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stills_stay_below_widgets_created_after_the_preview() {
+        use windows::Win32::UI::WindowsAndMessaging::*;
+        let _ui = Ui::new().unwrap();
+        let anchor = Surface::new(
+            Kind::Popup { activate: false },
+            "Hidden History anchor test",
+            Role::Pane,
+        )
+        .unwrap();
+        let widget = Surface::new(
+            Kind::Popup { activate: false },
+            "Hidden History widget test",
+            Role::Pane,
+        )
+        .unwrap();
+        let first = Surface::new(
+            Kind::Popup { activate: false },
+            "Hidden first still test",
+            Role::Pane,
+        )
+        .unwrap();
+        let second = Surface::new(
+            Kind::Popup { activate: false },
+            "Hidden second still test",
+            Role::Pane,
+        )
+        .unwrap();
+        for window in [&anchor, &widget, &first, &second] {
+            prepare(window.hwnd()).unwrap();
+        }
+        let still = Still {
+            stamp: None,
+            surfaces: vec![first, second],
+        };
+        let foreground = unsafe { GetForegroundWindow() };
+        // Arrange only our hidden HWNDs; no real desktop/window or synthetic input is used.
+        unsafe {
+            let before = GetWindow(anchor.hwnd(), GW_HWNDPREV).unwrap_or(HWND_TOP);
+            SetWindowPos(
+                widget.hwnd(),
+                Some(before),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            )
+            .unwrap();
+        }
+        still.keep_bottom(anchor.hwnd(), false).unwrap();
+        let assert_order = || unsafe {
+            assert_eq!(
+                GetWindow(widget.hwnd(), GW_HWNDNEXT).unwrap(),
+                still.surfaces[0].hwnd()
+            );
+            assert_eq!(
+                GetWindow(still.surfaces[1].hwnd(), GW_HWNDNEXT).unwrap(),
+                anchor.hwnd()
+            );
+        };
+        assert_order();
+        // Reproduce a later widget entering under a still; the next update must put it above.
+        unsafe {
+            SetWindowPos(
+                widget.hwnd(),
+                Some(still.surfaces[0].hwnd()),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            )
+            .unwrap();
+        }
+        still.keep_bottom(anchor.hwnd(), false).unwrap();
+        assert_order();
+        assert_eq!(unsafe { GetForegroundWindow() }, foreground);
+        assert!(
+            still
+                .surfaces
+                .iter()
+                .all(|s| unsafe { !IsWindowVisible(s.hwnd()).as_bool() })
+        );
+    }
     #[test]
     fn large_stills_decode_with_bounded_pixels_and_retain_native_center_size() {
         let _ui = Ui::new().unwrap();
