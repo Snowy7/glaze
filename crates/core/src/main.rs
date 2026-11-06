@@ -18,6 +18,7 @@
 mod autostart;
 mod bars;
 mod child;
+mod clean_env;
 mod desktop_extras;
 mod restart;
 mod styling;
@@ -57,6 +58,8 @@ fn main() -> ExitCode {
     if let Some(code) = autostart::cli(std::env::args().skip(1)) {
         return code;
     }
+    // Before any thread: everything mypaper launches inherits this environment (clean_env.rs).
+    clean_env::reset();
     mypaper_desktop::init_logging();
     mypaper_desktop::quit_on_ctrl_c();
     match run() {
