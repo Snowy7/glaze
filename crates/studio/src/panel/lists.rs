@@ -325,6 +325,15 @@ pub fn remove(app: &mut App, list: &List, index: usize) {
         {
             if slot.index == index {
                 app.nav.module = None;
+                if let Some(panel) = &mut app.panel
+                    && panel.page == super::Page::Module
+                {
+                    panel.page = if *bar == Bar::Dock {
+                        super::Page::Dock
+                    } else {
+                        super::Page::Top
+                    };
+                }
             } else if slot.index > index {
                 slot.index -= 1;
             }

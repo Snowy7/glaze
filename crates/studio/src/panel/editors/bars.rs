@@ -1937,6 +1937,16 @@ mod tests {
             Some(&json!(["clock"]))
         );
         assert_eq!(resolved_for(&app, 0), first);
+        app.panel.as_mut().unwrap().page = Page::Module;
+        app.nav.module = Some(Slot {
+            bar: Bar::Top,
+            list: "right",
+            index: 0,
+        });
+        app.key_with(0x2E, (false, false, false));
+        assert_eq!(bar_value(&app, "/top/right"), Some(json!([])));
+        assert_eq!(resolved_for(&app, 0), first);
+        assert_eq!(app.panel.as_ref().unwrap().page, Page::Top);
     }
 
     #[test]
