@@ -13,10 +13,12 @@ fn app(ui: &Ui, dark: bool) -> App {
     app.panel = Some(State::default());
     let mut bars = app.docs.doc(DocId::Bars).raw.clone();
     bars["dock"]["pinned"] = json!(super::icons::fixture_pins());
+    let mut layout = crate::pages::widgets::layout(&app);
+    layout.upgrade();
     app.docs = crate::docs::Docs::fixture([
         &app.docs.doc(DocId::Config).raw.to_string(),
         &bars.to_string(),
-        &app.docs.doc(DocId::Widgets).raw.to_string(),
+        &serde_json::to_string(&layout).unwrap(),
         &app.docs.doc(DocId::Studio).raw.to_string(),
     ]);
     crate::pages::plugins::fixture(&mut app.plugins);
@@ -62,6 +64,10 @@ fn render_panel_pages() {
             (Page::AddWidget, "add-widget"),
             (Page::Look, "look"),
             (Page::Look, "look-more"),
+            (Page::Look, "look-custom-color"),
+            (Page::Look, "look-light-desktop"),
+            (Page::Look, "newer-settings"),
+            (Page::Look, "malformed-settings"),
             (Page::Look, "wallpaper-look"),
             (Page::Windows, "windows"),
             (Page::Windows, "windows-more"),
@@ -101,6 +107,25 @@ fn render_panel_pages() {
             let mut app = app(&ui, dark);
             app.panel.as_mut().unwrap().page = page;
             match name {
+                "newer-settings" | "malformed-settings" => {
+                    let source = if name == "newer-settings" {
+                        "{\"future_setting\":true}"
+                    } else {
+                        "{\n broken\n}"
+                    };
+                    app.docs = crate::docs::Docs::fixture([source, "{\"version\":1}", "{}", "{}"]);
+                }
+                "look-light-desktop" => app.run(Action::Set(
+                    crate::actions::Edit::new(DocId::Config, "/look/appearance", "Appearance"),
+                    json!("light"),
+                )),
+                "look-custom-color" => {
+                    app.nav.more.insert(mypaper_ui::controls::key((
+                        "panel-color-picker",
+                        DocId::Config,
+                        "/look/material/tint",
+                    )));
+                }
                 "weather" => app.nav.widget = Some("weather-1".into()),
                 "clock" | "clock-world" | "clock-greeting" | "clock-own-look" => {
                     app.nav.widget = Some("clock-1".into());
@@ -754,10 +779,10 @@ fn save_failures_are_visible_on_the_affected_page_and_clear_after_a_valid_edit()
         built
             .targets
             .iter()
-            .any(|t| t.action == Action::ShowFile(DocId::Config))
+            .any(|t| t.action == Action::Panel(Command::RetryDoc(DocId::Config)))
     );
     assert!(
-        built
+        !built
             .targets
             .iter()
             .any(|t| t.action == Action::StartOver(DocId::Config))
@@ -919,4 +944,127 @@ fn custom_module_interval_text_is_saved_as_a_number() {
         "{:?}",
         app.docs.saved
     );
+}
+
+#[test]
+fn moving_a_module_between_bars_and_disconnect_are_single_undo_steps() {
+    let ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    app.nav.module = Some(crate::actions::Slot {
+        bar: crate::actions::Bar::Top,
+        list: "right",
+        index: 0,
+    });
+    let before = app.docs.doc(DocId::Bars).raw.clone();
+    super::run(
+        &mut app,
+        Command::MoveModuleTo(crate::actions::Bar::Dock, "left"),
+    );
+    assert_eq!(app.docs.undo_count(), 1);
+    assert_eq!(
+        app.nav.module.as_ref().unwrap().bar,
+        crate::actions::Bar::Dock
+    );
+    app.run(Action::Undo);
+    assert_eq!(app.docs.doc(DocId::Bars).raw, before);
+    let mut widgets = app.docs.doc(DocId::Widgets).raw.clone();
+    let mut face = widgets["instances"][0].clone();
+    face["instance"] = json!("t3-agents-1");
+    face["widget"] = json!("t3--agents");
+    face["cell"] = json!([10, 10]);
+    widgets["instances"].as_array_mut().unwrap().push(face);
+    let mut bars = before;
+    for (bar, zone) in [("top", "left"), ("dock", "right")] {
+        let mut modules = app
+            .get(DocId::Bars, &format!("/{bar}/{zone}"))
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        modules.push(json!("custom:t3--status"));
+        if !bars[bar].is_object() {
+            bars[bar] = json!({});
+        }
+        bars[bar][zone] = json!(modules);
+    }
+    app.docs = crate::docs::Docs::fixture([
+        &app.docs.doc(DocId::Config).raw.to_string(),
+        &bars.to_string(),
+        &widgets.to_string(),
+        "{}",
+    ]);
+    assert!(app.docs.doc(DocId::Bars).error.is_none());
+    assert!(app.docs.doc(DocId::Widgets).error.is_none());
+    super::run(&mut app, Command::Disconnect("t3".into()));
+    assert!(app.plugins.preferences.disabled.contains("t3"));
+    assert_eq!(app.docs.undo_count(), 1);
+    assert_eq!(
+        app.get(DocId::Widgets, "/instances")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        widgets["instances"].as_array().unwrap().len() - 1
+    );
+    for pointer in ["/top/left", "/dock/right"] {
+        assert!(
+            !app.get(DocId::Bars, pointer)
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .contains(&json!("custom:t3--status"))
+        );
+    }
+    app.run(Action::Undo);
+    assert!(!app.plugins.preferences.disabled.contains("t3"));
+    assert_eq!(app.docs.doc(DocId::Widgets).raw, widgets);
+    assert_eq!(app.docs.doc(DocId::Bars).raw, bars);
+}
+
+#[test]
+fn style_specimens_ignore_the_current_material_and_native_windows_are_distinct() {
+    use mypaper_ui::Rect;
+    use mypaper_ui::controls::Builder;
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    let render_material = |app: &App, text: &mut mypaper_ui::Text| {
+        let mut b = Builder::new(text, &app.theme.palette, &app.theme.ty, 1.0, &app.input);
+        super::specimens::material(
+            app,
+            &mut b,
+            Rect::new(0.0, 0.0, 160.0, 100.0),
+            mypaper_config::look::Style::Fluent,
+        );
+        b.list.ops
+    };
+    let before = render_material(&app, &mut ui.text);
+    app.docs
+        .edit(
+            "Current material",
+            &[crate::docs::Op {
+                doc: DocId::Config,
+                path: "/look/material/clarity".into(),
+                value: Some(json!(1.0)),
+            }],
+        )
+        .unwrap();
+    assert_eq!(render_material(&app, &mut ui.text), before);
+    let window = |look, text: &mut mypaper_ui::Text| {
+        let mut b = Builder::new(text, &app.theme.palette, &app.theme.ty, 1.0, &app.input);
+        super::specimens::window(&app, &mut b, Rect::new(0.0, 0.0, 160.0, 100.0), look);
+        b.list.ops
+    };
+    assert_ne!(window(0, &mut ui.text), window(1, &mut ui.text));
+}
+
+#[test]
+fn unreadable_history_cannot_be_cleared_by_an_older_reader() {
+    let ui = Ui::new().unwrap();
+    let app = app(&ui, true);
+    super::history::observe(&app);
+    let count = app.panel.as_ref().unwrap().history.borrow().entries.len();
+    app.panel.as_ref().unwrap().history.borrow_mut().error = Some(crate::docs::NEWER.into());
+    super::history::clear(&app);
+    let history = app.panel.as_ref().unwrap().history.borrow();
+    assert_eq!(history.error.as_deref(), Some(crate::docs::NEWER));
+    assert_eq!(history.entries.len(), count);
 }

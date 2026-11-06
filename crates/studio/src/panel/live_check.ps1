@@ -1,6 +1,7 @@
 param(
     [string]$Exe = 'C:\mypaper-targets\studio-panel\target\debug\mypaper-studio.exe',
-    [string]$Shots = 'C:\mypaper-targets\studio-panel\shots'
+    [string]$Shots = 'C:\mypaper-targets\studio-panel\shots',
+    [switch]$FunctionsOnly
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -29,7 +30,7 @@ public static class StudioPanelCheck {
 
 function SettingsHashes {
     $result = @{}
-    foreach ($name in 'config.json','bars.json','widgets.json','studio.json','integrations.json','studio-panel-history.json') {
+    foreach ($name in 'config.json','bars.json','widgets.json','studio.json','integrations.json','studio-panel-history.json','plugin-manager.json') {
         $path = Join-Path (Join-Path $env:APPDATA 'mypaper') $name
         $result[$name] = if (Test-Path -LiteralPath $path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash } else { $null }
     }
@@ -135,6 +136,8 @@ function CheckPeek([bool]$Mouse) {
         return @{ input = $(if ($Mouse) { 'eye' } else { 'Ctrl D' }); hiddenWhileHeld = $hidden; restoredOnRelease = $restored }
     }
 }
+
+if ($FunctionsOnly) { return }
 
 $before = SettingsHashes
 $existing = @(Get-Process -Name 'mypaper-studio' -ErrorAction SilentlyContinue | Select-Object Id,Path,MainWindowTitle)
