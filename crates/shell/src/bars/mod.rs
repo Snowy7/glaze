@@ -928,6 +928,12 @@ impl Bars {
         self.studio_dock_pending = true;
     }
 
+    /// Exercise parsing, projection and painting before the first slider sample arrives.
+    pub fn warm_studio_preview(&mut self) {
+        let _ = Self::studio_preview_config(&self.config, &[]);
+        self.studio_dock_pending = true;
+    }
+
     /// Resolve the same layers and per-display overrides as the eventual durable save.
     fn studio_preview_config(config: &BarsConfig, ops: &[crate::studio_pick::wire::PreviewOp]) -> Option<BarsConfig> {
         let raw = crate::studio_pick::wire::patched(&serde_json::Value::Object(config.raw().clone()), ops)?;

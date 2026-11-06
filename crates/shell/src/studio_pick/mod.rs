@@ -83,6 +83,7 @@ struct Catcher {
 struct Decoration {
     frame: Surface,
     chip: Surface,
+    chip_size: (f32, f32),
     handles: Vec<(Surface, resize::Corner)>,
     target: Target,
     selected: bool,
@@ -91,7 +92,7 @@ struct Decoration {
 struct Gesture {
     selection: Selection,
     spec: resize::Spec,
-    corner: resize::Corner,
+    corner: Option<resize::Corner>,
     start: Point,
     pending: ([u32; 2], [u32; 2]),
     capture: SurfaceId,
@@ -100,11 +101,23 @@ struct Gesture {
 }
 
 impl Gesture {
+    fn new(target: &Target, surface: &Surface, point: Point, corner: Option<resize::Corner>) -> Option<Self> {
+        let spec = target.resize.as_ref()?;
+        // SAFETY: this is a shell-owned no-activate widget, chip or corner on the UI thread.
+        unsafe { windows::Win32::UI::Input::KeyboardAndMouse::SetCapture(surface.hwnd()); }
+        Some(Self {
+            selection: target.selection.clone(), spec: spec.clone(), corner, start: point,
+            pending: (spec.cell, spec.size), capture: surface.id(), window: surface.hwnd(),
+            _frames: surface.animation_frames(Duration::from_secs(3600)),
+        })
+    }
+
     fn update(&mut self, point: Point) {
-        self.pending = self.spec.target(
-            self.corner,
-            Point::new(point.x - self.start.x, point.y - self.start.y),
-        );
+        let delta = Point::new(point.x - self.start.x, point.y - self.start.y);
+        self.pending = match self.corner {
+            Some(corner) => self.spec.target(corner, delta),
+            None => self.spec.moved(delta),
+        };
     }
 }
 
@@ -137,6 +150,7 @@ pub struct StudioPick {
     preview: preview::Preview,
     resize_preview: Option<resize::Preview>,
     widget_revision: Option<u64>,
+    warm_preview: bool,
 }
 
 impl StudioPick {
@@ -158,6 +172,7 @@ impl StudioPick {
             preview: preview::Preview::default(),
             resize_preview: None,
             widget_revision: None,
+            warm_preview: false,
         })
     }
     pub fn timeout_ms(&self) -> u32 {
@@ -165,6 +180,10 @@ impl StudioPick {
     }
     pub fn active(&self) -> bool {
         self.session.active()
+    }
+
+    pub fn take_preview_warm(&mut self) -> bool {
+        std::mem::take(&mut self.warm_preview)
     }
 
     pub fn preview(&mut self) -> &mut preview::Preview { &mut self.preview }
@@ -200,6 +219,7 @@ impl StudioPick {
                     }
                 }
                 Message::End => self.session.end(source.0 as isize),
+                Message::WarmPreview if self.owns(source) => self.warm_preview = true,
                 Message::Preview { session, sequence, documents }
                     if self.owns(source) => self.preview.update(session, sequence, documents),
                 Message::PreviewCommit { session, sequence, revisions }
@@ -412,7 +432,7 @@ impl StudioPick {
                     && spec.origin == gesture.spec.origin && spec.scale == gesture.spec.scale)
             })
         }) {
-            self.finish_resize(false);
+            self.finish_geometry(false);
         }
         if let Some(gesture) = &mut self.gesture {
             use windows::Win32::Foundation::POINT;
@@ -420,11 +440,11 @@ impl StudioPick {
             use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
             let mut point = POINT::default();
             // SAFETY: read-only pointer state. Polling also covers no-activate background capture.
-            let released = unsafe {
+            let (released, cancelled) = unsafe {
                 if GetCursorPos(&mut point).is_ok() {
                     gesture.update(Point::new(point.x as f32, point.y as f32));
                 }
-                GetAsyncKeyState(1) >= 0
+                (GetAsyncKeyState(1) >= 0, GetAsyncKeyState(27) < 0)
             };
             if let Some(preview) = &mut self.resize_preview {
                 (preview.cell, preview.size) = gesture.pending;
@@ -438,11 +458,15 @@ impl StudioPick {
                 if let Err(e) =
                     paint_frame(ui, &mut decoration.frame, rect, decoration.target.radius, gesture.spec.scale, true)
                 {
-                    log::warn!("Studio resize outline: {e:#}");
+                    log::warn!("Studio widget outline: {e:#}");
                 }
+                let work = self.monitors.iter().find(|m| m.device == gesture.selection.display)
+                    .map(|m| chrome::work_area(m, bars));
+                let at = chrome::name_position(rect.inflate(3.0 * gesture.spec.scale), decoration.chip_size, work, gesture.spec.scale);
+                let _ = decoration.chip.move_to((at.x.round() as i32, at.y.round() as i32));
             }
-            if released {
-                self.finish_resize(true);
+            if cancelled || released {
+                self.finish_geometry(!cancelled);
             } else {
                 return;
             }
@@ -487,8 +511,8 @@ impl StudioPick {
         }
     }
 
-    /// Called before normal controls. A selection does not consume widget or module input.
-    pub fn event(&mut self, surface: SurfaceId, event: &Event, target: Option<Target>) -> bool {
+    /// Runs before controls; only a selected widget's empty face or chip starts a move.
+    pub fn event(&mut self, surface: SurfaceId, event: &Event, target: Option<Target>, move_surface: Option<&Surface>) -> bool {
         if !self.active() {
             return false;
         }
@@ -510,10 +534,10 @@ impl StudioPick {
                     Event::Move(p) | Event::Release(p, Button::Left) => {
                         gesture.update(Point::new(p.screen.0 as f32, p.screen.1 as f32));
                         if matches!(event, Event::Release(_, Button::Left)) {
-                            self.finish_resize(true);
+                            self.finish_geometry(true);
                         }
                     }
-                    Event::CaptureLost | Event::Cancelled => self.finish_resize(false),
+                    Event::CaptureLost | Event::Cancelled | Event::Key(27) => self.finish_geometry(false),
                     _ => {}
                 }
                 return true;
@@ -535,27 +559,10 @@ impl StudioPick {
                 .map(|(s, c)| (d, s, *c))
         }) {
             if let Event::Press(p, Button::Left) = event
-                && let Some(spec) = &decoration.target.resize
+                && let Some(gesture) = Gesture::new(&decoration.target, handle,
+                    Point::new(p.screen.0 as f32, p.screen.1 as f32), Some(corner))
             {
-                // SAFETY: capture belongs to this shell-owned no-activate handle.
-                unsafe {
-                    windows::Win32::UI::Input::KeyboardAndMouse::SetCapture(handle.hwnd());
-                }
-                self.gesture = Some(Gesture {
-                    selection: decoration.target.selection.clone(),
-                    spec: spec.clone(),
-                    corner,
-                    start: Point::new(p.screen.0 as f32, p.screen.1 as f32),
-                    pending: (spec.cell, spec.size),
-                    capture: surface,
-                    window: handle.hwnd(),
-                    _frames: handle.animation_frames(Duration::from_secs(3600)),
-                });
-                self.resize_preview = self.widget_revision.map(|base_revision| resize::Preview {
-                    selection: decoration.target.selection.clone(),
-                    before_cell: spec.saved_cell, before_size: spec.saved_size,
-                    cell: spec.cell, size: spec.size, base_revision, saved_revision: None,
-                });
+                self.begin_geometry(gesture);
             }
             return true;
         }
@@ -566,7 +573,12 @@ impl StudioPick {
                 Event::Leave => {
                     self.hover_until = Some(Instant::now() + Duration::from_millis(350))
                 }
-                Event::Press(_, Button::Left) => self.select(selection),
+                Event::Press(p, Button::Left) => {
+                    let gesture = Gesture::new(&decoration.target, &decoration.chip,
+                        Point::new(p.screen.0 as f32, p.screen.1 as f32), None);
+                    self.select(selection);
+                    if let Some(gesture) = gesture { self.begin_geometry(gesture); }
+                }
                 _ => {}
             }
             return true;
@@ -593,8 +605,16 @@ impl StudioPick {
                 }
             }
             Event::Leave => self.hover_until = Some(Instant::now() + Duration::from_millis(350)),
-            Event::Press(_, Button::Left) => {
+            Event::Press(p, Button::Left) => {
                 if let Some(target) = target.filter(|t| t.body_selects) {
+                    if self.session.selected.as_ref() == Some(&target.selection)
+                        && let Some(surface) = move_surface
+                        && let Some(gesture) = Gesture::new(&target, surface,
+                            Point::new(p.screen.0 as f32, p.screen.1 as f32), None)
+                    {
+                        self.begin_geometry(gesture);
+                        return true;
+                    }
                     self.select(target.selection);
                 }
             }
@@ -624,6 +644,7 @@ impl StudioPick {
     }
 
     fn reset_transients(&mut self) {
+        self.warm_preview = false;
         self.preview = preview::Preview::default();
         self.resize_preview = None;
         self.gesture = None;
@@ -634,11 +655,23 @@ impl StudioPick {
         self.notice = None;
     }
 
-    fn finish_resize(&mut self, commit: bool) {
+    fn begin_geometry(&mut self, gesture: Gesture) {
+        self.resize_preview = self.widget_revision.map(|base_revision| resize::Preview {
+            selection: gesture.selection.clone(),
+            before_cell: gesture.spec.saved_cell, before_size: gesture.spec.saved_size,
+            cell: gesture.spec.cell, size: gesture.spec.size, base_revision, saved_revision: None,
+        });
+        self.gesture = Some(gesture);
+    }
+
+    fn finish_geometry(&mut self, commit: bool) {
         let Some(gesture) = self.gesture.take() else {
             return;
         };
         self.pressed = false;
+        if let Some(preview) = &mut self.resize_preview {
+            (preview.cell, preview.size) = gesture.pending;
+        }
         if !commit || gesture.pending == (gesture.spec.cell, gesture.spec.size) { self.resize_preview = None; }
         if commit
             && gesture.pending != (gesture.spec.cell, gesture.spec.size)
@@ -746,7 +779,7 @@ impl StudioPick {
             let _ = chip.raise_in_desktop_band();
         }
         let mut handles = Vec::new();
-        if selected && target.resize.is_some() {
+        if selected && target.resize.as_ref().is_some_and(|spec| spec.resizable) {
             for corner in resize::CORNERS {
                 let rect = resize::handle(r, corner, target.radius + 3.0 * scale, scale);
                 let mut surface = Surface::new(kind, "Studio resize corner", Role::Pane)?;
@@ -774,6 +807,7 @@ impl StudioPick {
         self.decorations.push(Decoration {
             frame,
             chip,
+            chip_size: (width, height),
             handles,
             target,
             selected,

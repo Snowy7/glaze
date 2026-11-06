@@ -212,6 +212,8 @@ pub fn patched(raw: &serde_json::Value, ops: &[PreviewOp]) -> Option<serde_json:
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
+    /// Prime the existing preview machinery at saved values, without an override or save.
+    WarmPreview,
     Preview {
         session: u64,
         sequence: u64,

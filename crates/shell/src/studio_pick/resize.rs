@@ -1,4 +1,4 @@
-//! Grid-snapped corner resizing. Geometry stays transient until Studio commits the release.
+//! Grid-snapped widget movement and resizing, transient until Studio commits the release.
 use mypaper_ui::{Point, Rect};
 use mypaper_widgets::{layout::Grid, manifest::SizeSpec};
 
@@ -34,6 +34,7 @@ impl Preview {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spec {
+    pub resizable: bool,
     pub grid: Grid,
     pub cell: [u32; 2],
     pub size: [u32; 2],
@@ -82,6 +83,18 @@ pub(super) fn handle(rect: Rect, corner: Corner, radius: f32, scale: f32) -> Rec
 }
 
 impl Spec {
+    pub(super) fn moved(&self, delta: Point) -> ([u32; 2], [u32; 2]) {
+        let delta = [delta.x, delta.y];
+        let limits = [self.grid.cols, self.grid.rows];
+        let cell = [0, 1].map(|axis| {
+            let step = (self.grid.cell[axis] + self.grid.gap) as f32 * self.scale;
+            (self.cell[axis] as f32 + delta[axis] / step)
+                .round()
+                .clamp(0.0, limits[axis].saturating_sub(self.size[axis]) as f32) as u32
+        });
+        (cell, self.size)
+    }
+
     pub(super) fn target(&self, corner: Corner, delta: Point) -> ([u32; 2], [u32; 2]) {
         let leading = [corner.left, corner.top];
         let delta = [delta.x, delta.y];
@@ -158,6 +171,7 @@ mod tests {
     }
     fn spec() -> Spec {
         Spec {
+            resizable: true,
             grid: Grid {
                 origin: [16.0, 40.0],
                 cell: [40.0, 30.0],
@@ -177,6 +191,19 @@ mod tests {
             origin: (-2560, 9),
             scale: 2.0,
         }
+    }
+    #[test]
+    fn movement_snaps_in_physical_pixels_and_clamps_without_changing_size() {
+        let mut s = spec();
+        s.resizable = false;
+        assert_eq!(s.moved(Point::new(40.0, 30.0)), (s.cell, s.size));
+        assert_eq!(s.moved(Point::new(96.0, -76.0)), ([4, 3], s.size));
+        assert_eq!(s.moved(Point::new(-10000.0, 10000.0)), ([0, 15], s.size));
+        let before = s.rect(s.cell, s.size);
+        let (cell, size) = s.moved(Point::new(96.0, -76.0));
+        let after = s.rect(cell, size);
+        assert_eq!(after.left - before.left, 96.0);
+        assert_eq!(after.top - before.top, -76.0);
     }
     #[test]
     fn every_corner_snaps_and_keeps_opposite_edges_fixed() {

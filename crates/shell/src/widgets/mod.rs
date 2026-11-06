@@ -524,18 +524,18 @@ impl Widgets {
     /// Transient Studio policy. No layout or widget storage is changed by selection.
     pub fn studio_revision(&self) -> u64 { crate::studio_pick::wire::revision(&self.studio_raw) }
 
-    pub fn studio_preview(&mut self, ui: &mut Ui, preview: &mut crate::studio_pick::preview::Preview, resize: Option<&crate::studio_pick::resize::Preview>) {
+    pub fn studio_preview(&mut self, ui: &mut Ui, preview: &mut crate::studio_pick::preview::Preview, resize: Option<&crate::studio_pick::resize::Preview>, warm: bool) {
         use crate::studio_pick::wire::{self, Document};
         if !preview.has(Document::Config) && !preview.has(Document::Widgets)
             && self.studio_stamp.0.is_none() && self.studio_stamp.1.is_none()
-            && resize.is_none() && self.studio_resize.is_none() { return; }
+            && resize.is_none() && self.studio_resize.is_none() && !warm { return; }
         let config_revision = wire::revision(&self.studio_config_raw);
         let widget_revision = wire::revision(&self.studio_raw);
         let config = preview.effective(Document::Config, config_revision)
             .map(|(seq, ops)| (seq, ops.to_vec()));
         let widgets = preview.effective(Document::Widgets, widget_revision);
         let stamp = (config.as_ref().map(|v| v.0), widgets.map(|v| v.0), config_revision, widget_revision);
-        if self.studio_stamp == stamp && self.studio_resize.as_ref() == resize { return; }
+        if self.studio_stamp == stamp && self.studio_resize.as_ref() == resize && !warm { return; }
         if self.studio_applied.elapsed() < mypaper_ui::display_frame() {
             self.studio_pending = true;
             self.ticker.schedule(true);
@@ -586,7 +586,8 @@ impl Widgets {
             let label = self.registry.get(&e.model.placed.widget)
                 .map_or(e.model.placed.widget.as_str(), |w| w.manifest.name.as_str());
             let screen = &self.monitors[e.monitor];
-            let resize = self.registry.get(&e.model.placed.widget).filter(|w| w.manifest.resizable).map(|w| crate::studio_pick::resize::Spec {
+            let resize = self.registry.get(&e.model.placed.widget).map(|w| crate::studio_pick::resize::Spec {
+                resizable: w.manifest.resizable,
                 grid: grid_for_bars(&self.layout, screen, &self.bars),
                 cell: e.model.placed.cell, size: e.model.placed.size,
                 saved_cell: self.layout.get(id).map_or(e.model.placed.cell, |i| i.cell),
@@ -605,6 +606,12 @@ impl Widgets {
                 resize,
             }
         }).collect()
+    }
+
+    /// The selected face can move from its empty area; its own buttons and fields keep input.
+    pub fn studio_move_surface(&self, surface: SurfaceId, point: mypaper_ui::Point) -> Option<&Surface> {
+        let entry = self.entries.values().find(|e| e.surface.id() == surface)?;
+        entry.surface.shown().hit_at(point).is_none().then_some(&entry.surface)
     }
     #[allow(dead_code, reason = "live fixture diagnostics")]
     pub fn costs(&self) -> WorkCosts {

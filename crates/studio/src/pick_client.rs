@@ -28,6 +28,7 @@ struct Client {
     undo_step: Option<UndoGuard>,
     page_selection: Option<Selection>,
     desktop_selected: bool,
+    warmed_page: Option<(crate::panel::Page, usize)>,
 }
 
 struct PreviewDrag {
@@ -59,6 +60,21 @@ impl UndoGuard {
 }
 
 impl Client {
+    fn warm_preview(&mut self, app: &App) {
+        let page = app.panel.as_ref().map(|state| (state.page, app.nav.display));
+        if self.warmed_page == page { return; }
+        let slider_page = page.is_some_and(|(page, _)| matches!(page,
+            crate::panel::Page::Look | crate::panel::Page::Bars | crate::panel::Page::Top
+            | crate::panel::Page::Dock | crate::panel::Page::Widget | crate::panel::Page::Wallpaper
+            | crate::panel::Page::Windows | crate::panel::Page::DesktopMenu | crate::panel::Page::BarPanel
+            | crate::panel::Page::Module | crate::panel::Page::Performance));
+        if !slider_page || self.shell.is_some_and(|shell|
+            wire::send(shell, self.endpoint.hwnd(), &Message::WarmPreview))
+        {
+            self.warmed_page = page;
+        }
+    }
+
     fn finish_choice(&mut self, app: &App) {
         if self.choice_preview.take().is_none() { return; }
         let Some(shell) = self.shell else { return };
@@ -685,6 +701,7 @@ pub fn connect(app: &App) {
                 undo_step: None,
                 page_selection: None,
                 desktop_selected: false,
+                warmed_page: None,
             });
         }
         let client = client.as_mut().unwrap();
@@ -699,6 +716,7 @@ pub fn connect(app: &App) {
             client.page_selection = None;
             client.desktop_selected = false;
             client.undo_step = None;
+            client.warmed_page = None;
         }
         if !client.begun
             && let Some(shell) = shell
@@ -719,6 +737,7 @@ pub fn connect(app: &App) {
                 wire::send(shell, client.endpoint.hwnd(), &Message::UndoDismiss);
             }
         }
+        client.warm_preview(app);
         client.stream_preview(app);
         if client.choice_preview.is_some() && client.observed_version != app.docs.version && app.drag.is_none() {
             client.finish_choice(app);
@@ -1023,19 +1042,20 @@ fn resize_widget(
     else {
         return None;
     };
-    if instance.cell != before_cell || instance.size != before_size {
-        app.alert("This widget changed while resizing. Try again.");
+    if instance.cell != before_cell || instance.size != before_size || instance.monitor != selection.display {
+        app.alert("This widget changed while moving or resizing. Try again.");
         return None;
     }
     let Some(widget) = app.registry.get(&instance.widget) else {
         return None;
     };
-    if !widget.manifest.resizable
-        || widget.manifest.fit_size(size.map(f64::from), [u32::MAX; 2]) != Some(size)
+    if size != before_size && (!widget.manifest.resizable
+        || widget.manifest.fit_size(size.map(f64::from), [u32::MAX; 2]) != Some(size))
     {
         return None;
     }
-    let label = format!("Resize {}", widget.manifest.name);
+    let verb = if size == before_size { "Move" } else { "Resize" };
+    let label = format!("{verb} {}", widget.manifest.name);
     let mut ops = Vec::new();
     if app.get(DocId::Widgets, "/version").and_then(Value::as_u64) == Some(1) {
         // Upgrade all grid coordinates together, preserving unknown fields in the raw file.
@@ -1068,7 +1088,13 @@ fn resize_widget(
     ]);
     let checkpoint = app.docs.undo_count();
     app.apply(&label, ops);
-    (app.docs.undo_count() > checkpoint).then(|| wire::revision(&app.docs.doc(DocId::Widgets).raw))
+    if app.docs.undo_count() <= checkpoint { return None; }
+    CLIENT.with(|client| {
+        if let Some(client) = client.borrow_mut().as_mut() {
+            client.announce(app, format!("{label} · Undo"));
+        }
+    });
+    Some(wire::revision(&app.docs.doc(DocId::Widgets).raw))
 }
 
 /// The one navigation seam. Selection changes only navigation, never document values.
@@ -1323,6 +1349,29 @@ mod tests {
     }
 
     #[test]
+    fn move_release_saves_one_step_and_undo_restores_all_original_geometry() {
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State::default());
+        let before = app.docs.doc(DocId::Widgets).raw.clone();
+        let layout = crate::pages::widgets::layout(&app);
+        let instance = layout.get("clock-1").unwrap();
+        let selection = Selection { kind: Kind::Widget, id: instance.instance.clone(), display: instance.monitor.clone() };
+        let (cell, size) = (instance.cell, instance.size);
+        let moved = [cell[0] + 2, cell[1] + 1];
+        assert!(resize_widget(&mut app, selection.clone(), cell, size, cell, size).is_none());
+        assert!(!app.docs.can_undo());
+        assert!(resize_widget(&mut app, selection.clone(), cell, size, moved, size).is_some());
+        let layout = crate::pages::widgets::layout(&app);
+        assert_eq!((layout.get("clock-1").unwrap().cell, layout.get("clock-1").unwrap().size), (moved, size));
+        assert_eq!(app.docs.undo_count(), 1);
+        assert!(resize_widget(&mut app, selection, cell, size, [moved[0] + 1, moved[1]], size).is_none());
+        assert_eq!(app.docs.undo_count(), 1);
+        assert_eq!(app.docs.undo().unwrap().as_deref(), Some("Move Clock"));
+        assert_eq!(app.docs.doc(DocId::Widgets).raw, before);
+    }
+
+    #[test]
     fn a_pick_places_the_panel_even_when_navigation_already_names_that_display() {
         use windows::Win32::Foundation::POINT;
         use windows::Win32::Graphics::Gdi::ClientToScreen;
@@ -1387,6 +1436,7 @@ mod tests {
     fn dock_slider_streams_memory_values_then_the_saved_revision() {
         let ui = Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State { page: crate::panel::Page::Look, ..Default::default() });
         let receiver = wire::Endpoint::new(true).unwrap();
         let base_revision = wire::revision(&app.docs.doc(DocId::Bars).raw);
         let mut client = Client {
@@ -1407,7 +1457,15 @@ mod tests {
             undo_step: None,
             page_selection: None,
             desktop_selected: false,
+            warmed_page: None,
         };
+        let before = snapshot(&app);
+        client.warm_preview(&app);
+        assert!(matches!(receiver.next(), Some((_, Message::WarmPreview))));
+        client.warm_preview(&app);
+        assert!(receiver.next().is_none(), "a page warms only when opened");
+        assert_eq!(snapshot(&app), before);
+        assert!(!app.docs.can_undo());
         let edit = crate::actions::Edit::new(DocId::Bars, "/dock/size", "Icon size");
         app.drag = Some(crate::app::Drag::Slider {
             edit,
@@ -1708,6 +1766,7 @@ mod tests {
                 undo_step: Some(guard),
                 page_selection: None,
                 desktop_selected: false,
+                warmed_page: None,
             })
         });
         // SAFETY: read-only foreground query; neither hidden endpoint is activated.

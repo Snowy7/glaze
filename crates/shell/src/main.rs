@@ -321,11 +321,13 @@ impl Shell {
         }
         let revision = self.studio.active().then(|| self.widgets.as_ref().map(widgets::Widgets::studio_revision)).flatten();
         self.studio.tick(ui, &targets, self.bars.config(), revision);
+        let warm = self.studio.take_preview_warm();
+        if warm { self.bars.warm_studio_preview(); }
         self.bars.studio_preview(self.studio.preview());
         self.bars.studio_session(self.studio.active());
         if let Some(widgets) = &mut self.widgets {
             let (preview, resize) = self.studio.previews();
-            widgets.studio_preview(ui, preview, resize);
+            widgets.studio_preview(ui, preview, resize, warm);
             widgets.studio_session(ui, self.studio.active(), self.studio.lifted());
         }
     }
@@ -366,7 +368,12 @@ impl Shell {
                     let target = self.widgets.as_ref()
                         .and_then(|w| w.studio_targets().into_iter().find(|t| t.surface == id))
                         .or_else(|| point.and_then(|p| self.bars.studio_hit(id, p)));
-                    if self.studio.event(id, &event, target) { continue; }
+                    let move_surface = match &event {
+                        mypaper_ui::Event::Press(p, mypaper_ui::Button::Left) => self.widgets.as_ref()
+                            .and_then(|w| w.studio_move_surface(id, p.at)),
+                        _ => None,
+                    };
+                    if self.studio.event(id, &event, target, move_surface) { continue; }
                 }
                 if self.flyouts.owns(id) {
                     self.flyouts.event(ui, &mut self.bars, id, &event);
