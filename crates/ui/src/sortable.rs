@@ -8,6 +8,7 @@ pub struct Row<'a, A> {
     pub key: Key,
     pub rect: Rect,
     pub label: &'a str,
+    pub detail: &'a str,
     pub separator: bool,
     pub icon: Option<Glyph>,
     pub select: A,
@@ -21,6 +22,7 @@ pub fn row<A: Clone>(b: &mut Builder<'_, A>, row: Row<'_, A>) -> Rect {
         key: id,
         rect: r,
         label,
+        detail,
         separator,
         icon,
         select,
@@ -65,12 +67,36 @@ pub fn row<A: Clone>(b: &mut Builder<'_, A>, row: Row<'_, A>) -> Rect {
         (trash.left - left - b.px(6.0)).max(0.0)
     };
     b.text_in(
-        Rect::new(left, r.top, label_width, r.height()),
+        Rect::new(
+            left,
+            r.top,
+            label_width,
+            if detail.is_empty() {
+                r.height()
+            } else {
+                r.height() / 2.0
+            },
+        ),
         label,
         &style,
         b.p.ink1,
         Align::Start,
     );
+    if !detail.is_empty() {
+        let style = b.font(Font::Caption);
+        b.text_in(
+            Rect::new(
+                left,
+                r.top + r.height() / 2.0 - b.px(3.0),
+                label_width,
+                r.height() / 2.0,
+            ),
+            detail,
+            &style,
+            b.p.ink2,
+            Align::Start,
+        );
+    }
     if separator {
         b.hline(
             left + label_width + b.px(10.0),

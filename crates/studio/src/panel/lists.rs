@@ -42,26 +42,58 @@ pub fn row(
     icon: Option<Glyph>,
     select: Option<Action>,
 ) -> Rect {
-    let rect = Rect::new(c.x, c.y, c.w, super::controls::height(b, 40.0));
+    row_detail(app, b, c, list, index, label, "", separator, icon, select)
+}
+
+pub fn row_detail(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    list: &List,
+    index: usize,
+    label: &str,
+    detail: &str,
+    separator: bool,
+    icon: Option<Glyph>,
+    select: Option<Action>,
+) -> Rect {
+    let rect = Rect::new(
+        c.x,
+        c.y,
+        c.w,
+        super::controls::height(b, if detail.is_empty() { 40.0 } else { 56.0 }),
+    );
+    let first_target = b.targets.len();
     let picture = mypaper_ui::sortable::row(
         b,
         mypaper_ui::sortable::Row {
             key: row_key(list, index),
             rect,
             label,
+            detail,
             separator,
             icon: if separator {
-                Some(Glyph::Icon(if matches!(list, List::Menu) {
-                    mypaper_ui::icons::Icon::Remove
+                Some(if matches!(list, List::Menu) {
+                    Glyph::Icon(mypaper_ui::icons::Icon::Remove)
                 } else {
-                    mypaper_ui::icons::Icon::Grip
-                }))
-            } else { icon },
+                    Glyph::Font(' ')
+                })
+            } else {
+                icon
+            },
             select: select.unwrap_or_else(|| Action::Panel(Command::SortRow(list.clone(), index))),
             drag: Action::Panel(Command::SortHandle(list.clone(), index)),
             remove: Action::Panel(Command::SortRemove(list.clone(), index)),
         },
     );
+    if separator && !matches!(list, List::Menu) {
+        super::controls::spacing_glyph(b, picture);
+    }
+    // Focus scrolling includes the ring outside the row, even at a viewport boundary.
+    for target in &mut b.targets[first_target..] {
+        target.rect.top -= 6.0 * b.s;
+        target.rect.bottom += 6.0 * b.s;
+    }
     if let Some(drag) = &app.panel.as_ref().unwrap().sort_drag
         && drag.moved
         && drag
@@ -203,9 +235,10 @@ pub fn drop_overlay(app: &App, b: &mut B) {
     let width = app.size.0 as f32 - x * 2.0;
     let line = super::controls::height(b, 30.0);
     let top = b.px(56.0);
-    let plate = Rect::new(x, top, width, line * 5.0 + b.px(24.0));
-    b.fill(plate, b.px(10.0), b.p.chrome);
-    b.stroke(plate, b.px(10.0), b.px(1.0), b.p.edge);
+    let at = b.list.ops.len();
+    for target in &mut b.targets {
+        target.visible = None;
+    }
     super::controls::text(
         b,
         Rect::new(x + b.px(10.0), top, width - b.px(20.0), line),
@@ -242,6 +275,39 @@ pub fn drop_overlay(app: &App, b: &mut B) {
         );
         y = r.bottom + b.px(4.0);
     }
+    let plate = Rect::new(x, top, width, y - top + b.px(8.0));
+    // Insert the measured card under its content; dim and disable the page behind it.
+    let body = Rect::new(
+        0.0,
+        b.px(48.0),
+        app.size.0 as f32,
+        app.size.1 as f32 - b.px(48.0),
+    );
+    b.list.ops.insert(
+        at,
+        mypaper_ui::Op::Fill {
+            rect: body,
+            radius: 0.0,
+            color: b.p.chrome.with_alpha(0.82),
+        },
+    );
+    b.list.ops.insert(
+        at + 1,
+        mypaper_ui::Op::Fill {
+            rect: plate,
+            radius: b.px(10.0),
+            color: b.p.chrome,
+        },
+    );
+    b.list.ops.insert(
+        at + 2,
+        mypaper_ui::Op::Stroke {
+            rect: plate,
+            radius: b.px(10.0),
+            width: b.px(1.0),
+            color: b.p.edge,
+        },
+    );
 }
 
 /// Keyboard Place and pointer drops share one atomic, undoable transfer.
@@ -558,7 +624,49 @@ mod tests {
                             moved: true,
                         });
                     }
-                    let built = super::super::build(&app, &mut ui.text);
+                    let mut built = super::super::build(&app, &mut ui.text);
+                    if !drag {
+                        let row = row_key(&List::Modules(Bar::Top, "left"), 1);
+                        let at = built
+                            .targets
+                            .iter()
+                            .position(|target| target.key == row)
+                            .unwrap();
+                        app.input.focus = Some(built.targets[at - 1].key);
+                        app.frame.targets = built.targets;
+                        app.frame.scrolls = built.scrolls;
+                        app.key_with(0x09, (false, false, false));
+                        built = super::super::build(&app, &mut ui.text);
+                    }
+                    if drag {
+                        let plate = built
+                            .list
+                            .ops
+                            .iter()
+                            .find_map(|op| match op {
+                                mypaper_ui::Op::Fill { rect, .. }
+                                    if (rect.left - 16.0).abs() < 0.1
+                                        && (rect.top - 56.0).abs() < 0.1 =>
+                                {
+                                    Some(rect)
+                                }
+                                _ => None,
+                            })
+                            .unwrap();
+                        for target in built
+                            .targets
+                            .iter()
+                            .filter(|target| target.visible.is_some())
+                        {
+                            if matches!(target.action, Action::Panel(Command::SortRow(..))) {
+                                assert!(
+                                    target.rect.top >= plate.top
+                                        && target.rect.bottom <= plate.bottom,
+                                    "{target:?}"
+                                );
+                            }
+                        }
+                    }
                     let image =
                         mypaper_ui::render(&mut ui, &built.list, width, app.size.1).unwrap();
                     let name = format!(
@@ -709,5 +817,56 @@ mod tests {
         assert_eq!(app.docs.undo_count(), 1);
         app.run(Action::Undo);
         assert_eq!(app.docs.doc(DocId::Bars).raw, before);
+    }
+
+    #[test]
+    fn keyboard_focus_reveals_the_module_row_and_its_entire_ring_at_360_dips() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui);
+        app.size = (360, 760);
+        app.theme.ty.text_scale = 1.5;
+        app.panel.as_mut().unwrap().page = super::super::Page::Top;
+        app.nav.bar = Some(Bar::Top);
+        let built = super::super::build(&app, &mut ui.text);
+        let row = row_key(&List::Modules(Bar::Top, "left"), 1);
+        let at = built
+            .targets
+            .iter()
+            .position(|target| target.key == row)
+            .unwrap();
+        app.input.focus = Some(built.targets[at - 1].key);
+        app.frame.targets = built.targets;
+        app.frame.scrolls = built.scrolls;
+        app.key_with(0x09, (false, false, false));
+        assert_eq!(app.input.focus, Some(row));
+        let built = super::super::build(&app, &mut ui.text);
+        let target = built
+            .targets
+            .iter()
+            .find(|target| target.key == row)
+            .unwrap();
+        let viewport = built
+            .scrolls
+            .iter()
+            .find(|scroll| Some(scroll.key) == target.scroll)
+            .unwrap()
+            .viewport;
+        assert!(
+            target.rect.top >= viewport.top && target.rect.bottom <= viewport.bottom,
+            "{:?} in {viewport:?}",
+            target.rect
+        );
+        let ring = built.list.ops.iter().find_map(|op| match op {
+            mypaper_ui::Op::Stroke { rect, .. }
+                if rect.width() > 300.0
+                    && rect.height() < 80.0
+                    && rect.top >= target.rect.top
+                    && rect.bottom <= target.rect.bottom =>
+            {
+                Some(rect)
+            }
+            _ => None,
+        });
+        assert!(ring.is_some());
     }
 }
