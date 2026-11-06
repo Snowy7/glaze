@@ -219,6 +219,7 @@ pub enum Command {
     Design(Option<crate::actions::Bar>),
     SameBars,
     FirstRunBack,
+    ApplyChoice(u64, Box<Action>),
 }
 
 pub fn run(app: &mut App, command: Command) {
@@ -244,6 +245,11 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::SameBars => editors::same_bars(app),
         Command::FirstRunBack => first_run::back(app),
+        Command::ApplyChoice(disclosure, action) => {
+            app.nav.more.remove(&disclosure);
+            choosers::end(app);
+            app.run(*action);
+        }
         Command::Open(page) => {
             app.overlay = None;
             if page == Page::FirstRun {
