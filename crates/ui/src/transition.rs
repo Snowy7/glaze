@@ -21,7 +21,7 @@ impl Timing {
     pub fn new(enabled: bool, milliseconds: f32, easing: Easing) -> Self {
         let duration = match easing {
             Easing::Spring(spring) => Duration::from_secs_f32(spring.settle(0.001)),
-            _ => Duration::from_secs_f32(milliseconds.max(0.0) / 1000.0),
+            _ => Duration::from_secs_f64(f64::from(milliseconds.max(0.0)) / 1000.0),
         };
         Self {
             enabled: enabled && milliseconds > 0.0,
