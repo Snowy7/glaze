@@ -108,13 +108,34 @@ pub fn swatches(
     if app.is_open(picker_key(edit)) {
         let rgb = mypaper_config::Color::parse(current).map_or([139, 158, 183], |color| color.0);
         let hsv = color_value(app, edit, current, rgb);
-        let width = b.px(212.0).min(c.w);
-        let rect = Rect::new(
-            c.right() - width,
-            c.y + b.px(3.0),
-            width,
-            width + b.px(98.0),
-        );
+        app.panel
+            .as_ref()
+            .unwrap()
+            .color_values
+            .borrow_mut()
+            .insert(picker_key(edit), (current.into(), hsv));
+        let viewport = b.clip_rect().unwrap_or(Rect::new(
+            0.0,
+            b.px(48.0),
+            app.size.0 as f32,
+            app.size.1 as f32 - b.px(48.0),
+        ));
+        let width = b
+            .px(212.0)
+            .min(c.w)
+            .min((viewport.height() - b.px(114.0)).max(b.px(100.0)));
+        let popover_height = width + b.px(98.0);
+        let below = c.y + b.px(3.0);
+        let flipped = below + popover_height > viewport.bottom - b.px(6.0);
+        let top = if flipped {
+            (c.y - row_height - popover_height - b.px(8.0)).clamp(
+                viewport.top + b.px(6.0),
+                (viewport.bottom - popover_height - b.px(6.0)).max(viewport.top + b.px(6.0)),
+            )
+        } else {
+            below
+        };
+        let rect = Rect::new(c.right() - width, top, width, popover_height);
         let well = mypaper_ui::color_row::popover::draw(
             b,
             picker_key(edit),
@@ -159,15 +180,13 @@ pub fn swatches(
             FieldId::Text(edit.doc, edit.path.clone()),
             None,
             "#RRGGBB",
-            if current.starts_with('#') {
-                current
-            } else {
-                ""
-            },
+            &mypaper_config::Color(hsv.rgb()).hex(),
             &format!("{} hex", edit.label),
         );
         b.stroke(field, b.px(6.0), b.px(1.0), b.p.control);
-        c.y = rect.bottom + b.px(10.0);
+        if !flipped {
+            c.y = rect.bottom + b.px(10.0);
+        }
     }
 }
 
@@ -187,12 +206,40 @@ fn color_value(app: &App, edit: &Edit, current: &str, rgb: [u8; 3]) -> Hsv {
 }
 
 fn current_color(app: &App, edit: &Edit) -> Hsv {
+    if edit.path.starts_with("/theme:")
+        && let Some((_, hsv)) = app
+            .panel
+            .as_ref()
+            .unwrap()
+            .color_values
+            .borrow()
+            .get(&picker_key(edit))
+    {
+        return *hsv;
+    }
     let current = app
         .get(edit.doc, &edit.path)
         .and_then(Value::as_str)
         .unwrap_or("");
     let rgb = mypaper_config::Color::parse(current).map_or([139, 158, 183], |color| color.0);
     color_value(app, edit, current, rgb)
+}
+
+/// Native text editing starts from the same displayed color, including wallpaper theme fields.
+pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
+    let FieldId::Text(doc, path) = id else {
+        return None;
+    };
+    let edit = Edit::new(*doc, path.clone(), "");
+    if !app.is_open(picker_key(&edit)) {
+        return None;
+    }
+    app.panel
+        .as_ref()?
+        .color_values
+        .borrow()
+        .get(&picker_key(&edit))
+        .map(|(_, hsv)| mypaper_config::Color(hsv.rgb()).hex())
 }
 
 fn remember_color(app: &App, edit: &Edit, hsv: Hsv) -> Value {
@@ -481,6 +528,31 @@ mod tests {
         )));
         app.frame.targets = crate::panel::build(&app, &mut ui.text).targets;
         app
+    }
+
+    #[test]
+    fn color_picker_flips_inside_the_viewport_and_hex_starts_with_the_displayed_color() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = app(&mut ui);
+        let edit = Edit::new(DocId::Config, "/look/material/tint", "Tint");
+        app.run(Action::Set(edit.clone(), json!("#2379AB")));
+        app.size = (360, 620);
+        let built = crate::panel::build(&app, &mut ui.text);
+        for target in built
+            .targets
+            .iter()
+            .filter(|target| matches!(&target.action, Action::Panel(Command::ColorDrag(..))))
+        {
+            assert!(
+                target.rect.top >= 48.0 && target.rect.bottom <= 620.0,
+                "{:?}",
+                target.rect
+            );
+        }
+        assert_eq!(
+            field_initial(&app, &FieldId::Text(edit.doc, edit.path)),
+            Some("#2379ab".into())
+        );
     }
 
     #[test]
