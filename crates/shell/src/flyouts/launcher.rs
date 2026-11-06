@@ -490,7 +490,7 @@ impl Launcher {
         let Some(app) = self.shown().get(index).map(|a| (*a).clone()) else {
             return Effect::None;
         };
-        system::open(app.path.clone());
+        open_with_native_files(&app);
         self.history.record(&app.id, &app.path, index::epoch_ms());
         if let Some(path) = &self.history_path {
             self.history.save(path);
@@ -908,7 +908,7 @@ impl Panel for Launcher {
             }
             id if id >= RECOMMENDED => {
                 if let Some(app) = self.recommended.get((id - RECOMMENDED) as usize) {
-                    system::open(app.path.clone());
+                    open_with_native_files(app);
                     Effect::Close
                 } else {
                     Effect::None
@@ -1175,6 +1175,26 @@ fn file_size(bytes: u64) -> String {
         }
     }
     format!("{bytes} B")
+}
+
+/// Route folders and the File Explorer entry to our on-demand browser only while opted in.
+/// Path classification stays on a worker: a disconnected share must not hold up the launcher.
+fn open_with_native_files(app: &App) {
+    let enabled = mypaper_config::Config::load().is_ok_and(|c| c.experimental.files_default);
+    if !enabled { system::open(app.path.clone()); return; }
+    let path = app.path.clone();
+    let files_entry = app.name.eq_ignore_ascii_case("File Explorer") || app.name.eq_ignore_ascii_case("Files");
+    let _ = std::thread::Builder::new().name("launcher-folder".into()).spawn(move || {
+        use std::os::windows::process::CommandExt;
+        let folder = if files_entry { Some("shell:profile".to_owned()) }
+            else if std::path::Path::new(&path).is_dir() || (path.starts_with("shell:") && !path.starts_with("shell:AppsFolder")) { Some(path.clone()) }
+            else { None };
+        if let Some(folder) = folder
+            && let Ok(executable) = std::env::current_exe().map(|p| p.with_file_name("mypaper-files.exe"))
+            && std::process::Command::new(executable).args(["--", &folder]).creation_flags(0x08000000).spawn().is_ok()
+        { return; }
+        system::open(path);
+    });
 }
 
 /// A shortcut path and an AppsFolder id are different launch representations of one app.
