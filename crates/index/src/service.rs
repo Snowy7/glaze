@@ -515,6 +515,7 @@ pub fn cli(args: Vec<String>) -> Result<()> {
         }
         Some("--bench-query") => {
             let mut times = Vec::new();
+            let cold = args.iter().any(|arg| arg == "--cold");
             let queries = [
                 "cargo",
                 "readme",
@@ -524,8 +525,28 @@ pub fn cli(args: Vec<String>) -> Result<()> {
                 "path:projects ext:toml",
                 "unlikely-no-match-8932",
             ];
-            for _ in 0..20 {
+            let rounds = if cold {
+                1
+            } else {
+                args.get(1).and_then(|s| s.parse().ok()).unwrap_or(20)
+            };
+            if !cold {
                 for query in queries {
+                    pipe::request(
+                        &Request::Search {
+                            query: query.into(),
+                            limit: 50,
+                        },
+                        5000,
+                    )?;
+                }
+            }
+            let mut samples = Vec::new();
+            for _ in 0..rounds {
+                for query in queries {
+                    if cold {
+                        std::thread::sleep(Duration::from_millis(2500));
+                    }
                     let started = Instant::now();
                     let answer = pipe::request(
                         &Request::Search {
@@ -538,12 +559,15 @@ pub fn cli(args: Vec<String>) -> Result<()> {
                         started.elapsed().as_secs_f64() * 1000.0,
                         answer.elapsed_us as f64 / 1000.0,
                     ));
+                    samples.push(serde_json::json!({"query":query,"pipe_ms":times.last().expect("sample").0,"server_ms":answer.elapsed_us as f64 / 1000.0,"hits":answer.hits.len()}));
                 }
             }
             times.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let mut server: Vec<_> = times.iter().map(|sample| sample.1).collect();
+            server.sort_by(f64::total_cmp);
             println!(
                 "{}",
-                serde_json::json!({"queries":times.len(), "p50_ms":times[times.len()/2].0, "p95_ms":times[times.len()*95/100].0, "p50_server_ms":times[times.len()/2].1, "p95_server_ms":times[times.len()*95/100].1})
+                serde_json::json!({"cold_after_quiet_trim":cold,"queries":times.len(), "p50_ms":times[times.len()/2].0, "p95_ms":times[times.len()*95/100].0, "max_ms":times.last().expect("samples").0,"p50_server_ms":server[server.len()/2],"p95_server_ms":server[server.len()*95/100],"samples":samples})
             );
             Ok(())
         }
