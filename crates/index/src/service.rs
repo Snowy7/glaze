@@ -350,6 +350,17 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
 
 fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> {
     std::fs::create_dir_all(&cache)?;
+    event(
+        &cache,
+        format_args!(
+            "start; panic={}",
+            if cfg!(panic = "unwind") {
+                "unwind"
+            } else {
+                "abort"
+            }
+        ),
+    );
     let snapshot = cache.join("snapshot.bin");
     let (tx, rx) = mpsc::sync_channel(256);
     let quiet = crate::quiet::Quiet::start(tx.clone())?;
@@ -474,7 +485,10 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                                     roots.remove(&root);
                                     offline_root(&state, &root);
                                     dirty.get_or_insert_with(|| quiet.now());
-                                    eprintln!("volume {} offline", root.display());
+                                    event(
+                                        &cache,
+                                        format_args!("volume {} offline", root.display()),
+                                    );
                                 }
                                 for root in available {
                                     if watches.contains_key(&root)
@@ -573,7 +587,10 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                         }
                         Change::Failed { root, error } => {
                             if watches.get(&root).is_some_and(|watch| watch.failed()) {
-                                eprintln!("watch {} offline: {error}", root.display());
+                                event(
+                                    &cache,
+                                    format_args!("watch {} offline: {error}", root.display()),
+                                );
                                 watches.remove(&root);
                                 roots.remove(&root);
                                 offline_root(&state, &root);
