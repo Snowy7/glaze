@@ -1,0 +1,577 @@
+﻿{
+    "index_pid":  12136,
+    "fixture_pid":  60296,
+    "seconds":  60.880108899999996,
+    "entries_before_game":  5988608,
+    "warmup_queries":  22,
+    "before_private_bytes":  21008384,
+    "before_working_set_bytes":  67600384,
+    "cpu_core_pct":  0,
+    "context_switches_per_second":  18.659624966603829,
+    "max_private_bytes":  21159936,
+    "max_working_set_bytes":  1630208,
+    "final_private_bytes":  21159936,
+    "final_working_set_bytes":  1630208,
+    "threads":  [
+                    {
+                        "tid":  88284,
+                        "name":  "main",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  33884,
+                        "name":  "index-parent",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  91812,
+                        "name":  "notify-rs windows loop",
+                        "context_switches":  572,
+                        "switches_per_second":  9.3955153881139
+                    },
+                    {
+                        "tid":  61136,
+                        "name":  "index-game",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  25472,
+                        "name":  "index-pipe-0",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  69372,
+                        "name":  "index-pipe-1",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  44604,
+                        "name":  "index-pipe-2",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  76960,
+                        "name":  "index-pipe-3",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  82020,
+                        "name":  "index-delivery-C:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  56700,
+                        "name":  "index-watch-C:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  75476,
+                        "name":  "index-delivery-D:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  8408,
+                        "name":  "index-watch-D:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  41448,
+                        "name":  "index-delivery-E:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  88048,
+                        "name":  "index-watch-E:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  59140,
+                        "name":  "notify-rs windows loop",
+                        "context_switches":  564,
+                        "switches_per_second":  9.26410957848993
+                    },
+                    {
+                        "tid":  65028,
+                        "name":  "index-search-0",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  44076,
+                        "name":  "index-search-1",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  82480,
+                        "name":  "index-search-2",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  81132,
+                        "name":  "index-search-3",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  57068,
+                        "name":  "index-search-4",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  78552,
+                        "name":  "index-search-5",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  69752,
+                        "name":  "index-search-6",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  17432,
+                        "name":  "index-search-7",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    }
+                ],
+    "samples":  [
+                    {
+                        "second":  1,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  2,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  3,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  4,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  5,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  6,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  7,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  8,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  9,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  10,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  11,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  12,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  13,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  14,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  15,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  16,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  17,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  18,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  19,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  20,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  21,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  22,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  23,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  24,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  25,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  26,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  27,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  28,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  29,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  30,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  31,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  32,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  33,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  34,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  35,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  36,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  37,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  38,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  39,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  40,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  41,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  42,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  43,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  44,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  45,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  46,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  47,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  48,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  49,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  50,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  51,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  52,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  53,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  54,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  55,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  56,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  57,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  58,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  59,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    },
+                    {
+                        "second":  60,
+                        "private_bytes":  21159936,
+                        "working_set_bytes":  1630208,
+                        "pause_background":  true,
+                        "foreground_pid":  60296
+                    }
+                ]
+}

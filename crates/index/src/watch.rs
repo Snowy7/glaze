@@ -83,10 +83,7 @@ pub(crate) fn start(
             loop {
                 let (paths, overflow, stopped) = {
                     let mut state = delivery.0.lock().expect("watch handoff");
-                    while state.paths.is_empty()
-                        && !state.overflow
-                        && state.stopped.is_none()
-                    {
+                    while state.paths.is_empty() && !state.overflow && state.stopped.is_none() {
                         state = delivery.1.wait(state).expect("watch wake");
                     }
                     (

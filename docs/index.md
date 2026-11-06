@@ -59,7 +59,7 @@ A query combines its name terms' trigrams, rejects impossible blocks, and checks
 surviving name exactly. One- and two-byte terms bypass the prefilter. The filter has false
 positives but no false negatives; filters on paths are applied after name matching.
 The block filters, file/directory summaries and hashed extension unions live in a compact
-private directory. Queries inspect it before touching mapped names. Blocks with more than
+query directory. Queries inspect it before touching mapped names. Blocks with more than
 512 bits set gain a 4096-bit query signature so long names cannot saturate the prefilter.
 Directory trigram summaries, including cross-separator trigrams, reject impossible path filters before
 reconstructing paths. Any changed mapped directory path disables that shortcut until the
@@ -74,6 +74,13 @@ UTF-8 bytes. A temporary 4 MiB count-min sketch selects common longer prefixes; 
 discarded after loading. The cache has at most 8,192 keys. Live overrides are merged, and
 cached results are used only when their rank bounds prove no unseen row can beat them.
 Otherwise the exact scan remains available. Ranking and Unicode folding are unchanged.
+The final private-memory follow-up writes immutable block/signature arrays, directory
+summaries and ranked-prefix rows to four ordinary files and maps them read-only. The
+construction vectors are freed before the replacements are mapped, avoiding two resident
+copies. Windows can reclaim those file pages without retaining the arrays as private
+commit. Only the small prefix-key/range directory remains private. Files use delete-on-close
+handles, so a killed helper leaves no auxiliary files behind. These are runtime summaries:
+they are still rebuilt at startup rather than persisted as a versioned startup cache.
 Each of eight search shards retains two 1 MiB name windows, avoiding cross-shard page
 eviction. Record/path reads retain four 2 MiB windows and a 2 MiB path cache. Searches do
 not read every 40-byte record on every query.
@@ -116,15 +123,18 @@ create/delete events; Rust/.NET marker changes re-evaluate the affected subtree.
 
 The helper also consumes `mypaper_tweaks::game_activity::Snapshot`: scan workers and
 generation streams and cache validators block at work boundaries while `pause_background`
-is true. Watch readers stop rearming native directory reads, discard the current name
-batch, and mark that root for reconciliation on resume. This avoids sustained context
-switches from build/cache notifications. Queries stay available once a cache is loaded.
+is true. Watch readers stop rearming native directory reads and retain the completed raw
+batch without decoding it. Windows retains subsequent notifications in its bounded native
+buffer. Resume applies the exact retained paths through the normal final-state update
+path; only genuine buffer/queue overflow requests a root reconciliation. This avoids
+both sustained notification churn and speculative rescans of broad parent directories.
+Queries stay available once a cache is loaded.
 On the pause transition, the path cache is freed and a one-shot working-set trim pages
-out mapped data and rebuildable filter/prefix heaps after workers park. Private commit
-remains allocated for fast resume; resident RAM is reported separately. Reconciliation/checkpoint/trim
+out mapped data and query summaries after workers park. The path-cache allocator may
+retain freed capacity; resident RAM and private commit are reported separately. Reconciliation/checkpoint/trim
 deadlines use a clock stopped for the entire pause. A directory notification wakes the
 reader, and the checked publisher process handle joins its blocking wait set; missing,
-corrupt, disabled or dead publication resumes work. No polling timer is added. Initial
+corrupt, disabled or dead publication resumes work. Index scheduling adds no polling timer. Initial
 or paused notification accumulation is bounded to 128,000 unique paths, then falls back
 to volume reconciliation rather than retaining an unbounded list.
 
@@ -229,7 +239,101 @@ mypaper-index --bench-scan 'D:\some-representative-tree'
 `--root PATH [CACHE]` runs a standalone service for an isolated fixture. Core passes
 `--parent PID` in production. Only one server may own the pipe at a time.
 
-## Round 2 measurements (2026-11-06)
+## Final Round 2 result (2026-11-06, 09:38 build)
+
+The final deployed index combines file-backed query summaries (`262ec03`) with exact
+notification replay after games (`7062002`). One core-owned process, PID 12136, completed
+all C:/D:/E: generations, notification replay, queries, a real foreground fullscreen game
+fixture, and post-game catch-up without restarting. **Its OS lifetime working-set peak
+remained 136.40 MiB after all of those actions**, including the resume test.
+
+| Round 2 budget | Before (Round 1) | Final measured result |
+|---|---:|---:|
+| Active query working set <=150 MiB | 859–878 MiB | **65.53 MiB**, sampled every 10 ms; lifetime OS peak also below 150 MiB |
+| Warm full-pipe p95 <=20 ms | 42.21 ms | **4.87 ms**; p50 0.55 ms, max 6.22 ms, 1,100 requests |
+| First query after quiet trim <=40 ms | 91.88–125.36 ms server time | **0.60–5.59 ms full-pipe**, eleven forms |
+| Generation working-set peak <=256 MiB | 141.91 MiB bounded follow-up | **136.40 MiB**, complete uninterrupted three-volume run and later resume |
+
+The remaining index contained **5,984,220 record slots**, versus about 11.4 million
+before exclusions. Reconciliation/checkpoints/replay took **226.39 s**, followed by a
+30-second settling observation. Private high-water was **140.89 MiB**; settled private
+memory was **16.82 MiB**, with **7.65 MiB working set**. The preceding private-summary
+design retained 108.65 MiB private after settling; the mapped arrays remove that cost.
+These are live machine results with differing cache/load conditions, not controlled
+estimates of the speed gain from each change.
+
+| Final non-admin enumeration | Entries | Seconds | Inaccessible directories |
+|---|---:|---:|---:|
+| C: | 2,530,021 | 77.132 | 566 |
+| D: | 3,089,648 | 86.546 | 2 |
+| E: | 364,157 | 6.913 | 0 |
+
+The owned borderless topmost fixture covered the primary monitor. Win32 foreground PID
+and core's real hint both identified that fixture; all 60 sampled hints stayed true.
+After warming 22 pipe requests, working set fell from **64.47 MiB** to at most
+**1.55 MiB** during the **60.88-second** sample. Private commit was at most **20.18 MiB**,
+and CPU was **0.000% of one core**. The pause-edge path-cache release and working-set
+trim page out the mapped summaries; private allocation and resident RAM are distinct.
+The sample begins after a 12-second activation/settling interval, so it does not establish
+an exact trim-latency bound.
+
+One **32 KiB file created while paused** became searchable with exactly one file and
+32,768 known bytes **152.61 ms after the fixture ended**. Retaining exact raw paths was
+essential. The original dirty-root fallback took **207.77 s**. An intermediate
+parent-directory sweep took 9.69 s but pushed the OS lifetime peak to **259.98 MiB**:
+directory metadata notifications can identify very broad ancestors. That prototype fails
+the budget and was replaced, not shipped as the final behavior. Its failure evidence is
+`round2-backed-resume-highwater.json` and `round2-parent-sweep-game-catchup.json`.
+
+**Remaining wake cost:** 18.66 context switches/s came entirely from two
+`notify-rs windows loop` threads (572 and 564 switches). Every index main/search/native
+reader/delivery thread recorded zero switches in that game sample. The installed
+`notify` 8.2.1 Windows backend unconditionally waits with
+`WaitForSingleObjectEx(wakeup_sem, 100, TRUE)`; its Windows constructor ignores the
+poll-interval config. This misses the handful-of-wakes target even though index work is
+parked. The separate `crates/fswatch` workstream owns replacing those shared config/game
+watchers with an infinite overlapped wait. Its source migration landed after this build;
+**these results do not claim that later migration was deployed or measured**.
+
+Other final checks:
+
+- A 2,000-file / 256,000-byte burst converged in **1,035.16 ms**, using 1,046.88 ms index
+  CPU. Move/resize/rename/delete converged in **19.11 ms**; the final 1,999 files and
+  256,768 bytes were correct. Renamed-file query server time was 3.42 ms.
+- The earlier mapped-build live exclusion fixture passed boundary, unknown-size,
+  Rust/.NET marker and deleted-project checks. Exact replay uses the same tested
+  final-state update path. The earlier isolated 60-second idle sample remained
+  0.00% CPU; disable/on supervision was verified and the flag restored true.
+- The final million-entry query-code repeat measured **p50 5.13 / p95 12.12 ms**, max
+  14.37 ms, first after trim 7.72 ms. Load was 529.88 ms; private memory 2.23 MiB,
+  or 20.27 MiB with the wide-directory lookup. **The inherited <=10 ms gate still
+  misses**, specifically the repeated nonmatching path case.
+- Full cached startup was **4,058.58 ms**, so **the inherited subsecond goal still
+  misses**. Runtime summaries are rebuilt; persisting a validated summary cache is
+  follow-up work. An isolated mapped load used only 4.70 MiB private on return.
+- An earlier mapped warm run measured p95 23.66 ms and the synthetic run 55.56 ms
+  amid concurrent Studio fixture activity. Those results are retained alongside the
+  settled repeats and the final clean full-pipe run. They are not silently discarded.
+- Guarded launcher capture skipped input while Windows Settings was foreground;
+  full-pipe evidence is used as the brief permits. The fullscreen and restored desktop
+  PNGs were inspected. No foreign window was moved, minimized, or typed into.
+
+Final verification: **20 index tests**, **21 config tests**, index Clippy on all targets
+with warnings denied, and the workspace release build passed. The helper remains enabled
+and core-owned. No push was performed. Primary commits for this round are `1c63748`
+(layered config), `db7efcc` (exclusions/query column), `997640e` (honest launcher sizes),
+`2625876` and `0141cd2` (bounded filters/ranked caches/game parking), `262ec03`
+(file-backed summaries), and `7062002` (exact resume replay). Measurement tools are
+committed separately. Config fields and defaulted Hit booleans are additive API changes;
+the fswatch owner separately changed the config-watcher dependency and snippet.
+
+Final binary SHA-256:
+`F8D929EE525BC5A45CF5B6525D6F7C799E3E8455838526140C315F34146D60DC`.
+Final evidence is `round2-replay-{binary,reconcile,warm,cold,live,game,game-catchup,
+lifetime}.json` and `round2-replay-production.log`; synthetic repeat evidence is
+`round2-backed-million-repeat.json`. Earlier iterations remain under `round2-*`.
+
+## First complete Round 2 measurements (2026-11-06, 08:20 build)
 
 The final workspace release was deployed at 08:20 local and measured without another
 deployment through all C:/D:/E: scans, generation replacements and notification replay.
@@ -302,7 +406,7 @@ The game reader fix had already measured 0.000% CPU in the separate game-quiet r
 but retained 119 MiB resident RAM before the pause-edge trim was added. The first local
 trim proof was rejected: the owned topmost primary-monitor fullscreen fixture was
 verified foreground by Win32, while core's published hint remained stale and false.
-`round2-game-activation.json` and the fullscreen/restored screenshots preserve that
+`round2-game-stale-publisher-activation.json` and its fullscreen/restored screenshots preserve that
 publisher failure; they are not a successful game performance sample. A real publisher
 signal is required before certifying the new game RAM behavior.
 

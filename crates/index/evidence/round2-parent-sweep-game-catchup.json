@@ -1,0 +1,49 @@
+﻿{
+    "created_at":  "2026-11-06T09:25:05.7361784+03:00",
+    "file":  "C:\\Users\\you\\mypaper-index-fixtures\\game-1b4a64d00a494f42b8edd21055473846\\mypaper-game-resume-d3b3c219708242fbb01ef7aac32948f2.txt",
+    "catchup_ms":  9692.4618000000009,
+    "search":  {
+                   "hits":  [
+                                {
+                                    "name":  "mypaper-game-resume-d3b3c219708242fbb01ef7aac32948f2.txt",
+                                    "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-1b4a64d00a494f42b8edd21055473846\\mypaper-game-resume-d3b3c219708242fbb01ef7aac32948f2.txt",
+                                    "directory":  false,
+                                    "size":  32768,
+                                    "files":  1,
+                                    "modified":  1793946305,
+                                    "size_unknown":  false,
+                                    "excluded":  false
+                                }
+                            ],
+                   "entries":  6248384,
+                   "scanning":  false,
+                   "elapsed_us":  8416
+               },
+    "sizes":  {
+                  "hits":  [
+                               {
+                                   "name":  "game-1b4a64d00a494f42b8edd21055473846",
+                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-1b4a64d00a494f42b8edd21055473846",
+                                   "directory":  true,
+                                   "size":  32768,
+                                   "files":  1,
+                                   "modified":  1793946305,
+                                   "size_unknown":  false,
+                                   "excluded":  false
+                               },
+                               {
+                                   "name":  "mypaper-game-resume-d3b3c219708242fbb01ef7aac32948f2.txt",
+                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-1b4a64d00a494f42b8edd21055473846\\mypaper-game-resume-d3b3c219708242fbb01ef7aac32948f2.txt",
+                                   "directory":  false,
+                                   "size":  32768,
+                                   "files":  1,
+                                   "modified":  1793946305,
+                                   "size_unknown":  false,
+                                   "excluded":  false
+                               }
+                           ],
+                  "entries":  6248384,
+                  "scanning":  false,
+                  "elapsed_us":  48
+              }
+}
