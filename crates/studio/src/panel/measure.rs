@@ -5,6 +5,14 @@ pub struct Memory {
     pub private_mb: f64,
 }
 
+/// Temporary software canvases can finish after a page's async wallpaper decode.
+/// Reclaim their released allocations after the resulting frame has been presented too.
+pub fn raster_finished(app: &crate::app::App) {
+    if !app.fixture {
+        app.panel.as_ref().unwrap().reclaim_heap.set(true);
+    }
+}
+
 /// A page owns its decoded thumbnails, preview artwork, icon descriptions and shaped text.
 /// Keep the image worker connected while dropping its ready pixels, so the next page stays async.
 pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {

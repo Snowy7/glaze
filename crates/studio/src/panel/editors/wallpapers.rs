@@ -839,3 +839,54 @@ fn source_preview(app: &App, b: &mut B, r: Rect, source: Source, value: &str) {
         Align::Center,
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn use_now_changes_the_only_creation_primary_without_saving_a_preference() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State::default());
+        app.size = (480, 760);
+        app.run(Action::AddWallpaper);
+        app.overlay = Some(Overlay::AddWallpaper {
+            source: Some(Source::Web),
+            picked: None,
+        });
+        app.texts
+            .insert(FieldId::AddUrl, "https://example.com/wallpaper".into());
+        let version = app.docs.version;
+        assert!(use_now(&app));
+        let built = crate::panel::build(&app, &mut ui.text);
+        assert_eq!(
+            built
+                .targets
+                .iter()
+                .filter(|t| matches!(t.action, Action::AddCommit(_)))
+                .count(),
+            1
+        );
+        assert!(
+            built
+                .targets
+                .iter()
+                .any(|t| t.action == Action::AddCommit(true))
+        );
+        app.run(Action::Set(
+            Edit::new(DocId::Studio, "/add_use_now", "Use it now"),
+            json!(false),
+        ));
+        assert!(!use_now(&app));
+        let built = crate::panel::build(&app, &mut ui.text);
+        assert!(
+            built
+                .targets
+                .iter()
+                .any(|t| t.action == Action::AddCommit(false))
+        );
+        assert_eq!(app.docs.version, version);
+        app.run(Action::AddWallpaper);
+        assert!(use_now(&app));
+    }
+}

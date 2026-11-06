@@ -387,6 +387,8 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
                 None,
             ),
             ("Start over: App connections", DocId::Plugins, None),
+            ("Start over: Settings", DocId::Config, None),
+            ("Start over: Studio", DocId::Studio, None),
         ] {
             if matches!(
                 app.docs.doc(doc).issue,

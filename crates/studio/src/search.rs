@@ -705,7 +705,7 @@ mod tests {
     }
     #[test]
     fn panel_search_includes_plugin_connections_desktop_widgets_and_history() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = mypaper_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         crate::panel::record_drag(&app, "First desktop");
         let entries = all(&app);
@@ -744,5 +744,7 @@ mod tests {
         assert_eq!(app.panel.as_ref().unwrap().page, PanelPage::Widget);
         assert_eq!(app.docs.version, version);
         assert!(app.panel.as_ref().unwrap().search_match.is_some());
+        crate::panel::build(&app, &mut ui.text);
+        assert!(app.anchors.borrow().contains_key("panel-search-match"));
     }
 }

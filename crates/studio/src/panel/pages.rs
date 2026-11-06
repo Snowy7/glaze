@@ -650,13 +650,27 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
                 .get(&instance.widget)
                 .map_or(instance.widget.as_str(), |w| w.manifest.name.as_str());
             let position = super::editors::position(app, &layout, instance);
-            let area = position.split(", column").next().unwrap_or("On this display");
-            let collision = items.iter().any(|other| other.instance != instance.instance
-                && other.widget == instance.widget
-                && super::editors::position(app,&layout,other).starts_with(&format!("{area},")));
+            let area = position
+                .split(", column")
+                .next()
+                .unwrap_or("On this display");
+            let collision = items.iter().any(|other| {
+                other.instance != instance.instance
+                    && other.widget == instance.widget
+                    && super::editors::position(app, &layout, other)
+                        .starts_with(&format!("{area},"))
+            });
             let caption = if collision {
-                format!("{area} \u{b7} {} \u{d7} {} \u{b7} cell {}, {}",instance.size[0],instance.size[1],instance.cell[0]+1,instance.cell[1]+1)
-            } else {area.into()};
+                format!(
+                    "{area} \u{b7} {} \u{d7} {} \u{b7} cell {}, {}",
+                    instance.size[0],
+                    instance.size[1],
+                    instance.cell[0] + 1,
+                    instance.cell[1] + 1
+                )
+            } else {
+                area.into()
+            };
             row(
                 b,
                 c,

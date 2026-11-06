@@ -21,6 +21,8 @@ pub struct Desktop {
     /// Keep the wallpaper's appearance layer even if its theme is edited later.
     #[serde(default)]
     theme: Value,
+    #[serde(default)]
+    dark: Option<bool>,
 }
 
 impl Desktop {
@@ -67,6 +69,7 @@ impl Desktop {
                     .as_ref()
                     .clone()
             }),
+            dark: Some(super::specimens::desktop_dark(app)),
         }
     }
 
@@ -693,10 +696,11 @@ pub fn picture(
         .iter()
         .find(|(path, _)| path == "/look")
         .and_then(|(_, v)| v.as_ref());
-    let light = look
-        .and_then(|look| look.get("appearance"))
-        .and_then(Value::as_str)
-        == Some("light");
+    let light = !desktop.dark.unwrap_or_else(|| {
+        look.and_then(|look| look.get("appearance"))
+            .and_then(Value::as_str)
+            != Some("light")
+    });
     let display = app.display()?;
     let dip_width = display.rect.width as f32 / (display.dpi as f32 / 96.0);
     let scale = size.0 as f32 / dip_width;
@@ -874,9 +878,13 @@ pub fn picture(
             ));
         }
     }
-    mypaper_ui::render(&mut ui, &list, size.0, size.1)
+    let picture = mypaper_ui::render(&mut ui, &list, size.0, size.1)
         .ok()
-        .map(std::sync::Arc::new)
+        .map(std::sync::Arc::new);
+    drop(ui);
+    drop(list);
+    super::measure::raster_finished(app);
+    picture
 }
 
 pub fn starter_picture(
@@ -889,12 +897,14 @@ pub fn starter_picture(
     let wallpaper = app.library.items.iter().find(|w| w.id == wallpaper)?;
     let style = ["liquid", "fluent", "oneui", "mono"].get(index)?;
     let mut desktop = Desktop::read(app);
+    let mut look = app
+        .get(DocId::Config, "/look")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    look["style"] = serde_json::json!(style);
     desktop.config = vec![
         ("/theme".into(), Some(serde_json::json!(wallpaper.apply_as))),
-        (
-            "/look".into(),
-            Some(serde_json::json!({"style":style,"appearance":"dark"})),
-        ),
+        ("/look".into(), Some(look)),
     ];
     desktop.theme = super::saving::theme_value(app, wallpaper).as_ref().clone();
     desktop.bars = serde_json::json!({"version":1,"preset":preset,"look":{"style":style}});
@@ -979,6 +989,47 @@ mod tests {
             picture(&app, &current, (216, 122), 1793958138)
                 .unwrap()
                 .pixels
+        );
+    }
+    #[test]
+    fn history_retains_pictures_only_for_visible_rows_and_releases_them_on_leave() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        app.size = (480, 360);
+        for wallpaper in &mut app.library.items {
+            wallpaper.preview = None;
+            wallpaper.video = None;
+        }
+        observe(&app);
+        let entry = app.panel.as_ref().unwrap().history.borrow().entries[0].clone();
+        app.panel.as_ref().unwrap().history.borrow_mut().entries = vec![entry; 30];
+        app.panel.as_mut().unwrap().page = super::super::Page::History;
+        super::super::build(&app, &mut ui.text);
+        let count = app
+            .panel
+            .as_ref()
+            .unwrap()
+            .history
+            .borrow()
+            .pictures
+            .borrow()
+            .len();
+        assert!(count > 0 && count <= 4, "visible picture count: {count}");
+        super::super::run(
+            &mut app,
+            super::super::Command::Open(super::super::Page::Root),
+        );
+        super::super::build(&app, &mut ui.text);
+        assert!(
+            app.panel
+                .as_ref()
+                .unwrap()
+                .history
+                .borrow()
+                .pictures
+                .borrow()
+                .is_empty()
         );
     }
 }

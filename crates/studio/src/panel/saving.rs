@@ -226,12 +226,12 @@ pub fn reset_part(app: &mut App, doc: crate::docs::DocId, path: Option<&'static 
     });
     match result {
         Ok(StartedOver::Done(backup)) => {
-            if doc == DocId::Config && path.is_some_and(|path| path.starts_with("/look")) {
+            if doc == DocId::Config && path.is_none_or(|path| path.starts_with("/look")) {
                 app.apply(
                     "Start over",
                     vec![Op {
                         doc,
-                        path: path.unwrap().into(),
+                        path: path.unwrap_or("/look").into(),
                         value: None,
                     }],
                 );
@@ -243,6 +243,8 @@ pub fn reset_part(app: &mut App, doc: crate::docs::DocId, path: Option<&'static 
                 .borrow_mut()
                 .remove(&doc);
             app.retheme();
+            app.library
+                .set_active(crate::app::theme_name(&app.docs).as_deref());
             super::sync_connections(app);
             super::history::record_drag(app, "Start over");
             app.toast(

@@ -34,7 +34,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                     .enumerate()
                     .map(|(i, (name, _))| (*name, starter == i, Action::FirstRunPick(i)))
                     .collect();
-                super::choosers::draw(
+                let shown = super::choosers::draw(
                     app,
                     b,
                     c,
@@ -47,7 +47,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                     b,
                     c,
                     starters
-                        .get(starter)
+                        .get(shown.unwrap_or(starter))
                         .map_or("Choose a starter", |(_, line)| *line),
                 );
             });

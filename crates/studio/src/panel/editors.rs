@@ -86,6 +86,14 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
     bars::field_initial(app, id)
 }
 
+/// Creation and its room check must use the same display grid as the shell.
+pub fn prepare_widget_grid(app: &App) {
+    if let Some(monitor) = app.display() {
+        let layout = crate::pages::widgets::layout(app);
+        app.stage.borrow_mut().content.grid = Some((crate::stage::grid_for(&layout, monitor), 1.0));
+    }
+}
+
 pub fn widget_has_room(app: &App, id: &str) -> bool {
     let Some(manifest) = app.registry.get(id).map(|w| &w.manifest) else {
         return false;
@@ -681,6 +689,7 @@ pub fn run_search(app: &mut App, index: usize) {
             .more
             .insert(key(("panel-more", key(("studio-panel", page)))));
         app.pending_reveal = Some("panel-search-match");
+        app.anchors.borrow_mut().remove("panel-search-match");
         app.flash = Some(("panel-search-match", std::time::Instant::now()));
     }
 }
@@ -708,6 +717,12 @@ pub fn reveal_search(app: &App, b: &mut B, page: Page, first_target: usize) {
                 || hit.label.starts_with(&format!("{label}:"))
                 || hit.label.starts_with(&format!("{label},")))
             .then_some(target.rect)
+        })
+        .or_else(|| {
+            b.list.ops.iter().find_map(|op| match op {
+                mypaper_ui::Op::Text { rect, text, .. } if text.as_ref() == label => Some(*rect),
+                _ => None,
+            })
         });
     if let Some(rect) = target {
         crate::ui::anchor(
@@ -821,5 +836,40 @@ pub fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect) {
     b.fill(rect, b.px(6.0), b.p.fill);
     if let Some(picture) = picture {
         crate::stage::image_round(b, rect, &picture, 1.0, b.px(6.0));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn widget_room_state_and_creation_use_the_actual_display_extent() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State::default());
+        app.monitors.truncate(1);
+        let grid =
+            crate::stage::grid_for(&crate::pages::widgets::layout(&app), app.display().unwrap());
+        assert!(grid.cols > 30);
+        let widgets = serde_json::json!({"version":2,"instances":[{"instance":"cover","widget":"clock","monitor":"","cell":[0,0],"size":[24,grid.rows]}]});
+        app.docs = crate::docs::Docs::fixture(["{}", "{}", &widgets.to_string(), "{}"]);
+        assert!(widget_has_room(&app, "clock"));
+        app.run(Action::AddWidget("clock".into()));
+        let layout = crate::pages::widgets::layout(&app);
+        assert_eq!(layout.instances.len(), 2);
+        assert!(layout.instances[1].cell[0] >= 24);
+        let widgets = serde_json::json!({"version":2,"instances":[{"instance":"cover","widget":"clock","monitor":"","cell":[0,0],"size":[grid.cols,grid.rows]}]});
+        app.docs = crate::docs::Docs::fixture(["{}", "{}", &widgets.to_string(), "{}"]);
+        assert!(!widget_has_room(&app, "clock"));
+        app.run(Action::AddWidget("clock".into()));
+        assert_eq!(crate::pages::widgets::layout(&app).instances.len(), 1);
+        assert!(
+            app.toast
+                .as_ref()
+                .unwrap()
+                .action
+                .as_ref()
+                .is_some_and(|(label, _)| label == "Make room")
+        );
     }
 }
