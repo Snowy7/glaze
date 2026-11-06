@@ -453,6 +453,10 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
         return true;
     }
     if !ctrl {
+        if vk == 0x2E && app.field.is_none() && app.panel.as_ref().is_some_and(|s| s.page == Page::Module) && let Some(slot) = app.nav.module.clone() {
+            lists::remove(app, &SortList::Modules(slot.bar, slot.list), slot.index);
+            return true;
+        }
         if alt
             && matches!(vk, 0x26 | 0x28)
             && app.field.is_none()
