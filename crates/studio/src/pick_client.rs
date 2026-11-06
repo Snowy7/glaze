@@ -803,7 +803,7 @@ fn hovered_widget(app: &App, point: Option<mypaper_ui::Point>) -> Option<String>
         })
 }
 
-fn panel_pointer(app: &App) -> Option<mypaper_ui::Point> {
+pub(crate) fn panel_pointer(app: &App) -> Option<mypaper_ui::Point> {
     use windows::Win32::{
         Foundation::POINT,
         Graphics::Gdi::ScreenToClient,
