@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::panel::controls::{more, setting};
 
-const STYLES: [(Style, &str, &str); 5] = [
+pub(super) const STYLES: [(Style, &str, &str); 5] = [
     (
         Style::Liquid,
         "Liquid",
@@ -64,28 +64,9 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         .unwrap_or_default();
     group(b, c, "Style", |b, c| {
         crate::ui::anchor(app, "style", c.view, c.y);
-        let choices: Vec<_> = STYLES
-            .iter()
-            .map(|(style, name, _)| (*name, *style == current, Action::SetStyle(Some(*style))))
-            .collect();
-        crate::ui::tiles(
-            b,
-            c,
-            key("panel-materials"),
-            3,
-            false,
-            &choices,
-            |b, i, pic| super::super::specimens::material(app, b, pic, STYLES[i].0),
-        );
-        notice(
-            b,
-            c,
-            STYLES
-                .iter()
-                .find(|(style, _, _)| *style == current)
-                .unwrap()
-                .2,
-        );
+        style_tiles(app, b, c, Some(current), |style| {
+            Action::SetStyle(Some(style))
+        });
     });
     group(b, c, "Material", |b, c| {
         for (id, uses) in ["clarity", "blur", "refraction", "highlight"]
@@ -186,6 +167,62 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                 );
             }
         });
+    }
+}
+
+/// The same five choices on Look and a widget's own look, always in one row.
+pub(super) fn style_tiles(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    selected: Option<Style>,
+    action: impl Fn(Style) -> Action,
+) {
+    let gap = b.px(6.0);
+    let width = (c.w - gap * 4.0) / 5.0;
+    let picture_height = width * 0.8;
+    let label_height = height(b, 24.0);
+    b.group(key(("panel-look-styles", c.view)), |b| {
+        for (i, (style, name, _)) in STYLES.iter().enumerate() {
+            let rect = Rect::new(
+                c.x + i as f32 * (width + gap),
+                c.y,
+                width,
+                picture_height + label_height,
+            );
+            let k = key(("panel-look-style", c.view, i));
+            let on = selected == Some(*style);
+            b.plate(k, rect.inflate(b.px(2.0)), b.px(9.0), on);
+            super::super::specimens::material(
+                app,
+                b,
+                Rect::new(rect.left, rect.top, width, picture_height),
+                *style,
+            );
+            text(
+                b,
+                Rect::new(rect.left, rect.top + picture_height, width, label_height),
+                name,
+                11.0,
+                if on { 600 } else { 400 },
+                b.p.ink1,
+                Align::Center,
+            );
+            b.hit_checked(
+                k,
+                rect,
+                Role::RadioButton,
+                name,
+                Some(on),
+                action(*style),
+                Behavior::Click,
+            );
+            b.focus_ring(k, rect, b.px(9.0));
+        }
+    });
+    c.y += picture_height + label_height + b.px(8.0);
+    if let Some((_, _, sentence)) = STYLES.iter().find(|(style, _, _)| Some(*style) == selected) {
+        notice(b, c, sentence);
     }
 }
 

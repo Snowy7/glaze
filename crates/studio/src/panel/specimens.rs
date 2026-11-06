@@ -124,145 +124,356 @@ fn softened(app: &App, image: &Arc<Image>, radius: usize) -> Arc<Image> {
     image
 }
 
-pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
-    backdrop(app, b, r);
-    let surface = Rect::new(
-        r.left + r.width() * 0.13,
-        r.top + r.height() * 0.18,
-        r.width() * 0.74,
-        r.height() * 0.64,
-    );
-    let kit_style = match style {
-        Style::Liquid => mypaper_ui::Style::Liquid,
-        Style::Oneui => mypaper_ui::Style::OneUi,
-        Style::Fluent => mypaper_ui::Style::Fluent,
-        Style::Solid => mypaper_ui::Style::Solid,
-        Style::Mono => mypaper_ui::Style::Mono,
-    };
-    let dark = desktop_dark(app);
-    let theme = mypaper_ui::Theme::new(
-        kit_style,
-        if dark {
+/// Native style defaults, shared by the pictures and the widget look projection.
+pub fn style_theme(app: &App, style: Style) -> mypaper_ui::Theme {
+    mypaper_ui::Theme::new(
+        match style {
+            Style::Liquid => mypaper_ui::Style::Liquid,
+            Style::Oneui => mypaper_ui::Style::OneUi,
+            Style::Fluent => mypaper_ui::Style::Fluent,
+            Style::Solid => mypaper_ui::Style::Solid,
+            Style::Mono => mypaper_ui::Style::Mono,
+        },
+        if desktop_dark(app) {
             mypaper_ui::Scheme::Dark
         } else {
             mypaper_ui::Scheme::Light
         },
         wallpaper_color(app).unwrap_or(hex(0x8b9eb7)),
+    )
+}
+
+/// Pick a bright, detailed crop so glass can be judged even on a quiet wallpaper.
+fn material_backdrop(app: &App) -> Arc<Image> {
+    let source = wallpaper(app);
+    let cache_key = format!(
+        "material-crop:{:p}",
+        source.as_ref().map_or(std::ptr::null(), Arc::as_ptr)
     );
-    let material = mypaper_ui::theme::material(kit_style, theme.color.surface);
-    let blur = material.map_or(0, |m| (m.blur / 2.0) as usize);
-    let alpha = material.map_or(theme.color.surface.a, |m| 1.0 - m.clarity);
-    let radius = theme.radius.card;
-    let highlight = material.map_or(if style == Style::Solid { 0.12 } else { 0.0 }, |m| {
-        m.highlight
-    });
-    let radius = b.px(radius).min(surface.height() / 2.0);
-    if style != Style::Solid
-        && let Some(image) = wallpaper(app)
+    if let Some(image) = app
+        .panel
+        .as_ref()
+        .unwrap()
+        .specimens
+        .borrow()
+        .get(&cache_key)
     {
-        crate::stage::image_round(b, surface, &softened(app, &image, blur), 1.0, radius);
+        return image.clone();
     }
-    let tint = theme.color.surface;
-    b.fill(surface, radius, tint.with_alpha(alpha));
-    if highlight > 0.0 {
-        b.stroke(
-            surface,
-            radius,
-            b.px(1.0),
-            hex(0xffffff).with_alpha(highlight),
-        );
-        b.hline(
-            surface.left + radius,
-            surface.right - radius,
-            surface.top + b.px(1.0),
-            hex(0xffffff).with_alpha(highlight),
-        );
+    let (width, height) = (180usize, 144usize);
+    let mut pixels = vec![255; width * height * 4];
+    if let Some(source) = source {
+        let sw = (source.width as f32 * 0.58).min(source.height as f32 * 1.25);
+        let sh = sw / 1.25;
+        let mut best = (f32::MIN, 0.0, 0.0);
+        for row in 0..4 {
+            for col in 0..4 {
+                let x = (source.width as f32 - sw) * col as f32 / 3.0;
+                let y = (source.height as f32 - sh) * row as f32 / 3.0;
+                let mut sum = 0.0;
+                let mut squares = 0.0;
+                for j in 0..12 {
+                    for i in 0..12 {
+                        let sx = (x + i as f32 * sw / 12.0) as usize;
+                        let sy = (y + j as f32 * sh / 12.0) as usize;
+                        let at = (sy.min(source.height as usize - 1) * source.width as usize
+                            + sx.min(source.width as usize - 1))
+                            * 4;
+                        let light = (source.pixels[at] as f32
+                            + source.pixels[at + 1] as f32
+                            + source.pixels[at + 2] as f32)
+                            / 765.0;
+                        sum += light;
+                        squares += light * light;
+                    }
+                }
+                let mean = sum / 144.0;
+                let score = (squares / 144.0 - mean * mean) * 4.0 + mean * 0.04;
+                if score > best.0 {
+                    best = (score, x, y);
+                }
+            }
+        }
+        for y in 0..height {
+            for x in 0..width {
+                let sx = (best.1 + x as f32 * sw / width as f32) as usize;
+                let sy = (best.2 + y as f32 * sh / height as f32) as usize;
+                let at = (sy.min(source.height as usize - 1) * source.width as usize
+                    + sx.min(source.width as usize - 1))
+                    * 4;
+                for channel in 0..3 {
+                    pixels[(y * width + x) * 4 + channel] =
+                        (source.pixels[at + channel] as f32 * 1.32 + 12.0).min(255.0) as u8;
+                }
+            }
+        }
+    } else {
+        // A colorful desktop crop when no wallpaper is available; no external asset or service.
+        for y in 0..height {
+            for x in 0..width {
+                let band = ((x + y / 2) / 24) % 4;
+                let color = [
+                    [228, 174, 80],
+                    [92, 181, 209],
+                    [174, 125, 199],
+                    [112, 205, 165],
+                ][band];
+                pixels[(y * width + x) * 4..(y * width + x) * 4 + 3].copy_from_slice(&color);
+            }
+        }
     }
-    let ink = if dark { hex(0xffffff) } else { hex(0x1a1a1a) };
-    text(b, surface, "10:42", 22.0, 500, ink, Align::Center);
+    let image = Arc::new(Image {
+        width: width as u32,
+        height: height as u32,
+        pixels,
+    });
+    remember(app, cache_key, &image);
+    image
+}
+
+fn blur_crop(source: &Image, radius: usize) -> Vec<u8> {
+    let (width, height) = (source.width as usize, source.height as usize);
+    let mut pixels = source.pixels.clone();
+    for horizontal in [true, false] {
+        let input = pixels.clone();
+        for y in 0..height {
+            for x in 0..width {
+                let mut sum = [0usize; 3];
+                let mut count = 0;
+                for offset in -(radius as isize)..=radius as isize {
+                    let sx = if horizontal {
+                        (x as isize + offset).clamp(0, width as isize - 1) as usize
+                    } else {
+                        x
+                    };
+                    let sy = if horizontal {
+                        y
+                    } else {
+                        (y as isize + offset).clamp(0, height as isize - 1) as usize
+                    };
+                    for channel in 0..3 {
+                        sum[channel] += input[(sy * width + sx) * 4 + channel] as usize;
+                    }
+                    count += 1;
+                }
+                for channel in 0..3 {
+                    pixels[(y * width + x) * 4 + channel] = (sum[channel] / count) as u8;
+                }
+            }
+        }
+    }
+    pixels
+}
+
+pub fn frosted_wallpaper(app: &App, blur: f32) -> Option<Arc<Image>> {
+    let source = wallpaper(app)?;
+    Some(softened(app, &source, (blur / 2.0).round() as usize))
+}
+
+/// A software lens uses the same defaults as the kit. Its backdrop stays registered through
+/// the plate; Liquid bends the crop at its rim, the other styles only frost or tint it.
+pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
+    let background = material_backdrop(app);
+    let theme = style_theme(app, style);
+    let cache_key = format!(
+        "material:{style:?}:{}:{:p}",
+        desktop_dark(app),
+        Arc::as_ptr(&background)
+    );
+    let cached = app
+        .panel
+        .as_ref()
+        .unwrap()
+        .specimens
+        .borrow()
+        .get(&cache_key)
+        .cloned();
+    let image = cached.unwrap_or_else(|| {
+        let (width, height) = (background.width as usize, background.height as usize);
+        let defaults = mypaper_ui::theme::material(theme.style, theme.color.surface);
+        let blur = defaults.map_or(0.0, |m| m.blur);
+        let alpha = defaults.map_or(
+            if style == Style::Solid {
+                1.0
+            } else {
+                theme.color.surface.a
+            },
+            |m| 1.0 - m.clarity,
+        );
+        let frosted = blur_crop(&background, (blur * 0.35).round() as usize);
+        let mut pixels = background.pixels.clone();
+        let radius = theme.radius.surface * 0.72;
+        let tint = theme.color.surface;
+        for y in 0..height {
+            for x in 0..width {
+                let (dx, dy) = (x as f32 - 89.5, y as f32 - 71.5);
+                let (qx, qy) = (dx.abs() - (74.0 - radius), dy.abs() - (49.0 - radius));
+                let distance = qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - radius;
+                let at = (y * width + x) * 4;
+                if distance > 0.6 {
+                    continue;
+                }
+                let coverage = (0.6 - distance).clamp(0.0, 1.0);
+                let rim = (1.0 + distance / 5.0).clamp(0.0, 1.0);
+                let bend = if style == Style::Liquid {
+                    rim * rim * defaults.unwrap().refraction * 10.0
+                } else {
+                    0.0
+                };
+                let sx = (x as f32 - dx.signum() * bend)
+                    .round()
+                    .clamp(0.0, width as f32 - 1.0) as usize;
+                let sy = (y as f32 - dy.signum() * bend)
+                    .round()
+                    .clamp(0.0, height as f32 - 1.0) as usize;
+                let from = (sy * width + sx) * 4;
+                let edge = if style == Style::Liquid {
+                    rim.powf(4.0)
+                        * defaults.unwrap().highlight
+                        * if dx + dy < 0.0 { 0.95 } else { 0.38 }
+                } else if style == Style::Fluent && distance > -1.1 {
+                    0.24
+                } else {
+                    0.0
+                };
+                for (channel, color) in [tint.b, tint.g, tint.r].into_iter().enumerate() {
+                    let sample = frosted[from + channel] as f32;
+                    let body = sample * (1.0 - alpha) + color * 255.0 * alpha;
+                    let body = body * (1.0 - edge) + 255.0 * edge;
+                    pixels[at + channel] = (pixels[at + channel] as f32 * (1.0 - coverage)
+                        + body * coverage)
+                        .round() as u8;
+                }
+            }
+        }
+        let image = Arc::new(Image {
+            width: background.width,
+            height: background.height,
+            pixels,
+        });
+        remember(app, cache_key, &image);
+        image
+    });
+    crate::stage::image_round(b, r, &image, 1.0, b.px(7.0));
+    let surface = Rect::new(
+        r.left + r.width() * 0.1,
+        r.top + r.height() * 0.24,
+        r.width() * 0.8,
+        r.height() * 0.5,
+    );
+    let ink = theme.color.label;
+    text(
+        b,
+        surface,
+        "10:42",
+        (r.width() / b.s * 0.22).clamp(10.0, 21.0),
+        if style == Style::Mono { 400 } else { 600 },
+        ink,
+        Align::Center,
+    );
 }
 
 pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
-    backdrop(app, b, r);
+    let background = material_backdrop(app);
+    crate::stage::image_round(b, r, &background, 1.0, b.px(8.0));
     let win = Rect::new(
-        r.left + r.width() * 0.13,
-        r.top + r.height() * 0.17,
-        r.width() * 0.74,
-        r.height() * 0.7,
+        r.left + r.width() * 0.09,
+        r.top + r.height() * 0.12,
+        r.width() * 0.82,
+        r.height() * 0.77,
     );
-    let radius = b.px(if look == 3 {
-        0.0
-    } else if look == 0 {
-        3.0
-    } else {
-        6.0
-    });
-    if let Some(image) = wallpaper(app) {
-        crate::stage::image_round(
-            b,
-            win,
-            &softened(app, &image, if look == 2 { 9 } else { 5 }),
-            1.0,
-            radius,
-        );
-    }
+    let scale = win.width() / 180.0;
+    let radius = if look == 3 { 0.0 } else { 8.0 * scale };
     let light = if look == 0 {
         !windows_dark(app)
     } else {
         !desktop_dark(app)
     };
+    let ink = hex(if light { 0x1a1a1a } else { 0xf5f5f5 });
+    let plate = hex(if light { 0xf5f5f5 } else { 0x24262b });
+    let accent = wallpaper_color(app).unwrap_or(hex(0x8b9eb7));
+    if look == 2 {
+        crate::stage::image_round(b, win, &softened(app, &background, 7), 1.0, radius);
+    }
     b.fill(
         win,
         radius,
-        hex(if light { 0xf5f5f5 } else { 0x24262b }).with_alpha(if look == 2 {
-            0.52
-        } else {
-            0.94
+        plate.with_alpha(match look {
+            0 | 3 => 1.0,
+            1 => 0.9,
+            _ => 0.45,
         }),
+    );
+    let caption = Rect::new(win.left, win.top, win.width(), 25.0 * scale);
+    b.fill(
+        caption,
+        radius,
+        match look {
+            1 => accent.with_alpha(if light { 0.35 } else { 0.5 }),
+            2 => hex(0xffffff).with_alpha(0.12),
+            _ => ink.with_alpha(0.06),
+        },
     );
     b.stroke(
         win,
         radius,
-        b.px(1.0),
-        if look == 0 {
-            hex(if light { 0xb5b5b5 } else { 0x555555 })
-        } else {
-            wallpaper_color(app).unwrap_or(b.p.ink2)
+        b.px(if look == 3 { 1.5 } else { 0.8 }),
+        match look {
+            0 => ink.with_alpha(0.25),
+            2 => hex(0xffffff).with_alpha(0.8),
+            _ => accent,
         },
     );
-    let ink = hex(if light { 0x444444 } else { 0xeeeeee });
+    if look == 3 {
+        b.fill(
+            Rect::new(win.left, win.top, win.width(), 2.0 * scale),
+            0.0,
+            accent,
+        );
+    }
+    text(
+        b,
+        Rect::new(
+            win.left + 8.0 * scale,
+            caption.top,
+            win.width() * 0.6,
+            caption.height(),
+        ),
+        "Files",
+        10.0,
+        500,
+        ink,
+        Align::Start,
+    );
     for n in 0..3 {
         b.fill(
             Rect::new(
-                win.right - b.px(10.0 + n as f32 * 8.0),
-                win.top + b.px(7.0),
-                b.px(3.0),
-                b.px(2.0),
+                win.right - (11.0 + n as f32 * 13.0) * scale,
+                win.top + 11.0 * scale,
+                5.0 * scale,
+                1.2 * scale,
             ),
             0.0,
             ink,
         );
     }
-    b.fill(
-        Rect::new(
-            win.left + b.px(7.0),
-            win.top + b.px(19.0),
-            win.width() * 0.22,
-            win.height() - b.px(25.0),
-        ),
-        b.px(2.0),
-        ink.with_alpha(0.1),
+    let sidebar = Rect::new(
+        win.left + 6.0 * scale,
+        caption.bottom + 5.0 * scale,
+        win.width() * 0.25,
+        win.bottom - caption.bottom - 11.0 * scale,
     );
+    b.fill(sidebar, 3.0 * scale, ink.with_alpha(0.08));
     for n in 0..3 {
         b.fill(
             Rect::new(
-                win.left + win.width() * 0.4,
-                win.top + b.px(22.0 + n as f32 * 9.0),
-                win.width() * (0.4 - n as f32 * 0.06),
-                b.px(3.0),
+                win.left + win.width() * 0.36,
+                caption.bottom + (12.0 + n as f32 * 16.0) * scale,
+                win.width() * (0.5 - n as f32 * 0.08),
+                5.0 * scale,
             ),
-            b.px(1.0),
-            ink.with_alpha(0.4),
+            1.5 * scale,
+            ink.with_alpha(if look == 2 { 0.75 } else { 0.35 }),
         );
     }
 }
