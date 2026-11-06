@@ -1,0 +1,14 @@
+07:56:39.013 styler 21416; explorer + settings styled; our window 10748312
+07:56:42.217 11 rules flips in ~1 s (the last one: other values); flag off now
+07:56:42.355 styler gone after 116 ms: True
+07:56:46.418 --- TAP log since the flips
+07:56:46.439   [tap 73468] restoring 24 element(s) on 1 thread(s) (1160 known; 897 removal(s) of elements never seen)
+07:56:46.440   [tap 76024] restoring 16 element(s) on 4 thread(s) (1936 known; 0 removal(s) of elements never seen)
+07:56:46.444   [tap 76024] thread 81796: put back 0 element(s)
+07:56:46.448   [tap 76024] thread 34116: put back 8 element(s)
+07:56:46.451   [tap 76024] thread 76480: put back 8 element(s)
+07:56:46.456   [tap 73468] thread 68748: put back 24 element(s)
+07:56:46.459   [tap 73468] detached: HRESULT(0x00000000)
+07:56:46.462   [tap 76024] thread 13420: put back 0 element(s)
+07:56:46.466   [tap 76024] detached: HRESULT(0x00000000)
+07:56:50.498 flag back on; styler 88004

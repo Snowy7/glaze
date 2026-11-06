@@ -291,9 +291,11 @@ opt-in and off by default:
 { "experimental": { "app_styler": true } }
 ```
 
-Off costs nothing: no process, no hook, nothing loaded anywhere. On, core runs `mypaper-styler`;
-turning the flag off, quitting mypaper, the panic hotkey or the helper dying for any reason puts
-both apps back as they were. Studio has no switch for it yet (Experimental section, later).
+Off costs nothing: no process, no hook, nothing loaded anywhere. On, core runs `mypaper-styler`
+(`--parent <core's pid>`); turning the flag off, quitting mypaper, the panic hotkey, core ending
+for any reason (a crash included: the helper exits with it) or the helper dying for any reason
+puts both apps back as they were. A helper started while the previous one is still exiting waits
+up to 10 s for it. Studio has no switch for it yet (Experimental section, later).
 
 ### How it works
 
@@ -305,8 +307,11 @@ both apps back as they were. Studio has no switch for it yet (Experimental secti
   and styled there. No polling.
 - **Which processes**: only `explorer.exe` and `ImmersiveControlPanel\SystemSettings.exe`, and
   only if the injection allowlist ([`crates/inject`](../crates/inject/src/lib.rs), with the
-  Microsoft-signature check) also accepts the process. That check runs again right before every
-  attach. Settings runs with the inbox package identity
+  Microsoft-signature check) also accepts the process. The helper opens the process first and
+  checks that very process, then keeps the handle open through the attach: a pid can't be given
+  to another process while a handle to it is open, so the attach can't reach a different app.
+  Its exit is watched from before the TAP loads (a crash while it loads counts). The TAP copy is
+  used only if its bytes are still this build's. Settings runs with the inbox package identity
   `windows.immersivecontrolpanel_cw5n1h2txyewy`, which the allowlist names.
 - **Which framework**: Settings is system XAML (`Windows.UI.Xaml`). Explorer's folder windows are
   WinUI 3 (`Microsoft.UI.Xaml` from the Windows App SDK). The helper attaches through that SDK's
@@ -412,13 +417,35 @@ window behind the XAML, so they stay solid in `glass`.
   element) and asks for a fresh handle right before using one, keeps a value type's original as
   text and makes it again right before putting it back, and releases what it holds on the
   object's own UI thread (a thread that is gone leaks it instead).
+- **Work for a UI thread carries no handles.** A restyle or clean-up is posted to the thread's
+  message window as a job that finds its elements in the TAP's map when it runs, on that thread,
+  where the tree callbacks keep the map true; an element is held while it is styled or put back.
+  A job that arrives while the thread is inside our own work (XAML calls can pump messages) waits
+  until that work is done. Each message window has a generation, checked before posting and when
+  the job runs, so a closed window whose handle or thread id comes back never runs an old job;
+  and a job only goes to a window whose procedure is this TAP build's (every build an app has
+  loaded registers the same class name, so the class alone doesn't say whose window it is).
+- **Closing**: when the helper goes, styling stops and each UI thread gets a clean-up job, queued
+  behind whatever it is doing; it puts back every value and brush on that thread and lets go of
+  what the TAP holds there. The TAP stops following the tree only after every thread has cleaned
+  up (at most 10 s; a thread that doesn't answer leaks what is held there instead).
+- **Nothing piles up**: the element strings each tree callback is handed are freed (XAML gives
+  them to the callback), rule values no element uses any more are released after each restyle,
+  and a UI thread whose window closed (its last element left) is retired: its overrides go back
+  and its values and message window go. Explorer often closes a window but keeps its thread, and
+  that tree goes without a removal: when the next window or popup opens on the thread, its old
+  roots that no longer resolve are forgotten (there is nothing left to put back).
 - **Crash guard**: if a styled app exits with an NTSTATUS-style code (`>= 0x80000000`: a crash, or
   being ended with `TerminateProcess(-1)` as `Stop-Process` and Task Manager's *End task* do)
   within 60 s of being attached, that counts once. Deaths of one app within 5 s of each other are
   one incident (an Explorer restart ends every Explorer process at once). After two incidents, the
   helper stops styling that app for the session and logs it (`not styling settings again this
-  session`); a fresh helper session starts clean. Exercised 2026-11-06 with Settings. A process
-  the allowlist rejects is never attached.
+  session`): it stops writing that app's rules and writes a stop marker (`<app>.off`) beside
+  them, and every TAP session of that app still running (Explorer can have several processes)
+  puts it back and detaches. A fresh helper session removes the markers and starts clean.
+  Exercised 2026-11-06 with Settings, and (round 3) with two separate Explorer folder processes:
+  the shell's Explorer, which survived, put its look back and detached. A process the allowlist
+  rejects is never attached.
 - The helper exits on its own only if `experimental.app_styler` reads off twice, a second apart:
   a config writer that replaces the file non-atomically briefly shows no file (defaults, off).
   Core stops the helper when the flag really goes off.
@@ -427,6 +454,18 @@ window behind the XAML, so they stay solid in `glass`.
   two Explorer restarts, several mypaper redeploys and flag off/on cycles. No Explorer or Settings
   crash, no guard trip, bars and wallpaper back after each restart. Helper: 2.9–3.3 MB private,
   47 ms CPU in 120 s idle (0.04 % of one core; it wakes only for window-show events).
+- **Known issue (round 3, 2026-11-06): Explorer keeps memory while attached.** With a session
+  subscribed, each burst of two folder windows opened, navigated and closed (plus Settings pages)
+  left 120–410 MB in Explorer's private bytes (754 MB to 2.4 GB over 7 bursts; handles 6.2k to
+  14.6k). It is the subscription itself: with the TAP attached and **no rules** (no styling, no
+  property reads) a burst still added 127–151 MB; with the flag off, 8–17 MB (3 bursts each way).
+  XAML Diagnostics' live-tree and handle maps hold strong references to what they track (WinUI's
+  `HandleMap`), so Explorer's closed windows stay alive while we are advised. Ending the session
+  doesn't reliably give it back (once 2.5 to 1.3 GB within 10 s, once nothing); restarting
+  Explorer does. The TAP's own map stays flat (it follows removals and drops trees that went
+  without one). Next step: end the subscription (and the TAP's diagnostics references) whenever
+  an app's windows have all closed and re-advise when one opens, then measure again. Until then
+  the flag stays **off**. Evidence: `crates/app-styler/evidence/round3`.
 - Missing elements across Windows builds are not errors: a selector that matches nothing does
   nothing.
 - Nothing is persisted in the apps. If anything is ever stuck, closing and reopening the window
