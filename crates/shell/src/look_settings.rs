@@ -123,6 +123,8 @@ pub fn bar(
         && let Some(style) = style(look, surface)
     {
         bar.style = Some(style);
+        // A glass design's translucent tint is a default, not an override of Solid's body.
+        if style == NativeStyle::Solid && !own("/tint") { bar.tint = None; }
     }
     if look.shape.corners.is_some() && !own("/radius") {
         bar.radius = None;

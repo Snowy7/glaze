@@ -237,6 +237,10 @@ fn bars_family_style_beats_the_global_style_and_explicit_bar_style_beats_both() 
         resolve(&user, &bars, "top", &ui.text).theme.style,
         mypaper_ui::Style::Solid
     );
+    let solid = resolve(&user, &bars, "top", &ui.text);
+    assert_eq!(solid.fill.unwrap_or(solid.theme.color.surface).a, 1.0);
+    let tinted = BarsConfig::parse(r#"{"top":{"look":{"tint":0.4}}}"#).unwrap();
+    assert_eq!(resolve(&user, &tinted, "top", &ui.text).fill.unwrap().a, 0.4);
     let bars = BarsConfig::parse(r#"{"top":{"look":{"style":"fluent"}}}"#).unwrap();
     assert_eq!(
         resolve(&user, &bars, "top", &ui.text).theme.style,
@@ -258,6 +262,10 @@ fn menus_family_style_is_independent_of_bars_and_resets_to_the_global_style() {
             settings(json!({"style":"liquid", "bars":{"style":"solid"}})),
             mypaper_ui::Style::Liquid,
         ),
+        (
+            settings(json!({"style":"liquid", "menus":{"style":"solid"}})),
+            mypaper_ui::Style::Solid,
+        ),
     ] {
         let mut own = bars.top.look.clone();
         let mut a = Appearance::default();
@@ -273,6 +281,7 @@ fn menus_family_style_is_independent_of_bars_and_resets_to_the_global_style() {
         );
         let panel = crate::flyouts::look::Look::resolve(&own, &a, &system);
         assert_eq!(panel.style, expected);
+        if expected == mypaper_ui::Style::Solid { assert_eq!(panel.fill.a, 1.0); }
     }
 }
 
