@@ -10,7 +10,7 @@ mod engine;
 mod system;
 pub mod look;
 mod windows;
-pub use engine::{EngineConfig, GpuPreference, RenderOptions, RenderSettings};
+pub use engine::{DuringGames, EngineConfig, GpuPreference, RenderOptions, RenderSettings};
 pub use system::{PowerMode, SystemConfig};
 pub use apps::{AppRules, AppsStyle};
 pub use look::Look;
