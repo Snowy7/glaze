@@ -9,6 +9,7 @@ license.workspace = true
 mypaper-plugin-api = { path = "../plugin-api" }
 mypaper-plugin-sdk = { path = "../plugin-sdk" }
 mypaper-config.workspace = true
+mypaper-index.workspace = true
 mypaper-desktop.workspace = true
 mypaper-theme.workspace = true
 mypaper-tweaks.workspace = true
