@@ -1794,6 +1794,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-fswatch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "windows",
+]
+
+[[package]]
 name = "mypaper-glass-ipc"
 version = "0.1.0"
 dependencies = [
