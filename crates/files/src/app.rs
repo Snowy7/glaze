@@ -133,6 +133,9 @@ pub struct App {
     pending_images: HashSet<(String, i32)>,
     image_order: VecDeque<(String, i32)>,
     pub backend: Backend,
+    watch: Option<(String, crate::backend::FolderWatch)>,
+    directory_dirty: bool,
+    refreshing: bool,
     drop_target: DropTarget,
     menu: Menu<Command>,
     menu_at: (i32, i32),
@@ -218,6 +221,9 @@ impl App {
             pending_images: HashSet::new(),
             image_order: VecDeque::new(),
             backend,
+            watch: None,
+            directory_dirty: false,
+            refreshing: false,
             drop_target,
             menu: Menu::new("Files actions")?,
             menu_at: (0, 0),
@@ -325,6 +331,12 @@ impl App {
     }
 
     pub fn navigate(&mut self, path: String, record: bool) -> Result<()> {
+        self.drop_target
+            .enabled
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.watch = None;
+        self.directory_dirty = false;
+        self.refreshing = false;
         self.focus(Field::None)?;
         self.menu.close();
         self.search.set_text("")?;
@@ -430,7 +442,12 @@ impl App {
 
     pub fn refresh(&mut self) -> Result<()> {
         if let Some(location) = &self.location {
-            self.navigate(location.path.clone(), false)?;
+            self.epoch = self.backend.folder(location.path.clone(), None, self.sort);
+            self.refreshing = true;
+            self.loading = true;
+            self.directory_dirty = false;
+            self.error = None;
+            self.pending_images.clear();
         }
         Ok(())
     }
@@ -515,6 +532,9 @@ impl App {
         }
         self.backend.operation(operation)?;
         self.busy = true;
+        self.drop_target
+            .enabled
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         self.drop_target
             .destination
             .lock()
@@ -1073,6 +1093,15 @@ impl App {
         while let Ok(reply) = self.backend.replies.try_recv() {
             changed = true;
             match reply {
+                Reply::Changed { path } => {
+                    if self
+                        .location
+                        .as_ref()
+                        .is_some_and(|location| location.path.eq_ignore_ascii_case(&path))
+                    {
+                        self.directory_dirty = true;
+                    }
+                }
                 Reply::Folder {
                     epoch,
                     location,
@@ -1080,6 +1109,20 @@ impl App {
                     complete,
                     elapsed_ms,
                 } if epoch == self.epoch => {
+                    if self.refreshing && !complete {
+                        continue;
+                    }
+                    if location.filesystem
+                        && self
+                            .watch
+                            .as_ref()
+                            .is_none_or(|(path, _)| path != &location.path)
+                    {
+                        self.watch = Some((
+                            location.path.clone(),
+                            self.backend.watch(location.path.clone())?,
+                        ));
+                    }
                     let selected: HashSet<_> = self.selected_paths().into_iter().collect();
                     if self.pending_history {
                         self.history.visit(location.path.clone());
@@ -1100,14 +1143,24 @@ impl App {
                         .lock()
                         .map(|mut d| *d = location.filesystem.then(|| location.path.clone()))
                         .ok();
+                    self.drop_target
+                        .enabled
+                        .store(!self.busy, std::sync::atomic::Ordering::Relaxed);
                     self.location = Some(location);
                     self.loading = !complete;
+                    if complete {
+                        self.refreshing = false;
+                    }
                     self.elapsed_ms = elapsed_ms;
                     self.entries = entries.clone();
                     if self.query_text.is_empty() {
                         self.shown = entries;
                     } else {
-                        self.run_search();
+                        self.query = self.backend.search(
+                            self.query_text.clone(),
+                            self.entries.clone(),
+                            self.sort,
+                        );
                     }
                     self.selection.items = self
                         .shown
@@ -1164,6 +1217,9 @@ impl App {
                 Reply::Operation(result) => {
                     self.busy = false;
                     self.drop_target
+                        .enabled
+                        .store(true, std::sync::atomic::Ordering::Relaxed);
+                    self.drop_target
                         .destination
                         .lock()
                         .map(|mut d| {
@@ -1190,6 +1246,10 @@ impl App {
         }
         while let Ok(operation) = self.drop_target.requests.try_recv() {
             self.operation(operation)?;
+            changed = true;
+        }
+        if self.directory_dirty && !self.loading && !self.busy {
+            self.refresh()?;
             changed = true;
         }
         Ok(changed)

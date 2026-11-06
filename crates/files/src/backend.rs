@@ -21,6 +21,9 @@ use windows::Win32::{
 pub const WAKE: u32 = WM_APP + 171;
 
 pub enum Reply {
+    Changed {
+        path: String,
+    },
     Folder {
         epoch: u64,
         location: Location,
@@ -367,5 +370,83 @@ impl Backend {
                 send(&out, hwnd, Reply::Operation(result));
             })?;
         Ok(())
+    }
+
+    pub fn watch(&self, path: String) -> anyhow::Result<FolderWatch> {
+        FolderWatch::new(path, self.sender.clone(), self.hwnd)
+    }
+}
+
+struct Stop(usize);
+impl Drop for Stop {
+    fn drop(&mut self) {
+        // SAFETY: the final Arc owner closes the event after the watcher stops using it.
+        let _ = unsafe {
+            windows::Win32::Foundation::CloseHandle(windows::Win32::Foundation::HANDLE(self.0 as _))
+        };
+    }
+}
+
+/// One directory notification, cancelled on navigation or close. It does not recurse or poll.
+pub struct FolderWatch {
+    stop: Arc<Stop>,
+}
+impl FolderWatch {
+    fn new(path: String, sender: SyncSender<Reply>, hwnd: usize) -> anyhow::Result<Self> {
+        use windows::{
+            Win32::{Foundation::*, Storage::FileSystem::*, System::Threading::*},
+            core::HSTRING,
+        };
+        // SAFETY: an unnamed manual-reset cancellation event, shared until the worker exits.
+        let stop = Arc::new(Stop(
+            unsafe { CreateEventW(None, true, false, None) }?.0 as usize,
+        ));
+        let worker_stop = stop.clone();
+        std::thread::Builder::new()
+            .name("files-directory-watch".into())
+            .stack_size(256 * 1024)
+            .spawn(move || {
+                // SAFETY: notification creation is off the UI thread; this worker owns its handle.
+                let notification = unsafe {
+                    FindFirstChangeNotificationW(
+                        &HSTRING::from(&path),
+                        false,
+                        FILE_NOTIFY_CHANGE_FILE_NAME
+                            | FILE_NOTIFY_CHANGE_DIR_NAME
+                            | FILE_NOTIFY_CHANGE_LAST_WRITE
+                            | FILE_NOTIFY_CHANGE_SIZE,
+                    )
+                };
+                let Ok(notification) = notification else {
+                    return;
+                };
+                let stop = HANDLE(worker_stop.0 as _);
+                loop {
+                    // SAFETY: both handles remain live throughout this wait; cancellation wins.
+                    if unsafe { WaitForMultipleObjects(&[stop, notification], false, INFINITE) }
+                        != WAIT_EVENT(WAIT_OBJECT_0.0 + 1)
+                    {
+                        break;
+                    }
+                    // SAFETY: rearm this worker's notification before publishing the change.
+                    if unsafe { FindNextChangeNotification(notification) }.is_err() {
+                        break;
+                    }
+                    send(&sender, hwnd, Reply::Changed { path: path.clone() });
+                }
+                // SAFETY: this worker owns the successful directory notification.
+                let _ = unsafe { FindCloseChangeNotification(notification) };
+            })?;
+        Ok(Self { stop })
+    }
+}
+impl Drop for FolderWatch {
+    fn drop(&mut self) {
+        // SAFETY: this owner's Arc keeps the cancellation event live through SetEvent.
+        let _ = unsafe {
+            windows::Win32::System::Threading::SetEvent(windows::Win32::Foundation::HANDLE(
+                self.stop.0 as _,
+            ))
+        };
     }
 }

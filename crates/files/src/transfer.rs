@@ -2,6 +2,7 @@
 //! CF_HDROP and shell namespace formats; file mutations still go through IFileOperation.
 use crate::{backend::WAKE, shell::Operation};
 use anyhow::{Result, ensure};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     cell::Cell,
     sync::{
@@ -204,6 +205,7 @@ pub fn drag(paths: &[String]) -> Result<()> {
 
 #[implement(IDropTarget)]
 struct Target {
+    enabled: Arc<AtomicBool>,
     destination: Arc<Mutex<Option<String>>>,
     regions: Arc<Mutex<Vec<DropRegion>>>,
     sender: Sender<Operation>,
@@ -213,7 +215,7 @@ struct Target {
 }
 impl Target_Impl {
     fn destination_at(&self, point: &POINTL) -> Option<String> {
-        let root = self.destination.lock().ok().and_then(|p| p.clone())?;
+        let root = self.destination.lock().ok().and_then(|p| p.clone());
         self.regions
             .lock()
             .ok()
@@ -228,10 +230,13 @@ impl Target_Impl {
                     })
                     .map(|r| r.path.clone())
             })
-            .or(Some(root))
+            .or(root)
     }
     fn effect(&self, keys: MODIFIERKEYS_FLAGS, point: &POINTL) -> DROPEFFECT {
-        if !self.valid.get() || self.destination_at(point).is_none() {
+        if !self.enabled.load(Ordering::Relaxed)
+            || !self.valid.get()
+            || self.destination_at(point).is_none()
+        {
             return DROPEFFECT_NONE;
         }
         let wanted = if keys.contains(MK_SHIFT) {
@@ -333,15 +338,18 @@ pub struct DropTarget {
     hwnd: HWND,
     _target: IDropTarget,
     pub destination: Arc<Mutex<Option<String>>>,
+    pub enabled: Arc<AtomicBool>,
     pub regions: Arc<Mutex<Vec<DropRegion>>>,
     pub requests: Receiver<Operation>,
 }
 impl DropTarget {
     pub fn new(hwnd: HWND) -> Result<Self> {
         let destination = Arc::new(Mutex::new(None));
+        let enabled = Arc::new(AtomicBool::new(false));
         let regions = Arc::new(Mutex::new(Vec::new()));
         let (sender, requests) = mpsc::channel();
         let target: IDropTarget = Target {
+            enabled: enabled.clone(),
             destination: destination.clone(),
             regions: regions.clone(),
             sender,
@@ -358,6 +366,7 @@ impl DropTarget {
             hwnd,
             _target: target,
             destination,
+            enabled,
             regions,
             requests,
         })
