@@ -456,6 +456,7 @@ fn panel_controls_use_the_existing_validated_documents_and_undo() {
     let gpu = built.targets.iter().find(|t| matches!(&t.action, Action::Set(edit, value) if edit.path.as_ref() == "/engine/gpu" && value == "auto")).unwrap().action.clone();
     app.run(gpu);
     assert_eq!(app.get(DocId::Config, "/engine/gpu"), Some(&json!("auto")));
+    app.monitors.truncate(1);
     app.panel.as_mut().unwrap().page = Page::Bars;
     app.run(Action::Panel(Command::Design(None)));
     let built = super::build(&app, &mut ui.text);
