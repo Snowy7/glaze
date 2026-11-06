@@ -78,16 +78,22 @@ fn plates_file(path: &Path) -> Vec<Plate> {
         .collect()
 }
 
-/// The shell's live plates on the screen at the origin, in [`plates_file`]'s form (a passive
-/// read of the shared snapshot).
+/// The shell's live plates on the screen at the origin (or monitor `MYPAPER_LAB_SCREEN`, moved to
+/// the origin), in [`plates_file`]'s form (a passive read of the shared snapshot).
 #[test]
 #[ignore = "dev tool: needs a running shell"]
 fn live_plates() {
     let mut reader = mypaper_glass_ipc::Reader::open().unwrap();
     let snapshot = reader.read_changed().unwrap().expect("a snapshot");
-    eprintln!("{} plates; screens: {:?}", snapshot.plates.len(), mypaper_desktop::monitor_infos());
+    let monitors = mypaper_desktop::monitor_infos();
+    eprintln!("{} plates; screens: {monitors:?}", snapshot.plates.len());
+    let origin = std::env::var("MYPAPER_LAB_SCREEN")
+        .ok()
+        .and_then(|n| monitors.get(n.parse::<usize>().ok()?))
+        .map_or((0.0, 0.0), |m| (m.rect.x as f32, m.rect.y as f32));
     for p in snapshot.plates {
         let ([x, y, w, h], m) = (p.rect, p.material);
+        let (x, y) = (x - origin.0, y - origin.1);
         if x >= 0.0 && y >= 0.0 && x < SIZE.0 as f32 && y < SIZE.1 as f32 {
             let [r, g, b, a] = m.tint;
             println!(
@@ -663,6 +669,77 @@ fn release() {
         gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
         step(&format!("{round}: warm: device opened"), t);
     }
+}
+
+/// Private bytes over release/resume cycles on one device (what `Engine::release` drops and
+/// `resume` makes again: the source, a kept frame, two screen-sized targets, glass), on the
+/// integrated GPU, or the discrete one with `MYPAPER_LAB_GPU=high`. Does the memory come back,
+/// and does it grow per cycle? `MYPAPER_LAB_THEME=themes\rain-city cargo test -p
+/// mypaper-wallpaper --release lab::release_cycles -- --ignored --exact --nocapture`
+#[test]
+#[ignore = "dev tool: MYPAPER_LAB_THEME=<theme>"]
+fn release_cycles() {
+    let theme = std::env::var("MYPAPER_LAB_THEME").expect("set MYPAPER_LAB_THEME");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let theme = mypaper_theme::LoadedTheme::load(root.join(theme)).unwrap();
+    let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
+    let gpu = Gpu::headless().expect("a DX12 GPU");
+    let monitor = Rect {
+        x: 0,
+        y: 0,
+        width: SIZE.0 as i32,
+        height: SIZE.1 as i32,
+    };
+    let wait = || {
+        for _ in 0..2 {
+            gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        }
+    };
+    let mut line = format!("start {:.0}", private_mib());
+    for _ in 0..6 {
+        let mut source = sources::load(&gpu, &theme, &[]).unwrap();
+        let kept = KeptFrame::new(&gpu, source.render_size(SIZE));
+        let targets: Vec<_> = (0..2)
+            .map(|_| {
+                gpu.texture(
+                    "screen stand-in",
+                    SIZE,
+                    gpu.format,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                    None,
+                )
+            })
+            .collect();
+        let mut glass = GlassPass::new(Some(&[monitor, monitor])).unwrap();
+        glass.set_plates(fixture(0.0));
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        source.render(
+            &gpu,
+            Frame {
+                screen: 0,
+                size: kept.size(),
+                mouse: [0.0, 0.0],
+                clock: Duration::from_secs(5),
+                frame: 1,
+                view: &kept.view,
+                encoder: &mut encoder,
+            },
+        );
+        kept.drawn.set(Some(1));
+        for (i, target) in targets.iter().enumerate() {
+            let view = target.create_view(&Default::default());
+            kept.restore(&gpu, target, &view, &mut encoder);
+            glass.encode(&gpu, i, &kept, target, &mut encoder);
+        }
+        gpu.queue.submit([encoder.finish()]);
+        wait();
+        line += &format!(" | drawn {:.0}", private_mib());
+        drop((source, kept, targets, glass));
+        wait();
+        std::thread::sleep(Duration::from_secs(4));
+        line += &format!(" released {:.0}", private_mib());
+    }
+    eprintln!("{line}");
 }
 
 /// Idles 12 s in each of three states, for a wake sampler run alongside on this process: the

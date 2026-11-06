@@ -506,8 +506,8 @@ fn instance() -> wgpu::Instance {
 
 /// Fixed 4 MiB suballocation blocks, the allocator's minimum. Anything larger (every screen-sized
 /// texture) gets a heap of exactly its own size. `MemoryUsage` grows blocks from 8 to 64 MiB and
-/// reserved 124 MiB for four 2560x1440 textures (56 MiB). On this integrated GPU every heap is
-/// private memory, and a released one is not given back (docs/engine-notes.md, Memory).
+/// reserved 124 MiB for four 2560x1440 textures (56 MiB). On both GPUs here every heap is private
+/// memory; a released one comes back a few seconds later (docs/engine-notes.md, Memory).
 const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::Manual {
     suballocated_device_memory_block_size: 4 << 20..4 << 20,
 };

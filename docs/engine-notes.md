@@ -15,6 +15,15 @@ costs as much as one kept forever. Reproduce with the ignored dev tests in `src/
 `lab::memory` (private bytes after each allocation step of a two-screen engine) and
 `lab::memory_hints` (screen-sized textures allocated, freed and allocated again).
 
+*Correction (6 November 2026).* Freed memory does come back, on both GPUs, a few seconds late:
+the driver frees a released resource's heap after a delay, so a reading taken right after the
+drop still shows the peak. `lab::release_cycles` (the source, a kept frame, two 2560x1440
+targets and glass made and dropped six times on one device, read 4 s after each drop): AMD iGPU
+drawn 179 -> released 77 MiB, RTX 188 -> 110 MiB; over the six cycles the released figure creeps
+up for a few cycles and then stays (iGPU 77 -> 112, RTX 110 -> 125 MiB). Textures on the RTX are
+process memory too. This is what lets the engine release its drawing while every screen is
+covered (docs/performance.md, "Hidden = free").
+
 | Allocation | Before | After | Change |
 |---|---:|---:|---|
 | wgpu device | +188 MiB | **+97 MiB** | `max_non_sampler_bindings` 1,000,000 -> 16,384: wgpu's DX12 backend allocates its shader-visible view descriptor heap at that size up front (`gpu.rs`, `DESCRIPTORS`) |

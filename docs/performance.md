@@ -130,19 +130,16 @@ submit and one present per frame, the minimum for this design. GPU: 0.2 ms per f
 **What stays open, and the trade-offs.**
 - *Covered screens: 0.31% of a core, not 0.* With every screen covered the engine draws nothing,
   but three NVIDIA driver threads still wake about 65 times a second each while the D3D12 device
-  exists (197 wakes/s in all). Reaching 0 (and ~10 MB instead of ~170 MB) means releasing the
-  device after some seconds fully covered and hiding our windows, so Windows shows the theme's
-  static snapshot; the cost is that rain would resume a few hundred ms after a screen is
-  uncovered, with the still showing meanwhile. That is a behaviour change for the user to decide.
+  exists (197 wakes/s in all). Round 2 (below, "Hidden = free") releases everything but the
+  device after 10 s fully covered and measured the device itself.
 - *Still image.* Not measured live (it would switch the user's theme). It draws nothing; what
   remains is the covered case's driver wakes plus window events, now batched off the frame loop.
 - *Memory: 169 MB private steady on the RTX.* A wgpu device here is 92-112 MiB of it (a bare D3D12
   device alone is 57 MiB). wgpu creates a D3D12 device on all five adapters DXGI lists (the RTX
   three times, the AMD iGPU, WARP) before choosing; exposing only the screens' adapter saves
   about 13 MiB (lab, two runs each), which needs a patched wgpu-hal (`Adapter::expose` is
-  private): not done. After a shader misses NVIDIA's disk cache (a new theme, or a new build), the
-  driver keeps a compile pool of ~60 threads and about +40 MB until the engine restarts (seen
-  as 205-212 MB / 80 threads; the same build later started at 169 MB / 24 threads).
+  private): not done. The ~60 extra threads and ~+40 MB seen some runs (205-212 MB / 80 threads)
+  are not a shader-cache miss: round 2 traced them to the first glass overlay's D3D11 device.
 - *Studio (not engine code).* It asks again right after a refusal, and waits forever on an
   engine that restarted mid-request (its done event never comes); the engine now copes with
   both, but Studio should stop re-asking an unchanged refused request and time out a request.
@@ -150,6 +147,80 @@ submit and one present per frame, the minimum for this design. GPU: 0.2 ms per f
 Tools (`C:\mypaper-targets\engine-perf\tools`): per-thread CPU and wakes, the preview request
 rate and round trip, plate publication rate, cursor-motion and covered-screen probes, and an
 engine A/B swapper (`swap-engine.ps1`) that puts another exe live and restarts only the engine.
+
+### Hidden = free (6 November 2026, round 2)
+
+Same live desktop and caveats as above. The decision (made for the user, who counts RAM as much
+as CPU): once every screen has been covered by maximized or fullscreen apps for 10 s, let go of
+what drawing holds, keep the theme's still on the desktop, and come back the moment a screen is
+uncovered, with the still covering the way back so nothing goes blank or flashes.
+
+**What each level frees and what coming back costs** (`lab::release` and `lab::idle`: the
+engine's own device path, `engine.gpu: auto` = the RTX 4070 SUPER, rain-city, three cycles):
+
+| Released | Frees (private) | Back to a first frame |
+|---|---:|---:|
+| Drawing: swapchains, kept frames, blur and backdrop pyramids, the source; the device stays | live **-46 MiB** (one screen's swapchain 28, kept frame 6, baked rain 6, glass and backdrop pyramids); textures on this driver are process memory too | **33-62 ms** live (the source again on the warm device: 19-30 ms) |
+| + the wgpu device, its adapter kept | +4 MiB more (the adapter holds the D3D12 device) | +48 ms |
+| + device and adapter (no wgpu at all) | +38-40 MiB more; the driver's one ~66 wakes/s thread stops (`lab::idle`: 66 -> 0 wakes/s) | ~1.6 s: open 0.4-0.5 s, rain 0.16 s, liquid-rust's glass 1.0 s (a new device compiles every shader again with FXC) |
+
+So the engine releases the drawing and keeps the device. Releasing the device too was over the
+~500 ms budget, and glass overlays (flyouts and menus over apps) draw with that device: the first
+flyout after it would wait ~1.6 s for its glass. It would also free less than it looks: with no
+wgpu object left, the process still held 143-287 MiB in the lab (driver and compiler memory a
+process never gets back), so only a process exit returns the rest.
+
+**What it does** (`Engine::release`, `Engine::resume`). After 10 s with every screen covered,
+and only while Windows shows this theme's still on every screen (`static_snapshot`, confirmed by
+the snapshot worker; with it off the user's own wallpaper would flash by on the way back, so
+nothing is released): the windows hide, so the still shows in their place; every swapchain,
+kept frame, glass pyramid and backdrop pyramid is dropped, and so is the source when loading it
+again draws the same frame (`Source::releasable`: shaders and still images; a video, slideshow
+or scene would restart from its first frame, so it stays loaded). When a screen is uncovered the
+source loads again, the windows show (empty, the still shows through) and the next frame makes
+the swapchain. Quick alt-tabs inside the 10 s change nothing. Glass overlays keep working while
+released: a notifications flyout opened over a maximized window then got its glass 44 ms after
+opening (`flyout-released.ps1`).
+
+| Live (`release-check.ps1`: DISPLAY1 covered, a window of our own maximized over DISPLAY2) | Covered, inside the 10 s | Released |
+|---|---:|---:|
+| Private | 171, 173 MiB | **123, 124, 127, 132 MiB** |
+| Wakes, CPU | 135/s, ~0% | 139/s, ~0% |
+| First frame after the uncover was seen | | **33-62 ms** (12 resumes) |
+
+The memory comes back about 3 s after the release (the driver frees the swapchain late:
+`release-course.ps1`). Five release/resume cycles in a row resumed at 182, 184, 184, 184, 182
+MiB: nothing grows per cycle. 101 captures of DISPLAY2 through two uncovers show the still, then
+rain: never black, never another wallpaper.
+
+**Also found on the way**
+
+| Commit | Change | Before | After |
+|---|---|---:|---:|
+| `ef7ad19` | A glass spring caught mid-flight by a window maximizing over its screen kept waking the engine every 4 ms while the screen stayed covered (springs only advance as a screen is drawn); only drawn screens count now | main thread 305 and 278 wakes/s, 0.78% of a core (2 of 3 covers) | **15-28 wakes/s**, 0-0.2% (3 of 3) |
+| `67d1c8e` | The overlays' D3D11 capture device is created with `PREVENT_INTERNAL_THREADING_OPTIMIZATIONS`: NVIDIA's D3D11 driver started ~56 worker threads with the first overlay of a process | 80, 81 threads with a flyout open; 212, 194 MiB | **42, 45 threads**; 192, 192 MiB; CPU no worse (3.5, 5.1% vs 5.6, 6.6%) |
+
+The first overlay of a process still adds ~+20-40 MiB (the D3D11 device on NVIDIA); in 3 of 4
+runs it went back to ~176 MiB once the capture went cold, 3 s after the last overlay closed.
+
+**Memory while visible, item by item** (rain-city, one visible screen, RTX; `lab::memory` and
+the live numbers above; private, MiB):
+
+| Item | MiB | |
+|---|---:|---|
+| wgpu device and driver | ~98-100 | needs the patched wgpu-hal (adapter probing) to shrink |
+| shader compilation (FXC, driver) | ~17 | per process, kept |
+| city.jpg with its mips (2560x1111) | 15 | the look depends on its trilinear mips |
+| swapchain, 2 x 2560x1440 | 28 | the minimum two buffers |
+| glass blur pyramid (half size, Rgba16Float, 7 levels) | 9.4 | per kept frame; 8-bit would band |
+| kept frame (1664x936) and baked rain | 6 + 6 | |
+| backdrop pyramid between publishes | ~5 -> 0 | dropped after each publish since round 2: settled private 165.7, 169.5, 169.7 MiB against 170.6, 171.1, 173.2 interleaved (its smaller levels share 4 MiB allocator blocks, so 1.6-4.9 MiB comes back) |
+
+What stays open: the driver's device thread (~66 wakes/s, ~0% CPU) while released, which only
+releasing the device removes (above: 1.6 s back and slower first flyouts); rain at 2.3-3.3% of a
+core visible, of which the main thread's frame is ~0.8 ms and recording plus submitting it
+0.22 ms (lab, RTX): the rest is acquire, present and the driver (round 1's profile), one of each
+per frame; and the device's ~100 MiB, which needs the patched wgpu-hal.
 
 ### Engine hillclimb (5 November 2026)
 

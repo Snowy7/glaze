@@ -351,16 +351,18 @@ impl ScreenState {
         };
         pyramid.readback.unmap();
         let copy = copied.elapsed();
-        let paths: Vec<PathBuf> = std::iter::once(name)
-            .chain(&also)
-            .map(|name| image_path(dir, name))
-            .collect();
         let (name, (w, h), stride, bgra) = (
             name.clone(),
             pyramid.output,
             pyramid.stride as usize,
             pyramid.bgra,
         );
+        // The next publish is seconds away: its ~5 MiB (2560x1440) are made again then.
+        self.pyramid = None;
+        let paths: Vec<PathBuf> = std::iter::once(&name)
+            .chain(&also)
+            .map(|name| image_path(dir, name))
+            .collect();
         let spawned = std::thread::Builder::new()
             .name("backdrop".into())
             .spawn(move || {
