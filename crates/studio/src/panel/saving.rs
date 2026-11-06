@@ -41,7 +41,7 @@ pub fn finish_page(app: &App, b: &mut B, page: Page, first_op: usize, first_targ
             hit.role == mypaper_ui::Role::RadioButton
                 && hit.checked == Some(true)
                 && hit.rect.height() <= b.px(36.0)
-                && hit.rect.width() > b.px(48.0)
+                && hit.rect.width() > hit.rect.height()
         })
         .map(|hit| hit.rect)
         .collect();
@@ -321,6 +321,31 @@ mod tests {
                 mypaper_ui::Op::Text { text, color, .. }
                     if text.as_ref() == "More"
                         && *color == super::super::palette_for(&app).ink2
+            )));
+        }
+    }
+
+    #[test]
+    fn short_segment_labels_have_the_same_selected_fill() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        for dark in [true, false] {
+            let mut app = crate::goldens::app(dark, &ui);
+            app.panel = Some(super::super::State::default());
+            app.panel.as_mut().unwrap().page = Page::Widget;
+            app.nav.widget = Some("system-monitor-1".into());
+            app.size = (480, 2200);
+            let built = super::super::build(&app, &mut ui.text);
+            let selected = built
+                .list
+                .hits
+                .iter()
+                .find(|hit| hit.label.as_ref() == "Update every: 2 s")
+                .unwrap();
+            assert_eq!(selected.checked, Some(true));
+            assert!(built.list.ops.iter().any(|op| matches!(
+                op,
+                mypaper_ui::Op::Fill { rect, color, .. }
+                    if *rect == selected.rect && *color == super::super::tokens::thumb(dark)
             )));
         }
     }
