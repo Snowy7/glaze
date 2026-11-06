@@ -602,6 +602,24 @@ fn choice_documents(app: &App, action: &Action) -> Option<Vec<wire::PreviewDocum
             }
             ops
         }
+        Action::FirstRunPick(index) => {
+            let (_, preset, _) = crate::pages::first_run::panel_starter(*index)?;
+            let mut ops = vec![op(DocId::Bars, "/preset".into(), Some(json!(preset)))];
+            for bar in ["top", "dock"] {
+                for field in ["design", "enabled"] {
+                    ops.push(op(DocId::Bars, format!("/{bar}/{field}"), None));
+                }
+            }
+            if matches!(preset, "macos" | "islands") {
+                ops.push(op(DocId::Bars, "/dock/enabled".into(), Some(json!(true))));
+            }
+            if matches!(app.overlay, Some(crate::app::Overlay::FirstRun { taskbar: 1 | 2, .. })) {
+                for bar in ["top", "dock"] {
+                    ops.push(op(DocId::Bars, format!("/{bar}/enabled"), Some(json!(false))));
+                }
+            }
+            ops
+        }
         Action::Set(edit, value) if edit.doc == DocId::Studio && edit.path.as_ref() == "/panel/bar-preset" => {
             let base = mypaper_bars::BarsConfig::parse(&json!({"preset":value}).to_string()).ok()?;
             let base = serde_json::to_value(base).ok()?;
@@ -1219,6 +1237,29 @@ mod tests {
         let second = parsed.for_monitor(r"\\.\DISPLAY2", false).unwrap();
         assert!(!second.top.enabled);
         assert_eq!(second.dock.design, mypaper_bars::config::DockDesign::Windows11);
+    }
+
+    #[test]
+    fn starter_preview_uses_the_declared_bar_pair_and_taskbar_step_without_a_save() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        let before = snapshot(&app);
+        for index in 0..crate::pages::first_run::panel_starters().len() {
+            let (_, preset, _) = crate::pages::first_run::panel_starter(index).unwrap();
+            let docs = choice_documents(&app, &Action::FirstRunPick(index)).unwrap();
+            assert!(docs.iter().all(|doc| doc.document == wire::Document::Bars));
+            let ops = docs.iter().find(|doc| doc.document == wire::Document::Bars).map_or(&[][..], |doc| doc.ops.as_slice());
+            let raw = wire::patched(&app.docs.doc(DocId::Bars).raw, ops).unwrap();
+            assert_eq!(raw["preset"], preset);
+        }
+        app.overlay = Some(crate::app::Overlay::FirstRun { step: 0, starter: 0, taskbar: 1 });
+        let docs = choice_documents(&app, &Action::FirstRunPick(2)).unwrap();
+        let bars = docs.iter().find(|doc| doc.document == wire::Document::Bars).unwrap();
+        let raw = wire::patched(&app.docs.doc(DocId::Bars).raw, &bars.ops).unwrap();
+        let bars = mypaper_bars::BarsConfig::parse(&raw.to_string()).unwrap();
+        assert!(!bars.top.enabled && !bars.dock.enabled);
+        assert_eq!(snapshot(&app), before);
+        assert!(choice_documents(&app, &Action::FirstRunPick(usize::MAX)).is_none());
     }
     use mypaper_ui::Ui;
 

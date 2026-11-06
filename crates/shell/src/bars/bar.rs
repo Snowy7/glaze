@@ -54,6 +54,7 @@ pub struct Bar {
     studio_active: bool,
     studio_base: Option<BarsConfig>,
     studio_band: Option<DesktopRect>,
+    studio_reveal: Option<(Value, Option<Instant>)>,
     /// A preview may show a normally disabled bar; it never owns a reservation.
     pub(super) studio_only: bool,
     pub surface: Surface,
@@ -182,6 +183,7 @@ impl Bar {
             studio_active: false,
             studio_base: None,
             studio_band: None,
+            studio_reveal: None,
             studio_only: false,
             surface,
             kind,
@@ -380,6 +382,7 @@ impl Bar {
     pub fn restyle(&mut self, config: BarsConfig, tokens: Tokens, animate: bool) {
         self.studio_base = None;
         if let Some(band) = self.studio_band.take() { self.band = band; }
+        if let Some((slide, hide_at)) = self.studio_reveal.take() { self.slide = slide; self.hide_at = hide_at; }
         let motion = if self.kind == BarKind::Dock {
             &config.dock.animation
         } else {
@@ -423,12 +426,18 @@ impl Bar {
         if transient {
             self.studio_base.get_or_insert_with(|| self.config.clone());
             self.studio_band.get_or_insert(self.band);
+            if self.studio_reveal.is_none() {
+                let mut shown = Value::new(0.0);
+                shown.settings = self.slide.settings;
+                self.studio_reveal = Some((std::mem::replace(&mut self.slide, shown), self.hide_at.take()));
+            }
             let thickness = if self.kind == BarKind::Top { config.top.band() } else { config.dock.band() };
             self.band = appbar::settle(self.monitor.rect, edge(self.kind, &config),
                 (thickness as f32 * self.monitor.dpi as f32 / 96.0 * tokens.scale).round() as i32);
         } else {
             self.studio_base = None;
             if let Some(band) = self.studio_band.take() { self.band = band; }
+            if let Some((slide, hide_at)) = self.studio_reveal.take() { self.slide = slide; self.hide_at = hide_at; }
         }
         self.config = config;
         self.tokens = tokens;
@@ -440,7 +449,8 @@ impl Bar {
         !self.hidden && self.enabled() && self.slide.value < 0.999
     }
     fn enabled(&self) -> bool {
-        if self.kind == BarKind::Top { self.config.top.enabled } else { self.config.dock.enabled }
+        self.studio_base.is_none() && !self.studio_only
+            || if self.kind == BarKind::Top { self.config.top.enabled } else { self.config.dock.enabled }
     }
     pub fn topics(&self) -> std::collections::BTreeSet<mypaper_bars::actions::Topic> {
         bar_topics(self.kind, &self.config)
@@ -1073,6 +1083,30 @@ mod tests {
     use mypaper_ui::glass::{Backdrop, Shape};
     use windows::Win32::Foundation::HWND;
     struct Available;
+
+    #[test]
+    fn studio_preview_restores_auto_hide_and_keeps_reservations_untouched() {
+        let config = BarsConfig::parse(r#"{"preset":"macos","dock":{"enabled":true,"autohide":true}}"#).unwrap();
+        let tokens = Tokens::resolve(&config.dock.look, &Default::default(), &mypaper_bars::accent::read());
+        let monitor = Monitor {
+            device: "test".into(), dpi: 96, primary: true,
+            rect: DesktopRect { x: 0, y: 0, width: 1280, height: 720 },
+            work: DesktopRect { x: 0, y: 32, width: 1280, height: 688 },
+        };
+        let mut bar = Bar::new(BarKind::Dock, config.clone(), monitor, tokens.clone(), false).unwrap();
+        let original_band = bar.band;
+        assert_eq!(bar.slide.value, 1.0);
+        let preview = BarsConfig::parse(r#"{"preset":"windows11"}"#).unwrap();
+        bar.studio_appearance(preview, tokens.clone(), true);
+        assert_eq!(bar.slide.value, 0.0);
+        bar.reserve();
+        assert!(bar.reservation.is_none());
+        assert!(bar.studio_reveal.is_some());
+        bar.studio_appearance(config, tokens, false);
+        assert_eq!(bar.band, original_band);
+        assert_eq!(bar.slide.value, 1.0);
+        assert!(bar.reservation.is_none());
+    }
     impl Backdrop for Available {
         fn available(&self) -> bool {
             true
