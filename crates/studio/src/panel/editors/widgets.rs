@@ -850,6 +850,15 @@ pub(crate) fn face(
     let appearance = mypaper_widgets::look::json_of(&resolved_appearance);
     if !standalone && resolved_appearance.surface != Some(mypaper_theme::Surface::None) {
         b.fill(pic, b.px(8.0), b.p.well);
+    } else if !standalone {
+        // Context belongs to the desktop; the widget itself keeps its background absent.
+        if let Some(image) = crate::panel::specimens::wallpaper(app) {
+            crate::stage::image_round(b, pic, &image, 1.0, b.px(8.0));
+        } else {
+            b.fill(pic, b.px(8.0), crate::panel::tokens::hex(
+                if crate::panel::specimens::desktop_dark(app) { 0x303033 } else { 0xe8e8ed }
+            ));
+        }
     }
     let mut resolved_settings = manifest.resolve_settings(&settings);
     let plugin = instance

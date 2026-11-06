@@ -330,7 +330,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         _ => (0, 0, 0),
     };
     if step > 0 {
-        let rect = Rect::new(c.x, c.y, b.px(74.0), super::controls::height(b, 30.0));
+        let rect = Rect::new(c.x, c.y, b.button_width("Back", true, true).min(c.w), super::controls::height(b, 30.0));
         b.button(
             key("first-run-back"),
             rect,
