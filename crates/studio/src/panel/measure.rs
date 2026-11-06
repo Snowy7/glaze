@@ -46,6 +46,35 @@ pub fn reclaim(app: &crate::app::App) {
     {
         return;
     }
+    optimize_heap();
+    if let Some(window) = app.window {
+        // Resize/paint and retired accessibility providers can release buffers after present.
+        // Coalesce one idle pass per navigation; hover never schedules this timer.
+        unsafe {
+            windows::Win32::UI::WindowsAndMessaging::SetTimer(
+                Some(window),
+                RECLAIM_TIMER,
+                250,
+                Some(reclaim_idle),
+            );
+        }
+    }
+}
+
+const RECLAIM_TIMER: usize = 0x6A34;
+
+unsafe extern "system" fn reclaim_idle(
+    window: windows::Win32::Foundation::HWND,
+    _: u32,
+    id: usize,
+    _: u32,
+) {
+    // SAFETY: the callback belongs to this panel's UI thread and is one-shot.
+    let _ = unsafe { windows::Win32::UI::WindowsAndMessaging::KillTimer(Some(window), id) };
+    optimize_heap();
+}
+
+fn optimize_heap() {
     #[repr(C)]
     struct HeapOptimizeResourcesInformation {
         version: u32,
