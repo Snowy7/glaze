@@ -20,7 +20,7 @@ pub const PAGES: &[(&str, &str, &[&str])] = &[
     (
         "Graphics",
         "display-advancedgraphics",
-        &["gpu", "graphics preference"],
+        &["gpu", "graphics preference", "hags", "hardware accelerated gpu scheduling", "mpo", "windowed game optimizations"],
     ),
     (
         "Sound",
@@ -53,6 +53,11 @@ pub const PAGES: &[(&str, &str, &[&str])] = &[
         "Storage",
         "storagesense",
         &["disk", "space", "cleanup", "storage sense"],
+    ),
+    (
+        "Dev Drive / Disks & volumes",
+        "disksandvolumes",
+        &["developer drive", "refs", "vhd", "dev drive", "build cache"],
     ),
     (
         "Multitasking",
@@ -210,6 +215,11 @@ pub const PAGES: &[(&str, &str, &[&str])] = &[
     ),
     ("Game Mode", "gaming-gamemode", &["gaming", "performance"]),
     (
+        "Captures",
+        "gaming-gamedvr",
+        &["background capture", "game dvr", "record what happened", "recording"],
+    ),
+    (
         "Text size",
         "easeofaccess-display",
         &["accessibility", "bigger text", "zoom"],
@@ -259,6 +269,6 @@ pub const PAGES: &[(&str, &str, &[&str])] = &[
     (
         "For developers",
         "developers",
-        &["developer mode", "sudo", "terminal"],
+        &["developer mode", "sudo", "terminal", "long paths"],
     ),
 ];
