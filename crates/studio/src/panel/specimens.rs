@@ -314,14 +314,15 @@ fn blur_crop(mut source: Image, radius: usize) -> Vec<u8> {
     source.pixels
 }
 
-pub fn frosted_wallpaper(app: &App, blur: f32) -> Option<Arc<Image>> {
+pub fn frosted_wallpaper(app: &App, blur: f32, picture_width: u32) -> Option<Arc<Image>> {
     let source = wallpaper(app)?;
-    let width = app.size.0.clamp(384, 1024);
+    let native_width = app.size.0.clamp(384, 1024);
+    let width = picture_width.clamp(1, native_width);
     Some(softened(
         app,
         &source,
-        (blur / 2.0).round() as usize,
-        (width, width * 2 / 3),
+        (blur / 2.0 * width as f32 / native_width as f32).round() as usize,
+        (width, (width * 2 / 3).max(1)),
     ))
 }
 

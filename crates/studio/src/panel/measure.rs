@@ -123,6 +123,7 @@ pub fn scale_picture(ops: &mut [mypaper_ui::Op], scale: f32) {
 /// Reclaim their released allocations after the resulting frame has been presented too.
 pub fn raster_finished(app: &crate::app::App) {
     if !app.fixture {
+        optimize_heap();
         app.panel.as_ref().unwrap().reclaim_heap.set(true);
     }
 }

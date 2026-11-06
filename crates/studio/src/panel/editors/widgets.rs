@@ -891,6 +891,11 @@ pub(super) fn face(
             && let Some(image) = crate::panel::specimens::frosted_wallpaper(
                 app,
                 resolved_appearance.blur.unwrap_or(12.0),
+                if app.panel.as_ref().unwrap().page == crate::panel::Page::AddWidget {
+                    pic.width().ceil().max(1.0) as u32
+                } else {
+                    app.size.0.clamp(384, 1024)
+                },
             )
         {
             list.ops.insert(
