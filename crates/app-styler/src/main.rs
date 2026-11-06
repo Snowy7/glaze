@@ -3,7 +3,8 @@
 //! killed), every styled app puts its original look back.
 //!
 //! ```text
-//! mypaper-styler                       follow the config and style Explorer and Settings
+//! mypaper-styler [--parent PID]        follow the config and style Explorer and Settings;
+//!                                      with --parent (core passes its pid), exit with it
 //! mypaper-styler --preview PRESET      the same with that preset, whatever the flag and theme
 //! mypaper-styler --dump PID [--winui] [--out FILE] [--props SELECTOR]
 //!                                      write that app's live XAML tree (for writing rules),
@@ -42,7 +43,12 @@ fn run() -> Result<()> {
         args.get(at + 1).cloned()
     };
     let (pid, dump) = match (value("--attach"), value("--dump")) {
-        (None, None) => return helper::run::run(value("--preview")),
+        (None, None) => {
+            let parent = value("--parent")
+                .map(|p| p.parse().context("--parent expects a process id"))
+                .transpose()?;
+            return helper::run::run(value("--preview"), parent);
+        }
         (Some(pid), _) => (pid, false),
         (None, Some(pid)) => (pid, true),
     };
@@ -52,7 +58,11 @@ fn run() -> Result<()> {
     } else {
         Framework::System
     };
-    let app = helper::check_allowed(pid)?;
+    // Stage the DLL first, then pin the process: from the check to the attach, its pid can't
+    // name another process.
+    let tap = helper::tap_path()?;
+    let process = helper::check_allowed(pid)?;
+    let app = process.app;
     let dir = helper::data_dir()?;
     // A dump styles nothing: its rules file never exists.
     let rules = if dump {
@@ -75,7 +85,8 @@ fn run() -> Result<()> {
         rules,
         dump,
     };
-    helper::attach::attach(pid, framework, &helper::tap_path()?, &data)?;
+    anyhow::ensure!(process.running(), "{app} ({pid}) exited");
+    helper::attach::attach(pid, framework, &tap, &data)?;
     let seconds = value("--seconds")
         .and_then(|s| s.parse().ok())
         .unwrap_or(30);

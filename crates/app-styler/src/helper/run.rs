@@ -1,25 +1,29 @@
 //! The helper's run loop: follow the config, keep each app's rules file current, attach to
 //! Explorer and Settings as they appear, and stop styling an app that keeps crashing.
 //!
-//! Event-driven only: it sleeps in `MsgWaitForMultipleObjects` on the attached processes and its
-//! message queue, which a window-shown WinEvent hook and the config/palette file watches feed.
+//! Event-driven only: it sleeps in `MsgWaitForMultipleObjects` on core (when core started it),
+//! the attached processes and its message queue, which a window-shown WinEvent hook and the
+//! config/palette file watches feed.
 
 use std::cell::RefCell;
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use mypaper_app_styler::presets::{self, Colors};
-use mypaper_app_styler::{Attach, Framework};
+use mypaper_app_styler::{Attach, Framework, stop_marker};
 use mypaper_config::Config;
 use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::{
-    CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HANDLE, HWND, LPARAM, WAIT_OBJECT_0, WPARAM,
+    CloseHandle, ERROR_ALREADY_EXISTS, FILETIME, GetLastError, HANDLE, HWND, LPARAM,
+    WAIT_ABANDONED, WAIT_OBJECT_0, WPARAM,
 };
 use windows::Win32::System::Threading::{
-    CreateMutexW, GetCurrentThreadId, GetExitCodeProcess, INFINITE, OpenProcess,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    CreateMutexW, GetCurrentProcess, GetCurrentThreadId, GetExitCodeProcess, GetProcessTimes,
+    INFINITE, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    WaitForSingleObject,
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -30,7 +34,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows_core::{BOOL, w};
 
-use super::{app_of, attach, data_dir, tap_path};
+use super::{Pinned, attach, data_dir, pin, tap_path};
 
 /// `config.json` or `palette.json` changed.
 const WM_RESOLVE: u32 = WM_APP + 1;
@@ -48,14 +52,32 @@ thread_local! {
     static SHOWN: RefCell<Vec<HWND>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Runs until the flag goes off or the process is told to quit. `preview`: style with that
-/// preset (under the user's `look.apps`) whatever the flag and the theme say, to try one.
-pub fn run(preview: Option<String>) -> Result<()> {
+/// How long a new helper waits for the previous one to finish exiting (core restarted).
+const PREVIOUS_EXIT: u32 = 10_000;
+
+/// Runs until the flag goes off, the process is told to quit, or `parent` (core, which started
+/// us) exits. `preview`: style with that preset (under the user's `look.apps`) whatever the flag
+/// and the theme say, to try one.
+pub fn run(preview: Option<String>, parent: Option<u32>) -> Result<()> {
+    // Watch core first: if it is already gone there is nothing to do.
+    let parent = match parent.map(open_parent) {
+        Some(Some(handle)) => Some(handle),
+        Some(None) => {
+            log::info!("core has already exited; not starting");
+            return Ok(());
+        }
+        None => None,
+    };
     // SAFETY: a named mutex held for the life of the process.
-    let _single = unsafe { CreateMutexW(None, true, w!("Local\\mypaper-styler"))? };
+    let single = unsafe { CreateMutexW(None, true, w!("Local\\mypaper-styler"))? };
     // SAFETY: reads this thread's last error.
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
-        bail!("mypaper-styler is already running");
+        // A helper whose core just exited is still putting the apps back; wait for it.
+        // SAFETY: the mutex handle from above, kept for the life of the process.
+        let waited = unsafe { WaitForSingleObject(single, PREVIOUS_EXIT) };
+        if waited != WAIT_OBJECT_0 && waited != WAIT_ABANDONED {
+            bail!("mypaper-styler is already running");
+        }
     }
     // SAFETY: no preconditions.
     let thread = unsafe { GetCurrentThreadId() };
@@ -70,7 +92,7 @@ pub fn run(preview: Option<String>) -> Result<()> {
         .inspect_err(|e| log::warn!("rules won't follow the wallpaper: {e:#}"))
         .ok();
 
-    let mut helper = Helper::new(preview)?;
+    let mut helper = Helper::new(preview, parent)?;
     if !helper.resolve() {
         log::info!("experimental.app_styler is off; exiting");
         return Ok(());
@@ -101,6 +123,45 @@ pub fn run(preview: Option<String>) -> Result<()> {
     result
 }
 
+/// A wait handle on core, `pid`, if that process is still the one that started us: a process
+/// created after us under a reused pid can't be. `None` when core is gone.
+fn open_parent(pid: u32) -> Option<Process> {
+    // SAFETY: a wait and query handle, closed by `Process`.
+    let handle = unsafe {
+        OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            pid,
+        )
+    }
+    .ok()?;
+    let parent = Process(handle);
+    let created = |process: HANDLE| {
+        let (mut created, mut exited, mut kernel, mut user) = Default::default();
+        // SAFETY: a live handle and valid out pointers.
+        unsafe { GetProcessTimes(process, &mut created, &mut exited, &mut kernel, &mut user) }
+            .ok()
+            .map(|()| filetime(created))
+    };
+    // SAFETY: the pseudo handle needs no closing.
+    let ours = created(unsafe { GetCurrentProcess() })?;
+    (created(parent.0)? <= ours).then_some(parent)
+}
+
+fn filetime(time: FILETIME) -> u64 {
+    (u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime)
+}
+
+/// An owned process handle, closed on drop.
+struct Process(HANDLE);
+
+impl Drop for Process {
+    fn drop(&mut self) {
+        // SAFETY: opened by us, closed once.
+        let _ = unsafe { CloseHandle(self.0) };
+    }
+}
+
 /// `%LOCALAPPDATA%\mypaper\palette.json`, which the wallpaper writes on every theme (re)load.
 fn palette_path() -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
@@ -110,9 +171,12 @@ fn palette_path() -> Result<PathBuf> {
 struct Helper {
     /// `--preview PRESET`: ignore the flag and the theme's `apps`.
     preview: Option<String>,
+    /// Core, when it started us: we exit with it (which puts the apps back).
+    parent: Option<Process>,
     tap: PathBuf,
     dir: PathBuf,
-    /// Attached processes by pid.
+    /// Attached processes by pid, pinned (see [`Pinned`]) from before the TAP loads, so a crash
+    /// while it loads is seen too.
     attached: HashMap<u32, Attached>,
     /// Pids that aren't Explorer or Settings (or were refused), not asked again.
     refused: HashSet<u32>,
@@ -125,25 +189,24 @@ struct Helper {
 }
 
 struct Attached {
-    app: &'static str,
-    process: HANDLE,
+    process: Pinned,
+    /// When the last attach started.
     at: Instant,
     frameworks: Vec<Framework>,
 }
 
-impl Drop for Attached {
-    fn drop(&mut self) {
-        // SAFETY: opened in `attach_to`, closed once.
-        let _ = unsafe { CloseHandle(self.process) };
-    }
-}
-
 impl Helper {
-    fn new(preview: Option<String>) -> Result<Self> {
+    fn new(preview: Option<String>, parent: Option<Process>) -> Result<Self> {
+        let dir = data_dir()?;
+        // A fresh session starts clean: stop markers from an earlier one's crash guard go.
+        for app in mypaper_config::apps::APPS {
+            let _ = std::fs::remove_file(stop_marker(&dir, &rules_name(app)));
+        }
         Ok(Self {
             tap: tap_path()?,
             preview,
-            dir: data_dir()?,
+            parent,
+            dir,
             attached: HashMap::new(),
             refused: HashSet::new(),
             seen: HashMap::new(),
@@ -186,6 +249,10 @@ impl Helper {
         };
         let theme_apps = theme.as_ref().and_then(|t| t.theme.apps.as_ref());
         for app in mypaper_config::apps::APPS {
+            // The crash guard gave up on it: its rules aren't published any more.
+            if self.disabled.contains(app) {
+                continue;
+            }
             let rules = match &self.preview {
                 Some(name) => {
                     let user = mypaper_config::AppsStyle {
@@ -197,7 +264,7 @@ impl Helper {
                 None => presets::resolve(app, theme_apps, &config.look.apps, colors),
             };
             let text = serde_json::to_string_pretty(&rules).unwrap_or_default();
-            let path = self.dir.join(format!("{app}.json"));
+            let path = self.dir.join(rules_name(app));
             if std::fs::read_to_string(&path).ok().as_deref() != Some(text.as_str())
                 && let Err(e) = write_atomic(&path, &text)
             {
@@ -210,11 +277,25 @@ impl Helper {
     fn serve(&mut self) -> Result<()> {
         loop {
             let pids: Vec<u32> = self.attached.keys().copied().collect();
-            let handles: Vec<HANDLE> = pids.iter().map(|p| self.attached[p].process).collect();
+            // Core first (when it started us), then the attached processes.
+            let handles: Vec<HANDLE> = self
+                .parent
+                .iter()
+                .map(|p| p.0)
+                .chain(pids.iter().map(|p| self.attached[p].process.handle()))
+                .collect();
             let wait_on = (!handles.is_empty()).then_some(handles.as_slice());
             // SAFETY: the handles stay open while their entries exist.
             let woke = unsafe { MsgWaitForMultipleObjects(wait_on, false, INFINITE, QS_ALLINPUT) };
-            let index = woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
+            let mut index = woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
+            if self.parent.is_some() {
+                if index == 0 {
+                    // Quit, panic hotkey or a crash of core: nothing supervises us any more.
+                    log::info!("core exited; exiting (the apps get their look back)");
+                    return Ok(());
+                }
+                index = index.wrapping_sub(1);
+            }
             if index < pids.len() {
                 self.exited(pids[index]);
             }
@@ -261,14 +342,14 @@ impl Helper {
             let app = match self
                 .attached
                 .get(&pid)
-                .map(|a| a.app)
+                .map(|a| a.process.app)
                 .or_else(|| self.seen.get(&pid).copied())
             {
                 Some(app) => app,
-                None => match app_of(pid) {
-                    Some(app) => {
-                        self.seen.insert(pid, app);
-                        app
+                None => match pin(pid) {
+                    Some(process) => {
+                        self.seen.insert(pid, process.app);
+                        process.app
                     }
                     None => {
                         self.refused.insert(pid);
@@ -299,49 +380,54 @@ impl Helper {
     }
 
     fn attach_to(&mut self, pid: u32, app: &'static str, framework: Framework) {
-        // Pids are reused: ask the allowlist again right before touching the process.
-        if app_of(pid) != Some(app) {
-            self.refused.insert(pid);
-            return;
+        // Pin the process and ask the allowlist about that very process, then keep it pinned
+        // (pids are reused, but not while we hold a handle) and watched from before the TAP
+        // loads: a crash while it loads counts too.
+        if let Entry::Vacant(slot) = self.attached.entry(pid) {
+            match pin(pid) {
+                Some(process) if process.app == app => {
+                    slot.insert(Attached {
+                        process,
+                        at: Instant::now(),
+                        frameworks: Vec::new(),
+                    });
+                }
+                _ => {
+                    self.seen.remove(&pid);
+                    self.refused.insert(pid);
+                    return;
+                }
+            }
         }
+        let Some(entry) = self.attached.get_mut(&pid) else {
+            return;
+        };
+        if !entry.process.running() {
+            return self.exited(pid);
+        }
+        entry.at = Instant::now();
         let data = Attach {
             helper: std::process::id(),
             framework,
             dir: self.dir.clone(),
-            rules: format!("{app}.json"),
+            rules: rules_name(app),
             dump: false,
         };
-        if let Err(e) = attach::attach(pid, framework, &self.tap, &data) {
-            // WinUI not loaded yet in a fresh Explorer: a later window will try again.
-            log::debug!("{app} ({pid}): {e:#}");
-            return;
-        }
-        log::info!("styling {app} ({pid}, {framework})");
-        if let Some(entry) = self.attached.get_mut(&pid) {
-            entry.frameworks.push(framework);
-            return;
-        }
-        // SAFETY: a handle to wait on and read the exit code; closed by `Attached`.
-        let process = unsafe {
-            OpenProcess(
-                PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
-                false,
-                pid,
-            )
-        };
-        match process {
-            Ok(process) => {
-                self.attached.insert(
-                    pid,
-                    Attached {
-                        app,
-                        process,
-                        at: Instant::now(),
-                        frameworks: vec![framework],
-                    },
-                );
+        match attach::attach(pid, framework, &self.tap, &data) {
+            Ok(()) => {
+                log::info!("styling {app} ({pid}, {framework})");
+                entry.frameworks.push(framework);
             }
-            Err(e) => log::warn!("can't watch {app} ({pid}): {e}"),
+            Err(e) => {
+                // WinUI not loaded yet in a fresh Explorer: a later window will try again.
+                log::debug!("{app} ({pid}): {e:#}");
+                if !entry.process.running() {
+                    // It died while we attached: the crash guard decides whether that was us.
+                    self.exited(pid);
+                } else if entry.frameworks.is_empty() {
+                    self.attached.remove(&pid);
+                }
+            }
         }
     }
 
@@ -351,26 +437,26 @@ impl Helper {
         let Some(entry) = self.attached.remove(&pid) else {
             return;
         };
+        let app = entry.process.app;
         let mut code = 0;
         // SAFETY: a live handle and a valid out pointer.
-        let _ = unsafe { GetExitCodeProcess(entry.process, &mut code) };
+        let _ = unsafe { GetExitCodeProcess(entry.process.handle(), &mut code) };
         // NTSTATUS errors and warnings (access violation, fail-fast, heap corruption, ...) and
         // being ended with TerminateProcess(-1); a normal close or Task Manager's Explorer
         // restart isn't one.
         let crashed = code >= 0x8000_0000;
         let soon = entry.at.elapsed() < CRASH_WINDOW;
-        log::info!("{} ({pid}) exited with {code:#x}", entry.app);
+        log::info!("{app} ({pid}) exited with {code:#x}");
         if !(crashed && soon) {
             return;
         }
         let (strikes, last) = self
             .strikes
-            .entry(entry.app)
+            .entry(app)
             .or_insert((0, Instant::now() - INCIDENT * 2));
         if last.elapsed() < INCIDENT {
             log::warn!(
-                "{} also died {:?} after we attached: same incident",
-                entry.app,
+                "{app} also died {:?} after we attached: same incident",
                 entry.at.elapsed()
             );
             return;
@@ -378,16 +464,32 @@ impl Helper {
         *strikes += 1;
         *last = Instant::now();
         log::warn!(
-            "{} crashed {:?} after we attached ({} of {CRASH_LIMIT})",
-            entry.app,
+            "{app} crashed {:?} after we attached ({} of {CRASH_LIMIT})",
             entry.at.elapsed(),
             strikes
         );
         if *strikes >= CRASH_LIMIT {
-            log::error!("not styling {} again this session", entry.app);
-            self.disabled.insert(entry.app);
+            self.disable(app);
         }
     }
+
+    /// Stops styling `app` for this session: no new attaches, no more rules for it, and its
+    /// sessions still running (Explorer can have several processes) put it back and detach
+    /// when they see its stop marker.
+    fn disable(&mut self, app: &'static str) {
+        log::error!("not styling {app} again this session");
+        self.disabled.insert(app);
+        let marker = stop_marker(&self.dir, &rules_name(app));
+        if let Err(e) = std::fs::write(&marker, b"crash guard\n") {
+            log::warn!("writing {}: {e}", marker.display());
+        }
+        self.attached.retain(|_, a| a.process.app != app);
+    }
+}
+
+/// An app's rules file name in the styler's folder.
+fn rules_name(app: &str) -> String {
+    format!("{app}.json")
 }
 
 /// The class of `hwnd`'s top-level window.

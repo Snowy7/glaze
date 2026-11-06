@@ -10,11 +10,12 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use mypaper_inject::signature::microsoft_signed;
 use mypaper_inject::{Target, Verdict, evaluate};
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_TIMEOUT};
 use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
 use windows::Win32::System::SystemInformation::GetWindowsDirectoryW;
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    QueryFullProcessImageNameW, WaitForSingleObject,
 };
 use windows_core::PWSTR;
 
@@ -57,19 +58,51 @@ pub fn tap_path() -> Result<PathBuf> {
             let _ = std::fs::remove_file(entry.path());
         }
     }
-    if !staged.exists() {
+    // An existing copy is only used if it is still exactly this build (the folder is writable).
+    if std::fs::read(&staged).ok().as_deref() != Some(bytes.as_slice()) {
         let temp = dir.join(format!("{name}.tmp"));
         std::fs::write(&temp, &bytes)?;
-        std::fs::rename(&temp, &staged)?;
+        std::fs::rename(&temp, &staged)
+            .with_context(|| format!("replacing {}", staged.display()))?;
     }
     Ok(staged)
 }
 
-/// The app `pid` is ("explorer" or "settings"), if the injection allowlist (with the signature
-/// check) accepts it and it is one of the two styled apps. Anything else is refused.
-pub fn app_of(pid: u32) -> Option<&'static str> {
-    // SAFETY: a query-only handle, closed by `Process`.
-    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
+/// A process the allowlist accepted, held open. While a handle to a process is open its pid
+/// can't be given to another process, so attaching by this pid reaches this process and no
+/// other. The handle also waits for its exit (`SYNCHRONIZE`) and reads its exit code.
+pub struct Pinned {
+    /// "explorer" or "settings".
+    pub app: &'static str,
+    process: Process,
+}
+
+impl Pinned {
+    pub fn handle(&self) -> HANDLE {
+        self.process.0
+    }
+
+    /// Whether the process hasn't exited.
+    pub fn running(&self) -> bool {
+        // SAFETY: a live handle; a zero timeout only polls.
+        let waited = unsafe { WaitForSingleObject(self.process.0, 0) };
+        waited == WAIT_TIMEOUT
+    }
+}
+
+/// Opens `pid` and checks *that* process: the app it is ("explorer" or "settings"), if the
+/// injection allowlist (with the signature check) accepts it and it is one of the two styled
+/// apps. Anything else is refused.
+pub fn pin(pid: u32) -> Option<Pinned> {
+    // SAFETY: a query and wait handle, closed by `Process`.
+    let handle = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            false,
+            pid,
+        )
+    }
+    .ok()?;
     let process = Process(handle);
     let image = process.image()?;
     let windows = windows_dir()?;
@@ -89,11 +122,12 @@ pub fn app_of(pid: u32) -> Option<&'static str> {
         package_family: family.as_deref(),
         microsoft_signed: microsoft_signed(&image),
     };
-    (evaluate(&target, &windows) == Verdict::Allow).then_some(app)
+    let pinned = Pinned { app, process };
+    (evaluate(&target, &windows) == Verdict::Allow && pinned.running()).then_some(pinned)
 }
 
-pub fn check_allowed(pid: u32) -> Result<&'static str> {
-    app_of(pid).with_context(|| format!("process {pid} is not Explorer or Settings; refused"))
+pub fn check_allowed(pid: u32) -> Result<Pinned> {
+    pin(pid).with_context(|| format!("process {pid} is not Explorer or Settings; refused"))
 }
 
 struct Process(HANDLE);

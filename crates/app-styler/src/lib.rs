@@ -42,6 +42,13 @@ impl fmt::Display for Framework {
     }
 }
 
+/// `<rules file>.off` next to the rules: while it exists, every TAP session of that app puts the
+/// app back and detaches, and none starts. The helper writes it when its crash guard gives up on
+/// an app, and removes stale ones when a helper session starts.
+pub fn stop_marker(dir: &std::path::Path, rules: &str) -> PathBuf {
+    dir.join(rules).with_extension("off")
+}
+
 /// What the helper tells the TAP when it attaches. XAML Diagnostics silently drops initialization
 /// data much longer than 256 characters, so this names one folder and short file names in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,6 +74,11 @@ impl Attach {
     /// Where the TAP appends its log lines.
     pub fn log_path(&self) -> PathBuf {
         self.dir.join("styler.log")
+    }
+
+    /// The marker that makes this session put its app back and detach (see [`stop_marker`]).
+    pub fn stop_path(&self) -> PathBuf {
+        stop_marker(&self.dir, &self.rules)
     }
 
     /// One `key=value` per line.
@@ -135,5 +147,15 @@ mod tests {
         assert_eq!(Attach::decode(&data), Some(attach));
         assert_eq!(Attach::decode("helper=1\nrules=x"), None, "no framework");
         assert_eq!(Attach::decode("garbage"), None);
+    }
+
+    #[test]
+    fn the_stop_marker_sits_next_to_the_rules() {
+        let dir = std::path::Path::new(r"C:\styler");
+        assert_eq!(stop_marker(dir, "explorer.json"), dir.join("explorer.off"));
+        assert_eq!(
+            stop_marker(dir, r"D:\rules\try.json"),
+            std::path::Path::new(r"D:\rules\try.off")
+        );
     }
 }

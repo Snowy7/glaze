@@ -39,6 +39,15 @@ pub(super) struct ThreadResources {
     applied: Vec<(String, String, Vec<Undo>)>,
 }
 
+impl ThreadResources {
+    /// The brushes whose colour is overridden here.
+    pub(super) fn brushes(&self) -> impl Iterator<Item = InstanceHandle> + '_ {
+        self.applied
+            .iter()
+            .flat_map(|(_, _, undo)| undo.iter().map(|u| u.brush))
+    }
+}
+
 #[derive(Clone)]
 struct Scratch {
     border: InstanceHandle,
@@ -99,7 +108,10 @@ impl Session {
     pub(super) fn apply_resources(&self, thread: u32) {
         let (wanted, current) = {
             let mut state = self.lock();
-            (state.resource_rules.clone(), state.resources.remove(&thread))
+            (
+                state.resource_rules.clone(),
+                state.resources.remove(&thread),
+            )
         };
         if wanted.is_empty() && current.is_none() {
             return;
@@ -128,7 +140,12 @@ impl Session {
         if let Some(scratch) = &current.scratch {
             // Let go of the last brush the scratch resolved.
             // SAFETY: handles from the service.
-            let _ = unsafe { self.tree.ClearProperty(self.handle_of(&scratch.held).unwrap_or(scratch.border), scratch.background) };
+            let _ = unsafe {
+                self.tree.ClearProperty(
+                    self.handle_of(&scratch.held).unwrap_or(scratch.border),
+                    scratch.background,
+                )
+            };
         }
         let count = current.applied.len();
         self.lock().resources.insert(thread, current);

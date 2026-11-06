@@ -13,12 +13,15 @@
 //! the value it had before recorded. Each UI thread's theme-brush overrides ([`resources`]) are
 //! applied when its first element appears. A removed element gets its values back first (it may
 //! come back), a rules change re-styles every thread and element, and when the helper exits for
-//! any reason (flag off, quit, panic hotkey, crash) every recorded value and brush is put back and
-//! the session ends: no thread, hook or timer of ours is left in the app. The DLL itself stays
-//! mapped (a TAP can't unload safely).
+//! any reason (flag off, quit, panic hotkey, crash) or writes this app's stop marker (its crash
+//! guard), every recorded value and brush is put back and the session ends: no thread, hook or
+//! timer of ours is left in the app. The DLL itself stays mapped (a TAP can't unload safely).
 //!
 //! XAML Diagnostics' handles don't keep objects alive (see [`Original`]): anything kept is held
-//! by a strong reference and re-resolved to a fresh handle before use.
+//! by a strong reference and re-resolved to a fresh handle before use. Work for a UI thread is
+//! posted as a job that carries no handles: it looks up what it works on when it runs, on that
+//! thread, where the tree callbacks keep the map current. An element is held while it is styled
+//! or restored, so nothing done meanwhile can destroy it under us.
 //!
 //! Nothing here may panic: release builds abort on panic, which would take the app down with
 //! us. Every COM failure is logged and skipped.
@@ -26,12 +29,15 @@
 mod inspect;
 mod resources;
 
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::io::Write;
+use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
+use std::time::Duration;
 
 use mypaper_config::AppRules;
 use windows::Win32::Foundation::{
@@ -56,8 +62,9 @@ use windows::Win32::System::Threading::{
     WaitForMultipleObjects,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, HWND_MESSAGE, PostMessageW, RegisterClassW,
-    WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WNDCLASSW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GCW_ATOM, GWLP_USERDATA, GetClassLongPtrW,
+    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_MESSAGE, IsWindow, PostMessageW,
+    RegisterClassW, SetWindowLongPtrW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WNDCLASSW,
 };
 use windows_core::{
     BOOL, BSTR, GUID, HRESULT, IInspectable, IUnknown, Interface, PCWSTR, Ref, implement, w,
@@ -68,7 +75,7 @@ use crate::xamlom::{
     IS_VALUE_HANDLE, IS_VALUE_NULL, IVisualTreeService3, IVisualTreeServiceCallback_Impl,
     IVisualTreeServiceCallback2, IVisualTreeServiceCallback2_Impl, IXamlDiagnostics,
     InstanceHandle, MUTATION_ADD, ParentChildRelation, PropertyChainSource, PropertyChainValue,
-    SOURCE_LOCAL, VisualElement, free, free_chain, text,
+    RawBstr, SOURCE_LOCAL, VisualElement, free, free_chain, text,
 };
 use crate::{Attach, CLSID_TAP, Framework};
 
@@ -195,9 +202,15 @@ struct Session {
     tree: IVisualTreeService3,
     framework: Framework,
     rules_path: PathBuf,
-    /// Set once the helper is gone: callbacks stop styling.
+    /// Set (under the state lock) once the helper is gone: nothing is styled any more, and each
+    /// UI thread's clean-up job puts its values back.
     closing: AtomicBool,
+    /// Set when a UI thread didn't clean up in time and the session detached anyway: the tree is
+    /// no longer followed, so its late jobs don't touch XAML (they leak what they hold).
+    abandoned: AtomicBool,
     state: Mutex<State>,
+    /// Signalled whenever a UI thread's record leaves `State::threads` (cleaned up or gone).
+    cleaned: Condvar,
 }
 
 // SAFETY: the tree service is free-threaded; everything else is behind the mutex or atomic.
@@ -214,10 +227,11 @@ struct State {
     /// What we changed, per element.
     styled: HashMap<InstanceHandle, Vec<Applied>>,
     /// Values created from rule strings, by (UI thread, property type, text): shared between
-    /// the elements of one thread (XAML objects belong to the thread that made them).
+    /// the elements of one thread (XAML objects belong to the thread that made them). Values no
+    /// element uses any more are evicted after each restyle.
     values: HashMap<(u32, String, String), (InstanceHandle, Held)>,
-    /// One message-only window per UI thread, to run work there.
-    threads: HashMap<u32, isize>,
+    /// The UI threads we work on, by thread id.
+    threads: HashMap<u32, UiThread>,
     /// (element type, property) pairs already reported missing, so each is logged once.
     reported: HashSet<(String, String)>,
     /// Other messages already logged once.
@@ -232,6 +246,73 @@ struct State {
     recolored: HashSet<InstanceHandle>,
 }
 
+/// One UI thread we work on: the message-only window its jobs are posted to, and that window's
+/// lifetime generation (also its `GWLP_USERDATA` and every job's `WPARAM`). A window that was
+/// destroyed, or a thread id that came back as another thread, never runs a job meant for the
+/// old one.
+#[derive(Clone, Copy)]
+struct UiThread {
+    window: isize,
+    generation: u64,
+}
+
+/// Generations of message windows, unique in the process (every session shares the class).
+static GENERATION: AtomicU64 = AtomicU64::new(1);
+
+impl UiThread {
+    /// A message-only window on the calling (UI) thread, for [`post`].
+    fn create() -> Option<Self> {
+        let atom = class_atom()?;
+        let module = own_module()?;
+        // SAFETY: a registered class (by atom); a message-only window owned by this thread.
+        let window = unsafe {
+            CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                PCWSTR(usize::from(atom) as *const u16),
+                None,
+                WINDOW_STYLE(0),
+                0,
+                0,
+                0,
+                0,
+                Some(HWND_MESSAGE),
+                None,
+                Some(HINSTANCE(module.0)),
+                None,
+            )
+        }
+        .ok()?;
+        let generation = GENERATION.fetch_add(1, Ordering::Relaxed);
+        // SAFETY: our own window.
+        unsafe { SetWindowLongPtrW(window, GWLP_USERDATA, generation as isize) };
+        Some(Self {
+            window: window.0 as isize,
+            generation,
+        })
+    }
+
+    fn hwnd(self) -> HWND {
+        HWND(self.window as *mut c_void)
+    }
+
+    /// Whether the window is still this one: ours, on `thread`, of this generation.
+    fn alive(self, thread: u32) -> bool {
+        let Some(atom) = class_atom() else {
+            return false;
+        };
+        let hwnd = self.hwnd();
+        let mut pid = 0;
+        // SAFETY: plain queries; a stale handle just fails each check.
+        unsafe {
+            IsWindow(Some(hwnd)).as_bool()
+                && GetWindowThreadProcessId(hwnd, Some(&mut pid)) == thread
+                && pid == GetCurrentProcessId()
+                && GetClassLongPtrW(hwnd, GCW_ATOM) == usize::from(atom)
+                && GetWindowLongPtrW(hwnd, GWLP_USERDATA) == self.generation as isize
+        }
+    }
+}
+
 struct Element {
     parent: InstanceHandle,
     kind: Arc<str>,
@@ -240,9 +321,6 @@ struct Element {
     /// The UI thread the element lives on.
     thread: u32,
 }
-
-/// What the rules want on one element: (property, value) pairs.
-type Wanted = Vec<(String, String)>;
 
 struct Rule {
     selector: Selector,
@@ -332,13 +410,19 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         Ok(tree) => tree,
         Err(e) => return log(&format!("no IVisualTreeService3: {e}")),
     };
+    let stop = attach.stop_path();
+    if stop.exists() {
+        return log("the helper stopped styling this app; not attaching");
+    }
     let session = Arc::new(Session {
         diagnostics: diagnostics.0,
         tree,
         framework: attach.framework,
         rules_path: attach.rules_path(),
         closing: AtomicBool::new(false),
+        abandoned: AtomicBool::new(false),
         state: Mutex::new(State::default()),
+        cleaned: Condvar::new(),
     });
     session.reload_rules();
 
@@ -396,6 +480,10 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         {
             // SAFETY: the notification handle from above.
             let _ = unsafe { FindNextChangeNotification(changes) };
+            if stop.exists() {
+                log("the helper stopped styling this app (crash guard)");
+                break;
+            }
             if session.reload_rules() {
                 session.restyle();
             }
@@ -405,10 +493,12 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         }
     }
 
-    session.closing.store(true, Ordering::SeqCst);
+    // Every UI thread puts its values back while the tree is still followed (removals keep the
+    // map true until each clean-up has run); only then stop following it.
+    session.close();
     // SAFETY: the callback we advised.
     let unadvised = unsafe { session.tree.UnadviseVisualTreeChange(callback.as_raw()) };
-    session.restore_all();
+    session.forget_rest();
     log(&format!("detached: {unadvised:?}"));
     // SAFETY: handles opened above, closed once.
     unsafe {
@@ -467,15 +557,30 @@ impl Session {
     fn on_add(&self, handle: InstanceHandle, parent: InstanceHandle, kind: &str, name: String) {
         // SAFETY: no preconditions.
         let thread = unsafe { GetCurrentThreadId() };
-        let mut new_thread = false;
-        let wanted = {
+        let (wanted, new_thread) = {
             let mut state = self.lock();
-            if !state.threads.contains_key(&thread)
-                && let Some(window) = message_window()
-            {
-                state.threads.insert(thread, window.0 as isize);
-                new_thread = true;
+            // Read under the lock `close` sets it under, so a thread recorded here is one whose
+            // clean-up `close` posts.
+            if self.closing.load(Ordering::SeqCst) {
+                return;
             }
+            let new_thread = match state.threads.get(&thread).copied() {
+                Some(ui) if ui.alive(thread) => false,
+                stale => {
+                    // The thread id came back as a new thread: the old one is gone.
+                    if let Some(old) = stale {
+                        forget_locked(&mut state, thread, old.generation);
+                        self.cleaned.notify_all();
+                    }
+                    match UiThread::create() {
+                        Some(ui) => {
+                            state.threads.insert(thread, ui);
+                            true
+                        }
+                        None => false,
+                    }
+                }
+            };
             let kind: Arc<str> = match state.kinds.get(kind) {
                 Some(k) => k.clone(),
                 None => {
@@ -484,34 +589,37 @@ impl Session {
                     k
                 }
             };
-            // Re-parented: leave the old parent's children.
-            let previous = state
-                .nodes
-                .get(&handle)
-                .map(|e| (e.parent, e.children.clone()));
-            if let Some((old, _)) = previous
-                && let Some(p) = state.nodes.get_mut(&old)
-            {
-                p.children.retain(|&c| c != handle);
-            }
+            // Re-parented without a removal: leave the old parent's children. An entry from
+            // another thread is a handle that named an object we never saw leave: forget it.
+            let previous = state.nodes.remove(&handle);
+            let children = match previous {
+                Some(old) if old.thread == thread => {
+                    if let Some(p) = state.nodes.get_mut(&old.parent) {
+                        p.children.retain(|&c| c != handle);
+                    }
+                    old.children
+                }
+                Some(_) => {
+                    std::mem::forget(state.styled.remove(&handle));
+                    Vec::new()
+                }
+                None => Vec::new(),
+            };
             state.nodes.insert(
                 handle,
                 Element {
                     parent,
                     kind,
                     name: name.into(),
-                    children: previous.map(|(_, c)| c).unwrap_or_default(),
+                    children,
                     thread,
                 },
             );
             if let Some(p) = state.nodes.get_mut(&parent) {
                 p.children.push(handle);
             }
-            state.wanted(handle)
+            (state.wanted(handle), new_thread)
         };
-        if self.closing.load(Ordering::SeqCst) {
-            return;
-        }
         // The thread's first element: its theme resources first, so rules see them.
         if new_thread {
             self.apply_resources(thread);
@@ -522,15 +630,23 @@ impl Session {
     }
 
     /// An element left the tree (on its UI thread): give it and everything below it its values
-    /// back, since it may be added again, and forget them.
-    fn on_remove(&self, handle: InstanceHandle) {
-        let taken = {
+    /// back, since it may be added again, and forget them. When the thread's last element goes
+    /// (its window closed), the thread's own state is retired too, once this work is done.
+    fn on_remove(self: &Arc<Self>, handle: InstanceHandle) {
+        // SAFETY: no preconditions.
+        let thread = unsafe { GetCurrentThreadId() };
+        let (taken, emptied) = {
             let mut state = self.lock();
-            if let Some(parent) = state.nodes.get(&handle).map(|e| e.parent)
-                && let Some(p) = state.nodes.get_mut(&parent)
-            {
-                p.children.retain(|&c| c != handle);
-            }
+            let Some(parent) = state.nodes.get(&handle).map(|e| e.parent) else {
+                return;
+            };
+            let root = match state.nodes.get_mut(&parent) {
+                Some(p) => {
+                    p.children.retain(|&c| c != handle);
+                    false
+                }
+                None => true,
+            };
             let mut stack = vec![handle];
             let mut taken = Vec::new();
             while let Some(h) = stack.pop() {
@@ -541,16 +657,37 @@ impl Session {
                     taken.push((h, applied));
                 }
             }
-            taken
+            // Only a root leaving can empty a thread; checking then is rare and cheap.
+            let emptied = root && !state.nodes.values().any(|e| e.thread == thread);
+            (taken, emptied)
         };
-        for (h, applied) in taken {
-            self.restore(h, &applied);
+        self.restore_taken(&taken);
+        if emptied {
+            let session = self.clone();
+            run_or_defer(Box::new(move || session.clean_thread(thread, true)));
+        }
+    }
+
+    /// Puts back what `taken` recorded, each element held meanwhile so restoring one can't
+    /// destroy another under us, and through its current handle. An element that can't be held
+    /// is gone, with nothing to put back. On the elements' UI thread.
+    fn restore_taken(&self, taken: &[(InstanceHandle, Vec<Applied>)]) {
+        let held: Vec<Option<Held>> = taken.iter().map(|(h, _)| self.hold(*h)).collect();
+        for ((handle, applied), held) in taken.iter().zip(&held) {
+            if let Some(held) = held {
+                self.restore(self.handle_of(held).unwrap_or(*handle), applied);
+            }
         }
     }
 
     /// Sets `wanted` on the element (on its UI thread), keeping what it had before. Properties
-    /// it already has from us keep their first original; ones no rule wants any more go back.
+    /// it already has from us keep their first original; ones no rule wants any more go back
+    /// (an empty `wanted` puts everything back).
     fn style(&self, handle: InstanceHandle, wanted: &[(String, String)]) {
+        // Held while we work: nothing done meanwhile can destroy it and hand its handle on.
+        let Some(_keep) = self.hold(handle) else {
+            return;
+        };
         let mut previous: HashMap<String, Applied> = self
             .lock()
             .styled
@@ -613,8 +750,14 @@ impl Session {
         for ours in previous.into_values() {
             self.restore_one(handle, &ours);
         }
-        if !applied.is_empty() {
-            self.lock().styled.insert(handle, applied);
+        let mut state = self.lock();
+        if !state.nodes.contains_key(&handle) {
+            // It left the tree while we styled it (our own calls can change the tree): it is
+            // still held, so give its values back now.
+            drop(state);
+            self.restore(handle, &applied);
+        } else if !applied.is_empty() {
+            state.styled.insert(handle, applied);
         }
     }
 
@@ -675,11 +818,14 @@ impl Session {
                 Some(value) => set(value),
                 None => clear(),
             },
-            Original::Object(value, held) => set(self.handle_of(held).unwrap_or(*value))
-                .or_else(|e| {
-                    log(&format!("putting back a {kind} object: {e}; clearing instead"));
+            Original::Object(value, held) => {
+                set(self.handle_of(held).unwrap_or(*value)).or_else(|e| {
+                    log(&format!(
+                        "putting back a {kind} object: {e}; clearing instead"
+                    ));
                     clear()
-                }),
+                })
+            }
         };
         if let Err(e) = result {
             log(&format!("putting a {kind} back on {handle}: {e}"));
@@ -841,107 +987,242 @@ impl Session {
         }
     }
 
-    /// The rules changed: every UI thread brings its resource overrides up to date, then every
-    /// element gets what the new rules want, on its own thread. Threads that are gone (their
-    /// window closed) are forgotten.
+    /// The rules changed: each UI thread is asked to bring its resource overrides and elements
+    /// up to date. Threads that are gone are forgotten.
     fn restyle(self: &Arc<Self>) {
-        let (mut plan, windows) = {
-            let state = self.lock();
-            let mut plan: HashMap<u32, Vec<(InstanceHandle, Wanted)>> = HashMap::new();
-            for (&handle, element) in &state.nodes {
-                let wanted = state.wanted(handle);
-                if !wanted.is_empty() || state.styled.contains_key(&handle) {
-                    plan.entry(element.thread)
-                        .or_default()
-                        .push((handle, wanted));
-                }
-            }
-            (plan, state.threads.clone())
-        };
-        let count: usize = plan.values().map(Vec::len).sum();
-        log(&format!("restyling {count} element(s)"));
-        for (thread, window) in windows {
-            let elements = plan.remove(&thread).unwrap_or_default();
+        let threads: Vec<(u32, UiThread)> = self
+            .lock()
+            .threads
+            .iter()
+            .map(|(&t, &ui)| (t, ui))
+            .collect();
+        for (thread, ui) in threads {
             let session = self.clone();
-            let posted = post(thread, window, move || {
-                session.apply_resources(thread);
-                for (handle, wanted) in elements {
-                    if wanted.is_empty() {
-                        let applied = session.lock().styled.remove(&handle);
-                        if let Some(applied) = applied {
-                            session.restore(handle, &applied);
-                        }
-                    } else {
-                        session.style(handle, &wanted);
+            if !post(thread, ui, move || session.restyle_thread(thread)) {
+                self.forget_thread(thread, ui.generation);
+            }
+        }
+    }
+
+    /// One UI thread's part of a restyle, on that thread: its resources, then every element of
+    /// it the rules want something on or that has something from us, as the map has them now.
+    /// Values no element uses any more are let go of afterwards.
+    fn restyle_thread(&self, thread: u32) {
+        if self.closing.load(Ordering::SeqCst) {
+            return;
+        }
+        self.apply_resources(thread);
+        let handles: Vec<InstanceHandle> = {
+            let state = self.lock();
+            state
+                .nodes
+                .iter()
+                .filter(|&(&h, e)| {
+                    e.thread == thread
+                        && (state.styled.contains_key(&h) || !state.wanted(h).is_empty())
+                })
+                .map(|(&h, _)| h)
+                .collect()
+        };
+        log(&format!(
+            "restyling {} element(s) on thread {thread}",
+            handles.len()
+        ));
+        for handle in handles {
+            if self.closing.load(Ordering::SeqCst) {
+                break;
+            }
+            // Styling one element can add or remove others: ask the map again for each.
+            let wanted = {
+                let state = self.lock();
+                match state.nodes.get(&handle) {
+                    Some(e) if e.thread == thread => state.wanted(handle),
+                    _ => continue,
+                }
+            };
+            self.style(handle, &wanted);
+        }
+        self.evict_values(thread);
+    }
+
+    /// Lets go of this UI thread's rule values (brushes, fonts) that no styled element uses any
+    /// more. On that thread.
+    fn evict_values(&self, thread: u32) {
+        let unused: Vec<_> = {
+            let mut state = self.lock();
+            let in_use: HashSet<(String, String)> = state
+                .styled
+                .iter()
+                .filter(|(h, _)| state.nodes.get(h).is_some_and(|e| e.thread == thread))
+                .flat_map(|(_, applied)| applied.iter().map(|a| (a.kind.clone(), a.value.clone())))
+                .collect();
+            state
+                .values
+                .extract_if(|(t, kind, value), _| {
+                    *t == thread && !in_use.contains(&(kind.clone(), value.clone()))
+                })
+                .collect()
+        };
+        if !unused.is_empty() {
+            log(&format!(
+                "let go of {} unused value(s) on thread {thread}",
+                unused.len()
+            ));
+        }
+        drop(unused);
+    }
+
+    /// A UI thread that is gone: drop what we knew about it (if `generation` is still its
+    /// record's). Its held objects are leaked, not released from the wrong thread.
+    fn forget_thread(&self, thread: u32, generation: u64) {
+        let mut state = self.lock();
+        if state
+            .threads
+            .get(&thread)
+            .is_some_and(|ui| ui.generation == generation)
+        {
+            forget_locked(&mut state, thread, generation);
+            self.cleaned.notify_all();
+        }
+    }
+
+    /// Cleans up this UI thread, on it: puts back every value we set on its elements and its
+    /// resource overrides, lets go of what we hold there and closes its message window. With
+    /// `only_if_empty` (its last element left), only if nothing came back on it meanwhile.
+    fn clean_thread(&self, thread: u32, only_if_empty: bool) {
+        let (taken, ui) = {
+            let mut state = self.lock();
+            if only_if_empty && state.nodes.values().any(|e| e.thread == thread) {
+                return;
+            }
+            if self.abandoned.load(Ordering::SeqCst) {
+                // The tree isn't followed any more: the map may name dead objects.
+                let ui = state.threads.get(&thread).copied();
+                if let Some(ui) = ui {
+                    forget_locked(&mut state, thread, ui.generation);
+                }
+                (Vec::new(), ui)
+            } else {
+                let handles: Vec<InstanceHandle> = state
+                    .nodes
+                    .iter()
+                    .filter(|(_, e)| e.thread == thread)
+                    .map(|(&h, _)| h)
+                    .collect();
+                let mut taken = Vec::new();
+                for h in handles {
+                    state.nodes.remove(&h);
+                    if let Some(applied) = state.styled.remove(&h) {
+                        taken.push((h, applied));
                     }
                 }
-            });
-            if !posted {
-                self.forget_thread(thread);
+                (taken, state.threads.get(&thread).copied())
             }
-        }
-    }
-
-    /// A UI thread that is gone: drop what we knew about it. Its held objects are leaked, not
-    /// released from the wrong thread.
-    fn forget_thread(&self, thread: u32) {
-        let mut state = self.lock();
-        state.threads.remove(&thread);
-        std::mem::forget(state.resources.remove(&thread));
-        let values: Vec<_> = state
-            .values
-            .extract_if(|(t, _, _), _| *t == thread)
-            .collect();
-        std::mem::forget(values);
-        let gone: Vec<InstanceHandle> = state
-            .nodes
-            .iter()
-            .filter(|(_, e)| e.thread == thread)
-            .map(|(&h, _)| h)
-            .collect();
-        for h in gone {
-            state.nodes.remove(&h);
-            std::mem::forget(state.styled.remove(&h));
-        }
-    }
-
-    /// Puts every recorded value and resource back (each on its own UI thread), lets go of
-    /// what we held there, and closes the threads' message windows.
-    fn restore_all(self: &Arc<Self>) {
-        let (mut by_thread, windows) = {
-            let mut state = self.lock();
-            let mut by_thread: HashMap<u32, Vec<(InstanceHandle, Vec<Applied>)>> = HashMap::new();
-            for (handle, applied) in std::mem::take(&mut state.styled) {
-                let thread = state.nodes.get(&handle).map_or(0, |e| e.thread);
-                by_thread.entry(thread).or_default().push((handle, applied));
-            }
-            state.nodes.clear();
-            (by_thread, std::mem::take(&mut state.threads))
         };
-        let count: usize = by_thread.values().map(Vec::len).sum();
-        log(&format!("restoring {count} element(s)"));
-        for (thread, window) in windows {
-            let elements = by_thread.remove(&thread).unwrap_or_default();
-            let session = self.clone();
-            post(thread, window, move || {
-                for (handle, applied) in elements {
-                    session.restore(handle, &applied);
+        if !self.abandoned.load(Ordering::SeqCst) {
+            self.restore_taken(&taken);
+            self.restore_resources(thread);
+            let values: Vec<_> = self
+                .lock()
+                .values
+                .extract_if(|(t, _, _), _| *t == thread)
+                .collect();
+            drop(values);
+            log(&format!(
+                "thread {thread}: put back {} element(s){}",
+                taken.len(),
+                if only_if_empty {
+                    " (its window closed)"
+                } else {
+                    ""
                 }
-                session.restore_resources(thread);
-                let values: Vec<_> = session
-                    .lock()
-                    .values
-                    .extract_if(|(t, _, _), _| *t == thread)
-                    .collect();
-                drop(values);
-                // SAFETY: our own message-only window, destroyed on its thread.
-                let _ = unsafe { DestroyWindow(HWND(window as *mut c_void)) };
-            });
+            ));
         }
-        if !by_thread.is_empty() {
-            log("some elements were on threads without a window; not restored");
-            std::mem::forget(by_thread);
+        {
+            let mut state = self.lock();
+            if let Some(ui) = ui
+                && state
+                    .threads
+                    .get(&thread)
+                    .is_some_and(|r| r.generation == ui.generation)
+            {
+                state.threads.remove(&thread);
+            }
         }
+        self.cleaned.notify_all();
+        // Only while it is still ours: a recycled handle could name one of the app's windows.
+        if let Some(ui) = ui
+            && ui.alive(thread)
+        {
+            // SAFETY: our own message-only window, destroyed on its thread.
+            let _ = unsafe { DestroyWindow(ui.hwnd()) };
+        }
+    }
+
+    /// The helper is gone: stop styling, then have every UI thread clean up after whatever it
+    /// is doing (a job queued behind its in-flight work), and wait for them. A thread that
+    /// doesn't answer in time is abandoned and leaks what we hold there.
+    fn close(self: &Arc<Self>) {
+        let threads: Vec<(u32, UiThread)> = {
+            let state = self.lock();
+            self.closing.store(true, Ordering::SeqCst);
+            state.threads.iter().map(|(&t, &ui)| (t, ui)).collect()
+        };
+        let count = self.lock().styled.len();
+        log(&format!(
+            "restoring {count} element(s) on {} thread(s)",
+            threads.len()
+        ));
+        for &(thread, ui) in &threads {
+            let session = self.clone();
+            if !post(thread, ui, move || session.clean_thread(thread, false)) {
+                self.forget_thread(thread, ui.generation);
+            }
+        }
+        let pending = |state: &mut State| {
+            threads.iter().any(|(t, ui)| {
+                state
+                    .threads
+                    .get(t)
+                    .is_some_and(|r| r.generation == ui.generation)
+            })
+        };
+        let state = self.lock();
+        let (state, waited) = self
+            .cleaned
+            .wait_timeout_while(state, CLEAN_UP_TIMEOUT, pending)
+            .unwrap_or_else(|e| e.into_inner());
+        if waited.timed_out() {
+            self.abandoned.store(true, Ordering::SeqCst);
+            log(&format!(
+                "{} thread(s) didn't clean up in {CLEAN_UP_TIMEOUT:?}; leaving them",
+                state.threads.len()
+            ));
+        }
+    }
+
+    /// After detaching: whatever is still recorded belongs to threads that never cleaned up.
+    /// Leak it rather than release XAML objects from this thread.
+    fn forget_rest(&self) {
+        let mut state = self.lock();
+        let threads: Vec<(u32, u64)> = state
+            .threads
+            .iter()
+            .map(|(&t, ui)| (t, ui.generation))
+            .collect();
+        for (thread, generation) in threads {
+            forget_locked(&mut state, thread, generation);
+        }
+        if !state.styled.is_empty() {
+            log(&format!(
+                "{} element(s) on threads without a window; not restored",
+                state.styled.len()
+            ));
+        }
+        std::mem::forget(std::mem::take(&mut state.styled));
+        std::mem::forget(std::mem::take(&mut state.values));
+        std::mem::forget(std::mem::take(&mut state.resources));
+        state.nodes.clear();
     }
 
     /// Writes the visual tree as an indented outline (`mypaper-styler --dump`).
@@ -1034,28 +1315,106 @@ fn compile(rules: &AppRules) -> Vec<Rule> {
     out
 }
 
-/// Runs `job` on `thread`: right here if that is us, else posted to its message window. A job
-/// owns everything it uses, so it is safe whenever it runs; one for a thread that is gone is
-/// dropped unrun (and `false` returned).
-fn post(thread: u32, window: isize, job: impl FnOnce() + Send + 'static) -> bool {
+/// What a UI thread's record and its objects were: leak (forget) everything held there. With the
+/// state locked; the caller notifies `Session::cleaned`.
+fn forget_locked(state: &mut State, thread: u32, generation: u64) {
+    if state
+        .threads
+        .get(&thread)
+        .is_some_and(|ui| ui.generation == generation)
+    {
+        state.threads.remove(&thread);
+    }
+    if let Some(resources) = state.resources.remove(&thread) {
+        for brush in resources.brushes() {
+            state.recolored.remove(&brush);
+        }
+        std::mem::forget(resources);
+    }
+    let values: Vec<_> = state
+        .values
+        .extract_if(|(t, _, _), _| *t == thread)
+        .collect();
+    std::mem::forget(values);
+    let gone: Vec<InstanceHandle> = state
+        .nodes
+        .iter()
+        .filter(|(_, e)| e.thread == thread)
+        .map(|(&h, _)| h)
+        .collect();
+    for h in gone {
+        state.nodes.remove(&h);
+        std::mem::forget(state.styled.remove(&h));
+    }
+}
+
+/// How long closing waits for every UI thread to clean up.
+const CLEAN_UP_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Work for one UI thread. A job holds no XAML object or handle (it looks up what it works on
+/// when it runs, on its thread), so dropping one unrun anywhere is safe.
+type Job = Box<dyn FnOnce() + Send>;
+
+thread_local! {
+    /// How deep this thread is in our own work (a tree callback or a job). XAML calls can pump
+    /// messages, so without this a posted job could run in the middle of a callback's styling.
+    static DEPTH: Cell<u32> = const { Cell::new(0) };
+    /// Jobs that arrived while this thread was in our work, run once it is done. Never dropped
+    /// at thread exit (no destructor runs under the loader lock); a dead thread leaks its few.
+    static DEFERRED: ManuallyDrop<RefCell<Vec<Job>>> =
+        const { ManuallyDrop::new(RefCell::new(Vec::new())) };
+}
+
+/// Runs `work` as our own work on this thread; jobs that arrive meanwhile wait until the
+/// outermost such work is done, then run in order.
+fn guarded<R>(work: impl FnOnce() -> R) -> R {
+    DEPTH.set(DEPTH.get() + 1);
+    let result = work();
+    DEPTH.set(DEPTH.get() - 1);
+    if DEPTH.get() == 0 {
+        while let Some(job) = DEFERRED.with(|d| {
+            let mut d = d.borrow_mut();
+            (!d.is_empty()).then(|| d.remove(0))
+        }) {
+            guarded(job);
+        }
+    }
+    result
+}
+
+/// Runs `job` now, or after the work this thread is in the middle of.
+fn run_or_defer(job: Job) {
+    if DEPTH.get() > 0 {
+        DEFERRED.with(|d| d.borrow_mut().push(job));
+    } else {
+        guarded(job);
+    }
+}
+
+/// Runs `job` on `thread`: here if that is us, else posted to its message window if that is
+/// still the one `ui` names. Returns `false` (the job dropped unrun) when the thread is gone.
+fn post(thread: u32, ui: UiThread, job: impl FnOnce() + Send + 'static) -> bool {
     // SAFETY: no preconditions.
     if thread == unsafe { GetCurrentThreadId() } {
-        job();
+        run_or_defer(Box::new(job));
         return true;
     }
-    let raw = Box::into_raw(Box::new(Box::new(job) as Box<dyn FnOnce() + Send>));
+    if !ui.alive(thread) {
+        return false;
+    }
+    let raw = Box::into_raw(Box::new(Box::new(job) as Job));
     // SAFETY: the window runs the job on its thread and frees it (`window_proc`).
     let posted = unsafe {
         PostMessageW(
-            Some(HWND(window as *mut c_void)),
+            Some(ui.hwnd()),
             WM_JOB,
-            WPARAM(0),
+            WPARAM(ui.generation as usize),
             LPARAM(raw as isize),
         )
     };
     if posted.is_err() {
-        // Not posted: the thread is gone. Leak the job; it may hold that thread's XAML objects,
-        // which must not be released from here.
+        // SAFETY: not posted, so the box is still ours.
+        drop(unsafe { Box::from_raw(raw) });
         return false;
     }
     true
@@ -1063,11 +1422,13 @@ fn post(thread: u32, window: isize, job: impl FnOnce() + Send + 'static) -> bool
 
 const WM_JOB: u32 = WM_APP + 0x51;
 
-/// A message-only window on the calling (UI) thread, for [`post`].
-fn message_window() -> Option<HWND> {
-    static CLASS: OnceLock<bool> = OnceLock::new();
-    let module = own_module()?;
-    let registered = *CLASS.get_or_init(|| {
+/// Our message windows' class, registered once (0 if that failed).
+fn class_atom() -> Option<u16> {
+    static CLASS: OnceLock<u16> = OnceLock::new();
+    let atom = *CLASS.get_or_init(|| {
+        let Some(module) = own_module() else {
+            return 0;
+        };
         let class = WNDCLASSW {
             lpfnWndProc: Some(window_proc),
             hInstance: HINSTANCE(module.0),
@@ -1075,29 +1436,9 @@ fn message_window() -> Option<HWND> {
             ..Default::default()
         };
         // SAFETY: a valid class description with a 'static name.
-        unsafe { RegisterClassW(&class) != 0 }
+        unsafe { RegisterClassW(&class) }
     });
-    if !registered {
-        return None;
-    }
-    // SAFETY: a registered class; a message-only window owned by this thread.
-    unsafe {
-        CreateWindowExW(
-            WINDOW_EX_STYLE(0),
-            w!("mypaper-app-styler"),
-            None,
-            WINDOW_STYLE(0),
-            0,
-            0,
-            0,
-            0,
-            Some(HWND_MESSAGE),
-            None,
-            Some(HINSTANCE(module.0)),
-            None,
-        )
-    }
-    .ok()
+    (atom != 0).then_some(atom)
 }
 
 fn own_module() -> Option<HMODULE> {
@@ -1122,12 +1463,30 @@ unsafe extern "system" fn window_proc(
 ) -> LRESULT {
     if message == WM_JOB && lparam.0 != 0 {
         // SAFETY: posted by `post`, which gave up ownership of the box.
-        let job = unsafe { Box::from_raw(lparam.0 as *mut Box<dyn FnOnce() + Send>) };
-        job();
+        let job = unsafe { Box::from_raw(lparam.0 as *mut Job) };
+        // Only a job for this window's lifetime runs (see `UiThread`).
+        // SAFETY: our own window.
+        if wparam.0 as isize == unsafe { GetWindowLongPtrW(window, GWLP_USERDATA) } {
+            run_or_defer(*job);
+        }
         return LRESULT(0);
     }
     // SAFETY: default handling for everything else.
     unsafe { DefWindowProcW(window, message, wparam, lparam) }
+}
+
+/// The strings of a `VisualElement`, which XAML gives to the callback to free (WinUI's
+/// `LiveVisualTree.cpp`: "the contract is that we are giving ownership of these strings to the
+/// callback"; system XAML keeps the same contract for Visual Studio). Freed on drop.
+struct ElementStrings([RawBstr; 4]);
+
+impl Drop for ElementStrings {
+    fn drop(&mut self) {
+        for raw in self.0 {
+            // SAFETY: ours to free, once (null is a no-op).
+            unsafe { free(raw) };
+        }
+    }
 }
 
 #[implement(IVisualTreeServiceCallback2)]
@@ -1142,17 +1501,28 @@ impl IVisualTreeServiceCallback_Impl for Callback_Impl {
         element: VisualElement,
         mutation: i32,
     ) -> HRESULT {
+        let _strings = ElementStrings([
+            element.Type,
+            element.Name,
+            element.SrcInfo.FileName,
+            element.SrcInfo.Hash,
+        ]);
         let session = &self.session;
-        if session.closing.load(Ordering::SeqCst) {
-            return S_OK;
-        }
-        if mutation == MUTATION_ADD {
-            // SAFETY: the strings are the caller's, valid for this call.
-            let (kind, name) = unsafe { (text(element.Type), text(element.Name)) };
-            session.on_add(element.Handle, relation.Parent, &kind, name);
-        } else {
-            session.on_remove(element.Handle);
-        }
+        guarded(|| {
+            if mutation == MUTATION_ADD {
+                // Nothing new is styled once closing (checked again under the lock).
+                if session.closing.load(Ordering::SeqCst) {
+                    return;
+                }
+                // SAFETY: the strings live until `_strings` drops.
+                let (kind, name) = unsafe { (text(element.Type), text(element.Name)) };
+                session.on_add(element.Handle, relation.Parent, &kind, name);
+            } else {
+                // Removals are followed while closing too: they keep the map true until every
+                // thread has cleaned up.
+                session.on_remove(element.Handle);
+            }
+        });
         S_OK
     }
 }
@@ -1160,5 +1530,82 @@ impl IVisualTreeServiceCallback_Impl for Callback_Impl {
 impl IVisualTreeServiceCallback2_Impl for Callback_Impl {
     unsafe fn OnElementStateChanged(&self, _: InstanceHandle, _: i32, _: PCWSTR) -> HRESULT {
         S_OK
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::UI::WindowsAndMessaging::{DispatchMessageW, MSG, PM_REMOVE, PeekMessageW};
+
+    fn pump() {
+        let mut msg = MSG::default();
+        // SAFETY: a plain message pump on the test thread.
+        unsafe {
+            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                DispatchMessageW(&msg);
+            }
+        }
+    }
+
+    #[test]
+    fn jobs_that_arrive_during_our_work_run_after_it_in_order() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let push = |what: &'static str| {
+            let seen = seen.clone();
+            Box::new(move || seen.lock().unwrap().push(what)) as Job
+        };
+        guarded(|| {
+            run_or_defer(push("first job"));
+            guarded(|| run_or_defer(push("second job")));
+            seen.lock().unwrap().push("work");
+        });
+        assert_eq!(*seen.lock().unwrap(), ["work", "first job", "second job"]);
+    }
+
+    #[test]
+    fn a_job_reaches_only_its_own_live_window() {
+        // SAFETY: no preconditions.
+        let thread = unsafe { GetCurrentThreadId() };
+        let ui = UiThread::create().expect("a message window");
+        assert!(ui.alive(thread));
+        assert!(!ui.alive(thread + 1), "another thread's id");
+        let older = UiThread {
+            generation: ui.generation + 1,
+            ..ui
+        };
+        assert!(!older.alive(thread), "another generation");
+
+        let ran = Arc::new(AtomicBool::new(false));
+        let job = |ran: &Arc<AtomicBool>| {
+            let ran = ran.clone();
+            move || ran.store(true, Ordering::SeqCst)
+        };
+        // A stale generation is refused before posting...
+        let posted = std::thread::scope(|s| s.spawn(|| post(thread, older, job(&ran))).join());
+        assert!(!posted.unwrap());
+        // ...and one that reaches the window anyway is dropped unrun.
+        let raw = Box::into_raw(Box::new(Box::new(job(&ran)) as Job));
+        // SAFETY: our window; `window_proc` takes the box.
+        unsafe {
+            PostMessageW(
+                Some(ui.hwnd()),
+                WM_JOB,
+                WPARAM(older.generation as usize),
+                LPARAM(raw as isize),
+            )
+        }
+        .unwrap();
+        pump();
+        assert!(!ran.load(Ordering::SeqCst));
+
+        let posted = std::thread::scope(|s| s.spawn(|| post(thread, ui, job(&ran))).join());
+        assert!(posted.unwrap());
+        pump();
+        assert!(ran.load(Ordering::SeqCst));
+
+        // SAFETY: our own window.
+        unsafe { DestroyWindow(ui.hwnd()) }.unwrap();
+        assert!(!ui.alive(thread), "destroyed");
     }
 }
