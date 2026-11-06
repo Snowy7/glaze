@@ -37,6 +37,15 @@ public static class IndexGameThreads {
   }finally{SetCursorPos(before.X,before.Y);}
  }
  [DllImport("ntdll.dll")] static extern int NtQuerySystemInformation(int c,IntPtr b,int n,out int r);
+ [DllImport("kernel32.dll")] static extern IntPtr OpenThread(uint access,bool inherit,uint id);
+ [DllImport("kernel32.dll")] static extern int GetThreadDescription(IntPtr thread,out IntPtr description);
+ [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+ [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr p);
+ public static string Name(long tid) {
+  var h=OpenThread(0x0800,false,(uint)tid);if(h==IntPtr.Zero)return "";
+  try{IntPtr p;if(GetThreadDescription(h,out p)<0)return "";try{return Marshal.PtrToStringUni(p);}finally{LocalFree(p);}}
+  finally{CloseHandle(h);}
+ }
  public static Dictionary<long,long> Read(int pid) {
   var result=new Dictionary<long,long>(); int n=16<<20,r; IntPtr b=Marshal.AllocHGlobal(n);
   try {
@@ -97,7 +106,12 @@ try {
   $index.Refresh()
   $threadsAfter = [IndexGameThreads]::Read($index.Id)
   $switches = 0L
-  foreach ($tid in $threadsAfter.Keys) { $old = if ($threadsBefore.ContainsKey($tid)) { $threadsBefore[$tid] } else { 0 }; $switches += $threadsAfter[$tid]-$old }
+  $threadSwitches = foreach ($tid in $threadsAfter.Keys) {
+    $old = if ($threadsBefore.ContainsKey($tid)) { $threadsBefore[$tid] } else { 0 }
+    $count = $threadsAfter[$tid]-$old
+    $switches += $count
+    [pscustomobject]@{tid=$tid;name=[IndexGameThreads]::Name($tid);context_switches=$count;switches_per_second=$count/$elapsed}
+  }
   [pscustomobject]@{
     index_pid=$index.Id;fixture_pid=$fixture.Id;seconds=$elapsed
     entries_before_game=$status.entries;warmup_queries=$warm.queries
@@ -107,6 +121,7 @@ try {
     max_private_bytes=($samples|Measure-Object private_bytes -Maximum).Maximum
     max_working_set_bytes=($samples|Measure-Object working_set_bytes -Maximum).Maximum
     final_private_bytes=$index.PrivateMemorySize64;final_working_set_bytes=$index.WorkingSet64
+    threads=$threadSwitches
     samples=$samples
   } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-game.json')
 } finally {
