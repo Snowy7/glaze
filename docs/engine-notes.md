@@ -377,6 +377,29 @@ The shared schema types are `mypaper_config::{GpuPreference, RenderOptions, Engi
 RenderSettings}`; theme `engine` uses `RenderOptions`. See their exact fields in
 `crates/config/src/engine.rs`.
 
+**During games** (`"engine": { "during_games": "pause" }`, the default; `"keep"` turns it off;
+written to the file only when kept). While core's game signal is on (docs/system.md, "Games":
+a fullscreen or Direct3D app in front), every screen holds on its current frame, and after 10 s the
+engine releases its drawing exactly as when every screen is covered (docs/performance.md, "Hidden
+= free"): the windows hide over the theme's still, and the swapchains, kept frames, pyramids and
+source go. When the signal clears it resumes. The engine follows the signal with a directory
+notification and the publisher's process handle in its wait set: no timer, and nothing at all
+with `"keep"`. A game on one monitor no longer leaves the other one animating or the drawing held.
+
+Live, a borderless topmost window of our own covering only the primary monitor
+(`examples/game_primary.rs`, foreground, so the signal reads `Fullscreen`), DISPLAY2 uncovered,
+rain-city, 20 s sampled from 14-16 s into the "game":
+
+| | Engine CPU, one core | Engine private | Engine wakes/s |
+|---|---:|---:|---:|
+| Before (held by the fullscreen check, not released) | 0.078 % | 208.7 MiB | 93.2 |
+| After (`pause`: released 10 s in) | **0.000 %** | **124.7 MiB** | 90.9 |
+
+What wakes is the NVIDIA driver's two device threads (docs/performance.md, round 3). When the game
+ended, the first frame came 73.9 ms later (private 171 MiB). Not checked frame by frame: on the
+uncovered screen the release swaps the held frame for the theme's still (its first frame), so an
+animated theme visibly steps there once, without black or another wallpaper in between.
+
 ### Shader image inputs
 
 ```json
