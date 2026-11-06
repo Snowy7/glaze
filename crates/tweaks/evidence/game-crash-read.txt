@@ -1,0 +1,4 @@
+live={"publisher_pid":71068,"publisher_started":134383990131248361,"activity":{"pause_background":false,"reason":"idle","foreground_pid":64528}}
+dead=null
+START {"publisher_pid":71104,"publisher_started":134383990142327469,"activity":{"pause_background":false,"reason":"idle","foreground_pid":64528}}
+PASS event-driven publisher lifecycle and cleanup

@@ -1,0 +1,4 @@
+BEFORE [null,{"raw":{"kind":4,"bytes":[0,0,0,0]}},{"raw":{"kind":4,"bytes":[1,0,0,0]}},{"raw":{"kind":4,"bytes":[0,0,0,0]}},{"binary":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"binary":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]
+APPLIED {"power_mode":"performance"} shell_flags=0x3/0x0
+RESTORED exact type/bytes/absence (all six values)
+PASS originals [null,{"raw":{"kind":4,"bytes":[0,0,0,0]}},{"raw":{"kind":4,"bytes":[1,0,0,0]}},{"raw":{"kind":4,"bytes":[0,0,0,0]}},{"binary":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"binary":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]
