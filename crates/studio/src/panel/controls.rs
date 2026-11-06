@@ -27,15 +27,11 @@ pub fn height(b: &B, base: f32) -> f32 {
     b.px(base * b.t.text_scale)
 }
 
-/// Shared readout grammar: percent closes up; physical and time units take one space.
-pub fn unit(value: f64, unit: &str) -> String {
-    let unit = unit.trim();
-    format!("{value:.0}{}{unit}", if unit.is_empty() || unit == "%" { "" } else { " " })
-}
+pub use mypaper_ui::controls::format_value as unit;
 
-/// All inline sliders reserve the same label column; narrow and large-text rows stack.
+/// All inline sliders reserve the kit's common label column.
 pub fn label_width(b: &B, c: &Col) -> f32 {
-    b.px(140.0).min(c.w * 0.46)
+    b.label_width(c.w)
 }
 
 pub fn displays(app: &App, b: &mut B, c: &mut Col) {
@@ -46,7 +42,7 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
         .map(|i| format!("Display {i}"))
         .collect();
     let labels: Vec<_> = labels.iter().map(String::as_str).collect();
-    let r = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(30.0));
+    let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
     b.segmented(
         key(("panel-displays", c.view)),
         r,
@@ -150,7 +146,10 @@ pub fn feedback(b: &mut B, c: &mut Col, message: &str, actions: Vec<(&str, Actio
         b.p.ink2,
     );
     let style = font(b, 11.0, 400);
-    let style = mypaper_ui::TextStyle { size: style.size * 12.0 / 11.0, ..style };
+    let style = mypaper_ui::TextStyle {
+        size: style.size * 12.0 / 11.0,
+        ..style
+    };
     let lines = b
         .text
         .lines(message, &style, (right - c.x - b.px(21.0)).max(1.0), 2);
@@ -360,7 +359,7 @@ pub fn row(
     let r = Rect::new(c.x, c.y, c.w, h);
     let k = key(("panel-row", c.view, label, caption));
     let on = checked == Some(true);
-    let area = Rect::new(c.x - b.px(8.0), c.y, c.w + b.px(16.0), h);
+    let area = b.list_row_area(r);
     if on {
         b.fill(area, b.px(8.0), b.p.selected);
     } else {
@@ -376,7 +375,8 @@ pub fn row(
         b.icon(tile, g, 16.0, b.p.ink2);
         x += gw + b.px(10.0);
     }
-    let tail = Rect::new(r.right - b.px(16.0), r.top, b.px(16.0), h);
+    let tail_w = height(b, 16.0);
+    let tail = Rect::new(r.right - tail_w, r.top, tail_w, h);
     if let Some(checked) = checked {
         if checked {
             b.icon(tail, glyph::CHECK, 16.0, b.p.ink1);
@@ -496,6 +496,7 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
         _ if c.w < b.px(360.0) || b.t.text_scale > 1.0 => c.w,
         _ => label_width(b, c),
     };
+    let label_op = b.list.ops.len();
     text(
         b,
         Rect::new(c.x, y, label_w, text_h),
@@ -608,101 +609,25 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
         Kind::Choice { options, .. } => {
             let mut options: Vec<_> = options.iter().collect();
             options.sort_by_key(|(_, label)| *label != "As is");
-            // Keep three values on one line at 480; stack within the plate at laptop widths
-            // or increased Windows text size rather than truncating any of the choices.
-            let style = font(b, 12.0, 500);
-            let cell = options
+            let labels: Vec<_> = options.iter().map(|(_, label)| *label).collect();
+            let selected = options
                 .iter()
-                .map(|(_, l)| b.measure(l, &style).0 + b.px(16.0))
-                .fold(0.0, f32::max);
-            let cell = if matches!(id, "save_power" | "reduce_motion") {
-                cell.max(b.measure("Like Windows", &style).0 + b.px(16.0))
-            } else {
-                cell
-            };
-            let required = cell * options.len() as f32;
-            let stacked =
-                c.w < b.px(360.0) || b.t.text_scale > 1.0 || c.w - label_w - b.px(8.0) < required;
-            let vertical = required > c.w;
-            let control = if stacked {
-                c.y += height(b, 30.0);
-                Rect::new(
-                    c.x,
-                    c.y,
-                    c.w,
-                    height(b, 30.0) * if vertical { options.len() as f32 } else { 1.0 },
-                )
-            } else {
-                Rect::new(
-                    r.right - required,
-                    c.y + (h - height(b, 28.0)) / 2.0,
-                    required,
-                    height(b, 28.0),
-                )
-            };
-            b.fill(control, b.px(7.0), b.p.fill);
-            b.stroke(control, b.px(7.0), b.px(1.0), b.p.edge);
-            let sw = if vertical {
-                control.width()
-            } else {
-                control.width() / options.len() as f32
-            };
-            b.group(key(("panel-segment", id)), |b| {
-                for (i, (v, label)) in options.iter().enumerate() {
-                    let v: Value = serde_json::from_str(v).expect("setting value");
-                    let on = v == value;
-                    let r = Rect::new(
-                        control.left + if vertical { 0.0 } else { sw * i as f32 } + b.px(2.0),
-                        control.top
-                            + if vertical {
-                                height(b, 30.0) * i as f32
-                            } else {
-                                0.0
-                            }
-                            + b.px(2.0),
-                        sw - b.px(4.0),
-                        if vertical {
-                            height(b, 30.0)
-                        } else {
-                            control.height()
-                        } - b.px(4.0),
-                    );
-                    let k = key(("panel-segment", id, i));
-                    if on {
-                        b.fill(r, b.px(5.0), super::tokens::thumb(b.p.dark));
-                    } else {
-                        b.wash(k, r, b.px(5.0));
-                    }
-                    text(
-                        b,
-                        r,
-                        label,
-                        12.0,
-                        500,
-                        if on {
-                            super::tokens::hex(0xffffff)
-                        } else {
-                            b.p.ink2
-                        },
-                        Align::Center,
-                    );
-                    b.hit_checked(
-                        k,
-                        r,
-                        Role::RadioButton,
-                        label,
-                        Some(on),
-                        Action::Set(edit.clone(), v),
-                        Behavior::Click,
-                    );
-                    b.focus_ring(k, r, b.px(5.0));
-                }
-            });
-            c.y = if stacked {
-                control.bottom + b.px(8.0)
-            } else {
-                r.bottom
-            };
+                .position(|(v, _)| serde_json::from_str::<Value>(v).is_ok_and(|v| v == value));
+            b.list.ops.truncate(label_op);
+            let r = b.labeled_segments(
+                key(("panel-segment", id)),
+                r,
+                label,
+                &labels,
+                selected,
+                |i| {
+                    Action::Set(
+                        edit.clone(),
+                        serde_json::from_str(options[i].0).expect("setting value"),
+                    )
+                },
+            );
+            c.y = r.bottom + b.px(8.0);
         }
         Kind::Slider {
             min,

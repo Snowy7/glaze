@@ -38,6 +38,23 @@ pub fn key(parts: impl Hash) -> Key {
     h.finish()
 }
 
+/// Value readouts use one grammar: 55%, 12 px, 30 fps.
+pub fn format_value(value: f64, unit: &str) -> String {
+    let unit = unit.trim();
+    let number = format!("{value:.2}")
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_owned();
+    format!(
+        "{number}{}{unit}",
+        if unit.is_empty() || unit == "%" {
+            ""
+        } else {
+            " "
+        }
+    )
+}
+
 /// The gray tokens of the monochrome design (plans/native/studio-redesign.md, 8.3), retuned
 /// for fills instead of outlines: each surface step is a clear fill step, hover and selection
 /// are washes that read on any of them, and every text step meets the kit's floors (ink-1 7:1,
@@ -445,6 +462,22 @@ impl<'a, A: Clone> Builder<'a, A> {
         v * self.s
     }
 
+    /// The shared label column for inline value controls.
+    pub fn label_width(&self, width: f32) -> f32 {
+        self.px(140.0).min(width * 0.46)
+    }
+
+    /// Rows share an 8-DIP text inset, with 2 DIPs between neighboring selection washes.
+    /// A plate's 12-DIP content padding leaves the wash 4 DIPs inside its edge.
+    pub fn list_row_area(&self, rect: Rect) -> Rect {
+        Rect::new(
+            rect.left - self.px(8.0),
+            rect.top + self.px(2.0),
+            rect.width() + self.px(16.0),
+            rect.height() - self.px(4.0),
+        )
+    }
+
     pub fn font(&self, font: Font) -> TextStyle {
         self.t.style(font, self.s)
     }
@@ -696,7 +729,22 @@ impl<'a, A: Clone> Builder<'a, A> {
     /// An icon centered in `rect`, about `size` design pixels: the kit's vector (a touch
     /// larger, as Lucide's outlines sit inside their box) or a font glyph.
     pub fn icon(&mut self, rect: Rect, glyph: impl Into<Glyph>, size: f32, color: Rgba) {
-        match glyph.into() {
+        let glyph = glyph.into();
+        let size = if matches!(
+            glyph,
+            Glyph::Icon(
+                Icon::Check
+                    | Icon::ChevronLeft
+                    | Icon::ChevronRight
+                    | Icon::ChevronDown
+                    | Icon::ChevronUp
+            )
+        ) {
+            size * self.t.text_scale
+        } else {
+            size
+        };
+        match glyph {
             Glyph::Icon(icon) => {
                 let px = ((size + 1.0).max(13.0) * self.s).round();
                 let at = Rect::new(
@@ -943,7 +991,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         let inner = outer.inflate(-inset);
         // The kit's equal segments, unless a label wouldn't fit one: then each segment is as
         // wide as its label needs, drawn the kit's way.
-        let style = self.kit.font.style(crate::theme::TextRole::Callout, self.s);
+        let style = self.font(Font::Caption);
         let widths: Vec<f32> = items
             .iter()
             .map(|s| self.text.measure(s, &style).0 + self.px(14.0))
@@ -975,7 +1023,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         let proportional = segs
             .first()
             .is_some_and(|r| (r.width() - equal.round()).abs() > 0.5);
-        if proportional {
+        if proportional || self.t.text_scale != 1.0 {
             self.segments_drawn(&keys, outer, &segs, items, selected);
         } else {
             self.kit(
@@ -1017,7 +1065,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         let radius = self.px(8.0).min(outer.height() / 2.0);
         let inner_radius = (radius - (2.0 * self.s).round()).max(0.0);
         self.fill(outer, radius, c.well);
-        let style = self.kit.font.style(crate::theme::TextRole::Callout, self.s);
+        let style = self.font(Font::Caption);
         for (i, (seg, item)) in segs.iter().zip(items).enumerate() {
             let on = selected == Some(i);
             if on {
@@ -1036,12 +1084,170 @@ impl<'a, A: Clone> Builder<'a, A> {
 
     /// The width a segmented control needs for `items` (equal segments, the widest label).
     pub fn segmented_width(&mut self, items: &[&str]) -> f32 {
-        let style = self.kit.font.style(crate::theme::TextRole::Callout, self.s);
+        let style = self.font(Font::Caption);
         let widest = items
             .iter()
             .map(|s| self.text.measure(s, &style).0)
             .fold(0.0, f32::max);
         ((widest + self.px(24.0)) * items.len() as f32 + self.px(4.0)).ceil()
+    }
+
+    /// A page choice always spans its plate below a left-aligned label. Choices wrap to
+    /// readable rows when narrow or enlarged text cannot fit; no label is compressed.
+    pub fn labeled_segments(
+        &mut self,
+        id: Key,
+        rect: Rect,
+        label: &str,
+        items: &[&str],
+        selected: Option<usize>,
+        action: impl Fn(usize) -> A,
+    ) -> Rect {
+        let line = self.px(26.0 * self.t.text_scale);
+        let mut style = self.font(Font::Body);
+        style.size *= 13.0 / 14.0;
+        self.text_in(
+            Rect::new(rect.left, rect.top, rect.width(), line),
+            label,
+            &style,
+            self.p.ink1,
+            Align::Start,
+        );
+        let item_style = self.font(Font::Caption);
+        let needed: Vec<_> = items
+            .iter()
+            .map(|item| self.text.measure(item, &item_style).0 + self.px(20.0))
+            .collect();
+        let mut rows = Vec::new();
+        let mut first = 0;
+        let mut used = 0.0;
+        for (i, width) in needed.iter().enumerate() {
+            if i > first && used + width > rect.width() - self.px(4.0) {
+                rows.push((first, i));
+                first = i;
+                used = 0.0;
+            }
+            used += width;
+        }
+        rows.push((first, items.len()));
+        let row_h = self.px(32.0 * self.t.text_scale);
+        let mut bottom = rect.top + line;
+        for (row, (first, end)) in rows.into_iter().enumerate() {
+            let r = Rect::new(rect.left, bottom, rect.width(), row_h);
+            self.segmented(
+                key((id, row)),
+                r,
+                &items[first..end],
+                selected
+                    .filter(|i| *i >= first && *i < end)
+                    .map(|i| i - first),
+                label,
+                true,
+                |i| action(first + i),
+            );
+            self.stroke(r, self.px(7.0), self.px(1.0), self.p.edge);
+            bottom = r.bottom + self.px(4.0);
+        }
+        Rect::new(rect.left, rect.top, rect.width(), bottom - rect.top)
+    }
+
+    /// The same picture choices for Fit in creation and wallpaper details.
+    pub fn fit_tiles(
+        &mut self,
+        id: Key,
+        rect: Rect,
+        selected: usize,
+        action: impl Fn(usize) -> A,
+    ) -> Rect {
+        let columns = if rect.width() < self.px(340.0) || self.t.text_scale > 1.0 {
+            2
+        } else {
+            4
+        };
+        let gap = self.px(8.0);
+        let width = (rect.width() - gap * (columns - 1) as f32) / columns as f32;
+        let tile_h = self.px(58.0 + 26.0 * self.t.text_scale);
+        let style = self.font(Font::Caption);
+        for (i, label) in ["Fill", "Fit", "Stretch", "Center"].into_iter().enumerate() {
+            let tile = Rect::new(
+                rect.left + (i % columns) as f32 * (width + gap),
+                rect.top + (i / columns) as f32 * (tile_h + gap),
+                width,
+                tile_h,
+            );
+            let k = key((id, i));
+            self.plate(k, tile, self.px(7.0), selected == i);
+            let screen = Rect::new(
+                tile.left + self.px(7.0),
+                tile.top + self.px(8.0),
+                width - self.px(14.0),
+                self.px(34.0),
+            );
+            self.fill(screen, self.px(3.0), self.p.well);
+            let picture = match i {
+                1 => Rect::new(
+                    screen.left + screen.width() * 0.22,
+                    screen.top,
+                    screen.width() * 0.56,
+                    screen.height(),
+                ),
+                3 => Rect::new(
+                    screen.left + screen.width() * 0.32,
+                    screen.top + self.px(8.0),
+                    screen.width() * 0.36,
+                    self.px(18.0),
+                ),
+                _ => screen,
+            };
+            self.fill(picture, self.px(2.0), self.p.ink3.with_alpha(0.45));
+            self.fill(
+                Rect::new(
+                    picture.left + picture.width() * 0.56,
+                    picture.top + picture.height() * 0.18,
+                    self.px(if i == 2 { 12.0 } else { 7.0 }),
+                    self.px(7.0),
+                ),
+                self.px(4.0),
+                self.p.ink1,
+            );
+            self.line(
+                Point::new(picture.left, picture.bottom),
+                Point::new(
+                    picture.left + picture.width() * 0.45,
+                    picture.top + picture.height() * 0.45,
+                ),
+                self.px(2.0),
+                self.p.ink1,
+            );
+            self.text_in(
+                Rect::new(
+                    tile.left,
+                    screen.bottom + self.px(5.0),
+                    width,
+                    self.px(26.0 * self.t.text_scale),
+                ),
+                label,
+                &style,
+                self.p.ink1,
+                Align::Center,
+            );
+            self.hit_checked(
+                k,
+                tile,
+                Role::RadioButton,
+                &format!("Fit: {label}"),
+                Some(selected == i),
+                action(i),
+                Behavior::Click,
+            );
+            self.focus_ring(k, tile, self.px(7.0));
+        }
+        Rect::new(
+            rect.left,
+            rect.top,
+            rect.width(),
+            (4 / columns) as f32 * (tile_h + gap),
+        )
     }
 
     /// The kit's slider over `rect`: the track, then the value text at the right

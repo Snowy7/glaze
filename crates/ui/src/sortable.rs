@@ -34,7 +34,7 @@ pub fn row<A: Clone>(b: &mut Builder<'_, A>, row: Row<'_, A>) -> Rect {
             .into_iter()
             .any(|k| b.input.focus == Some(k) || b.pressed(k));
     if hot {
-        b.fill(r, b.px(6.0), b.p.hover);
+        b.fill(b.list_row_area(r), b.px(6.0), b.p.hover);
     }
     let handle = Rect::new(r.left, r.top, b.px(20.0), r.height());
     b.icon(handle, Icon::Grip, 12.0, b.p.ink3);
@@ -86,7 +86,7 @@ pub fn row<A: Clone>(b: &mut Builder<'_, A>, row: Row<'_, A>) -> Rect {
         select,
         Behavior::Click,
     );
-    b.focus_ring(id, r, b.px(6.0));
+    b.focus_ring(id, b.list_row_area(r), b.px(6.0));
     b.semantics(id, crate::Semantics::Reorder);
     b.hit(
         handle_key,
