@@ -13,6 +13,8 @@ pub(crate) use history::time_label as history_time;
 mod icons;
 mod lists;
 mod measure;
+#[cfg(test)]
+mod headless_review;
 pub(crate) use measure::{optimize_heap, prepare_frame};
 mod options;
 pub(crate) mod pages;

@@ -153,6 +153,11 @@ pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
         return;
     }
     app.panel.as_ref().unwrap().reclaim_heap.set(true);
+    release_page_resources(app, text);
+}
+
+/// Shared with the hidden memory review so fixture isolation does not change cache policy.
+pub(super) fn release_page_resources(app: &crate::app::App, text: &mut mypaper_ui::Text) {
     let mut images = app.images.borrow_mut();
     images.clear_page();
     drop(images);
