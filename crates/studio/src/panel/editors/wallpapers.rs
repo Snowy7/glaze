@@ -36,7 +36,11 @@ fn thumbnail(app: &App, b: &mut B, r: Rect, i: usize) {
 }
 
 pub fn list(app: &App, b: &mut B, c: &mut Col) {
-    let add = Rect::new(c.right() - b.px(64.0), c.y, b.px(64.0), b.px(28.0));
+    let add_width = b
+        .measure("Add", &crate::panel::controls::font(b, 13.0, 500))
+        .0
+        + b.px(44.0);
+    let add = Rect::new(c.right() - add_width, c.y, add_width, height(b, 28.0));
     button(
         b,
         add,
@@ -166,8 +170,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
     }
     if count == 0 {
         if app.nav.filter == 1 && query.is_empty() && category.is_none() {
-            notice(b, c, "No wallpapers of your own yet.");
-            action_button(b, c, "Add a wallpaper", Action::AddWallpaper);
+            notice(b, c, "No wallpapers of your own yet. Add one above.");
         } else {
             notice(b, c, "No wallpapers match. Try All or another search.");
         }

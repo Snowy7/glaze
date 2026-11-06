@@ -370,7 +370,7 @@ fn metrics(app: &App) -> String {
     format!("{gpu} · {fps} · {cpu:.1}% CPU · {memory:.0} MB")
 }
 
-fn playback_status(app: &App) -> String {
+fn stopped_parts(app: &App) -> Option<String> {
     let stopped: Vec<_> = crate::system::PARTS
         .iter()
         .zip(app.system.parts)
@@ -381,9 +381,10 @@ fn playback_status(app: &App) -> String {
             _ => "Shell",
         })
         .collect();
-    if !stopped.is_empty() {
-        return format!("{} stopped", stopped.join(", "));
-    }
+    (!stopped.is_empty()).then(|| format!("{} stopped", stopped.join(", ")))
+}
+
+fn playback_status(app: &App) -> String {
     let Some(wallpaper) = app.library.active().map(|i| &app.library.items[i]) else {
         return "No wallpaper selected".into();
     };
@@ -420,7 +421,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         ui::feedback(
             b,
             c,
-            &playback_status(app),
+            &stopped_parts(app).unwrap_or_default(),
             vec![("Troubleshoot", open(Page::Troubleshoot))],
         );
     }
@@ -444,6 +445,8 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         .unwrap_or(false);
     let playing = if !app.system.running() {
         "Off"
+    } else if !app.system.parts[1].running {
+        "Stopped"
     } else if paused {
         "Paused"
     } else {
@@ -451,7 +454,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
     };
     let x = thumb.right + b.px(10.0);
     let label = if paused { "Resume" } else { "Pause" };
-    let control_w = b.px(if paused { 90.0 } else { 80.0 });
+    let control_w = b.measure(label, &ui::font(b, 13.0, 500)).0 + b.px(44.0);
     let available = c.right() - x - control_w - b.px(16.0);
     text(
         b,
@@ -464,7 +467,12 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
     );
     text(
         b,
-        Rect::new(x, c.y + b.px(29.0), available, height(b, 18.0)),
+        Rect::new(
+            x,
+            c.y + b.px(8.0) + height(b, 24.0),
+            available,
+            height(b, 18.0),
+        ),
         &playback_status(app),
         12.0,
         400,
@@ -475,9 +483,9 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         b,
         Rect::new(
             c.right() - control_w - b.px(8.0),
-            c.y + (h - b.px(28.0)) / 2.0,
+            c.y + (h - height(b, 28.0)) / 2.0,
             control_w,
-            b.px(28.0),
+            height(b, 28.0),
         ),
         label,
         Some(if paused { glyph::PLAY } else { glyph::PAUSE }),
@@ -657,11 +665,12 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
 fn widgets(app: &App, b: &mut B, c: &mut Col) {
     let layout = crate::pages::widgets::layout(app);
     let items = crate::pages::widgets::here(app, &layout);
+    let add_width = b.measure("Add", &ui::font(b, 13.0, 500)).0 + b.px(44.0);
     let add = Rect::new(
-        c.right() - b.px(60.0),
+        c.right() - add_width,
         c.y + b.px(2.0),
-        b.px(60.0),
-        b.px(28.0),
+        add_width,
+        height(b, 28.0),
     );
     button(
         b,
@@ -701,8 +710,8 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
             );
             if let Some(hit) = b.list.hits.last_mut() {
                 hit.label = format!(
-                    "{name}, {}",
-                    super::editors::position(app, &layout, instance)
+                    "{name}, {caption}, column {}, row {}",
+                    instance.cell[0] + 1, instance.cell[1] + 1
                 )
                 .into();
             }

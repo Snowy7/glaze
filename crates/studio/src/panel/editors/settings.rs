@@ -78,7 +78,7 @@ pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
             if app.docs.doc(*doc).issue.is_some() {
                 app.run(Action::StartOver(*doc));
             } else {
-                crate::panel::saving::reset_part(app, *doc, *path);
+                app.run(Action::Panel(Command::ResetPart(*doc, *path)));
             }
         }
         return true;
