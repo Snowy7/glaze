@@ -33,6 +33,9 @@ lock, leave the desktop restored, kill headless browsers) still applies.
   you release it. The lock is a **directory**: take it with `New-Item -ItemType Directory` (fails if
   it exists), release it with `Remove-Item -Recurse`. Never create it as a file: a file blocks every
   other agent's deploy (2026-11-06 03:19).
+- Never run an exe from `C:\mypaper-targets\main\release`: a running exe is locked and breaks every
+  other agent's workspace build there. Run test instances from your own target dir or the deployed
+  `target\release`.
 - Verify visually with DPI-aware screenshots (PNG) of the live desktop. Look at them yourself
   before calling anything done.
 
