@@ -28,3 +28,22 @@ pub fn memory(fixture: bool) -> Option<Memory> {
         private_mb: counters.PrivateUsage as f64 / 1048576.0,
     })
 }
+
+/// The selected display's current refresh rate, read from Windows without changing its mode.
+pub fn refresh_rate(app: &crate::app::App) -> Option<u32> {
+    if app.fixture {
+        return Some(144);
+    }
+    use windows::Win32::Graphics::Gdi::{DEVMODEW, ENUM_CURRENT_SETTINGS, EnumDisplaySettingsW};
+    let monitor = app.display()?;
+    let device = windows::core::HSTRING::from(&monitor.device);
+    let mut mode = DEVMODEW {
+        dmSize: size_of::<DEVMODEW>() as u16,
+        ..Default::default()
+    };
+    // SAFETY: a read-only query with a correctly sized writable DEVMODEW.
+    unsafe { EnumDisplaySettingsW(&device, ENUM_CURRENT_SETTINGS, &mut mode) }
+        .as_bool()
+        .then_some(mode.dmDisplayFrequency)
+        .filter(|hz| (1..=360).contains(hz))
+}

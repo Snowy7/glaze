@@ -368,15 +368,81 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                     "No look of its own. Your look applies."
                 },
             );
-            if w.active {
+            if w.editable() {
+                let k = key(("panel-wallpaper-look", &w.id));
+                action_button(b, c, "Edit the look it brings", Action::More(k));
+                if app.is_open(k) {
+                    notice(b, c, "Saved to this wallpaper. Your desktop keeps playing.");
+                    for (field, label, max, factor, unit, fallback) in [
+                        ("tint", "Clarity", 1.0, 100.0, "%", 0.94),
+                        ("blur", "Blur", 32.0, 1.0, " px", 0.0),
+                    ] {
+                        let value = theme
+                            .pointer(&format!("/widgets/glass/{field}"))
+                            .and_then(Value::as_f64)
+                            .map(|value| if field == "tint" { 1.0 - value } else { value })
+                            .unwrap_or(fallback);
+                        text(
+                            b,
+                            Rect::new(c.x, c.y, c.w, height(b, 24.0)),
+                            label,
+                            13.0,
+                            400,
+                            b.p.ink1,
+                            Align::Start,
+                        );
+                        c.y += height(b, 24.0);
+                        let r = Rect::new(c.x, c.y, c.w, height(b, 36.0));
+                        let path = if field == "tint" {
+                            "/@both/glass/clarity"
+                        } else {
+                            "/@both/glass/blur"
+                        };
+                        b.slider(
+                            key(("panel-wallpaper-material", &w.id, field)),
+                            r,
+                            value,
+                            (0.0, max, if max == 1.0 { 0.01 } else { 1.0 }),
+                            &format!("{:.0}{unit}", value * factor),
+                            b.px(60.0),
+                            label,
+                            Action::Slider(theme_edit(w, path, label)),
+                        );
+                        c.y = r.bottom + b.px(4.0);
+                    }
+                    text(
+                        b,
+                        Rect::new(c.x, c.y, c.w, height(b, 28.0)),
+                        "Tint",
+                        13.0,
+                        400,
+                        b.p.ink1,
+                        Align::Start,
+                    );
+                    c.y += height(b, 28.0);
+                    crate::panel::colors::swatches(
+                        app,
+                        b,
+                        c,
+                        &theme_edit(w, "/@both/appearance/tint", "Wallpaper tint"),
+                        theme.pointer("/widgets/appearance/tint"),
+                        true,
+                        true,
+                        &[
+                            [139, 158, 183],
+                            [127, 174, 142],
+                            [200, 141, 60],
+                            [230, 230, 230],
+                        ],
+                    );
+                }
+            } else {
                 action_button(
                     b,
                     c,
-                    "Edit the look it brings",
-                    Action::Panel(Command::Scope(true)),
+                    "Make a copy to edit its look",
+                    Action::CopyWallpaper(i),
                 );
-            } else if w.brings_look {
-                notice(b, c, "Use this wallpaper to edit the look it brings.");
             }
         });
         if w.kind == Some(Kind::App) && w.editable() {
@@ -423,22 +489,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                     (json!("auto"), "Windows' choice".into()),
                 ],
             );
-            select(
-                b,
-                c,
-                "Frame rate",
-                app.get(DocId::Config, &format!("{base}/fps"))
-                    .cloned()
-                    .unwrap_or(Value::Null),
-                Edit::new(DocId::Config, format!("{base}/fps"), "Wallpaper frame rate"),
-                vec![
-                    (Value::Null, "Same as Settings".into()),
-                    (json!(24), "24 fps".into()),
-                    (json!(30), "30 fps".into()),
-                    (json!(60), "60 fps".into()),
-                    (json!(120), "120 fps".into()),
-                ],
-            );
+            super::settings::frame_cap(app, b, c, &format!("{base}/fps"), "Same as Settings");
         });
     }
     if let Some(credit) = &w.credit {
@@ -557,40 +608,21 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
             };
             let value = picked.unwrap_or_else(|| app.text(&FieldId::AddUrl));
             notice(b, c, label);
-            notice(b, c, value);
+            let shown = if picked.is_some() {
+                std::path::Path::new(value)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or(value)
+            } else {
+                value
+            };
+            notice(b, c, shown);
             let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
-            button(
-                b,
-                r,
-                "Change",
-                None,
-                false,
-                true,
-                if source == Source::Web {
-                    if picked.is_some() {
-                        Action::AddChoose(Source::Web)
-                    } else {
-                        Action::Field(FieldId::AddUrl)
-                    }
-                } else {
-                    Action::AddSource(source)
-                },
-            );
+            button(b, r, "Change", None, false, true, Action::AddBack);
             c.y = r.bottom + b.px(8.0);
             let r = Rect::new(c.x, c.y, c.w, c.w * 0.56);
             source_preview(app, b, r, source, value);
             c.y = r.bottom + b.px(8.0);
-            let r = Rect::new(c.x, c.y, c.w, b.px(28.0));
-            b.button(
-                key("panel-change-source-kind"),
-                r,
-                "Choose another source type",
-                None,
-                mypaper_ui::controls::ButtonKind::Ghost,
-                true,
-                Action::AddBack,
-            );
-            c.y = r.bottom + b.px(4.0);
         });
     }
     if source.is_some() {

@@ -78,20 +78,37 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                         faces
                     }
                 };
-                crate::panel::icons::row(
-                    app,
+                let row_y = c.y;
+                row(
                     b,
                     c,
-                    &format!("custom:{}", item.id),
-                    glyph::INTEGRATIONS,
+                    Some(glyph::INTEGRATIONS),
                     &item.name,
-                    &format!(
-                        "{} \u{b7} {detail}",
-                        if reconnect { "Reconnect" } else { status }
-                    ),
-                    false,
+                    status,
+                    &detail,
+                    None,
                     Action::Panel(Command::Connection(legacy::LIST.len() + i)),
                 );
+                if let Some(image) =
+                    crate::panel::icons::plugin_image(app, &format!("custom:{}", item.id))
+                {
+                    let pic = Rect::new(
+                        c.x,
+                        row_y + (height(b, 56.0) - b.px(28.0)) / 2.0,
+                        b.px(28.0),
+                        b.px(28.0),
+                    );
+                    b.fill(pic, b.px(7.0), b.p.fill);
+                    crate::stage::image_round(b, pic, &image, 1.0, b.px(7.0));
+                }
+                if reconnect {
+                    action_button(
+                        b,
+                        c,
+                        "Reconnect",
+                        Action::Panel(Command::Connect(item.id.clone())),
+                    );
+                }
             }
         });
     }

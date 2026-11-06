@@ -6,6 +6,105 @@ use serde_json::Value;
 use super::*;
 use crate::panel::controls::setting;
 
+pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
+    let value = app.get(DocId::Config, path).cloned().unwrap_or(Value::Null);
+    let custom_key = key(("panel-custom-fps", path));
+    let custom = app.is_open(custom_key);
+    let refresh = crate::panel::measure::refresh_rate(app);
+    let mut options = vec![(Value::Null, inherit.into())];
+    if let Some(hz) = refresh {
+        options.push((serde_json::json!(hz), format!("Display refresh · {hz} fps")));
+    }
+    for fps in [24, 30, 60, 120] {
+        if refresh != Some(fps) {
+            options.push((serde_json::json!(fps), format!("{fps} fps")));
+        }
+    }
+    let known = options.iter().any(|(v, _)| *v == value);
+    options.push((serde_json::json!("custom"), "Custom…".into()));
+    select(
+        b,
+        c,
+        "Cap",
+        if custom || !known {
+            serde_json::json!("custom")
+        } else {
+            value.clone()
+        },
+        Edit::new(
+            DocId::Studio,
+            format!("/panel/frame-cap{path}"),
+            "Frame rate",
+        ),
+        options,
+    );
+    if custom || !known {
+        let current = value
+            .as_f64()
+            .unwrap_or_else(|| refresh.unwrap_or(60) as f64);
+        let r = Rect::new(c.x, c.y + b.px(4.0), c.w, height(b, 36.0));
+        b.slider(
+            key(("panel-fps-number", path)),
+            r,
+            current,
+            (1.0, 360.0, 1.0),
+            &format!("{current:.0} fps"),
+            b.px(66.0),
+            "Custom frame rate, 1 to 360 fps",
+            Action::Slider(Edit::new(DocId::Config, path, "Frame rate")),
+        );
+        c.y = r.bottom + b.px(6.0);
+    }
+}
+
+pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
+    if edit.doc != DocId::Studio {
+        return false;
+    }
+    let Some(path) = edit.path.strip_prefix("/panel/frame-cap") else {
+        return false;
+    };
+    let k = key(("panel-custom-fps", path));
+    if value == "custom" {
+        app.nav.more.insert(k);
+    } else {
+        app.nav.more.remove(&k);
+        app.set(&Edit::new(DocId::Config, path, "Frame rate"), value.clone());
+    }
+    true
+}
+
+#[cfg(test)]
+mod frame_cap_tests {
+    use super::*;
+
+    #[test]
+    fn custom_frame_rate_is_staged_and_the_slider_spans_the_supported_range() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State::default());
+        let before = app.docs.version;
+        app.set(
+            &Edit::new(DocId::Studio, "/panel/frame-cap/engine/fps", "Cap"),
+            serde_json::json!("custom"),
+        );
+        assert_eq!(app.docs.version, before);
+        app.panel.as_mut().unwrap().page = Page::Performance;
+        let built = crate::panel::build(&app, &mut ui.text);
+        assert!(built.targets.iter().any(|target| matches!(&target.behavior, Behavior::Slider { min: 1.0, max: 360.0, .. }) && matches!(&target.action, Action::Slider(edit) if edit.path.as_ref() == "/engine/fps")));
+        app.set(
+            &Edit::new(DocId::Config, "/engine/fps", "Cap"),
+            serde_json::json!(144),
+        );
+        assert_eq!(
+            app.get(DocId::Config, "/engine/fps"),
+            Some(&serde_json::json!(144))
+        );
+        app.run(Action::Undo);
+        assert_eq!(app.docs.undo_count(), 0);
+    }
+}
+
 pub fn general(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "General", "mypaper and Studio");
     group(b, c, "Startup", |b, c| {
