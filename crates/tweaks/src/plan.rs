@@ -87,11 +87,23 @@ pub fn system_writes(style: &WindowsStyle, palette: Option<&Palette>) -> Vec<Wri
             });
         }
     }
+    for (key, enabled) in [
+        (PERSONALIZE_KEY, style.accent_on_taskbar),
+        (DWM_KEY, style.accent_on_title_bars),
+    ] {
+        if let Some(enabled) = enabled {
+            writes.push(Write {
+                key,
+                name: "ColorPrevalence",
+                value: Value::Dword(u32::from(enabled)),
+            });
+        }
+    }
     writes
 }
 
 /// Does the user currently have apps set to the dark theme?
-pub(crate) fn system_prefers_dark() -> bool {
+pub fn system_prefers_dark() -> bool {
     use crate::registry::Registry;
     use crate::undo::Store;
     matches!(
@@ -146,5 +158,29 @@ mod tests {
             assert_eq!(names, ["AppsUseLightTheme", "SystemUsesLightTheme"]);
             assert!(writes.iter().all(|w| w.value == Value::Dword(expected)));
         }
+    }
+
+    #[test]
+    fn accent_visibility_writes_distinct_keys_even_without_a_palette() {
+        for (taskbar, titles) in [(true, false), (false, true)] {
+            let style = WindowsStyle {
+                accent_on_taskbar: Some(taskbar),
+                accent_on_title_bars: Some(titles),
+                ..Default::default()
+            };
+            let writes = system_writes(&style, None);
+            assert_eq!(writes.len(), 2);
+            assert_eq!(
+                (writes[0].key, writes[0].name),
+                (PERSONALIZE_KEY, "ColorPrevalence")
+            );
+            assert_eq!(writes[0].value, Value::Dword(u32::from(taskbar)));
+            assert_eq!(
+                (writes[1].key, writes[1].name),
+                (DWM_KEY, "ColorPrevalence")
+            );
+            assert_eq!(writes[1].value, Value::Dword(u32::from(titles)));
+        }
+        assert!(system_writes(&WindowsStyle::default(), None).is_empty());
     }
 }

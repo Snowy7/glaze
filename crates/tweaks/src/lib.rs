@@ -34,6 +34,8 @@ pub mod registry;
 pub mod system;
 pub mod undo;
 
+pub use plan::system_prefers_dark;
+
 use std::path::Path;
 use std::time::Duration;
 
@@ -92,6 +94,18 @@ impl Tweaks {
             dwm::reset_all(forced_dark.then(plan::system_prefers_dark));
         }
         Ok(tweaks)
+    }
+
+    /// Windows' own app scheme before our override. Automatic styling must not inherit a
+    /// previous forced mode when switching from light/dark back to auto.
+    pub fn unmanaged_dark_mode(&self) -> bool {
+        match self
+            .system
+            .original(plan::PERSONALIZE_KEY, plan::APPS_THEME)
+        {
+            Ok(Some(value)) => value == Some(undo::Value::Dword(0)),
+            _ => system_prefers_dark(),
+        }
     }
 
     /// Applies `style`. `palette` resolves `"auto"` colors; without one,

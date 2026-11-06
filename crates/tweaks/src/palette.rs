@@ -29,14 +29,7 @@ pub fn path() -> Result<PathBuf> {
     Ok(local_dir()?.join(FILE))
 }
 
-/// Two colors taken from a wallpaper.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Palette {
-    /// The most common non-extreme color.
-    pub dominant: Color,
-    /// A vivid color that works as an accent.
-    pub accent: Color,
-}
+pub use mypaper_theme::windows::Palette;
 
 /// A palette and the theme folder it belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
