@@ -1,0 +1,83 @@
+{
+    "label":  "index-first-live",
+    "at":  "2026-11-06T03:26:22",
+    "rows":  [
+                 {
+                     "part":  "mypaper-styler",
+                     "pid":  65172,
+                     "cpu_core_pct":  0.03,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  3,
+                     "ws_mb":  18
+                 },
+                 {
+                     "part":  "mypaper-core",
+                     "pid":  75752,
+                     "cpu_core_pct":  0,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  3,
+                     "ws_mb":  18
+                 },
+                 {
+                     "part":  "mypaper-wallpaper",
+                     "pid":  22260,
+                     "cpu_core_pct":  2.55,
+                     "gpu3d_pct":  9.56,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  143,
+                     "private_mb":  178,
+                     "ws_mb":  27
+                 },
+                 {
+                     "part":  "mypaper-plugins",
+                     "pid":  35160,
+                     "cpu_core_pct":  0,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  12,
+                     "ws_mb":  24
+                 },
+                 {
+                     "part":  "mypaper-shell",
+                     "pid":  31640,
+                     "cpu_core_pct":  0.81,
+                     "gpu3d_pct":  0.42,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  35,
+                     "ws_mb":  112
+                 },
+                 {
+                     "part":  "mypaper-index",
+                     "pid":  50456,
+                     "cpu_core_pct":  85.73,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  1800,
+                     "ws_mb":  1253
+                 }
+             ],
+    "total":  {
+                  "part":  "TOTAL",
+                  "procs":  6,
+                  "cpu_core_pct":  89.12,
+                  "gpu3d_pct":  9.98,
+                  "gpu_video_pct":  0,
+                  "gpu_mem_mb":  143,
+                  "private_mb":  2031,
+                  "ws_mb":  1452
+              },
+    "theme":  "rain-city"
+}

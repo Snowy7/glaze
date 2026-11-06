@@ -1,0 +1,8 @@
+{
+    "at":  "2026-11-06T05:28:23.9708471+03:00",
+    "stage":  "latest deployed build 338c48b / 74a0dd1",
+    "debug_image":  "launcher-before-lane-fix.png",
+    "outcome":  "skipped",
+    "reason":  "T3 Code (Nightly) is foreground; no synthetic input sent",
+    "earlier_success":  "launcher.json"
+}

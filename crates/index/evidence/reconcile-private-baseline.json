@@ -1,0 +1,7 @@
+{
+    "phase":  "full-volume reconciliation before sparse mappings",
+    "peak_private_bytes":  2616041472,
+    "note":  "not an idle or steady-state measurement",
+    "source":  "observed Get-Process PeakPagedMemorySize64 during the earlier production run",
+    "entries_approx":  11300000
+}

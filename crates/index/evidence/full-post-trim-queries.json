@@ -1,0 +1,30 @@
+[
+    {
+        "query":  "cargo",
+        "wall_ms":  213.135,
+        "server_ms":  125.355,
+        "entries":  11404989,
+        "working_set_after_query":  920653824
+    },
+    {
+        "query":  "ext:rs",
+        "wall_ms":  125.988,
+        "server_ms":  97.153,
+        "entries":  11404998,
+        "working_set_after_query":  907010048
+    },
+    {
+        "query":  "path:projects ext:toml",
+        "wall_ms":  118.124,
+        "server_ms":  91.883,
+        "entries":  11405012,
+        "working_set_after_query":  907563008
+    },
+    {
+        "query":  "unlikely-no-match-8932",
+        "wall_ms":  151.315,
+        "server_ms":  117.043,
+        "entries":  11405028,
+        "working_set_after_query":  901099520
+    }
+]
