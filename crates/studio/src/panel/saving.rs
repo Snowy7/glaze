@@ -11,6 +11,103 @@ use crate::{
     ui::{B, Col},
 };
 
+/// Alerts use the same readable treatment in the header and beside a failed file.
+pub fn emphasize_feedback(b: &mut B, from: usize) {
+    let style = super::controls::font(b, 12.0, 500);
+    for op in &mut b.list.ops[from..] {
+        match op {
+            mypaper_ui::Op::Text {
+                style: text_style,
+                color,
+                ..
+            } if text_style.size <= style.size + 0.1 => {
+                *text_style = style.clone();
+                *color = b.p.ink1;
+            }
+            mypaper_ui::Op::Icon { color, .. } => *color = b.p.ink1,
+            _ => {}
+        }
+    }
+}
+
+/// Keep selected segments consistent, and make a file's unavailable controls visibly inert.
+pub fn finish_page(app: &App, b: &mut B, page: Page, first_op: usize, first_target: usize) {
+    use mypaper_ui::Op;
+    let selected: Vec<_> = b
+        .list
+        .hits
+        .iter()
+        .filter(|hit| hit.checked == Some(true) && hit.rect.height() <= b.px(36.0))
+        .map(|hit| hit.rect)
+        .collect();
+    for op in &mut b.list.ops[first_op..] {
+        match op {
+            Op::Fill { rect, color, .. } if selected.contains(rect) => {
+                *color = super::tokens::thumb(b.p.dark);
+            }
+            Op::Text { rect, color, .. }
+                if selected.iter().any(|r| {
+                    r.left <= rect.left
+                        && r.right >= rect.right
+                        && r.top <= rect.top
+                        && r.bottom >= rect.bottom
+                }) =>
+            {
+                *color = super::tokens::hex(0xffffff);
+            }
+            _ => {}
+        }
+    }
+    if !super::controls::relevant_docs(page)
+        .iter()
+        .any(|id| app.docs.doc(*id).issue.is_some())
+    {
+        return;
+    }
+    let disabled: Vec<_> = b
+        .targets
+        .iter()
+        .enumerate()
+        .skip(first_target)
+        .filter(|(_, target)| {
+            !matches!(
+                &target.action,
+                Action::Panel(
+                    Command::Open(_)
+                        | Command::Back
+                        | Command::Display(_)
+                        | Command::Wallpaper(_)
+                        | Command::Connection(_)
+                ) | Action::SelectWidget(_)
+                    | Action::SelectModule(_)
+                    | Action::SelectPanel(_)
+                    | Action::More(_)
+            )
+        })
+        .map(|(index, _)| index)
+        .collect();
+    for &index in &disabled {
+        b.targets[index].action = Action::None;
+        b.targets[index].visible = None;
+    }
+    for hit in &mut b.list.hits {
+        if disabled.contains(&(hit.id.saturating_sub(1) as usize)) {
+            hit.enabled = false;
+        }
+    }
+    for op in &mut b.list.ops[first_op..] {
+        match op {
+            Op::Text { color, .. }
+            | Op::Icon { color, .. }
+            | Op::Fill { color, .. }
+            | Op::Stroke { color, .. }
+            | Op::Line { color, .. } => color.a *= 0.5,
+            Op::Image { opacity, .. } | Op::RoundedImage { opacity, .. } => *opacity *= 0.5,
+            _ => {}
+        }
+    }
+}
+
 pub fn theme_saved(app: &mut App, dir: &Path) {
     if let Some(panel) = &app.panel {
         panel.theme_errors.borrow_mut().remove(dir);

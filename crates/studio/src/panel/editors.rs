@@ -1,10 +1,13 @@
 mod bars;
 mod connections;
-pub use bars::{insert_module, move_module};
+pub use bars::{
+    bar_path, bar_value, insert_module, move_module, overview as bars_overview, same_bars,
+};
 pub use connections::{connect, connection_module, disconnect, hide_connection_widget};
 mod look;
 mod settings;
 pub use settings::add_menu_item;
+pub use settings::frame_cap;
 mod wallpapers;
 mod widgets;
 pub use widgets::{can_add_widget, pick_asset};
@@ -45,6 +48,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::History => history(app, b, c),
         Page::Search => search(app, b, c),
         Page::Top | Page::Dock => bars::bar(app, b, c, page),
+        Page::BarDesign => bars::designs(app, b, c),
         Page::Module => bars::module(app, b, c),
         Page::AddModule => bars::add(app, b, c),
         Page::Panels => bars::panels(b, c),
@@ -52,6 +56,10 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::FirstRun => super::first_run::view(app, b, c),
         _ => {}
     }
+}
+
+pub fn intercept_page_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
+    bars::intercept_set(app, edit, value) || settings::intercept_set(app, edit, value)
 }
 
 /// Position is relative to the display's actual grid, including the widget's size.
@@ -66,109 +74,21 @@ pub fn position(app: &App, layout: &Layout, instance: &Instance) -> String {
         (x * 3.0).floor().min(2.0) as u8,
         (y * 3.0).floor().min(2.0) as u8,
     ) {
-        (0, 0) => "top left",
-        (1, 0) => "top",
-        (2, 0) => "top right",
-        (0, 1) => "left",
-        (1, 1) => "center",
-        (2, 1) => "right",
-        (0, _) => "bottom left",
-        (1, _) => "bottom",
-        _ => "bottom right",
+        (0, 0) => "Top left",
+        (1, 0) => "Top",
+        (2, 0) => "Top right",
+        (0, 1) => "Left",
+        (1, 1) => "Center",
+        (2, 1) => "Right",
+        (0, _) => "Bottom left",
+        (1, _) => "Bottom",
+        _ => "Bottom right",
     };
     format!(
         "{area}, column {}, row {}",
         instance.cell[0] + 1,
         instance.cell[1] + 1
     )
-}
-
-/// The full tile is selected; its thumbnail uses the shell's offscreen bar views.
-pub fn design_row(
-    app: &App,
-    b: &mut B,
-    c: &mut Col,
-    id: &str,
-    name: &str,
-    on: bool,
-    action: Action,
-) {
-    let r = Rect::new(c.x, c.y + b.px(3.0), c.w, b.px(80.0));
-    let k = key(("design", c.view, id));
-    if on {
-        b.fill(r, b.px(8.0), b.p.fill);
-        b.stroke(r, b.px(8.0), b.px(1.0), b.p.ink2);
-    } else {
-        b.wash(k, r, b.px(8.0));
-    }
-    let pic = Rect::new(
-        r.left + b.px(6.0),
-        r.top + b.px(6.0),
-        b.px(130.0),
-        r.height() - b.px(12.0),
-    );
-    crate::panel::specimens::backdrop(app, b, pic);
-    let (raw, only) = match &action {
-        Action::Set(edit, value) => {
-            let mut raw = app.docs.doc(DocId::Bars).raw.clone();
-            crate::docs::apply_op(
-                &mut raw,
-                &crate::docs::Op {
-                    doc: DocId::Bars,
-                    path: edit.path.to_string(),
-                    value: Some(value.clone()),
-                },
-            );
-            (
-                raw,
-                Some(if edit.path.starts_with("/top") {
-                    crate::actions::Bar::Top
-                } else {
-                    crate::actions::Bar::Dock
-                }),
-            )
-        }
-        _ => (serde_json::json!({"version":1,"preset":id}), None),
-    };
-    crate::panel::specimens::bars(app, b, pic, &raw, only);
-    text(
-        b,
-        Rect::new(
-            pic.right + b.px(12.0),
-            r.top,
-            r.right - pic.right - b.px(36.0),
-            r.height(),
-        ),
-        name,
-        13.0,
-        500,
-        b.p.ink1,
-        Align::Start,
-    );
-    if on {
-        b.icon(
-            Rect::new(
-                r.right - b.px(26.0),
-                r.top + b.px(28.0),
-                b.px(20.0),
-                b.px(20.0),
-            ),
-            glyph::CHECK,
-            15.0,
-            b.p.ink1,
-        );
-    }
-    b.hit_checked(
-        k,
-        r,
-        Role::RadioButton,
-        name,
-        Some(on),
-        action,
-        Behavior::Click,
-    );
-    b.focus_ring(k, r, b.px(8.0));
-    c.y = r.bottom + b.px(3.0);
 }
 
 pub fn field(
@@ -277,18 +197,7 @@ pub fn action_button(b: &mut B, c: &mut Col, label: &str, action: Action) {
 pub fn footer_height(app: &App) -> f32 {
     match app.panel.as_ref().map(|s| s.page) {
         Some(Page::AddWidget | Page::AddWallpaper | Page::AddModule | Page::FirstRun) => 64.0,
-        Some(Page::History)
-            if app
-                .panel
-                .as_ref()
-                .unwrap()
-                .history
-                .borrow()
-                .selected
-                .is_some() =>
-        {
-            64.0
-        }
+        Some(Page::History) if super::history::can_restore(app) => 64.0,
         _ => 0.0,
     }
 }
@@ -405,7 +314,10 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
         primary,
         None,
         true,
-        enabled,
+        enabled
+            && !super::controls::relevant_docs(state.page)
+                .iter()
+                .any(|id| app.docs.doc(*id).issue.is_some()),
         commit,
     );
 }
@@ -430,76 +342,71 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
     }
     group(b, c, "Desktop changes", |b, c| {
         for (i, entry) in history.entries.iter().enumerate().rev() {
-            row(
+            let r = Rect::new(c.x - b.px(8.0), c.y, c.w + b.px(16.0), height(b, 84.0));
+            let k = key(("panel-history", i));
+            if history.selected == Some(i) {
+                b.fill(r, b.px(8.0), b.p.selected);
+            } else {
+                b.wash(k, r, b.px(8.0));
+            }
+            let pic = Rect::new(c.x, c.y + b.px(10.0), b.px(108.0), b.px(61.0));
+            desktop_preview(app, b, pic, &entry.desktop);
+            let x = pic.right + b.px(12.0);
+            let summary = if entry.summary.is_empty() {
+                &entry.title
+            } else {
+                &entry.summary
+            };
+            text(
                 b,
-                c,
-                Some(glyph::CLOCK),
-                if entry.summary.is_empty() {
-                    &entry.title
-                } else {
-                    &entry.summary
-                },
+                Rect::new(x, c.y + b.px(8.0), c.right() - x, height(b, 30.0)),
+                summary,
+                13.0,
+                500,
+                b.p.ink1,
+                Align::Start,
+            );
+            let when = format!(
+                "{}{}",
+                super::history::time_label(entry.at),
                 if i + 1 == history.entries.len() {
-                    "Now"
+                    " · Now"
                 } else {
                     ""
-                },
-                &format!(
-                    "{} · {}",
-                    super::history::time_label(entry.at),
-                    entry.detail
-                ),
+                }
+            );
+            text(
+                b,
+                Rect::new(x, c.y + height(b, 38.0), c.right() - x, height(b, 22.0)),
+                &when,
+                12.0,
+                400,
+                b.p.ink3,
+                Align::Start,
+            );
+            b.hit_checked(
+                k,
+                r,
+                Role::RadioButton,
+                &format!("{summary}, {when}, {}", entry.detail),
                 Some(history.selected == Some(i)),
                 Action::Panel(Command::History(i)),
+                Behavior::Click,
             );
+            b.focus_ring(k, r, b.px(8.0));
+            c.y = r.bottom;
         }
     });
     if let Some(entry) = history.selected.and_then(|i| history.entries.get(i)) {
         group(b, c, "Selected desktop", |b, c| {
             let r = Rect::new(c.x, c.y + b.px(6.0), c.w, c.w * 9.0 / 16.0);
-            b.fill(r, b.px(8.0), b.p.fill);
-            if let Some(wallpaper) = entry.desktop.wallpaper().and_then(|id| {
-                app.library
-                    .items
-                    .iter()
-                    .find(|w| w.apply_as == id || w.id == id)
-            }) && let Some(path) = wallpaper.preview.as_ref()
-                && let Some(image) = app
-                    .images
-                    .borrow_mut()
-                    .get(path, (r.width() as u32, r.height() as u32))
-            {
-                crate::stage::image_round(b, r, &image, 1.0, b.px(8.0));
-            }
-            crate::panel::specimens::desktop_bars(app, b, r, entry.desktop.bars());
+            desktop_preview(app, b, r, &entry.desktop);
             let count = entry
                 .desktop
                 .widgets()
                 .get("instances")
                 .and_then(Value::as_array)
                 .map_or(0, Vec::len);
-            if let Ok(layout) = serde_json::from_value::<mypaper_widgets::layout::Layout>(
-                entry.desktop.widgets().clone(),
-            ) && let Some(monitor) = app.display()
-            {
-                let grid = crate::stage::grid_for(&layout, monitor);
-                let scale = r.width() / (monitor.rect.width as f32 / (monitor.dpi as f32 / 96.0));
-                for mut instance in crate::pages::widgets::here(app, &layout) {
-                    let at = grid.rect(instance.cell, instance.size);
-                    let frame = Rect::new(
-                        r.left + at.x as f32 * scale,
-                        r.top + at.y as f32 * scale,
-                        at.width as f32 * scale,
-                        at.height as f32 * scale,
-                    );
-                    instance.appearance = instance
-                        .appearance
-                        .over(&layout.appearance.over(&mypaper_widgets::look::defaults()));
-                    if let Some(widget) = app.registry.get(&instance.widget) {
-                        widgets::face(app, b, &instance, &widget.manifest, "", "", frame);
-                    }
-                }
-            }
             c.y = r.bottom + b.px(10.0);
             notice(b, c, &entry.detail);
             notice(
@@ -517,6 +424,45 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                 ),
             );
         });
+    }
+}
+
+fn desktop_preview(app: &App, b: &mut B, r: Rect, desktop: &super::history::Desktop) {
+    b.fill(r, b.px(6.0), b.p.fill);
+    if let Some(wallpaper) = desktop.wallpaper().and_then(|id| {
+        app.library
+            .items
+            .iter()
+            .find(|w| w.apply_as == id || w.id == id)
+    }) && let Some(path) = wallpaper.preview.as_ref()
+        && let Some(image) = app
+            .images
+            .borrow_mut()
+            .get(path, (r.width() as u32, r.height() as u32))
+    {
+        crate::stage::image_round(b, r, &image, 1.0, b.px(6.0));
+    }
+    crate::panel::specimens::desktop_bars(app, b, r, desktop.bars());
+    if let Ok(layout) = serde_json::from_value::<Layout>(desktop.widgets().clone())
+        && let Some(monitor) = app.display()
+    {
+        let grid = crate::stage::grid_for(&layout, monitor);
+        let scale = r.width() / (monitor.rect.width as f32 / (monitor.dpi as f32 / 96.0));
+        for mut instance in crate::pages::widgets::here(app, &layout) {
+            let at = grid.rect(instance.cell, instance.size);
+            let frame = Rect::new(
+                r.left + at.x as f32 * scale,
+                r.top + at.y as f32 * scale,
+                at.width as f32 * scale,
+                at.height as f32 * scale,
+            );
+            instance.appearance = instance
+                .appearance
+                .over(&layout.appearance.over(&mypaper_widgets::look::defaults()));
+            if let Some(widget) = app.registry.get(&instance.widget) {
+                widgets::face(app, b, &instance, &widget.manifest, "", "", frame);
+            }
+        }
     }
 }
 
@@ -739,8 +685,15 @@ pub fn number(
         Rect::new(c.x + b.px(96.0), c.y, c.w - b.px(96.0), h),
         value,
         range,
-        &format!("{value:.2}"),
-        b.px(42.0),
+        &format!(
+            "{value:.0}{}",
+            if matches!(label, "Corners" | "Padding" | "Text size") {
+                " px"
+            } else {
+                ""
+            }
+        ),
+        b.px(60.0),
         label,
         Action::Slider(Edit::new(doc, path, label)),
     );

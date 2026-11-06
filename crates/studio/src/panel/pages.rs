@@ -17,15 +17,44 @@ fn open(page: Page) -> Action {
 }
 
 pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
+    let committing = matches!(
+        page,
+        Page::AddWidget | Page::AddModule | Page::AddWallpaper | Page::History | Page::FirstRun
+    );
+    let done_label = if committing { "Cancel" } else { "Done" };
     let done_style = ui::font(b, 13.0, 500);
-    let done_width = (b.measure("Done", &done_style).0 + b.px(20.0)).max(b.px(52.0));
+    let done_width = (b.measure(done_label, &done_style).0 + b.px(20.0)).max(b.px(52.0));
     let done = Rect::new(
         r.right - done_width - b.px(8.0),
         b.px(10.0),
         done_width,
         b.px(28.0),
     );
-    if page != Page::FirstRun {
+    if committing {
+        let cancel = if page == Page::FirstRun {
+            Action::FirstRunSkip
+        } else if page == Page::AddModule {
+            open(if app.nav.bar == Some(Bar::Dock) {
+                Page::Dock
+            } else {
+                Page::Top
+            })
+        } else {
+            open(page.parent().unwrap_or(Page::Root))
+        };
+        b.button(
+            key(("panel-header-cancel", page)),
+            done,
+            "Cancel",
+            None,
+            mypaper_ui::controls::ButtonKind::Ghost,
+            true,
+            cancel,
+        );
+        if let Some(hit) = b.list.hits.last_mut() {
+            hit.label = format!("Cancel {}", page.title()).into();
+        }
+    } else {
         button(
             b,
             done,
@@ -67,11 +96,15 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         );
     }
     if editing {
-        let read_only = super::controls::relevant_docs(page)
+        let issue = super::controls::relevant_docs(page)
             .iter()
-            .any(|id| app.docs.error(*id).is_some());
-        let status = if read_only {
-            "Read only"
+            .find_map(|id| app.docs.doc(*id).issue);
+        let status = if let Some(issue) = issue {
+            match issue {
+                crate::docs::ReadIssue::Newer => "Newer",
+                crate::docs::ReadIssue::Unavailable => "Can't read",
+                crate::docs::ReadIssue::Malformed { .. } => "Read only",
+            }
         } else if !app.panel.as_ref().unwrap().save_errors.borrow().is_empty()
             || !app.panel.as_ref().unwrap().theme_errors.borrow().is_empty()
         {
@@ -96,16 +129,27 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
                 app.docs.version
             },
         );
-        let style = ui::font(b, 10.0, 400);
-        let width = b.measure(status, &style).0 + b.px(8.0);
+        let alert = matches!(status, "Read only" | "Can't read" | "Couldn't save");
+        let size = if alert { 12.0 } else { 10.0 };
+        let style = ui::font(b, size, if alert { 600 } else { 400 });
+        let glyph_width = if alert { b.px(18.0) } else { 0.0 };
+        let width = b.measure(status, &style).0 + b.px(8.0) + glyph_width;
         x -= width;
+        if alert {
+            b.icon(
+                Rect::new(x, b.px(10.0), b.px(16.0), b.px(28.0)),
+                mypaper_ui::icons::Icon::Warning,
+                14.0,
+                b.p.ink1,
+            );
+        }
         text(
             b,
-            Rect::new(x, b.px(10.0), width, b.px(28.0)),
+            Rect::new(x + glyph_width, b.px(10.0), width - glyph_width, b.px(28.0)),
             status,
-            10.0,
-            400,
-            b.p.ink3,
+            size,
+            if alert { 600 } else { 400 },
+            if alert { b.p.ink1 } else { b.p.ink3 },
             Align::Center,
         );
     }
@@ -163,15 +207,27 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         }
     }
     let left = b.px(12.0);
-    let parent = if matches!(page, Page::Module | Page::AddModule) && app.nav.bar == Some(Bar::Dock)
-    {
+    let parent = if page == Page::FirstRun {
+        None
+    } else if page == Page::BarDesign {
+        Some(match app.nav.bar {
+            Some(Bar::Top) => Page::Top,
+            Some(Bar::Dock) => Page::Dock,
+            None => Page::Bars,
+        })
+    } else if matches!(page, Page::Module | Page::AddModule) && app.nav.bar == Some(Bar::Dock) {
         Some(Page::Dock)
     } else {
         page.parent()
     };
     let end = if let Some(parent) = parent {
+        let parent_title = if parent == Page::Wallpapers {
+            "Wallpapers"
+        } else {
+            parent.title()
+        };
         let style = ui::font(b, 13.0, 500);
-        let width = (b.measure(parent.title(), &style).0 + b.px(24.0))
+        let width = (b.measure(parent_title, &style).0 + b.px(24.0))
             .min((x - left - b.px(8.0)).max(b.px(40.0)));
         let back = Rect::new(left - b.px(4.0), b.px(10.0), width, b.px(28.0));
         b.icon(
@@ -188,7 +244,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
                 back.width() - b.px(18.0),
                 back.height(),
             ),
-            parent.title(),
+            parent_title,
             13.0,
             500,
             b.p.ink2,
@@ -199,7 +255,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             k,
             back,
             Role::Button,
-            &format!("Back to {}", parent.title()),
+            &format!("Back to {parent_title}"),
             Action::Panel(Command::Back),
             Behavior::Click,
         );
@@ -246,6 +302,8 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
 }
 
 pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
+    let first_op = b.list.ops.len();
+    let first_target = b.targets.len();
     match page {
         Page::Root => root(app, b, c),
         Page::Widgets => widgets(app, b, c),
@@ -255,6 +313,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::Top | Page::Dock => super::editors::view(app, b, c, page),
         _ => super::editors::view(app, b, c, page),
     }
+    super::saving::finish_page(app, b, page, first_op, first_target);
 }
 
 fn wallpaper_name(app: &App) -> &str {
@@ -296,6 +355,33 @@ fn metrics(app: &App) -> String {
         .and_then(Value::as_u64)
         .map_or("Wallpaper's fps".into(), |n| format!("{n} fps cap"));
     format!("{gpu} · {fps} · {cpu:.1}% CPU · {memory:.0} MB")
+}
+
+fn playback_status(app: &App) -> String {
+    let stopped: Vec<_> = crate::system::PARTS
+        .iter()
+        .zip(app.system.parts)
+        .filter(|(_, part)| !part.running)
+        .map(|((id, _), _)| *id)
+        .collect();
+    if !stopped.is_empty() {
+        return format!("{} stopped · {}", stopped.join(", "), metrics(app));
+    }
+    let specific = app.library.active().and_then(|i| {
+        app.get(
+            DocId::Config,
+            &format!(
+                "/engine/wallpapers/{}/fps",
+                crate::docs::token(&app.library.items[i].id)
+            ),
+        )
+    });
+    specific
+        .or_else(|| app.get(DocId::Config, "/engine/fps"))
+        .and_then(Value::as_u64)
+        .map_or("At the wallpaper's frame rate".into(), |fps| {
+            format!("Up to {fps} fps")
+        })
 }
 
 fn root(app: &App, b: &mut B, c: &mut Col) {
@@ -340,7 +426,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
     text(
         b,
         Rect::new(x, c.y + b.px(29.0), available, height(b, 18.0)),
-        &metrics(app),
+        &playback_status(app),
         12.0,
         400,
         b.p.ink3,
@@ -576,15 +662,20 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
                 Some(crate::pages::widgets::glyph_of(&instance.widget)),
                 name,
                 "",
-                &format!(
-                    "{} × {} · {}",
-                    instance.size[0],
-                    instance.size[1],
-                    super::editors::position(app, &layout, instance)
-                ),
+                super::editors::position(app, &layout, instance)
+                    .split(", column")
+                    .next()
+                    .unwrap_or("On this display"),
                 None,
                 Action::SelectWidget(Some(instance.instance.clone())),
             );
+            if let Some(hit) = b.list.hits.last_mut() {
+                hit.label = format!(
+                    "{name}, {}",
+                    super::editors::position(app, &layout, instance)
+                )
+                .into();
+            }
         }
     });
     group(b, c, "", |b, c| {
@@ -614,63 +705,7 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
 }
 
 fn bars(app: &App, b: &mut B, c: &mut Col) {
-    title(
-        b,
-        c,
-        "Bars",
-        &format!("Top bar and dock · Display {}", app.nav.display + 1),
-    );
-    super::controls::displays(app, b, c);
-    let current = app
-        .get(DocId::Bars, "/preset")
-        .and_then(Value::as_str)
-        .unwrap_or("monochrome");
-    group(b, c, "Design", |b, c| {
-        for &(id, name) in &crate::pages::bars::PRESETS {
-            super::editors::design_row(app, b, c, id, name, current == id, Action::Preset(id));
-        }
-    });
-    group(b, c, "", |b, c| {
-        for (bar, page, id, label) in [
-            (Bar::Top, Page::Top, "top_enabled", "Top bar"),
-            (Bar::Dock, Page::Dock, "dock_enabled", "Dock"),
-        ] {
-            let s = crate::settings::Setting::get(id).expect("bar switch");
-            let on = app.value(s).as_bool().unwrap_or(true);
-            row(
-                b,
-                c,
-                None,
-                label,
-                &format!(
-                    "{} · {}",
-                    if on { "On" } else { "Off" },
-                    crate::pages::bars::design_name(app, bar)
-                ),
-                "",
-                None,
-                open(page),
-            );
-        }
-        setting(app, b, c, "taskbar_mode", "Windows' taskbar", "");
-    });
-    if more(app, b, c, "Panels, per display") {
-        group(b, c, "", |b, c| {
-            row(
-                b,
-                c,
-                Some(glyph::TOGGLES),
-                "Panels",
-                "",
-                "Start, sound, calendar, tray and notifications",
-                None,
-                open(Page::Panels),
-            )
-        });
-        group(b, c, "Windows' taskbar", |b, c| {
-            setting(app, b, c, "taskbar_alignment", "Icons", "")
-        });
-    }
+    super::editors::bars_overview(app, b, c);
 }
 
 fn settings(_app: &App, b: &mut B, c: &mut Col) {
@@ -778,7 +813,7 @@ fn performance(app: &App, b: &mut B, c: &mut Col) {
         }
     });
     group(b, c, "Frame rate", |b, c| {
-        setting(app, b, c, "fps", "Cap", "")
+        super::editors::frame_cap(app, b, c, "/engine/fps", "Wallpaper's frame rate")
     });
     group(b, c, "When to rest", |b, c| {
         setting(
@@ -847,5 +882,122 @@ pub fn toast(app: &App, b: &mut B, window: Rect) {
             true,
             action.clone(),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture(ui: &mypaper_ui::Ui) -> App {
+        let mut app = crate::goldens::app(true, ui);
+        app.panel = Some(super::super::State::default());
+        app.size = (480, 760);
+        app
+    }
+
+    #[test]
+    fn commit_pages_have_cancel_headers_first_run_has_no_back_and_now_has_no_restore() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui);
+        for page in [
+            Page::AddWidget,
+            Page::AddModule,
+            Page::AddWallpaper,
+            Page::History,
+            Page::FirstRun,
+        ] {
+            app.panel.as_mut().unwrap().page = page;
+            let built = super::super::build(&app, &mut ui.text);
+            assert!(
+                !built
+                    .list
+                    .hits
+                    .iter()
+                    .any(|hit| hit.label.as_ref() == "Done"),
+                "{page:?}"
+            );
+            assert!(
+                built
+                    .list
+                    .hits
+                    .iter()
+                    .any(|hit| hit.label.starts_with("Cancel ")),
+                "{page:?}"
+            );
+            if page == Page::FirstRun {
+                assert!(
+                    !built
+                        .list
+                        .hits
+                        .iter()
+                        .any(|hit| hit.label.starts_with("Back to "))
+                );
+            }
+        }
+        app.panel.as_mut().unwrap().page = Page::Root;
+        super::super::history::observe(&app);
+        app.run(Action::Preset("islands"));
+        let last = app.panel.as_ref().unwrap().history.borrow().entries.len() - 1;
+        app.panel.as_mut().unwrap().page = Page::History;
+        app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(last);
+        assert_eq!(super::super::editors::footer_height(&app), 0.0);
+        app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(0);
+        assert_eq!(super::super::editors::footer_height(&app), 64.0);
+    }
+
+    #[test]
+    fn unreadable_files_have_readable_status_and_inert_editors_while_newer_stays_newer() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        for (source, label) in [
+            ("{broken", "Read only"),
+            ("{\"future_setting\":true}", "Newer"),
+        ] {
+            let mut app = fixture(&ui);
+            app.docs = crate::docs::Docs::fixture([source, "{}", "{}", "{}"]);
+            app.panel.as_mut().unwrap().page = Page::Look;
+            let built = super::super::build(&app, &mut ui.text);
+            assert!(built.list.ops.iter().any(|op| matches!(op, mypaper_ui::Op::Text { text, style, color, .. } if text.as_ref() == label && (label == "Newer" || style.size >= 12.0 && *color == super::super::palette_for(&app).ink1))));
+            assert!(
+                !built
+                    .targets
+                    .iter()
+                    .any(|target| matches!(target.action, Action::SetStyle(_) | Action::Slider(_)))
+            );
+            assert!(built.list.hits.iter().any(|hit| !hit.enabled));
+        }
+    }
+
+    #[test]
+    fn widget_switcher_reports_only_the_selected_display_and_positions_keep_grid_details_accessible()
+     {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui);
+        app.panel.as_mut().unwrap().page = Page::Widgets;
+        let first = super::super::build(&app, &mut ui.text);
+        let rows: Vec<_> = first
+            .list
+            .hits
+            .iter()
+            .filter(|hit| hit.label.contains("column "))
+            .collect();
+        assert!(!rows.is_empty());
+        assert!(rows.iter().all(|hit| hit.label.contains("row ")));
+        assert!(
+            !first.list.ops.iter().any(
+                |op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.contains("column "))
+            )
+        );
+        let version = app.docs.version;
+        super::super::run(&mut app, Command::Display(1));
+        let second = super::super::build(&app, &mut ui.text);
+        assert!(
+            !second
+                .list
+                .hits
+                .iter()
+                .any(|hit| hit.label.contains("column "))
+        );
+        assert_eq!(app.docs.version, version);
     }
 }

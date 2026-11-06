@@ -8,6 +8,7 @@ use crate::{
     ui::{B, Col},
 };
 use mypaper_ui::controls::key;
+use mypaper_ui::{Rect, controls::Align};
 
 pub fn view(app: &App, b: &mut B, c: &mut Col) {
     let (step, starter, taskbar) = match app.overlay {
@@ -102,10 +103,21 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         }
     }
     group(b, c, "Recovery", |b, c| {
-        notice(
-            b,
-            c,
-            "Ctrl Alt Shift Backspace puts the Windows desktop back, from anywhere.",
-        )
+        let style = super::controls::font(b, 12.0, 500);
+        let mut x = c.x;
+        for label in ["Ctrl", "Alt", "Shift", "Backspace"] {
+            let width = b.measure(label, &style).0 + b.px(16.0);
+            if x + width > c.right() {
+                x = c.x;
+                c.y += b.px(32.0);
+            }
+            let r = Rect::new(x, c.y + b.px(4.0), width, b.px(26.0));
+            b.fill(r, b.px(5.0), b.p.fill);
+            b.stroke(r, b.px(5.0), b.px(1.0), b.p.edge);
+            super::controls::text(b, r, label, 12.0, 500, b.p.ink1, Align::Center);
+            x += width + b.px(6.0);
+        }
+        c.y += b.px(36.0);
+        notice(b, c, "Put the Windows desktop back, from anywhere.");
     });
 }

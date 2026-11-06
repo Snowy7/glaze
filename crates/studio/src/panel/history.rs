@@ -500,6 +500,12 @@ pub fn record_edit(app: &mut App, label: &str, ops: &[Op], checkpoint: usize) {
             Some(path.into())
         }
         (DocId::Bars, "/preset" | "/top/design" | "/dock/design") => Some(op.path.clone()),
+        (DocId::Bars, path)
+            if path.starts_with("/overrides/")
+                && (path.ends_with("/design") || path.ends_with("/preset")) =>
+        {
+            Some(path.into())
+        }
         (DocId::Widgets, path)
             if path.ends_with("/variant")
                 || path.ends_with("/face")
@@ -566,6 +572,9 @@ pub fn retry(app: &App) {
 }
 
 pub fn restore(app: &mut App) {
+    if !can_restore(app) {
+        return;
+    }
     let selected = app.panel.as_ref().and_then(|state| {
         let history = state.history.borrow();
         history
@@ -579,4 +588,17 @@ pub fn restore(app: &mut App) {
         app.panel.as_ref().unwrap().history.borrow_mut().selected = None;
         app.toast_undo("Restored this desktop");
     }
+}
+
+pub fn can_restore(app: &App) -> bool {
+    let Some(panel) = &app.panel else {
+        return false;
+    };
+    let history = panel.history.borrow();
+    history
+        .selected
+        .and_then(|i| history.entries.get(i).map(|entry| (i, entry)))
+        .is_some_and(|(i, entry)| {
+            i + 1 < history.entries.len() && entry.desktop != Desktop::read(app)
+        })
 }
