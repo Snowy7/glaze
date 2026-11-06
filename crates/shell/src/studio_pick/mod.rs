@@ -1,9 +1,11 @@
 //! Transient desktop picking while Studio's panel is open. Selection never writes config.
 //! Catchers sit below widgets in the desktop band; widget input still reaches its real HWND.
 mod chrome;
+pub mod module_drag;
 mod notice;
 pub mod preview;
 pub mod resize;
+pub mod wallpaper;
 pub mod wire;
 
 use anyhow::Result;
@@ -151,6 +153,12 @@ pub struct StudioPick {
     resize_preview: Option<resize::Preview>,
     widget_revision: Option<u64>,
     warm_preview: bool,
+    module_gesture: Option<module_drag::Gesture>,
+    module_preview: Option<module_drag::Preview>,
+    module_zones: Vec<module_drag::Zone>,
+    module_raw: serde_json::Value,
+    module_marker: Option<Surface>,
+    wallpaper_still: wallpaper::Still,
 }
 
 impl StudioPick {
@@ -173,6 +181,12 @@ impl StudioPick {
             resize_preview: None,
             widget_revision: None,
             warm_preview: false,
+            module_gesture: None,
+            module_preview: None,
+            module_zones: Vec::new(),
+            module_raw: serde_json::Value::Null,
+            module_marker: None,
+            wallpaper_still: wallpaper::Still::default(),
         })
     }
     pub fn timeout_ms(&self) -> u32 {
@@ -188,6 +202,22 @@ impl StudioPick {
 
     pub fn preview(&mut self) -> &mut preview::Preview { &mut self.preview }
 
+    pub fn bar_previews(&mut self) -> (&mut preview::Preview, Option<&module_drag::Preview>) {
+        (&mut self.preview, self.module_preview.as_ref())
+    }
+
+    pub fn wallpaper_preview(&mut self, ui: &mut Ui) {
+        if let Err(error) = self.wallpaper_still.update(
+            ui,
+            self.preview.snapshot_sequence(),
+            self.preview.snapshot_theme().flatten(),
+            &self.monitors,
+            self.anchor,
+        ) {
+            log::warn!("Studio History wallpaper still: {error:#}");
+        }
+    }
+
     pub fn previews(&mut self) -> (&mut preview::Preview, Option<&resize::Preview>) {
         (&mut self.preview, self.resize_preview.as_ref())
     }
@@ -201,8 +231,19 @@ impl StudioPick {
         }
     }
 
-    pub fn tick(&mut self, ui: &mut Ui, targets: &[Target], bars: &BarsConfig, widget_revision: Option<u64>) {
+    pub fn tick(
+        &mut self,
+        ui: &mut Ui,
+        targets: &[Target],
+        bars: &BarsConfig,
+        widget_revision: Option<u64>,
+        zones: Vec<module_drag::Zone>,
+    ) {
         self.widget_revision = widget_revision;
+        self.module_raw = serde_json::Value::Object(bars.raw().clone());
+        if self.module_gesture.is_none() {
+            self.module_zones = zones;
+        }
         let mut previous_owner = self.session.owner;
         while let Some((source, request)) = self.endpoint.next() {
             match request {
@@ -272,6 +313,12 @@ impl StudioPick {
                     else { self.notice = Some(notice::Notice::new(display, text, step)); }
                 }
                 Message::UndoDismiss if self.owns(source) => self.notice = None,
+                Message::MoveModuleResult {revision} if self.owns(source) => {
+                    if let Some(preview)=&mut self.module_preview {
+                        if let Some(revision)=revision {preview.saved_revision=Some(revision);}
+                        else {self.module_preview=None;}
+                    }
+                }
                 Message::ResizeResult { selection, cell, size, revision } if self.owns(source) => {
                     if let Some(preview) = &mut self.resize_preview && preview.selection == selection
                         && preview.cell == cell && preview.size == size {
@@ -285,6 +332,9 @@ impl StudioPick {
                     }) =>
                 {
                     self.gesture = None;
+                    self.module_gesture=None;
+                    self.module_preview=None;
+                    self.module_marker=None;
                     self.resize_preview = None;
                     self.session.selected = None;
                     self.session.highlight = None;
@@ -319,6 +369,9 @@ impl StudioPick {
         }
         if !self.session.active() {
             self.gesture = None;
+            self.module_gesture=None;
+            self.module_preview=None;
+            self.module_marker=None;
             self.catchers.clear();
             self.decorations.clear();
             self.hovered = None;
@@ -415,6 +468,47 @@ impl StudioPick {
         }
         for catcher in &self.catchers {
             let _ = catcher.surface.keep_above_desktop();
+        }
+        let bars_revision = wire::revision(&self.module_raw);
+        if self
+            .module_preview
+            .as_ref()
+            .is_some_and(|p| !p.current(bars_revision))
+        {
+            self.module_preview = None;
+        }
+        if self
+            .module_gesture
+            .as_ref()
+            .is_some_and(|g| g.base_revision != bars_revision)
+        {
+            self.finish_module(false);
+        }
+        if let Some(gesture) = &mut self.module_gesture {
+            use windows::Win32::{
+                Foundation::POINT,
+                UI::{
+                    Input::KeyboardAndMouse::GetAsyncKeyState, WindowsAndMessaging::GetCursorPos,
+                },
+            };
+            let mut point = POINT::default();
+            // SAFETY: read-only state supports a no-activate chip while the panel owns focus.
+            let (released, cancelled) = unsafe {
+                if GetCursorPos(&mut point).is_ok() {
+                    gesture.update(Point::new(point.x as f32, point.y as f32));
+                }
+                (GetAsyncKeyState(1) >= 0, GetAsyncKeyState(27) < 0)
+            };
+            self.module_preview = gesture.preview.clone();
+            let marker = gesture.marker;
+            if let Err(e) = self.paint_module_marker(ui, marker) {
+                log::warn!("Studio module insertion: {e:#}");
+            }
+            if released || cancelled {
+                self.finish_module(!cancelled);
+            } else {
+                return;
+            }
         }
         if let Some(notice) = &mut self.notice {
             match notice.tick(ui, &self.monitors, bars, self.panel) {
@@ -514,9 +608,30 @@ impl StudioPick {
     }
 
     /// Runs before controls; only a selected widget's empty face or chip starts a move.
-    pub fn event(&mut self, surface: SurfaceId, event: &Event, target: Option<Target>, move_surface: Option<&Surface>) -> bool {
+    pub fn event(
+        &mut self,
+        surface: SurfaceId,
+        event: &Event,
+        target: Option<Target>,
+        move_surface: Option<&Surface>,
+    ) -> bool {
         if !self.active() {
             return false;
+        }
+        if let Some(gesture) = &mut self.module_gesture
+            && gesture.capture == surface
+        {
+            match event {
+                Event::Move(p) | Event::Release(p, Button::Left) => {
+                    gesture.update(Point::new(p.screen.0 as f32, p.screen.1 as f32));
+                    if matches!(event, Event::Release(_, Button::Left)) {
+                        self.finish_module(true);
+                    }
+                }
+                Event::CaptureLost | Event::Cancelled | Event::Key(27) => self.finish_module(false),
+                _ => {}
+            }
+            return true;
         }
         if let Some(notice) = &mut self.notice
             && let Some(undo) = notice.event(surface, event)
@@ -578,8 +693,14 @@ impl StudioPick {
                 Event::Press(p, Button::Left) => {
                     let gesture = Gesture::new(&decoration.target, &decoration.chip,
                         Point::new(p.screen.0 as f32, p.screen.1 as f32), None);
+                    let module=if selection.kind == Kind::Module {
+                        let primary=self.monitors.iter().find(|m|m.device == selection.display).is_some_and(|m|m.primary);
+                        module_drag::Gesture::new(selection.clone(),&decoration.chip,
+                            Point::new(p.screen.0 as f32,p.screen.1 as f32),self.module_zones.clone(),self.module_raw.clone(),primary,self.monitors.len()>1)
+                    } else {None};
                     self.select(selection);
                     if let Some(gesture) = gesture { self.begin_geometry(gesture); }
+                    self.module_gesture=module;
                 }
                 _ => {}
             }
@@ -627,6 +748,10 @@ impl StudioPick {
 
     fn select(&mut self, selection: Selection) {
         self.gesture = None;
+        self.module_gesture = None;
+        self.module_preview = None;
+        self.module_marker = None;
+        self.wallpaper_still.clear();
         self.resize_preview = None;
         self.session.selected = Some(selection.clone());
         if let Some((owner, _)) = self.session.owner {
@@ -650,11 +775,88 @@ impl StudioPick {
         self.preview = preview::Preview::default();
         self.resize_preview = None;
         self.gesture = None;
+        self.module_gesture = None;
+        self.module_preview = None;
+        self.module_marker = None;
         self.hovered = None;
         self.hover_until = None;
         self.decorations.clear();
         self.pressed = false;
         self.notice = None;
+    }
+
+    fn finish_module(&mut self, commit: bool) {
+        let Some(gesture) = self.module_gesture.take() else {
+            return;
+        };
+        self.module_marker = None;
+        self.pressed = false;
+        self.module_preview = if commit {
+            gesture.preview.clone()
+        } else {
+            None
+        };
+        if commit
+            && self.module_preview.is_some()
+            && let Some(destination) = &gesture.destination
+            && let Some((owner, _)) = self.session.owner
+        {
+            if !wire::send(
+                HWND(owner as _),
+                self.endpoint.hwnd(),
+                &Message::MoveModule {
+                    selection: gesture.selection.clone(),
+                    destination: destination.clone(),
+                    base_revision: gesture.base_revision,
+                },
+            ) {
+                self.module_preview = None;
+            }
+        }
+        self.decorations.clear();
+    }
+
+    fn paint_module_marker(&mut self, ui: &mut Ui, rect: Option<Rect>) -> Result<()> {
+        let Some(rect) = rect else {
+            self.module_marker = None;
+            return Ok(());
+        };
+        if self.module_marker.is_none() {
+            let surface = Surface::new(
+                SurfaceKind::Popup { activate: false },
+                "Studio module insertion",
+                Role::Pane,
+            )?;
+            surface.set_no_activate(true);
+            surface.set_click_through(true);
+            self.module_marker = Some(surface);
+        }
+        let surface = self.module_marker.as_mut().unwrap();
+        let r = rect.inflate(2.0);
+        let local = Rect::new(2.0, 2.0, rect.width(), rect.height());
+        surface.present(
+            ui,
+            (r.left.round() as i32, r.top.round() as i32),
+            (r.width().ceil() as u32, r.height().ceil() as u32),
+            DisplayList {
+                ops: vec![
+                    Op::Stroke {
+                        rect: local,
+                        radius: 1.0,
+                        width: 3.0,
+                        color: Rgba::rgb8([20, 20, 20], 1.0),
+                    },
+                    Op::Fill {
+                        rect: local,
+                        radius: 1.0,
+                        color: Rgba::rgb8([255, 255, 255], 1.0),
+                    },
+                ],
+                ..Default::default()
+            },
+        )?;
+        surface.show();
+        Ok(())
     }
 
     fn begin_geometry(&mut self, gesture: Gesture) {

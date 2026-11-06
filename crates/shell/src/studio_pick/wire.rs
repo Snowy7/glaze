@@ -321,6 +321,14 @@ pub enum Message {
         size: [u32; 2],
         revision: Option<u64>,
     },
+    MoveModule {
+        selection: Selection,
+        destination: super::module_drag::Slot,
+        base_revision: u64,
+    },
+    MoveModuleResult {
+        revision: Option<u64>,
+    },
     Selected {
         selection: Selection,
     },

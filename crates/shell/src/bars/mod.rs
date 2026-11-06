@@ -43,6 +43,14 @@ use std::{
     time::{Duration, Instant},
 };
 use view::Target;
+
+/// Floating docks expose only explicitly configured modules, sharing the view's rule.
+fn visible_modules(kind: BarKind, config: &BarsConfig) -> impl Iterator<Item = &ModuleRef> {
+    let top = (kind == BarKind::Top).then(|| config.top.modules());
+    let dock =
+        (kind == BarKind::Dock).then(|| view::dock_module_lists(config).into_iter().flatten());
+    top.into_iter().flatten().chain(dock.into_iter().flatten())
+}
 use windows::Win32::{
     Foundation::HANDLE,
     UI::{
@@ -74,7 +82,7 @@ pub struct Bars {
     studio_config: Option<BarsConfig>,
     studio_theme: Option<Option<LoadedTheme>>,
     studio_image_root: Option<std::path::PathBuf>,
-    studio_stamp: (Option<u64>, u64),
+    studio_stamp: (Option<u64>, u64, Option<u64>),
     studio_dock_pending: bool,
     studio_dock_applied: Instant,
     studio_frame: Duration,
@@ -153,7 +161,7 @@ impl Bars {
             studio_config: None,
             studio_theme: None,
             studio_image_root: None,
-            studio_stamp: (None, 0),
+            studio_stamp: (None, 0, None),
             studio_dock_pending: false,
             studio_dock_applied: Instant::now(),
             studio_frame: mypaper_ui::display_frame(),
@@ -923,16 +931,34 @@ impl Bars {
         for bar in &mut self.bars { bar.studio_session(active); }
     }
 
-    pub fn studio_preview(&mut self, preview: &mut crate::studio_pick::preview::Preview) {
+    pub fn studio_preview(
+        &mut self,
+        preview: &mut crate::studio_pick::preview::Preview,
+        module: Option<&crate::studio_pick::module_drag::Preview>,
+    ) {
         use crate::studio_pick::wire::{self, Document};
-        if !preview.has(Document::Bars) && self.studio_stamp.0.is_none() { return; }
+        if !preview.has(Document::Bars)
+            && module.is_none()
+            && self.studio_stamp.0.is_none()
+            && self.studio_stamp.2.is_none()
+        {
+            return;
+        }
         let raw = serde_json::Value::Object(self.config.raw().clone());
         let revision = wire::revision(&raw);
         let value = preview.effective(Document::Bars, revision);
-        let stamp = (value.map(|v| v.0), revision);
+        let module = module.filter(|p| p.current(revision));
+        let stamp = (
+            value.map(|v| v.0),
+            revision,
+            module.map(|p| wire::revision(&p.ops)),
+        );
         if self.studio_stamp == stamp { return; }
         self.studio_stamp = stamp;
-        self.studio_config = value.and_then(|(_, ops)| Self::studio_preview_config(&self.config, ops));
+        self.studio_config = module
+            .map(|p| p.ops.as_slice())
+            .or_else(|| value.map(|(_, ops)| ops))
+            .and_then(|ops| Self::studio_preview_config(&self.config, ops));
         self.studio_theme = preview.snapshot_theme().map(|theme| theme.cloned());
         if let Some(theme) = &self.studio_theme {
             self.studio_image_root.get_or_insert_with(|| self.images.theme.clone());
@@ -992,6 +1018,86 @@ impl Bars {
                 let label = studio_labels::label(&module, &bar.config, bar.tokens.family == Family::Fluent);
                 result.push(make(Kind::Module, format!("{key}/{list}/{index}"), label,
                     hit.rect.offset(origin.0 as f32, origin.1 as f32), 4.0 * bar.scale(), false));
+            }
+        }
+        result
+    }
+
+    /// Frozen hit regions keep insertion targets stable while the module itself previews.
+    pub fn studio_zones(&self) -> Vec<crate::studio_pick::module_drag::Zone> {
+        use crate::studio_pick::{
+            module_drag::{Slot, Zone},
+            wire::Kind,
+        };
+        let targets = self.studio_targets();
+        let mut result = Vec::new();
+        for bar in self.bars.iter().filter(|b| b.shows_content()) {
+            let key = if bar.kind == BarKind::Top {
+                "top"
+            } else {
+                "dock"
+            };
+            let horizontal = bar.horizontal();
+            let origin = bar.origin();
+            let size = bar.surface.client_size();
+            let full = mypaper_ui::Rect::new(
+                origin.0 as f32,
+                origin.1 as f32,
+                size.0 as f32,
+                size.1 as f32,
+            );
+            let names: &[&str] = if key == "top" {
+                &["left", "center", "right"]
+            } else {
+                &["left", "right"]
+            };
+            for (i, name) in names.iter().enumerate() {
+                let rect = if horizontal {
+                    mypaper_ui::Rect::new(
+                        full.left + full.width() * i as f32 / names.len() as f32,
+                        full.top,
+                        full.width() / names.len() as f32,
+                        full.height(),
+                    )
+                } else {
+                    mypaper_ui::Rect::new(
+                        full.left,
+                        full.top + full.height() * i as f32 / names.len() as f32,
+                        full.width(),
+                        full.height() / names.len() as f32,
+                    )
+                };
+                let mut items: Vec<_> = targets
+                    .iter()
+                    .filter(|t| {
+                        t.selection.kind == Kind::Module
+                            && t.selection.display == bar.monitor.device
+                    })
+                    .filter_map(|t| {
+                        let slot = Slot::parse(&t.selection.id)?;
+                        (slot.bar == key && slot.zone == *name).then_some((slot.index, t.rect))
+                    })
+                    .collect();
+                items.sort_by_key(|(index, _)| *index);
+                items.dedup_by_key(|(index, _)| *index);
+                let len = if key == "top" {
+                    match *name {
+                        "left" => bar.config.top.left.len(),
+                        "center" => bar.config.top.center.len(),
+                        _ => bar.config.top.right.len(),
+                    }
+                } else {
+                    view::dock_module_lists(&bar.config)[i].len()
+                };
+                result.push(Zone {
+                    display: bar.monitor.device.clone(),
+                    bar: key.into(),
+                    zone: (*name).into(),
+                    rect,
+                    horizontal,
+                    items,
+                    len,
+                });
             }
         }
         result
@@ -2013,7 +2119,7 @@ impl Bars {
             self.bars
                 .iter()
                 .filter(|b| b.shows_content())
-                .flat_map(|b| providers::actions::bar_modules(b.kind, &b.config)),
+                .flat_map(|b| visible_modules(b.kind, &b.config)),
             self.bars
                 .iter()
                 .any(|b| b.shows_content() && b.kind == BarKind::Dock),

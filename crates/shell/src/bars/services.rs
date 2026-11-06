@@ -213,10 +213,8 @@ impl Services {
         if self.topics.contains(&Topic::Custom) {
             for config in configs {
                 for (id, options) in config.custom_modules() {
-                    let shown = config
-                        .top
-                        .modules()
-                        .chain(config.dock.modules())
+                    let shown = super::visible_modules(mypaper_bars::actions::BarKind::Top,config)
+                        .chain(super::visible_modules(mypaper_bars::actions::BarKind::Dock,config))
                         .any(|m| matches!(m, ModuleRef::Custom(key) if key == id));
                     if shown && let Some(command) = &options.command {
                         custom.insert(

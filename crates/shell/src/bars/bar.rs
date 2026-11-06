@@ -453,7 +453,12 @@ impl Bar {
             || if self.kind == BarKind::Top { self.config.top.enabled } else { self.config.dock.enabled }
     }
     pub fn topics(&self) -> std::collections::BTreeSet<mypaper_bars::actions::Topic> {
-        bar_topics(self.kind, &self.config)
+        let mut topics = bar_topics(self.kind, &self.config);
+        topics.extend(
+            super::visible_modules(self.kind, &self.config)
+                .filter_map(mypaper_bars::actions::module_topic),
+        );
+        topics
     }
     pub fn hide_when_maximized(&self) -> bool {
         match self.kind {

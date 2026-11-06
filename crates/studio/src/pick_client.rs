@@ -595,7 +595,7 @@ pub fn preview_action(app: &App, action: &Action) -> bool {
 }
 
 /// Show a History desktop on every display using frozen theme data, without changing files.
-/// End with `end_preview` on Now, Cancel or navigation. Wallpaper playback stays engine-owned.
+/// End with `end_preview` on Now, Cancel or navigation. The shell paints the wallpaper still.
 pub fn preview_snapshot(
     app: &App,
     config: &Value,
@@ -637,6 +637,19 @@ pub fn preview_snapshot(
     });
     if !sent { end_preview(); }
     sent
+}
+
+/// History can explain a partial preview when a wallpaper has no usable local still.
+pub(crate) fn snapshot_wallpaper_available(theme: &Value, dir: Option<&std::path::Path>) -> bool {
+    wire::SnapshotTheme {
+        raw: theme.clone(),
+        dir: dir.map(std::path::Path::to_path_buf),
+    }
+    .loaded()
+    .ok()
+    .flatten()
+    .and_then(|theme| mypaper_shell::studio_pick::wallpaper::still_path(&theme))
+    .is_some()
 }
 
 /// Restores the saved desktop after leaving a chooser, Esc, or navigation.
@@ -1028,6 +1041,14 @@ pub fn on_key(app: &mut App, key: u16) -> bool {
     });
     for message in messages {
         match message {
+            Message::MoveModule {selection,destination,base_revision} => {
+                let revision=move_module(app,selection,destination,base_revision);
+                CLIENT.with(|c| {
+                    if let Some(c)=c.borrow().as_ref() && let Some(shell)=c.shell {
+                        wire::send(shell,c.endpoint.hwnd(),&Message::MoveModuleResult{revision});
+                    }
+                });
+            }
             Message::Selected { selection } => {
                 CLIENT.with(|c| {
                     if let Some(c) = c.borrow_mut().as_mut() {
@@ -1094,6 +1115,60 @@ pub fn on_key(app: &mut App, key: u16) -> bool {
         }
     }
     true
+}
+
+/// The shell previews movement; only this release validates and writes one undoable edit.
+fn move_module(
+    app: &mut App,
+    selection: Selection,
+    destination: mypaper_shell::studio_pick::module_drag::Slot,
+    base_revision: u64,
+) -> Option<u64> {
+    use mypaper_shell::studio_pick::module_drag::{Slot, move_ops};
+    if selection.kind != Kind::Module
+        || wire::revision(&app.docs.doc(DocId::Bars).raw) != base_revision
+    {
+        return None;
+    }
+    let from = Slot::parse(&selection.id)?;
+    let display = display_index(&app.monitors, &selection.display)?;
+    let ops = move_ops(
+        &app.docs.doc(DocId::Bars).raw,
+        &selection.display,
+        app.monitors[display].primary,
+        app.monitors.len() > 1,
+        &from,
+        &destination,
+    )?;
+    let checkpoint = app.docs.undo_count();
+    app.apply(
+        "Move module",
+        ops.into_iter()
+            .map(|op| Op {
+                doc: DocId::Bars,
+                path: op.path,
+                value: Some(op.value),
+            })
+            .collect(),
+    );
+    if app.docs.undo_count() == checkpoint
+        || matches!(app.docs.saved, crate::docs::Saved::Failed(_))
+    {
+        return None;
+    }
+    selected(
+        app,
+        Selection {
+            id: destination.id(),
+            ..selection
+        },
+    );
+    CLIENT.with(|c| {
+        if let Some(c) = c.borrow_mut().as_mut() {
+            c.announce(app, "Move module · Undo".into());
+        }
+    });
+    Some(wire::revision(&app.docs.doc(DocId::Bars).raw))
 }
 
 /// The shell never saves widget geometry. Release returns here for one validated undo step.
@@ -1259,6 +1334,40 @@ fn reposition(app: &App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn module_release_is_one_undo_step_and_rejects_a_stale_desktop() {
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State::default());
+        let before = app.docs.doc(DocId::Bars).raw.clone();
+        let base = wire::revision(&before);
+        let display = app.monitors[0].device.clone();
+        let selection = Selection {
+            kind: Kind::Module,
+            id: "top/left/1".into(),
+            display,
+        };
+        let destination =
+            mypaper_shell::studio_pick::module_drag::Slot::parse("dock/left/0").unwrap();
+        assert!(
+            move_module(
+                &mut app,
+                selection.clone(),
+                destination.clone(),
+                base.wrapping_add(1)
+            )
+            .is_none()
+        );
+        assert_eq!(app.docs.undo_count(), 0);
+        assert!(move_module(&mut app, selection.clone(), destination.clone(), base).is_some());
+        assert_eq!(app.docs.undo_count(), 1);
+        assert_eq!(app.nav.module.as_ref().unwrap().bar, Bar::Dock);
+        assert!(move_module(&mut app, selection, destination, base).is_none());
+        assert_eq!(app.docs.undo_count(), 1);
+        app.docs.undo().unwrap();
+        assert_eq!(app.docs.doc(DocId::Bars).raw, before);
+    }
 
     #[test]
     fn chooser_previews_include_whole_styles_without_touching_documents_or_undo() {

@@ -320,16 +320,24 @@ impl Shell {
             if let Some(widgets) = &self.widgets { targets.extend(widgets.studio_targets()); }
         }
         let revision = self.studio.active().then(|| self.widgets.as_ref().map(widgets::Widgets::studio_revision)).flatten();
-        self.studio.tick(ui, &targets, self.bars.config(), revision);
+        let zones = if self.studio.active() {
+            self.bars.studio_zones()
+        } else {
+            Vec::new()
+        };
+        self.studio
+            .tick(ui, &targets, self.bars.config(), revision, zones);
         let warm = self.studio.take_preview_warm();
         if warm { self.bars.warm_studio_preview(); }
-        self.bars.studio_preview(self.studio.preview());
+        let (preview, module) = self.studio.bar_previews();
+        self.bars.studio_preview(preview, module);
         self.bars.studio_session(self.studio.active());
         if let Some(widgets) = &mut self.widgets {
             let (preview, resize) = self.studio.previews();
             widgets.studio_preview(ui, preview, resize, warm);
             widgets.studio_session(ui, self.studio.active(), self.studio.lifted());
         }
+        self.studio.wallpaper_preview(ui);
     }
 
     /// Handles everything queued: inbox messages and input, in order, until both are empty.

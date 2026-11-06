@@ -956,6 +956,28 @@ pub fn top(
     out.finish(list, (width, (h + 2.0 * m).ceil() as u32))
 }
 
+pub(super) fn dock_module_lists(config: &BarsConfig) -> [&[ModuleRef]; 2] {
+    let taskbar = config.dock.style == DockStyle::Taskbar;
+    let explicit = |zone: &str| {
+        config
+            .raw()
+            .get("dock")
+            .is_some_and(|dock| dock.get(zone).is_some())
+    };
+    [
+        if taskbar || explicit("left") {
+            &config.dock.left
+        } else {
+            &[]
+        },
+        if taskbar || explicit("right") {
+            &config.dock.right
+        } else {
+            &[]
+        },
+    ]
+}
+
 /// The macOS Dock, or a taskbar. A stable cropped envelope: magnification changes content and
 /// plates, never monitor-sized buffers.
 #[allow(clippy::too_many_arguments)]
@@ -1006,8 +1028,9 @@ pub fn dock(
         .filter(|&i| i > 0);
     let extras_divider = !taskbar && !apps.is_empty() && !d.extras.is_empty();
     let dividers = split.map_or(0.0, |_| divider) + if extras_divider { divider } else { 0.0 };
+    let module_lists = dock_module_lists(config);
     let groups = zones(
-        &[&d.left, &d.right],
+        &module_lists,
         model,
         config,
         BarKind::Dock,
@@ -1017,15 +1040,11 @@ pub fn dock(
         scale,
     );
     let side_width = |i: usize| {
-        if taskbar {
             groups[i]
                 .iter()
                 .flatten()
                 .map(|c| c.width + gap)
                 .sum::<f32>()
-        } else {
-            0.0
-        }
     };
     let sides = [side_width(0), side_width(1)];
     let base =
@@ -1046,7 +1065,7 @@ pub fn dock(
     let envelope = if taskbar {
         along
     } else {
-        (base + extra + px(24.0)).min(along)
+        (base + sides[0] + sides[1] + extra + px(24.0)).min(along)
     }
     .max(1.0);
     let across = if taskbar {
@@ -1076,7 +1095,7 @@ pub fn dock(
             ((envelope - base + sides[0]) / 2.0).max(sides[0] + pad)
         }
     } else {
-        (envelope - base) / 2.0
+        (envelope - base - sides[0] - sides[1]) / 2.0 + sides[0]
     }
     .round();
     // Where app `i` starts along the dock, past the dividers before it.
@@ -1147,10 +1166,10 @@ pub fn dock(
     let (panel_start, panel_length) = if taskbar {
         (0.0, envelope)
     } else if rest.is_empty() {
-        (start, base)
+        (start - sides[0], base + sides[0] + sides[1])
     } else {
         let from = span(0).0 - pad;
-        (from, span(rest.len() - 1).1 + pad - from)
+        (from - sides[0], span(rest.len() - 1).1 + pad - from + sides[0] + sides[1])
     };
     let plate = |a: f32, length: f32| convert(a, edge - pad, length, size + pad * 2.0);
     if islands {
@@ -1190,19 +1209,23 @@ pub fn dock(
             Rgba::HIT,
         );
     }
-    if taskbar {
+    if taskbar || sides[0] > 0.0 || sides[1] > 0.0 {
         for (i, zone) in groups.iter().enumerate().take(2) {
             let mut a = if i == 0 {
-                if d.align == ItemsAlign::Start {
+                if taskbar && d.align == ItemsAlign::Start {
                     pad
                 } else {
                     start + pad - sides[0]
                 }
             } else {
-                envelope - sides[1] - pad
+                if taskbar {envelope - sides[1] - pad} else {start + base - pad}
             };
+            if islands && sides[i] > 0.0 {
+                panel(&mut f,&mut out,plate(a-pad,sides[i]+pad),px(tokens.radius),tokens);
+            }
             for content in zone.iter().flatten() {
-                let rect = convert(a, 0.0, content.width, across);
+                let rect = if taskbar {convert(a,0.0,content.width,across)}
+                    else {convert(a,edge-pad,content.width,size+2.0*pad)};
                 item(&mut f, &mut out, content, rect, config, tokens, tokens.bare);
                 a += content.width + gap;
             }

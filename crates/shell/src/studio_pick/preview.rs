@@ -74,6 +74,11 @@ impl Preview {
         self.snapshot.as_ref().map(Option::as_ref)
     }
 
+    pub fn snapshot_sequence(&self) -> Option<u64> {
+        self.snapshot.as_ref()?;
+        self.values.first().map(|v| v.sequence)
+    }
+
     pub fn snapshot_raw(&self, document: Document) -> Option<&serde_json::Value> {
         self.snapshot.as_ref()?;
         self.values.iter().find(|v| v.document.document == document)
