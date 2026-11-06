@@ -186,7 +186,8 @@ opening (`flyout-released.ps1`).
 |---|---:|---:|
 | Private | 171, 173 MiB | **123, 124, 127, 132 MiB** |
 | Wakes, CPU | 135/s, ~0% | 139/s, ~0% |
-| First frame after the uncover was seen | | **33-62 ms** (12 resumes) |
+| Releasing | | 4.4-13.3 ms on the main thread (14 releases) |
+| First frame after the uncover was seen | | **33-62 ms**, median 47 (14 resumes) |
 
 The memory comes back about 3 s after the release (the driver frees the swapchain late:
 `release-course.ps1`). Five release/resume cycles in a row resumed at 182, 184, 184, 184, 182
