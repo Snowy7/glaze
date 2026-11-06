@@ -467,3 +467,98 @@ mod font_tests {
         assert!(app.panel.as_ref().unwrap().fonts.get().is_some());
     }
 }
+
+/// Icon packs use the same unboxed, adaptive select as every panel setting.
+pub fn icon_pack(app: &App, b: &mut B, c: &mut Col) {
+    use mypaper_bars::icon_pack::IconPack;
+    use mypaper_ui::{Rect, controls::Align};
+    let current = app
+        .get(DocId::Config, "/look/text/icon_pack")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let folder = mypaper_config::dir().ok().map(|dir| dir.join("icons"));
+    let mut options = vec![(Value::Null, "The style's icons".to_owned())];
+    if let Some(folder) = &folder {
+        let mut names: Vec<_> = std::fs::read_dir(folder)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|entry| entry.path().is_dir())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        options.extend(names.into_iter().map(|name| (json!(name), name)));
+    }
+    crate::ui::anchor(app, "icon_pack", c.view, c.y);
+    super::editors::select(
+        b,
+        c,
+        "Icon pack",
+        current.clone(),
+        Edit::new(DocId::Config, "/look/text/icon_pack", "Icon pack"),
+        options,
+    );
+    let pack = current
+        .as_str()
+        .zip(folder.as_ref())
+        .and_then(|(name, folder)| {
+            let dir = folder.join(name);
+            IconPack::load(&dir).ok().map(|pack| (dir, pack))
+        });
+    if let Some((dir, pack)) = pack {
+        for (i, entry) in pack.entries.iter().enumerate() {
+            let rect = Rect::new(c.x, c.y, c.w, super::controls::height(b, 36.0));
+            let icon = Rect::new(
+                rect.left + b.px(2.0),
+                rect.top + b.px(8.0),
+                b.px(20.0),
+                b.px(20.0),
+            );
+            if let Some(image) = app
+                .images
+                .borrow_mut()
+                .get(&dir.join(&entry.icon), (64, 64))
+            {
+                crate::stage::image_cover(b, icon, &image, 1.0);
+            } else {
+                b.icon(icon, crate::theme::glyph::APP, 14.0, b.p.ink3);
+            }
+            let what = [&entry.path, &entry.umid, &entry.extension, &entry.key]
+                .into_iter()
+                .flatten()
+                .next()
+                .map_or("", String::as_str);
+            super::controls::text(
+                b,
+                Rect::new(
+                    rect.left + b.px(32.0),
+                    rect.top,
+                    rect.width() - b.px(68.0),
+                    rect.height(),
+                ),
+                what,
+                13.0,
+                400,
+                b.p.ink1,
+                Align::Start,
+            );
+            super::controls::icon_button(
+                b,
+                Rect::new(
+                    rect.right - b.px(30.0),
+                    rect.top + b.px(4.0),
+                    b.px(28.0),
+                    b.px(28.0),
+                ),
+                crate::theme::glyph::DELETE,
+                &format!("Remove {what}"),
+                true,
+                Action::IconPackRemove(i),
+            );
+            c.y = rect.bottom;
+        }
+        action_button(b, c, "An app's icon", Action::IconPackAdd);
+    } else {
+        action_button(b, c, "Start your own", Action::IconPackNew);
+    }
+}

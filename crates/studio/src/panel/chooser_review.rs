@@ -35,7 +35,7 @@ fn fixture(ui: &Ui, dark: bool, page: Page) -> App {
 
 fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: bool) {
     app.toast = None;
-    let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r10");
+    let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r11");
     let built = crate::panel::build(app, &mut ui.text);
     let scroll = built.scrolls.last().unwrap();
     app.size.1 =
@@ -45,7 +45,11 @@ fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: b
         let target = built
             .targets
             .iter()
-            .rfind(|target| target.action == action)
+            .rfind(|target| {
+                target.action == action
+                    || matches!(&target.action,
+                Action::Panel(super::super::Command::ApplyChoice(_, inner)) if **inner == action)
+            })
             .expect("hovered action must be present on the review page");
         app.input.pointer = Some(Point::new(target.rect.left + 30.0, target.rect.top + 10.0));
         app.input.hover = Some(target.key);
@@ -67,7 +71,7 @@ fn viewport_shot(app: &App, ui: &mut Ui, name: &str, dark: bool) {
     let image = render(ui, &built.list, app.size.0, app.size.1).unwrap();
     golden::write(
         &image,
-        &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r10").join(format!(
+        &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r11").join(format!(
             "{name}-{}.png",
             if dark { "dark" } else { "light" }
         )),
@@ -149,17 +153,31 @@ fn render_chooser_review() {
                 .iter()
                 .position(|instance| instance.instance == widget)
                 .unwrap();
+            shot(
+                &mut app,
+                &mut ui,
+                &format!("{widget}-collapsed"),
+                None,
+                dark,
+            );
+            app.nav.more.insert(key(("panel-faces", widget, "variant")));
             let path = format!("/instances/{index}/settings/variant");
             let action = crate::panel::build(&app, &mut ui.text)
                 .targets
                 .into_iter()
-                .find_map(|target| match target.action {
-                    Action::Set(edit, value)
-                        if edit.path.as_ref() == path && value == json!(face) =>
-                    {
-                        Some(Action::Set(edit, value))
+                .find_map(|target| {
+                    let action = match target.action {
+                        Action::Panel(super::super::Command::ApplyChoice(_, action)) => *action,
+                        action => action,
+                    };
+                    match action {
+                        Action::Set(edit, value)
+                            if edit.path.as_ref() == path && value == json!(face) =>
+                        {
+                            Some(Action::Set(edit, value))
+                        }
+                        _ => None,
                     }
-                    _ => None,
                 })
                 .unwrap();
             shot(
@@ -286,7 +304,7 @@ fn render_chooser_review() {
         let image = render(&mut ui, &built.list, 360, 620).unwrap();
         golden::write(
             &image,
-            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r10").join(
+            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r11").join(
                 format!("color-360-{}.png", if dark { "dark" } else { "light" }),
             ),
         )
@@ -406,10 +424,41 @@ fn render_gallery_countdown_fits_and_taskbar_choices() {
         let image = render(&mut ui, &list, 480, c.y.ceil() as u32 + 16).unwrap();
         golden::write(
             &image,
-            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r10").join(
+            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r11").join(
                 format!("fit-stills-{}.png", if dark { "dark" } else { "light" }),
             ),
         )
         .unwrap();
+    }
+}
+
+#[test]
+fn render_retained_plugin_face_and_transparent_widget() {
+    let mut ui = Ui::new().unwrap();
+    let trees: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../plugins/t3/golden/faces.json"
+    )).unwrap();
+    for dark in [true, false] {
+        let mut app = fixture(&ui, dark, Page::AddWidget);
+        let id = "t3--running";
+        let manifest = mypaper_widgets::manifest::WidgetManifest::parse(
+            &json!({"id": id,"name":"T3 · Running now","category":"Plugins",
+                "description":"From your connected T3 app","size":{"default":[4,3],"min":[2,2]},"settings":[]}).to_string(), id
+        ).unwrap();
+        app.registry.widgets.clear();
+        app.registry.widgets.insert(id.into(), mypaper_widgets::registry::Installed { manifest });
+        super::begin(&app);
+        app.panel.as_ref().unwrap().chooser.borrow_mut().plugin_faces = Some(json!({
+            id: {"title":"Running now","icon":"terminal","status":"live","face":trees["running"]["small"]}
+        }));
+        app.size = (480, 650);
+        viewport_shot(&app, &mut ui, "gallery-retained-plugin", dark);
+        assert!(app.panel.as_ref().unwrap().chooser.borrow().drawings.keys().any(|key| key.starts_with("face:t3--running")));
+
+        let mut app = fixture(&ui, dark, Page::Widget);
+        app.nav.widget = Some("clock-1".into());
+        app.run(Action::Set(Edit::new(DocId::Widgets, "/appearance/surface", "Background"), json!("none")));
+        app.run(Action::Set(Edit::new(DocId::Widgets, "/instances/0/settings/variant", "Face"), json!("flip")));
+        shot(&mut app, &mut ui, "clock-no-background", None, dark);
     }
 }

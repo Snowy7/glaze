@@ -46,12 +46,12 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
         c,
         &manifest.name,
         &format!(
-            "{} · Display {}",
+            "{} · {}",
             position(app, &layout, instance)
                 .split(',')
                 .next()
                 .unwrap_or(""),
-            app.nav.display + 1
+            crate::panel::controls::display_name(app, app.nav.display)
         ),
     );
     let index = layout
@@ -147,12 +147,12 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                     )
                 })
                 .collect();
-            let shown = crate::panel::choosers::draw(
+            crate::panel::choosers::current(
                 app,
                 b,
                 c,
                 key(("panel-widget-styles", &instance.instance)),
-                b.px(184.0),
+                "Style",
                 &choices,
                 |b, index, rect| {
                     let mut preview = instance.clone();
@@ -173,12 +173,8 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                 },
             );
             let style = selected.unwrap_or(inherited);
-            let preview = shown
-                .map(|index| super::look::STYLES[index].0)
-                .filter(|style| Some(*style) != selected)
-                .map(super::look::style_name);
-            crate::panel::material::applied_controls(b, c, preview, |b, c| {
-                if preview.is_none() {
+            crate::panel::material::applied_controls(b, c, None, |b, c| {
+                {
                     notice(
                         b,
                         c,
@@ -384,23 +380,12 @@ fn manifest_control(
                     )
                 })
                 .collect();
-            text(
-                b,
-                Rect::new(c.x, c.y, c.w, height(b, 24.0)),
-                label,
-                13.0,
-                500,
-                b.p.ink1,
-                Align::Start,
-            );
-            c.y += height(b, 28.0);
-            let picture_height = b.px(184.0);
-            crate::panel::choosers::draw(
+            crate::panel::choosers::current(
                 app,
                 b,
                 c,
                 key(("panel-faces", &instance.instance, name)),
-                picture_height,
+                label,
                 &tiles,
                 |b, index, rect| {
                     face(
@@ -793,6 +778,27 @@ fn number_unit(name: &str, schema: &Value) -> String {
 
 use crate::panel::controls::unit as number_readout;
 
+/// Read the shell's retained kit trees once per gallery visit, without starting plugins.
+fn plugin_data(app: &App, widget: &str) -> Option<Value> {
+    let mut chooser = app.panel.as_ref()?.chooser.borrow_mut();
+    let faces = chooser.plugin_faces.get_or_insert_with(|| {
+        mypaper_widgets::files::local("plugins/studio-faces.json")
+            .ok()
+            .and_then(|path| {
+                let file = std::fs::File::open(path).ok()?;
+                if file.metadata().ok()?.len() > 1 << 20 {
+                    return None;
+                }
+                serde_json::from_reader(file).ok()
+            })
+            .unwrap_or_else(|| json!({}))
+    });
+    faces
+        .get(widget)
+        .filter(|data| data.get("face").is_some_and(Value::is_object))
+        .cloned()
+}
+
 /// Face tiles use the actual shell view with an isolated sample model; no services or writes.
 pub(crate) fn face(
     app: &App,
@@ -813,9 +819,6 @@ pub(crate) fn face(
         return;
     }
     let standalone = setting.is_empty();
-    if !standalone {
-        b.fill(pic, b.px(8.0), b.p.well);
-    }
     let mut settings = instance.settings.clone();
     if !setting.is_empty() {
         settings.insert(setting.into(), json!(value));
@@ -845,7 +848,15 @@ pub(crate) fn face(
         }
     }
     let appearance = mypaper_widgets::look::json_of(&resolved_appearance);
+    if !standalone && resolved_appearance.surface != Some(mypaper_theme::Surface::None) {
+        b.fill(pic, b.px(8.0), b.p.well);
+    }
     let mut resolved_settings = manifest.resolve_settings(&settings);
+    let plugin = instance
+        .widget
+        .contains("--")
+        .then(|| plugin_data(app, &instance.widget))
+        .flatten();
     if instance.widget == "clock" && value == "words" {
         resolved_settings.insert("name".into(), json!("Ada"));
     }
@@ -878,7 +889,9 @@ pub(crate) fn face(
         .get("variant")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let (width, height) = if standalone {
+    let (width, height) = if plugin.is_some() {
+        (pic.width().round().max(1.0) as u32, pic.height().round().max(1.0) as u32)
+    } else if standalone {
         (
             360,
             (360 * instance.size[1] / instance.size[0].max(1)).clamp(80, 360),
@@ -895,11 +908,13 @@ pub(crate) fn face(
             _ => (360, 220),
         }
     };
-    let backdrop = (!standalone && instance.widget != "photo"
+    let backdrop = (!standalone
+        && instance.widget != "photo"
         && resolved_appearance.surface != Some(mypaper_theme::Surface::None))
-        .then(|| crate::panel::specimens::wallpaper(app)).flatten();
+    .then(|| crate::panel::specimens::wallpaper(app))
+    .flatten();
     let cache_key = format!(
-        "face:{}:{setting}:{value}:{width}:{height}:{:.0}x{:.0}:{}:{}:{}:{:p}:{:p}",
+        "face:{}:{setting}:{value}:{width}:{height}:{:.0}x{:.0}:{}:{}:{}:{:p}:{:p}:{}",
         instance.widget,
         pic.width(),
         pic.height(),
@@ -911,14 +926,17 @@ pub(crate) fn face(
         photo
             .as_ref()
             .map_or(std::ptr::null(), std::sync::Arc::as_ptr),
-        backdrop.as_ref().map_or(std::ptr::null(), std::sync::Arc::as_ptr)
+        backdrop
+            .as_ref()
+            .map_or(std::ptr::null(), std::sync::Arc::as_ptr),
+        plugin.as_ref().map_or(String::new(), Value::to_string)
     );
     let cached = crate::panel::choosers::drawing(app, &cache_key);
     // Construct the sample model only on a drawing miss; retain immutable kit operations.
     let drawing = cached.or_else(|| {
     let placed = mypaper_widgets::layout::Placed {
         instance: "panel-face-preview".into(),
-        widget: instance.widget.clone(),
+        widget: if plugin.is_some() { "clock".into() } else { instance.widget.clone() },
         cell: [0, 0],
         size: manifest.size.default,
         settings: resolved_settings,
@@ -942,9 +960,34 @@ pub(crate) fn face(
     let Ok(mut model) = Model::new(placed, &mut storage, now) else {
         return None;
     };
-    if instance.widget.contains("--") && model.data.get("face").is_none() {
-        return None;
+    if instance.widget.contains("--") {
+        model.kind = mypaper_shell::preview::widgets::Widget::Plugin;
+        model.placed.widget = instance.widget.clone();
+        model.data = plugin.clone()?;
     }
+        if instance.widget.starts_with("custom-")
+            && let Ok(definition) = mypaper_widgets::custom::load(&instance.widget)
+        {
+            // Gallery pictures read static/local inputs; commands and network sources run
+            // only after the widget is placed on the desktop.
+            use mypaper_widgets::custom::Source;
+            model.integration.custom.value = match &definition.source {
+                Source::Static { value } => value.clone(),
+                Source::File { .. } => mypaper_widgets::custom::evaluate(&instance.widget, &definition)
+                    .unwrap_or(Value::Null),
+                _ => Value::Null,
+            };
+            if definition.layout == mypaper_widgets::custom::Template::Image
+                && let Some(path) = model.integration.custom.value.as_str()
+                && !path.starts_with("https://")
+            {
+                model.integration.custom.image = app.images.borrow_mut().get(
+                    std::path::Path::new(path),
+                    (pic.width().ceil() as u32, pic.height().ceil() as u32),
+                );
+            }
+            model.integration.custom.definition = Some(definition);
+        }
     sample_content(&mut model, now);
     if instance.widget == "weather" {
         model.data = json!({"current":{"temperature":22,"condition":"Partly cloudy","code":2,"isDay":true,"location":{"name":"Hong Kong"}},"forecast":{"days":[{"date":"2026-11-06","max":24,"min":19,"code":2},{"date":"2026-11-07","max":23,"min":18,"code":3},{"date":"2026-11-08","max":25,"min":20,"code":0}]}});
@@ -1326,6 +1369,55 @@ mod gallery_tests {
     use super::*;
 
     #[test]
+    fn widget_faces_expand_and_a_pick_folds_the_catalog_in_one_step() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State {
+            page: Page::Widget,
+            ..Default::default()
+        });
+        app.nav.widget = Some("clock-1".into());
+        app.size = (480, 1000);
+        let frame = crate::panel::build(&app, &mut ui.text);
+        let disclosure = key(("panel-faces", "clock-1", "variant"));
+        assert!(
+            frame
+                .targets
+                .iter()
+                .any(|target| target.action == Action::More(disclosure))
+        );
+        assert!(
+            !frame
+                .targets
+                .iter()
+                .any(|target| matches!(&target.action, Action::Panel(Command::ApplyChoice(_, _))))
+        );
+        app.run(Action::More(disclosure));
+        let frame = crate::panel::build(&app, &mut ui.text);
+        let action = frame
+            .targets
+            .iter()
+            .find_map(|target| match &target.action {
+                Action::Panel(Command::ApplyChoice(id, action))
+                    if *id == disclosure
+                        && matches!(action.as_ref(), Action::Set(_, value) if value == "world") =>
+                {
+                    Some(target.action.clone())
+                }
+                _ => None,
+            })
+            .unwrap();
+        app.run(action);
+        assert!(!app.is_open(disclosure));
+        assert_eq!(app.docs.undo_count(), 1);
+        let layout = legacy::layout(&app);
+        assert_eq!(
+            layout.get("clock-1").unwrap().settings.get("variant"),
+            Some(&json!("world"))
+        );
+    }
+
+    #[test]
     fn gallery_enter_and_double_click_each_create_one_selected_widget() {
         for double_click in [false, true] {
             let mut ui = mypaper_ui::Ui::new().unwrap();
@@ -1432,7 +1524,15 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                 .find(|p| p.id == plugin)
                 .map(|p| p.name.as_str())
                 .unwrap_or_else(|| manifest.name.split(" · ").next().unwrap_or(plugin));
-            if !developer_mode(app) && development_plugin(plugin, name) {
+            if !developer_mode(app)
+                && (development_plugin(plugin, name)
+                    || app
+                        .plugins
+                        .installed
+                        .iter()
+                        .find(|entry| entry.id == plugin)
+                        .is_some_and(|entry| !super::connections::visible_plugin(entry)))
+            {
                 continue;
             }
             (2, name.to_owned())
@@ -1465,60 +1565,118 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         .category
         .as_deref()
         .and_then(|category| category.strip_prefix("widget:"))
-        .filter(|category| sections.keys().any(|(_, heading)| heading == category));
+        .filter(|category| {
+            *category == "@apps"
+                || sections
+                    .keys()
+                    .any(|(kind, heading)| *kind < 2 && heading == category)
+        });
     let total: usize = sections.values().map(Vec::len).sum();
+    let app_count: usize = sections
+        .iter()
+        .filter(|((kind, _), _)| *kind == 2)
+        .map(|(_, rows)| rows.len())
+        .sum();
     let categories: Vec<_> = std::iter::once(("All", total, None))
         .chain(
             sections
                 .iter()
+                .filter(|((kind, _), _)| *kind < 2)
                 .map(|((_, name), widgets)| (name.as_str(), widgets.len(), Some(name.as_str()))),
         )
+        .chain((app_count > 0).then_some(("From your apps", app_count, Some("@apps"))))
         .collect();
-    let font = crate::panel::controls::font(b, 11.0, 500);
-    let mut x = c.x;
-    let h = height(b, 29.0);
-    for (label, count, value) in categories {
-        let label = format!("{label} ({count})");
-        let width = (b.measure(&label, &font).0 + b.px(18.0)).min(c.w);
-        if x > c.x && x + width > c.right() {
-            x = c.x;
-            c.y += h + b.px(6.0);
-        }
-        let rect = Rect::new(x, c.y, width, h);
-        let k = key(("widget-category", value));
-        let on = category == value;
-        b.plate(k, rect, b.px(6.0), on);
-        text(b, rect, &label, 11.0, 500, b.p.ink1, Align::Center);
-        b.hit_checked(
-            k,
-            rect,
-            mypaper_ui::Role::RadioButton,
-            &label,
-            Some(on),
-            Action::Panel(Command::Category(
-                value.map(|value| format!("widget:{value}")),
-            )),
-            mypaper_ui::controls::Behavior::Click,
+    let folded = c.w < b.px(340.0) || b.t.text_scale > 1.0;
+    let disclosure = key("panel-widget-filters");
+    if folded {
+        let label = categories
+            .iter()
+            .find(|(_, _, value)| *value == category)
+            .map_or("All", |(label, _, _)| *label);
+        action_button(
+            b,
+            c,
+            &format!("Categories: {label}"),
+            Action::More(disclosure),
         );
-        b.focus_ring(k, rect, b.px(6.0));
-        x += width + b.px(6.0);
     }
-    c.y += h + b.px(8.0);
-    for ((_, heading), widgets) in sections {
-        if category.is_some_and(|category| category != heading) {
+    if !folded || app.is_open(disclosure) {
+        let font = crate::panel::controls::font(b, 11.0, 500);
+        let mut x = c.x;
+        let h = height(b, 29.0);
+        for (label, count, value) in categories {
+            let label = format!("{label} ({count})");
+            let width = (b.measure(&label, &font).0 + b.px(18.0)).min(c.w);
+            if x > c.x && x + width > c.right() {
+                x = c.x;
+                c.y += h + b.px(6.0);
+            }
+            let rect = Rect::new(x, c.y, width, h);
+            let k = key(("widget-category", value));
+            let on = category == value;
+            b.plate(k, rect, b.px(6.0), on);
+            text(b, rect, &label, 11.0, 500, b.p.ink1, Align::Center);
+            b.hit_checked(
+                k,
+                rect,
+                mypaper_ui::Role::RadioButton,
+                &label,
+                Some(on),
+                Action::Panel(Command::Category(
+                    value.map(|value| format!("widget:{value}")),
+                )),
+                mypaper_ui::controls::Behavior::Click,
+            );
+            b.focus_ring(k, rect, b.px(6.0));
+            x += width + b.px(6.0);
+        }
+        c.y += h + b.px(8.0);
+    }
+    for ((kind, heading), widgets) in sections {
+        if category.is_some_and(|category| {
+            if category == "@apps" {
+                kind != 2
+            } else {
+                category != heading
+            }
+        }) {
             continue;
         }
         group(b, c, &heading, |b, c| {
+            let (widgets, rows): (Vec<_>, Vec<_>) = widgets
+                .into_iter()
+                .partition(|(id, _)| !id.contains("--") || plugin_data(app, id).is_some());
+            for (id, manifest) in rows {
+                let name = manifest
+                    .name
+                    .split_once(" · ")
+                    .map_or(manifest.name.as_str(), |(_, face)| face);
+                row(
+                    b,
+                    c,
+                    Some(crate::panel::icons::plugin_glyph(app, id)),
+                    name,
+                    "",
+                    manifest.description.as_deref().unwrap_or(""),
+                    Some(selected.as_deref() == Some(id.as_str())),
+                    Action::Panel(Command::PickWidget(id.clone())),
+                );
+            }
+            let columns = if c.w < b.px(340.0) || b.t.text_scale > 1.0 {
+                1
+            } else {
+                2
+            };
             let gap = b.px(10.0);
-            let width = (c.w - gap) / 2.0;
+            let width = (c.w - (columns - 1) as f32 * gap) / columns as f32;
             let picture_height = width * 0.49;
-            let caption_height = height(b, 48.0);
+            let caption_height = height(b, 64.0);
             let row_height = picture_height + caption_height + b.px(12.0);
             b.group(key(("widget-gallery", heading.as_str())), |b| {
                 for (i, (id, manifest)) in widgets.iter().enumerate() {
                     let rect = Rect::new(
-                        c.x + (i % 2) as f32 * (width + gap),
-                        c.y + (i / 2) as f32 * row_height,
+                        c.x + (i % columns) as f32 * (width + gap),
+                        c.y + (i / columns) as f32 * row_height,
                         width,
                         picture_height + caption_height,
                     );
@@ -1600,7 +1758,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     );
                     let mut font = b.font(mypaper_ui::controls::Font::Caption);
                     font.size = b.px(11.0) * b.t.text_scale;
-                    let lines = b.text.lines(&detail, &font, width - b.px(8.0), 1);
+                    let lines = b.text.lines(&detail, &font, width - b.px(8.0), 2);
                     for (line, value) in lines.iter().enumerate() {
                         b.text_in(
                             Rect::new(
@@ -1632,7 +1790,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     b.focus_ring(k, rect, b.px(10.0));
                 }
             });
-            c.y += widgets.len().div_ceil(2) as f32 * row_height;
+            c.y += widgets.len().div_ceil(columns) as f32 * row_height;
         });
     }
     notice(

@@ -429,7 +429,15 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
                 }
             }
         }
-        area_crop(&source, Rect::new(best.1, best.2, sw, sh), size).pixels
+        let mut pixels = area_crop(&source, Rect::new(best.1, best.2, sw, sh), size).pixels;
+        // Expose a dim wallpaper crop so clear glass and opaque plates remain comparable.
+        let lift = ((0.65 - best.0) / (1.0 - best.0).max(0.01)).clamp(0.0, 0.6);
+        for pixel in pixels.chunks_exact_mut(4) {
+            for channel in &mut pixel[..3] {
+                *channel = (*channel as f32 * (1.0 - lift) + 255.0 * lift).round() as u8;
+            }
+        }
+        pixels
     } else {
         // Neutral context makes the material legible without suggesting a different wallpaper.
         let mut pixels = vec![255; width * height * 4];
@@ -437,11 +445,7 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
             for x in 0..width {
                 let t = (x as f32 / width as f32 * 0.65 + y as f32 / height as f32 * 0.35)
                     .clamp(0.0, 1.0);
-                let gray = if desktop_dark(app) {
-                    48.0 + t * 58.0
-                } else {
-                    235.0 - t * 55.0
-                } as u8;
+                let gray = (240.0 - t * 70.0) as u8;
                 pixels[(y * width + x) * 4..(y * width + x) * 4 + 3].fill(gray);
             }
         }
@@ -533,7 +537,7 @@ impl MaterialSample {
             highlight: material.map_or(0.0, |m| m.highlight),
             tint: theme.color.surface,
             radius: theme.radius.surface,
-            edge: style == Style::Fluent,
+            edge: matches!(style, Style::Solid | Style::Fluent),
         }
     }
 
@@ -584,7 +588,6 @@ pub fn material_sample(
         material_backdrop(app, size)
     };
     let style = sample.style;
-    let theme = style_theme(app, style);
     let cache_key = format!(
         "material:{sample:?}:{}:{}:{:p}",
         desktop_dark(app),
@@ -594,10 +597,8 @@ pub fn material_sample(
     let cached = cached_image(app, &cache_key);
     let image = cached.unwrap_or_else(|| {
         let (width, height) = (background.width as usize, background.height as usize);
-        let scale = b.s
-            * (r.width() / b.px(220.0))
-                .min(r.height() / b.px(130.0))
-                .min(1.0);
+        // A close crop of one surface keeps the corner and edge at a readable scale.
+        let scale = r.width() / 220.0;
         let alpha = 1.0 - sample.clarity;
         let frosted = blur_crop(
             background.as_ref().clone(),
@@ -607,12 +608,7 @@ pub fn material_sample(
         let tint = sample.tint;
         for y in 0..height {
             for x in 0..width {
-                let widget = y < height * 3 / 4;
-                let (cx, cy, hw, hh) = if widget {
-                    (0.40, 0.39, 0.32, 0.29)
-                } else {
-                    (0.50, 0.85, 0.42, 0.09)
-                };
+                let (cx, cy, hw, hh) = (0.70, 1.15, 0.55, 0.95);
                 let radius = (sample.radius * scale)
                     .min(height as f32 * hh)
                     .min(width as f32 * hw);
@@ -673,11 +669,12 @@ pub fn material_sample(
         radius: b.px(7.0),
     });
     let surface = Rect::new(
-        r.left + r.width() * 0.08,
-        r.top + r.height() * 0.1,
-        r.width() * 0.64,
-        r.height() * 0.58,
+        r.left + r.width() * 0.23,
+        r.top + r.height() * 0.38,
+        r.width() * 0.82,
+        r.height() * 1.38,
     );
+    let content_start = b.list.ops.len();
     if let Some(widget) = app.registry.get("weather") {
         let instance = mypaper_widgets::layout::Instance {
             instance: "style-weather".into(),
@@ -698,47 +695,11 @@ pub fn material_sample(
         };
         super::editors::widgets::face(app, b, &instance, &widget.manifest, "", "", surface);
     }
-    let dock = Rect::new(
-        r.left + r.width() * 0.08,
-        r.top + r.height() * 0.76,
-        r.width() * 0.84,
-        r.height() * 0.18,
-    );
-    let pins = app
-        .get(DocId::Bars, "/dock/pinned")
-        .and_then(serde_json::Value::as_array);
-    let icons: Vec<_> = pins
-        .into_iter()
-        .flatten()
-        .filter_map(|pin| super::icons::image(app, pin.get("path")?.as_str()?))
-        .take(5)
-        .collect();
-    let icon = dock.height() * 0.72;
-    let gap = icon * 0.35;
-    let count = icons.len().max(3);
-    let left = dock.left + (dock.width() - count as f32 * (icon + gap) + gap) / 2.0;
-    for i in 0..count {
-        let slot = Rect::new(
-            left + i as f32 * (icon + gap),
-            dock.top + (dock.height() - icon) / 2.0,
-            icon,
-            icon,
-        );
-        if let Some(image) = icons.get(i) {
-            crate::stage::image_round(b, slot, image, 1.0, icon * 0.18);
-        } else {
-            b.icon(
-                slot,
-                [
-                    crate::theme::glyph::FOLDER,
-                    crate::theme::glyph::SEARCH,
-                    crate::theme::glyph::SETTINGS,
-                ][i % 3],
-                icon / b.s,
-                theme.color.label,
-            );
-        }
-    }
+    let content = b.list.ops.split_off(content_start);
+    b.list.ops.push(mypaper_ui::Op::Clipped {
+        rect: r,
+        ops: content.into(),
+    });
 }
 
 pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
@@ -775,11 +736,12 @@ pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
     let background = material_backdrop(app, size);
     crate::stage::image_round(b, r, &background, 1.0, b.px(8.0));
     let win = Rect::new(
-        r.left + r.width() * 0.09,
-        r.top + r.height() * 0.12,
-        r.width() * 0.82,
-        r.height() * 0.77,
+        r.left + r.width() * 0.12,
+        r.top + r.height() * 0.18,
+        r.width() * 1.10,
+        r.height() * 1.65,
     );
+    let content_start = b.list.ops.len();
     let scale = win.width() / 180.0;
     let style = app
         .get(DocId::Config, "/look/style")
@@ -961,6 +923,11 @@ pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
             ink.with_alpha(if look == 2 { 0.75 } else { 0.35 }),
         );
     }
+    let content = b.list.ops.split_off(content_start);
+    b.list.ops.push(mypaper_ui::Op::Clipped {
+        rect: r,
+        ops: content.into(),
+    });
 }
 
 /// Specimens follow the desktop, independently of Studio's own appearance.

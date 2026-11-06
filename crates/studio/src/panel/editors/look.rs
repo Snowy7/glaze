@@ -6,19 +6,11 @@ use super::*;
 use crate::panel::controls::{more, setting};
 
 pub(super) const STYLES: [(Style, &str, &str); 5] = [
-    (
-        Style::Liquid,
-        "Liquid",
-        "Clear glass, bent light and a soft highlight",
-    ),
-    (Style::Oneui, "One UI", "Soft plates, generous corners"),
-    (Style::Solid, "Solid", "Opaque surfaces and quiet edges"),
-    (
-        Style::Fluent,
-        "Fluent",
-        "Frosted depth, familiar to Windows",
-    ),
-    (Style::Mono, "Mono", "Simple surfaces with just a tint"),
+    (Style::Liquid, "Liquid", "Clear glass, bent light"),
+    (Style::Oneui, "One UI", "Soft plates, round corners"),
+    (Style::Solid, "Solid", "Opaque, quiet edges"),
+    (Style::Fluent, "Fluent", "Fine frost, crisp edges"),
+    (Style::Mono, "Mono", "Flat tint, no blur"),
 ];
 const COLORS: [[u8; 3]; 6] = [
     [139, 158, 183],
@@ -102,43 +94,42 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         });
     });
     let preview = shown.filter(|style| *style != current).map(style_name);
-    group(b, c, "Material", |b, c| {
-        crate::panel::material::applied_controls(b, c, preview, |b, c| {
-            if preview.is_none() {
-                notice(b, c, &format!("Your {} settings", style_name(current)));
-            }
-            let sliders: Vec<_> = ["clarity", "blur", "refraction", "highlight"]
-                .into_iter()
-                .zip(crate::look::uses(current))
-                .filter(|(_, uses)| *uses)
-                .map(|(id, _)| {
-                    let setting = crate::settings::Setting::get(id).unwrap();
-                    crate::ui::anchor(app, id, c.view, c.y);
-                    crate::panel::material::Slider {
-                        label: setting.label,
-                        value: crate::panel::material::look_value(app, current, id),
-                        max: if id == "blur" { 32.0 } else { 1.0 },
-                        edit: Edit::new(setting.doc, setting.path, setting.label),
-                    }
-                })
-                .collect();
-            crate::ui::anchor(app, "tint", c.view, c.y);
-            crate::panel::material::block(
-                app,
-                b,
-                c,
-                &sliders,
-                Edit::new(DocId::Config, "/look/material/tint", "Tint"),
-                app.get(DocId::Config, "/look/material/tint"),
-                true,
-            );
-        });
-    });
+    group(
+        b,
+        c,
+        &format!("{} settings", style_name(current)),
+        |b, c| {
+            crate::panel::material::applied_controls(b, c, preview, |b, c| {
+                let sliders: Vec<_> = ["clarity", "blur", "refraction", "highlight"]
+                    .into_iter()
+                    .zip(crate::look::uses(current))
+                    .filter(|(_, uses)| *uses)
+                    .map(|(id, _)| {
+                        let setting = crate::settings::Setting::get(id).unwrap();
+                        crate::ui::anchor(app, id, c.view, c.y);
+                        crate::panel::material::Slider {
+                            label: setting.label,
+                            value: crate::panel::material::look_value(app, current, id),
+                            max: if id == "blur" { 32.0 } else { 1.0 },
+                            edit: Edit::new(setting.doc, setting.path, setting.label),
+                        }
+                    })
+                    .collect();
+                crate::ui::anchor(app, "tint", c.view, c.y);
+                crate::panel::material::block(
+                    app,
+                    b,
+                    c,
+                    &sliders,
+                    Edit::new(DocId::Config, "/look/material/tint", "Tint"),
+                    app.get(DocId::Config, "/look/material/tint"),
+                    true,
+                );
+            });
+        },
+    );
     group(b, c, "Color", |b, c| {
         crate::panel::material::applied_controls(b, c, preview, |b, c| {
-            if preview.is_none() {
-                notice(b, c, &format!("Your {} colors", style_name(current)));
-            }
             setting(app, b, c, "appearance", "Appearance", "");
             text(
                 b,
@@ -182,7 +173,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
             }
         });
         group(b, c, "App icons", |b, c| {
-            crate::pages::look::icon_pack(app, b, c)
+            crate::panel::pickers::icon_pack(app, b, c)
         });
         group(b, c, "Shape", |b, c| {
             setting(app, b, c, "corners", "Corners", "");
@@ -249,14 +240,14 @@ pub(super) fn style_tiles(
         .iter()
         .map(|(style, name, _)| (*name, selected == Some(*style), action(*style)))
         .collect();
-    let picture_height = b.px(164.0);
-    let shown = crate::panel::choosers::draw(
+    let captions: Vec<_> = STYLES.iter().map(|(_, _, caption)| *caption).collect();
+    let shown = crate::panel::choosers::captioned(
         app,
         b,
         c,
         key(("panel-look-styles", c.view)),
-        picture_height,
         &choices,
+        &captions,
         |b, index, rect| {
             crate::panel::specimens::material(
                 app,
@@ -313,13 +304,14 @@ fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
                 )
             })
             .collect();
-        shown = crate::panel::choosers::draw(
+        let captions: Vec<_> = STYLES.iter().map(|(_, _, caption)| *caption).collect();
+        shown = crate::panel::choosers::captioned(
             app,
             b,
             c,
             key(("panel-wallpaper-styles", &wallpaper.id)),
-            b.px(164.0),
             &choices,
+            &captions,
             |b, index, rect| {
                 let shown = index.map(|index| target::with_style(app, &theme, STYLES[index].0));
                 specimens::material_sample(
@@ -338,7 +330,7 @@ fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
         .map(style_name);
     group(b, c, "Material", |b, c| {
         crate::panel::material::applied_controls(b, c, preview, |b, c| {
-            if preview.is_none() {
+            {
                 notice(
                     b,
                     c,
@@ -354,7 +346,7 @@ fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
     let edit = |path: &str, label: &str| target::edit(wallpaper, path, label);
     group(b, c, "Color", |b, c| {
         crate::panel::material::applied_controls(b, c, preview, |b, c| {
-            if preview.is_none() {
+            {
                 notice(
                     b,
                     c,
@@ -496,14 +488,18 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
             .enumerate()
             .map(|(i, (name, _))| (*name, selected == Some(i), Action::WindowsLook(i)))
             .collect();
-        let picture_height = b.px(174.0);
-        crate::panel::choosers::draw(
+        crate::panel::choosers::captioned(
             app,
             b,
             c,
             key("panel-windows-looks"),
-            picture_height,
             &choices,
+            &[
+                "Windows' own look",
+                "Your current material",
+                "Clear frost, bright edge",
+                "Square, opaque edges",
+            ],
             |b, index, rect| super::super::specimens::window_choice(app, b, rect, index),
         );
     });

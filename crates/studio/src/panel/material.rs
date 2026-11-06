@@ -74,35 +74,14 @@ pub fn row(
     c.y += h;
 }
 
-/// Keep the applied controls visible during a transient style preview, but inert.
+/// Hover previews never alter the applied style's controls or their geometry.
 pub fn applied_controls(
     b: &mut B,
     c: &mut Col,
-    preview: Option<&str>,
+    _preview: Option<&str>,
     body: impl FnOnce(&mut B, &mut Col),
 ) {
-    if let Some(style) = preview {
-        super::controls::notice(b, c, &format!("Click {style} to edit its material"));
-    }
-    let top = c.y;
-    let (targets, hits, semantics, focus) = (
-        b.targets.len(),
-        b.list.hits.len(),
-        b.semantics.len(),
-        b.list.focus,
-    );
     body(b, c);
-    if preview.is_some() {
-        b.targets.truncate(targets);
-        b.list.hits.truncate(hits);
-        b.semantics.truncate(semantics);
-        b.list.focus = focus;
-        b.fill(
-            Rect::new(c.x, top, c.w, c.y - top),
-            0.0,
-            b.p.panel.with_alpha(0.65),
-        );
-    }
 }
 
 pub fn block(

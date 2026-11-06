@@ -32,6 +32,7 @@ pub struct State {
     drawing_live: std::collections::HashSet<String>,
     pub(super) image_live: std::collections::HashSet<String>,
     drawing_page: Option<super::Page>,
+    pub(super) plugin_faces: Option<serde_json::Value>,
 }
 
 pub fn begin(app: &App) {
@@ -43,6 +44,7 @@ pub fn begin(app: &App) {
     state.image_live.clear();
     if state.drawing_page.replace(panel.page) != Some(panel.page) {
         state.drawings.clear();
+        state.plugin_faces = None;
     }
 }
 
@@ -132,23 +134,53 @@ pub fn draw(
     id: Key,
     _picture_height: f32,
     choices: &[(&str, bool, Action)],
+    picture: impl FnMut(&mut B, Option<usize>, Rect),
+) -> Option<usize> {
+    cards(app, b, c, id, None, choices, picture)
+}
+
+/// Compact material cards reserve a permanent caption, so hover changes no layout.
+pub fn captioned(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    id: Key,
+    choices: &[(&str, bool, Action)],
+    captions: &[&str],
+    picture: impl FnMut(&mut B, Option<usize>, Rect),
+) -> Option<usize> {
+    cards(app, b, c, id, Some(captions), choices, picture)
+}
+
+fn cards(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    id: Key,
+    captions: Option<&[&str]>,
+    choices: &[(&str, bool, Action)],
     mut picture: impl FnMut(&mut B, Option<usize>, Rect),
 ) -> Option<usize> {
     if choices.is_empty() {
         return None;
     }
+    let columns = if b.t.text_scale > 1.0 { 1 } else { 2 };
     app.panel
         .as_ref()
         .unwrap()
         .chooser
         .borrow_mut()
         .groups
-        .insert(id, 2);
+        .insert(id, columns);
     let selected = choices.iter().position(|(_, selected, _)| *selected);
     let count = choices.len() + usize::from(selected.is_none());
     let gap = b.px(10.0);
-    let width = (c.w - gap) / 2.0;
-    let picture_height = width * 9.0 / 16.0;
+    let width = (c.w - (columns - 1) as f32 * gap) / columns as f32;
+    let picture_height = if captions.is_some() {
+        b.px(54.0)
+    } else {
+        width * 9.0 / 16.0
+    };
     let title_font = super::controls::font(b, 13.0, 600);
     let label_lines = choices
         .iter()
@@ -156,14 +188,28 @@ pub fn draw(
         .max()
         .unwrap_or(1)
         .max(1);
-    let label_height = height(b, 25.0 * label_lines as f32);
+    let label_height = height(b, 22.0 * label_lines as f32);
+    let caption_font = super::controls::font(b, 10.0, 400);
+    let caption_lines = captions.map_or(1, |captions| {
+        captions
+            .iter()
+            .map(|caption| {
+                b.text
+                    .lines(caption, &caption_font, width - b.px(16.0), 2)
+                    .len()
+            })
+            .max()
+            .unwrap_or(1)
+            .max(1)
+    });
     // Reserve the preview caption so hovering never moves another card.
-    let row_height = picture_height + label_height + height(b, 24.0) + gap;
+    let row_height =
+        picture_height + b.px(3.0) + label_height + height(b, 17.0 * caption_lines as f32) + gap;
     let top = c.y;
     let row_rect = |index: usize| {
         Rect::new(
-            c.x + (index % 2) as f32 * (width + gap),
-            top + (index / 2) as f32 * row_height,
+            c.x + (index % columns) as f32 * (width + gap),
+            top + (index / columns) as f32 * row_height,
             width,
             row_height - gap,
         )
@@ -229,9 +275,9 @@ pub fn draw(
                         b,
                         Rect::new(
                             label.left,
-                            label.top + line as f32 * height(b, 25.0),
+                            label.top + line as f32 * height(b, 22.0),
                             label.width(),
-                            height(b, 25.0),
+                            height(b, 22.0),
                         ),
                         value,
                         13.0,
@@ -240,25 +286,46 @@ pub fn draw(
                         Align::Start,
                     );
                 }
+                if let Some(caption) = captions.and_then(|captions| captions.get(index)) {
+                    let lines = b.text.lines(caption, &caption_font, width - b.px(16.0), 2);
+                    for (line, value) in lines.iter().enumerate() {
+                        text(
+                            b,
+                            Rect::new(
+                                label.left,
+                                label.bottom + line as f32 * height(b, 17.0),
+                                width - b.px(16.0),
+                                height(b, 17.0),
+                            ),
+                            value,
+                            10.0,
+                            400,
+                            b.p.ink2,
+                            Align::Start,
+                        );
+                    }
+                }
                 if hovered && index < choices.len() {
-                    text(
-                        b,
-                        Rect::new(
-                            label.left,
-                            label.bottom,
-                            width - b.px(16.0),
-                            height(b, 18.0),
-                        ),
-                        if width < b.px(175.0) || b.t.text_scale > 1.0 {
-                            "Previewing"
-                        } else {
-                            "Previewing · Apply"
-                        },
-                        11.0,
-                        400,
-                        b.p.ink2,
-                        Align::Start,
-                    );
+                    if captions.is_none() {
+                        text(
+                            b,
+                            Rect::new(
+                                label.left,
+                                label.bottom,
+                                width - b.px(16.0),
+                                height(b, 18.0),
+                            ),
+                            if width < b.px(175.0) || b.t.text_scale > 1.0 {
+                                "Previewing"
+                            } else {
+                                "Previewing · Apply"
+                            },
+                            11.0,
+                            400,
+                            b.p.ink2,
+                            Align::Start,
+                        );
+                    }
                     b.announce(&format!("Previewing {name} · Click to apply"), id);
                 }
                 if *applied {
@@ -290,12 +357,82 @@ pub fn draw(
             b.focus_ring(k, area, b.px(7.0));
         }
     });
-    c.y = top + count.div_ceil(2) as f32 * row_height + b.px(6.0);
+    c.y = top + count.div_ceil(columns) as f32 * row_height + b.px(6.0);
     if let Some(index) = hot.filter(|index| *index < choices.len()) {
         app.panel.as_ref().unwrap().chooser.borrow_mut().requested =
             Some((key((id, index)), choices[index].2.clone()));
     }
     shown
+}
+
+/// A widget's current choice stays compact; its catalog expands in place and folds on pick.
+pub fn current(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    id: Key,
+    label: &str,
+    choices: &[(&str, bool, Action)],
+    mut picture: impl FnMut(&mut B, Option<usize>, Rect),
+) {
+    let selected = choices.iter().position(|(_, selected, _)| *selected);
+    let name = selected.map_or("Custom", |index| choices[index].0);
+    let expanded = app.is_open(id);
+    let h = height(b, 68.0);
+    let rect = Rect::new(c.x, c.y, c.w, h);
+    let picture_width = (c.w * 0.37).min(b.px(140.0));
+    picture(
+        b,
+        selected,
+        Rect::new(c.x, c.y + b.px(4.0), picture_width, h - b.px(8.0)),
+    );
+    let x = c.x + picture_width + b.px(12.0);
+    text(
+        b,
+        Rect::new(x, c.y + height(b, 4.0), c.right() - x, height(b, 22.0)),
+        &format!("{label} · {name}"),
+        13.0,
+        500,
+        b.p.ink1,
+        Align::Start,
+    );
+    let change = Rect::new(x, c.y + height(b, 29.0), c.right() - x, height(b, 30.0));
+    let k = key((id, "change"));
+    text(
+        b,
+        change,
+        if expanded {
+            "Close choices"
+        } else {
+            "Change…"
+        },
+        12.0,
+        400,
+        b.p.ink2,
+        Align::Start,
+    );
+    b.hit(
+        k,
+        rect,
+        Role::Button,
+        &format!("Change {label}: {name}"),
+        Action::More(id),
+        Behavior::Click,
+    );
+    b.focus_ring(k, rect, b.px(7.0));
+    c.y = rect.bottom + b.px(6.0);
+    if expanded {
+        let start = b.targets.len();
+        draw(app, b, c, id, b.px(112.0), choices, picture);
+        for target in &mut b.targets[start..] {
+            if target.action != Action::None {
+                target.action = Action::Panel(super::Command::ApplyChoice(
+                    id,
+                    Box::new(target.action.clone()),
+                ));
+            }
+        }
+    }
 }
 
 /// Starter desktops use a single column when larger type needs room for the contents line.
@@ -687,70 +824,43 @@ mod tests {
     }
 
     #[test]
-    fn style_hover_disables_material_and_color_until_leaving_or_applying() {
+    fn style_hover_preserves_applied_controls_and_their_positions() {
         let mut ui = Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(PanelState {
             page: Page::Look,
             ..Default::default()
         });
-        app.size = (480, 800);
-        let frame = crate::panel::build(&app, &mut ui.text);
-        let is_material = |action: &Action| matches!(action, Action::Slider(edit) if edit.path.starts_with("/look/material/"));
-        assert!(
-            frame
-                .targets
-                .iter()
-                .any(|target| is_material(&target.action))
-        );
+        app.size = (480, 1000);
+        let before = crate::panel::build(&app, &mut ui.text);
+        let controls: Vec<_> = before.targets.iter().filter(|target| matches!(&target.action,
+            Action::Slider(edit) | Action::Set(edit, _) | Action::Choose(crate::actions::Choices { edit, .. })
+                if edit.path.starts_with("/look/material/") || edit.path.as_ref() == "/look/appearance"))
+            .map(|target| (target.key, target.rect)).collect();
+        assert!(!controls.is_empty());
         let action = Action::SetStyle(Some(Style::Fluent));
-        let target = frame
+        let target = before
             .targets
             .iter()
             .find(|target| target.action == action)
             .unwrap();
         app.input.pointer = Some(Point::new(target.rect.left + 20.0, target.rect.top + 10.0));
-        let frame = crate::panel::build(&app, &mut ui.text);
-        assert!(
-            !frame
+        let during = crate::panel::build(&app, &mut ui.text);
+        for (key, rect) in controls {
+            let target = during
                 .targets
                 .iter()
-                .any(|target| is_material(&target.action))
-        );
-        assert!(!frame.targets.iter().any(|target| matches!(&target.action,
-            Action::Set(edit, _) if edit.path.as_ref() == "/look/appearance")));
-        assert!(
-            frame
-                .list
-                .ops
-                .iter()
-                .any(|op| matches!(op, mypaper_ui::Op::Text { text, .. }
-            if text.as_ref() == "Click Fluent to edit its material"))
-        );
-        app.input.pointer = None;
-        let frame = crate::panel::build(&app, &mut ui.text);
-        assert!(
-            frame
-                .targets
-                .iter()
-                .any(|target| is_material(&target.action))
-        );
+                .find(|target| target.key == key)
+                .unwrap();
+            assert_eq!(target.rect, rect);
+        }
+        assert!(during.list.ops.iter().any(|op| matches!(op,
+            mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Liquid settings")));
+        assert_eq!(app.docs.undo_count(), 0);
         app.run(action);
-        let frame = crate::panel::build(&app, &mut ui.text);
-        assert!(
-            frame
-                .targets
-                .iter()
-                .any(|target| is_material(&target.action))
-        );
-        assert!(
-            frame
-                .list
-                .ops
-                .iter()
-                .any(|op| matches!(op, mypaper_ui::Op::Text { text, .. }
-            if text.as_ref() == "Your Fluent settings"))
-        );
+        let applied = crate::panel::build(&app, &mut ui.text);
+        assert!(applied.list.ops.iter().any(|op| matches!(op,
+            mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Fluent settings")));
     }
 
     #[test]

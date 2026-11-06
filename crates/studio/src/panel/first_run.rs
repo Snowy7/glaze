@@ -30,6 +30,12 @@ pub fn begin(app: &App) {
     });
 }
 
+pub fn back(app: &mut App) {
+    if let Some(Overlay::FirstRun { step, .. }) = &mut app.overlay {
+        *step = step.saturating_sub(1);
+    }
+}
+
 pub fn run(app: &mut App, action: Action) {
     use crate::docs::{DocId, Op};
     use serde_json::json;
@@ -254,6 +260,7 @@ fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect, taskbar: usiz
         mypaper_config::look::Style::Mono,
     ][index];
     b.fill(rect, b.px(6.0), b.p.well);
+    super::specimens::backdrop(app, b, rect);
     if let Some(image) = app
         .library
         .items
@@ -322,6 +329,19 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         }) => (step, starter, taskbar),
         _ => (0, 0, 0),
     };
+    if step > 0 {
+        let rect = Rect::new(c.x, c.y, b.px(74.0), super::controls::height(b, 30.0));
+        b.button(
+            key("first-run-back"),
+            rect,
+            "Back",
+            Some(crate::theme::glyph::CHEVRON_LEFT),
+            mypaper_ui::controls::ButtonKind::Ghost,
+            true,
+            Action::Panel(super::Command::FirstRunBack),
+        );
+        c.y = rect.bottom + b.px(4.0);
+    }
     match step {
         1 => {
             title(
@@ -483,5 +503,30 @@ mod tests {
             Some(&serde_json::json!([]))
         );
         assert_eq!(contents(2, 2), "Wallpaper · One UI");
+        run(&mut app, Action::FirstRunNext);
+        let docs =
+            [DocId::Config, DocId::Bars, DocId::Widgets].map(|doc| app.docs.doc(doc).raw.clone());
+        for step in [1, 0] {
+            let frame = crate::panel::build(&app, &mut ui.text);
+            assert!(
+                frame
+                    .targets
+                    .iter()
+                    .any(|target| target.action
+                        == Action::Panel(super::super::Command::FirstRunBack))
+            );
+            back(&mut app);
+            assert!(
+                matches!(app.overlay, Some(Overlay::FirstRun { step: current, .. }) if current == step)
+            );
+            assert_eq!(
+                docs,
+                [DocId::Config, DocId::Bars, DocId::Widgets].map(|doc| app
+                    .docs
+                    .doc(doc)
+                    .raw
+                    .clone())
+            );
+        }
     }
 }
