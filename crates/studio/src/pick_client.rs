@@ -237,6 +237,7 @@ pub fn record_pick(app: &App, label: &str, ops: &[Op], checkpoint: usize, merge:
 
 fn choice_name(value: Option<&Value>, path: &str, fallback: &str) -> String {
     let name = match value {
+        Some(Value::String(value)) if value == "oneui" => "One UI".into(),
         Some(Value::String(value)) => value
             .rsplit(['/', '\\'])
             .next()
@@ -495,6 +496,10 @@ mod tests {
 
     #[test]
     fn consecutive_picks_update_one_undo_chip_and_new_lists_reset_it() {
+        assert_eq!(
+            choice_name(Some(&serde_json::json!("oneui")), "/look/style", "Style"),
+            "One UI"
+        );
         let mut chain = UndoChain::default();
         assert_eq!(
             chain.record("Liquid".into(), "Fluent".into(), false),
