@@ -379,7 +379,7 @@ fn playback_status(app: &App) -> String {
         return "mypaper is off".into();
     }
     if !app.system.parts[1].running {
-        return "Engine stopped".into();
+        return "Wallpaper stopped".into();
     }
     if app
         .get(DocId::Config, "/paused")
@@ -465,7 +465,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
     let (label, action, icon) = if !app.system.running() {
         ("Start mypaper", Action::StartMypaper, glyph::PLAY)
     } else if !app.system.parts[1].running {
-        ("Restart engine", Action::Restart("engine"), glyph::REDO)
+        ("Restart", Action::Restart("engine"), glyph::REDO)
     } else if paused {
         ("Resume", Action::Pause, glyph::PLAY)
     } else {
@@ -632,16 +632,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         );
     });
     group(b, c, "Around it", |b, c| {
-        let windows = app
-            .get(DocId::Config, "/look/windows/apps")
-            .and_then(Value::as_str)
-            .unwrap_or("as-is");
-        let windows = match windows {
-            "match" => "Match mypaper",
-            "light" => "Light",
-            "dark" => "Dark",
-            _ => "As is",
-        };
+        let windows = super::editors::windows_summary(app);
         row(
             b,
             c,
@@ -652,25 +643,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             None,
             open(Page::Windows),
         );
-        let connected = crate::pages::integrations::LIST
-            .iter()
-            .filter(|item| crate::pages::integrations::enabled(app, item))
-            .count()
-            + app
-                .plugins
-                .installed
-                .iter()
-                .filter(|plugin| {
-                    !app.plugins.preferences.disabled.contains(&plugin.id)
-                        && app
-                            .plugins
-                            .snapshot
-                            .plugins
-                            .get(&plugin.id)
-                            .is_some_and(|state| state.status != "Unloaded")
-                })
-                .count();
-        let connections = format!("{connected} connected");
+        let connections = super::editors::connections_summary(app);
         row(
             b,
             c,
@@ -954,7 +927,7 @@ mod tests {
                 true,
                 false,
                 false,
-                "Engine stopped",
+                "Wallpaper stopped",
                 Action::Restart("engine"),
             ),
             (true, true, true, "Paused", Action::Pause),
@@ -1102,6 +1075,21 @@ mod tests {
                 .any(|hit| hit.label.contains("column "))
         );
         assert_eq!(app.docs.version, version);
+    }
+
+    #[test]
+    fn home_uses_the_windows_pages_preset_match_including_custom() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui);
+        let edit = Edit::new(DocId::Config, "/look/windows", "Windows look");
+        for (value, summary) in [
+            (json!({"apps":"match","accent":"auto","border":"auto","corners":"square","backdrop":"none"}), "Sharp"),
+            (json!({"apps":"match","corners":"square"}), "Custom"),
+        ] {
+            app.set(&edit, value);
+            let built = super::super::build(&app, &mut ui.text);
+            assert!(built.list.hits.iter().any(|hit| hit.label.starts_with(&format!("Windows {summary} "))));
+        }
     }
 
     #[test]

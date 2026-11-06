@@ -4,13 +4,16 @@ pub use bars::{
     bar_path, bar_value, design_name as bar_design_name, insert_module, move_module,
     overview as bars_overview, same_bars,
 };
-pub use connections::{connect, connection_module, disconnect, hide_connection_widget};
+pub use connections::{
+    connect, connection_module, disconnect, hide_connection_widget, summary as connections_summary,
+};
 mod look;
 mod settings;
+pub use look::windows_summary;
 pub use settings::add_menu_item;
 pub use settings::frame_cap;
 mod wallpapers;
-mod widgets;
+pub(super) mod widgets;
 pub use widgets::{can_add_widget, pick_asset};
 
 use mypaper_ui::controls::{Align, Behavior, key};
@@ -42,9 +45,13 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
                     .into_iter()
                     .max_by_key(|instance| instance.size[0] * instance.size[1])
                     .map(|instance| ("Make room", Action::SelectWidget(Some(instance.instance))));
-                let name = app.registry.get(id).map_or(id, |widget| widget.manifest.name.as_str());
+                let name = app
+                    .registry
+                    .get(id)
+                    .map_or(id, |widget| widget.manifest.name.as_str());
                 super::controls::feedback(
-                    b, c,
+                    b,
+                    c,
                     &format!("No room for {name} on Display {}", app.nav.display + 1),
                     make_room.into_iter().collect(),
                 );
@@ -77,6 +84,12 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
 }
 
 pub fn intercept_page_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
+    if edit.doc == DocId::Studio && edit.path.as_ref() == "/panel/display" {
+        if let Some(index) = value.as_u64() {
+            app.run(Action::Panel(Command::Display(index as usize)));
+        }
+        return true;
+    }
     if edit.doc == DocId::Studio && edit.path.as_ref() == "/add_use_now" {
         app.texts.insert(
             FieldId::Text(DocId::Studio, edit.path.clone()),
@@ -218,11 +231,22 @@ pub fn segments(
     options: Vec<(Value, String)>,
 ) {
     let labels: Vec<_> = options.iter().map(|(_, label)| label.as_str()).collect();
+    let style = b.font(mypaper_ui::controls::Font::Caption);
+    let needed: f32 = labels
+        .iter()
+        .map(|label| b.measure(label, &style).0 + b.px(20.0))
+        .sum();
+    if options.len() > 4 || needed > c.w - b.px(4.0) {
+        select(b, c, label, value, edit, options);
+        return;
+    }
     let selected = options.iter().position(|(option, _)| *option == value);
     let r = b.labeled_segments(
         key(("panel-choice", c.view, edit.doc, edit.path.as_ref())),
         Rect::new(c.x, c.y, c.w, 0.0),
-        label, &labels, selected,
+        label,
+        &labels,
+        selected,
         |i| Action::Set(edit.clone(), options[i].0.clone()),
     );
     c.y = r.bottom + b.px(8.0);
@@ -268,6 +292,7 @@ pub fn toggle(b: &mut B, c: &mut Col, label: &str, caption: &str, on: bool, acti
         label,
         action,
     );
+    b.hline(c.x, c.right(), c.y + h - 1.0, b.p.line);
     c.y += h;
 }
 
@@ -275,6 +300,40 @@ pub fn action_button(b: &mut B, c: &mut Col, label: &str, action: Action) {
     let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
     button(b, r, label, None, false, true, action);
     c.y = r.bottom + b.px(8.0);
+}
+
+/// List creation stays beside its heading, before any scrollable rows.
+pub fn group_action(
+    b: &mut B,
+    c: &mut Col,
+    heading: &str,
+    label: &str,
+    action: Action,
+    content: impl FnOnce(&mut B, &mut Col),
+) {
+    c.y += b.px(16.0);
+    let h = height(b, 28.0);
+    let width = b.measure(label, &super::controls::font(b, 13.0, 500)).0 + b.px(44.0);
+    text(
+        b,
+        Rect::new(c.x, c.y, c.w - width - b.px(8.0), h),
+        heading,
+        13.0,
+        600,
+        b.p.ink1,
+        Align::Start,
+    );
+    button(
+        b,
+        Rect::new(c.right() - width, c.y, width, h),
+        label,
+        Some(glyph::ADD),
+        false,
+        true,
+        action,
+    );
+    c.y += h;
+    group(b, c, "", content);
 }
 
 pub fn footer_height(app: &App) -> f32 {
@@ -393,13 +452,10 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
 }
 
 fn history(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "History", "Restores every display");
-    crate::panel::controls::displays(app, b, c);
-    notice(
-        b,
-        c,
-        "Select a row to preview its bars, widgets and Look on every display. Cancel puts them back. Wallpaper playback stays current during preview. Later desktops stay here.",
-    );
+    title(b, c, "History", "Preview on every display");
+    if super::history::partial_preview(app) {
+        notice(b, c, "Partial preview · wallpaper unchanged");
+    }
     let history = app.panel.as_ref().unwrap().history.borrow();
     if let Some(error) = &history.error {
         let mut actions = vec![];
@@ -423,7 +479,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                 b.wash(k, r, b.px(8.0));
             }
             let pic = Rect::new(c.x, c.y + b.px(10.0), b.px(108.0), b.px(61.0));
-            desktop_preview(app, b, pic, i, entry, true, &mut visible_pictures);
+            desktop_preview(app, b, pic, i, entry, &mut visible_pictures);
             let x = pic.right + b.px(12.0);
             let summary = if entry.summary.is_empty() {
                 &entry.title
@@ -470,37 +526,6 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
             c.y += row_h;
         }
     });
-    if let Some((i, entry)) = history
-        .selected
-        .and_then(|i| history.entries.get(i).map(|entry| (i, entry)))
-    {
-        group(b, c, "Selected desktop", |b, c| {
-            let r = Rect::new(c.x, c.y + b.px(6.0), c.w, c.w * 9.0 / 16.0);
-            desktop_preview(app, b, r, i, entry, false, &mut visible_pictures);
-            let count = entry
-                .desktop
-                .widgets()
-                .get("instances")
-                .and_then(Value::as_array)
-                .map_or(0, Vec::len);
-            c.y = r.bottom + b.px(10.0);
-            notice(b, c, &entry.detail);
-            notice(
-                b,
-                c,
-                &format!(
-                    "{} bars · {count} widgets across all displays",
-                    crate::pages::bars::PRESETS
-                        .iter()
-                        .find(
-                            |(id, _)| entry.desktop.bars().get("preset").and_then(Value::as_str)
-                                == Some(id)
-                        )
-                        .map_or("Custom", |(_, name)| *name)
-                ),
-            );
-        });
-    }
     history
         .pictures
         .borrow_mut()
@@ -513,7 +538,6 @@ fn desktop_preview(
     r: Rect,
     index: usize,
     entry: &super::history::Entry,
-    cropped: bool,
     visible: &mut std::collections::HashSet<super::history::PictureKey>,
 ) {
     if b.clip_rect().is_some_and(|clip| !r.intersects(&clip)) {
@@ -523,18 +547,20 @@ fn desktop_preview(
         r.width().ceil().max(1.0) as u32,
         r.height().ceil().max(1.0) as u32,
     );
-    let key = super::history::PictureKey { entry: index, display: app.nav.display, size, cropped };
+    let key = super::history::PictureKey { entry: index, size };
     visible.insert(key);
     let history = app.panel.as_ref().unwrap().history.borrow();
     let cached = history.pictures.borrow().get(&key).cloned();
     let picture = cached.or_else(|| {
-        let picture = if cropped {
-            super::history::thumbnail(app, entry, index.checked_sub(1).and_then(|i| history.entries.get(i)).map(|entry| &entry.desktop), size)?
-        } else { super::history::picture(app, &entry.desktop, size, entry.at)? };
+        let picture = super::history::thumbnail(app, entry, size)?;
         let mut pictures = history.pictures.borrow_mut();
         let bytes: usize = pictures.values().map(|image| image.pixels.len()).sum();
-        if bytes + picture.pixels.len() > 2 << 20 { pictures.clear(); }
-        if picture.pixels.len() <= 2 << 20 { pictures.insert(key, picture.clone()); }
+        if bytes + picture.pixels.len() > 2 << 20 {
+            pictures.clear();
+        }
+        if picture.pixels.len() <= 2 << 20 {
+            pictures.insert(key, picture.clone());
+        }
         Some(picture)
     });
     b.fill(r, b.px(6.0), b.p.fill);
@@ -839,39 +865,6 @@ pub fn number(
         ),
         Edit::new(doc, path, label),
     );
-}
-
-pub fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect) {
-    // Keep the one visible specimen at the panel's actual pixel resolution.
-    let width = rect.width().ceil().max(1.0) as u32;
-    let size = (
-        width,
-        (rect.height() * width as f32 / rect.width().max(1.0))
-            .ceil()
-            .max(1.0) as u32,
-    );
-    let taskbar = match app.overlay {
-        Some(crate::app::Overlay::FirstRun { taskbar, .. }) => taskbar,
-        _ => 0,
-    };
-    let key = format!("starter:{index}:{taskbar}:{size:?}");
-    let cached = app
-        .panel
-        .as_ref()
-        .unwrap()
-        .specimens
-        .borrow()
-        .get(&key)
-        .cloned();
-    let picture = cached.or_else(|| {
-        let picture = super::history::starter_picture(app, index, size, taskbar)?;
-        super::specimens::remember(app, key, &picture);
-        Some(picture)
-    });
-    b.fill(rect, b.px(6.0), b.p.fill);
-    if let Some(picture) = picture {
-        crate::stage::image_round(b, rect, &picture, 1.0, b.px(6.0));
-    }
 }
 
 #[cfg(test)]

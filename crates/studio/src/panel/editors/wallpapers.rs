@@ -66,11 +66,20 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
     );
     title(b, c, "Wallpapers", "");
     let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
-    let filter_w = b.px(178.0).min(c.w * 0.57);
+    let stacked = c.w < b.px(360.0) || b.t.text_scale > 1.0;
+    let filter_w = if stacked {
+        c.w
+    } else {
+        b.px(178.0).min(c.w * 0.57)
+    };
     let search = Rect::new(
         r.left,
         r.top,
-        (r.width() - filter_w - b.px(8.0)).max(1.0),
+        if stacked {
+            c.w
+        } else {
+            (r.width() - filter_w - b.px(8.0)).max(1.0)
+        },
         r.height(),
     );
     crate::ui::text_field(
@@ -84,7 +93,12 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
         "Search wallpapers",
     );
     b.stroke(search, b.px(6.0), b.px(1.0), b.p.edge);
-    let filter = Rect::new(r.right - filter_w, r.top, filter_w, r.height());
+    let filter = Rect::new(
+        r.right - filter_w,
+        if stacked { r.bottom + b.px(8.0) } else { r.top },
+        filter_w,
+        height(b, 30.0),
+    );
     b.segmented(
         key("panel-wallpaper-filter"),
         filter,
@@ -95,7 +109,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
         |i| Action::WallpaperFilter(i as u8),
     );
     b.stroke(filter, b.px(7.0), b.px(1.0), b.p.edge);
-    c.y = r.bottom + b.px(4.0);
+    c.y = filter.bottom + b.px(4.0);
     let query = app.text(&FieldId::WallpaperSearch).to_lowercase();
     let category = &app.panel.as_ref().unwrap().category;
     let categories_button = Rect::new(c.x, c.y, c.w, b.px(24.0));
@@ -361,7 +375,23 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                 .unwrap_or("cover");
             if w.editable() {
                 group(b, c, "", |b, c| {
-                    fit_tiles(b, c, current, theme_edit(w, "/wallpaper/fit", "Fit"));
+                    let source = (w.kind == Some(Kind::Image))
+                        .then(|| theme.pointer("/wallpaper/source").and_then(Value::as_str))
+                        .flatten()
+                        .map(|source| w.dir.join(source))
+                        .filter(|path| path.is_file());
+                    let image = source
+                        .as_ref()
+                        .or(w.preview.as_ref().or(w.video.as_ref()))
+                        .and_then(|path| app.images.borrow_mut().get(path, (640, 360)));
+                    crate::panel::specimens::fit_tiles(
+                        app,
+                        b,
+                        c,
+                        current,
+                        theme_edit(w, "/wallpaper/fit", "Fit"),
+                        image,
+                    );
                 });
             } else {
                 let fit = FITS
@@ -499,7 +529,17 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     group(b, c, "", |b, c| {
         action_button(b, c, "Show in folder", Action::Reveal(w.dir.clone()));
         if w.editable() && !w.active {
-            action_button(b, c, "Remove", Action::RemoveWallpaper(i));
+            let r = Rect::new(c.x, c.y + b.px(4.0), c.w, height(b, 30.0));
+            b.button(
+                key("panel-wallpaper-remove"),
+                r,
+                "Remove",
+                None,
+                mypaper_ui::controls::ButtonKind::Ghost,
+                true,
+                Action::RemoveWallpaper(i),
+            );
+            c.y = r.bottom + b.px(8.0);
         } else if w.editable() {
             notice(b, c, "Choose another wallpaper before removing this one.");
         }
@@ -521,28 +561,6 @@ const FITS: [(&str, &str); 4] = [
     ("stretch", "Stretch"),
     ("center", "Center"),
 ];
-
-fn fit_tiles(b: &mut B, c: &mut Col, current: &str, edit: Edit) {
-    text(
-        b,
-        Rect::new(c.x, c.y, c.w, height(b, 24.0)),
-        "Fit",
-        13.0,
-        400,
-        b.p.ink1,
-        Align::Start,
-    );
-    c.y += height(b, 28.0);
-    let r = b.fit_tiles(
-        key(("panel-fit", edit.path.as_ref())),
-        Rect::new(c.x, c.y, c.w, 0.0),
-        FITS.iter()
-            .position(|(value, _)| *value == current)
-            .unwrap_or(0),
-        |i| Action::Set(edit.clone(), json!(FITS[i].0)),
-    );
-    c.y = r.bottom;
-}
 
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
     title(
@@ -678,11 +696,19 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     );
                 } else if matches!(source, Some(Source::File | Source::Folder)) {
                     let value = app.text(&FieldId::Text(DocId::Studio, "/add_fit".into()));
-                    fit_tiles(
+                    let image = source_image(
+                        app,
+                        source.unwrap(),
+                        picked.unwrap_or_else(|| app.text(&FieldId::AddUrl)),
+                        (640, 360),
+                    );
+                    crate::panel::specimens::fit_tiles(
+                        app,
                         b,
                         c,
                         if value.is_empty() { "cover" } else { value },
                         Edit::new(DocId::Studio, "/add_fit", "Fit"),
+                        image,
                     );
                 }
                 let on = use_now(app);
@@ -704,33 +730,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
 
 fn source_preview(app: &App, b: &mut B, r: Rect, source: Source, value: &str) {
     b.fill(r, b.px(8.0), b.p.fill);
-    let path = std::path::Path::new(value);
-    let file = if source == Source::Folder {
-        let mut pictures: Vec<_> = std::fs::read_dir(path)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| {
-                p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
-                    ["png", "jpg", "jpeg", "bmp", "webp"].contains(&e.to_lowercase().as_str())
-                })
-            })
-            .collect();
-        pictures.sort();
-        pictures.into_iter().next()
-    } else {
-        Some(path.to_path_buf())
-    };
-    let image = if source == Source::App {
-        crate::panel::icons::image(app, value)
-    } else {
-        file.as_ref().and_then(|p| {
-            app.images
-                .borrow_mut()
-                .get(p, (r.width() as u32, r.height() as u32))
-        })
-    };
+    let image = source_image(app, source, value, (r.width() as u32, r.height() as u32));
     if let Some(image) = image {
         if source == Source::App {
             let icon = Rect::new(
@@ -854,5 +854,37 @@ mod tests {
         assert_eq!(app.docs.version, version);
         app.run(Action::AddWallpaper);
         assert!(use_now(&app));
+    }
+}
+
+fn source_image(
+    app: &App,
+    source: Source,
+    value: &str,
+    size: (u32, u32),
+) -> Option<std::sync::Arc<mypaper_ui::Image>> {
+    let path = std::path::Path::new(value);
+    let file = if source == Source::Folder {
+        let mut pictures: Vec<_> = std::fs::read_dir(path)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                    ["png", "jpg", "jpeg", "bmp", "webp"].contains(&e.to_lowercase().as_str())
+                })
+            })
+            .collect();
+        pictures.sort();
+        pictures.into_iter().next()
+    } else {
+        Some(path.to_path_buf())
+    };
+    if source == Source::App {
+        crate::panel::icons::image(app, value)
+    } else {
+        file.as_ref()
+            .and_then(|p| app.images.borrow_mut().get(p, size))
     }
 }

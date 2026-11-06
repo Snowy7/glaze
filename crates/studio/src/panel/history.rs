@@ -61,13 +61,6 @@ impl Desktop {
             .and_then(|(_, v)| v.as_ref())
             .and_then(Value::as_str)
     }
-    pub fn bars(&self) -> &Value {
-        &self.bars
-    }
-    pub fn widgets(&self) -> &Value {
-        &self.widgets
-    }
-
     fn read(app: &App) -> Self {
         let mut bars = app.docs.doc(DocId::Bars).raw.clone();
         for path in SETTINGS_IN_BARS {
@@ -226,9 +219,7 @@ pub struct History {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PictureKey {
     pub entry: usize,
-    pub display: usize,
     pub size: (u32, u32),
-    pub cropped: bool,
 }
 
 impl History {
@@ -801,6 +792,18 @@ pub fn can_restore(app: &App) -> bool {
         })
 }
 
+pub fn partial_preview(app: &App) -> bool {
+    let history = app.panel.as_ref().unwrap().history.borrow();
+    history
+        .selected
+        .and_then(|index| history.entries.get(index))
+        .filter(|entry| history.last.as_ref() != Some(&entry.desktop))
+        .is_some_and(|entry| {
+            let dir = wallpaper(app, entry.desktop.wallpaper()).map(|item| item.dir.as_path());
+            !super::pick_client::snapshot_wallpaper_available(&entry.desktop.theme, dir)
+        })
+}
+
 /// A snapshot owns every appearance input; current Look and current wallpaper never enter it.
 /// Rasterize at the actual picture size so a long history retains only small visible pictures.
 pub fn picture(
@@ -809,97 +812,41 @@ pub fn picture(
     size: (u32, u32),
     at: u64,
 ) -> Option<std::sync::Arc<mypaper_ui::Image>> {
-    picture_region(app, desktop, size, at, None)
+    picture_region(app, desktop, size, at, app.nav.display)
 }
 
-/// Crop the changed object before rasterizing, so a widget face stays sharp at row size.
-/// Large virtual desktop coordinates never allocate a desktop-sized intermediate bitmap.
+/// Every row shows the whole saved desktop, with its displays beside each other.
 pub fn thumbnail(
     app: &App,
     entry: &Entry,
-    previous: Option<&Desktop>,
     size: (u32, u32),
 ) -> Option<std::sync::Arc<mypaper_ui::Image>> {
-    let region = previous.and_then(|before| changed_region(app, before, &entry.desktop, size));
-    picture_region(app, &entry.desktop, size, entry.at, region)
-}
-
-fn changed_region(
-    app: &App,
-    before: &Desktop,
-    after: &Desktop,
-    size: (u32, u32),
-) -> Option<mypaper_ui::Rect> {
-    use mypaper_ui::Rect;
-    if before.wallpaper() != after.wallpaper() {
+    let count = app.monitors.len().max(1) as u32;
+    let gap = if count > 1 { 2 } else { 0 };
+    let slot = size.0.saturating_sub(gap * (count - 1)) / count;
+    if slot == 0 || size.1 == 0 {
         return None;
     }
-    let display = app.display()?;
-    let dpi = display.dpi as f32 / 96.0;
-    let (width, height) = (
-        display.rect.width as f32 / dpi,
-        display.rect.height as f32 / dpi,
-    );
-    let mut bounds: Option<Rect> = None;
-    for (desktop, other) in [(after, before), (before, after)] {
-        let layout =
-            serde_json::from_value::<mypaper_widgets::layout::Layout>(desktop.widgets.clone())
-                .ok()?;
-        let grid = crate::stage::grid_for(&layout, display);
-        for instance in crate::pages::widgets::here(app, &layout) {
-            let changed = other
-                .widgets
-                .get("instances")
-                .and_then(Value::as_array)
-                .and_then(|items| {
-                    items
-                        .iter()
-                        .find(|value| value["instance"].as_str() == Some(&instance.instance))
-                })
-                .is_none_or(|old| serde_json::to_value(&instance).ok().as_ref() != Some(old));
-            let look_changed = before.theme != after.theme || before.config != after.config;
-            if !changed && !look_changed {
-                continue;
-            }
-            let frame = grid.rect(instance.cell, instance.size);
-            let rect = Rect::new(
-                frame.x as f32 / width,
-                frame.y as f32 / height,
-                frame.width as f32 / width,
-                frame.height as f32 / height,
-            );
-            bounds = Some(bounds.map_or(rect, |old| old.union(rect)));
-            if look_changed {
-                break;
-            }
+    let mut result = mypaper_ui::Image {
+        width: size.0,
+        height: size.1,
+        pixels: [0x24, 0x24, 0x24, 0xff].repeat((size.0 * size.1) as usize),
+    };
+    for (index, monitor) in app.monitors.iter().enumerate() {
+        let aspect = monitor.rect.width.max(1) as f32 / monitor.rect.height.max(1) as f32;
+        let width = slot.min((size.1 as f32 * aspect).round() as u32).max(1);
+        let height = size.1.min((width as f32 / aspect).round() as u32).max(1);
+        let picture = picture_region(app, &entry.desktop, (width, height), entry.at, index)?;
+        let left = index as u32 * (slot + gap) + (slot - width) / 2;
+        let top = (size.1 - height) / 2;
+        for row in 0..height {
+            let from = (row * width * 4) as usize;
+            let to = (((top + row) * size.0 + left) * 4) as usize;
+            result.pixels[to..to + width as usize * 4]
+                .copy_from_slice(&picture.pixels[from..from + width as usize * 4]);
         }
     }
-    let bounds = bounds.or_else(|| {
-        if before.bars != after.bars || before.theme != after.theme || before.config != after.config
-        {
-            Some(if before.bars.get("dock") != after.bars.get("dock") {
-                Rect::new(0.22, 0.58, 0.56, 0.42)
-            } else {
-                Rect::new(0.22, 0.0, 0.56, 0.42)
-            })
-        } else {
-            None
-        }
-    })?;
-    let aspect = size.0.max(1) as f32 / size.1.max(1) as f32 * height / width;
-    let mut w = (bounds.width() + 0.04).min(1.0);
-    let mut h = (bounds.height() + 0.04).min(1.0);
-    if w / h < aspect {
-        w = (h * aspect).min(1.0);
-    } else {
-        h = (w / aspect).min(1.0);
-    }
-    Some(Rect::new(
-        ((bounds.left + bounds.right - w) / 2.0).clamp(0.0, 1.0 - w),
-        ((bounds.top + bounds.bottom - h) / 2.0).clamp(0.0, 1.0 - h),
-        w,
-        h,
-    ))
+    Some(std::sync::Arc::new(result))
 }
 
 fn picture_region(
@@ -907,19 +854,13 @@ fn picture_region(
     desktop: &Desktop,
     size: (u32, u32),
     at: u64,
-    region: Option<mypaper_ui::Rect>,
+    display_index: usize,
 ) -> Option<std::sync::Arc<mypaper_ui::Image>> {
     use mypaper_shell::preview::{bars as bars_view, widgets as widgets_view};
     use mypaper_ui::{DisplayList, Op, Rect, Rgba, Ui};
-    let display = app.display()?;
+    let display = app.monitors.get(display_index)?;
     let dip_width = display.rect.width as f32 / (display.dpi as f32 / 96.0);
-    let view_size = region.map_or(size, |region| {
-        let scale = size.0 as f32 / (dip_width * region.width());
-        (
-            (dip_width * scale).ceil() as u32,
-            (display.rect.height as f32 / (display.dpi as f32 / 96.0) * scale).ceil() as u32,
-        )
-    });
+    let view_size = size;
     let rect = Rect::new(0.0, 0.0, view_size.0 as f32, view_size.1 as f32);
     let wallpaper = wallpaper(app, desktop.wallpaper());
     let backdrop = wallpaper
@@ -1078,7 +1019,20 @@ fn picture_region(
         let mut storage = mypaper_widgets::storage::Storage::new(
             std::env::temp_dir().join("mypaper-panel-snapshot"),
         );
-        for instance in crate::pages::widgets::here(app, &layout) {
+        let devices: Vec<_> = app
+            .monitors
+            .iter()
+            .map(|monitor| monitor.device.clone())
+            .collect();
+        let primary = app
+            .monitors
+            .iter()
+            .position(|monitor| monitor.primary)
+            .unwrap_or(0);
+        for instance in layout.instances.iter().filter(|instance| {
+            mypaper_widgets::layout::show_on(&instance.monitor, &devices, primary)
+                == Some(display.device.as_str())
+        }) {
             let Some(widget) = app.registry.get(&instance.widget) else {
                 continue;
             };
@@ -1137,14 +1091,6 @@ fn picture_region(
             ));
         }
     }
-    if let Some(region) = region {
-        list.ops = crate::stage::offset(
-            &list.ops,
-            -region.left * view_size.0 as f32,
-            -region.top * view_size.1 as f32,
-        )
-        .collect();
-    }
     ui.text.clear_cache();
     let picture = mypaper_ui::render(&mut ui, &list, size.0, size.1)
         .ok()
@@ -1153,51 +1099,6 @@ fn picture_region(
     drop(list);
     super::measure::raster_finished(app);
     picture
-}
-
-pub fn starter_picture(
-    app: &App,
-    index: usize,
-    size: (u32, u32),
-    taskbar: usize,
-) -> Option<std::sync::Arc<mypaper_ui::Image>> {
-    let (wallpaper, preset, items) = crate::pages::first_run::panel_starter(index)?;
-    let wallpaper = app.library.items.iter().find(|w| w.id == wallpaper)?;
-    let style = ["liquid", "fluent", "oneui", "mono"].get(index)?;
-    let mut desktop = Desktop::read(app);
-    let mut look = app
-        .get(DocId::Config, "/look")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({}));
-    look["style"] = serde_json::json!(style);
-    desktop.config = vec![
-        ("/theme".into(), Some(serde_json::json!(wallpaper.apply_as))),
-        ("/look".into(), Some(look)),
-    ];
-    desktop.theme = super::saving::theme_value(app, wallpaper).as_ref().clone();
-    desktop.bars = serde_json::json!({"version":1,"preset":preset,"look":{"style":style}});
-    if matches!(preset, "macos" | "islands") {
-        desktop.bars["dock"] = serde_json::json!({"enabled":true});
-    }
-    if taskbar != 0 {
-        desktop.bars["top"] = serde_json::json!({"enabled":false});
-        desktop.bars["dock"] = serde_json::json!({"enabled":false});
-    }
-    let mut row = 1;
-    let instances: Vec<_> = if taskbar == 2 {
-        vec![]
-    } else {
-        items.iter().enumerate().map(|(i,(id,size))| {
-        let instance=serde_json::json!({"instance":format!("starter-{i}"),"widget":id,"monitor":"","cell":[20,row],"size":size});
-        row+=size[1];
-        instance
-    }).collect()
-    };
-    desktop.widgets = serde_json::json!({"version":2,"instances":instances,"appearance":{
-        "style":if *style == "liquid" {"liquid"} else {"minimal"},
-        "surface":"glass","radius":if *style == "oneui" {32} else {16},
-        "opacity":if *style == "liquid" {0.15} else {0.7}}});
-    picture(app, &desktop, size, 1793958138)
 }
 
 #[cfg(test)]
@@ -1303,22 +1204,29 @@ mod tests {
     }
 
     #[test]
-    fn a_changed_widgets_thumbnail_crops_to_its_display_region() {
+    fn history_rows_show_every_display_independently_of_the_inspected_display() {
         let ui = mypaper_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
-        let before = Desktop::read(&app);
-        let mut after = before.clone();
-        after.widgets["instances"][0]["settings"] = serde_json::json!({"variant":"digital"});
-        let region = changed_region(&app, &before, &after, (216, 122)).unwrap();
-        assert!(region.width() < 0.6 && region.height() < 0.6, "{region:?}");
-        assert!(
-            region.left >= 0.0 && region.top >= 0.0 && region.right <= 1.0 && region.bottom <= 1.0
-        );
-        let mut wallpaper_changed = after;
-        wallpaper_changed.config[0].1 = Some(serde_json::json!("another-wallpaper"));
-        assert!(changed_region(&app, &before, &wallpaper_changed, (216, 122)).is_none());
+        for wallpaper in &mut app.library.items {
+            wallpaper.preview = None;
+            wallpaper.video = None;
+        }
+        observe(&app);
+        let entry = app.panel.as_ref().unwrap().history.borrow().entries[0].clone();
+        app.nav.display = 0;
+        let first = thumbnail(&app, &entry, (216, 122)).unwrap();
+        app.nav.display = 1;
+        let second = thumbnail(&app, &entry, (216, 122)).unwrap();
+        assert_eq!(first, second);
+        for half in [0..107, 109..216] {
+            assert!(half.into_iter().any(|x| (0..122).any(|y| {
+                let at = ((y * 216 + x) * 4) as usize;
+                first.pixels[at..at + 4] != [0x24, 0x24, 0x24, 0xff]
+            })));
+        }
     }
+
     #[test]
     fn restore_finishes_when_the_snapshot_has_a_different_windows_scheme() {
         let ui = mypaper_ui::Ui::new().unwrap();

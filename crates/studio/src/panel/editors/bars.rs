@@ -26,7 +26,7 @@ const MODULES: [(&str, &str); 15] = [
 
 fn name(id: &str) -> &str {
     if id == "|" {
-        return "A gap";
+        return "Gap";
     }
     MODULES
         .iter()
@@ -806,63 +806,71 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
             ),
         );
     });
-    row(
-        b,
-        c,
-        None,
-        "Design",
-        &design_name(app, Some(bar)),
-        "",
-        None,
-        Action::Panel(Command::Design(Some(bar))),
-    );
+    group(b, c, "", |b, c| {
+        row(
+            b,
+            c,
+            None,
+            "Design",
+            &design_name(app, Some(bar)),
+            "",
+            None,
+            Action::Panel(Command::Design(Some(bar))),
+        )
+    });
     display_differences(app, b, c);
     if bar == Bar::Dock {
         pinned_apps(app, b, c, Pins::Dock);
     }
-    group(b, c, "Modules", |b, c| {
-        for (list, label) in [("left", "Start"), ("center", "Middle"), ("right", "End")] {
-            if bar == Bar::Dock && list == "center" {
-                continue;
-            }
-            text(
-                b,
-                Rect::new(c.x, c.y, c.w, b.px(26.0)),
-                label,
-                12.0,
-                600,
-                b.p.ink3,
-                Align::Start,
-            );
-            let zone_top = c.y;
-            c.y += b.px(28.0);
-            let modules = bar_value(app, &format!("/{}/{list}", bar.key()))
-                .and_then(|v| v.as_array().cloned())
-                .unwrap_or_default();
-            crate::panel::lists::zone_target(
-                app,
-                b,
-                Rect::new(c.x, zone_top, c.w, b.px(28.0)),
-                bar,
-                list,
-                modules.len(),
-            );
-            module_rows(app, b, c, bar, list, &modules);
-            if modules.is_empty() {
-                let top = c.y;
-                notice(b, c, "No modules here");
+    super::group_action(
+        b,
+        c,
+        "Modules",
+        "Add a module",
+        Action::AddModule(bar),
+        |b, c| {
+            for (list, label) in [("left", "Start"), ("center", "Middle"), ("right", "End")] {
+                if bar == Bar::Dock && list == "center" {
+                    continue;
+                }
+                text(
+                    b,
+                    Rect::new(c.x, c.y, c.w, b.px(26.0)),
+                    label,
+                    12.0,
+                    600,
+                    b.p.ink3,
+                    Align::Start,
+                );
+                let zone_top = c.y;
+                c.y += b.px(28.0);
+                let modules = bar_value(app, &format!("/{}/{list}", bar.key()))
+                    .and_then(|v| v.as_array().cloned())
+                    .unwrap_or_default();
                 crate::panel::lists::zone_target(
                     app,
                     b,
-                    Rect::new(c.x, top, c.w, c.y - top),
+                    Rect::new(c.x, zone_top, c.w, b.px(28.0)),
                     bar,
                     list,
-                    0,
+                    modules.len(),
                 );
+                module_rows(app, b, c, bar, list, &modules);
+                if modules.is_empty() {
+                    let top = c.y;
+                    notice(b, c, "No modules here");
+                    crate::panel::lists::zone_target(
+                        app,
+                        b,
+                        Rect::new(c.x, top, c.w, c.y - top),
+                        bar,
+                        list,
+                        0,
+                    );
+                }
             }
-        }
-        action_button(b, c, "Add a module", Action::AddModule(bar));
-    });
+        },
+    );
     if more(app, b, c, "Layout, look, motion, displays") {
         if bar == Bar::Top {
             number(
@@ -933,9 +941,9 @@ fn module_rows(app: &App, b: &mut B, c: &mut Col, bar: Bar, list: &'static str, 
             &crate::panel::SortList::Modules(bar, list),
             index,
             &if id == "|" {
-                "A gap".into()
+                "Gap".into()
             } else {
-                format!("{} · Click: {}", name(id), click_label(app, id, bar))
+                format!("{} · {}", name(id), click_label(app, id, bar))
             },
             id == "|",
             Some(crate::panel::icons::module(id)),
@@ -1310,8 +1318,10 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         row(
             b,
             c,
-            None,
-            "A gap",
+            Some(mypaper_ui::controls::Glyph::Icon(
+                mypaper_ui::icons::Icon::Grip,
+            )),
+            "Gap",
             "",
             "",
             Some(selected == Some("|")),

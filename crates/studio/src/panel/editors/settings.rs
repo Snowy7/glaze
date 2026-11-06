@@ -25,7 +25,7 @@ pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
     let refresh = crate::panel::measure::refresh_rate(app);
     let mut options = vec![(Value::Null, inherit.into())];
     if let Some(hz) = refresh {
-        options.push((serde_json::json!(hz), format!("Display refresh · {hz} fps")));
+        options.push((serde_json::json!(hz), format!("Display ({hz} fps)")));
     }
     for fps in [24, 30, 60, 120] {
         if refresh != Some(fps) {
@@ -34,7 +34,7 @@ pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
     }
     let known = options.iter().any(|(v, _)| *v == value);
     options.push((serde_json::json!("custom"), "Custom…".into()));
-    segments(
+    select(
         b,
         c,
         "Cap",
@@ -110,6 +110,8 @@ mod frame_cap_tests {
         assert_eq!(app.docs.version, before);
         app.panel.as_mut().unwrap().page = Page::Performance;
         let built = crate::panel::build(&app, &mut ui.text);
+        assert!(built.targets.iter().any(|target| matches!(&target.action,
+            Action::Choose(choices) if choices.edit.path.as_ref() == "/panel/frame-cap/engine/fps" && choices.options.len() > 4)));
         assert!(built.targets.iter().any(|target| matches!(&target.behavior, Behavior::Slider { min: 1.0, max: 360.0, .. }) && matches!(&target.action, Action::Slider(edit) if edit.path.as_ref() == "/engine/fps")));
         app.set(
             &Edit::new(DocId::Config, "/engine/fps", "Cap"),
@@ -147,10 +149,7 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
     });
     group(b, c, "Studio", |b, c| {
         setting(app, b, c, "studio_appearance", "Appearance", "");
-        let left = app
-            .get(DocId::Studio, "/panel_side")
-            .and_then(Value::as_str)
-            == Some("left");
+        let left = crate::panel::pick_client::panel_side(app) == Some("left");
         text(
             b,
             Rect::new(c.x, c.y, c.w, height(b, 24.0)),
@@ -374,7 +373,7 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
                     b.px(98.0),
                     b.px(30.0),
                 ),
-                &format!("Restart {label}"),
+                &format!("Restart {}", label.to_lowercase()),
                 None,
                 false,
                 true,
@@ -549,128 +548,134 @@ pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_else(default_items);
     menu_preview(app, b, c, &items);
-    group(b, c, "Items · top to bottom", |b, c| {
-        for (i, item) in items.iter().enumerate() {
-            crate::panel::lists::row(
-                app,
-                b,
-                c,
-                &crate::panel::SortList::Menu,
-                i,
-                &menu_name(item),
-                *item == Entry::Builtin(Builtin::Separator),
-                None,
-                None,
-            );
-            if let Entry::Custom(custom) = item
-                && app.is_open(key(("panel-menu-item", i)))
-            {
+    super::group_action(
+        b,
+        c,
+        "Items",
+        "Add your own",
+        Action::More(key("panel-menu-add")),
+        |b, c| {
+            if app.is_open(key("panel-menu-add")) {
+                let mut shown = Vec::new();
+                for item in default_items().into_iter() {
+                    if shown.contains(&item)
+                        || items.contains(&item) && item != Entry::Builtin(Builtin::Separator)
+                    {
+                        continue;
+                    }
+                    shown.push(item.clone());
+                    if let Entry::Builtin(builtin) = &item {
+                        let id = serde_json::to_value(builtin)
+                            .ok()
+                            .and_then(|v| v.as_str().map(str::to_owned))
+                            .unwrap();
+                        row(
+                            b,
+                            c,
+                            Some(glyph::ADD),
+                            &menu_name(&item),
+                            "",
+                            "",
+                            None,
+                            Action::MenuAdd(id),
+                        );
+                    }
+                }
                 field(
                     app,
                     b,
                     c,
-                    FieldId::Text(
-                        DocId::Config,
-                        format!("/desktop_menu/items/{i}/label").into(),
-                    ),
-                    "Name",
-                    "Menu item",
-                    &custom.label,
+                    FieldId::Text(DocId::Studio, "/menu_label".into()),
+                    "Your own item's name",
+                    "Notes",
+                    "",
                 );
                 field(
                     app,
                     b,
                     c,
-                    FieldId::Text(
-                        DocId::Config,
-                        format!("/desktop_menu/items/{i}/command").into(),
-                    ),
+                    FieldId::Text(DocId::Studio, "/menu_command".into()),
                     "Program",
                     "notepad.exe",
-                    &custom.command,
+                    "",
                 );
-                let args = custom
-                    .args
-                    .iter()
-                    .map(|arg| {
-                        if arg.contains(' ') {
-                            format!("\"{arg}\"")
-                        } else {
-                            arg.clone()
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
                 field(
                     app,
                     b,
                     c,
-                    FieldId::Text(DocId::Studio, format!("/panel/menu_args/{i}").into()),
+                    FieldId::Text(DocId::Studio, "/panel/draft/menu_args".into()),
                     "Arguments",
                     "\"D:\\My notes.txt\"",
-                    &args,
+                    "",
                 );
+                action_button(b, c, "Add your item", Action::Panel(Command::AddMenuItem));
+                action_button(b, c, "Reset to the default menu", Action::MenuReset);
             }
-        }
-    });
-    if crate::panel::controls::more(app, b, c, "Add item") {
-        group(b, c, "", |b, c| {
-            let mut shown = Vec::new();
-            for item in default_items().into_iter() {
-                if shown.contains(&item)
-                    || items.contains(&item) && item != Entry::Builtin(Builtin::Separator)
+
+            for (i, item) in items.iter().enumerate() {
+                crate::panel::lists::row(
+                    app,
+                    b,
+                    c,
+                    &crate::panel::SortList::Menu,
+                    i,
+                    &menu_name(item),
+                    *item == Entry::Builtin(Builtin::Separator),
+                    None,
+                    None,
+                );
+                if let Entry::Custom(custom) = item
+                    && app.is_open(key(("panel-menu-item", i)))
                 {
-                    continue;
-                }
-                shown.push(item.clone());
-                if let Entry::Builtin(builtin) = &item {
-                    let id = serde_json::to_value(builtin)
-                        .ok()
-                        .and_then(|v| v.as_str().map(str::to_owned))
-                        .unwrap();
-                    row(
+                    field(
+                        app,
                         b,
                         c,
-                        Some(glyph::ADD),
-                        &menu_name(&item),
-                        "",
-                        "",
-                        None,
-                        Action::MenuAdd(id),
+                        FieldId::Text(
+                            DocId::Config,
+                            format!("/desktop_menu/items/{i}/label").into(),
+                        ),
+                        "Name",
+                        "Menu item",
+                        &custom.label,
+                    );
+                    field(
+                        app,
+                        b,
+                        c,
+                        FieldId::Text(
+                            DocId::Config,
+                            format!("/desktop_menu/items/{i}/command").into(),
+                        ),
+                        "Program",
+                        "notepad.exe",
+                        &custom.command,
+                    );
+                    let args = custom
+                        .args
+                        .iter()
+                        .map(|arg| {
+                            if arg.contains(' ') {
+                                format!("\"{arg}\"")
+                            } else {
+                                arg.clone()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    field(
+                        app,
+                        b,
+                        c,
+                        FieldId::Text(DocId::Studio, format!("/panel/menu_args/{i}").into()),
+                        "Arguments",
+                        "\"D:\\My notes.txt\"",
+                        &args,
                     );
                 }
             }
-            field(
-                app,
-                b,
-                c,
-                FieldId::Text(DocId::Studio, "/menu_label".into()),
-                "Your own item's name",
-                "Notes",
-                "",
-            );
-            field(
-                app,
-                b,
-                c,
-                FieldId::Text(DocId::Studio, "/menu_command".into()),
-                "Program",
-                "notepad.exe",
-                "",
-            );
-            field(
-                app,
-                b,
-                c,
-                FieldId::Text(DocId::Studio, "/panel/draft/menu_args".into()),
-                "Arguments",
-                "\"D:\\My notes.txt\"",
-                "",
-            );
-            action_button(b, c, "Add your item", Action::Panel(Command::AddMenuItem));
-            action_button(b, c, "Reset to the default menu", Action::MenuReset);
-        });
-    }
+        },
+    );
     group(b, c, "Explorer", |b, c| {
         setting(app, b, c, "classic_menu", "Full Windows menus", "")
     });
@@ -678,8 +683,6 @@ pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
 
 /// The shell's actual menu drawing, reduced over the active wallpaper.
 fn menu_preview(app: &App, b: &mut B, c: &mut Col, items: &[Entry]) {
-    let r = Rect::new(c.x, c.y + b.px(12.0), c.w, b.px(160.0));
-    crate::panel::specimens::backdrop(app, b, r);
     let config = mypaper_config::DesktopMenu {
         enabled: true,
         items: items.to_vec(),
@@ -697,6 +700,8 @@ fn menu_preview(app: &App, b: &mut B, c: &mut Col, items: &[Entry]) {
     );
     tokens.shadow = false;
     let layout = mypaper_ui::menu::layout(&items, &tokens, b.s, b.text);
+    let r = Rect::new(c.x, c.y + b.px(12.0), c.w, layout.height + b.px(16.0));
+    crate::panel::specimens::backdrop(app, b, r);
     let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
     b.list.ops.push(mypaper_ui::Op::Clip { rect: r });
     b.list.ops.extend(crate::stage::offset(

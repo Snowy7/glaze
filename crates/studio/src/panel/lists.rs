@@ -50,7 +50,13 @@ pub fn row(
             rect,
             label,
             separator,
-            icon,
+            icon: if separator {
+                Some(Glyph::Icon(if matches!(list, List::Menu) {
+                    mypaper_ui::icons::Icon::Remove
+                } else {
+                    mypaper_ui::icons::Icon::Grip
+                }))
+            } else { icon },
             select: select.unwrap_or_else(|| Action::Panel(Command::SortRow(list.clone(), index))),
             drag: Action::Panel(Command::SortHandle(list.clone(), index)),
             remove: Action::Panel(Command::SortRemove(list.clone(), index)),
