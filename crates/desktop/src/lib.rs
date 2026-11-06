@@ -5,7 +5,6 @@ mod config_watch;
 mod control;
 mod cover;
 pub mod desktop_hit;
-pub mod dir_watch;
 pub mod desktop_view;
 pub mod desktop_wallpaper;
 pub mod display_gpu;

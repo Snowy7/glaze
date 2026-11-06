@@ -115,3 +115,77 @@ fn named_files_ignore_noise_and_coalesce_atomic_saves() {
     assert!(started.elapsed() < Duration::from_secs(1));
     assert!(Watch::directory(&dir.0.join("missing"), false, |_| {}).is_err());
 }
+
+#[test]
+fn deleted_directory_recovers_and_drop_cancels_waiting_for_a_parent_change() {
+    let parent = Dir::new();
+    let dir = parent.0.join("mypaper");
+    std::fs::create_dir(&dir).unwrap();
+    let (tx, rx) = mpsc::channel();
+    let watch = Watch::directory(&dir, false, move |event| {
+        let _ = tx.send(event);
+    })
+    .unwrap();
+    std::fs::remove_dir(&dir).unwrap();
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+        Event::Rescan
+    );
+    // Leave it absent long enough to enter the parent watch, then recreate and publish before
+    // recovery. The recovery rescan must cover that publication, and later writes must arrive.
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_millis(200)),
+        Err(mpsc::RecvTimeoutError::Timeout)
+    ));
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::write(dir.join("game-activity.json"), "game on").unwrap();
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+        Event::Rescan
+    );
+    while rx.try_recv().is_ok() {}
+    let after = dir.join("after-recovery");
+    std::fs::write(&after, "game off").unwrap();
+    wait_for(&rx, &after);
+
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+        Event::Rescan
+    );
+    let started = Instant::now();
+    drop(watch);
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "drop cancels the parent watch too"
+    );
+}
+
+#[test]
+fn named_files_recover_when_their_parent_tree_is_recreated() {
+    let parent = Dir::new();
+    let tree = parent.0.join("settings");
+    let dir = tree.join("mypaper");
+    std::fs::create_dir_all(&dir).unwrap();
+    let (tx, rx) = mpsc::channel();
+    let watch = Watch::files(&dir, &["game-activity.json"], move || {
+        let _ = tx.send(());
+    })
+    .unwrap();
+    std::fs::remove_dir_all(&tree).unwrap();
+    rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(matches!(
+        rx.recv_timeout(Duration::from_millis(200)),
+        Err(mpsc::RecvTimeoutError::Timeout)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("game-activity.json"), "game on").unwrap();
+    rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    // Drain recovery/publication and then prove that the named-file filter still works.
+    while rx.recv_timeout(Duration::from_millis(200)).is_ok() {}
+    std::fs::write(dir.join("noise"), "x").unwrap();
+    assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+    std::fs::write(dir.join("game-activity.json"), "game off").unwrap();
+    rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    drop(watch);
+}

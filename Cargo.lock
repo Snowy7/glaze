@@ -1766,6 +1766,7 @@ dependencies = [
  "env_logger",
  "log",
  "mypaper-config",
+ "mypaper-fswatch",
  "serde",
  "serde_json",
  "windows",

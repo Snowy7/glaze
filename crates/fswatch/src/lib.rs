@@ -14,13 +14,14 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use windows::Win32::Foundation::{
-    ERROR_IO_PENDING, ERROR_NOTIFY_ENUM_DIR, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    ERROR_DIRECTORY, ERROR_FILE_NOT_FOUND, ERROR_IO_PENDING, ERROR_NOTIFY_ENUM_DIR,
+    ERROR_PATH_NOT_FOUND, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT,
 };
 use windows::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OVERLAPPED, FILE_LIST_DIRECTORY,
-    FILE_NOTIFY_CHANGE_ATTRIBUTES, FILE_NOTIFY_CHANGE_DIR_NAME, FILE_NOTIFY_CHANGE_FILE_NAME,
-    FILE_NOTIFY_CHANGE_LAST_WRITE, FILE_NOTIFY_CHANGE_SIZE, FILE_SHARE_DELETE, FILE_SHARE_READ,
-    FILE_SHARE_WRITE, OPEN_EXISTING, ReadDirectoryChangesW,
+    FILE_NOTIFY_CHANGE_ATTRIBUTES, FILE_NOTIFY_CHANGE_CREATION, FILE_NOTIFY_CHANGE_DIR_NAME,
+    FILE_NOTIFY_CHANGE_FILE_NAME, FILE_NOTIFY_CHANGE_LAST_WRITE, FILE_NOTIFY_CHANGE_SIZE,
+    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, ReadDirectoryChangesW,
 };
 use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows::Win32::System::Threading::{
@@ -34,7 +35,7 @@ const DEBOUNCE: Duration = Duration::from_millis(60);
 const MAX_LATENCY: Duration = Duration::from_millis(250);
 
 /// Paths are absolute and include both old and new names for a rename. `Rescan` means names
-/// were lost (kernel overflow or invalid records); consumers must reload their watched state.
+/// were lost (overflow, invalid records or I/O recovery); reload the watched state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Paths(Vec<PathBuf>),
@@ -86,26 +87,8 @@ impl Watch {
         mut changed: impl FnMut(Event) + Send + 'static,
     ) -> Result<Self> {
         let root = std::path::absolute(dir)?;
-        let path = HSTRING::from(root.as_os_str());
-        // SAFETY: directory-list access, sharing all operations; each successful handle is
-        // immediately transferred to an OwnedHandle, never closed while the worker uses it.
-        let (folder, stop, done) = unsafe {
-            let folder = owned(
-                CreateFileW(
-                    &path,
-                    FILE_LIST_DIRECTORY.0,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                    None,
-                    OPEN_EXISTING,
-                    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
-                    None,
-                )
-                .with_context(|| format!("watch {}", root.display()))?,
-            );
-            let stop = Arc::new(owned(CreateEventW(None, true, false, PCWSTR::null())?));
-            let done = owned(CreateEventW(None, true, false, PCWSTR::null())?);
-            (folder, stop, done)
-        };
+        // SAFETY: a new stop event, owned until the worker has joined.
+        let stop = Arc::new(unsafe { owned(CreateEventW(None, true, false, PCWSTR::null())?) });
         let worker_stop = stop.clone();
         let (ready, armed) = mpsc::sync_channel(1);
         let thread = std::thread::Builder::new()
@@ -115,25 +98,44 @@ impl Watch {
             ))
             .stack_size(256 * 1024)
             .spawn(move || {
-                let mut read = Read::new(folder, done, buffer_bytes);
-                if let Err(error) = read.arm(recursive) {
-                    let _ = ready.send(Err(error));
-                    return;
-                }
+                let mut read = match Read::open(&root, buffer_bytes).and_then(|mut read| {
+                    read.arm(recursive)?;
+                    Ok(read)
+                }) {
+                    Ok(read) => read,
+                    Err(error) => {
+                        let _ = ready.send(Err(error));
+                        return;
+                    }
+                };
                 if ready.send(Ok(())).is_err() {
                     return;
                 }
-                if let Err(error) = run(
-                    &mut read,
-                    raw(&worker_stop),
-                    &root,
-                    recursive,
-                    &names,
-                    debounce,
-                    &mut changed,
-                ) {
-                    log::warn!("watch {} stopped: {error:#}", root.display());
+                loop {
+                    if let Err(error) = run(
+                        &mut read,
+                        raw(&worker_stop),
+                        &root,
+                        recursive,
+                        &names,
+                        debounce,
+                        &mut changed,
+                    ) {
+                        log::warn!("watch {} recovering: {error:#}", root.display());
+                    } else {
+                        return; // Stop was signalled.
+                    }
+                    // Close the old directory before waiting: its delete-pending handle can
+                    // otherwise prevent a replacement at the same path.
+                    drop(read);
                     changed(Event::Rescan);
+                    let Some(recovered) =
+                        recover(&root, raw(&worker_stop), recursive, buffer_bytes)
+                    else {
+                        return;
+                    };
+                    read = recovered;
+                    changed(Event::Rescan); // Includes publications made before re-arming.
                 }
             })
             .context("start directory watcher")?;
@@ -176,6 +178,28 @@ struct Read {
 }
 
 impl Read {
+    fn open(root: &Path, buffer_bytes: usize) -> Result<Self> {
+        let path = HSTRING::from(root.as_os_str());
+        // SAFETY: each successfully created handle is immediately owned; pending I/O is
+        // cancelled and drained by Read::drop before its handles or storage are freed.
+        unsafe {
+            let folder = owned(
+                CreateFileW(
+                    &path,
+                    FILE_LIST_DIRECTORY.0,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    None,
+                    OPEN_EXISTING,
+                    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
+                    None,
+                )
+                .with_context(|| format!("watch {}", root.display()))?,
+            );
+            let done = owned(CreateEventW(None, true, false, PCWSTR::null())?);
+            Ok(Self::new(folder, done, buffer_bytes))
+        }
+    }
+
     fn new(folder: OwnedHandle, done: OwnedHandle, bytes: usize) -> Self {
         let overlapped = Box::new(OVERLAPPED {
             hEvent: raw(&done),
@@ -205,6 +229,7 @@ impl Read {
                     | FILE_NOTIFY_CHANGE_DIR_NAME
                     | FILE_NOTIFY_CHANGE_SIZE
                     | FILE_NOTIFY_CHANGE_LAST_WRITE
+                    | FILE_NOTIFY_CHANGE_CREATION
                     | FILE_NOTIFY_CHANGE_ATTRIBUTES,
                 None,
                 Some(self.overlapped.as_mut()),
@@ -253,6 +278,80 @@ impl Drop for Read {
             }
         }
     }
+}
+
+fn missing(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<windows::core::Error>()
+        .is_some_and(|error| {
+            [ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND, ERROR_DIRECTORY]
+                .iter()
+                .any(|code| error.code() == code.to_hresult())
+        })
+}
+
+/// Reopen after failed I/O. Transient failures back off from 25 ms to 1 s; an absent directory
+/// sleeps on its nearest surviving ancestor instead, with no timed existence checks.
+fn recover(root: &Path, stop: HANDLE, recursive: bool, buffer_bytes: usize) -> Option<Read> {
+    let mut delay = 25;
+    loop {
+        // SAFETY: the worker owns a live stop event throughout recovery.
+        if unsafe { WaitForMultipleObjects(&[stop], false, 0) } != WAIT_TIMEOUT {
+            return None;
+        }
+        let opened = Read::open(root, buffer_bytes).and_then(|mut read| {
+            read.arm(recursive)?;
+            Ok(read)
+        });
+        match opened {
+            Ok(read) => return Some(read),
+            Err(error) if missing(&error) => {
+                match wait_for_directory(root, stop, buffer_bytes) {
+                    Ok(true) => continue,
+                    Ok(false) => return None,
+                    Err(_) => {} // Ancestor vanished or is inaccessible; retry with backoff.
+                }
+            }
+            Err(_) => {}
+        }
+        // SAFETY: the stop event also makes a transient-error backoff immediately cancellable.
+        if unsafe { WaitForMultipleObjects(&[stop], false, delay) } != WAIT_TIMEOUT {
+            return None;
+        }
+        delay = (delay * 2).min(1000);
+    }
+}
+
+/// Arm before rechecking existence so a recreation cannot fall between the check and wait.
+/// Recursive watching also covers the case where several levels of parent were removed.
+fn wait_for_directory(root: &Path, stop: HANDLE, buffer_bytes: usize) -> Result<bool> {
+    for ancestor in root.ancestors().skip(1) {
+        let mut parent = match Read::open(ancestor, buffer_bytes).and_then(|mut read| {
+            read.arm(true)?;
+            Ok(read)
+        }) {
+            Ok(read) => read,
+            Err(error) if missing(&error) => continue,
+            Err(error) => return Err(error),
+        };
+        if root.is_dir() {
+            return Ok(true);
+        }
+        // SAFETY: both events are owned throughout this wait; Drop drains the parent read.
+        let result = unsafe { WaitForMultipleObjects(&[stop, raw(&parent.done)], false, INFINITE) };
+        if result == WAIT_OBJECT_0 {
+            return Ok(false);
+        }
+        if result.0 == WAIT_OBJECT_0.0 + 1 {
+            parent.complete()?;
+            return Ok(true);
+        }
+        bail!(
+            "parent directory wait failed: {:?}",
+            windows::core::Error::from_thread()
+        );
+    }
+    bail!("no surviving parent for {}", root.display())
 }
 
 #[derive(Default)]
