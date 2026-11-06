@@ -125,6 +125,11 @@ impl Column {
                     u32_at(block, cursor) as usize == expected,
                     "unordered name IDs"
                 );
+                let parent = u32_at(block, cursor + 4);
+                ensure!(
+                    (expected == 0 && parent == crate::store::NONE) || (parent as usize) < expected,
+                    "bad names column parent"
+                );
                 let len = (u32_at(block, cursor + 12) & 0x3fff_ffff) as usize;
                 cursor += 16;
                 ensure!(len <= block.len() - cursor, "bad folded name length");
@@ -209,7 +214,14 @@ mod tests {
         let mut bytes = Vec::new();
         for id in 0..75 {
             builder
-                .push(&mut bytes, id, 0, 128, 0, format!("name-{id}").as_bytes())
+                .push(
+                    &mut bytes,
+                    id,
+                    if id == 0 { crate::store::NONE } else { 0 },
+                    128,
+                    0,
+                    format!("name-{id}").as_bytes(),
+                )
                 .unwrap();
         }
         builder.flush(&mut bytes).unwrap();
