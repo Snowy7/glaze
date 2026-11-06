@@ -225,15 +225,13 @@ is guarded by `catch_unwind`, then the listener disconnects and accepts another 
 Sizes walks folded path components, so Unicode lowercase changes in UTF-8 byte length
 (for example the Kelvin sign) never slice the original string at a folded byte offset.
 
-**Release build requirement:** this workspace normally sets `panic = "abort"`. After its
-workspace release build, run `powershell -NoProfile -File crates/index/tools/build-release.ps1`
-to rebuild the index with `CARGO_PROFILE_RELEASE_PANIC=unwind` into
-`C:/mypaper-targets/main/release`, then deploy only through `scripts/deploy-local.ps1`.
-The wrapper does not change other workspace binaries or the shared Cargo profile.
-A later ordinary workspace build overwrites the index with abort semantics, bypassing
-transaction panic containment; repeat the wrapper before deploying it. The injected-panic
-regression runs with `cargo test --release -p mypaper-index`; Windows' Cranelift debug
-backend cannot unwind and the containment test is compiled only for release tests.
+**Panics:** the workspace builds with `panic = "abort"`, and the index ships with the normal
+workspace build (no special build step). Under abort, `catch_unwind` doesn't contain a
+transaction panic: the helper exits and core restarts it from its cached snapshot, which is
+the intended fallback for a bug we haven't seen. Known panic sources (the folded-offset slice)
+are fixed at the source. `crates/index/tools/build-release.ps1` still builds an unwinding
+index for experiments, and the injected-panic regression runs with
+`cargo test --release -p mypaper-index` (Windows' Cranelift debug backend cannot unwind).
 
 The Rust library's bounded client is the preferred integration:
 
@@ -294,14 +292,14 @@ visibility cache and two diagnostic CLI benchmarks after live stress exposed add
 failures. It is committed and verified in the private target, **not deployed**: this turn
 used its one permitted deployment at 10:54. The running helper therefore still has the
 broad-subtree memory failure described below. Complete live certification requires the
-orchestrator's next deployment (workspace build, then the index unwinding wrapper, then
-`deploy-local.ps1`) and a new resume/rebuild observation. No second deployment was attempted.
+orchestrator's next deployment (normal workspace build, then `deploy-local.ps1`) and a new
+resume/rebuild observation. No second deployment was attempted.
 
 | Finding | Repair and focused regression |
 |---|---|
 | Failed/vanished volumes exit or retain stale hits | One offline-root overlay record hides descendants; streamed checkpoints prune that root. Device broadcasts re-enumerate/rearm roots. Native watch deletion leaves a second watch delivering; startup missing/shadowed roots and racing scan swaps stay hidden; cached-prefix/ordinary searches, Sizes, overlay reload and next-generation pruning are covered. |
 | Marker below an unindexed parent imports a phantom root | `merge` returns when neither an old root nor its parent exists. Real marker reconciliation below `node_modules/project/target` preserves the original root chain and record count. |
-| Folded Unicode byte offsets panic in Sizes and lose a listener | Walk folded components. Kelvin-sign drive/component Sizes returns correct bytes. A release-test transaction panic drops its read guard and the same listener path accepts the next transaction. Deployment must use the unwinding wrapper described above. |
+| Folded Unicode byte offsets panic in Sizes and lose a listener | Walk folded components. Kelvin-sign drive/component Sizes returns correct bytes. A release-test transaction panic drops its read guard and the same listener path accepts the next transaction (unwinding builds only; the shipped abort build restarts the helper instead, see "Panics"). |
 | Per-entry marker filesystem probes | Scans pass inherited marker decisions through the directory queue, taking `.csproj` presence from enumeration. Notification batches cache directory decisions. A regression removes marker files after resolving the directory and verifies 2,000 children reuse the decision; a fresh batch observes removal. Existing include/unknown-size scan coverage remains. |
 | Game buffer can overflow | Native reads continue during pause; only bounded parent-directory sets are retained. A real paused watch delivers a dirty directory before resume and cancels cleanly while paused; 200,000 same-directory paths remain one directory, and 8,193 directories request bounded overflow recovery. The offline 20,000-file regression also verifies unchanged paused Sizes and exact resumed search/bytes/counts after one subtree replay. |
 
