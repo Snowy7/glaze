@@ -60,6 +60,10 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
 }
 
 pub fn intercept_page_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
+    if edit.doc == DocId::Studio && edit.path.as_ref() == "/add_use_now" {
+        app.texts.insert(FieldId::Text(DocId::Studio, edit.path.clone()), value.to_string());
+        return true;
+    }
     bars::intercept_set(app, edit, value) || settings::intercept_set(app, edit, value)
 }
 
@@ -216,7 +220,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
     let state = app.panel.as_ref().unwrap();
     let (secondary, cancel, primary, commit, enabled) = match state.page {
         Page::FirstRun => (
-            "Skip",
+            "Cancel",
             Action::FirstRunSkip,
             if matches!(
                 app.overlay,
@@ -242,8 +246,8 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
         Page::AddWallpaper => (
             "Cancel",
             open(Page::Wallpapers),
-            "Add and use",
-            Action::AddCommit(true),
+            if wallpapers::use_now(app) { "Add and use" } else { "Add" },
+            Action::AddCommit(wallpapers::use_now(app)),
             wallpapers::can_add(app),
         ),
         Page::AddModule => (
@@ -273,34 +277,6 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
         && !super::controls::relevant_docs(state.page)
             .iter()
             .any(|id| app.docs.doc(*id).issue.is_some());
-    if state.page == Page::AddWallpaper {
-        let widths = [
-            70.0,
-            70.0,
-            (r.width() / b.s - 32.0 - 16.0 - 140.0).max(100.0),
-        ];
-        let mut x = b.px(16.0);
-        for ((label, action, primary), width) in [
-            ("Cancel", open(Page::Wallpapers), false),
-            ("Add", Action::AddCommit(false), false),
-            ("Add and use", Action::AddCommit(true), true),
-        ]
-        .into_iter()
-        .zip(widths)
-        {
-            button(
-                b,
-                Rect::new(x, r.top + b.px(16.0), b.px(width), b.px(32.0)),
-                label,
-                None,
-                primary,
-                label == "Cancel" || enabled,
-                action,
-            );
-            x += b.px(width + 8.0);
-        }
-        return;
-    }
     let gap = b.px(8.0);
     let width = (r.width() - b.px(32.0) - gap) / 2.0;
     button(

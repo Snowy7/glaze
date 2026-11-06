@@ -58,10 +58,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
             }
             for (i, item) in plugins {
                 let status = plugin_status(app, &item.id);
-                let reconnect = status.starts_with("Stopped") || status.starts_with("Restarting");
-                let detail = if reconnect {
-                    status.to_owned()
-                } else {
+                let detail = {
                     let faces = item
                         .faces
                         .iter()
@@ -100,19 +97,6 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                     );
                     b.fill(pic, b.px(7.0), b.p.fill);
                     crate::stage::image_round(b, pic, &image, 1.0, b.px(7.0));
-                }
-                if reconnect {
-                    let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
-                    b.button(
-                        key(("panel-reconnect", &item.id)),
-                        r,
-                        "Reconnect",
-                        None,
-                        mypaper_ui::controls::ButtonKind::Secondary,
-                        true,
-                        Action::Panel(Command::Connect(item.id.clone())),
-                    );
-                    c.y = r.bottom + b.px(8.0);
                 }
             }
         });

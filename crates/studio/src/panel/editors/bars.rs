@@ -225,18 +225,21 @@ fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, cap
             unit,
             default,
         } => {
+            let stacked = app.size.0 as f32 <= b.px(360.0) || b.t.text_scale > 1.0;
+            let label_width = if stacked { c.w } else { b.px(100.0) };
             text(
                 b,
-                Rect::new(c.x, c.y, c.w, height(b, 25.0)),
+                Rect::new(c.x, c.y, label_width, height(b, if stacked { 25.0 } else { 40.0 })),
                 label,
                 13.0,
                 400,
                 b.p.ink1,
                 Align::Start,
             );
-            c.y += height(b, 25.0);
+            if stacked { c.y += height(b, 25.0); }
             let value = value.as_f64().unwrap_or(default);
-            let r = Rect::new(c.x, c.y, c.w, height(b, 36.0));
+            let left = if stacked { c.x } else { c.x + label_width + b.px(8.0) };
+            let r = Rect::new(left, c.y, c.right() - left, height(b, 36.0));
             b.slider(
                 key(("panel-bar-setting", id)),
                 r,
@@ -1803,13 +1806,13 @@ fn click_label(app: &App, id: &str, bar: Bar) -> String {
         .and_then(|value| value.get("exec"))
         .and_then(Value::as_str)
     {
-        return format!("Click: Run {}", mypaper_bars::apps::file_stem(program));
+        return format!("Run {}", mypaper_bars::apps::file_stem(program));
     }
     if let Some(target) = own
         .and_then(|value| value.get("open"))
         .and_then(Value::as_str)
     {
-        return format!("Click: Open {target}");
+        return format!("Open {target}");
     }
     let grouped = document
         .pointer(&format!("/{}/look/family", bar.key()))
@@ -1862,7 +1865,7 @@ fn click_label(app: &App, id: &str, bar: Bar) -> String {
         "none" => "No action",
         other => other,
     };
-    format!("Click: {name}")
+    name.into()
 }
 
 #[cfg(test)]

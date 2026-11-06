@@ -169,11 +169,12 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
     let gap = b.px(12.0);
     let width = (c.w - gap) / 2.0;
     for chunk in indices.chunks(2) {
-        let row_height = width * 0.56 + height(b, 64.0);
+        let row_height = width * 0.56 + height(b, 88.0);
         for (column, &i) in chunk.iter().enumerate() {
             let wallpaper = &app.library.items[i];
             let x = c.x + column as f32 * (width + gap);
             let r = Rect::new(x, c.y, width, width * 0.56);
+            let card = Rect::new(x, c.y, width, row_height - b.px(8.0));
             thumbnail(app, b, r, i);
             let k = key(("panel-wallpaper", i));
             let apply = if wallpaper.error.is_some() {
@@ -183,16 +184,16 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             };
             b.hit(
                 k,
-                r,
+                card,
                 Role::Button,
                 &format!("Apply {}", wallpaper.name),
                 apply,
                 Behavior::Click,
             );
-            b.focus_ring(k, r, b.px(8.0));
+            b.focus_ring(k, card, b.px(8.0));
             if wallpaper.active {
                 let check = Rect::new(
-                    r.right - b.px(22.0),
+                    r.left + b.px(6.0),
                     r.top + b.px(6.0),
                     b.px(16.0),
                     b.px(16.0),
@@ -202,23 +203,30 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             }
             text(
                 b,
-                Rect::new(x, r.bottom + b.px(4.0), width - b.px(24.0), height(b, 22.0)),
+                Rect::new(x, r.bottom + b.px(4.0), width, height(b, 22.0)),
                 &wallpaper.name,
                 13.0,
                 500,
                 b.p.ink1,
                 Align::Start,
             );
-            let detail = Rect::new(r.right - b.px(24.0), r.bottom, b.px(24.0), height(b, 28.0));
-            b.icon(detail, glyph::CHEVRON_RIGHT, 15.0, b.p.ink2);
+            let details_key = key(("panel-wallpaper-details", i));
+            let detail = Rect::new(r.right - b.px(34.0), r.top + b.px(4.0), b.px(30.0), b.px(28.0));
+            if app.input.pointer.is_some_and(|point| card.contains(point))
+                || app.input.focus == Some(k) || app.input.focus == Some(details_key)
+            {
+                b.fill(detail, b.px(6.0), b.p.chrome);
+                text(b, detail, "\u{22ef}", 20.0, 600, b.p.ink1, Align::Center);
+            }
             b.hit(
-                key(("panel-wallpaper-details", i)),
-                Rect::new(x, r.bottom, width, height(b, 28.0)),
+                details_key,
+                detail,
                 Role::Button,
                 &format!("{} details", wallpaper.name),
                 Action::Panel(Command::Wallpaper(i)),
                 Behavior::Click,
             );
+            b.focus_ring(details_key, detail, b.px(6.0));
             let caption = if wallpaper.error.is_some() {
                 "Can't load · open for details"
             } else if wallpaper.active {
@@ -235,6 +243,14 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 b.p.ink3,
                 Align::Start,
             );
+            let badges = [
+                wallpaper.credit.as_ref().is_some_and(|credit| credit.noncommercial).then_some("Personal use"),
+                wallpaper.brings_look.then_some("Brings a look"),
+            ].into_iter().flatten().collect::<Vec<_>>().join(" \u{b7} ");
+            if !badges.is_empty() {
+                text(b, Rect::new(x, r.bottom + height(b, 47.0), width, height(b, 20.0)),
+                    &badges, 10.5, 500, b.p.ink2, Align::Start);
+            }
         }
         c.y += row_height;
     }
@@ -249,13 +265,6 @@ fn shown_kind(w: &crate::library::Wallpaper) -> Option<Kind> {
     } else {
         w.kind
     }
-}
-
-fn theme_value(wallpaper: &crate::library::Wallpaper) -> Value {
-    std::fs::read_to_string(wallpaper.dir.join(mypaper_theme::MANIFEST))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or(json!({}))
 }
 
 fn theme_edit(w: &crate::library::Wallpaper, path: &str, label: &str) -> Edit {
@@ -294,7 +303,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         if !w.active {
             action_button(b, c, "Use this wallpaper", Action::UseWallpaper(i));
         }
-        let theme = theme_value(w);
+        let theme = crate::panel::saving::theme_value(app, w);
         if w.kind.is_some_and(Kind::uses_fit) {
             group(b, c, "Fit", |b, c| {
                 let current = theme
@@ -302,23 +311,12 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                     .and_then(Value::as_str)
                     .unwrap_or("cover");
                 if w.editable() {
-                    for (value, label) in [
-                        ("cover", "Fill"),
-                        ("contain", "Fit"),
-                        ("stretch", "Stretch"),
-                        ("center", "Center"),
-                    ] {
-                        row(
-                            b,
-                            c,
-                            None,
-                            label,
-                            "",
-                            "",
-                            Some(current == value),
-                            Action::Set(theme_edit(w, "/wallpaper/fit", "Fit"), json!(value)),
-                        );
-                    }
+                    let r = Rect::new(c.x, c.y + b.px(4.0), c.w, height(b, 32.0));
+                    b.segmented(key(("panel-wallpaper-fit", &w.id)), r,
+                        &["Fill", "Fit", "Stretch", "Center"],
+                        FITS.iter().position(|(value, _)| *value == current),
+                        "Fit", true, |i| Action::Set(theme_edit(w, "/wallpaper/fit", "Fit"), json!(FITS[i].0)));
+                    c.y = r.bottom + b.px(6.0);
                 } else {
                     let fit = match current {
                         "contain" => "Fit",
@@ -532,6 +530,41 @@ pub fn can_add(app: &App) -> bool {
         || matches!(&app.overlay, Some(Overlay::AddWallpaper { picked: Some(path), .. }) if !path.is_empty())
 }
 
+pub fn use_now(app: &App) -> bool {
+    app.text(&FieldId::Text(DocId::Studio, "/add_use_now".into())) != "false"
+}
+
+const FITS: [(&str, &str); 4] = [("cover", "Fill"), ("contain", "Fit"), ("stretch", "Stretch"), ("center", "Center")];
+
+fn fit_tiles(b: &mut B, c: &mut Col, current: &str) {
+    text(b, Rect::new(c.x, c.y, c.w, height(b, 24.0)), "Fit", 13.0, 400, b.p.ink1, Align::Start);
+    c.y += height(b, 28.0);
+    let gap = b.px(8.0);
+    let width = (c.w - gap * 3.0) / 4.0;
+    for (i, (value, label)) in FITS.iter().enumerate() {
+        let tile = Rect::new(c.x + i as f32 * (width + gap), c.y, width, height(b, 82.0));
+        let k = key(("panel-add-fit", value));
+        b.plate(k, tile, b.px(7.0), *value == current);
+        let screen = Rect::new(tile.left + b.px(7.0), tile.top + b.px(8.0), width - b.px(14.0), b.px(34.0));
+        b.fill(screen, b.px(3.0), b.p.well);
+        let picture = match *value {
+            "contain" => Rect::new(screen.left + screen.width() * 0.22, screen.top, screen.width() * 0.56, screen.height()),
+            "center" => Rect::new(screen.left + screen.width() * 0.32, screen.top + b.px(8.0), screen.width() * 0.36, b.px(18.0)),
+            _ => screen,
+        };
+        b.fill(picture, b.px(2.0), b.p.ink3.with_alpha(0.45));
+        let sun = Rect::new(picture.left + picture.width() * 0.56, picture.top + picture.height() * 0.18,
+            if *value == "stretch" { b.px(12.0) } else { b.px(7.0) }, b.px(7.0));
+        b.fill(sun, b.px(4.0), b.p.ink1);
+        b.line(mypaper_ui::Point::new(picture.left, picture.bottom), mypaper_ui::Point::new(picture.left + picture.width()*0.45, picture.top + picture.height()*0.45), b.px(2.0), b.p.ink1);
+        text(b, Rect::new(tile.left, screen.bottom + b.px(5.0), width, height(b, 26.0)), label, 12.0, 500, b.p.ink1, Align::Center);
+        b.hit_checked(k, tile, Role::RadioButton, &format!("Fit: {label}"), Some(*value == current),
+            Action::Set(Edit::new(DocId::Studio, "/add_fit", "Fit"), json!(value)), Behavior::Click);
+        b.focus_ring(k, tile, b.px(7.0));
+    }
+    c.y += height(b, 90.0);
+}
+
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
     title(
         b,
@@ -666,23 +699,11 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     );
                 } else if matches!(source, Some(Source::File | Source::Folder)) {
                     let value = app.text(&FieldId::Text(DocId::Studio, "/add_fit".into()));
-                    select(
-                        b,
-                        c,
-                        "Fit",
-                        json!(if value.is_empty() { "cover" } else { value }),
-                        Edit::new(DocId::Studio, "/add_fit", "Fit"),
-                        [
-                            ("cover", "Fill"),
-                            ("contain", "Fit"),
-                            ("stretch", "Stretch"),
-                            ("center", "Center"),
-                        ]
-                        .into_iter()
-                        .map(|(v, l)| (json!(v), l.into()))
-                        .collect(),
-                    );
+                    fit_tiles(b, c, if value.is_empty() { "cover" } else { value });
                 }
+                let on = use_now(app);
+                toggle(b, c, "Use it now", "", on,
+                    Action::Set(Edit::new(DocId::Studio, "/add_use_now", "Use it now"), json!(!on)));
             },
         );
     }

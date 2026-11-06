@@ -302,14 +302,15 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
                 c,
                 Some(glyph::APP),
                 "Studio",
-                &format!("{:.0} MB private", memory.private_mb),
+                "",
                 &format!(
-                    "This window \u{b7} {:.0} MB working set \u{b7} software rendering",
-                    memory.working_mb
+                    "{:.0} MB working set \u{b7} {:.0} MB private",
+                    memory.working_mb, memory.private_mb
                 ),
                 None,
                 Action::None,
             );
+            notice(b, c, "Software rendering");
         }
         for ((id, _), part) in crate::system::PARTS.iter().zip(app.system.parts) {
             let label = match *id {
@@ -375,10 +376,7 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
             ("Start over: Widgets", DocId::Widgets),
             ("Start over: Look", DocId::Config),
         ] {
-            if !matches!(
-                app.docs.doc(doc).issue,
-                Some(crate::docs::ReadIssue::Malformed { .. })
-            ) {
+            if matches!(app.docs.doc(doc).issue, Some(crate::docs::ReadIssue::Newer | crate::docs::ReadIssue::Unavailable)) {
                 continue;
             }
             row(

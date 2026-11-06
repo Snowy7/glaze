@@ -11,6 +11,32 @@ use crate::{
     ui::{B, Col},
 };
 
+#[derive(Debug, Default)]
+pub struct ThemeCache(std::collections::HashMap<PathBuf, ThemeData>);
+
+#[derive(Debug)]
+struct ThemeData {
+    stamp: Option<(std::time::SystemTime, u64)>,
+    value: std::rc::Rc<Value>,
+}
+
+/// Watch the cheap file stamp; parse a wallpaper manifest only when its file changes.
+pub fn theme_value(app: &App, wallpaper: &crate::library::Wallpaper) -> std::rc::Rc<Value> {
+    let path = wallpaper.dir.join(mypaper_theme::MANIFEST);
+    let stamp = std::fs::metadata(&path).ok().and_then(|m| Some((m.modified().ok()?, m.len())));
+    let mut cache = app.panel.as_ref().unwrap().theme_data.borrow_mut();
+    if let Some(data) = cache.0.get(&path)
+        && data.stamp == stamp
+    {
+        return data.value.clone();
+    }
+    let value = std::rc::Rc::new(std::fs::read_to_string(&path).ok()
+        .and_then(|source| serde_json::from_str(&source).ok())
+        .unwrap_or_else(|| serde_json::json!({})));
+    cache.0.insert(path, ThemeData { stamp, value: value.clone() });
+    value
+}
+
 /// Alerts use the same readable treatment in the header and beside a failed file.
 pub fn emphasize_feedback(b: &mut B, from: usize) {
     let style = super::controls::font(b, 12.0, 500);

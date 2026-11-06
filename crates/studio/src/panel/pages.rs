@@ -17,11 +17,15 @@ fn open(page: Page) -> Action {
 }
 
 pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
+    // Creation has one exit in its footer. First run has no header chrome.
+    if page == Page::FirstRun {
+        return;
+    }
     let committing = matches!(
         page,
-        Page::AddWidget | Page::AddModule | Page::AddWallpaper | Page::History | Page::FirstRun
+        Page::AddWidget | Page::AddModule | Page::AddWallpaper
     );
-    let done_label = if committing { "Cancel" } else { "Done" };
+    let done_label = "Done";
     let done_style = ui::font(b, 13.0, 500);
     let done_width = (b.measure(done_label, &done_style).0 + b.px(20.0)).max(b.px(52.0));
     let done = Rect::new(
@@ -30,25 +34,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         done_width,
         b.px(28.0),
     );
-    if committing {
-        let cancel = if page == Page::FirstRun {
-            Action::FirstRunSkip
-        } else {
-            Action::Panel(Command::Back)
-        };
-        b.button(
-            key(("panel-header-cancel", page)),
-            done,
-            "Cancel",
-            None,
-            mypaper_ui::controls::ButtonKind::Ghost,
-            true,
-            cancel,
-        );
-        if let Some(hit) = b.list.hits.last_mut() {
-            hit.label = format!("Cancel {}", page.title()).into();
-        }
-    } else {
+    if !committing {
         button(
             b,
             done,
@@ -59,7 +45,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             Action::Panel(Command::Done),
         );
     }
-    let mut x = done.left - b.px(6.0);
+    let mut x = if committing { r.right - b.px(8.0) } else { done.left - b.px(6.0) };
     let editing = app.system.running();
     let compact = r.width() <= b.px(360.0) || b.t.text_scale > 1.0;
     for (icon, label, enabled, action) in [
@@ -102,12 +88,12 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         } else if !app.panel.as_ref().unwrap().save_errors.borrow().is_empty()
             || !app.panel.as_ref().unwrap().theme_errors.borrow().is_empty()
         {
-            "Couldn't save"
+            ""
         } else if app.drag.is_some() {
             "Saving…"
         } else {
             match &app.docs.saved {
-                crate::docs::Saved::Failed(_) => "Couldn't save",
+                crate::docs::Saved::Failed(_) => "",
                 _ => "Saved",
             }
         };
@@ -364,7 +350,9 @@ fn playback_status(app: &App) -> String {
     let Some(wallpaper) = app.library.active().map(|i| &app.library.items[i]) else {
         return "No wallpaper selected".into();
     };
-    let loaded = mypaper_theme::LoadedTheme::load(wallpaper.dir.clone()).ok();
+    let loaded: Option<mypaper_theme::Theme> = serde_json::from_value(
+        super::saving::theme_value(app, wallpaper).as_ref().clone(),
+    ).ok();
     let engine: mypaper_config::EngineConfig = app
         .get(DocId::Config, "/engine")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -372,12 +360,12 @@ fn playback_status(app: &App) -> String {
     let cap = engine
         .resolve(
             &wallpaper.id,
-            loaded.as_ref().map_or_default(|theme| theme.theme.engine),
+            loaded.as_ref().map_or_default(|theme| theme.engine),
         )
         .fps;
     let source = loaded
         .as_ref()
-        .and_then(|theme| match &theme.theme.wallpaper {
+        .and_then(|theme| match &theme.wallpaper {
             mypaper_theme::Wallpaper::Shader(source) => Some(source.fps),
             mypaper_theme::Wallpaper::Video(source) => Some(source.fps),
             mypaper_theme::Wallpaper::Scene(source) => Some(source.fps),
@@ -899,14 +887,13 @@ mod tests {
     }
 
     #[test]
-    fn commit_pages_have_cancel_headers_first_run_has_no_back_and_now_has_no_restore() {
+    fn creation_exits_live_in_the_footer_and_history_keeps_done() {
         let mut ui = mypaper_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         for page in [
             Page::AddWidget,
             Page::AddModule,
             Page::AddWallpaper,
-            Page::History,
             Page::FirstRun,
         ] {
             app.panel.as_mut().unwrap().page = page;
@@ -924,7 +911,7 @@ mod tests {
                     .list
                     .hits
                     .iter()
-                    .any(|hit| hit.label.starts_with("Cancel ")),
+                    .any(|hit| hit.label.as_ref() == "Cancel" && hit.rect.top >= app.size.1 as f32 - 64.0),
                 "{page:?}"
             );
             if page == Page::FirstRun {
@@ -950,21 +937,12 @@ mod tests {
         let cancel = built
             .targets
             .iter()
-            .find(|target| target.key == key(("panel-header-cancel", Page::History)))
+            .find(|target| target.action == Action::Panel(Command::Done))
             .unwrap()
             .action
             .clone();
         app.run(cancel);
-        assert_eq!(app.panel.as_ref().unwrap().page, Page::Root);
-        assert!(
-            app.panel
-                .as_ref()
-                .unwrap()
-                .history
-                .borrow()
-                .selected
-                .is_none()
-        );
+        assert!(app.quit);
     }
 
     #[test]
