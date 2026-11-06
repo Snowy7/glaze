@@ -87,6 +87,7 @@ pub fn row<A: Clone>(b: &mut Builder<'_, A>, row: Row<'_, A>) -> Rect {
         Behavior::Click,
     );
     b.focus_ring(id, r, b.px(6.0));
+    b.semantics(id, crate::Semantics::Reorder);
     b.hit(
         handle_key,
         handle,

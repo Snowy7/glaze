@@ -169,6 +169,7 @@ pub(crate) struct Shared {
     /// The window's top-left on screen, for pointer events.
     origin: Cell<(i32, i32)>,
     a11y: RefCell<Option<A11y>>,
+    semantics: RefCell<Vec<(HitId, crate::Semantics)>>,
 }
 
 /// The bitmap `UpdateLayeredWindowIndirect` reads: a DIB section selected into a memory DC.
@@ -383,6 +384,7 @@ impl Surface {
             activates: RefCell::new(Vec::new()),
             field: RefCell::new(None),
             origin: Cell::new((0, 0)),
+            semantics: RefCell::default(),
             a11y: RefCell::new(Some(if deferred {
                 A11y::deferred(hwnd, role, name.into())
             } else {
@@ -906,15 +908,23 @@ impl Surface {
             hits.clear();
             hits.extend(list.hits.iter().map(|h| h.rect));
         }
-        let events = self
-            .shared
-            .a11y
-            .try_borrow_mut()
-            .ok()
-            .and_then(|mut a11y| a11y.as_mut()?.update(&list.hits, list.focus));
+        let events = self.shared.a11y.try_borrow_mut().ok().and_then(|mut a11y| {
+            a11y.as_mut()?
+                .update_full(&list.hits, list.focus, &self.shared.semantics.borrow())
+        });
         if let Some(events) = events {
             events.raise();
         }
+    }
+
+    /// Optional metadata for the next presented frame; callers that omit it retain their existing tree.
+    pub fn set_accessibility_semantics(&self, semantics: Vec<(HitId, crate::Semantics)>) {
+        *self.shared.semantics.borrow_mut() = semantics;
+    }
+
+    /// Consume a rich UIA request when handling its corresponding `Event::Invoke`.
+    pub fn take_accessibility_action(&self, hit: HitId) -> Option<crate::AccessibilityAction> {
+        self.shared.a11y.borrow().as_ref()?.take_action(hit)
     }
 }
 

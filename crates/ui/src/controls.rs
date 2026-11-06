@@ -178,7 +178,11 @@ impl Palette {
     /// The kit theme over these grays: Mono (no accent hue), its colour roles mapped onto the
     /// tokens, so the kit's components draw Studio's look.
     pub fn theme(&self) -> Theme {
-        let scheme = if self.dark { Scheme::Dark } else { Scheme::Light };
+        let scheme = if self.dark {
+            Scheme::Dark
+        } else {
+            Scheme::Light
+        };
         let mut t = Theme::new(Style::Mono, scheme, self.solid);
         let c = &mut t.color;
         c.label = self.ink1;
@@ -196,7 +200,11 @@ impl Palette {
         c.elevated = self.panel;
         c.hover = self.hover;
         c.pressed = self.selected;
-        c.knob = if self.shadow.a > 0.0 { white(1.0) } else { self.ink1 };
+        c.knob = if self.shadow.a > 0.0 {
+            white(1.0)
+        } else {
+            self.ink1
+        };
         c.scrollbar = self.ink1.with_alpha(0.32);
         c.shadow = self.shadow;
         t.radius.card = 12.0;
@@ -399,6 +407,7 @@ pub enum Align {
 /// Builds one frame: ops, hits and their targets.
 pub struct Builder<'a, A> {
     pub list: DisplayList,
+    pub semantics: Vec<(crate::HitId, crate::Semantics)>,
     pub text: &'a mut Text,
     pub p: &'a Palette,
     pub t: &'a Type,
@@ -417,6 +426,7 @@ impl<'a, A: Clone> Builder<'a, A> {
     pub fn new(text: &'a mut Text, p: &'a Palette, t: &'a Type, s: f32, input: &'a Input) -> Self {
         Self {
             list: DisplayList::default(),
+            semantics: Vec::new(),
             text,
             p,
             t,
@@ -462,6 +472,21 @@ impl<'a, A: Clone> Builder<'a, A> {
     /// The innermost clip, if any.
     pub fn clip_rect(&self) -> Option<Rect> {
         self.clips.last().map(|(_, r)| *r)
+    }
+
+    /// Attach a semantic value or action to an existing control key.
+    pub fn semantics(&mut self, key: Key, value: crate::Semantics) {
+        if let Some(index) = self.targets.iter().position(|target| target.key == key) {
+            self.semantics.push((index as u32 + 1, value));
+        }
+    }
+
+    /// A stable polite live region; changing the message announces save/status feedback.
+    pub fn announce(&mut self, message: &str, revision: u64) {
+        self.semantics.push((
+            u32::MAX - 1 - (revision % (1 << 20)) as u32,
+            crate::Semantics::Status(message.into()),
+        ));
     }
 
     /// Registers a target with its hit, clipped to the current scroll view. A control scrolled
@@ -768,7 +793,11 @@ impl<'a, A: Clone> Builder<'a, A> {
         let p = *self.p;
         let (fill, ink) = match kind {
             ButtonKind::Primary => (
-                if enabled && self.hovered(key) { p.solid_hover } else { p.solid },
+                if enabled && self.hovered(key) {
+                    p.solid_hover
+                } else {
+                    p.solid
+                },
                 p.on_solid,
             ),
             ButtonKind::Secondary => (p.fill, p.ink1),
@@ -777,7 +806,11 @@ impl<'a, A: Clone> Builder<'a, A> {
                 if self.hovered(key) { p.ink1 } else { p.ink2 },
             ),
         };
-        let (fill, ink) = if enabled { (fill, ink) } else { (p.well, p.ink4) };
+        let (fill, ink) = if enabled {
+            (fill, ink)
+        } else {
+            (p.well, p.ink4)
+        };
         self.fill(rect, r, fill);
         if enabled && kind != ButtonKind::Primary {
             self.wash(key, rect, r);
@@ -903,7 +936,9 @@ impl<'a, A: Clone> Builder<'a, A> {
             let w = self.segmented_width(items);
             Rect::new(rect.right - w, rect.top, w, rect.height())
         };
-        let keys: Vec<Key> = (0..items.len()).map(|i| crate::controls::key((key, i))).collect();
+        let keys: Vec<Key> = (0..items.len())
+            .map(|i| crate::controls::key((key, i)))
+            .collect();
         let inset = (2.0 * self.s).round();
         let inner = outer.inflate(-inset);
         // The kit's equal segments, unless a label wouldn't fit one: then each segment is as
@@ -937,13 +972,19 @@ impl<'a, A: Clone> Builder<'a, A> {
                 })
                 .collect()
         };
-        let proportional = segs.first().is_some_and(|r| (r.width() - equal.round()).abs() > 0.5);
+        let proportional = segs
+            .first()
+            .is_some_and(|r| (r.width() - equal.round()).abs() > 0.5);
         if proportional {
             self.segments_drawn(&keys, outer, &segs, items, selected);
         } else {
-            self.kit(&keys, |_| {}, |f, base| {
-                f.segmented(base, outer, items, selected.unwrap_or(usize::MAX));
-            });
+            self.kit(
+                &keys,
+                |_| {},
+                |f, base| {
+                    f.segmented(base, outer, items, selected.unwrap_or(usize::MAX));
+                },
+            );
         }
         self.group(key, |b| {
             for (i, item) in items.iter().enumerate() {
@@ -980,7 +1021,11 @@ impl<'a, A: Clone> Builder<'a, A> {
         for (i, (seg, item)) in segs.iter().zip(items).enumerate() {
             let on = selected == Some(i);
             if on {
-                self.fill(*seg, inner_radius, if self.p.dark { c.fill } else { c.knob });
+                self.fill(
+                    *seg,
+                    inner_radius,
+                    if self.p.dark { c.fill } else { c.knob },
+                );
             }
             self.wash(keys[i], *seg, inner_radius);
             let ink = if on { c.label } else { c.secondary };
@@ -1054,6 +1099,15 @@ impl<'a, A: Clone> Builder<'a, A> {
                 max,
                 step,
                 value,
+            },
+        );
+        self.semantics(
+            key,
+            crate::Semantics::Range {
+                value,
+                min,
+                max,
+                step,
             },
         );
     }
@@ -1317,20 +1371,24 @@ impl<'a, A: Clone> Builder<'a, A> {
             Accessory::Switch(on) => Some(on),
             _ => None,
         };
-        self.kit(&[key], |_| {}, |f, id| {
-            f.row(
-                &Row {
-                    id,
-                    lead,
-                    title,
-                    subtitle,
-                    accessory,
-                    selected,
-                    enabled: true,
-                },
-                rect,
-            );
-        });
+        self.kit(
+            &[key],
+            |_| {},
+            |f, id| {
+                f.row(
+                    &Row {
+                        id,
+                        lead,
+                        title,
+                        subtitle,
+                        accessory,
+                        selected,
+                        enabled: true,
+                    },
+                    rect,
+                );
+            },
+        );
         let label = match subtitle {
             Some(s) => format!("{title}: {s}"),
             None => title.to_owned(),
@@ -1403,8 +1461,12 @@ impl<'a, A: Clone> Builder<'a, A> {
     ) -> f32 {
         self.list.ops.push(Op::Clip { rect: viewport });
         let clip = match self.clips.last() {
-            Some((_, outer)) => intersect(viewport, *outer)
-                .unwrap_or(Rect::new(viewport.left, viewport.top, 0.0, 0.0)),
+            Some((_, outer)) => intersect(viewport, *outer).unwrap_or(Rect::new(
+                viewport.left,
+                viewport.top,
+                0.0,
+                0.0,
+            )),
             None => viewport,
         };
         self.clips.push((key, clip));
@@ -1435,7 +1497,11 @@ impl<'a, A: Clone> Builder<'a, A> {
             let k = crate::controls::key((key, "thumb"));
             let hot = self.hovered(k) || self.pressed(k);
             // Quiet at rest (it is always there: no fade timer in an app window), clear on hover.
-            self.fill(bar, w / 2.0, p.ink1.with_alpha(if hot { 0.45 } else { 0.16 }));
+            self.fill(
+                bar,
+                w / 2.0,
+                p.ink1.with_alpha(if hot { 0.45 } else { 0.16 }),
+            );
             self.hit(
                 k,
                 bar.inflate(self.px(3.0)),
@@ -1511,9 +1577,16 @@ mod tests {
         assert_eq!(height, 432.0);
         let labels: Vec<_> = b.list.hits.iter().map(|h| h.label.to_string()).collect();
         assert_eq!(labels, ["A", "In", "Out", "Scroll"]);
-        assert!(b.list.hits[2].rect.is_empty(), "the scrolled-out button takes no clicks");
+        assert!(
+            b.list.hits[2].rect.is_empty(),
+            "the scrolled-out button takes no clicks"
+        );
         assert_eq!(b.targets[2].visible, None);
-        assert_eq!(b.targets[2].scroll, Some(key("view")), "but the keyboard can reach it");
+        assert_eq!(
+            b.targets[2].scroll,
+            Some(key("view")),
+            "but the keyboard can reach it"
+        );
         assert_eq!(b.targets[1].visible, Some(b.targets[1].rect));
         assert_eq!(b.targets[1].action, Act::Go(1));
         assert!(matches!(b.targets[3].behavior, Behavior::Thumb { .. }));
@@ -1564,16 +1637,50 @@ mod tests {
         let (p, t) = (Palette::dark(), Type::new(&text));
         let draw = |text: &mut Text, input: &Input| {
             let mut b: Builder<'_, Act> = Builder::new(text, &p, &t, 1.0, input);
-            b.button(key("b"), Rect::new(0.0, 0.0, 90.0, 32.0), "Go", None, ButtonKind::Secondary, true, Act::Flip);
+            b.button(
+                key("b"),
+                Rect::new(0.0, 0.0, 90.0, 32.0),
+                "Go",
+                None,
+                ButtonKind::Secondary,
+                true,
+                Act::Flip,
+            );
             b.switch(key("s"), Point::new(0.0, 40.0), false, "S", Act::Flip);
-            b.segmented(key("g"), Rect::new(0.0, 70.0, 200.0, 30.0), &["A", "B"], Some(0), "G", true, Act::Go);
-            b.select(key("c"), Rect::new(0.0, 110.0, 120.0, 30.0), "Value", "C", Act::Flip);
-            b.field(key("f"), Rect::new(0.0, 150.0, 120.0, 32.0), None, "Type", true, false, "F", Act::Flip);
+            b.segmented(
+                key("g"),
+                Rect::new(0.0, 70.0, 200.0, 30.0),
+                &["A", "B"],
+                Some(0),
+                "G",
+                true,
+                Act::Go,
+            );
+            b.select(
+                key("c"),
+                Rect::new(0.0, 110.0, 120.0, 30.0),
+                "Value",
+                "C",
+                Act::Flip,
+            );
+            b.field(
+                key("f"),
+                Rect::new(0.0, 150.0, 120.0, 32.0),
+                None,
+                "Type",
+                true,
+                false,
+                "F",
+                Act::Flip,
+            );
             b.list
         };
         let rest = draw(&mut text, &Input::default());
         assert!(
-            !rest.ops.iter().any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
+            !rest
+                .ops
+                .iter()
+                .any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
             "no outlines at rest"
         );
         let focused = draw(
@@ -1585,7 +1692,10 @@ mod tests {
             },
         );
         assert!(
-            focused.ops.iter().any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
+            focused
+                .ops
+                .iter()
+                .any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
             "the kit draws the focused segment's ring"
         );
         let hovered = draw(
