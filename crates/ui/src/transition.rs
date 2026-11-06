@@ -8,6 +8,12 @@ use crate::Spring;
 pub enum Easing {
     Bezier([f32; 4]),
     Spring(Spring),
+    /// A named spring fitted to a configured duration; explicit physical springs keep their
+    /// natural duration instead. `settle` is computed once when the configuration is resolved.
+    TimedSpring {
+        spring: Spring,
+        settle: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -60,6 +66,9 @@ impl Transition {
         let elapsed = now.saturating_duration_since(self.start).as_secs_f32();
         let p = match self.timing.easing {
             Easing::Spring(spring) => spring.at(elapsed),
+            Easing::TimedSpring { spring, settle } => {
+                spring.at(elapsed / self.timing.duration.as_secs_f32() * settle)
+            }
             Easing::Bezier(points) => {
                 bezier_at(points, elapsed / self.timing.duration.as_secs_f32())
             }

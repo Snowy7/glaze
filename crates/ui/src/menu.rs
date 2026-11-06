@@ -36,7 +36,7 @@ thread_local! { static OPEN_MOTION: std::cell::Cell<Option<MenuMotion>> = const 
 #[derive(Debug, Clone, Copy)]
 pub struct MenuMotion {
     pub timing: crate::transition::Timing,
-    pub slide: bool,
+    pub style: crate::reveal::Reveal,
 }
 
 pub fn set_open_motion(motion: Option<MenuMotion>) {
@@ -496,6 +496,7 @@ struct Panel<C> {
     scroll: f32,
     motion: Option<crate::Tween>,
     configured_motion: Option<crate::transition::Transition>,
+    snapshot: Option<crate::reveal::Snapshot>,
     frames: Option<crate::surface::AnimationFrames>,
     /// When it opened (on glass, its fade follows the glass from there).
     opened: std::time::Instant,
@@ -571,14 +572,28 @@ impl<C: Clone> Menu<C> {
     ) -> Result<()> {
         let started = std::time::Instant::now();
         self.close();
-        self.open_motion = self.presentation.as_ref().map(|(_, m)| *m).or_else(|| OPEN_MOTION.with(std::cell::Cell::get));
-        self.tokens = self.presentation.as_ref().map(|(t, _)| t.clone()).or_else(|| STYLE.with_borrow(Clone::clone)).unwrap_or_else(|| tokens.clone());
+        self.open_motion = self
+            .presentation
+            .as_ref()
+            .map(|(_, m)| *m)
+            .or_else(|| OPEN_MOTION.with(std::cell::Cell::get));
+        self.tokens = self
+            .presentation
+            .as_ref()
+            .map(|(t, _)| t.clone())
+            .or_else(|| STYLE.with_borrow(Clone::clone))
+            .unwrap_or_else(|| tokens.clone());
         // Glass when the engine can draw it: the tokens' own, else the active style's.
         self.tokens.glass = self
             .tokens
             .glass
             .filter(|_| crate::glass::available())
-            .or_else(|| self.presentation.is_none().then(crate::glass::style).flatten());
+            .or_else(|| {
+                self.presentation
+                    .is_none()
+                    .then(crate::glass::style)
+                    .flatten()
+            });
         let content_scale = if self.open_motion.is_some() {
             self.tokens.scale
         } else {
@@ -633,8 +648,41 @@ impl<C: Clone> Menu<C> {
                     let now = std::time::Instant::now();
                     let progress = motion.value(now).clamp(0.0, 1.0);
                     let edge = margin(&self.tokens, p.layout.scale) as i32;
+                    if let Some(snapshot) = &p.snapshot {
+                        let full =
+                            Rect::new(edge as f32, edge as f32, p.layout.width, p.layout.height);
+                        let style = self
+                            .open_motion
+                            .map_or(crate::reveal::Reveal::Fade, |m| m.style);
+                        let body =
+                            style.body(full, Rect::new(full.left, full.top, 1.0, 1.0), progress);
+                        let list = if motion.done(now) {
+                            snapshot.original.clone()
+                        } else {
+                            snapshot.frame(full, body)
+                        };
+                        let (w, h) = p.layout.size();
+                        let _ = p.surface.present(
+                            ui,
+                            (p.origin.0 - edge, p.origin.1 - edge),
+                            ((w + 2 * edge) as u32, (h + 2 * edge) as u32),
+                            list,
+                        );
+                        p.surface
+                            .set_glass(self.tokens.glass.map(|material| crate::Glass {
+                                body,
+                                radius: self.tokens.radius * p.layout.scale * body.width()
+                                    / full.width(),
+                                material: crate::GlassMaterial {
+                                    blur: material.blur * p.layout.scale,
+                                    ..material
+                                },
+                            }));
+                    }
                     let slide = if self.tokens.glass.is_none()
-                        && self.open_motion.is_some_and(|m| m.slide)
+                        && self
+                            .open_motion
+                            .is_some_and(|m| m.style == crate::reveal::Reveal::Slide)
                     {
                         ((1.0 - progress) * 6.0 * p.layout.scale).round() as i32
                     } else {
@@ -651,6 +699,7 @@ impl<C: Clone> Menu<C> {
                         .move_to((p.origin.0 - edge, p.origin.1 - edge + slide));
                     if motion.done(now) {
                         p.configured_motion = None;
+                        p.snapshot = None;
                         p.frames = None;
                     }
                     return None;
@@ -902,6 +951,7 @@ impl<C: Clone> Menu<C> {
             scroll: 0.0,
             motion: None,
             configured_motion: None,
+            snapshot: None,
             frames: None,
             opened: std::time::Instant::now(),
             origin,
@@ -913,6 +963,16 @@ impl<C: Clone> Menu<C> {
         if let Some(configured) = self.open_motion {
             p.surface.set_alpha(255)?;
             if configured.timing.enabled {
+                if configured.style.scales() {
+                    let edge = margin(&self.tokens, p.layout.scale) as u32;
+                    let (w, h) = p.layout.size();
+                    p.snapshot = crate::reveal::Snapshot::new(
+                        ui,
+                        p.surface.shown().clone(),
+                        (w as u32 + 2 * edge, h as u32 + 2 * edge),
+                    )
+                    .ok();
+                }
                 let delay = if self.tokens.glass.is_some() {
                     GLASS_DELAY
                 } else {
