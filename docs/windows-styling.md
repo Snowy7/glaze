@@ -171,8 +171,10 @@ Nothing is changed without a way back.
   originals. Restoring writes the originals back (deleting what was absent), announces the change,
   then re-checks and rewrites any value Windows changed in reaction (it keeps the DWM accent in sync
   with `AccentColorMenu`), so the registry ends up as it was. The journal is deleted after that.
-- **When it runs**: on a theme change (or a theme without a `windows` section), Quit, the panic
-  hotkey, Ctrl+C and normal exit. Core's own drop does it too, so error exits are covered.
+- **When it runs**: before applying a different resolved style, when all Windows styling is
+  released (no selected native style, theme styling or explicit Windows fields), Quit, the
+  panic hotkey, Ctrl+C and normal exit. Core's own drop does it too, so error exits are covered.
+  A theme without a `windows` section still follows a selected native style's defaults.
 - **After a crash or kill**: the journal is still there, and core's next start undoes it before doing
   anything else. Windows opened or styled by the dead run are reset to defaults too. Their original
   dark-mode value is lost, so if the dead run forced dark mode, windows get the system's current
@@ -182,13 +184,102 @@ Nothing is changed without a way back.
 
 ## Behavior notes and limits
 
-- Styling follows the theme in `config.json`, and the `windows` section is re-read whenever the
-  wallpaper reloads its theme, so editing `theme.json` applies live.
+- Styling follows the look and theme in `config.json`, and the `windows` section is re-read
+  whenever the wallpaper reloads its theme, so editing `theme.json` applies live.
 - While a theme with `accent` or `dark_mode` is active, changing those in Settings by hand is
   overwritten the next time the theme changes colors, and undone at restore.
 - Apps that set their own title bar color or backdrop may override ours on their next paint.
 - Restyling the *inside* of File Explorer and Settings is the experimental [app styler](#app-styler-experimental)
   below; everything above is DWM and registry only.
+
+## Verification (2026-11-06)
+
+`CARGO_TARGET_DIR=C:\mypaper-targets\style-sync`. Config 21, theme 21 and tweaks 43 library tests
+passed; core 16 passed with four existing Task Scheduler/tray tests ignored. Strict Clippy passed
+for all config/theme/tweaks targets, and core/app-styler checks and the release workspace build
+passed. Pure tests cover all five styles in both schemes, the absent/null/value layers, no palette,
+mono's automatic accent, both independent accent switches, identical-event no-ops, and recovery
+of first registry originals after ten style/scheme transitions and a palette update.
+
+The live probe followed the real core's config/palette watches, rather than applying writes
+itself. [Ten cases](../crates/tweaks/evidence/style-sync/) exercised five dark styles, Liquid light,
+explicit Windows overrides, Mono light-to-auto, a palette update and releasing styling. Every
+case compared all eight registry values (exact type/bytes/absence) with its pre-case state and
+restored config and palette bytes. All ten config before/after SHA-256 values were:
+`F4AF26AEC8255D043312EBF4C0A962868D6BC0C267C616371C9CE56F3AD219B9`.
+The neighbouring app-styler soak already had its flag and glass preset enabled; these probes
+preserved those settings, including the enabled file index, and did not enable an optional feature.
+Their owner controls the final soak restoration.
+
+- [Explicit overrides](../crates/tweaks/evidence/style-sync/explicit.json) selected a fixed accent,
+  border/caption/text, square corners, no backdrop, light apps despite dark shared appearance,
+  and independent accent visibility. The [app token](../crates/tweaks/evidence/style-sync/explicit-app-tokens.json)
+  was the same `#c04080` as Windows.
+- [Automatic Mono](../crates/tweaks/evidence/style-sync/auto-return.json) released the forced light
+  mode, restored the original dark preference and supplied the [same `#f2f2f2` token](../crates/tweaks/evidence/style-sync/auto-app-tokens.json)
+  to the helper, without depending on which process handled the config event first.
+- The [palette event](../crates/tweaks/evidence/style-sync/palette-changed.json) changed the Windows
+  accent to `#d06030`; the [helper's real rules file](../crates/tweaks/evidence/style-sync/palette-app-tokens.json)
+  contained that same accent and `#80223344` for `$dominant/80`.
+- [Releasing styling](../crates/tweaks/evidence/style-sync/release.json) removed `undo.json`, restored
+  every journal original and returned Explorer's corner/backdrop attributes to default. Restoring
+  the config re-applied the user's explicit acrylic backdrop and null border.
+
+Verified visually: [native frame captions](../crates/tweaks/evidence/style-sync/native-frames.png),
+actual Settings in [dark](../crates/tweaks/evidence/style-sync/liquid-dark-settings.png) and
+[light](../crates/tweaks/evidence/style-sync/liquid-light-settings.png), plus Explorer's
+[dark](../crates/tweaks/evidence/style-sync/liquid-dark-explorer-header.png) and
+[light](../crates/tweaks/evidence/style-sync/liquid-light-explorer-header.png) chrome. Captions had
+9,159–9,196 pixels matching their expected RGB within two channel values. Native reference windows
+were owned, nonactivating and closed after capture; no clicks/keys, user-window movement or focus
+changes were used. Full captures and their [hashes](../crates/tweaks/evidence/style-sync/full-capture-hashes.json)
+are retained in `C:\Users\you\AppData\Local\Temp\mypaper-tools\style-sync-full`; only compact crops are committed.
+
+DWM's [colour attributes](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute)
+are documented for setting, and their getters returned no colour on this build, so colour paint
+was checked on owned standard frames. Explorer's queryable corner/backdrop/dark attributes followed
+the styles. Settings sometimes repainted its own backdrop to none; a custom app header can retain
+its own fill. The screenshots do not claim that DWM replaces such client rendering. Both
+`ColorPrevalence` registry mappings follow Microsoft's [settings reference](https://learn.microsoft.com/en-us/windows/apps/develop/settings/settings-common);
+the light-taskbar limit follows [Windows colour settings](https://support.microsoft.com/en-us/windows/experience/personalization/personalize-your-colors-in-windows).
+
+| Check / budget | Before | After |
+|---|---:|---:|
+| Core CPU, % of one core, prescribed 30-second sampler | 0 | 0.05 |
+| Core private memory | 3 MB | 3 MB |
+| Extra styling process / worker / timer / polling loop | 0 | 0 |
+| Exact config/palette + eight-value registry restoration | — | 10/10 cases |
+
+The [before](../crates/tweaks/evidence/style-sync/measure-before.json) and
+[after](../crates/tweaks/evidence/style-sync/measure-after.json) samples were on the shared live
+desktop with other agents, indexing and the app-styler soak active. The after core sample corresponds
+to about 15 ms CPU in 30 seconds; this is not an isolated proof of literal 0% idle or a performance
+improvement. No new periodic work was introduced; resolution uses the existing events, and
+private memory held. Other processes' changes in those samples are outside this slice.
+
+Reproduce using `inspect_style_sync --check` (the read-only example), then
+`evidence/style-sync/run.ps1 -Case <case>` under the shared desktop-lock rules, at least 30 seconds
+between cases. `frame.ps1` handles the set-only colour paint check; `contact.ps1` compacts captures.
+The fixture uses `File.Replace` for atomic config updates. Its initial PowerShell `Move-Item -Force`
+replacement could expose a missing-file gap; the corrected final Mono light-to-auto run kept
+the same helper PID (16688) throughout and restored all bytes/values again. No product test
+failure remained.
+
+The only implementation edit outside theme/config/tweaks was the small core styling call site.
+The app-styler owner made its corresponding helper call-site edits. Studio was not edited: expose
+the two new tri-state Windows accent-visibility fields in its Look/Windows editor; the selected
+style already drives the synchronization.
+
+For the next consumers: `mypaper_theme::windows::Palette { dominant: Color, accent: Color }`,
+`resolve(&Look, Option<&Theme>, Option<Palette>, system_dark: bool) -> Resolved`, where
+`Resolved { windows: Option<WindowsStyle>, accent: Option<Color>, dominant: Option<Color> }`.
+`WindowsStyle` has `accent_on_taskbar` / `accent_on_title_bars: Option<bool>`;
+`look::WindowsLayer` uses `Option<Option<bool>>` for each to retain absent/null/value.
+Core uses `Tweaks::unmanaged_dark_mode() -> bool`; the helper uses the stateless
+`unmanaged_system_prefers_dark() -> bool` to read the same journal original. The underlying
+`Undo::original(key: &str, name: &str) -> Result<Option<Option<Value>>>` distinguishes no journal
+entry from an originally absent value. No new messages: core still handles `WM_STYLE_CONFIG`
+and `WM_STYLE_PALETTE`, and the app helper uses its existing config/palette watch events.
 
 ## App styler (experimental)
 
