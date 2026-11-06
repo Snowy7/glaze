@@ -267,6 +267,22 @@ impl Docs {
         !self.redo.is_empty()
     }
 
+    pub(crate) fn undo_count(&self) -> usize { self.undo.len() }
+
+    /// Consecutive picks retain the first before-value and latest after-value.
+    pub(crate) fn coalesce_last_pick(&mut self, checkpoint: usize) -> bool {
+        if checkpoint == 0 || self.undo.len() != checkpoint + 1 { return false }
+        let latest = self.undo.pop().expect("length checked");
+        let previous = self.undo.last_mut().expect("checkpoint is nonzero");
+        previous.label = latest.label;
+        for (id, before, after) in latest.changes {
+            if let Some((_, _, final_value)) = previous.changes.iter_mut().find(|(doc, ..)| *doc == id) {
+                *final_value = after;
+            } else { previous.changes.push((id, before, after)); }
+        }
+        true
+    }
+
     /// Applies `ops` as one undoable step named `label`, writing every changed file.
     pub fn edit(&mut self, label: &str, ops: &[Op]) -> Result<()> {
         if self.live.is_some() {

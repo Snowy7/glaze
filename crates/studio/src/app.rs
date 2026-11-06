@@ -624,6 +624,12 @@ impl App {
 
     fn end_drag(&mut self) {
         let drag = self.drag.take();
+        let history_label = match &drag {
+            Some(Drag::Slider { edit, .. }) => Some(edit.label.to_string()),
+            Some(Drag::Widget { resize, .. }) => Some(if *resize { "Resize widget" } else { "Move widget" }.into()),
+            Some(Drag::Module { .. }) => Some("Move module".into()),
+            _ => None,
+        };
         self.capture(false);
         self.input.pressed = None;
         self.dirty = true;
@@ -643,6 +649,7 @@ impl App {
             }
             _ => {}
         }
+        if let Some(label) = history_label { crate::panel::record_drag(self, &label); }
     }
 
     // --- Keyboard -----------------------------------------------------------------------------
@@ -934,6 +941,7 @@ impl App {
     }
 
     fn field_initial(&self, id: &FieldId) -> String {
+        if let Some(value) = crate::panel::field_initial(self, id) { return value; }
         if let FieldId::Text(DocId::Studio, path) = id
             && let Some(rest) = path.strip_prefix("/plugins/setting/")
             && let Some((plugin, key)) = rest.split_once('/') {
@@ -1075,6 +1083,7 @@ impl App {
 
     /// Sets a value as one undoable step (a click, a key).
     pub fn set(&mut self, edit: &Edit, value: Value) {
+        if crate::panel::intercept_set(self, edit, &value) { return; }
         let value = (!value.is_null()).then_some(value);
         if edit.doc == DocId::Studio && crate::pages::intercept(self, &edit.path, value.clone()) {
             self.dirty = true;
@@ -1120,8 +1129,12 @@ impl App {
             ops.extend(projected);
         }
         let docs: Vec<DocId> = ops.iter().map(|o| o.doc).collect();
+        let checkpoint = self.docs.undo_count();
         match self.docs.edit(label, &ops) {
-            Ok(()) => self.after_edit(&docs),
+            Ok(()) => {
+                self.after_edit(&docs);
+                crate::panel::record_edit(self, label, &ops, checkpoint);
+            }
             Err(e) => self.alert(format!("{e:#}")),
         }
         self.dirty = true;
@@ -1462,6 +1475,7 @@ impl App {
             Action::Reveal(path) => crate::system::reveal(&path),
             other => crate::pages::run(self, other),
         }
+        crate::panel::after_action(self);
     }
 
     fn window_command(&mut self, action: Action) {

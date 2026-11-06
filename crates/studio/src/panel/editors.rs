@@ -1,8 +1,11 @@
+mod bars;
 mod connections;
+pub use bars::insert_module;
 mod look;
 mod settings;
 mod wallpapers;
 mod widgets;
+pub use widgets::{can_add_widget, move_list, move_photos, pick_asset};
 
 use mypaper_ui::controls::{Align, Behavior, key};
 use mypaper_ui::{Rect, Role};
@@ -17,7 +20,9 @@ use crate::docs::DocId;
 use crate::theme::glyph;
 use crate::ui::{B, Col};
 
-pub fn open(page: Page) -> Action { Action::Panel(Command::Open(page)) }
+pub fn open(page: Page) -> Action {
+    Action::Panel(Command::Open(page))
+}
 
 pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
     match page {
@@ -37,66 +42,186 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::DesktopMenu => settings::desktop_menu(app, b, c),
         Page::History => history(app, b, c),
         Page::Search => search(app, b, c),
+        Page::Top | Page::Dock => bars::bar(app, b, c, page),
+        Page::Module => bars::module(app, b, c),
+        Page::AddModule => bars::add(app, b, c),
+        Page::Panels => bars::panels(b, c),
+        Page::BarPanel => bars::panel(app, b, c),
         _ => {}
     }
 }
 
 /// Position is relative to the display's actual grid, including the widget's size.
 pub fn position(app: &App, layout: &Layout, instance: &Instance) -> &'static str {
-    let Some(monitor) = app.display() else { return "on this display" };
+    let Some(monitor) = app.display() else {
+        return "on this display";
+    };
     let grid = crate::stage::grid_for(layout, monitor);
     let x = (instance.cell[0] as f32 + instance.size[0] as f32 / 2.0) / grid.cols.max(1) as f32;
     let y = (instance.cell[1] as f32 + instance.size[1] as f32 / 2.0) / grid.rows.max(1) as f32;
-    match ((x * 3.0).floor().min(2.0) as u8, (y * 3.0).floor().min(2.0) as u8) {
-        (0, 0) => "top left", (1, 0) => "top", (2, 0) => "top right",
-        (0, 1) => "left", (1, 1) => "center", (2, 1) => "right",
-        (0, _) => "bottom left", (1, _) => "bottom", _ => "bottom right",
+    match (
+        (x * 3.0).floor().min(2.0) as u8,
+        (y * 3.0).floor().min(2.0) as u8,
+    ) {
+        (0, 0) => "top left",
+        (1, 0) => "top",
+        (2, 0) => "top right",
+        (0, 1) => "left",
+        (1, 1) => "center",
+        (2, 1) => "right",
+        (0, _) => "bottom left",
+        (1, _) => "bottom",
+        _ => "bottom right",
     }
 }
 
 /// Miniature bar geometry from v16's sil(), drawn with the kit's rounded rectangles.
 pub fn design_row(b: &mut B, c: &mut Col, id: &str, name: &str, on: bool, action: Action) {
     let start = c.y;
-    let mut label = Col { x: c.x + b.px(76.0), y: c.y, w: c.w - b.px(76.0), view: c.view };
+    let mut label = Col {
+        x: c.x + b.px(76.0),
+        y: c.y,
+        w: c.w - b.px(76.0),
+        view: c.view,
+    };
     row(b, &mut label, None, name, "", "", Some(on), action.clone());
     let r = Rect::new(c.x, start + b.px(4.0), b.px(64.0), b.px(32.0));
     b.fill(r, b.px(6.0), b.p.fill);
     let parts: Vec<(f32, f32, f32, f32, f32)> = match id {
         "macos" => vec![(4., 5., 56., 3., 1.), (20., 21., 24., 6., 3.)],
-        "islands" => vec![(4., 4., 14., 6., 3.), (25., 4., 14., 6., 3.), (46., 4., 14., 6., 3.), (20., 21., 24., 6., 3.)],
+        "islands" => vec![
+            (4., 4., 14., 6., 3.),
+            (25., 4., 14., 6., 3.),
+            (46., 4., 14., 6., 3.),
+            (20., 21., 24., 6., 3.),
+        ],
         "windows11" | "windows10" | "edge" => vec![(0., 25., 64., 7., 1.)],
         "chromeos" => vec![(4., 21., 56., 7., 4.)],
         "floating" | "pill" | "capsule" => vec![(10., 4., 44., 6., 3.), (20., 21., 24., 6., 3.)],
-        _ => vec![(0., 0., 64., 5., 1.), (22., 22., 5., 5., 1.), (30., 22., 5., 5., 1.), (38., 22., 5., 5., 1.)],
+        _ => vec![
+            (0., 0., 64., 5., 1.),
+            (22., 22., 5., 5., 1.),
+            (30., 22., 5., 5., 1.),
+            (38., 22., 5., 5., 1.),
+        ],
     };
     for (x, y, w, h, radius) in parts {
-        b.fill(Rect::new(r.left + b.px(x), r.top + b.px(y), b.px(w), b.px(h)), b.px(radius), b.p.ink2);
+        b.fill(
+            Rect::new(r.left + b.px(x), r.top + b.px(y), b.px(w), b.px(h)),
+            b.px(radius),
+            b.p.ink2,
+        );
     }
-    b.hit(key(("design", c.view, id)), r, Role::RadioButton, name, action, Behavior::Click);
+    b.hit(
+        key(("design", c.view, id)),
+        r,
+        Role::RadioButton,
+        name,
+        action,
+        Behavior::Click,
+    );
     c.y = label.y;
 }
 
-pub fn field(app: &App, b: &mut B, c: &mut Col, id: FieldId, label: &str, placeholder: &str, value: &str) {
+pub fn field(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    id: FieldId,
+    label: &str,
+    placeholder: &str,
+    value: &str,
+) {
     let h = height(b, 22.0);
-    text(b, Rect::new(c.x, c.y, c.w, h), label, 13.0, 400, b.p.ink1, Align::Start);
+    text(
+        b,
+        Rect::new(c.x, c.y, c.w, h),
+        label,
+        13.0,
+        400,
+        b.p.ink1,
+        Align::Start,
+    );
     let r = Rect::new(c.x, c.y + h, c.w, height(b, 32.0));
     crate::ui::text_field(app, b, r, id, None, placeholder, value, label);
     b.stroke(r, b.px(6.0), b.px(1.0), b.p.edge);
     c.y = r.bottom + b.px(10.0);
 }
 
-pub fn select(b: &mut B, c: &mut Col, label: &str, value: Value, edit: Edit, options: Vec<(Value, String)>) {
-    let shown = options.iter().find(|(v, _)| v == &value).map_or_else(|| "Custom".to_owned(), |(_, l)| l.clone());
-    row(b, c, None, label, &shown, "", None, Action::Choose(Choices { edit, options, current: Some(value) }));
+pub fn select(
+    b: &mut B,
+    c: &mut Col,
+    label: &str,
+    value: Value,
+    edit: Edit,
+    options: Vec<(Value, String)>,
+) {
+    let shown = options
+        .iter()
+        .find(|(v, _)| v == &value)
+        .map_or_else(|| "Custom".to_owned(), |(_, l)| l.clone());
+    row(
+        b,
+        c,
+        None,
+        label,
+        &shown,
+        "",
+        None,
+        Action::Choose(Choices {
+            edit,
+            options,
+            current: Some(value),
+        }),
+    );
 }
 
 pub fn toggle(b: &mut B, c: &mut Col, label: &str, caption: &str, on: bool, action: Action) {
     let h = height(b, if caption.is_empty() { 40.0 } else { 56.0 });
-    text(b, Rect::new(c.x, c.y, c.w - b.px(50.0), height(b, if caption.is_empty() { 40.0 } else { 28.0 })), label, 13.0, 400, b.p.ink1, Align::Start);
-    if !caption.is_empty() { text(b, Rect::new(c.x, c.y + height(b, 28.0), c.w - b.px(50.0), height(b, 18.0)), caption, 12.0, 400, b.p.ink3, Align::Start); }
+    text(
+        b,
+        Rect::new(
+            c.x,
+            c.y,
+            c.w - b.px(50.0),
+            height(b, if caption.is_empty() { 40.0 } else { 28.0 }),
+        ),
+        label,
+        13.0,
+        400,
+        b.p.ink1,
+        Align::Start,
+    );
+    if !caption.is_empty() {
+        text(
+            b,
+            Rect::new(
+                c.x,
+                c.y + height(b, 28.0),
+                c.w - b.px(50.0),
+                height(b, 18.0),
+            ),
+            caption,
+            12.0,
+            400,
+            b.p.ink3,
+            Align::Start,
+        );
+    }
     let point = mypaper_ui::Point::new(c.right() - b.px(36.0), c.y + (h - b.px(20.0)) / 2.0);
-    b.switch(key(("panel-toggle", c.view, label)), point, on, label, action);
-    b.stroke(Rect::new(point.x, point.y, b.px(36.0), b.px(20.0)), b.px(10.0), b.px(1.0), b.p.edge);
+    b.switch(
+        key(("panel-toggle", c.view, label)),
+        point,
+        on,
+        label,
+        action,
+    );
+    b.stroke(
+        Rect::new(point.x, point.y, b.px(36.0), b.px(20.0)),
+        b.px(10.0),
+        b.px(1.0),
+        b.p.edge,
+    );
     c.y += h;
 }
 
@@ -108,63 +233,294 @@ pub fn action_button(b: &mut B, c: &mut Col, label: &str, action: Action) {
 
 pub fn footer_height(app: &App) -> f32 {
     match app.panel.as_ref().map(|s| s.page) {
-        Some(Page::AddWidget | Page::AddWallpaper) => 64.0,
-        Some(Page::History) if app.panel.as_ref().unwrap().history.borrow().selected.is_some() => 64.0,
+        Some(Page::AddWidget | Page::AddWallpaper | Page::AddModule) => 64.0,
+        Some(Page::History)
+            if app
+                .panel
+                .as_ref()
+                .unwrap()
+                .history
+                .borrow()
+                .selected
+                .is_some() =>
+        {
+            64.0
+        }
         _ => 0.0,
     }
 }
 
 pub fn footer(app: &App, b: &mut B, r: Rect) {
-    if r.height() <= 0.0 { return }
+    if r.height() <= 0.0 {
+        return;
+    }
     b.fill(r, 0.0, b.p.chrome);
     b.hline(r.left, r.right, r.top, b.p.line);
     let state = app.panel.as_ref().unwrap();
     let (secondary, cancel, primary, commit, enabled) = match state.page {
-        Page::AddWidget => ("Cancel", open(Page::Widgets), "Add", Action::Panel(Command::AddWidget), state.add_widget.is_some()),
-        Page::AddWallpaper => ("Cancel", open(Page::Wallpapers), "Add", Action::AddCommit(true), wallpapers::can_add(app)),
-        Page::History => ("Cancel", Action::Panel(Command::CancelRestore), "Restore this desktop", Action::Panel(Command::Restore), true),
+        Page::AddWidget => (
+            "Cancel",
+            open(Page::Widgets),
+            "Add",
+            Action::Panel(Command::AddWidget),
+            state
+                .add_widget
+                .as_deref()
+                .is_some_and(|id| can_add_widget(app, id)),
+        ),
+        Page::AddWallpaper => (
+            "Cancel",
+            open(Page::Wallpapers),
+            "Add",
+            Action::AddCommit(true),
+            wallpapers::can_add(app),
+        ),
+        Page::AddModule => (
+            "Cancel",
+            open(if app.nav.bar == Some(crate::actions::Bar::Dock) {
+                Page::Dock
+            } else {
+                Page::Top
+            }),
+            "Add",
+            Action::Panel(Command::AddModule),
+            state.add_module.is_some(),
+        ),
+        Page::History => (
+            "Cancel",
+            Action::Panel(Command::CancelRestore),
+            "Restore this desktop",
+            Action::Panel(Command::Restore),
+            true,
+        ),
         _ => return,
     };
     let gap = b.px(8.0);
     let width = (r.width() - b.px(32.0) - gap) / 2.0;
-    button(b, Rect::new(b.px(16.0), r.top + b.px(16.0), width, b.px(32.0)), secondary, None, false, true, cancel);
-    button(b, Rect::new(b.px(16.0) + width + gap, r.top + b.px(16.0), width, b.px(32.0)), primary, None, true, enabled, commit);
+    button(
+        b,
+        Rect::new(b.px(16.0), r.top + b.px(16.0), width, b.px(32.0)),
+        secondary,
+        None,
+        false,
+        true,
+        cancel,
+    );
+    button(
+        b,
+        Rect::new(
+            b.px(16.0) + width + gap,
+            r.top + b.px(16.0),
+            width,
+            b.px(32.0),
+        ),
+        primary,
+        None,
+        true,
+        enabled,
+        commit,
+    );
 }
 
 fn history(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "History", "Desktops from this Studio session");
-    notice(b, c, "Select a desktop to inspect it, then restore. Later desktops stay here. Settings and Connections are separate.");
+    title(b, c, "History", "Your desktop after each change");
+    notice(
+        b,
+        c,
+        "Select a desktop to inspect it, then restore. Later desktops stay here. Settings and Connections are separate.",
+    );
     let history = app.panel.as_ref().unwrap().history.borrow();
+    if let Some(error) = &history.error {
+        notice(b, c, error);
+    }
     group(b, c, "Desktop changes", |b, c| {
         for (i, entry) in history.entries.iter().enumerate().rev() {
-            row(b, c, Some(glyph::CLOCK), &entry.title, "", &entry.detail, Some(history.selected == Some(i)), Action::Panel(Command::History(i)));
+            row(
+                b,
+                c,
+                Some(glyph::CLOCK),
+                &entry.title,
+                "",
+                &entry.detail,
+                Some(history.selected == Some(i)),
+                Action::Panel(Command::History(i)),
+            );
         }
     });
     if let Some(entry) = history.selected.and_then(|i| history.entries.get(i)) {
-        group(b, c, "Selected desktop", |b, c| notice(b, c, &format!("{} · {}", entry.title, entry.detail)));
-    }
-}
-
-fn search(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "Search", "Settings, actions and everything on your desktop");
-    super::controls::search(app, b, c);
-    let results = crate::search::results(app);
-    if results.is_empty() { notice(b, c, "Nothing found. Try a setting, wallpaper or widget name."); }
-    for name in ["Settings", "Actions", "Wallpapers", "Widgets", "Integrations", "Go to", "Recent"] {
-        let items: Vec<_> = results.iter().enumerate().filter(|(_, e)| e.group == name).collect();
-        if items.is_empty() { continue }
-        group(b, c, if name == "Integrations" { "Connections" } else { name }, |b, c| {
-            for (i, entry) in items { row(b, c, Some(entry.glyph), &entry.title, "", &entry.section, None, Action::Panel(Command::Search(i))); }
+        group(b, c, "Selected desktop", |b, c| {
+            let r = Rect::new(c.x, c.y + b.px(6.0), c.w, c.w * 9.0 / 16.0);
+            b.fill(r, b.px(8.0), b.p.fill);
+            if let Some(wallpaper) = entry.desktop.wallpaper().and_then(|id| {
+                app.library
+                    .items
+                    .iter()
+                    .find(|w| w.apply_as == id || w.id == id)
+            }) && let Some(path) = wallpaper.preview.as_ref()
+                && let Some(image) = app
+                    .images
+                    .borrow_mut()
+                    .get(path, (r.width() as u32, r.height() as u32))
+            {
+                crate::stage::image_round(b, r, &image, 1.0, b.px(8.0));
+            }
+            let ink = crate::panel::tokens::hex(0xffffff);
+            if entry
+                .desktop
+                .bars()
+                .pointer("/top/enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+            {
+                b.fill(
+                    Rect::new(
+                        r.left + b.px(4.0),
+                        r.top + b.px(4.0),
+                        r.width() - b.px(8.0),
+                        b.px(5.0),
+                    ),
+                    b.px(2.0),
+                    ink.with_alpha(0.75),
+                );
+            }
+            if entry
+                .desktop
+                .bars()
+                .pointer("/dock/enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+            {
+                b.fill(
+                    Rect::new(
+                        r.left + r.width() * 0.35,
+                        r.bottom - b.px(14.0),
+                        r.width() * 0.3,
+                        b.px(8.0),
+                    ),
+                    b.px(4.0),
+                    ink.with_alpha(0.75),
+                );
+            }
+            let count = entry
+                .desktop
+                .widgets()
+                .get("instances")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len);
+            if let Ok(layout) = serde_json::from_value::<mypaper_widgets::layout::Layout>(
+                entry.desktop.widgets().clone(),
+            ) && let Some(monitor) = app.display()
+            {
+                let grid = crate::stage::grid_for(&layout, monitor);
+                let scale = r.width() / (monitor.rect.width as f32 / (monitor.dpi as f32 / 96.0));
+                for instance in crate::pages::widgets::here(app, &layout) {
+                    let at = grid.rect(instance.cell, instance.size);
+                    let frame = Rect::new(
+                        r.left + at.x as f32 * scale,
+                        r.top + at.y as f32 * scale,
+                        at.width as f32 * scale,
+                        at.height as f32 * scale,
+                    );
+                    b.fill(frame, b.px(3.0), ink.with_alpha(0.18));
+                    b.stroke(frame, b.px(3.0), b.px(1.0), ink.with_alpha(0.8));
+                }
+            }
+            c.y = r.bottom + b.px(10.0);
+            notice(b, c, &entry.detail);
+            notice(
+                b,
+                c,
+                &format!(
+                    "{} bars · {count} widgets",
+                    entry
+                        .desktop
+                        .bars()
+                        .get("preset")
+                        .and_then(Value::as_str)
+                        .unwrap_or("Your")
+                ),
+            );
         });
     }
 }
 
+fn search(app: &App, b: &mut B, c: &mut Col) {
+    title(
+        b,
+        c,
+        "Search",
+        "Settings, actions and everything on your desktop",
+    );
+    super::controls::search(app, b, c);
+    let results = crate::search::results(app);
+    if results.is_empty() {
+        notice(
+            b,
+            c,
+            "Nothing found. Try a setting, wallpaper or widget name.",
+        );
+    }
+    for name in [
+        "Settings",
+        "Actions",
+        "Wallpapers",
+        "Widgets",
+        "Integrations",
+        "Go to",
+        "Recent",
+    ] {
+        let items: Vec<_> = results
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.group == name)
+            .collect();
+        if items.is_empty() {
+            continue;
+        }
+        group(
+            b,
+            c,
+            if name == "Integrations" {
+                "Connections"
+            } else {
+                name
+            },
+            |b, c| {
+                for (i, entry) in items {
+                    row(
+                        b,
+                        c,
+                        Some(entry.glyph),
+                        &entry.title,
+                        "",
+                        &entry.section,
+                        None,
+                        Action::Panel(Command::Search(i)),
+                    );
+                }
+            },
+        );
+    }
+}
+
 pub fn run_search(app: &mut App, index: usize) {
-    let Some(entry) = crate::search::results(app).get(index).cloned() else { return };
-    if let Some(id) = entry.id.strip_prefix("setting:").and_then(crate::settings::Setting::get) {
+    let Some(entry) = crate::search::results(app).get(index).cloned() else {
+        return;
+    };
+    if let Some(id) = entry
+        .id
+        .strip_prefix("setting:")
+        .and_then(crate::settings::Setting::get)
+    {
         app.reveal(id);
         let page = match id.place {
-            crate::settings::Place::Look { windows } => if windows { Page::Windows } else { Page::Look },
+            crate::settings::Place::Look { windows } => {
+                if windows {
+                    Page::Windows
+                } else {
+                    Page::Look
+                }
+            }
             crate::settings::Place::Bars(Some(crate::actions::Bar::Top)) => Page::Top,
             crate::settings::Place::Bars(Some(crate::actions::Bar::Dock)) => Page::Dock,
             crate::settings::Place::Bars(_) | crate::settings::Place::BarsPanel(_) => Page::Bars,
@@ -179,25 +535,37 @@ pub fn run_search(app: &mut App, index: usize) {
     match entry.action {
         Action::Nav(page) => app.panel.as_mut().unwrap().page = legacy_page(page),
         Action::Section(section) => app.panel.as_mut().unwrap().page = section_page(section),
-        Action::AddWidget(id) => { app.panel.as_mut().unwrap().add_widget = Some(id); app.panel.as_mut().unwrap().page = Page::AddWidget; }
-        Action::SelectIntegration(i) => { app.nav.integration = i; app.panel.as_mut().unwrap().page = Page::Connection; }
+        Action::AddWidget(id) => {
+            app.panel.as_mut().unwrap().add_widget = Some(id);
+            app.panel.as_mut().unwrap().page = Page::AddWidget;
+        }
+        Action::SelectIntegration(i) => {
+            app.nav.integration = i;
+            app.panel.as_mut().unwrap().page = Page::Connection;
+        }
         action => app.run(action),
     }
 }
 
 fn legacy_page(page: crate::actions::Page) -> Page {
     match page {
-        crate::actions::Page::Home => Page::Root, crate::actions::Page::Wallpapers => Page::Wallpapers,
-        crate::actions::Page::Look => Page::Look, crate::actions::Page::Widgets => Page::Widgets,
-        crate::actions::Page::Bars => Page::Bars, crate::actions::Page::Integrations => Page::Connections,
+        crate::actions::Page::Home => Page::Root,
+        crate::actions::Page::Wallpapers => Page::Wallpapers,
+        crate::actions::Page::Look => Page::Look,
+        crate::actions::Page::Widgets => Page::Widgets,
+        crate::actions::Page::Bars => Page::Bars,
+        crate::actions::Page::Integrations => Page::Connections,
         crate::actions::Page::Settings => Page::Settings,
     }
 }
 
 fn section_page(section: crate::actions::Section) -> Page {
     match section {
-        crate::actions::Section::General => Page::General, crate::actions::Section::Performance => Page::Performance,
-        crate::actions::Section::Desktop => Page::DesktopMenu, crate::actions::Section::Keyboard => Page::Keyboard,
-        crate::actions::Section::Troubleshoot => Page::Troubleshoot, crate::actions::Section::About => Page::About,
+        crate::actions::Section::General => Page::General,
+        crate::actions::Section::Performance => Page::Performance,
+        crate::actions::Section::Desktop => Page::DesktopMenu,
+        crate::actions::Section::Keyboard => Page::Keyboard,
+        crate::actions::Section::Troubleshoot => Page::Troubleshoot,
+        crate::actions::Section::About => Page::About,
     }
 }

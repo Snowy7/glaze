@@ -1,5 +1,8 @@
 use mypaper_ui::Rect;
-use serde_json::json;
+use mypaper_ui::controls::{Align, key};
+use mypaper_widgets::layout::Instance;
+use mypaper_widgets::manifest::{Setting, WidgetManifest};
+use serde_json::{Map, Value, json};
 
 use super::*;
 use crate::pages::widgets as legacy;
@@ -13,37 +16,92 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     };
     let Some(installed) = app.registry.get(&instance.widget) else {
         title(b, c, &instance.widget, "Not installed");
-        notice(b, c, "Bring its folder back, or remove this widget from your desktop.");
+        notice(
+            b,
+            c,
+            "Bring its folder back, or remove this widget from your desktop.",
+        );
         action_button(b, c, "Remove", Action::RemoveWidget);
         return;
     };
     let manifest = &installed.manifest;
-    title(b, c, &manifest.name, &format!("{} × {} · {} · Display {}", instance.size[0], instance.size[1], position(app, &layout, instance), app.nav.display + 1));
+    title(
+        b,
+        c,
+        &manifest.name,
+        &format!(
+            "{} × {} · {} · Display {}",
+            instance.size[0],
+            instance.size[1],
+            position(app, &layout, instance),
+            app.nav.display + 1
+        ),
+    );
     let half = (c.w - b.px(8.0)) / 2.0;
-    for (n, label, icon, action) in [(0, "Duplicate", glyph::COPY, Action::DuplicateWidget), (1, "Remove", glyph::DELETE, Action::RemoveWidget)] {
-        button(b, Rect::new(c.x + n as f32 * (half + b.px(8.0)), c.y + b.px(6.0), half, b.px(30.0)), label, Some(icon), false, true, action);
+    for (n, label, icon, action) in [
+        (0, "Duplicate", glyph::COPY, Action::DuplicateWidget),
+        (1, "Remove", glyph::DELETE, Action::RemoveWidget),
+    ] {
+        button(
+            b,
+            Rect::new(
+                c.x + n as f32 * (half + b.px(8.0)),
+                c.y + b.px(6.0),
+                half,
+                b.px(30.0),
+            ),
+            label,
+            Some(icon),
+            false,
+            true,
+            action,
+        );
     }
     c.y += b.px(44.0);
-    let index = layout.instances.iter().position(|i| i.instance == instance.instance).unwrap();
+    let index = layout
+        .instances
+        .iter()
+        .position(|i| i.instance == instance.instance)
+        .unwrap();
     let base = format!("/instances/{index}");
     let resolved = manifest.resolve_settings(&instance.settings);
     let mut groups = Vec::new();
     for setting in &manifest.settings {
         let group = legacy::group_of(setting).unwrap_or("Options");
-        if !groups.contains(&group) { groups.push(group); }
+        if !groups.contains(&group) {
+            groups.push(group);
+        }
     }
     for heading in groups {
         group(b, c, heading, |b, c| {
-            for setting in manifest.settings.iter().filter(|s| legacy::group_of(s).unwrap_or("Options") == heading) {
-                legacy::widget_setting(app, b, c, &base, &resolved, setting, instance, manifest);
+            if instance.widget == "photo" && heading == "Photos" {
+                photos(app, b, c, instance, &resolved, &base);
+                return;
+            }
+            for setting in manifest
+                .settings
+                .iter()
+                .filter(|s| legacy::group_of(s).unwrap_or("Options") == heading)
+            {
+                manifest_control(app, b, c, &base, &resolved, setting, instance, manifest);
             }
         });
     }
     group(b, c, "Size", |b, c| {
         // Stacking keeps the labels and both stepper buttons legible at 360 DIPs.
         for (label, value, minus, plus) in [
-            ("Wide", instance.size[0], Action::ResizeWidget(-1, 0), Action::ResizeWidget(1, 0)),
-            ("Tall", instance.size[1], Action::ResizeWidget(0, -1), Action::ResizeWidget(0, 1)),
+            (
+                "Wide",
+                instance.size[0],
+                Action::ResizeWidget(-1, 0),
+                Action::ResizeWidget(1, 0),
+            ),
+            (
+                "Tall",
+                instance.size[1],
+                Action::ResizeWidget(0, -1),
+                Action::ResizeWidget(0, 1),
+            ),
         ] {
             let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(32.0));
             legacy::stepper(b, r, label, value, minus, plus);
@@ -53,52 +111,857 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     });
     group(b, c, "Its look", |b, c| {
         let own = instance.appearance != Default::default();
-        toggle(b, c, "Its own look", if own { "Your override" } else { "From Look" }, own,
-            if own { Action::Unset(Edit::new(DocId::Widgets, format!("{base}/appearance"), "Follow Look")) }
-            else { Action::Set(Edit::new(DocId::Widgets, format!("{base}/appearance/surface"), "Its own look"), json!("glass")) });
+        toggle(
+            b,
+            c,
+            "Its own look",
+            if own { "Your override" } else { "From Look" },
+            own,
+            if own {
+                Action::Unset(Edit::new(
+                    DocId::Widgets,
+                    format!("{base}/appearance"),
+                    "Follow Look",
+                ))
+            } else {
+                Action::Set(
+                    Edit::new(
+                        DocId::Widgets,
+                        format!("{base}/appearance/surface"),
+                        "Its own look",
+                    ),
+                    json!("glass"),
+                )
+            },
+        );
         if own {
-            select(b, c, "Background", app.get(DocId::Widgets, &format!("{base}/appearance/surface")).cloned().unwrap_or(json!("glass")),
-                Edit::new(DocId::Widgets, format!("{base}/appearance/surface"), "Background"),
-                [("glass", "Glass"), ("solid", "Solid"), ("none", "None")].into_iter().map(|(v, l)| (json!(v), l.into())).collect());
-            crate::ui::swatches(app, b, c, &Edit::new(DocId::Widgets, format!("{base}/appearance/tint"), "Tint"),
-                app.get(DocId::Widgets, &format!("{base}/appearance/tint")), None,
-                &[[139,158,183], [127,174,142], [200,141,60], [230,230,230]]);
-            action_button(b, c, "Follow Look", Action::Unset(Edit::new(DocId::Widgets, format!("{base}/appearance"), "Follow Look")));
-        } else { row(b, c, Some(glyph::LOOK), "Look", "From Look", "", None, open(Page::Look)); }
+            select(
+                b,
+                c,
+                "Background",
+                app.get(DocId::Widgets, &format!("{base}/appearance/surface"))
+                    .cloned()
+                    .unwrap_or(json!("glass")),
+                Edit::new(
+                    DocId::Widgets,
+                    format!("{base}/appearance/surface"),
+                    "Background",
+                ),
+                [("glass", "Glass"), ("solid", "Solid"), ("none", "None")]
+                    .into_iter()
+                    .map(|(v, l)| (json!(v), l.into()))
+                    .collect(),
+            );
+            crate::ui::swatches(
+                app,
+                b,
+                c,
+                &Edit::new(DocId::Widgets, format!("{base}/appearance/tint"), "Tint"),
+                app.get(DocId::Widgets, &format!("{base}/appearance/tint")),
+                None,
+                &[
+                    [139, 158, 183],
+                    [127, 174, 142],
+                    [200, 141, 60],
+                    [230, 230, 230],
+                ],
+            );
+            action_button(
+                b,
+                c,
+                "Follow Look",
+                Action::Unset(Edit::new(
+                    DocId::Widgets,
+                    format!("{base}/appearance"),
+                    "Follow Look",
+                )),
+            );
+        } else {
+            row(
+                b,
+                c,
+                Some(glyph::LOOK),
+                "Look",
+                "From Look",
+                "",
+                None,
+                open(Page::Look),
+            );
+        }
     });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn manifest_control(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    base: &str,
+    resolved: &Map<String, Value>,
+    setting: &Setting,
+    instance: &Instance,
+    manifest: &WidgetManifest,
+) {
+    match setting {
+        Setting::Select {
+            key: name,
+            label,
+            options,
+            ..
+        } if options.len() >= 3
+            && matches!(
+                name.as_str(),
+                "variant" | "face" | "layout" | "style" | "look" | "shape" | "display" | "frame"
+            ) =>
+        {
+            let current = resolved.get(name).and_then(Value::as_str).unwrap_or("");
+            let options: Vec<_> = options
+                .iter()
+                .map(|o| match o {
+                    mypaper_widgets::manifest::SelectOption::Plain(value) => {
+                        (value.as_str(), value.as_str())
+                    }
+                    mypaper_widgets::manifest::SelectOption::Detailed(value) => (
+                        value.value.as_str(),
+                        value.label.as_deref().unwrap_or(&value.value),
+                    ),
+                })
+                .collect();
+            let edit = Edit::new(
+                DocId::Widgets,
+                format!("{base}/settings/{}", crate::docs::token(name)),
+                label.as_str(),
+            );
+            let tiles: Vec<_> = options
+                .iter()
+                .map(|(value, title)| {
+                    (
+                        *title,
+                        *value == current,
+                        Action::Set(edit.clone(), json!(value)),
+                    )
+                })
+                .collect();
+            crate::ui::tiles(
+                b,
+                c,
+                key(("panel-faces", name)),
+                3,
+                false,
+                &tiles,
+                |b, i, pic| face(app, b, instance, manifest, name, options[i].0, pic),
+            );
+        }
+        Setting::Boolean {
+            key: name, label, ..
+        } => {
+            let on = resolved.get(name).and_then(Value::as_bool).unwrap_or(false);
+            toggle(
+                b,
+                c,
+                label,
+                "",
+                on,
+                Action::Toggle(
+                    Edit::new(
+                        DocId::Widgets,
+                        format!("{base}/settings/{}", crate::docs::token(name)),
+                        label.as_str(),
+                    ),
+                    on,
+                ),
+            );
+        }
+        Setting::String {
+            key: name, label, ..
+        }
+        | Setting::Font {
+            key: name, label, ..
+        } => {
+            field(
+                app,
+                b,
+                c,
+                FieldId::Text(
+                    DocId::Widgets,
+                    format!("{base}/settings/{}", crate::docs::token(name)).into(),
+                ),
+                label,
+                "",
+                resolved.get(name).and_then(Value::as_str).unwrap_or(""),
+            );
+        }
+        Setting::List {
+            key: name,
+            label,
+            fields,
+            max_items,
+            ..
+        } => {
+            let path = format!("{base}/settings/{}", crate::docs::token(name));
+            let items = resolved
+                .get(name)
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            text(
+                b,
+                Rect::new(c.x, c.y, c.w, height(b, 24.0)),
+                label,
+                13.0,
+                500,
+                b.p.ink1,
+                Align::Start,
+            );
+            c.y += height(b, 28.0);
+            let fields: Vec<_> = fields
+                .iter()
+                .map(|f| serde_json::to_value(f).expect("manifest field"))
+                .collect();
+            for (i, item) in items.iter().enumerate() {
+                let summary = fields
+                    .iter()
+                    .filter_map(|f| f["key"].as_str().and_then(|k| item[k].as_str()))
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                let disclosure = key(("panel-list-item", path.as_str(), i));
+                row(
+                    b,
+                    c,
+                    Some(glyph::GRIP),
+                    &format!("{}", i + 1),
+                    "Edit",
+                    &summary,
+                    None,
+                    Action::Panel(Command::ListRow(path.clone(), i)),
+                );
+                if app.is_open(disclosure) {
+                    for schema in &fields {
+                        let Some(name) = schema["key"].as_str() else {
+                            continue;
+                        };
+                        let label = schema["label"].as_str().unwrap_or(name);
+                        let field_path = format!("{path}/{i}/{}", crate::docs::token(name));
+                        let value = item
+                            .get(name)
+                            .cloned()
+                            .unwrap_or_else(|| schema["default"].clone());
+                        match schema["type"].as_str() {
+                            Some("boolean") => {
+                                let on = value.as_bool().unwrap_or(false);
+                                toggle(
+                                    b,
+                                    c,
+                                    label,
+                                    "",
+                                    on,
+                                    Action::Toggle(
+                                        Edit::new(DocId::Widgets, field_path, label),
+                                        on,
+                                    ),
+                                );
+                            }
+                            Some("select") => {
+                                let options = schema["options"]
+                                    .as_array()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|o| {
+                                        let value = o.get("value").unwrap_or(o).clone();
+                                        let label = o
+                                            .get("label")
+                                            .and_then(Value::as_str)
+                                            .or_else(|| value.as_str())
+                                            .unwrap_or("Option")
+                                            .to_owned();
+                                        (value, label)
+                                    })
+                                    .collect();
+                                select(
+                                    b,
+                                    c,
+                                    label,
+                                    value,
+                                    Edit::new(DocId::Widgets, field_path, label),
+                                    options,
+                                );
+                            }
+                            Some("number" | "slider") => {
+                                text(
+                                    b,
+                                    Rect::new(c.x, c.y, c.w, height(b, 24.0)),
+                                    label,
+                                    13.0,
+                                    400,
+                                    b.p.ink1,
+                                    Align::Start,
+                                );
+                                c.y += height(b, 24.0);
+                                let value = value.as_f64().unwrap_or(0.0);
+                                b.slider(
+                                    key(("panel-list-number", field_path.as_str())),
+                                    Rect::new(c.x, c.y, c.w, height(b, 36.0)),
+                                    value,
+                                    (
+                                        schema["min"].as_f64().unwrap_or(0.0),
+                                        schema["max"].as_f64().unwrap_or(100.0),
+                                        schema["step"].as_f64().unwrap_or(1.0),
+                                    ),
+                                    &format!("{value:.0}"),
+                                    b.px(48.0),
+                                    label,
+                                    Action::Slider(Edit::new(DocId::Widgets, field_path, label)),
+                                );
+                                c.y += height(b, 40.0);
+                            }
+                            _ => field(
+                                app,
+                                b,
+                                c,
+                                FieldId::Text(DocId::Widgets, field_path.into()),
+                                label,
+                                "",
+                                value.as_str().unwrap_or(""),
+                            ),
+                        }
+                    }
+                    for (label, action) in [
+                        (
+                            "Move up",
+                            Action::Panel(Command::MoveList(path.clone(), i, -1)),
+                        ),
+                        (
+                            "Move down",
+                            Action::Panel(Command::MoveList(path.clone(), i, 1)),
+                        ),
+                        ("Remove item", Action::ListRemove(path.clone(), i)),
+                    ] {
+                        action_button(b, c, label, action);
+                    }
+                }
+            }
+            if max_items.is_none_or(|max| items.len() < max) {
+                field(
+                    app,
+                    b,
+                    c,
+                    FieldId::Text(DocId::Studio, format!("/list_new{path}").into()),
+                    "New item",
+                    "Name",
+                    "",
+                );
+                action_button(b, c, "Add item", Action::ListAdd(path));
+            }
+        }
+        Setting::File {
+            key: name, label, ..
+        }
+        | Setting::Image {
+            key: name, label, ..
+        } => {
+            let path = format!("{base}/settings/{}", crate::docs::token(name));
+            let current = resolved.get(name).and_then(Value::as_str).unwrap_or("");
+            let name = mypaper_widgets::pick::parse_data_url(current)
+                .map(|url| url.name)
+                .unwrap_or("None".into());
+            row(
+                b,
+                c,
+                Some(glyph::PHOTO),
+                label,
+                "Choose",
+                &name,
+                None,
+                Action::Panel(Command::PickAsset(path)),
+            );
+        }
+        Setting::Select {
+            key: name,
+            label,
+            options,
+            ..
+        } if c.w < b.px(360.0) || b.t.text_scale > 1.0 => {
+            let edit = Edit::new(
+                DocId::Widgets,
+                format!("{base}/settings/{}", crate::docs::token(name)),
+                label.as_str(),
+            );
+            let options = options
+                .iter()
+                .map(|o| match o {
+                    mypaper_widgets::manifest::SelectOption::Plain(value) => {
+                        (json!(value), value.clone())
+                    }
+                    mypaper_widgets::manifest::SelectOption::Detailed(value) => (
+                        json!(value.value),
+                        value.label.clone().unwrap_or(value.value.clone()),
+                    ),
+                })
+                .collect();
+            select(
+                b,
+                c,
+                label,
+                resolved.get(name).cloned().unwrap_or(Value::Null),
+                edit,
+                options,
+            );
+        }
+        _ => legacy::widget_setting(app, b, c, base, resolved, setting, instance, manifest),
+    }
+}
+
+/// Face tiles use the actual shell view with an isolated sample model; no services or writes.
+fn face(
+    app: &App,
+    b: &mut B,
+    instance: &Instance,
+    manifest: &WidgetManifest,
+    setting: &str,
+    value: &str,
+    pic: Rect,
+) {
+    use mypaper_shell::preview::widgets::{Frame, Model, Stamp, tokens, view};
+    b.fill(pic, b.px(8.0), crate::panel::tokens::hex(0x293246));
+    if let Some(path) = app
+        .library
+        .active()
+        .and_then(|i| app.library.items[i].preview.as_ref())
+        && let Some(image) = app
+            .images
+            .borrow_mut()
+            .get(path, (pic.width() as u32, pic.height() as u32))
+    {
+        crate::stage::image_round(b, pic, &image, 0.65, b.px(8.0));
+    }
+    let mut settings = instance.settings.clone();
+    settings.insert(setting.into(), json!(value));
+    let appearance = mypaper_widgets::look::json_of(&mypaper_widgets::look::defaults());
+    let placed = mypaper_widgets::layout::Placed {
+        instance: "panel-face-preview".into(),
+        widget: instance.widget.clone(),
+        cell: [0, 0],
+        size: manifest.size.default,
+        settings: manifest.resolve_settings(&settings),
+        appearance: appearance.clone(),
+        own: Map::new(),
+    };
+    let now = Stamp {
+        date: mypaper_ui::calendar::Date {
+            year: 2026,
+            month: 11,
+            day: 6,
+        },
+        hour: 10,
+        minute: 42,
+        second: 18,
+        ms: 1793958138000,
+    };
+    let mut storage = mypaper_widgets::storage::Storage::new(
+        std::env::temp_dir().join("mypaper-panel-face-preview"),
+    );
+    let Ok(mut model) = Model::new(placed, &mut storage, now) else {
+        return;
+    };
+    if instance.widget == "weather" {
+        model.data = json!({"current":{"temperature":22,"condition":"Partly cloudy","code":2,"isDay":true,"location":{"name":"Hong Kong"}},"forecast":{"days":[{"date":"2026-11-06","max":24,"min":19,"code":2},{"date":"2026-11-07","max":23,"min":18,"code":3},{"date":"2026-11-08","max":25,"min":20,"code":0}]}});
+    }
+    if instance.widget == "photo" {
+        model.photo.current = app
+            .library
+            .active()
+            .and_then(|i| app.library.items[i].preview.as_ref())
+            .and_then(|p| app.images.borrow_mut().get(p, (256, 160)));
+    }
+    let inner = pic.inflate(-b.px(6.0));
+    let aspect = if instance.widget == "weather" && value == "compact" {
+        4.5
+    } else {
+        1.65
+    };
+    let w = inner.width().min(inner.height() * aspect);
+    let h = w / aspect;
+    let x = inner.left + (inner.width() - w) / 2.0;
+    let y = inner.top + (inner.height() - h) / 2.0;
+    let scale = w / 300.0;
+    let list = view(
+        &model,
+        &tokens(&appearance),
+        Frame {
+            size: (w.max(1.0) as u32, h.max(1.0) as u32),
+            scale,
+            now,
+            instant: std::time::Instant::now(),
+            editing: false,
+        },
+        b.text,
+    );
+    b.fill(
+        Rect::new(x, y, w, h),
+        16.0 * scale,
+        crate::panel::tokens::hex(0x344052).with_alpha(0.85),
+    );
+    b.list.ops.push(mypaper_ui::Op::Clip { rect: pic });
+    b.list
+        .ops
+        .extend(crate::stage::offset(&list.ops, x.round(), y.round()));
+    b.list.ops.push(mypaper_ui::Op::Unclip);
+}
+
+fn photos(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    instance: &Instance,
+    resolved: &Map<String, Value>,
+    base: &str,
+) {
+    for n in 1..=6 {
+        let key = format!("image{n}");
+        let value = resolved.get(&key).and_then(Value::as_str).unwrap_or("");
+        let Some(url) = mypaper_widgets::pick::parse_data_url(value) else {
+            continue;
+        };
+        let r = Rect::new(c.x, c.y, c.w, height(b, 44.0));
+        let row_key = mypaper_ui::controls::key(("panel-photo-row", n - 1));
+        let select = Rect::new(r.left, r.top, r.width() - b.px(90.0), r.height());
+        b.hit(
+            row_key,
+            select,
+            mypaper_ui::Role::ListItem,
+            &url.name,
+            Action::Panel(Command::PhotoRow(n - 1)),
+            mypaper_ui::controls::Behavior::Click,
+        );
+        b.focus_ring(row_key, select, b.px(6.0));
+        b.icon(
+            Rect::new(c.x, c.y, b.px(16.0), r.height()),
+            glyph::GRIP,
+            12.0,
+            b.p.ink3,
+        );
+        let pic = Rect::new(c.x + b.px(22.0), c.y + b.px(8.0), b.px(36.0), b.px(28.0));
+        let path = if app.fixture {
+            app.library
+                .items
+                .iter()
+                .filter_map(|w| w.preview.clone())
+                .nth(n - 1)
+        } else {
+            mypaper_widgets::files::user("widget-data")
+                .ok()
+                .map(|root| root.join(&instance.instance).join("files").join(&url.name))
+        };
+        if let Some(path) = path
+            && let Some(image) = app.images.borrow_mut().get(&path, (72, 56))
+        {
+            crate::stage::image_round(b, pic, &image, 1.0, b.px(4.0));
+        }
+        text(
+            b,
+            Rect::new(
+                pic.right + b.px(8.0),
+                r.top,
+                (r.right - pic.right - b.px(104.0)).max(0.0),
+                r.height(),
+            ),
+            &url.name,
+            12.0,
+            400,
+            b.p.ink1,
+            Align::Start,
+        );
+        for (column, icon, label, enabled, action) in [
+            (
+                0,
+                mypaper_ui::icons::Icon::ChevronUp.into(),
+                format!("Move photo {n} up"),
+                n > 1,
+                Action::Panel(Command::MovePhotos(n - 1, -1)),
+            ),
+            (
+                1,
+                glyph::CHEVRON_DOWN,
+                format!("Move photo {n} down"),
+                n < 6
+                    && resolved
+                        .get(&format!("image{}", n + 1))
+                        .and_then(Value::as_str)
+                        .is_some_and(|v| !v.is_empty()),
+                Action::Panel(Command::MovePhotos(n - 1, 1)),
+            ),
+            (
+                2,
+                glyph::DELETE,
+                format!("Remove photo {n}"),
+                true,
+                Action::Set(
+                    Edit::new(
+                        DocId::Widgets,
+                        format!("{base}/settings/{key}"),
+                        "Remove photo",
+                    ),
+                    json!(""),
+                ),
+            ),
+        ] {
+            crate::panel::controls::icon_button(
+                b,
+                Rect::new(
+                    r.right - b.px(84.0) + column as f32 * b.px(28.0),
+                    r.top + b.px(8.0),
+                    b.px(26.0),
+                    b.px(28.0),
+                ),
+                icon,
+                &label,
+                enabled,
+                action,
+            );
+        }
+        c.y = r.bottom;
+    }
+    if let Some(n) = (1..=6).find(|n| {
+        resolved
+            .get(&format!("image{n}"))
+            .and_then(Value::as_str)
+            .is_none_or(str::is_empty)
+    }) {
+        action_button(
+            b,
+            c,
+            "Add photo",
+            Action::Panel(Command::PickAsset(format!("{base}/settings/image{n}"))),
+        );
+    }
+}
+
+pub fn pick_asset(app: &mut App, path: &str) {
+    if app.fixture {
+        return;
+    }
+    let layout = legacy::layout(app);
+    let Some(instance) = app.nav.widget.as_deref().and_then(|id| layout.get(id)) else {
+        return;
+    };
+    let name = path
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .replace("~1", "/")
+        .replace("~0", "~");
+    let image = app
+        .registry
+        .get(&instance.widget)
+        .and_then(|w| w.manifest.setting(&name))
+        .is_some_and(|s| matches!(s, Setting::Image { .. }));
+    let Some(source) = crate::dialogs::pick(
+        app.window,
+        if image {
+            "Choose a picture"
+        } else {
+            "Choose a file"
+        },
+        false,
+        if image { crate::dialogs::PICTURES } else { &[] },
+    ) else {
+        return;
+    };
+    let result = mypaper_widgets::files::user("widget-data")
+        .map_err(|e| e.to_string())
+        .and_then(|root| {
+            mypaper_widgets::pick::import(&root, &instance.widget, &instance.instance, &source)
+                .map_err(|e| e.message)
+        });
+    match result {
+        Ok(picked) => app.set(
+            &Edit::new(DocId::Widgets, path, "Picture"),
+            json!(picked.url),
+        ),
+        Err(error) => app.alert(error),
+    }
+}
+
+pub fn move_photos(app: &mut App, index: usize, delta: i32) {
+    let layout = legacy::layout(app);
+    let Some((n, instance)) = app.nav.widget.as_deref().and_then(|id| {
+        layout
+            .instances
+            .iter()
+            .enumerate()
+            .find(|(_, i)| i.instance == id)
+    }) else {
+        return;
+    };
+    let Some(manifest) = app.registry.get(&instance.widget).map(|w| &w.manifest) else {
+        return;
+    };
+    let other = index as i32 + delta;
+    if !(0..6).contains(&other) || index >= 6 {
+        return;
+    }
+    let resolved = manifest.resolve_settings(&instance.settings);
+    let first = format!("image{}", index + 1);
+    let second = format!("image{}", other + 1);
+    app.apply(
+        "Move photo",
+        vec![
+            crate::docs::Op {
+                doc: DocId::Widgets,
+                path: format!("/instances/{n}/settings/{first}"),
+                value: Some(resolved.get(&second).cloned().unwrap_or(json!(""))),
+            },
+            crate::docs::Op {
+                doc: DocId::Widgets,
+                path: format!("/instances/{n}/settings/{second}"),
+                value: Some(resolved.get(&first).cloned().unwrap_or(json!(""))),
+            },
+        ],
+    );
+}
+
+pub fn move_list(app: &mut App, path: &str, index: usize, delta: i32) {
+    let parts: Vec<_> = path.split('/').collect();
+    let Some(instance) = parts.get(2).and_then(|n| n.parse::<usize>().ok()) else {
+        return;
+    };
+    let Some(name) = parts.get(4) else { return };
+    let name = name.replace("~1", "/").replace("~0", "~");
+    let layout = legacy::layout(app);
+    let Some(instance) = layout.instances.get(instance) else {
+        return;
+    };
+    let Some(manifest) = app.registry.get(&instance.widget).map(|w| &w.manifest) else {
+        return;
+    };
+    let mut items = manifest
+        .resolve_settings(&instance.settings)
+        .get(&name)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let other = index as i32 + delta;
+    if index < items.len() && other >= 0 && (other as usize) < items.len() {
+        items.swap(index, other as usize);
+        app.set(
+            &Edit::new(DocId::Widgets, path, "Move item"),
+            Value::Array(items),
+        );
+    }
+}
+
+pub fn can_add_widget(app: &App, id: &str) -> bool {
+    let Some(manifest) = app.registry.get(id).map(|w| &w.manifest) else {
+        return false;
+    };
+    let layout = legacy::layout(app);
+    let total = layout.instances.iter().filter(|i| i.widget == id).count();
+    let here = legacy::here(app, &layout)
+        .iter()
+        .filter(|i| i.widget == id)
+        .count();
+    manifest.instances.allows(total, here)
 }
 
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "Add a widget", "Choose one, then Add to your desktop");
-    field(app, b, c, FieldId::WidgetSearch, "Search widgets", "Name or description", "");
+    field(
+        app,
+        b,
+        c,
+        FieldId::WidgetSearch,
+        "Search widgets",
+        "Name or description",
+        "",
+    );
     let query = app.text(&FieldId::WidgetSearch).trim().to_lowercase();
     let selected = &app.panel.as_ref().unwrap().add_widget;
-    let builtins = ["clock", "calendar", "countdown", "crypto", "heatmap", "launcher", "media-pill", "notes", "now-playing", "photo", "quick-toggles", "quote", "rss", "system-monitor", "timer", "todo", "weather"];
+    let builtins = [
+        "clock",
+        "calendar",
+        "countdown",
+        "crypto",
+        "heatmap",
+        "launcher",
+        "media-pill",
+        "notes",
+        "now-playing",
+        "photo",
+        "quick-toggles",
+        "quote",
+        "rss",
+        "system-monitor",
+        "timer",
+        "todo",
+        "weather",
+    ];
     let mut categories = vec!["Your apps".to_owned()];
     for (id, widget) in &app.registry.widgets {
         if builtins.contains(&id.as_str()) {
             let category = widget.manifest.category.clone().unwrap_or("Other".into());
-            if !categories.contains(&category) { categories.push(category); }
+            if !categories.contains(&category) {
+                categories.push(category);
+            }
         }
     }
     let layout = legacy::layout(app);
     let mut count = 0;
     for category in categories {
-        let widgets: Vec<_> = app.registry.widgets.iter().filter(|(id, w)| {
-            let group = if builtins.contains(&id.as_str()) { w.manifest.category.as_deref().unwrap_or("Other") } else { "Your apps" };
-            group == category && format!("{} {}", w.manifest.name, w.manifest.description.as_deref().unwrap_or("")).to_lowercase().contains(&query)
-        }).collect();
-        if widgets.is_empty() { continue }
+        let widgets: Vec<_> = app
+            .registry
+            .widgets
+            .iter()
+            .filter(|(id, w)| {
+                let group = if builtins.contains(&id.as_str()) {
+                    w.manifest.category.as_deref().unwrap_or("Other")
+                } else {
+                    "Your apps"
+                };
+                group == category
+                    && format!(
+                        "{} {}",
+                        w.manifest.name,
+                        w.manifest.description.as_deref().unwrap_or("")
+                    )
+                    .to_lowercase()
+                    .contains(&query)
+            })
+            .collect();
+        if widgets.is_empty() {
+            continue;
+        }
         group(b, c, &category, |b, c| {
             for (id, widget) in widgets {
                 let manifest = &widget.manifest;
                 let already = layout.instances.iter().filter(|i| i.widget == *id).count();
-                let detail = if already > 0 { format!("{} · {already} on your desktop", manifest.description.as_deref().unwrap_or("")) } else { manifest.description.clone().unwrap_or_default() };
-                row(b, c, Some(legacy::glyph_of(id)), &manifest.name, "", &detail, Some(selected.as_deref() == Some(id)), Action::Panel(Command::PickWidget(id.clone())));
+                let detail = if already > 0 {
+                    format!(
+                        "{} · {already} on your desktop",
+                        manifest.description.as_deref().unwrap_or("")
+                    )
+                } else {
+                    manifest.description.clone().unwrap_or_default()
+                };
+                row(
+                    b,
+                    c,
+                    Some(legacy::glyph_of(id)),
+                    &manifest.name,
+                    "",
+                    &detail,
+                    Some(selected.as_deref() == Some(id)),
+                    Action::Panel(Command::PickWidget(id.clone())),
+                );
                 count += 1;
             }
         });
     }
-    if count == 0 { notice(b, c, "No widgets match this search."); }
-    notice(b, c, "New widgets land in the first free space. You can move them on the desktop.");
+    if count == 0 {
+        notice(b, c, "No widgets match this search.");
+    }
+    notice(
+        b,
+        c,
+        "New widgets land in the first free space. You can move them on the desktop.",
+    );
 }

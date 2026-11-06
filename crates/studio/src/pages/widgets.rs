@@ -752,7 +752,7 @@ fn add(app: &mut App, id: &str) {
 }
 
 /// Moves (dx, dy cells) or resizes (dw, dh) the selected widget, if the new place is free.
-fn nudge(app: &mut App, dx: i32, dy: i32, dw: i32, dh: i32) {
+pub(crate) fn nudge(app: &mut App, dx: i32, dy: i32, dw: i32, dh: i32) {
     let Some(id) = app.nav.widget.clone() else { return };
     let l = layout(app);
     let Some(n) = l.instances.iter().position(|i| i.instance == id) else { return };

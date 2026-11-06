@@ -28,6 +28,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         Action::Panel(Command::Done),
     );
     let mut x = done.left - b.px(6.0);
+    let editing = app.system.running();
     for (icon, label, enabled, action) in [
         (
             glyph::REDO,
@@ -42,6 +43,9 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             Action::Undo,
         ),
     ] {
+        if !editing {
+            continue;
+        }
         x -= b.px(26.0);
         icon_button(
             b,
@@ -53,12 +57,17 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         );
     }
     x -= b.px(8.0);
-    b.vline(x + b.px(2.0), b.px(15.0), b.px(33.0), b.p.line);
+    if editing {
+        b.vline(x + b.px(2.0), b.px(15.0), b.px(33.0), b.p.line);
+    }
     x -= b.px(4.0);
     for (icon, label) in [
         (glyph::EYE, "Peek (coming soon)"),
         (glyph::CLOCK, "History (Ctrl H)"),
     ] {
+        if !editing {
+            continue;
+        }
         x -= b.px(26.0);
         icon_button(
             b,
@@ -66,12 +75,25 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             icon,
             label,
             icon == glyph::CLOCK,
-            if icon == glyph::CLOCK { open(Page::History) } else { Action::None },
+            if icon == glyph::CLOCK {
+                open(Page::History)
+            } else {
+                Action::None
+            },
         );
     }
     let left = b.px(12.0);
-    let end = if let Some(parent) = page.parent() {
-        let back = Rect::new(left - b.px(4.0), b.px(10.0), b.px(80.0), b.px(28.0));
+    let parent = if matches!(page, Page::Module | Page::AddModule) && app.nav.bar == Some(Bar::Dock)
+    {
+        Some(Page::Dock)
+    } else {
+        page.parent()
+    };
+    let end = if let Some(parent) = parent {
+        let style = ui::font(b, 13.0, 500);
+        let width = (b.measure(parent.title(), &style).0 + b.px(24.0))
+            .min((x - left - b.px(8.0)).max(b.px(40.0)));
+        let back = Rect::new(left - b.px(4.0), b.px(10.0), width, b.px(28.0));
         b.icon(
             Rect::new(back.left, back.top, b.px(16.0), back.height()),
             glyph::CHEVRON_LEFT,
@@ -124,7 +146,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         text(
             b,
             Rect::new(caption_x, 0.0, x - caption_x, r.height()),
-            "Editing",
+            if editing { "Editing" } else { "Off" },
             12.0,
             400,
             b.p.ink3,
@@ -140,7 +162,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::Bars => bars(app, b, c),
         Page::Settings => settings(app, b, c),
         Page::Performance => performance(app, b, c),
-        Page::Top | Page::Dock => bar(app, b, c, page),
+        Page::Top | Page::Dock => super::editors::view(app, b, c, page),
         _ => super::editors::view(app, b, c, page),
     }
 }
@@ -420,7 +442,15 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
         b.px(60.0),
         b.px(28.0),
     );
-    button(b, add, "Add", Some(glyph::ADD), false, true, open(Page::AddWidget));
+    button(
+        b,
+        add,
+        "Add",
+        Some(glyph::ADD),
+        false,
+        true,
+        open(Page::AddWidget),
+    );
     title(
         b,
         c,
@@ -520,39 +550,37 @@ fn bars(app: &App, b: &mut B, c: &mut Col) {
         setting(app, b, c, "taskbar_mode", "Windows' taskbar", "");
     });
     if more(app, b, c, "Panels, per display") {
-        notice(
-            b,
-            c,
-            "Panel and per-display editors are coming to the panel.",
-        );
+        group(b, c, "", |b, c| {
+            row(
+                b,
+                c,
+                Some(glyph::TOGGLES),
+                "Panels",
+                "",
+                "Start, sound, calendar, tray and notifications",
+                None,
+                open(Page::Panels),
+            )
+        });
         group(b, c, "Windows' taskbar", |b, c| {
             setting(app, b, c, "taskbar_alignment", "Icons", "")
         });
     }
 }
 
-fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
-    title(
-        b,
-        c,
-        page.title(),
-        &format!("Display {}", app.nav.display + 1),
-    );
-    group(b, c, "", |b, c| {
-        let id = if page == Page::Top {
-            "top_enabled"
-        } else {
-            "dock_enabled"
-        };
-        setting(app, b, c, id, "Show", "");
-    });
-    notice(b, c, "Module and design editors are coming to the panel.");
-}
-
 fn settings(_app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "Settings", "mypaper and Studio");
     group(b, c, "", |b, c| {
-        row(b, c, Some(glyph::SLIDERS), "General", "", "Startup, Studio, history", None, open(Page::General));
+        row(
+            b,
+            c,
+            Some(glyph::SLIDERS),
+            "General",
+            "",
+            "Startup, Studio, history",
+            None,
+            open(Page::General),
+        );
         row(
             b,
             c,
@@ -565,9 +593,24 @@ fn settings(_app: &App, b: &mut B, c: &mut Col) {
         );
         for (icon, page, caption) in [
             (glyph::KEYBOARD, Page::Keyboard, "All shortcuts"),
-            (glyph::WRENCH, Page::Troubleshoot, "Parts, logs and recovery"),
+            (
+                glyph::WRENCH,
+                Page::Troubleshoot,
+                "Parts, logs and recovery",
+            ),
             (glyph::INFO, Page::About, "Version, licenses and credits"),
-        ] { row(b, c, Some(icon), page.title(), "", caption, None, open(page)); }
+        ] {
+            row(
+                b,
+                c,
+                Some(icon),
+                page.title(),
+                "",
+                caption,
+                None,
+                open(page),
+            );
+        }
     });
 }
 
@@ -660,7 +703,7 @@ pub fn toast(app: &App, b: &mut B, window: Rect) {
     };
     let r = Rect::new(
         b.px(16.0),
-        window.bottom - b.px(60.0),
+        window.bottom - b.px(60.0 + super::editors::footer_height(app)),
         window.width() - b.px(32.0),
         b.px(44.0),
     );

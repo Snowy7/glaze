@@ -79,7 +79,9 @@ pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B,
         w: c.w - b.px(24.0),
         view: c.view,
     };
-    content(b, &mut inner);
+    b.group(key(("panel-group", c.view, heading, start as i32)), |b| {
+        content(b, &mut inner)
+    });
     // The plate is inserted under its contents after their height is known.
     b.list.ops.insert(
         at,
@@ -119,7 +121,9 @@ pub fn button(
             b.p.fill
         },
     );
-    if !primary { b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge); }
+    if !primary {
+        b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
+    }
     let ink = if !enabled {
         b.p.ink3
     } else if primary {
@@ -161,7 +165,7 @@ pub fn button(
             id: u32::MAX - b.list.hits.len() as u32,
             rect: r,
             role: Role::Button,
-            label: format!("{label} (coming soon)").into(),
+            label: label.into(),
             enabled: false,
             checked: None,
         });
@@ -211,7 +215,12 @@ pub fn row(
 ) {
     let h = height(b, if caption.is_empty() { 40.0 } else { 56.0 });
     let r = Rect::new(c.x, c.y, c.w, h);
-    let k = key(("panel-row", c.view, label, caption));
+    let k = match &action {
+        Action::Panel(super::Command::ListRow(path, index)) => {
+            key(("panel-list-row", path.as_str(), index))
+        }
+        _ => key(("panel-row", c.view, label, caption)),
+    };
     let on = checked == Some(true);
     let area = Rect::new(c.x - b.px(8.0), c.y, c.w + b.px(16.0), h);
     if on {
@@ -309,8 +318,17 @@ pub fn row(
 
 pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, caption: &str) {
     let s = Setting::get(id).expect("panel uses known settings");
+    crate::ui::anchor(app, id, c.view, c.y);
     let value = app.value(s);
-    let edit = Edit::new(s.doc, s.path, s.label);
+    let edit = if let Some(field) = s.path.strip_prefix("/look/windows/") {
+        Edit::new(
+            crate::docs::DocId::Studio,
+            format!("/panel/windows/{field}"),
+            s.label,
+        )
+    } else {
+        Edit::new(s.doc, s.path, s.label)
+    };
     let h = height(b, if caption.is_empty() { 40.0 } else { 56.0 });
     let r = Rect::new(c.x, c.y, c.w, h);
     let text_h = if caption.is_empty() {
@@ -354,6 +372,17 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 label,
                 Action::Toggle(edit, on),
             );
+            b.stroke(
+                Rect::new(
+                    r.right - b.px(36.0),
+                    c.y + (h - b.px(20.0)) / 2.0,
+                    b.px(36.0),
+                    b.px(20.0),
+                ),
+                b.px(10.0),
+                b.px(1.0),
+                b.p.edge,
+            );
             c.y += h;
         }
         Kind::Select { options, .. } => {
@@ -361,12 +390,21 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 .iter()
                 .find(|(v, _)| serde_json::from_str::<Value>(v).is_ok_and(|v| v == value))
                 .map_or("Custom", |(_, l)| *l);
-            let width = b.px(164.0).min(c.w - label_w - b.px(8.0));
+            let stacked = c.w < b.px(360.0) || b.t.text_scale > 1.0;
+            let width = if stacked {
+                c.w
+            } else {
+                b.px(164.0).min(c.w - label_w - b.px(8.0))
+            };
             let control = Rect::new(
                 r.right - width,
-                c.y + (h - b.px(28.0)) / 2.0,
+                if stacked {
+                    c.y + height(b, if caption.is_empty() { 28.0 } else { 52.0 })
+                } else {
+                    c.y + (h - b.px(28.0)) / 2.0
+                },
                 width,
-                b.px(28.0),
+                height(b, 28.0),
             );
             let k = key(("panel-setting", id));
             b.fill(control, b.px(6.0), b.p.fill);
@@ -418,7 +456,11 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 Behavior::Click,
             );
             b.focus_ring(k, control, b.px(6.0));
-            c.y += h;
+            c.y = if stacked {
+                control.bottom + b.px(8.0)
+            } else {
+                r.bottom
+            };
         }
         Kind::Choice { options, .. } => {
             // Keep three values on one line at 480; stack within the plate at laptop widths
@@ -429,10 +471,17 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 .map(|(_, l)| b.measure(l, &style).0 + b.px(16.0))
                 .fold(0.0, f32::max);
             let required = cell * options.len() as f32;
-            let stacked = c.w - label_w - b.px(8.0) < required;
+            let stacked =
+                c.w < b.px(360.0) || b.t.text_scale > 1.0 || c.w - label_w - b.px(8.0) < required;
+            let vertical = required > c.w;
             let control = if stacked {
                 c.y += height(b, 30.0);
-                Rect::new(c.x, c.y, c.w, height(b, 30.0))
+                Rect::new(
+                    c.x,
+                    c.y,
+                    c.w,
+                    height(b, 30.0) * if vertical { options.len() as f32 } else { 1.0 },
+                )
             } else {
                 Rect::new(
                     r.right - required,
@@ -443,16 +492,30 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
             };
             b.fill(control, b.px(7.0), b.p.fill);
             b.stroke(control, b.px(7.0), b.px(1.0), b.p.edge);
-            let sw = control.width() / options.len() as f32;
+            let sw = if vertical {
+                control.width()
+            } else {
+                control.width() / options.len() as f32
+            };
             b.group(key(("panel-segment", id)), |b| {
                 for (i, (v, label)) in options.iter().enumerate() {
                     let v: Value = serde_json::from_str(v).expect("setting value");
                     let on = v == value;
                     let r = Rect::new(
-                        control.left + sw * i as f32 + b.px(2.0),
-                        control.top + b.px(2.0),
+                        control.left + if vertical { 0.0 } else { sw * i as f32 } + b.px(2.0),
+                        control.top
+                            + if vertical {
+                                height(b, 30.0) * i as f32
+                            } else {
+                                0.0
+                            }
+                            + b.px(2.0),
                         sw - b.px(4.0),
-                        control.height() - b.px(4.0),
+                        if vertical {
+                            height(b, 30.0)
+                        } else {
+                            control.height()
+                        } - b.px(4.0),
                     );
                     let k = key(("panel-segment", id, i));
                     if on {
@@ -491,7 +554,14 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 r.bottom
             };
         }
-        Kind::Slider { min, max, step, unit, factor, default } => {
+        Kind::Slider {
+            min,
+            max,
+            step,
+            unit,
+            factor,
+            default,
+        } => {
             let value = value.as_f64().unwrap_or(default);
             let stacked = c.w < b.px(360.0) || b.t.text_scale > 1.0;
             let control = if stacked {
@@ -499,14 +569,30 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
             } else {
                 Rect::new(c.x + label_w + b.px(8.0), c.y, c.w - label_w - b.px(8.0), h)
             };
-            b.slider(key(("panel-setting", id)), control, value, (min, max, step),
-                &format!("{:.0}{unit}", value * factor), b.px(48.0), label, Action::Slider(edit));
+            b.slider(
+                key(("panel-setting", id)),
+                control,
+                value,
+                (min, max, step),
+                &format!("{:.0}{unit}", value * factor),
+                b.px(48.0),
+                label,
+                Action::Slider(edit),
+            );
             c.y = control.bottom + if stacked { b.px(4.0) } else { 0.0 };
         }
         Kind::Text { placeholder } => {
             let control = Rect::new(c.x, c.y + height(b, 28.0), c.w, height(b, 32.0));
-            crate::ui::text_field(app, b, control, FieldId::Text(s.doc, s.path.into()), None,
-                placeholder, value.as_str().unwrap_or(""), label);
+            crate::ui::text_field(
+                app,
+                b,
+                control,
+                FieldId::Text(s.doc, s.path.into()),
+                None,
+                placeholder,
+                value.as_str().unwrap_or(""),
+                label,
+            );
             b.stroke(control, b.px(6.0), b.px(1.0), b.p.edge);
             c.y = control.bottom + b.px(8.0);
         }

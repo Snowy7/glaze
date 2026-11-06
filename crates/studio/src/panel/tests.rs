@@ -68,6 +68,14 @@ fn render_panel_pages() {
             (Page::DesktopMenu, "desktop-menu"),
             (Page::History, "history"),
             (Page::Search, "search"),
+            (Page::Module, "module"),
+            (Page::AddModule, "add-module"),
+            (Page::Panels, "panels"),
+            (Page::BarPanel, "start-menu"),
+            (Page::BarPanel, "calendar-panel"),
+            (Page::BarPanel, "sound-panel"),
+            (Page::BarPanel, "tray-panel"),
+            (Page::BarPanel, "notifications-panel"),
         ] {
             let mut app = app(&ui, dark);
             app.panel.as_mut().unwrap().page = page;
@@ -77,46 +85,121 @@ fn render_panel_pages() {
                 "photos" => {
                     let mut layout = crate::pages::widgets::layout(&app);
                     let mut photo = layout.instances[0].clone();
-                    photo.widget = "photo".into(); photo.instance = "photo-1".into(); photo.size = [6, 4];
-                    for (n, item) in app.library.items.iter().filter(|w| w.preview.is_some()).take(3).enumerate() {
-                        photo.settings.insert(format!("image{}", n + 1), json!(item.preview.as_ref().unwrap()));
+                    photo.widget = "photo".into();
+                    photo.instance = "photo-1".into();
+                    photo.size = [6, 4];
+                    for (n, item) in app
+                        .library
+                        .items
+                        .iter()
+                        .filter(|w| w.preview.is_some())
+                        .take(3)
+                        .enumerate()
+                    {
+                        photo.settings.insert(
+                            format!("image{}", n + 1),
+                            json!(mypaper_widgets::pick::data_url(
+                                "photo",
+                                "photo-1",
+                                &format!("{}.png", item.name)
+                            )),
+                        );
                     }
                     layout.instances.push(photo);
-                    app.docs.edit("Fixture", &[crate::docs::Op { doc: DocId::Widgets, path: String::new(), value: Some(serde_json::to_value(layout).unwrap()) }]).unwrap();
+                    app.docs
+                        .edit(
+                            "Fixture",
+                            &[crate::docs::Op {
+                                doc: DocId::Widgets,
+                                path: String::new(),
+                                value: Some(serde_json::to_value(layout).unwrap()),
+                            }],
+                        )
+                        .unwrap();
                     app.nav.widget = Some("photo-1".into());
                 }
-                "look-more" | "windows-more" => { app.nav.more.insert(mypaper_ui::controls::key(("panel-more", mypaper_ui::controls::key(("studio-panel", page))))); }
+                "look-more" | "windows-more" => {
+                    app.nav.more.insert(mypaper_ui::controls::key((
+                        "panel-more",
+                        mypaper_ui::controls::key(("studio-panel", page)),
+                    )));
+                }
                 "wallpaper-look" => app.nav.look_theme = true,
                 "wallpaper" => {
-                    app.nav.wallpaper = app.library.items.iter().position(|w| w.kind.is_some_and(crate::library::Kind::uses_fit));
+                    app.nav.wallpaper = app
+                        .library
+                        .items
+                        .iter()
+                        .position(|w| w.kind.is_some_and(crate::library::Kind::uses_fit));
                 }
                 "wallpapers-broken" | "wallpaper-broken" => {
                     let mut wallpaper = app.library.items[0].clone();
-                    wallpaper.id = "missing".into(); wallpaper.name = "beach-loop.mp4".into(); wallpaper.active = false;
+                    wallpaper.id = "missing".into();
+                    wallpaper.name = "beach-loop.mp4".into();
+                    wallpaper.active = false;
                     wallpaper.error = Some("The file was moved or is no longer available.".into());
                     wallpaper.origin = crate::library::Origin::User;
-                    app.library.items.insert(0, wallpaper); app.nav.filter = 1; app.nav.wallpaper = Some(0);
+                    app.library.items.insert(0, wallpaper);
+                    app.nav.filter = 1;
+                    app.nav.wallpaper = Some(0);
                 }
-                "add-wallpaper" => app.overlay = Some(crate::app::Overlay::AddWallpaper { source: None, picked: None }),
+                "add-wallpaper" => {
+                    app.overlay = Some(crate::app::Overlay::AddWallpaper {
+                        source: None,
+                        picked: None,
+                    })
+                }
                 "add-wallpaper-app" => {
-                    app.overlay = Some(crate::app::Overlay::AddWallpaper { source: Some(crate::actions::Source::App), picked: Some(r"C:\Apps\visualizer.exe".into()) });
-                    app.texts.insert(crate::actions::FieldId::AddName, "Visualizer".into());
-                    app.texts.insert(crate::actions::FieldId::AddArgs, "--embed {hwnd}".into());
+                    app.overlay = Some(crate::app::Overlay::AddWallpaper {
+                        source: Some(crate::actions::Source::App),
+                        picked: Some(r"C:\Apps\visualizer.exe".into()),
+                    });
+                    app.texts
+                        .insert(crate::actions::FieldId::AddName, "Visualizer".into());
+                    app.texts
+                        .insert(crate::actions::FieldId::AddArgs, "--embed {hwnd}".into());
                 }
                 "connection" => app.nav.integration = crate::pages::integrations::LIST.len(),
-                "connection-reconnect" => app.nav.integration = crate::pages::integrations::LIST.len() + 3,
+                "connection-reconnect" => {
+                    app.nav.integration = crate::pages::integrations::LIST.len() + 3
+                }
                 "history" => {
                     super::history::observe(&app);
                     app.run(Action::Preset("islands"));
                     super::history::observe(&app);
                     app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(0);
                 }
-                "search" => { app.texts.insert(crate::actions::FieldId::Palette, "wallpaper".into()); }
+                "search" => {
+                    app.texts
+                        .insert(crate::actions::FieldId::Palette, "wallpaper".into());
+                }
+                "top-bar" => app.nav.bar = Some(crate::actions::Bar::Top),
+                "dock" => app.nav.bar = Some(crate::actions::Bar::Dock),
+                "module" => {
+                    app.nav.bar = Some(crate::actions::Bar::Top);
+                    app.nav.module = Some(crate::actions::Slot {
+                        bar: crate::actions::Bar::Top,
+                        list: "right",
+                        index: 0,
+                    });
+                }
+                "add-module" => {
+                    app.nav.bar = Some(crate::actions::Bar::Top);
+                    app.panel.as_mut().unwrap().add_module = Some("media".into());
+                }
+                "start-menu" => app.nav.panel = Some(crate::actions::Panel::Start),
+                "calendar-panel" => app.nav.panel = Some(crate::actions::Panel::Calendar),
+                "sound-panel" => app.nav.panel = Some(crate::actions::Panel::Sound),
+                "tray-panel" => app.nav.panel = Some(crate::actions::Panel::Tray),
+                "notifications-panel" => app.nav.panel = Some(crate::actions::Panel::Notifications),
                 _ => {}
             }
+            app.toast = None;
             let built = super::build(&app, &mut ui.text);
             let content = built.scrolls.last().unwrap().content;
-            app.size.1 = (content + 48.0 + super::editors::footer_height(&app)).ceil().clamp(160.0, 760.0) as u32;
+            app.size.1 = (content + 48.0 + super::editors::footer_height(&app))
+                .ceil()
+                .clamp(160.0, 760.0) as u32;
             let built = super::build(&app, &mut ui.text);
             let image = render(&mut ui, &built.list, 480, app.size.1).unwrap();
             let path = out.join(format!(
@@ -130,7 +213,14 @@ fn render_panel_pages() {
                 app.size.1 = (content + 48.0 + super::editors::footer_height(&app)).ceil() as u32;
                 let built = super::build(&app, &mut ui.text);
                 let image = render(&mut ui, &built.list, 480, app.size.1).unwrap();
-                golden::write(&image, &out.join(format!("{name}-full-{}.png", if dark { "dark" } else { "light" }))).unwrap();
+                golden::write(
+                    &image,
+                    &out.join(format!(
+                        "{name}-full-{}.png",
+                        if dark { "dark" } else { "light" }
+                    )),
+                )
+                .unwrap();
             }
         }
     }
@@ -222,8 +312,33 @@ fn panel_controls_stay_inside_laptop_and_scaled_widths() {
             Page::Bars,
             Page::Settings,
             Page::Performance,
+            Page::Widget,
+            Page::AddWidget,
+            Page::Look,
+            Page::Windows,
+            Page::Wallpapers,
+            Page::Wallpaper,
+            Page::AddWallpaper,
+            Page::Connections,
+            Page::Connection,
+            Page::General,
+            Page::Keyboard,
+            Page::Troubleshoot,
+            Page::About,
+            Page::DesktopMenu,
+            Page::History,
+            Page::Search,
+            Page::Top,
+            Page::Dock,
+            Page::Module,
+            Page::AddModule,
+            Page::Panels,
+            Page::BarPanel,
         ] {
             app.panel.as_mut().unwrap().page = page;
+            if page == Page::Widget {
+                app.nav.widget = Some("weather-1".into());
+            }
             let built = super::build(&app, &mut ui.text);
             if page == Page::Performance && text_scale == 1.0 {
                 for label in ["On battery", "Like Windows", "Always", "Never"] {
@@ -258,4 +373,168 @@ fn placement_uses_work_area_and_display_dpi() {
     assert_eq!(super::bounds(screen, work, 1.0), (1432, 40, 480, 944));
     // 1920 physical px at 150% is a 1280-DIP laptop display: 360 DIPs, not 480.
     assert_eq!(super::bounds(screen, work, 1.5), (1368, 60, 540, 876));
+}
+
+#[test]
+fn consecutive_live_picks_share_an_undo_step_and_history_row() {
+    let ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    let bars = app.docs.doc(DocId::Bars).raw.clone();
+    super::history::observe(&app);
+    for preset in ["islands", "windows11", "floating"] {
+        app.run(Action::Preset(preset));
+    }
+    assert_eq!(app.docs.undo_count(), 1);
+    assert_eq!(
+        app.panel.as_ref().unwrap().history.borrow().entries.len(),
+        2
+    );
+    app.run(Action::Undo);
+    assert_eq!(app.docs.doc(DocId::Bars).raw, bars);
+    app.run(Action::Redo);
+    assert_eq!(app.get(DocId::Bars, "/preset"), Some(&json!("floating")));
+    super::run(&mut app, Command::Open(Page::Root));
+    app.run(Action::Preset("macos"));
+    assert_eq!(
+        app.docs.undo_count(),
+        2,
+        "leaving the list ends the pick sequence"
+    );
+}
+
+#[test]
+fn restoring_a_desktop_preserves_settings_connections_and_later_rows() {
+    let ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    let bars = app.docs.doc(DocId::Bars).raw.clone();
+    super::history::observe(&app);
+    app.run(Action::Preset("islands"));
+    let count = app.panel.as_ref().unwrap().history.borrow().entries.len();
+    for (doc, path, value) in [
+        (DocId::Config, "/engine/fps", json!(60)),
+        (DocId::Bars, "/performance", json!("on")),
+        (DocId::Bars, "/animation/reduceMotion", json!("always")),
+        (DocId::Integrations, "/media/enabled", json!(false)),
+    ] {
+        app.run(Action::Set(
+            crate::actions::Edit::new(doc, path, "Settings"),
+            value,
+        ));
+    }
+    assert_eq!(
+        app.panel.as_ref().unwrap().history.borrow().entries.len(),
+        count
+    );
+    super::run(&mut app, Command::History(0));
+    super::run(&mut app, Command::Restore);
+    assert_eq!(app.get(DocId::Bars, "/preset"), bars.pointer("/preset"));
+    assert_eq!(app.get(DocId::Config, "/engine/fps"), Some(&json!(60)));
+    assert_eq!(app.get(DocId::Bars, "/performance"), Some(&json!("on")));
+    assert_eq!(
+        app.get(DocId::Bars, "/animation/reduceMotion"),
+        Some(&json!("always"))
+    );
+    assert_eq!(
+        app.get(DocId::Integrations, "/media/enabled"),
+        Some(&json!(false))
+    );
+    assert!(
+        app.panel
+            .as_ref()
+            .unwrap()
+            .history
+            .borrow()
+            .entries
+            .iter()
+            .any(|e| e.title == "Islands preset")
+    );
+    app.run(Action::Undo);
+    assert_eq!(
+        app.get(DocId::Bars, "/preset"),
+        Some(&json!("islands")),
+        "restore is one undoable jump"
+    );
+}
+
+#[test]
+fn widget_creation_is_staged_and_search_opens_panel_pages() {
+    let ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    let original = app.docs.doc(DocId::Widgets).raw.clone();
+    super::run(&mut app, Command::Open(Page::AddWidget));
+    super::run(&mut app, Command::PickWidget("notes".into()));
+    assert_eq!(app.docs.doc(DocId::Widgets).raw, original);
+    super::run(&mut app, Command::Back);
+    assert_eq!(app.docs.doc(DocId::Widgets).raw, original);
+    super::run(&mut app, Command::Open(Page::AddWidget));
+    super::run(&mut app, Command::AddWidget);
+    assert_eq!(app.panel.as_ref().unwrap().page, Page::Widget);
+    assert_eq!(crate::pages::widgets::layout(&app).instances.len(), 7);
+    app.texts
+        .insert(crate::actions::FieldId::Palette, "on battery".into());
+    let results = crate::search::results(&app);
+    let i = results
+        .iter()
+        .position(|e| e.id == "setting:pause_on_battery")
+        .unwrap();
+    super::run(&mut app, Command::Search(i));
+    assert_eq!(app.panel.as_ref().unwrap().page, Page::Performance);
+    assert!(
+        DocId::ALL
+            .into_iter()
+            .all(|id| app.docs.doc(id).path.is_none())
+    );
+}
+
+#[test]
+fn windows_as_is_is_explicit_and_escape_leaves_the_add_page() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    super::run(&mut app, Command::Open(Page::Windows));
+    let built = super::build(&app, &mut ui.text);
+    let action = built.targets.iter().find(|t| matches!(&t.action, Action::Set(edit, value) if edit.path.as_ref() == "/panel/windows/corners" && value.is_null())).unwrap().action.clone();
+    app.run(action);
+    assert_eq!(
+        app.docs
+            .doc(DocId::Config)
+            .raw
+            .pointer("/look/windows/corners"),
+        Some(&serde_json::Value::Null)
+    );
+    super::run(&mut app, Command::Open(Page::AddWallpaper));
+    app.key_with(0x1B, (false, false, false));
+    assert_eq!(app.panel.as_ref().unwrap().page, Page::Wallpapers);
+    assert!(app.overlay.is_none());
+    assert!(!app.quit);
+    let city =
+        crate::actions::FieldId::Text(DocId::Widgets, "/instances/0/settings/zones/0/tz".into());
+    assert_eq!(
+        super::field_initial(&app, &city).as_deref(),
+        Some("America/New_York")
+    );
+}
+
+#[test]
+fn keyboard_can_reorder_menu_items_without_removing_them() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    super::run(&mut app, Command::Open(Page::DesktopMenu));
+    let built = super::build(&app, &mut ui.text);
+    app.frame.targets = built.targets;
+    app.input.focus = Some(mypaper_ui::controls::key(("menu-item", 0usize)));
+    app.key_with(0x28, (false, false, true));
+    let items = app
+        .get(DocId::Config, "/desktop_menu/items")
+        .and_then(serde_json::Value::as_array)
+        .unwrap();
+    assert_eq!(items[0], json!("sort"));
+    assert_eq!(items[1], json!("view"));
+    assert_eq!(
+        items.len(),
+        mypaper_config::desktop_menu::default_items().len()
+    );
+    assert_eq!(
+        app.input.focus,
+        Some(mypaper_ui::controls::key(("menu-item", 1usize)))
+    );
 }

@@ -52,6 +52,10 @@ pub enum Page {
     About,
     History,
     Search,
+    Module,
+    AddModule,
+    Panels,
+    BarPanel,
 }
 
 impl Page {
@@ -80,17 +84,28 @@ impl Page {
             Self::About => "About",
             Self::History => "History",
             Self::Search => "Search",
+            Self::Module => "Module",
+            Self::AddModule => "Add a module",
+            Self::Panels => "Panels",
+            Self::BarPanel => "Panel",
         }
     }
 
     fn parent(self) -> Option<Self> {
         match self {
             Self::Root => None,
-            Self::Performance | Self::General | Self::Keyboard | Self::Troubleshoot | Self::About => Some(Self::Settings),
+            Self::Performance
+            | Self::General
+            | Self::Keyboard
+            | Self::Troubleshoot
+            | Self::About => Some(Self::Settings),
             Self::Top | Self::Dock => Some(Self::Bars),
             Self::Widget | Self::AddWidget => Some(Self::Widgets),
             Self::Wallpaper | Self::AddWallpaper => Some(Self::Wallpapers),
             Self::Connection => Some(Self::Connections),
+            Self::Module | Self::AddModule => Some(Self::Top),
+            Self::Panels => Some(Self::Bars),
+            Self::BarPanel => Some(Self::Panels),
             _ => Some(Self::Root),
         }
     }
@@ -101,7 +116,9 @@ pub struct State {
     pub page: Page,
     pub add_widget: Option<String>,
     pub category: Option<String>,
+    pub add_module: Option<String>,
     pub history: std::cell::RefCell<history::History>,
+    auto_left: std::cell::Cell<Option<bool>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -121,6 +138,14 @@ pub enum Command {
     CancelRestore,
     ClearHistory,
     Side(bool),
+    PickAsset(String),
+    MovePhotos(usize, i32),
+    PickModule(String),
+    AddModule,
+    MoveList(String, usize, i32),
+    MenuItem(usize),
+    ListRow(String, usize),
+    PhotoRow(usize),
 }
 
 pub fn run(app: &mut App, command: Command) {
@@ -128,68 +153,240 @@ pub fn run(app: &mut App, command: Command) {
     if app.panel.is_none() {
         return;
     }
+    let keep_focus = matches!(
+        &command,
+        Command::MenuItem(_)
+            | Command::ListRow(_, _)
+            | Command::PhotoRow(_)
+            | Command::PickWidget(_)
+            | Command::PickModule(_)
+    );
     match command {
         Command::Open(page) => {
             app.overlay = None;
+            if page == Page::AddWallpaper {
+                app.overlay = Some(crate::app::Overlay::AddWallpaper {
+                    source: None,
+                    picked: None,
+                });
+            }
             app.panel.as_mut().unwrap().page = page;
-            if page == Page::Performance && !app.fixture { app.system.gpus(); }
-            if page == Page::Top { app.nav.bar = Some(crate::actions::Bar::Top); }
-            if page == Page::Dock { app.nav.bar = Some(crate::actions::Bar::Dock); }
+            app.nav.page = Some(match page {
+                Page::Wallpapers | Page::Wallpaper | Page::AddWallpaper => {
+                    crate::actions::Page::Wallpapers
+                }
+                Page::Look | Page::Windows => crate::actions::Page::Look,
+                Page::Widgets | Page::Widget | Page::AddWidget => crate::actions::Page::Widgets,
+                Page::Bars
+                | Page::Top
+                | Page::Dock
+                | Page::Module
+                | Page::AddModule
+                | Page::Panels
+                | Page::BarPanel => crate::actions::Page::Bars,
+                Page::Connections | Page::Connection => crate::actions::Page::Integrations,
+                Page::Settings
+                | Page::General
+                | Page::Performance
+                | Page::Keyboard
+                | Page::Troubleshoot
+                | Page::About
+                | Page::DesktopMenu => crate::actions::Page::Settings,
+                _ => crate::actions::Page::Home,
+            });
+            if page == Page::Widgets {
+                app.nav.widget = None;
+            }
+            if page == Page::Performance && !app.fixture {
+                app.system.gpus();
+            }
+            if page == Page::Top {
+                app.nav.bar = Some(crate::actions::Bar::Top);
+            }
+            if page == Page::Dock {
+                app.nav.bar = Some(crate::actions::Bar::Dock);
+            }
+            if matches!(page, Page::Top | Page::Dock) {
+                app.nav.module = None;
+            }
             if page == Page::Connections {
                 app.nav.page = Some(crate::actions::Page::Integrations);
                 app.nav.plugins = true;
-                if !app.fixture { app.plugins.refresh(); }
+                if !app.fixture {
+                    app.plugins.refresh();
+                }
             }
             app.nav.look_windows = page == Page::Windows;
         }
         Command::Back => {
             app.overlay = None;
             let state = app.panel.as_mut().unwrap();
-            state.page = state.page.parent().unwrap_or(Page::Root);
+            if state.page == Page::Module
+                || app.nav.module.is_some() && matches!(state.page, Page::Top | Page::Dock)
+            {
+                app.nav.module = None;
+                state.page = if app.nav.bar == Some(crate::actions::Bar::Dock) {
+                    Page::Dock
+                } else {
+                    Page::Top
+                };
+            } else if state.page == Page::AddModule {
+                state.page = if app.nav.bar == Some(crate::actions::Bar::Dock) {
+                    Page::Dock
+                } else {
+                    Page::Top
+                };
+            } else {
+                state.page = state.page.parent().unwrap_or(Page::Root);
+            }
             state.history.borrow_mut().selected = None;
         }
         Command::Done => app.quit = true,
         Command::PickWidget(id) => app.panel.as_mut().unwrap().add_widget = Some(id),
         Command::AddWidget => {
             if let Some(id) = app.panel.as_ref().unwrap().add_widget.clone() {
+                if !editors::can_add_widget(app, &id) {
+                    app.alert("This widget has reached its instance limit");
+                    return;
+                }
                 app.run(Action::AddWidget(id));
-                if app.nav.widget.is_some() { app.panel.as_mut().unwrap().page = Page::Widget; }
+                if app.nav.widget.is_some() {
+                    app.panel.as_mut().unwrap().page = Page::Widget;
+                }
             }
         }
-        Command::Wallpaper(i) => { app.nav.wallpaper = Some(i); app.panel.as_mut().unwrap().page = Page::Wallpaper; }
-        Command::Connection(i) => { app.nav.integration = i; app.panel.as_mut().unwrap().page = Page::Connection; }
-        Command::Scope(theme) => { app.nav.look_theme = theme; app.panel.as_mut().unwrap().page = Page::Look; }
+        Command::Wallpaper(i) => {
+            app.nav.wallpaper = Some(i);
+            app.panel.as_mut().unwrap().page = Page::Wallpaper;
+        }
+        Command::Connection(i) => {
+            app.nav.integration = i;
+            app.panel.as_mut().unwrap().page = Page::Connection;
+        }
+        Command::Scope(theme) => {
+            app.nav.look_theme = theme;
+            app.panel.as_mut().unwrap().page = Page::Look;
+        }
         Command::Category(category) => app.panel.as_mut().unwrap().category = category,
         Command::Search(i) => editors::run_search(app, i),
         Command::History(i) => app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(i),
         Command::Restore => history::restore(app),
         Command::CancelRestore => app.panel.as_ref().unwrap().history.borrow_mut().selected = None,
-        Command::ClearHistory => *app.panel.as_ref().unwrap().history.borrow_mut() = history::History::default(),
-        Command::Side(left) => app.set(&crate::actions::Edit::new(crate::docs::DocId::Studio, "/panel_side", "Panel side"), serde_json::json!(if left { "left" } else { "right" })),
+        Command::ClearHistory => history::clear(app),
+        Command::Side(left) => app.set(
+            &crate::actions::Edit::new(crate::docs::DocId::Studio, "/panel_side", "Panel side"),
+            serde_json::json!(if left { "left" } else { "right" }),
+        ),
+        Command::PickAsset(path) => editors::pick_asset(app, &path),
+        Command::MovePhotos(index, delta) => editors::move_photos(app, index, delta),
+        Command::PickModule(id) => app.panel.as_mut().unwrap().add_module = Some(id),
+        Command::AddModule => editors::insert_module(app),
+        Command::MoveList(path, index, delta) => editors::move_list(app, &path, index, delta),
+        Command::MenuItem(index) => app.input.focus = Some(key(("menu-item", index))),
+        Command::ListRow(path, index) => {
+            let disclosure = key(("panel-list-item", path.as_str(), index));
+            app.run(Action::More(disclosure));
+        }
+        Command::PhotoRow(index) => app.input.focus = Some(key(("panel-photo-row", index))),
     }
-    app.input.focus = None;
+    if !keep_focus {
+        app.input.focus = None;
+    }
     app.input.hover = None;
     app.dirty = true;
 }
 
 /// Panel shortcuts are resolved before the legacy app's page shortcuts.
-pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, _alt): (bool, bool, bool)) -> bool {
-    if pick_client::on_key(app, vk) { return true; }
+pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) -> bool {
+    if pick_client::on_key(app, vk) {
+        return true;
+    }
+    if !ctrl
+        && vk == 0x1B
+        && app.field.is_none()
+        && app
+            .panel
+            .as_ref()
+            .is_some_and(|s| s.page == Page::AddWallpaper)
+    {
+        run(app, Command::Back);
+        return true;
+    }
     if !ctrl && vk == 0x0D && app.field.as_ref().is_some_and(|f| f.id == FieldId::Palette) {
         app.blur_field();
         app.panel.as_mut().unwrap().page = Page::Search;
         return true;
     }
     if !ctrl {
+        if alt && matches!(vk, 0x26 | 0x28) && app.field.is_none() {
+            let action = app
+                .input
+                .focus
+                .and_then(|key| app.frame.targets.iter().find(|t| t.key == key))
+                .map(|t| t.action.clone());
+            let delta = if vk == 0x26 { -1 } else { 1 };
+            match action {
+                Some(Action::Panel(Command::MenuItem(index))) => {
+                    app.run(Action::MenuMove(index, delta))
+                }
+                Some(Action::Panel(Command::ListRow(path, index))) => {
+                    editors::move_list(app, &path, index, delta);
+                    let to = (index as i32 + delta).max(0) as usize;
+                    app.input.focus = Some(key(("panel-list-row", path.as_str(), to)));
+                }
+                Some(Action::Panel(Command::PhotoRow(index))) => {
+                    editors::move_photos(app, index, delta);
+                    app.input.focus = Some(key((
+                        "panel-photo-row",
+                        (index as i32 + delta).clamp(0, 5) as usize,
+                    )));
+                }
+                _ => return false,
+            }
+            return true;
+        }
+        if app.panel.as_ref().is_some_and(|s| s.page == Page::Widget)
+            && app.field.is_none()
+            && app.input.focus.is_none()
+        {
+            let (dx, dy) = match vk {
+                0x25 => (-1, 0),
+                0x27 => (1, 0),
+                0x26 => (0, -1),
+                0x28 => (0, 1),
+                0x2E => {
+                    app.run(Action::RemoveWidget);
+                    return true;
+                }
+                _ => return false,
+            };
+            if shift {
+                crate::pages::widgets::nudge(app, 0, 0, dx, dy);
+            } else {
+                crate::pages::widgets::nudge(app, dx, dy, 0, 0);
+            }
+            return true;
+        }
         return false;
     }
     match vk {
         0x5A if !shift => app.run(Action::Undo),
         0x5A | 0x59 => app.run(Action::Redo),
         0x57 => run(app, Command::Done),
-        0x4B | 0x46 => {
+        0x4B => {
             run(app, Command::Open(Page::Root));
             app.focus_field(FieldId::Palette);
+        }
+        0x46 => {
+            let field = match app.panel.as_ref().unwrap().page {
+                Page::Wallpapers => FieldId::WallpaperSearch,
+                Page::AddWidget => FieldId::WidgetSearch,
+                _ => {
+                    run(app, Command::Open(Page::Root));
+                    FieldId::Palette
+                }
+            };
+            app.focus_field(field);
         }
         0x31..=0x37 => run(
             app,
@@ -225,7 +422,10 @@ pub fn palette_for(app: &App) -> mypaper_ui::controls::Palette {
 pub fn build(app: &App, text: &mut Text) -> Built {
     pick_client::connect(app);
     history::observe(app);
-    let page = app.panel.as_ref().map_or(Page::Root, |s| s.page);
+    let mut page = app.panel.as_ref().map_or(Page::Root, |s| s.page);
+    if matches!(page, Page::Top | Page::Dock) && app.nav.module.is_some() {
+        page = Page::Module;
+    }
     let p = palette_for(app);
     let ty = app.theme.ty.clone();
     let mut b = Builder::new(text, &p, &ty, app.scale, &app.input);
@@ -253,10 +453,17 @@ pub fn build(app: &App, text: &mut Text) -> Built {
                 controls::notice(b, &mut c, &format!("{}: {error}", id.label()));
             }
         }
+        if !app.system.running() {
+            controls::notice(b, &mut c, "mypaper is off. Changes apply when it starts.");
+        }
         pages::view(app, b, &mut c, page);
         c.y + b.px(16.0)
     });
-    editors::footer(app, &mut b, Rect::new(0.0, body.bottom, window.width(), app.px(footer)));
+    editors::footer(
+        app,
+        &mut b,
+        Rect::new(0.0, body.bottom, window.width(), app.px(footer)),
+    );
     pages::toast(app, &mut b, window);
     Built {
         list: b.list,
@@ -281,19 +488,63 @@ pub fn placement(app: &App) -> (i32, i32, i32, i32) {
     let screen = monitor.map_or(fallback, |m| m.rect);
     let scale = monitor.map_or(app.scale, |m| m.dpi as f32 / 96.0);
     let mut rect = bounds(screen, work, scale);
-    if app.get(crate::docs::DocId::Studio, "/panel_side").and_then(serde_json::Value::as_str) == Some("left") {
+    let saved = app
+        .get(crate::docs::DocId::Studio, "/panel_side")
+        .and_then(serde_json::Value::as_str);
+    let left = match saved {
+        Some("left") => true,
+        Some("right") => false,
+        _ => app.panel.as_ref().is_some_and(|state| {
+            state.auto_left.get().unwrap_or_else(|| {
+                let left = first_side(app, work, rect);
+                state.auto_left.set(Some(left));
+                left
+            })
+        }),
+    };
+    if left {
         rect.0 = work.x + (8.0 * scale).round() as i32;
     }
     rect
 }
 
+/// On the first open, prefer the side with less of the foreground work window in it.
+/// Cache that decision so the panel never jumps when focus changes. An explicit side is saved.
+fn first_side(app: &App, work: mypaper_desktop::Rect, right: (i32, i32, i32, i32)) -> bool {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
+    let mut foreground = RECT::default();
+    // SAFETY: read-only geometry of the foreground window; no windows are moved or activated.
+    let ok = unsafe {
+        let window = GetForegroundWindow();
+        app.window != Some(window) && GetWindowRect(window, &mut foreground).is_ok()
+    };
+    if !ok {
+        return false;
+    }
+    let overlap = |x: i32| {
+        let width = (foreground.right.min(x + right.2) - foreground.left.max(x)).max(0);
+        let height =
+            (foreground.bottom.min(right.1 + right.3) - foreground.top.max(right.1)).max(0);
+        i64::from(width) * i64::from(height)
+    };
+    overlap(right.0) > overlap(work.x + (right.0 + right.2 - work.x - work.width).abs())
+}
+
 /// Fit the client to measured page content; retain the desktop bands as the upper limit.
 pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -> bool {
-    let Some(area) = built.scrolls.last() else { return false };
+    let Some(area) = built.scrolls.last() else {
+        return false;
+    };
     let mut rect = placement(app);
     rect.3 = (area.content + app.px(48.0 + editors::footer_height(app))).ceil() as i32;
-    rect.3 = rect.3.clamp((app.px(160.0) as i32).min(placement(app).3), placement(app).3);
-    if surface.client_size() == (rect.2 as u32, rect.3 as u32) { return false }
+    rect.3 = rect.3.clamp(
+        (app.px(160.0) as i32).min(placement(app).3),
+        placement(app).3,
+    );
+    if surface.client_size() == (rect.2 as u32, rect.3 as u32) {
+        return false;
+    }
     fit_client(surface, rect);
     app.size = surface.client_size();
     true
@@ -301,7 +552,38 @@ pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -
 
 /// One additive bridge into the legacy action dispatcher, shared with desktop picking.
 pub fn before_action(app: &mut App, action: &Action) {
-    let Some(state) = app.panel.as_mut() else { return };
+    history::observe(app);
+    if matches!(action, Action::AddCommit(_))
+        && app
+            .panel
+            .as_ref()
+            .is_some_and(|s| s.page == Page::AddWallpaper)
+        && matches!(
+            &app.overlay,
+            Some(crate::app::Overlay::AddWallpaper {
+                source: Some(crate::actions::Source::Web),
+                picked: None
+            })
+        )
+        && app.text(&FieldId::AddName).trim().is_empty()
+    {
+        let name = crate::library::suggested_name(app.text(&FieldId::AddUrl));
+        app.texts.insert(FieldId::AddName, name);
+    }
+    if matches!(
+        action,
+        Action::Panel(Command::Open(_) | Command::Back | Command::Scope(_))
+            | Action::Undo
+            | Action::Redo
+            | Action::Field(_)
+    ) {
+        if let Some(state) = &app.panel {
+            state.history.borrow_mut().end_picks();
+        }
+    }
+    let Some(state) = app.panel.as_mut() else {
+        return;
+    };
     match action {
         Action::SelectWidget(Some(_)) => state.page = Page::Widget,
         Action::SelectWidget(None) | Action::RemoveWidget => state.page = Page::Widgets,
@@ -309,8 +591,128 @@ pub fn before_action(app: &mut App, action: &Action) {
         Action::AddWallpaper => state.page = Page::AddWallpaper,
         Action::SelectIntegration(_) => state.page = Page::Connection,
         Action::LookScope(_) => state.page = Page::Look,
+        Action::SelectModule(Some(_)) => state.page = Page::Module,
+        Action::SelectModule(None) => {
+            state.page = if app.nav.bar == Some(crate::actions::Bar::Dock) {
+                Page::Dock
+            } else {
+                Page::Top
+            }
+        }
+        Action::SelectPanel(Some(_)) => state.page = Page::BarPanel,
+        Action::SelectPanel(None) => state.page = Page::Panels,
+        Action::AddModule(_) => state.page = Page::AddModule,
         _ => {}
     }
+}
+
+pub fn after_action(app: &mut App) {
+    let Some(state) = app.panel.as_mut() else {
+        return;
+    };
+    // The panel presents creation as a pushed page; legacy actions still own its source data.
+    if state.page == Page::AddWidget && matches!(app.overlay, Some(crate::app::Overlay::AddWidget))
+    {
+        app.overlay = None;
+    }
+    if state.page == Page::AddModule
+        && matches!(app.overlay, Some(crate::app::Overlay::AddModule { .. }))
+    {
+        app.overlay = None;
+    }
+    if state.page == Page::Module && app.nav.module.is_none() {
+        state.page = if app.nav.bar == Some(crate::actions::Bar::Dock) {
+            Page::Dock
+        } else {
+            Page::Top
+        };
+    }
+    if state.page == Page::AddWallpaper && app.overlay.is_none() && app.nav.wallpaper.is_some() {
+        state.page = Page::Wallpaper;
+    }
+}
+
+pub fn record_edit(app: &mut App, label: &str, ops: &[crate::docs::Op], checkpoint: usize) {
+    history::record_edit(app, label, ops, checkpoint);
+}
+
+pub fn record_drag(app: &App, label: &str) {
+    history::record_drag(app, label);
+}
+
+/// Windows' explicit null means keep Windows' own value, whereas missing inherits the wallpaper.
+pub fn intercept_set(
+    app: &mut App,
+    edit: &crate::actions::Edit,
+    value: &serde_json::Value,
+) -> bool {
+    if app.panel.is_none() || edit.doc != crate::docs::DocId::Studio {
+        return false;
+    }
+    let Some(field) = edit.path.strip_prefix("/panel/windows/") else {
+        return false;
+    };
+    if ![
+        "accent",
+        "corners",
+        "backdrop",
+        "apps",
+        "cursors",
+        "border",
+        "caption",
+        "caption_text",
+    ]
+    .contains(&field)
+    {
+        return false;
+    }
+    app.apply(
+        &edit.label,
+        vec![crate::docs::Op {
+            doc: crate::docs::DocId::Config,
+            path: format!("/look/windows/{field}"),
+            value: Some(value.clone()),
+        }],
+    );
+    true
+}
+
+/// Manifest defaults and transient drafts aren't stored in the raw documents yet.
+pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
+    if app.panel.is_none() {
+        return None;
+    }
+    if let Some(value) = app.texts.get(id) {
+        return Some(value.clone());
+    }
+    let FieldId::Text(doc, path) = id else {
+        return None;
+    };
+    if *doc == crate::docs::DocId::Widgets {
+        let parts: Vec<_> = path.split('/').collect();
+        if parts.get(1) != Some(&"instances") || parts.get(3) != Some(&"settings") {
+            return None;
+        }
+        let index = parts.get(2)?.parse::<usize>().ok()?;
+        let layout = crate::pages::widgets::layout(app);
+        let instance = layout.instances.get(index)?;
+        let manifest = &app.registry.get(&instance.widget)?.manifest;
+        let resolved = serde_json::Value::Object(manifest.resolve_settings(&instance.settings));
+        let pointer = format!("/{}", parts.get(4..)?.join("/"));
+        return resolved.pointer(&pointer).map(|value| {
+            value.as_str().map_or_else(
+                || {
+                    if value.is_null() {
+                        String::new()
+                    } else {
+                        value.to_string()
+                    }
+                },
+                str::to_owned,
+            )
+        });
+    }
+    None
 }
 
 /// `Surface::place` sizes the outer Win32 frame. Compensate for its invisible resize
