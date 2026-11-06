@@ -20,6 +20,20 @@ fn plugin_status<'a>(app: &'a App, id: &str) -> &'a str {
         })
 }
 
+pub fn summary(app: &App) -> String {
+    let connected = legacy::LIST
+        .iter()
+        .filter(|item| legacy::enabled(app, item))
+        .count()
+        + app
+            .plugins
+            .installed
+            .iter()
+            .filter(|plugin| plugin_status(app, &plugin.id) != "Available")
+            .count();
+    format!("{connected} connected")
+}
+
 pub fn list(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "Connections", "Your apps and built-in data sources");
     for name in ["Connected", "Built in", "Available"] {
@@ -66,11 +80,12 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                         .collect::<Vec<_>>()
                         .join(", ");
                     if faces.is_empty() {
-                        format!(
-                            "{} · {}",
-                            item.version.as_deref().unwrap_or("Plugin"),
-                            item.author.as_deref().unwrap_or("")
-                        )
+                        [item.version.as_deref(), item.author.as_deref()]
+                            .into_iter()
+                            .flatten()
+                            .filter(|text| !text.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" · ")
                     } else {
                         faces
                     }
@@ -123,6 +138,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     {
         let status = plugin_status(app, &plugin.id);
         title(b, c, &plugin.name, status);
+        crate::panel::controls::displays(app, b, c);
         let disabled = app.plugins.preferences.disabled.contains(&plugin.id);
         let needs_attention = status.starts_with("Stopped") || status.starts_with("Restarting");
         if disabled || needs_attention || status == "Available" {
@@ -299,6 +315,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
             "Built in · Off"
         },
     );
+    crate::panel::controls::displays(app, b, c);
     group(b, c, "Connection", |b, c| {
         notice(b, c, item.adds);
         if item.section.is_some() {
@@ -373,7 +390,8 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
 
 fn module_shown(app: &App, id: &str, bar: crate::actions::Bar) -> bool {
     ["left", "center", "right"].iter().any(|side| {
-        app.get(DocId::Bars, &format!("/{}/{side}", bar.key()))
+        bar_value(app, &format!("/{}/{side}", bar.key()))
+            .as_ref()
             .and_then(Value::as_array)
             .is_some_and(|list| list.iter().any(|m| m.as_str() == Some(id)))
     })
@@ -384,9 +402,10 @@ pub fn connection_module(app: &mut App, id: &str, bar: crate::actions::Bar, on: 
         .into_iter()
         .filter(|side| bar != crate::actions::Bar::Dock || *side != "center")
         .filter_map(|side| {
-            let path = format!("/{}/{side}", bar.key());
-            let before = app
-                .get(DocId::Bars, &path)
+            let source = format!("/{}/{side}", bar.key());
+            let path = bar_path(app, &source);
+            let before = bar_value(app, &source)
+                .as_ref()
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default();
@@ -464,31 +483,149 @@ pub fn disconnect(app: &mut App, id: &str) {
             value: Some(json!(kept)),
         });
     }
-    for bar in ["top", "dock"] {
-        for zone in ["left", "center", "right"] {
-            let path = format!("/{bar}/{zone}");
-            let modules = app
-                .get(DocId::Bars, &path)
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            let kept: Vec<_> = modules
-                .iter()
-                .filter(|module| {
-                    !module
-                        .as_str()
-                        .is_some_and(|module| module.starts_with(&format!("custom:{prefix}")))
-                })
-                .cloned()
-                .collect();
-            if kept != modules {
-                ops.push(Op {
-                    doc: DocId::Bars,
-                    path,
-                    value: Some(json!(kept)),
-                });
+    let raw = &app.docs.doc(DocId::Bars).raw;
+    let layers = std::iter::once(String::new()).chain(
+        raw.get("overrides")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .map(|(display, _)| format!("/overrides/{}", crate::docs::token(display))),
+    );
+    let module_prefix = format!("custom:{prefix}");
+    for layer in layers {
+        for bar in ["top", "dock"] {
+            for zone in ["left", "center", "right"] {
+                let path = format!("{layer}/{bar}/{zone}");
+                let modules = app
+                    .docs
+                    .doc(DocId::Bars)
+                    .raw
+                    .pointer(&path)
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                let kept: Vec<_> = modules
+                    .iter()
+                    .filter(|module| {
+                        !module
+                            .as_str()
+                            .is_some_and(|module| module.starts_with(&module_prefix))
+                    })
+                    .cloned()
+                    .collect();
+                if kept != modules {
+                    ops.push(Op {
+                        doc: DocId::Bars,
+                        path,
+                        value: Some(json!(kept)),
+                    });
+                }
             }
         }
     }
     app.apply("Disconnect", ops);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disconnect_removes_modules_from_base_and_all_overrides_as_one_undo_step() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State::default());
+        let bars = json!({"version":1,
+            "top":{"left":["start","custom:t3--status","custom:t30--status"],"center":[],"right":["clock"]},
+            "dock":{"left":[],"right":["custom:t3--agents","network"]},
+            "overrides":{
+                "DISPLAY2":{"top":{"left":["start","custom:t30--status"],"right":["custom:t3--status","clock"]}},
+                "secondary":{"dock":{"left":["custom:t3--agents"],"right":["network"]}},
+                "DISPLAY9":{"top":{"left":["custom:t3--status","volume"]}}
+            }
+        });
+        app.docs = crate::docs::Docs::fixture(["{}", &bars.to_string(), "{}", "{}"]);
+        assert!(
+            mypaper_bars::BarsConfig::parse(&bars.to_string()).is_ok(),
+            "{:?}",
+            mypaper_bars::BarsConfig::parse(&bars.to_string()).err()
+        );
+        disconnect(&mut app, "t3");
+        let after = &app.docs.doc(DocId::Bars).raw;
+        for path in [
+            "/top/left",
+            "/dock/right",
+            "/overrides/DISPLAY2/top/right",
+            "/overrides/secondary/dock/left",
+            "/overrides/DISPLAY9/top/left",
+        ] {
+            assert!(
+                !after
+                    .pointer(path)
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|module| module
+                        .as_str()
+                        .is_some_and(|id| id.starts_with("custom:t3--"))),
+                "{path}"
+            );
+        }
+        assert_eq!(
+            after.pointer("/top/left"),
+            Some(&json!(["start", "custom:t30--status"]))
+        );
+        assert!(app.plugins.preferences.disabled.contains("t3"));
+        assert_eq!(app.docs.undo_count(), 1);
+        app.run(Action::Undo);
+        assert_eq!(app.docs.doc(DocId::Bars).raw, bars);
+        assert!(!app.plugins.preferences.disabled.contains("t3"));
+    }
+
+    #[test]
+    fn shows_in_and_toggles_follow_the_selected_display() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State::default());
+        let second = app.monitors[1]
+            .device
+            .trim_start_matches(r"\\.\")
+            .to_owned();
+        let bars = json!({"version":1,"top":{"center":[],"right":["clock"]},"overrides":{
+            second: {"top":{"right":["custom:t3--status","clock"]}}
+        }});
+        mypaper_bars::BarsConfig::parse(&bars.to_string()).unwrap();
+        app.docs = crate::docs::Docs::fixture(["{}", &bars.to_string(), "{}", "{}"]);
+        app.nav.display = 0;
+        assert!(!module_shown(
+            &app,
+            "custom:t3--status",
+            crate::actions::Bar::Top
+        ));
+        app.nav.display = 1;
+        assert!(module_shown(
+            &app,
+            "custom:t3--status",
+            crate::actions::Bar::Top
+        ));
+        connection_module(
+            &mut app,
+            "custom:t3--status",
+            crate::actions::Bar::Top,
+            false,
+        );
+        assert!(!module_shown(
+            &app,
+            "custom:t3--status",
+            crate::actions::Bar::Top
+        ));
+        assert_eq!(
+            app.docs.doc(DocId::Bars).raw.pointer("/top/right"),
+            bars.pointer("/top/right")
+        );
+        assert_eq!(app.docs.undo_count(), 1);
+        app.run(Action::Undo);
+        assert_eq!(app.docs.doc(DocId::Bars).raw, bars);
+    }
 }
