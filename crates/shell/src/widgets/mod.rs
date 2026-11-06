@@ -536,7 +536,7 @@ impl Widgets {
         let widgets = preview.effective(Document::Widgets, widget_revision);
         let stamp = (config.as_ref().map(|v| v.0), widgets.map(|v| v.0), config_revision, widget_revision);
         if self.studio_stamp == stamp && self.studio_resize.as_ref() == resize && !warm { return; }
-        if self.studio_applied.elapsed() < mypaper_ui::display_frame() {
+        if !warm && self.studio_applied.elapsed() < mypaper_ui::display_frame() {
             self.studio_pending = true;
             self.ticker.schedule(true);
             return;

@@ -1352,6 +1352,7 @@ mod tests {
     fn move_release_saves_one_step_and_undo_restores_all_original_geometry() {
         let ui = Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
+        app.registry.widgets.get_mut("clock").unwrap().manifest.resizable = false;
         app.panel = Some(crate::panel::State::default());
         let before = app.docs.doc(DocId::Widgets).raw.clone();
         let layout = crate::pages::widgets::layout(&app);
@@ -1360,6 +1361,7 @@ mod tests {
         let (cell, size) = (instance.cell, instance.size);
         let moved = [cell[0] + 2, cell[1] + 1];
         assert!(resize_widget(&mut app, selection.clone(), cell, size, cell, size).is_none());
+        assert!(resize_widget(&mut app, selection.clone(), cell, size, cell, [size[0] + 1, size[1]]).is_none());
         assert!(!app.docs.can_undo());
         assert!(resize_widget(&mut app, selection.clone(), cell, size, moved, size).is_some());
         let layout = crate::pages::widgets::layout(&app);
