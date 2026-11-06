@@ -441,9 +441,9 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::Category(category) => app.panel.as_mut().unwrap().category = category,
         Command::Search(i) => editors::run_search(app, i),
-        Command::History(i) => app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(i),
+        Command::History(i) => history::select(app, i),
         Command::Restore => history::restore(app),
-        Command::CancelRestore => app.panel.as_ref().unwrap().history.borrow_mut().selected = None,
+        Command::CancelRestore => history::cancel(app),
         Command::ClearHistory => history::clear(app),
         Command::RetryHistory => history::retry(app),
         Command::Side(left) => {
@@ -579,6 +579,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     choosers::begin(app);
     history::observe(app);
     let mut page = app.panel.as_ref().map_or(Page::Root, |s| s.page);
+    history::preview_selected(app);
     if matches!(page, Page::Top | Page::Dock) && app.nav.module.is_some() {
         page = Page::Module;
     }

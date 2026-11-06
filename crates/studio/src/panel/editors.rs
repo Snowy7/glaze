@@ -393,11 +393,12 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
 }
 
 fn history(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "History", "Your desktop after each change");
+    title(b, c, "History", "Restores every display");
+    crate::panel::controls::displays(app, b, c);
     notice(
         b,
         c,
-        "Select a desktop to inspect it, then restore. Later desktops stay here. Settings and Connections are separate.",
+        "Select a row to preview its bars, widgets and Look on every display. Cancel puts them back. Wallpaper playback stays current during preview. Later desktops stay here.",
     );
     let history = app.panel.as_ref().unwrap().history.borrow();
     if let Some(error) = &history.error {
@@ -421,7 +422,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                 b.wash(k, r, b.px(8.0));
             }
             let pic = Rect::new(c.x, c.y + b.px(10.0), b.px(108.0), b.px(61.0));
-            desktop_preview(app, b, pic, i, entry, &mut visible_pictures);
+            desktop_preview(app, b, pic, i, entry, true, &mut visible_pictures);
             let x = pic.right + b.px(12.0);
             let summary = if entry.summary.is_empty() {
                 &entry.title
@@ -474,7 +475,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
     {
         group(b, c, "Selected desktop", |b, c| {
             let r = Rect::new(c.x, c.y + b.px(6.0), c.w, c.w * 9.0 / 16.0);
-            desktop_preview(app, b, r, i, entry, &mut visible_pictures);
+            desktop_preview(app, b, r, i, entry, false, &mut visible_pictures);
             let count = entry
                 .desktop
                 .widgets()
@@ -511,7 +512,8 @@ fn desktop_preview(
     r: Rect,
     index: usize,
     entry: &super::history::Entry,
-    visible: &mut std::collections::HashSet<(usize, u32, u32)>,
+    cropped: bool,
+    visible: &mut std::collections::HashSet<super::history::PictureKey>,
 ) {
     if b.clip_rect().is_some_and(|clip| !r.intersects(&clip)) {
         return;
@@ -520,13 +522,18 @@ fn desktop_preview(
         r.width().ceil().max(1.0) as u32,
         r.height().ceil().max(1.0) as u32,
     );
-    let key = (index, size.0, size.1);
+    let key = super::history::PictureKey { entry: index, display: app.nav.display, size, cropped };
     visible.insert(key);
     let history = app.panel.as_ref().unwrap().history.borrow();
     let cached = history.pictures.borrow().get(&key).cloned();
     let picture = cached.or_else(|| {
-        let picture = super::history::picture(app, &entry.desktop, size, entry.at)?;
-        history.pictures.borrow_mut().insert(key, picture.clone());
+        let picture = if cropped {
+            super::history::thumbnail(app, entry, index.checked_sub(1).and_then(|i| history.entries.get(i)).map(|entry| &entry.desktop), size)?
+        } else { super::history::picture(app, &entry.desktop, size, entry.at)? };
+        let mut pictures = history.pictures.borrow_mut();
+        let bytes: usize = pictures.values().map(|image| image.pixels.len()).sum();
+        if bytes + picture.pixels.len() > 2 << 20 { pictures.clear(); }
+        if picture.pixels.len() <= 2 << 20 { pictures.insert(key, picture.clone()); }
         Some(picture)
     });
     b.fill(r, b.px(6.0), b.p.fill);
