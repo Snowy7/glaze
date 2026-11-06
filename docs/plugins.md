@@ -175,6 +175,18 @@ calls (`secrets`, `storage`, `system`) are synchronous.
   When the toast has an `action`, clicking it (while the helper runs) delivers `event::action`
   with `instance` `"toast"` and that `action` to the plugin, loading it if it was unloaded. The
   helper keeps the last 16 such toasts so their click handlers stay registered.
+- **Launches**: the hidden helper starts nothing for `launch.open(target)`. It reports
+  `HelperMsg::Launched` and the shell, which got the click, opens the target off its thread and
+  raises the window of the scheme's handler (`open_and_raise` in `crates/widgets/src/plugins.rs`).
+  A URL whose registered handler is already running as a Chromium-based app (T3 Code, VS Code,
+  Discord) goes straight to it (`crates/widgets/src/handoff.rs`). The shell sends the
+  `WM_COPYDATA` the app's own second instance would send: `START\0<cwd>\0<command line>\0` to the
+  running process's ProcessSingleton window (`Chrome_MessageWindow`, titled with its user-data
+  dir), with the registered `open` command and the URL in place of `%1`. That takes about 1 ms;
+  a second process that only passes the URL on and exits takes ~0.4 s. Everything else goes
+  through `ShellExecute` as before: no running instance, several (other user-data dirs), another
+  placeholder in the command, or no answer within 200 ms. Each launch logs one info line with its
+  timings (`opened <target> N ms after the click, handed to …`).
 - **System events**: the shell sends `HostMsg::System(SystemEvent)` frames
   (`Plugins::system_event` in `crates/widgets/src/plugins.rs`). The helper delivers each one only
   to loaded plugins subscribed to its topic, and window events only to those holding `windows`.
