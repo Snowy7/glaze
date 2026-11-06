@@ -825,13 +825,14 @@ pub fn more(app: &App, b: &mut B, c: &mut Col, hint: &str) -> bool {
     let r = Rect::new(c.x, c.y, c.w, height(b, 36.0));
     let k = key(("panel-more", c.view));
     let open = app.is_open(k);
+    let label_width = b.measure("More", &font(b, 13.0, 500)).0 + b.px(12.0);
     text(b, r, "More", 13.0, 500, b.p.ink2, Align::Start);
     text(
         b,
         Rect::new(
-            r.left + b.px(48.0),
+            r.left + label_width,
             r.top,
-            r.width() - b.px(76.0),
+            r.width() - label_width - b.px(28.0),
             r.height(),
         ),
         hint,
