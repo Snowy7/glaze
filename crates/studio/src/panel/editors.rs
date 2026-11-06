@@ -42,7 +42,12 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
                     .into_iter()
                     .max_by_key(|instance| instance.size[0] * instance.size[1])
                     .map(|instance| ("Make room", Action::SelectWidget(Some(instance.instance))));
-                super::controls::feedback(b, c, "No room", make_room.into_iter().collect());
+                let name = app.registry.get(id).map_or(id, |widget| widget.manifest.name.as_str());
+                super::controls::feedback(
+                    b, c,
+                    &format!("No room for {name} on Display {}", app.nav.display + 1),
+                    make_room.into_iter().collect(),
+                );
             }
             widgets::add(app, b, c);
         }
@@ -201,6 +206,26 @@ pub fn select(
             current: Some(value),
         }),
     );
+}
+
+/// Small, finite choices use the kit's single page layout.
+pub fn segments(
+    b: &mut B,
+    c: &mut Col,
+    label: &str,
+    value: Value,
+    edit: Edit,
+    options: Vec<(Value, String)>,
+) {
+    let labels: Vec<_> = options.iter().map(|(_, label)| label.as_str()).collect();
+    let selected = options.iter().position(|(option, _)| *option == value);
+    let r = b.labeled_segments(
+        key(("panel-choice", c.view, edit.doc, edit.path.as_ref())),
+        Rect::new(c.x, c.y, c.w, 0.0),
+        label, &labels, selected,
+        |i| Action::Set(edit.clone(), options[i].0.clone()),
+    );
+    c.y = r.bottom + b.px(8.0);
 }
 
 pub fn toggle(b: &mut B, c: &mut Col, label: &str, caption: &str, on: bool, action: Action) {
