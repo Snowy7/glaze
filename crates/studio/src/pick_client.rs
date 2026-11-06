@@ -30,6 +30,8 @@ struct Client {
     page_selection: Option<Selection>,
     desktop_selected: bool,
     warmed_page: Option<(crate::panel::Page, usize)>,
+    panel_home: Option<(i32, i32)>,
+    flashed_display: Option<String>,
 }
 
 struct PreviewDrag {
@@ -787,6 +789,8 @@ pub fn connect(app: &App) {
                 page_selection: None,
                 desktop_selected: false,
                 warmed_page: None,
+                panel_home: None,
+                flashed_display: None,
             });
         }
         let client = client.as_mut().unwrap();
@@ -803,6 +807,8 @@ pub fn connect(app: &App) {
             client.desktop_selected = false;
             client.undo_step = None;
             client.warmed_page = None;
+            client.panel_home = None;
+            client.flashed_display = None;
         }
         if !client.begun
             && let Some(shell) = shell
@@ -824,6 +830,7 @@ pub fn connect(app: &App) {
             }
         }
         client.warm_preview(app);
+        send_panel_home(client, app);
         client.stream_preview(app);
         if (client.choice_preview.is_some() || client.snapshot_preview.is_some()) && client.observed_version != app.docs.version && app.drag.is_none() {
             client.finish_choice(app);
@@ -992,6 +999,37 @@ pub fn highlight(id: Option<String>) {
             client.highlighted = id;
         }
     });
+}
+
+/// Identify a display while its segment is hovered. Never saves or activates a window.
+pub fn flash_display(app: &App, display: Option<usize>) {
+    if app.fixture { return; }
+    let display = display.and_then(|i| app.monitors.get(i)).map(|m| m.device.clone());
+    CLIENT.with(|client| {
+        let mut client = client.borrow_mut();
+        let Some(client) = client.as_mut() else { return; };
+        if client.flashed_display == display { return; }
+        if let Some(shell) = client.shell
+            && wire::send(shell, client.endpoint.hwnd(), &Message::FlashDisplay { display: display.clone() })
+        {
+            client.flashed_display = display;
+        }
+    });
+}
+
+fn send_panel_home(client: &mut Client, app: &App) -> bool {
+    let (x, y, _, _) = super::placement(app);
+    if client.panel_home == Some((x, y)) { return true; }
+    let Some(shell) = client.shell else { return false; };
+    if !wire::send(shell, client.endpoint.hwnd(), &Message::PanelHome { x, y }) { return false; }
+    client.panel_home = Some((x, y));
+    true
+}
+
+/// Let the shell keep temporary avoidance separate from the remembered resting side.
+pub(crate) fn place_panel(app: &App) -> bool {
+    if app.fixture { return false; }
+    CLIENT.with(|client| client.borrow_mut().as_mut().is_some_and(|c| send_panel_home(c, app)))
 }
 
 /// Display switches end the desktop selection and place the panel without activation.
@@ -1658,6 +1696,8 @@ mod tests {
             page_selection: None,
             desktop_selected: false,
             warmed_page: None,
+            panel_home: None,
+            flashed_display: None,
         };
         let before = snapshot(&app);
         client.warm_preview(&app);
@@ -1968,6 +2008,8 @@ mod tests {
                 page_selection: None,
                 desktop_selected: false,
                 warmed_page: None,
+                panel_home: None,
+                flashed_display: None,
             })
         });
         // SAFETY: read-only foreground query; neither hidden endpoint is activated.

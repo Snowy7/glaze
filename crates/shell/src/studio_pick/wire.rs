@@ -254,6 +254,10 @@ pub fn patched(raw: &serde_json::Value, ops: &[PreviewOp]) -> Option<serde_json:
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
+    /// Studio's remembered resting position, in physical screen coordinates.
+    PanelHome { x: i32, y: i32 },
+    /// A display segment's transient hover; None removes the identification frame.
+    FlashDisplay { display: Option<String> },
     /// Prime the existing preview machinery at saved values, without an override or save.
     WarmPreview,
     PreviewSnapshot {

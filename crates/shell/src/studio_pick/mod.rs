@@ -1,6 +1,8 @@
 //! Transient desktop picking while Studio's panel is open. Selection never writes config.
 //! Catchers sit below widgets in the desktop band; widget input still reaches its real HWND.
 mod chrome;
+mod display_flash;
+mod panel_position;
 pub mod module_drag;
 mod notice;
 pub mod preview;
@@ -159,6 +161,10 @@ pub struct StudioPick {
     module_raw: serde_json::Value,
     module_marker: Option<Surface>,
     wallpaper_still: wallpaper::Still,
+    panel_position: panel_position::Position,
+    display_flash: display_flash::Flash,
+    highlight_pointer: Option<Point>,
+    highlight_clear_pending: bool,
 }
 
 impl StudioPick {
@@ -187,10 +193,14 @@ impl StudioPick {
             module_raw: serde_json::Value::Null,
             module_marker: None,
             wallpaper_still: wallpaper::Still::default(),
+            panel_position: panel_position::Position::default(),
+            display_flash: display_flash::Flash::default(),
+            highlight_pointer: None,
+            highlight_clear_pending: false,
         })
     }
     pub fn timeout_ms(&self) -> u32 {
-        if self.session.active() { 50 } else { u32::MAX }
+        if self.panel_position.animating() { 16 } else if self.session.active() { 50 } else { u32::MAX }
     }
     pub fn active(&self) -> bool {
         self.session.active()
@@ -260,6 +270,8 @@ impl StudioPick {
                     }
                 }
                 Message::End => self.session.end(source.0 as isize),
+                Message::PanelHome { x, y } if self.owns(source) => self.panel_position.home(x, y),
+                Message::FlashDisplay { display } if self.owns(source) => self.display_flash.set(display),
                 Message::WarmPreview if self.owns(source) => self.warm_preview = true,
                 Message::Preview { session, sequence, documents }
                     if self.owns(source) => self.preview.update(session, sequence, documents),
@@ -338,6 +350,8 @@ impl StudioPick {
                     self.resize_preview = None;
                     self.session.selected = None;
                     self.session.highlight = None;
+                    self.highlight_pointer = None;
+                    self.highlight_clear_pending = false;
                     self.hovered = None;
                     self.hover_until = None;
                 }
@@ -346,7 +360,16 @@ impl StudioPick {
                         h == source.0 as isize && wire::process(source) == pid
                     }) =>
                 {
-                    self.session.highlight = id;
+                    let pointer = screen_pointer();
+                    // Sliding the panel out from under a stationary pointer sends Leave.
+                    // Hold that row's preview until the pointer actually moves, so it cannot
+                    // chase the returning panel back and forth between edges.
+                    self.highlight_clear_pending = id.is_none() && self.panel_position.away()
+                        && pointer.is_some() && pointer == self.highlight_pointer;
+                    if !self.highlight_clear_pending {
+                        self.session.highlight = id;
+                        self.highlight_pointer = pointer;
+                    }
                 }
                 Message::Selected { selection } if self.owns(source) => {
                     if self.session.selected.as_ref() != Some(&selection) {
@@ -573,6 +596,14 @@ impl StudioPick {
             self.hovered = None;
             self.hover_until = None;
         }
+        if self.highlight_clear_pending && (screen_pointer() != self.highlight_pointer || !self.panel_position.away()) {
+            self.session.highlight = None;
+            self.highlight_pointer = None;
+            self.highlight_clear_pending = false;
+        }
+        if let Err(error) = self.display_flash.tick(ui, &self.monitors) {
+            log::warn!("Studio display frame: {error:#}");
+        }
         let mut wanted: Vec<(Target, bool)> = Vec::new();
         if let Some(selection) = &self.session.selected
             && let Some(target) = targets.iter().find(|t| t.selection == *selection)
@@ -594,6 +625,9 @@ impl StudioPick {
                 wanted.push((target.clone(), false));
             }
         }
+        let avoid: Vec<_> = wanted.iter().filter(|(t, _)| t.selection.kind == Kind::Widget)
+            .map(|(t, _)| t.rect).collect();
+        self.panel_position.tick(self.panel, &self.monitors, &avoid);
         if self
             .decorations
             .iter()
@@ -773,6 +807,10 @@ impl StudioPick {
     }
 
     fn reset_transients(&mut self) {
+        self.panel_position = panel_position::Position::default();
+        self.display_flash = display_flash::Flash::default();
+        self.highlight_pointer = None;
+        self.highlight_clear_pending = false;
         self.warm_preview = false;
         self.preview = preview::Preview::default();
         self.resize_preview = None;
@@ -1020,6 +1058,13 @@ impl StudioPick {
         });
         Ok(())
     }
+}
+
+fn screen_pointer() -> Option<Point> {
+    use windows::Win32::{Foundation::POINT, UI::WindowsAndMessaging::GetCursorPos};
+    let mut point = POINT::default();
+    // SAFETY: read-only pointer query, with a correctly sized output value.
+    unsafe { GetCursorPos(&mut point).ok().map(|_| Point::new(point.x as f32, point.y as f32)) }
 }
 
 fn paint_frame(
