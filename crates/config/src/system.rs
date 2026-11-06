@@ -18,7 +18,8 @@ pub struct SystemConfig {
     /// Windows' user power mode for both AC and battery, preserving each original.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub power_mode: Option<PowerMode>,
-    /// Publish the conservative fullscreen/presentation signal. No watcher while off.
+    /// Publish the conservative fullscreen/presentation signal (default on). False removes
+    /// the watcher; absent/null inherits the default without managing any Windows preference.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub game_activity: Option<bool>,
 }
